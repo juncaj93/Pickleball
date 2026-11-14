@@ -1,5 +1,6 @@
 import type { AdminSessionView } from '../../../shared/api';
 import { type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
+import { rosterLine } from '../../../shared/guestSpot';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, localParts, weekFade } from '../../../shared/time';
 import { useRef, useState } from 'react';
@@ -48,18 +49,33 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   const [seat, setSeat] = useState<boolean | null>(null);
   const meId = ctx.d.me?.id ?? null;
   const mineRow = meId ? s.roster.find((r) => r.playerId === meId && (r.status === 'confirmed' || r.status === 'waitlisted')) : undefined;
-  let confirmedNames = s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name);
-  let waitNames = s.roster.filter((r) => r.status === 'waitlisted').map((r) => r.name);
+  // Zip 42 "Guest spot": each guest right after its host (rosterLine gives the plain names when there is no guest).
+  const inLine = rosterLine(s.roster, 'confirmed');
+  const waitLine = rosterLine(s.roster, 'waitlisted');
+  let confirmedNames = inLine.names;
+  let waitNames = waitLine.names;
+  let guestAt = inLine.guestAt;
+  let waitGuestAt = waitLine.guestAt;
   if (seat !== null && meId && ctx.d.me) {
     if (seat && !mineRow) {
       // Joining: the last spot after everyone, or the waitlist when the game is full.
       // "Card cleanup" (Zip 10): no cap and no waitlist, so the organizer is always drawn in.
-      if (ctx.d.cardCleanup !== true && confirmedNames.length >= ctx.d.group.settings.maxPlayers) waitNames = [...waitNames, ctx.d.me.name];
+      if (ctx.d.cardCleanup !== true && confirmedNames.length >= ctx.d.group.settings.maxPlayers) {
+        waitNames = [...waitNames, ctx.d.me.name];
+        if (waitGuestAt) waitGuestAt = [...waitGuestAt, false];
+      }
       // At the database's 12 the server says no: nothing is drawn ahead of that answer.
-      else if (ctx.d.cardCleanup !== true || confirmedNames.length < MAX_PLAYERS_LIMIT) confirmedNames = [...confirmedNames, ctx.d.me.name];
+      else if (ctx.d.cardCleanup !== true || confirmedNames.length < MAX_PLAYERS_LIMIT) {
+        confirmedNames = [...confirmedNames, ctx.d.me.name];
+        if (guestAt) guestAt = [...guestAt, false];
+      }
     } else if (!seat && mineRow) {
-      confirmedNames = s.roster.filter((r) => r.status === 'confirmed' && r.playerId !== meId).map((r) => r.name);
-      waitNames = s.roster.filter((r) => r.status === 'waitlisted' && r.playerId !== meId).map((r) => r.name);
+      const a = rosterLine(s.roster, 'confirmed', meId);
+      const b = rosterLine(s.roster, 'waitlisted', meId);
+      confirmedNames = a.names;
+      waitNames = b.names;
+      guestAt = a.guestAt;
+      waitGuestAt = b.guestAt;
     }
   }
   const canceled = s.state.flags.canceled;
@@ -136,6 +152,8 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
               <PlayersLine
                 names={confirmedNames}
                 waitlist={waitNames}
+                {...(guestAt ? { guestAt } : {})}
+                {...(waitGuestAt ? { waitGuestAt } : {})}
                 waitLabel="Waitlist"
                 everyone={ctx.d.players.map((p) => p.name)}
                 maxPlayers={ctx.d.group.settings.maxPlayers}

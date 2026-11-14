@@ -511,7 +511,8 @@ async function main() {
       await page.locator('.tabbar button', { hasText: 'Settings' }).click();
       await sleep(500);
       for (const sm of await page.locator('details > summary').all()) await sm.click().catch(() => {});
-      const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').first().getAttribute('data-row');
+      // (Zip 42's Guest spot row is newer and sits on top of it.)
+      const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll')[0]);
       assert(first === 'christmasSkinAll', `newest first: ${first}`);
       const row = page.locator('[data-row="christmasSkinAll"]');
       assert((await row.locator('.set-name').innerText()).includes('Christmas skin'), 'its name');

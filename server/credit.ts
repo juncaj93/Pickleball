@@ -15,6 +15,8 @@ import { audit, flatOf, type GroupRow, loadRosters, loadSessions, lookbackIso, l
 import { asFewer } from './speed';
 import type { GroupSettings } from '../shared/settings';
 import { OPEN_FEE } from './lateFees';
+import { hasGuestColumns } from './guestSpot';
+import { seatUnits } from '../shared/guestSpot';
 
 const HISTORY_MS = 90 * 86_400_000;
 
@@ -344,16 +346,18 @@ export async function returnSeatCredit(
  * when they run (the flat price `flatCents` until finalized, then the final
  * price for those who played), so they can share a batch with the change.
  */
-export function repriceStatements(db: D1Database, sessionId: string, flatCents: number, nowIso: string): D1PreparedStatement[] {
-  const price = `(SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN session_players.played = 1 THEN s.final_price_cents ELSE NULL END
-                  FROM sessions s WHERE s.id = session_players.session_id)`;
+export function repriceStatements(db: D1Database, sessionId: string, flatCents: number, nowIso: string, guests = false): D1PreparedStatement[] {
+  // Zip 42 "Guest spot" (`guests`: migration 0021 ran): a seat with its guest in is priced for two. Without it: main's words exactly.
+  const units = (sp: string) => (guests ? ` * (1 + CASE WHEN ${sp}.guest_status = 'confirmed' AND ${sp}.guest_name IS NOT NULL THEN 1 ELSE 0 END)` : '');
+  const price = `((SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN session_players.played = 1 THEN s.final_price_cents ELSE NULL END
+                  FROM sessions s WHERE s.id = session_players.session_id)${units('session_players')})`;
   const used = `(${SEAT_USED('session_players')} + ${SEAT_CASH('session_players')})`;
   // A paid seat that is now short goes back to unpaid; the cash in its payment (beyond the credit on it) is held
   // against it as a 'cash' pair first, the same way Finalize does, so it still counts and the seat owes only the rest.
   const short = (sp: string) =>
     `${sp}.session_id = ?2 AND ${sp}.status = 'confirmed' AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL AND ${sp}.self_paid_at IS NULL
      AND (${SEAT_USED(sp)} + ${SEAT_CASH(sp)}) > 0
-     AND (SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN ${sp}.played = 1 THEN s.final_price_cents ELSE NULL END FROM sessions s WHERE s.id = ${sp}.session_id) > COALESCE(${sp}.payment_amount_cents, 0)`;
+     AND (SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN ${sp}.played = 1 THEN s.final_price_cents ELSE NULL END FROM sessions s WHERE s.id = ${sp}.session_id)${units(sp)} > COALESCE(${sp}.payment_amount_cents, 0)`;
   const cash = (sp: string) => `(COALESCE(${sp}.payment_amount_cents, 0) - ${SEAT_USED(sp)} - ${SEAT_CASH(sp)})`;
   const hold = (kind: 'kept' | 'used') =>
     db
@@ -940,7 +944,8 @@ export async function cashOutOffer(db: D1Database, session: SessionRow, playerId
   if (!row) return null;
   const group = await db.prepare('SELECT * FROM groups WHERE id = ?').bind(session.group_id).first<GroupRow>();
   if (!group || playerId === (await organizerIdOf(db, group))) return null;
-  const owed = flatOf(session, settings) - row.used;
+  // Zip 42 "Guest spot": a seat with its guest in owes two shares (no guest: the flat price, as before).
+  const owed = flatOf(session, settings) * (await seatUnitsOf(db, session.id, playerId)) - row.used;
   const usable = Math.max(0, row.usable);
   // Usable credit already covers it: nothing to ask.
   if (owed <= 0 || usable >= owed) return null;
@@ -1006,6 +1011,13 @@ export async function useCashOutOnSeat(
       .bind(entry, nowIso, sessionId, playerId, priceCents),
   ]);
   return out[0].meta.changes === 1;
+}
+
+/** Zip 42: how many shares a seat pays for (2 with its guest in), read only once migration 0021 ran. */
+export async function seatUnitsOf(db: D1Database, sessionId: string, playerId: string): Promise<number> {
+  if (!(await hasGuestColumns(db))) return 1;
+  const r = await db.prepare('SELECT status, guest_name, guest_status FROM session_players WHERE session_id = ? AND player_id = ?').bind(sessionId, playerId).first<{ status: string; guest_name: string | null; guest_status: string | null }>();
+  return r ? seatUnits(r) : 1;
 }
 
 /** The pot is never negative: a guard for callers that need to refuse early with a clear message. */

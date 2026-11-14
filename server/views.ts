@@ -25,9 +25,11 @@ import {
   statusInput,
   usualDaysOf,
   waitlistOf,
+  waitQueue,
 } from './repo';
 import { bookingOpensMs } from '../shared/time';
 import { agreedStart, isWaitingOnTime } from '../shared/timeShift';
+import { guestIn, guestViewOf, headCount, seatUnits } from '../shared/guestSpot';
 import { dropLeavesShort, FEE_KEPT, feeSplitOf, lateFeeCutoffMs, lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 
 /** `{ shortGame }` for a game priced from its own game-length row ("Short games" on, a 1.5 hour game), else nothing at all. */
@@ -88,15 +90,19 @@ export function playerSessionView(
   // Late fees (shared/lateFees.ts): past the cancel-by with the switch on, a drop that leaves the game short keeps their
   // money on it (nothing comes back), and the dialog and banner say so.
   const feeCents = flatOf(session, settings);
+  // Zip 42 "Guest spot": guests count like players, and a seat with its guest in pays (and drops) for two. No guest: as before.
+  const heads = headCount(confirmed);
+  const myUnits = mine ? seatUnits(mine) : 1;
+  const queue = noWaitlist ? [] : waitQueue(roster);
   const lateWindow =
     lateFees && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
   // The real waitlist (also when hidden), the same count the server's late-drop rule uses.
-  const dropOwes = lateWindow && dropLeavesShort(confirmed.length, waitlistOf(roster).length);
+  const dropOwes = lateWindow && dropLeavesShort(heads - (myUnits - 1), waitQueue(roster).length);
   const openFee = mine ? lateFeeKind(mine, session, isOrganizer) : null;
   const ownRow: PlayerSessionView['mine'] = mine
     ? {
         status: mine.status,
-        waitlistPosition: mine.status === 'waitlisted' ? waitlist.findIndex((r) => r.id === mine.id) + 1 : null,
+        waitlistPosition: mine.status === 'waitlisted' ? queue.findIndex((e) => !e.guest && e.row.id === mine.id) + 1 : null,
         attendanceConfirmed: !!mine.attendance_confirmed_at,
         // "Card cleanup" (Zip 10): no waitlist, so no "Good news, a spot opened up" either (also for an older move-in).
         promotion: !noWaitlist && mine.status === 'confirmed' && mine.promotion_reason ? 'spot_opened' : null,
@@ -124,9 +130,9 @@ export function playerSessionView(
                 owes: dropOwes,
                 // Zip 27 (A-02): a seat paid below the fee (the game was made longer after the payment) would owe only the rest: the dialog says
                 // that ("you still owe $3"). Every other seat: exactly as before.
-                ...(!isOrganizer && mine.payment_status === 'paid' && !mine.refunded_at && !claimed && paidNow > 0 && paidNow < feeCents
-                  ? { paid: false, feeCents: feeCents - paidNow }
-                  : { paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents }),
+                ...(!isOrganizer && mine.payment_status === 'paid' && !mine.refunded_at && !claimed && paidNow > 0 && paidNow < feeCents * myUnits
+                  ? { paid: false, feeCents: feeCents * myUnits - paidNow }
+                  : { paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents: feeCents * myUnits }),
               },
             }
           : {}),
@@ -134,10 +140,14 @@ export function playerSessionView(
         lateFee: openFee
           ? {
               kind: openFee,
-              oweCents: mine.payment_status === 'unpaid' ? Math.max(0, lateFeePriceCents(openFee, session, feeCents) - pot.seat.usedCents - pot.seat.cashCents) : 0,
+              oweCents: mine.payment_status === 'unpaid' ? Math.max(0, lateFeePriceCents(openFee, session, feeCents) * myUnits - pot.seat.usedCents - pot.seat.cashCents) : 0,
               ...(openFee === 'canceled_late' && feeSplitOf(session) ? { priceCents: feeSplitOf(session)!.priceCents } : {}),
             }
           : null,
+        ...(() => {
+          const gv = guestViewOf(mine);
+          return gv && gv.status !== 'late' ? { guest: { name: gv.name, status: gv.status, shareCents: feeCents } } : {};
+        })(),
       }
     : null;
   return {
@@ -149,12 +159,15 @@ export function playerSessionView(
     started,
     bookingStatus: session.booking_status,
     venueName: session.venue_name,
-    confirmed: confirmed.map((r) => ({ name: r.display_name, attendanceConfirmed: !!r.attendance_confirmed_at })),
-    waitlist: waitlist.map((r) => ({ name: r.display_name })),
-    openSpots: canceled || started ? 0 : openSpots(confirmed.length, capOf(settings)),
-    countText: countText(confirmed.length, noWaitlist ? Number.POSITIVE_INFINITY : settings.maxPlayers),
-    full: !noWaitlist && confirmed.length >= settings.maxPlayers,
-    joinAs: noWaitlist ? 'in' : joinOutcome(confirmed.length, settings.maxPlayers),
+    confirmed: confirmed.flatMap((r) => [
+      { name: r.display_name, attendanceConfirmed: !!r.attendance_confirmed_at },
+      ...(guestIn(r) ? [{ name: r.guest_name as string, attendanceConfirmed: !!r.attendance_confirmed_at, guestOf: r.display_name }] : []),
+    ]),
+    waitlist: queue.length === waitlist.length ? waitlist.map((r) => ({ name: r.display_name })) : queue.map((e) => (e.guest ? { name: e.row.guest_name as string, guestOf: e.row.display_name } : { name: e.row.display_name })),
+    openSpots: canceled || started ? 0 : openSpots(heads, capOf(settings)),
+    countText: countText(heads, noWaitlist ? Number.POSITIVE_INFINITY : settings.maxPlayers),
+    full: !noWaitlist && heads >= settings.maxPlayers,
+    joinAs: noWaitlist ? 'in' : joinOutcome(heads, settings.maxPlayers),
     holiday: holidayFor(session.starts_at, tz),
     courtState: session.court_state,
     extra: !!session.is_extra,
@@ -236,6 +249,8 @@ export function adminSessionView(
 ): AdminSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
+  // Zip 42: the whole line, waiting guests included (no guest: the same entries as waitlist).
+  const queue = waitQueue(roster);
   const prices = pricesFor(session, roster, settings);
   const state = computeSessionState(statusInput(session, roster), nowMs, settings, tz);
   const order = new Map<string, number>();
@@ -298,7 +313,13 @@ export function adminSessionView(
             : { kind: fee, paid: r.payment_status === 'paid' && !r.refunded_at, oweCents: owes }
           : null,
         isOrganizer: me,
-        waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
+        waitlistPosition: r.status === 'waitlisted' ? queue.findIndex((e) => !e.guest && e.row.id === r.id) + 1 : null,
+        ...(() => {
+          const gv = guestViewOf(r);
+          if (!gv) return {};
+          const at = queue.findIndex((e) => e.guest && e.row.id === r.id);
+          return { guest: { name: gv.name, status: gv.status, ...(gv.status === 'waitlisted' ? { waitlistPosition: at >= 0 ? at + 1 : null } : {}) } };
+        })(),
         promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
         refundedAt: r.payment_status === 'paid' ? r.refunded_at : null,
         lateDropAt: r.status === 'withdrawn' ? r.late_drop_at : null,
@@ -376,8 +397,8 @@ export function adminSessionView(
     cancelReason: session.status === 'canceled' ? session.cancel_reason : null,
     state,
     roster: entries,
-    confirmedCount: confirmed.length,
-    waitlistCount: waitlist.length,
+    confirmedCount: headCount(confirmed),
+    waitlistCount: queue.length,
     paidCount,
     payableCount: payable,
     court: hasCourt

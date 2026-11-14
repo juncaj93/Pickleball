@@ -22,6 +22,8 @@ import { flatOf, priceLockStatements, priceOf, specialFlatOf } from './repo';
 import { gameFinalPrice } from '../shared/gameLength';
 import { auditPlan, extendedTimeFor, extensionPlan, hasExtension, restoreAfterFailedReopen, unwindForReopen } from './extension';
 import { type ExtraMinutes, isExtraMinutes } from '../shared/extension';
+import { guestIn } from '../shared/guestSpot';
+import { hasGuestColumns } from './guestSpot';
 
 /** Over, not canceled, not finalized, and someone was in (or paid): the Finalize card shows. */
 export function needsFinalize(session: SessionRow, roster: { status: string; payment_status: string }[], nowMs: number): boolean {
@@ -89,7 +91,11 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   const roster = await loadRoster(ctx.db, session.id);
   const confirmed = confirmedOf(roster);
   const organizerId = await organizerIdOf(ctx.db, group);
-  const n = playedIds.size;
+  // Zip 42 "Guest spot": a guest played when their host did (the pair is marked together), and counts in N like any player. The seat
+  // pays for two (units). No guest: N is the people marked played and every seat is one share, exactly as before.
+  const units = (r: RosterRow) => (guestIn(r) ? 2 : 1);
+  const n = playedIds.size + confirmed.filter((r) => guestIn(r) && playedIds.has(r.player_id)).length;
+  const guests = await hasGuestColumns(ctx.db);
   // The final price for this game: floor(4 x $14 / N) for a normal game, the 1.5 hour row's table with "Short games" on.
   // A redo after Reopen uses the rules the game was first finalized under (its price lock, Zip 27 A-01), not today's switches.
   const gp = priceOf(session, settings);
@@ -136,7 +142,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     // seat owes the rest of the fee instead of reading "paid".
     if (owing.has(r.player_id)) {
       const paidCash = r.payment_status === 'paid' && !r.refunded_at && !r.self_paid_at ? (r.payment_amount_cents ?? 0) : 0;
-      const fee = gp.flatCents;
+      const fee = gp.flatCents * units(r);
       if (paidCash > 0 && paidCash < fee) {
         const onSeat = await usedOn(ctx, session.id, r.player_id);
         statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paidCash - onSeat), paymentCents: paidCash }));
@@ -156,11 +162,12 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     if (played) {
       // Credit used on an unpaid seat above the final price comes back too; the rest is settled by repricing below.
       const used = paid > 0 ? 0 : await usedOn(ctx, session.id, r.player_id);
-      const back = paid > 0 ? paid - price : used - price;
-      if (paid > 0 && paid < price && r.self_paid_at) {
+      const due = price * units(r);
+      const back = paid > 0 ? paid - due : used - due;
+      if (paid > 0 && paid < due && r.self_paid_at) {
         // Holding it as cash would make an unconfirmed I paid into money (only confirmed money becomes credit).
         throw new HttpError(409, 'unconfirmed_paid', `${r.display_name} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
-      } else if (paid > 0 && paid < price) {
+      } else if (paid > 0 && paid < due) {
         // Paid the earlier (lower) price, or the flat price went up: the cash stays against the seat, the rest is owed.
         // Only the cash part: credit (and cash already held) on the seat stays on it as it is.
         const onSeat = await usedOn(ctx, session.id, r.player_id);
@@ -191,7 +198,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     }
   }
   // Unpaid seats whose used credit now covers the final price are paid.
-  statements.push(...repriceStatements(ctx.db, session.id, flatOf(session, settings), now));
+  statements.push(...repriceStatements(ctx.db, session.id, flatOf(session, settings), now, guests));
   // Zip 31 "Extended time" (server/extension.ts): the shares go in the SAME batch, after the credit back above (so credit that came back
   // from this very game can pay a share), and only if this finalize went in. Null: the switch is off, nothing about it is written.
   const plan = extra === null ? null : extensionPlan(ctx.db, { groupId: group.id, session, roster, organizerId, playedIds, minutes: extra, nowIso: now, guard: claimed });
@@ -362,7 +369,7 @@ async function reopenChecked(ctx: Ctx, group: GroupRow, session: SessionRow) {
     ctx.db
       .prepare("UPDATE session_players SET late_drop_at = NULL, late_drop_done_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND status = 'confirmed' AND late_drop_at = ?3 AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL")
       .bind(now, session.id, session.finalized_at),
-    ...repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), now),
+    ...repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), now, await hasGuestColumns(ctx.db)),
   ]);
   if (unfinalized.meta.changes !== 1) {
     const late = (

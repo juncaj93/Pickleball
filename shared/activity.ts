@@ -244,6 +244,17 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} confirmed extra time paid with the next game`;
     case 'extension_unmarked_with_seat':
       return `${who} unmarked extra time paid with the next game`;
+    case 'guest_spot_on':
+      return `${who} switched "Guest spot" on`;
+    case 'guest_spot_off':
+      return `${who} switched "Guest spot" off`;
+    // Zip 42 "Guest spot": the guest's first name is in the line, never anything else about them.
+    case 'guest_added':
+      return `${who} added ${typeof d.guest === 'string' ? d.guest : 'a guest'} as ${player}'s guest${d.waitlisted === true ? ' (waitlist)' : ''}${forDay}`;
+    case 'guest_removed':
+      return `${d.by === 'host' ? `${player} removed their` : `${who} removed ${player}'s`} guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}`;
+    case 'guest_moved_in':
+      return `${player}'s guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''} moved up from the waitlist${forDay}`;
     case 'tap_guard_fix_on':
       return `${who} switched "Tap guard fix" on`;
     case 'tap_guard_fix_off':
@@ -394,7 +405,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${player} owes ${d.kind === 'canceled_late' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (canceled late, fee not waived)` : d.kind === 'no_show' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (did not play, fewer than 4 played)` : `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (late drop, game short)`}${forDay}`;
     case 'late_fee_cleared':
       return d.why === 'sub'
-        ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s $14 cleared${forDay}`
+        ? typeof d.guest === 'string'
+          ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s guest's spot: ${d.guest}'s $14 cleared${forDay}`
+          : `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s $14 cleared${forDay}`
         : d.why === 'canceled'
           ? `${player}'s late drop cleared (game canceled)${forDay}`
           : `${who} cleared ${player}'s $14 (${d.why === 'venue' ? 'venue waived' : 'my choice'})${forDay}`;

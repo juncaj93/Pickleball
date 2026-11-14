@@ -16,7 +16,7 @@ export function canJoinInstantly(s: PlayerSessionView): boolean {
 }
 
 function joined(s: PlayerSessionView, name: string, max: number): PlayerSessionView {
-  if (s.confirmed.some((c) => c.name === name)) return s;
+  if (s.confirmed.some((c) => c.name === name && !c.guestOf)) return s;
   const confirmed = [...s.confirmed, { name, attendanceConfirmed: false }];
   return {
     ...s,
@@ -49,12 +49,13 @@ function joined(s: PlayerSessionView, name: string, max: number): PlayerSessionV
 }
 
 function dropped(s: PlayerSessionView, name: string, max: number): PlayerSessionView {
-  const confirmed = s.confirmed.filter((c) => c.name !== name);
+  // Zip 42 "Guest spot": the host's guest goes with them (an entry with guestOf is never a player's own name).
+  const confirmed = s.confirmed.filter((c) => (c.guestOf ? c.guestOf !== name : c.name !== name));
   return {
     ...s,
     confirmed,
     // Also off the waiting list (a game with no court booked shows those people as in).
-    waitlist: s.waitlist.filter((c) => c.name !== name),
+    waitlist: s.waitlist.filter((c) => (c.guestOf ? c.guestOf !== name : c.name !== name)),
     countText: countText(confirmed.length, max),
     full: confirmed.length >= max,
     joinAs: joinOutcome(confirmed.length, max),

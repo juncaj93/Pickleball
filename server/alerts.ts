@@ -5,6 +5,7 @@
 // bot token and chat ID are Cloudflare secrets: they never reach a browser
 // and the bot only ever messages that one chat.
 import { type AlertPerson, type AlertPrefs, alertMessage, cashOutUsedMessage, DEFAULT_ALERT_PREFS, refundRequestMessage } from '../shared/alerts';
+import { alertName, guestIn } from '../shared/guestSpot';
 import type { AdminDashboard } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import { requireAdmin } from './auth';
@@ -229,8 +230,12 @@ export interface AlertWatch {
   before: AlertPerson[];
 }
 
+// Zip 42 "Guest spot": a guest in is a person too (so "4 in now" counts them, and a guest moving up is named "Sam (guest)").
 const people = (roster: Awaited<ReturnType<typeof loadRoster>>): AlertPerson[] =>
-  confirmedOf(roster).map((r) => ({ playerId: r.player_id, name: r.display_name }));
+  confirmedOf(roster).flatMap((r) => [
+    { playerId: r.player_id, name: r.display_name },
+    ...(guestIn(r) ? [{ playerId: `guest:${r.player_id}`, name: `${r.guest_name} (guest)` }] : []),
+  ]);
 
 /**
  * Call just before a player's tap changes a roster. Returns null (and costs
@@ -253,7 +258,10 @@ async function watchInner(ctx: Ctx, group: GroupRow, session: SessionRow, player
   if (!prefs.enabled || !(prefs.drop36 || prefs.belowMin || prefs.reachedMin)) return null;
   const roster = await loadRoster(ctx.db, session.id);
   const me = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(playerId).first<{ display_name: string }>();
-  return { group, session, prefs, actor: { playerId, name: me?.display_name ?? 'Someone' }, before: people(roster) };
+  // Zip 42: one alert for a pair, "Rowan (and guest Sam) dropped out ...". No guest: the name alone, as before.
+  const mine = roster.find((r) => r.player_id === playerId);
+  const name = alertName(me?.display_name ?? 'Someone', mine && guestIn(mine) ? mine.guest_name : null);
+  return { group, session, prefs, actor: { playerId, name }, before: people(roster) };
 }
 
 /**

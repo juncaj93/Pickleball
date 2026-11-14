@@ -66,8 +66,12 @@ export const OPEN_FEE = (sp: string) =>
  * SQL for "this seat leaving now leaves the game short": the others still in plus everyone waiting (the first ones
  * move in at once) are fewer than 4. ?sid is the session id, `id` the seat's own row id expression.
  */
-export const LEAVES_SHORT = (sessionParam: string, seatId: string) =>
-  `((SELECT COUNT(*) FROM session_players x WHERE x.session_id = ${sessionParam} AND x.status IN ('confirmed', 'waitlisted') AND x.id <> ${seatId}) < ${FEE_MIN_PLAYERS})`;
+export const LEAVES_SHORT = (sessionParam: string, seatId: string, guests = false) =>
+  guests
+    ? // Zip 42: everyone else counts, their guests too (in or waiting); this seat's own guest leaves with it.
+      `((SELECT COALESCE(SUM(1 + CASE WHEN x.guest_name IS NOT NULL AND x.guest_status IN ('confirmed', 'waitlisted') THEN 1 ELSE 0 END), 0)
+         FROM session_players x WHERE x.session_id = ${sessionParam} AND x.status IN ('confirmed', 'waitlisted') AND x.id <> ${seatId}) < ${FEE_MIN_PLAYERS})`
+    : `((SELECT COUNT(*) FROM session_players x WHERE x.session_id = ${sessionParam} AND x.status IN ('confirmed', 'waitlisted') AND x.id <> ${seatId}) < ${FEE_MIN_PLAYERS})`;
 
 /**
  * After a seat was tagged (late_drop_done_at = the tap's time) for clearing: what is left of the late-drop marks goes,
@@ -89,7 +93,7 @@ export function finishLateDropClear(db: D1Database, sessionId: string, nowIso: s
  * tagged as cleared (one each, a clear is final). The caller then adds the money-back statements for tagged seats and
  * finishLateDropClear. Nothing happens when the joiner was themselves the debtor (their own seat came back instead).
  */
-export function tagOldestLateDrop(db: D1Database, sessionId: string, joinerId: string, nowIso: string): D1PreparedStatement {
+export function tagOldestLateDrop(db: D1Database, sessionId: string, joinerId: string, nowIso: string, guests = false): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE session_players SET late_drop_done_at = ?3, updated_at = ?3
@@ -97,7 +101,13 @@ export function tagOldestLateDrop(db: D1Database, sessionId: string, joinerId: s
          AND EXISTS (SELECT 1 FROM session_players j WHERE j.session_id = ?1 AND j.player_id = ?2 AND j.status = 'confirmed' AND j.confirmed_at = ?3)
          -- One clear per game per moment: a losing duplicate tap in the same millisecond (its seat already given) can
          -- never clear a second debt. Two different subs in the very same millisecond clear one; the other stays owed.
-         AND NOT EXISTS (SELECT 1 FROM session_players t WHERE t.session_id = ?1 AND t.status = 'withdrawn' AND t.late_drop_at IS NOT NULL AND t.late_drop_done_at = ?3)`,
+         AND NOT EXISTS (SELECT 1 FROM session_players t WHERE t.session_id = ?1 AND t.status = 'withdrawn' AND t.late_drop_at IS NOT NULL AND t.late_drop_done_at = ?3)${
+           // Zip 42: a sub that just took a guest's share of a debt (same moment) clears nothing else.
+           guests
+             ? `
+         AND NOT EXISTS (SELECT 1 FROM session_players h WHERE h.session_id = ?1 AND h.status = 'withdrawn' AND h.guest_at = ?3 AND h.guest_status IS NULL AND h.guest_name IS NOT NULL)`
+             : ''
+         }`,
     )
     .bind(sessionId, joinerId, nowIso);
 }

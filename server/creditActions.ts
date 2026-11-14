@@ -8,7 +8,7 @@ import { notifyCashOutUsed, notifyRefundRequest } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
-import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, USABLE, useCashOutOnSeat } from './credit';
+import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, USABLE, useCashOutOnSeat, seatUnitsOf } from './credit';
 import { HttpError } from './http';
 import { lateFeeKind } from '../shared/lateFees';
 import { audit, type GroupRow, loadRoster, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
@@ -108,8 +108,9 @@ export async function useCashOutOn(ctx: Ctx, group: GroupRow, session: SessionRo
     requestCents: offer.requestCents,
     usableCents: offer.usableCents,
     fromRequest: offer.cents,
-    alreadyUsed: flatOf(session, settingsOf(group)) - offer.owedCents,
-    priceCents: flatOf(session, settingsOf(group)),
+    // Zip 42: offer.owedCents already counts a guest's share; the seat's price is two shares then.
+    alreadyUsed: flatOf(session, settingsOf(group)) * (await seatUnitsOf(ctx.db, session.id, playerId)) - offer.owedCents,
+    priceCents: flatOf(session, settingsOf(group)) * (await seatUnitsOf(ctx.db, session.id, playerId)),
     nowIso: ctx.nowIso,
   });
   if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again.');

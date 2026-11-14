@@ -11,6 +11,8 @@ import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wan
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
 import { adjustedPlayerLine, latestAdjustment, signedPrice } from '../../shared/adjustCredit';
 import { feeClearedNotice, lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
+import { guestLine, hostDropText, removeGuestText } from '../../shared/guestSpot';
+import '../guest-spot.css';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
@@ -2612,6 +2614,8 @@ export function ScheduleRow({
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   const [askOut, setAskOut] = useState(false);
+  // Zip 42 "Guest spot": the host's "Remove guest" confirm.
+  const [askGuest, setAskGuest] = useState(false);
   // Opened from the "time changed" notice's Can't make it: the same drop flow, in that notice's words.
   const [fromNotice, setFromNotice] = useState(false);
   const mine = s.mine;
@@ -2780,7 +2784,9 @@ export function ScheduleRow({
   const promoted = !held && inSession && !!mine.promotion && !!g.me && seeGoodNews(goodNewsKey(g.me.id, s.id, mine.signupAt), demoOn() ? demoSessionNumber() : null);
   const goodNews = promoted ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion!]) : null;
 
-  const names = s.confirmed.map((p) => p.name);
+  // Zip 42 "Guest spot": guestLine gives the same names when there is no guest.
+  const line = guestLine(s.confirmed);
+  const names = line.names;
   const everyone = g.players.map((p) => p.name);
   const onTop = g.payDue.some((o) => o.sessionId === s.id);
   const isIn = inSession && !s.canceled;
@@ -2837,10 +2843,25 @@ export function ScheduleRow({
     ));
   // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
   const showCount = !s.canceled && (simple || s.confirmed.length > 0 || !courtWait);
-  const dropLink = !held && isIn && open && (
+  // Zip 42 "Guest spot": the host's own guest. "Remove guest" sits right before Drop out while the switch is on for this screen.
+  const myGuest = mine?.guest ?? null;
+  const removeGuestLink = !held && isIn && open && !!myGuest && g.guestSpot === true && (
+    <button className="link-btn quiet-link remove-guest-link" data-remove-guest disabled={busy} aria-busy={busy} onClick={() => setAskGuest(true)}>
+      Remove guest
+    </button>
+  );
+  const dropOnly = !held && isIn && open && (
     <button className="link-btn quiet-link drop-link" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
       Drop out
     </button>
+  );
+  const dropLink = removeGuestLink ? (
+    <>
+      {removeGuestLink}
+      {dropOnly}
+    </>
+  ) : (
+    dropOnly
   );
   const payShows = !held && isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || mine.useCreditCents > 0 || onTop);
 
@@ -2997,9 +3018,9 @@ export function ScheduleRow({
                 <SpotDots names={names} me={g.me?.name} celebrate={celebrating && !gameDay} first={top} />
               </div>
             ))}
-          {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} />}
+          {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} {...(line.guestAt ? { guestAt: line.guestAt } : {})} />}
           {!s.canceled && !waiting && !simple && !cleanup && (
-            <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
+            <NamesLine {...guestLine(s.waitlist)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
           {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You're in if someone drops.</p>}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
@@ -3031,9 +3052,15 @@ export function ScheduleRow({
       <ConfirmDialog
         open={askOut}
         title={waiting ? (standbyWord ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
+        {...(myGuest && !waiting ? { cancelLabel: 'Stay in' } : {})}
         body={
           waiting
-            ? 'You lose your place in line.'
+            ? myGuest
+              ? `You lose your place in line. Your guest ${myGuest.name} comes off too.`
+              : 'You lose your place in line.'
+            : myGuest
+              ? // Zip 42: the guest drops out too. "You still owe $28 if no one takes your 2 spots" only inside the 12 hours (mocks 4 and 5).
+                hostDropText(myGuest.name, mine?.lateDrop?.owes ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz), owesCents: mine.lateDrop.feeCents } : null, formatPrice)
             : mine?.lateDrop
               ? // Past the cancel-by with late fees on: what this drop costs (shared/lateFees.ts rule 9).
                 lateDropDialogText(
@@ -3044,7 +3071,7 @@ export function ScheduleRow({
                 )
               : 'Your spot opens up for someone else.'
         }
-        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : 'Drop out'}
+        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : myGuest ? 'Drop out both' : 'Drop out'}
         danger
         busy={busy}
         onConfirm={() => {
@@ -3059,6 +3086,25 @@ export function ScheduleRow({
           setAskOut(false);
         }}
       />
+      {myGuest && (
+        <ConfirmDialog
+          open={askGuest}
+          title={`Remove ${myGuest.name}?`}
+          cancelLabel={`Keep ${myGuest.name}`}
+          body={
+            myGuest.status === 'waitlisted'
+              ? `${myGuest.name} comes off the waitlist.`
+              : removeGuestText(myGuest.name, myGuest.shareCents, mine?.paymentStatus === 'paid', formatPrice)
+          }
+          confirmLabel={`Remove ${myGuest.name}`}
+          busy={busy}
+          onConfirm={() => {
+            setAskGuest(false);
+            void run('remove-guest', (d) => (d?.creditBackCents > 0 ? `${myGuest.name} is off. ${formatPrice(d.creditBackCents)} back as credit.` : `${myGuest.name} is off your tab.`));
+          }}
+          onCancel={() => setAskGuest(false)}
+        />
+      )}
     </article>
   );
 }

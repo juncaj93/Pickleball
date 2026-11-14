@@ -1,5 +1,6 @@
 import type { ActionTokenView } from '../shared/api';
 import { openSpots } from '../shared/spots';
+import { headCount } from '../shared/guestSpot';
 import type { Ctx } from './context';
 import { newId, randomToken, sha256 } from './crypto';
 import type { D1Database } from './db';
@@ -95,7 +96,7 @@ async function view(ctx: Ctx, r: Resolved): Promise<ActionTokenView> {
       endsAt: r.session.ends_at,
       canceled: r.session.status === 'canceled',
       venueName: r.session.venue_name,
-      openSpots: openSpots(confirmedOf(roster).length, capOf(settingsOf(r.group))),
+      openSpots: openSpots(headCount(confirmedOf(roster)), capOf(settingsOf(r.group))),
     },
     myStatus: mine?.status ?? null,
     attendanceConfirmed: !!mine?.attendance_confirmed_at,

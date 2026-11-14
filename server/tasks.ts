@@ -5,6 +5,7 @@
 // as the card (shared/tasks.ts), so the two always say the same thing.
 // A failed tick or a failed send never touches any other data or any tap.
 import { holidayFor } from '../shared/holidays';
+import { hasGuestColumns, SEAT_HEADS } from './guestSpot';
 import { textsR2Allowed } from '../shared/textsR2';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
 import { dueAlerts, MARK_NAMES, markKey, mayAlertSoon, nextTasks, type TaskOptions, type TaskSession } from '../shared/tasks';
@@ -277,8 +278,10 @@ async function tickJobs(ctx: Ctx, watch: TickWatch): Promise<TickResult> {
   );
   if (rows.length === 0) return { ok: true, sent: 0, failed: 0 };
   const rowIds = rows.map((s) => s.id);
+  // Zip 42 "Guest spot": once migration 0021 ran, a guest in counts as a person (no guest: the same numbers).
+  const guests = await hasGuestColumns(ctx.db);
   const counts = await ctx.db
-    .prepare(`SELECT session_id, COUNT(*) AS n FROM session_players WHERE status = 'confirmed' AND session_id IN (${rowIds.map(() => '?').join(',')}) GROUP BY session_id`)
+    .prepare(`SELECT session_id, ${guests ? `SUM(${SEAT_HEADS('session_players')})` : 'COUNT(*)'} AS n FROM session_players WHERE status = 'confirmed' AND session_id IN (${rowIds.map(() => '?').join(',')}) GROUP BY session_id`)
     .bind(...rowIds)
     .all<{ session_id: string; n: number }>();
   const countOf = new Map(counts.results.map((r) => [r.session_id, Number(r.n)]));

@@ -118,6 +118,10 @@ export interface Env {
   PLAYERS_SHEET_REDO?: string;
   /** Zip 35 "Tap guard fix" (shared/tapGuard.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?tapguard=on. Look and feel only: which fast tap the page ignores. */
   TAP_GUARD_FIX?: string;
+  /** Zip 42 "Guest spot" (shared/guestSpot.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?guestspot=on. */
+  GUEST_SPOT?: string;
+  /** Zip 42, previews only (never production): the preview shows Guest spot whatever its shared database's Settings row says. */
+  GUEST_SPOT_PREVIEW?: string;
   /** Zip 34 "Check-in pay line" (shared/checkInPay.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?checkinpay=on. Words only. */
   CHECKIN_PAY_LINE?: string;
   /** Zip 30 "Acting for others" (shared/actingForOthers.ts): the kill switch, allowed unless "off" ("off" also stops recording phone codes). Who sees it: Settings > Feature switches, /admin?actingothers=on. Organizer only, look only. */

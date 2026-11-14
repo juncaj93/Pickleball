@@ -1,5 +1,6 @@
 import type { CreditEntryView, GroupView } from '../shared/api';
 import { claimShares, extendedTimeFor, extRowsOf, followSeat, hasViaShares, myExtShares, playerExtensionPaid, playerExtensionSeen, seatIdOf, undoClaimAt } from './extension';
+import { headCount } from '../shared/guestSpot';
 import { sessionCalendar } from '../shared/calendar';
 import { DEFAULT_VENUE_NAME, zelleNumberOf } from '../shared/settings';
 import { joinOutcome } from '../shared/spots';
@@ -98,6 +99,8 @@ import { payNoteFor } from './payNote';
 import { playerFix1For } from './playerFix1';
 import { instantTapsFor } from './instantTaps';
 import { tapGuardFixFlags } from './tapGuardFix';
+import { guestSpotFlags } from './guestSpot';
+import { removeGuestCore } from './guestActions';
 import { homeCollapseFor } from './homeCollapse';
 import { colorCleanupFor, playerCardsFor, tonightGlowFor } from './zip7';
 import { paySheetFor } from './paySheet';
@@ -256,9 +259,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
           sessionId: s.id,
           startsAt: s.starts_at,
           endsAt: s.ends_at,
-          joinAs: joinOutcome(confirmedOf(roster).length, capOf(settings)),
+          joinAs: joinOutcome(headCount(confirmedOf(roster)), capOf(settings)),
           holiday: holidayFor(s.starts_at, tz),
-          confirmedCount: confirmedOf(roster).length,
+          confirmedCount: headCount(confirmedOf(roster)),
           courtState: s.court_state,
         };
         break;
@@ -311,6 +314,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...((await instantTapsFor(ctx, group.id)) ? { instantTaps: true } : {}),
     // Zip 35 "Tap guard fix" (server/tapGuardFix.ts): only while on (off: this answer is exactly main's).
     ...((await tapGuardFixFlags(ctx, group.id)).on ? { tapGuardFix: true } : {}),
+    // Zip 42 "Guest spot" (server/guestSpot.ts): the host's Remove guest link, only while on (off: this answer is exactly main's).
+    ...((await guestSpotFlags(ctx, group.id)).on ? { guestSpot: true } : {}),
     ...((await homeCollapseFor(ctx, group.id)) ? { homeCollapse: true } : {}),
     ...((await tonightGlowFor(ctx, group.id)) ? { tonightGlow: true } : {}),
     ...((await colorCleanupFor(ctx, group.id)) ? { colorCleanup: true } : {}),
@@ -586,6 +591,14 @@ export async function playerWithdraw(ctx: Ctx) {
   // creditBackCents: cash paid that became credit; creditReturnedCents: credit used on the game that went back.
   // lateFee: the drop left the game short, so their $14 stays on it (or is owed) unless someone takes the spot.
   return { result, creditBackCents: res.creditBackCents, creditReturnedCents: res.creditReturnedCents, ...(res.lateFee ? { lateFee: { cents: res.lateFee.oweCents ?? flatOf(who.session, settingsOf(who.group)), paid: res.lateFee.paid } } : {}) };
+}
+
+/** POST /api/sessions/:id/remove-guest: Zip 42 "Guest spot", the host's own "Remove guest" (switch on for this phone). */
+export async function playerRemoveGuest(ctx: Ctx) {
+  const who = await actingOn(ctx);
+  if (!(await guestSpotFlags(ctx, who.group.id)).on) throw new HttpError(403, 'guest_spot_off', 'Ask Alex to remove your guest.');
+  const res = await removeGuestCore(ctx, who.group, who.session, who.playerId, 'host');
+  return { result: 'removed', guest: res.guest, creditBackCents: res.creditBackCents };
 }
 
 /**

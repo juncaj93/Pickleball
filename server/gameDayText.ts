@@ -1,5 +1,6 @@
 import { dayLabelR2, shortTime } from '../shared/textsR2';
 import { siteAddress } from '../shared/messages';
+import { headCount } from '../shared/guestSpot';
 import { COURT_NAME } from '../shared/zip9';
 import { GAME_DAY_TEXT, GAME_TEXT_TASK, gameDayTextAllowed, gameDayTextBody, recipientNumbers, reminderDue } from '../shared/gameDayText';
 import { playerLinkFor } from './admin';
@@ -221,7 +222,7 @@ export async function tickGameText(ctx: Ctx, group: GroupRow, games: SessionRow[
       const failed = logs.filter((l) => l.kind === 'failed');
       if (failed.length >= MAX_TRIES || failed.some((l) => ctx.nowMs - Date.parse(l.at) < RETRY_AFTER_MS)) continue;
       const roster = await loadRoster(ctx.db, s.id);
-      const inCount = confirmedOf(roster).length;
+      const inCount = headCount(confirmedOf(roster));
       if (inCount < MIN_IN) continue;
       if ((await recipientsOf(ctx, group, s)).numbers.length === 0) continue;
       const text = reminderMessage(s.starts_at, group.timezone, ctx.nowMs, inCount, `${siteUrl(ctx)}/gt/${await makeGdtToken(secret, s.id, s.ends_at)}`);

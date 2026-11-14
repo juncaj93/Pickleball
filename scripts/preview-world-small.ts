@@ -38,7 +38,7 @@ export const SMALL_NO_NUMBER = 'Reese';
 // since Sun Nov 8 evening (Alex, Zip 18 round 2).
 export const LATER_ON_LIVE: readonly string[] = ['game_day_card_on', 'second_chance_on', 'after_game_card_on', 'unpaid_nudge_on'];
 /** Being built: Tap guard fix (Zip 35). Extended time (Zip 31) is still being tried too. Check-in pay line (Zip 34) is still being tried too. Players sheet redo (Zip 32) is still being tried too. Acting for others (Zip 30) is still being tried too. Spent matches Totals (Zip 27), Booking hours (Zip 24) and Totals refresh (Zip 23) shipped OFF and are still being tried, so they stay on here too. */
-export const BUILDING_ON: readonly string[] = ['totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on'];
+export const BUILDING_ON: readonly string[] = ['totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on', 'guest_spot_on'];
 
 export function smallSwitchRows(nowMs: number): string {
   const at = new Date(nowMs).toISOString();
@@ -512,14 +512,36 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
   w.db.raw.prepare("UPDATE players SET usual_days = '4', is_regular = 1 WHERE id = ?").run(w.ids.Rowan);
   summary.push(`Sage: credit adjusted +$5 ("Thanks for bringing balls", ${(sagePot + 500) / 100} dollars now) and a Tue/Thu regular (Want in card); Rowan: a Thursday regular`);
 
+  // 24. Zip 42 "Guest spot": Rowan brings a guest, Sam (a guest is no player record: only a first name on Rowan's own seat). Two games, the
+  //     same four people (Rowan + Sam, Parker, Christopher Vanderberg), booked:
+  //     "Guest test", the next day at 7:30 PM: Rowan owes $28 (his cancel-by is 7:30 AM that day: after it, Drop out says "you still owe $28").
+  //     "Guest paid", about three days out at 7:00 PM: Rowan paid $28 (Remove guest gives $14 back as credit; Drop out says both spots open up).
+  {
+    await w.org.ok('PUT', '/api/admin/guest-spot-switch', { on: true });
+    const guestA = await makeAt(localAt(N + DAY, 19, 30), 120, 'Guest test');
+    const guestB = await makeAt(localAt(N + 3 * DAY, 19), 120, 'Guest paid');
+    for (const gg of [guestA, guestB]) {
+      await setCourt(gg, 'booked');
+      for (const n of ['Rowan', 'Parker', SMALL_LONG]) await join(n, gg);
+      await w.org.ok('POST', `/api/admin/sessions/${gg.id}/guest`, { playerId: w.ids.Rowan, name: 'Sam' });
+    }
+    await orgPays('Rowan', guestB);
+    keep.length = 0;
+    keep.push(guestA.id, guestB.id);
+    lateMove = undefined;
+    await refresh();
+    summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg (4 in); Rowan owes $28 on the first and paid $28 on the second');
+  }
+
   await refresh();
   const names = (dash.players as { name: string }[]).map((p) => p.name).sort();
   if (names.join('|') !== [...SMALL_NAMES].sort().join('|')) throw new Error(`the small preview must have exactly the fixed names, has: ${names.join(', ')}`);
 
   let calmSql = '';
   if (opts.calm) {
-    calmSql = calmDown(w.db.raw, keep, N, lateMove, skinKeep);
-    summary.push('CALM profile: only the 8:00 PM Second Chance game, the "Test game" and (Zip 38, player screens only) the tonight and tomorrow games are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
+    // Zip 42: the calm profile keeps only this zip's two games (the Zip 38 tonight and tomorrow player games stay in the full world, --full).
+    calmSql = calmDown(w.db.raw, keep, N, lateMove, []);
+    summary.push('CALM profile (Zip 42): only the two Guest spot games are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
   }
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);

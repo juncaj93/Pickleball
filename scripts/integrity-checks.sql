@@ -48,7 +48,10 @@ SELECT
   -- Credit on one seat above the most any game can cost up front: the top row of shared/gameLength.ts GAME_LENGTHS (2100 = $21, the
   -- 3 hour game) or Settings > Money "Price per player", whichever is higher (Zip 27, A-03; it used to be a fixed $14, which a paid
   -- 2.5 or 3 hour game tripped by mistake). tests/zip27-money.test.ts keeps 2100 equal to the table. The name is kept for old notes.
-  ,(SELECT COUNT(*) FROM used_on_seat WHERE cents > MAX(2100, COALESCE((SELECT json_extract(settings_json, '$.pricePerPlayerCents') FROM groups LIMIT 1), 1400))) AS credit_on_seat_over_14
+  -- Zip 42 "Guest spot": a seat that had a guest added (its "guest_added" History line) can carry the guest's share too: two shares. Every
+  -- other seat keeps the one-share limit. (Read from the History table, so this file works the same before and after migration 0021.)
+  ,(SELECT COUNT(*) FROM used_on_seat u WHERE u.cents > MAX(2100, COALESCE((SELECT json_extract(settings_json, '$.pricePerPlayerCents') FROM groups LIMIT 1), 1400))
+      * (1 + EXISTS (SELECT 1 FROM admin_audit_log a WHERE a.action = 'guest_added' AND a.session_id = u.session_id AND json_extract(a.details_json, '$.playerId') = u.player_id))) AS credit_on_seat_over_14
   -- "Card cleanup" (Zip 10) on for everyone: no Max players cap, so the limit is the database's own 12.
   ,(SELECT COUNT(*) FROM (SELECT session_id FROM session_players WHERE status = 'confirmed' GROUP BY session_id HAVING COUNT(*) > CASE WHEN EXISTS (SELECT 1 FROM task_log WHERE task = 'card_cleanup_on' AND kind = 'mark' AND session_id IS NULL) THEN 12 ELSE COALESCE((SELECT json_extract(settings_json, '$.maxPlayers') FROM groups LIMIT 1), 10) END)) AS more_in_than_max
   ,(SELECT COUNT(*) FROM session_players WHERE payment_status = 'paid' AND payment_amount_cents IS NULL) AS paid_seat_without_amount

@@ -581,6 +581,7 @@ export function ConfirmDialog({
   busy,
   onConfirm,
   onCancel,
+  cancelLabel,
 }: {
   open: boolean;
   title: string;
@@ -590,6 +591,8 @@ export function ConfirmDialog({
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Zip 42: the left button's words ("Keep Sam", "Stay in"). Missing: "Go back", as everywhere else. */
+  cancelLabel?: string;
 }) {
   return (
     <Sheet open={open} title={title} onClose={onCancel}>
@@ -597,7 +600,7 @@ export function ConfirmDialog({
         <div>{body}</div>
         <div className="btn-row">
           <button className="btn secondary" onClick={onCancel} disabled={busy}>
-            Go back
+            {cancelLabel ?? 'Go back'}
           </button>
           <button className={`btn ${danger ? 'danger' : ''}`} onClick={onConfirm} disabled={busy}>
             {busy ? 'Working…' : confirmLabel}
@@ -1016,6 +1019,7 @@ export function NamesLine({
   label,
   children,
   icon,
+  guestAt,
 }: {
   names: string[];
   me?: string | null;
@@ -1024,6 +1028,8 @@ export function NamesLine({
   children?: ReactNode;
   /** "Card cleanup" (Zip 10): the small gray people icon before the names. */
   icon?: boolean;
+  /** Zip 42 "Guest spot": true at a guest's place (always right after its host). It reads "Rowan + Sam (guest)". Missing: no guests. */
+  guestAt?: readonly boolean[];
 }) {
   // A name that appeared since the last draw (someone joined while you were looking) fades in.
   const seen = useRef<Set<string> | null>(null);
@@ -1043,15 +1049,23 @@ export function NamesLine({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   if (names.length === 0) return null;
-  const show = nameLabel([...everyone, ...names]);
+  const isGuest = (i: number) => guestAt?.[i] === true;
+  // A guest's name is the first name the organizer typed; the group's other players never shorten or lengthen it.
+  const show = guestAt?.some(Boolean) ? nameLabel([...everyone, ...names.filter((_, i) => !isGuest(i))]) : nameLabel([...everyone, ...names]);
+  // Yours is bold; so is your own guest (mock player_pair_1: "Rowan + Sam (guest)").
+  const mineAt = (i: number) => (isGuest(i) ? i > 0 && names[i - 1] === me : names[i] === me);
+  const label1 = (n: string, i: number) => (isGuest(i) ? n : show(n));
+  const one = (n: string, i: number) => (mineAt(i) ? <strong>{label1(n, i)}</strong> : label1(n, i));
   const list = names.map((n, i) => (
     <Fragment key={n + i}>
-      {i > 0 && ', '}
-      {fresh.includes(n) ? <span className="name-new">{n === me ? <strong>{show(n)}</strong> : show(n)}</span> : n === me ? <strong>{show(n)}</strong> : show(n)}
+      {i > 0 && (isGuest(i) ? <span className="guest-plus"> + </span> : ', ')}
+      {fresh.includes(n) ? <span className="name-new">{one(n, i)}</span> : one(n, i)}
+      {isGuest(i) && <span className="guest-tag"> (guest)</span>}
     </Fragment>
   ));
+  const title = guestAt?.some(Boolean) ? names.map((n, i) => (isGuest(i) ? ` + ${n} (guest)` : `${i > 0 ? ', ' : ''}${n}`)).join('') : names.join(', ');
   return (
-    <p className={`${label ? 'waitlist-line' : 'names-line'}${icon ? ' with-icon' : ''}`} title={names.join(', ')}>
+    <p className={`${label ? 'waitlist-line' : 'names-line'}${icon ? ' with-icon' : ''}`} title={title}>
       {label && `${label}: `}
       {icon ? (
         <>
@@ -1087,7 +1101,12 @@ export function PlayersLine({
   after,
   maxPlayers,
   cleanup,
+  guestAt,
+  waitGuestAt,
 }: {
+  /** Zip 42 "Guest spot": where guests sit in `names` / `waitlist` (shared/guestSpot.ts rosterLine). Missing: no guests. */
+  guestAt?: boolean[];
+  waitGuestAt?: boolean[];
   /** "Card cleanup" (Zip 10): no count text, the circles on one row, the people icon before the names, no waitlist line. */
   cleanup?: boolean;
   /** Confirmed players, in sign-up order. */
@@ -1112,7 +1131,7 @@ export function PlayersLine({
           </span>
           {after && <span className="players-after">{after}</span>}
         </div>
-        <NamesLine names={names} everyone={everyone} icon />
+        <NamesLine names={names} everyone={everyone} icon {...(guestAt ? { guestAt } : {})} />
       </div>
     );
   }
@@ -1125,8 +1144,8 @@ export function PlayersLine({
         <SpotDots names={names} />
         {after && <span className="players-after">{after}</span>}
       </div>
-      <NamesLine names={names} everyone={everyone} />
-      <NamesLine names={waitlist} everyone={everyone} label={waitLabel} />
+      <NamesLine names={names} everyone={everyone} {...(guestAt ? { guestAt } : {})} />
+      <NamesLine names={waitlist} everyone={everyone} label={waitLabel} {...(waitGuestAt ? { guestAt: waitGuestAt } : {})} />
     </div>
   );
 }

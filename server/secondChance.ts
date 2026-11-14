@@ -6,6 +6,7 @@
 // "On for everyone" is one row in task_log (kind 'mark', no game): no schema change, the same way the other switches are stored.
 // Card steps and sent Telegrams are task_log rows on the game (the table's unique index keeps each to one per game).
 import type { AdminDashboard, AdminSessionView } from '../shared/api';
+import { headCount } from '../shared/guestSpot';
 import { MIN_PLAYERS } from '../shared/spots';
 import { checkBookingTimes, hoursLine } from '../shared/bookingHours';
 import { COURTRESERVE_BOOKING_URL } from '../shared/settings';
@@ -147,7 +148,8 @@ export function factsOf(roster: readonly RosterRow[], organizerId: string | null
     .map((r) => ({ playerId: r.player_id, name: r.display_name, owesCents: owes.get(r.player_id) ?? 0, phone: r.phone_number }));
   // Paid by the player's own "I paid", not confirmed by the organizer yet (Mark paid confirms it): still counted, and Telegram 2 says how many.
   const unconfirmed = others.filter((r) => r.payment_status === 'paid' && !!r.self_paid_at).length;
-  return { inCount: inRows.length, paidCount: paid, unpaid, unconfirmed };
+  // Zip 42: a guest in counts as a person (headCount is inRows.length with no guest).
+  return { inCount: headCount(inRows), paidCount: paid, unpaid, unconfirmed };
 }
 
 function gameOf(s: SessionRow, facts: ReturnType<typeof factsOf>, marks: MarkRow[]): ScGame {

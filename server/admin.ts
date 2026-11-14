@@ -100,6 +100,8 @@ import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from '.
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
 import { setTapGuardFixForAll, tapGuardFixFlags } from './tapGuardFix';
+import { guestSpotFlags, hasGuestColumns } from './guestSpot';
+import { headCount, seatUnits } from '../shared/guestSpot';
 import { phoneTagOf } from './phoneTag';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
@@ -267,6 +269,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const checkInPay = await checkInPayFlags(ctx, group.id);
   // Zip 35 "Tap guard fix" (server/tapGuardFix.ts): which fast tap the page ignores, only while on (off: this answer is exactly main's).
   const tapGuard = await tapGuardFixFlags(ctx, group.id);
+  // Zip 42 "Guest spot" (server/guestSpot.ts): Add a guest on the Players sheet, only while on (off: this answer is exactly main's).
+  const guestSpot = await guestSpotFlags(ctx, group.id);
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -421,6 +425,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(checkInPay.forAll ? { checkInPayForAll: true as const } : {}),
     ...(tapGuard.on ? { tapGuardFix: true as const } : {}),
     ...(tapGuard.forAll ? { tapGuardFixForAll: true as const } : {}),
+    ...(guestSpot.on ? { guestSpot: true as const } : {}),
+    ...(guestSpot.forAll ? { guestSpotForAll: true as const } : {}),
     ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),
     ...(playersSheet.forAll ? { playersSheetRedoForAll: true as const } : {}),
     ...(actingRows ? { actingOthers: actingRows } : {}),
@@ -707,14 +713,15 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
   const claimed = plan
     ? `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND canceled_at = ${sqlText(ctx.nowIso)} AND canceled_by = '${FEE_KEPT}' AND final_price_cents = ${plan.priceCents} AND finalized_at IS NULL)`
     : '';
-  const seatMoves = plan ? plan.seats.map((seat) => splitSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, seat, priceCents: plan.priceCents, nowIso: ctx.nowIso, guard: claimed })) : [];
+  // Zip 42 "Guest spot": a seat with its guest in keeps two shares (plan.units / trim.units: 1 for every seat without a guest).
+  const seatMoves = plan ? plan.seats.map((seat, i) => splitSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, seat, priceCents: plan.priceCents * plan.units[i], nowIso: ctx.nowIso, guard: claimed })) : [];
   // Zip 39 ("Made cheaper after paying", server/cheaperFix.ts): no split, and a seat holds MORE than the fee (the game was made cheaper after
   // they paid). Each such seat keeps exactly the fee and the rest comes back as credit, with the split's own moves. Then, like the split, the
   // cancel only goes ahead if no seat or credit on the game changed since it was read. No such seat (every normal game), or the switch off:
   // nothing here, and the cancel is exactly main's.
   const trim = !plan && (await cheaperFixFor(ctx, group.id, true)) ? await cheaperCancelPlan(ctx, group, session, organizerId) : null;
   const trimmed = `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND canceled_at = ${sqlText(ctx.nowIso)} AND canceled_by = '${FEE_KEPT}' AND finalized_at IS NULL)`;
-  const trimMoves = trim ? trim.seats.map((seat) => splitSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, seat, priceCents: trim.feeCents, nowIso: ctx.nowIso, guard: trimmed })) : [];
+  const trimMoves = trim ? trim.seats.map((seat, i) => splitSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, seat, priceCents: trim.feeCents * trim.units[i], nowIso: ctx.nowIso, guard: trimmed })) : [];
   const [cancel] = await ctx.db.batch([
     plan
       ? ctx.db
@@ -844,15 +851,19 @@ async function splitPlan(ctx: Ctx, group: GroupRow, session: SessionRow, organiz
   const state = (await ctx.db.prepare(`SELECT ${SPLIT_STATE(session.id)} AS s`).first<{ s: string }>())?.s ?? '';
   const roster = await loadRoster(ctx.db, session.id);
   const confirmed = roster.filter((r) => r.status === 'confirmed');
-  const priceCents = feeSplitPrice(priceOf(session, settingsOf(group)), confirmed.length);
+  // Zip 42: everyone signed up counts, guests too (headCount is confirmed.length when there is no guest).
+  const count = headCount(confirmed);
+  const priceCents = feeSplitPrice(priceOf(session, settingsOf(group)), count);
   if (priceCents === null) return null;
   const seats: SplitSeat[] = [];
+  const units: number[] = [];
   for (const r of confirmed) {
     if (r.player_id === organizerId) continue;
     if (r.payment_status === 'paid' && !r.refunded_at && r.self_paid_at) continue;
     seats.push(await splitSeatOf(ctx, session.id, r));
+    units.push(seatUnits(r));
   }
-  return { priceCents, count: confirmed.length, state, seats };
+  return { priceCents, count, state, seats, units };
 }
 
 /**
@@ -864,14 +875,18 @@ async function cheaperCancelPlan(ctx: Ctx, group: GroupRow, session: SessionRow,
   const state = (await ctx.db.prepare(`SELECT ${SPLIT_STATE(session.id)} AS s`).first<{ s: string }>())?.s ?? '';
   const feeCents = flatOf(session, settingsOf(group));
   const seats: SplitSeat[] = [];
+  const units: number[] = [];
   for (const r of await loadRoster(ctx.db, session.id)) {
     if (r.status !== 'confirmed' || r.player_id === organizerId) continue;
     if (r.payment_status === 'paid' && !r.refunded_at && r.self_paid_at) continue;
     const seat = await splitSeatOf(ctx, session.id, r);
     const holds = seat.paid ? seat.paymentCents : seat.used.reduce((s, u) => s + u.cents, 0) + seat.heldCashCents;
-    if (holds > feeCents) seats.push(seat);
+    if (holds > feeCents * seatUnits(r)) {
+      seats.push(seat);
+      units.push(seatUnits(r));
+    }
   }
-  return seats.length ? { state, feeCents, seats } : null;
+  return seats.length ? { state, feeCents, seats, units } : null;
 }
 
 /**
@@ -1176,7 +1191,7 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileC
   // unpaid seat whose credit now covers it is paid, and anything paid above the new price comes back as credit at Finalize.
   // Off (or the same price): nothing is added, exactly as before.
   const newFlat = flatOf({ starts_at: startsAt, ends_at: endsAt }, settingsOf(group));
-  const reprice = newFlat !== flatOf(session, settingsOf(group)) ? repriceStatements(ctx.db, session.id, newFlat, ctx.nowIso) : [];
+  const reprice = newFlat !== flatOf(session, settingsOf(group)) ? repriceStatements(ctx.db, session.id, newFlat, ctx.nowIso, await hasGuestColumns(ctx.db)) : [];
   try {
     if (startsAt !== session.starts_at) {
       // "Time may shift": everyone in (or on the real waitlist) who had agreed to the old start time, by joining at
@@ -1621,7 +1636,7 @@ export async function applyPayment(
       // Only the latest cash went: the credit (and cash held) left on the seat may cover its price on its own. Then
       // the seat is paid with it, and on a finalized game that played, what is above the final price comes back as
       // credit, as Finalize does (never left unused on a seat that owes nothing).
-      ...(latestCash > 0 ? repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), ctx.nowIso) : []),
+      ...(latestCash > 0 ? repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), ctx.nowIso, await hasGuestColumns(ctx.db)) : []),
       ...(latestCash > 0 && session.finalized_at && row.played === 1 && session.final_price_cents !== null && session.final_price_cents !== undefined
         ? creditBackStatements(ctx.db, {
             groupId: group.id,
@@ -1764,7 +1779,7 @@ export async function prepareLinks(ctx: Ctx, body: Record<string, unknown>): Pro
       .filter((r) => !r.attendance_confirmed_at)
       .map((r) => ({ playerId: r.player_id, name: r.display_name, phone: r.phone_number }));
   } else {
-    if (openSpots(confirmedOf(roster).length, capOf(settingsOf(group))) === 0) {
+    if (openSpots(headCount(confirmedOf(roster)), capOf(settingsOf(group))) === 0) {
       throw new HttpError(409, 'session_full', 'No spots are open right now.');
     }
     recipients = eligibleSubstitutes(roster, await getPlayers(ctx.db, group.id));
@@ -1930,7 +1945,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
       .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
       .all<SessionRow>();
     for (const s of open) {
-      if (flatOf(s, after) !== flatOf(s, before)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
+      if (flatOf(s, after) !== flatOf(s, before)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso, await hasGuestColumns(ctx.db)));
     }
   }
   if (settings.maxPlayers > oldMax) {
@@ -2590,7 +2605,7 @@ export async function setBookingHoursSwitch(ctx: Ctx, body: Record<string, unkno
     .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
     .all<SessionRow>();
   for (const s of open) {
-    if ((LONG_MINUTES as readonly number[]).includes(gameMinutes(s.starts_at, s.ends_at))) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
+    if ((LONG_MINUTES as readonly number[]).includes(gameMinutes(s.starts_at, s.ends_at))) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso, await hasGuestColumns(ctx.db)));
   }
   return { ok: true, on };
 }
@@ -2802,7 +2817,7 @@ export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown
     .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?`)
     .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
     .all<SessionRow>();
-  for (const s of open) if (isShortGame(s.starts_at, s.ends_at)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
+  for (const s of open) if (isShortGame(s.starts_at, s.ends_at)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso, await hasGuestColumns(ctx.db)));
   return { ok: true, on };
 }
 

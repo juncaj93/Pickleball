@@ -10,6 +10,7 @@ import { zip9Allowed } from '../shared/zip9';
 import { bookingHoursAllowed } from '../shared/bookingHours';
 import { lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 import { OPEN_FEE } from './lateFees';
+import { guestWaiting, headCount, seatUnits } from '../shared/guestSpot';
 import type { D1Database, D1PreparedStatement } from './db';
 
 export interface GroupRow {
@@ -139,6 +140,11 @@ export interface RosterRow {
   ext_via?: string | null;
   ext_seen_at?: string | null;
   ext_at?: string | null;
+  /** Zip 42 "Guest spot" (migration 0021, shared/guestSpot.ts): this sign-up's guest (a plus one). Missing before 0021. */
+  guest_name?: string | null;
+  guest_status?: 'confirmed' | 'waitlisted' | 'late' | null;
+  guest_seq?: number | null;
+  guest_at?: string | null;
   display_name: string;
   phone_number: string | null;
 }
@@ -498,7 +504,27 @@ export function pricesFor(session: SessionRow, roster: RosterRow[], settings: Gr
     const kind = lateFeeKind(r, session);
     if (kind) out.set(r.player_id, { cents: lateFeePriceCents(kind, session, flat) });
   }
+  // Zip 42 "Guest spot": a seat with its guest in pays for two (the guest's share sits on the host's seat). No guest: units 1, as before.
+  for (const r of roster) {
+    const units = seatUnits(r);
+    const p = out.get(r.player_id);
+    if (units > 1 && p) out.set(r.player_id, { cents: p.cents * units });
+  }
   return out;
+}
+
+/** Zip 42: one place in line on the waitlist, a player's own seat or a guest waiting behind their host. */
+export interface WaitEntry {
+  row: RosterRow;
+  guest: boolean;
+  seq: number;
+}
+
+/** Zip 42: the whole waitlist in join order, waiting guests included. With no guest it is waitlistOf, one entry per row. */
+export function waitQueue(roster: RosterRow[]): WaitEntry[] {
+  const out: WaitEntry[] = waitlistOf(roster).map((row) => ({ row, guest: false, seq: row.claim_seq }));
+  for (const r of roster) if (guestWaiting(r)) out.push({ row: r, guest: true, seq: r.guest_seq ?? Number.MAX_SAFE_INTEGER });
+  return out.sort((a, b) => a.seq - b.seq || Number(a.guest) - Number(b.guest) || a.row.id.localeCompare(b.row.id));
 }
 
 /** What the venue charges for a session: the cost on the booking, else the typical court cost (a 1.5 hour game's row with "Short games" on). */
@@ -528,8 +554,9 @@ export function statusInput(session: SessionRow, roster: RosterRow[]): StatusInp
     courtState: session.court_state,
     cancellationDeadlineAt: session.cancellation_deadline_at,
     adminDecision: session.admin_decision,
-    confirmedCount: confirmed.length,
-    waitlistCount: waitlistOf(roster).length,
+    // Zip 42: guests count like players (headCount is confirmed.length when no game has a guest).
+    confirmedCount: headCount(confirmed),
+    waitlistCount: waitQueue(roster).length,
     unconfirmedAttendanceCount: confirmed.filter((r) => !r.attendance_confirmed_at).length,
   };
 }

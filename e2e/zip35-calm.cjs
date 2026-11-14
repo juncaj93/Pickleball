@@ -3,10 +3,9 @@
  *   node e2e/zip35-calm.cjs      (also run by npm run test:e2e)
  *
  * The CALM small world on its own dev server (PREVIEW_CALM and SECOND_CHANCE_TEST on, as on a preview), at 390 px wide, light and dark:
- *   C1  admin Home, opened at /admin?noontest=on: the first screen shows the Second Chance card "Tue 8:00 PM was 1 short" with its Book a court
- *       button, the whole Home fits in one screen without scrolling, and has no "haven't paid" rows (no Mark paid, Request, Remind, Finalize);
- *   C2  Book a court (the card's first step) leads to the time picker, which ends at 8:00 PM (Booking hours is on), then Reopen game works;
- *   C3  Money > Previous games > "Test game" is there with Hide from list (two taps from Money);
+ *   (Zip 42: the calm profile now holds the Guest spot games; the Second Chance and "Test game" checks this file had moved to the full world.)
+ *   C1  admin Home: the "Guest test" card is on the first screen, Home fits two screens at most, no unrelated money rows (Remind, Finalize, haven't paid);
+ *   C2  the money cell opens the Players sheet with Rowan, his guest Sam, Parker and Christopher (two taps from the preview link);
  *   C4  player Home (Rowan): no alert cards, no money, at most three plain games and "More sessions".
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -70,9 +69,10 @@ async function main() {
   const dash = async () => (await org.get(BASE + '/api/admin/dashboard', { headers: { Origin: BASE } })).json();
   const d0 = await dash();
   const eastern = (iso) => new Date(iso).toLocaleString('en-US', { timeZone: 'America/Detroit', hour: 'numeric', minute: '2-digit' });
-  const late = d0.sessions.find((s) => s.state.flags.canceled && s.confirmedCount === 3 && eastern(s.startsAt) === '8:00 PM');
-  assert(late, 'the 8:00 PM Second Chance game is missing from the calm world');
-  const dayKey = new Date(late.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
+  // Zip 42: the calm profile now keeps the two Guest spot games (the Zip 35 Second Chance scene lives in the full world, e2e/zip35.cjs).
+  const guestTest = d0.sessions.find((s) => s.note === 'Guest test');
+  const guestPaid = d0.sessions.find((s) => s.note === 'Guest paid');
+  assert(guestTest && guestPaid, 'the two Guest spot games are missing from the calm world');
 
   const shift = (ctx) =>
     ctx.addInitScript((delta) => {
@@ -101,60 +101,35 @@ async function main() {
   }
 
   for (const scheme of ['light', 'dark']) {
-    await check(`C1 (${scheme}): admin Home at 390 px: the Second Chance card is the first thing, Home fits two screens at most, no unpaid rows`, async () => {
-      const { ctx, page } = await openAdmin(scheme);
-      const card = page.locator(`[data-sc-card="chance"][data-session="${late.id}"]`);
-      await card.waitFor({ timeout: 15000 });
-      const box = await card.boundingBox();
-      assert(box && box.y < 200 && box.y + box.height < 400, `the card is not at the top: ${JSON.stringify(box)}`);
-      assert(/Tue 8:00 PM was 1 short/.test(await card.innerText()), `card words: ${await card.innerText()}`);
-      assert((await card.getByText('Book a court').count()) === 1, 'Book a court on the card');
+    await check(`C1 (${scheme}): admin Home at 390 px: the two Guest spot games come first, Home fits two screens at most, no unrelated money rows`, async () => {
+      const { ctx, page } = await openAdmin(scheme, '/admin');
+      const ids = await page.locator('article[data-r2-card]').evaluateAll((els) => els.map((e) => e.id));
+      if (process.env.CALM_SHOT) await page.screenshot({ path: process.env.CALM_SHOT, fullPage: true });
+      assert(ids[0] === `session-${guestTest.id}` && ids[1] === `session-${guestPaid.id}`, `first cards: ${ids.slice(0, 3)}`);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const box = await page.locator(`article[id="session-${guestTest.id}"]`).boundingBox();
+      assert(box && box.y + 120 < 844, `the Guest test card is not on the first screen: ${JSON.stringify(box)}`);
       const fit = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, w: window.innerHeight }));
-      // Zip 38: the calm profile also keeps tonight's and tomorrow's games for the player screens (the Christmas skin needs them), and the site
-      // always lists an open game with players on the organizer's Home, so Home is up to two screens now (the card is still the first thing).
       assert(fit.h <= fit.w * 2 + 2, `Home needs more than two screens: page ${fit.h}px, screen ${fit.w}px`);
       const text = await page.locator('body').innerText();
-      for (const bad of ['Mark paid', 'Request', 'Remind', 'Finalize', "haven't paid", 'Who owes', 'owes $']) assert(!text.includes(bad), `unrelated money text on Home: "${bad}"`);
+      for (const bad of ['Remind', 'Finalize', "haven't paid", 'Who owes']) assert(!text.includes(bad), `unrelated money text on Home: "${bad}"`);
       assert((await page.locator('article').count()) <= 7, `${await page.locator('article').count()} games on Home`);
       await ctx.close();
     });
   }
 
-  await check('C2: Book a court leads to the time picker (ends 8:00 PM, hours on), and Reopen game reopens at 7:00 PM', async () => {
-    const { ctx, page } = await openAdmin('light');
-    // The card's first step opens CourtReserve in another tab and moves the card to step 2 at the same moment: send the same tap.
-    const r = await org.post(`${BASE}/api/admin/sessions/${late.id}/second-chance`, { data: { action: 'booking' }, headers: { Origin: BASE } });
-    assert(r.ok(), 'step 1 to 2');
-    await page.reload();
-    const sel = page.locator(`[data-sc-card="chance"][data-session="${late.id}"] select[aria-label="Start time"]`);
-    await sel.waitFor({ timeout: 15000 });
-    const labels = await sel.locator('option').evaluateAll((os) => os.map((o) => o.textContent.trim()));
-    assert(labels.at(-1) === '8:00 PM' && !labels.includes('8:30 PM'), `picker: ${labels.join(', ')}`);
-    await sel.selectOption({ label: '7:00 PM' });
-    await page.locator(`[data-sc-card][data-session="${late.id}"] [data-sc-reopen]`).click();
-    await page.getByText('Reopened for 7:00 PM').first().waitFor({ timeout: 10000 });
-    const g = (await dash()).sessions.find((s) => s.id === late.id);
-    assert(!g.state.flags.canceled && eastern(g.startsAt) === '7:00 PM', `reopened: canceled=${g.state.flags.canceled} ${eastern(g.startsAt)}`);
+  await check('C2: two taps from the preview link: the money cell opens the Players sheet with Rowan, his guest Sam, Parker and Christopher', async () => {
+    const { ctx, page } = await openAdmin('light', '/admin');
+    const cell = page.locator(`article[id="session-${guestTest.id}"] [data-paid-cell]`);
+    await cell.scrollIntoViewIfNeeded();
+    await cell.click();
+    const dlg = page.locator('dialog.sheet[open]').first();
+    await dlg.waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+    const names = (await dlg.locator('.ps-row .ps-name').allInnerTexts()).map((t) => t.trim());
+    assert(names.join('|') === 'Rowan|Sam|Parker|Christopher Vanderberg', `rows: ${names.join(', ')}`);
     await ctx.close();
-    assert(dayKey.length === 10, 'day key');
   });
-
-  for (const scheme of ['light', 'dark']) {
-    await check(`C3 (${scheme}): Money > Previous games > Test game is there with Hide from list`, async () => {
-      const { ctx, page } = await openAdmin(scheme, '/admin');
-      await page.locator('.tabbar button', { hasText: 'Money' }).click();
-      await page.waitForTimeout(600);
-      await page.locator('[data-fold="previous"] .mrw-fold-head').click();
-      const test = (await dash()).sessions.find((s) => s.note === 'Test game');
-      assert(test, 'the Test game');
-      const row = page.locator(`[data-fold="previous"] .mrw-prow[data-session="${test.id}"]`);
-      await row.waitFor({ timeout: 15000 });
-      await page.waitForTimeout(600);
-      await row.locator('.mrw-prow-head').click();
-      await row.locator('[data-closed-body] [data-hide-from-list]').waitFor({ timeout: 10000 });
-      await ctx.close();
-    });
-  }
 
   for (const scheme of ['light', 'dark']) {
     await check(`C4 (${scheme}): player Home (Reese) at 390 px: plain games only, no alert cards, no money`, async () => {

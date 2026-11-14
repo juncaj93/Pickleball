@@ -6,6 +6,7 @@
 // give out is the same words the group already gets (a game time and the
 // site address), and all it can save is that the text was opened.
 import { MIN_PLAYERS } from '../shared/spots';
+import { headCount } from '../shared/guestSpot';
 import { needPlayersMessage, siteAddress } from '../shared/messages';
 import { needPlayersTextR2 } from '../shared/textsR2';
 import { textsR2For } from './textsR2';
@@ -91,7 +92,7 @@ export async function goText(ctx: Ctx, body: Record<string, unknown>) {
   if (!group || !session) throw new HttpError(404, 'not_found', 'This link does not work.');
   if (session.status === 'canceled') throw new HttpError(410, 'session_canceled', 'This game was canceled. Open the organizer page instead.');
   if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(410, 'link_expired', 'This link expired. Open the organizer page instead.');
-  const n = confirmedOf(await loadRoster(ctx.db, session.id)).length;
+  const n = headCount(confirmedOf(await loadRoster(ctx.db, session.id)));
   const link = siteAddress(playerLinkFor(ctx, group));
   const s = { startsAt: session.starts_at, endsAt: session.ends_at };
   // TEXTS_R2 on (everyone, or this phone's private link): the new wording with line breaks. Off: the old words.

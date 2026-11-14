@@ -1,5 +1,6 @@
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
+import { rosterLine } from '../../../shared/guestSpot';
 import { type CourtSwitch, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { countText, MIN_PLAYERS } from '../../../shared/spots';
 import { cardTime, formatShortDate } from '../../../shared/time';
@@ -131,7 +132,8 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
   );
   const switchValue = courtSwitchOf(s);
   const canceled = s.state.flags.canceled;
-  const names = s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name);
+  // Zip 42 "Guest spot": guests are names (and balls) right after their hosts; no guest: the same list.
+  const names = rosterLine(s.roster, 'confirmed').names;
   const me = ctx.d.me;
   const mine = !!me && s.roster.some((r) => r.playerId === me.id && r.status === 'confirmed');
   const ts = tsKind(court.kind, false);

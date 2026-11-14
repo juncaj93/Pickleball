@@ -29,8 +29,9 @@ export interface PlayerSessionView {
   started: boolean;
   bookingStatus: BookingStatus;
   venueName: string | null;
-  confirmed: { name: string; attendanceConfirmed: boolean }[];
-  waitlist: { name: string }[];
+  /** Zip 42 "Guest spot": a guest is its own entry right after its host, with `guestOf` (the host's name). No guest: exactly as before. */
+  confirmed: { name: string; attendanceConfirmed: boolean; guestOf?: string }[];
+  waitlist: { name: string; guestOf?: string }[];
   /** Spots left before the game is full. */
   openSpots: number;
   /** "3 of 4 in", "5 in", "10 in, full" */
@@ -93,6 +94,8 @@ export interface PlayerSessionView {
      * `paid`: money is on the seat ("Your $14 stays on this game"). Missing: the drop works exactly as before.
      */
     lateDrop?: { cancelByAt: string; owes: boolean; paid: boolean; feeCents: number };
+    /** Zip 42 "Guest spot": this player's guest for this game (in or waiting) and one person's share. Missing: no guest. */
+    guest?: { name: string; status: 'confirmed' | 'waitlisted'; shareCents: number };
     /** An open late fee on this seat (e.g. a game canceled late that the venue charged): what kind, and what is still owed. */
     /** priceCents: only for a late cancel with the fee split (LATE_FEE_SPLIT), what this seat's share is. */
     lateFee?: { kind: LateFeeKind; oweCents: number; priceCents?: number } | null;
@@ -178,6 +181,8 @@ export interface GroupView {
   instantTaps?: boolean;
   /** Zip 35 "Tap guard fix" is on for this screen (server/tapGuardFix.ts). Missing: the fast-tap guard is exactly as before. */
   tapGuardFix?: boolean;
+  /** Zip 42 "Guest spot" is on for this screen (server/guestSpot.ts): a host sees "Remove guest" on their card. Missing: no guest buttons. */
+  guestSpot?: boolean;
   /** "Home collapse" is on for this screen (server/homeCollapse.ts): Home shows this week and next week, later games behind one button. Missing: Home is exactly as before. */
   homeCollapse?: boolean;
   /** "Tonight glow" is on for this screen (server/zip7.ts): TONIGHT / TOMORROW tags and the badge glow. Missing: tiles are exactly as before. */
@@ -340,6 +345,8 @@ export interface AdminRosterEntry {
    * there is no share or credit here, and their paid mark means "Court paid".
    */
   isOrganizer: boolean;
+  /** Zip 42 "Guest spot": this player's guest for the game (in, waiting, or still on an open late-drop debt). Missing: no guest. */
+  guest?: { name: string; status: 'confirmed' | 'waitlisted' | 'late'; waitlistPosition?: number | null };
 }
 
 /** Organizer only: the court row on a session's Who paid list. Never sent to players. */
@@ -572,6 +579,10 @@ export interface AdminDashboard {
   tapGuardFix?: boolean;
   /** The Settings > Feature switches row for the Tap guard fix: on for every phone, player and organizer. */
   tapGuardFixForAll?: boolean;
+  /** Zip 42 "Guest spot" is on for this screen (server/guestSpot.ts): "Add a guest" on the Players sheet. Missing: no guest buttons. */
+  guestSpot?: boolean;
+  /** The Settings > Feature switches row for Guest spot: on for every phone. */
+  guestSpotForAll?: boolean;
   /** Zip 34 "Check-in pay line" is on for this screen (server/checkInPay.ts): the Check-in text carries a soft pay line while somebody signed up still owes. Missing: the words are exactly as before. */
   checkInPay?: boolean;
   /** The Settings > Feature switches row for the Check-in pay line: on for every organizer phone and the texted Telegram link. */

@@ -8,7 +8,9 @@ import { lateFeeCutoffMs } from '../shared/lateFees';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
-import { audit, flatOf, type GroupRow, type SessionRow, waitlistOf, loadRoster, confirmedOf, organizerIdOf, settingsOf } from './repo';
+import { audit, flatOf, type GroupRow, type SessionRow, waitlistOf, loadRoster, confirmedOf, organizerIdOf, settingsOf, waitQueue } from './repo';
+import { confirmedHeads, hasGuestColumns, nextClaimSeq, trimSeatStatements } from './guestSpot';
+import { headCount } from '../shared/guestSpot';
 
 // One court, any number from 4 up to the organizer's max (see shared/spots.ts).
 //
@@ -18,12 +20,14 @@ import { audit, flatOf, type GroupRow, type SessionRow, waitlistOf, loadRoster, 
 
 // Next position in this session's join / spot order. Timestamps can tie
 // to the millisecond; these counters can't. ?1 is always the session id.
-const NEXT_CLAIM_SEQ = '(SELECT COALESCE(MAX(x.claim_seq), 0) + 1 FROM session_players x WHERE x.session_id = ?1)';
+// Zip 42 "Guest spot": once migration 0021 ran (`g`), a guest in counts as a person and a waiting guest holds a place in the join
+// order (server/guestSpot.ts). Before it, these are main's words exactly.
+const NEXT_CLAIM_SEQ_OF = (g: boolean) => nextClaimSeq(g);
 const NEXT_CONFIRM_SEQ = '(SELECT COALESCE(MAX(x.confirm_seq), 0) + 1 FROM session_players x WHERE x.session_id = ?1)';
-const CONFIRMED = "(SELECT COUNT(*) FROM session_players x WHERE x.session_id = ?1 AND x.status = 'confirmed')";
+const CONFIRMED_OF = (g: boolean) => confirmedHeads(g);
 
 /** Someone not yet in may take a spot while fewer than the max (?5) are in. */
-const GUARD = `${CONFIRMED} < ?5`;
+const GUARD_OF = (g: boolean) => `${CONFIRMED_OF(g)} < ?5`;
 
 /**
  * Getting a spot back keeps a payment already made, unless it was refunded:
@@ -82,9 +86,14 @@ async function existingRow(db: D1Database, sessionId: string, playerId: string) 
  * the seat this batch tagged, so a retry, a second tap or a request cut off halfway can't clear twice or half.
  * With no open debts (always, while LATE_FEES was never on) these statements change nothing.
  */
-function subClearStatements(db: D1Database, auto: AutoCredit, sessionId: string, joinerId: string, nowIso: string) {
+function subClearStatements(db: D1Database, auto: AutoCredit, sessionId: string, joinerId: string, nowIso: string, g = false) {
   return [
-    tagOldestLateDrop(db, sessionId, joinerId, nowIso),
+    // Zip 42: a late-drop debt that holds the host AND their guest ("If no one takes your 2 spots") is cleared one spot at a time. When
+    // the oldest debt still has its guest's share, this sub takes the GUEST's spot: the guest's share comes off the debt (guest_status
+    // goes, guest_at marks this moment) and the tag below does nothing this time (one clear per game per moment). The money part of the
+    // guest's $14 is handed back right after the batch (auditSubClears). The next sub clears the host's own spot the usual way.
+    ...(g ? [guestHalfClear(db, sessionId, joinerId, nowIso)] : []),
+    tagOldestLateDrop(db, sessionId, joinerId, nowIso, g),
     ...seatMoneyBackStatements(db, {
       groupId: auto.groupId,
       sessionId,
@@ -98,8 +107,46 @@ function subClearStatements(db: D1Database, auto: AutoCredit, sessionId: string,
   ];
 }
 
+/** Zip 42: the guest's share of the oldest open late-drop debt comes off it (see subClearStatements). */
+function guestHalfClear(db: D1Database, sessionId: string, joinerId: string, nowIso: string) {
+  return db
+    .prepare(
+      `UPDATE session_players SET guest_status = NULL, guest_at = ?3, updated_at = ?3
+       WHERE id = (SELECT x.id FROM session_players x WHERE x.session_id = ?1 AND ${OPEN_LATE_DROP('x')} ORDER BY x.late_drop_at, x.rowid LIMIT 1)
+         AND guest_status = 'late' AND guest_name IS NOT NULL
+         AND EXISTS (SELECT 1 FROM session_players j WHERE j.session_id = ?1 AND j.player_id = ?2 AND j.status = 'confirmed' AND j.confirmed_at = ?3)
+         AND NOT EXISTS (SELECT 1 FROM session_players t WHERE t.session_id = ?1 AND t.status = 'withdrawn' AND t.late_drop_at IS NOT NULL
+                           AND (t.late_drop_done_at = ?3 OR (t.guest_at = ?3 AND t.guest_status IS NULL AND t.guest_name IS NOT NULL)))`,
+    )
+    .bind(sessionId, joinerId, nowIso);
+}
+
+/** Did this batch's sub clear something (a whole debt, or a guest's share of one)? `at`: where the sub statements start. */
+function subCleared(out: { meta: { changes: number } }[], at: number, g: boolean): boolean {
+  return g ? out[at].meta.changes === 1 || out[at + 1].meta.changes === 1 : out[at].meta.changes === 1;
+}
+
 /** History lines for debts a sub cleared at `nowIso` (none when nothing was cleared). */
-export async function auditSubClears(db: D1Database, groupId: string, sessionId: string, subPlayerId: string, nowIso: string): Promise<string[]> {
+export async function auditSubClears(db: D1Database, groupId: string, sessionId: string, subPlayerId: string, nowIso: string, flatCents = 0): Promise<string[]> {
+  // Zip 42: a sub took the guest's spot of a pair's debt: the seat now owes one share. What it holds above that comes back as credit
+  // (a paid $28 gives $14 back; an unpaid seat simply owes $14 less). Only while that debt is still open and its money is as read.
+  if (flatCents > 0 && (await hasGuestColumns(db))) {
+    const { results: halves } = await db
+      .prepare(
+        `SELECT sp.id, sp.player_id, sp.guest_name, p.display_name AS name, (SELECT display_name FROM players WHERE id = ?3) AS sub
+         FROM session_players sp JOIN players p ON p.id = sp.player_id
+         WHERE sp.session_id = ?1 AND sp.status = 'withdrawn' AND sp.guest_at = ?2 AND sp.guest_status IS NULL AND sp.guest_name IS NOT NULL
+           AND sp.late_drop_at IS NOT NULL AND sp.late_drop_done_at IS NULL`,
+      )
+      .bind(sessionId, nowIso, subPlayerId)
+      .all<{ id: string; player_id: string; guest_name: string; name: string; sub: string | null }>();
+    for (const h of halves) {
+      const guard = `EXISTS (SELECT 1 FROM session_players g WHERE g.id = '${h.id.replace(/[^0-9A-Za-z-]/g, '')}' AND g.status = 'withdrawn' AND g.guest_at = '${nowIso.replace(/[^0-9A-Za-z:.-]/g, '')}' AND g.late_drop_done_at IS NULL)`;
+      const trim = await trimSeatStatements(db, { groupId, sessionId, playerId: h.player_id, priceCents: flatCents, nowIso, guard, seatStatus: 'withdrawn', reason: 'dropped' });
+      if (trim.statements.length) await db.batch(trim.statements);
+      await audit(db, groupId, sessionId, 'late_fee_cleared', { player: h.name, playerId: h.player_id, why: 'sub', sub: h.sub ?? 'A player', guest: h.guest_name, amountCents: trim.backCents }, nowIso);
+    }
+  }
   const { results } = await db
     .prepare(
       `SELECT sp.player_id, p.display_name AS name, (SELECT display_name FROM players WHERE id = ?3) AS sub
@@ -138,11 +185,14 @@ async function tryConfirm(
   sub: { cleared: boolean } = { cleared: false },
 ) {
   const withCredit = auto ? autoCreditStatements(db, auto, session.id, playerId, nowIso) : [];
+  const g = await hasGuestColumns(db);
+  const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(g);
+  const GUARD = GUARD_OF(g);
   try {
     const existing = await existingRow(db, session.id, playerId);
     if (existing?.status === 'confirmed') return 'already';
     // A sub clears the oldest open late-drop debt in the same batch; a debtor coming back settles only their own.
-    const subs = auto && !isOpenLateDrop(existing) ? subClearStatements(db, auto, session.id, playerId, nowIso) : [];
+    const subs = auto && !isOpenLateDrop(existing) ? subClearStatements(db, auto, session.id, playerId, nowIso, g) : [];
     if (existing) {
       const out = await db.batch([
         db
@@ -157,7 +207,7 @@ async function tryConfirm(
                  promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
                  ${ownTap ? 'time_confirmed = NULL,' : ''}
                  ${KEEP_PAYMENT_UNLESS_REFUNDED},
-                 played = NULL,
+                 played = NULL,${g ? "\n                 guest_name = CASE WHEN status = 'waitlisted' THEN guest_name ELSE NULL END,\n                 guest_status = CASE WHEN status = 'waitlisted' THEN guest_status ELSE NULL END," : ''}
                  updated_at = ?3
              WHERE id = ?4 AND status <> 'confirmed' AND ${GUARD}`,
           )
@@ -165,7 +215,7 @@ async function tryConfirm(
         ...withCredit,
         ...subs,
       ]);
-      if (subs.length) sub.cleared = out[1 + withCredit.length].meta.changes === 1;
+      if (subs.length) sub.cleared = subCleared(out, 1 + withCredit.length, g);
       return out[0].meta.changes === 1 ? 'new' : false;
     }
     const out = await db.batch([
@@ -180,7 +230,7 @@ async function tryConfirm(
       ...withCredit,
       ...subs,
     ]);
-    if (subs.length) sub.cleared = out[1 + withCredit.length].meta.changes === 1;
+    if (subs.length) sub.cleared = subCleared(out, 1 + withCredit.length, g);
     return out[0].meta.changes === 1 ? 'new' : false;
   } catch (err) {
     if (isTriggerError(err, 'session_full')) return false;
@@ -195,6 +245,7 @@ async function tryConfirm(
 
 /** Put the player at the back of the waitlist (no-op if already waiting). */
 async function addToWaitlist(db: D1Database, session: SessionRow, playerId: string, nowIso: string) {
+  const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(await hasGuestColumns(db));
   try {
     const existing = await existingRow(db, session.id, playerId);
     if (existing?.status === 'waitlisted') return;
@@ -236,15 +287,48 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
   const maxPlayers = capOf(settings);
   const quiet = settings.noCap === true;
   const promoted: Promotion[] = [];
+  // Zip 42: a guest in counts as a person, and a guest waiting behind its host takes its turn in line (server/guestSpot.ts).
+  const g = await hasGuestColumns(db);
+  const CONFIRMED = CONFIRMED_OF(g);
   // Looked up once, only when someone may move in. Moving in uses their credit like tapping I'm in.
   let auto: AutoCredit | null | undefined;
   for (let i = 0; i < 16; i++) {
     const roster = await loadRoster(db, session.id);
-    const confirmed = confirmedOf(roster).length;
-    const waiting = waitlistOf(roster);
+    const confirmed = g ? headCount(confirmedOf(roster)) : confirmedOf(roster).length;
+    // A waiting guest moves in only behind a host who is in (a host still waiting goes first).
+    const waiting = g ? waitQueue(roster).filter((e) => !e.guest || e.row.status === 'confirmed') : waitlistOf(roster).map((row) => ({ row, guest: false }));
     if (confirmed >= maxPlayers || waiting.length === 0) break;
-    const row = waiting[0];
+    const next = waiting[0];
+    const row = next.row;
     if (auto === undefined) auto = await autoCreditFor(db, session, settings);
+    if (next.guest) {
+      // The guest takes the spot. The host's seat now costs two shares: a seat already paid for one is held at what it paid and
+      // owes the rest (the same move Finalize makes when a price goes up), never the organizer's court payment.
+      const two = (auto?.priceCents ?? 0) * 2;
+      const res = await db
+        .batch([
+          db
+            .prepare(
+              `UPDATE session_players SET guest_status = 'confirmed', updated_at = ?2
+               WHERE id = ?3 AND status = 'confirmed' AND guest_status = 'waitlisted' AND guest_name IS NOT NULL AND ${CONFIRMED} < ?4`,
+            )
+            .bind(session.id, nowIso, row.id, maxPlayers),
+          ...(auto
+            ? holdShortCashStatements(db, {
+                sessionId: session.id,
+                feeCents: two,
+                nowIso,
+                playerId: row.player_id,
+                organizerId: auto.organizerId,
+                seatWhere: (sp) => `${sp}.status = 'confirmed' AND ${sp}.guest_status = 'confirmed' AND ${sp}.updated_at = ?1`,
+              })
+            : []),
+        ])
+        .then((all) => all[0]);
+      if (res.meta.changes === 0) break;
+      await audit(db, session.group_id, session.id, 'guest_moved_in', { player: row.display_name, playerId: row.player_id, guest: row.guest_name ?? 'Guest' }, nowIso);
+      continue;
+    }
     const credits = auto ? autoCreditStatements(db, auto, session.id, row.player_id, nowIso) : [];
     let cleared = false;
     const res = await db
@@ -264,10 +348,10 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
           .bind(session.id, nowIso, row.id, maxPlayers),
         ...credits,
         // Moving in from the waitlist is a sub too (shared/lateFees.ts rule 3).
-        ...(auto ? subClearStatements(db, auto, session.id, row.player_id, nowIso) : []),
+        ...(auto ? subClearStatements(db, auto, session.id, row.player_id, nowIso, g) : []),
       ])
       .then((all) => {
-        if (auto) cleared = all[1 + credits.length].meta.changes === 1;
+        if (auto) cleared = subCleared(all, 1 + credits.length, g);
         return all[0];
       })
       .catch((err) => {
@@ -275,7 +359,7 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
         throw err;
       });
     if (res.meta.changes === 0) break;
-    if (auto && cleared) await auditSubClears(db, auto.groupId, session.id, row.player_id, nowIso);
+    if (auto && cleared) await auditSubClears(db, auto.groupId, session.id, row.player_id, nowIso, auto.priceCents);
     const credit = auto ? await auditAutoCredit(db, auto.groupId, session.id, row.player_id, nowIso) : { cents: 0, paid: false };
     promoted.push({ playerId: row.player_id, reason: 'spot_opened', creditCents: credit.cents, paidWithCredit: credit.paid });
   }
@@ -315,7 +399,7 @@ export async function joinSession(
   const sub = { cleared: false };
   const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto, mode !== 'organizer', sub);
   if (got) {
-    if (got === 'new' && auto && sub.cleared) await auditSubClears(db, auto.groupId, session.id, playerId, nowIso);
+    if (got === 'new' && auto && sub.cleared) await auditSubClears(db, auto.groupId, session.id, playerId, nowIso, auto.priceCents);
     // A second tap or device that found the seat already taken by the first reports (and logs) nothing new.
     const credit = auto && got === 'new' ? await auditAutoCredit(db, auto.groupId, session.id, playerId, nowIso) : { cents: 0, paid: false };
     return credit.cents > 0 ? { result: 'confirmed', creditCents: credit.cents, paidWithCredit: credit.paid } : { result: 'confirmed' };
@@ -353,9 +437,18 @@ export async function withdraw(
   /** LATE_FEES on for this tap (server/lateFees.ts): a player's own drop inside the 12 hours that leaves the game short owes. */
   /** cheaperFix (Zip 39, server/cheaperFix.ts): such a drop on a seat paid ABOVE the fee (the game was made cheaper after they paid) keeps only the fee. */
   opts: { lateFees?: boolean; cheaperFix?: boolean } = {},
-): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number } | null }> {
+): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number } | null; guest?: string | null }> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
+  // Zip 42 "Guest spot": the guest leaves with the host. Read before the seat changes (the alert and History name the guest).
+  const g = await hasGuestColumns(db);
+  const guestRow = g
+    ? await db
+        .prepare('SELECT guest_name, guest_status FROM session_players WHERE session_id = ? AND player_id = ?')
+        .bind(session.id, playerId)
+        .first<{ guest_name: string | null; guest_status: string | null }>()
+    : null;
+  const guestName = guestRow?.guest_name && (guestRow.guest_status === 'confirmed' || guestRow.guest_status === 'waitlisted') ? guestRow.guest_name : null;
   const nothing = { freedSpot: false, changed: false, promoted: [], creditBackCents: 0, creditReturnedCents: 0, lateFee: null };
   if (!existing || (existing.status !== 'confirmed' && existing.status !== 'waitlisted' && existing.status !== 'withdrawn')) return nothing;
   const nowIso = new Date(nowMs).toISOString();
@@ -374,7 +467,7 @@ export async function withdraw(
   // turned into an owed share (?5), and nothing on it ever becomes credit.
   const isOrg = playerId === organizerId;
   const feeDrop = !!opts.lateFees && existing.status === 'confirmed' && nowMs >= lateFeeCutoffMs(session.starts_at);
-  const short = LEAVES_SHORT('session_players.session_id', 'session_players.id');
+  const short = LEAVES_SHORT('session_players.session_id', 'session_players.id', g);
   const owes = `(?4 = 1 AND ${short})`;
   const money = seatMoneyBackStatements(db, {
     entryId,
@@ -396,7 +489,15 @@ export async function withdraw(
                  played = CASE WHEN ${owes} THEN 0 ELSE played END,
                  late_drop_at = CASE WHEN ${owes} THEN ?1 ELSE late_drop_at END,
                  late_drop_done_at = CASE WHEN ${owes} THEN NULL ELSE late_drop_done_at END,
-                 payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' WHEN ${owes} AND ?5 = 0 THEN 'unpaid' ELSE 'not_applicable' END,
+                 payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' WHEN ${owes} AND ?5 = 0 THEN 'unpaid' ELSE 'not_applicable' END,${
+                   // Zip 42: the guest leaves too. A late drop that owes with the guest in keeps the guest's share on the debt ('late');
+                   // otherwise the guest is simply gone. (Every right-hand side reads the row as it was before this statement.)
+                   g
+                     ? `
+                 guest_status = CASE WHEN ${owes} AND status = 'confirmed' AND guest_status = 'confirmed' AND guest_name IS NOT NULL THEN 'late' ELSE NULL END,
+                 guest_name = CASE WHEN ${owes} AND status = 'confirmed' AND guest_status = 'confirmed' THEN guest_name ELSE NULL END,`
+                     : ''
+                 }
                  updated_at = ?1
                WHERE id = ?2 AND status = ?3`,
             )
@@ -410,7 +511,8 @@ export async function withdraw(
     ...(leaving && feeDrop && !isOrg
       ? holdShortCashStatements(db, {
           sessionId: session.id,
-          feeCents: flatOf(session, settingsOf(group)),
+          // Zip 42: a pair's debt is two shares ("you still owe $28"); with no guest, the flat price as before.
+          feeCents: flatOf(session, settingsOf(group)) * (guestName && existing.status === 'confirmed' && guestRow?.guest_status === 'confirmed' ? 2 : 1),
           nowIso,
           playerId,
           organizerId,
@@ -420,7 +522,9 @@ export async function withdraw(
     // Zip 39 ("Made cheaper after paying", server/cheaperFix.ts; switch off: nothing here): the mirror of the hold above. A seat that holds MORE
     // than the fee (the game was made cheaper after they paid) keeps exactly the fee on the game, and the rest comes back now as credit
     // ('dropped'): the cash part first, then credit used on it. Only this drop's own new debt, read as it was before this batch.
-    ...(leaving && feeDrop && !isOrg && opts.cheaperFix ? await cheaperDropStatements(db, group, session, playerId, onSeat, nowIso) : []),
+    ...(leaving && feeDrop && !isOrg && opts.cheaperFix
+      ? await cheaperDropStatements(db, group, session, playerId, onSeat, nowIso, guestName && existing.status === 'confirmed' && guestRow?.guest_status === 'confirmed' ? 2 : 1)
+      : []),
   ]);
   const changed = leaving && out[0].meta.changes === 1;
   const [kept, , ended] = out.slice(leaving ? 1 : 0);
@@ -452,7 +556,9 @@ export async function withdraw(
   }
   // Did this drop leave an open late-drop debt (its money stayed on the game)?
   const after = changed && feeDrop ? await existingRow(db, session.id, playerId) : null;
-  const lateFee = isOpenLateDrop(after) ? (isOrg ? { paid: false } : await lateFeeLeft(db, session.id, playerId, flatOf(session, settingsOf(group)))) : null;
+  // Zip 42: a debt that kept the guest's share is two shares.
+  const units = g && after && isOpenLateDrop(after) ? ((await db.prepare("SELECT guest_status FROM session_players WHERE id = ?").bind(after.id).first<{ guest_status: string | null }>())?.guest_status === 'late' ? 2 : 1) : 1;
+  const lateFee = isOpenLateDrop(after) ? (isOrg ? { paid: false } : await lateFeeLeft(db, session.id, playerId, flatOf(session, settingsOf(group)) * units, units > 1)) : null;
   if (!changed && cash === 0 && credit === 0) return nothing;
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.
@@ -463,7 +569,7 @@ export async function withdraw(
   }
   // A court on Waitlist never moves anybody in or out of line by itself: a drop frees a seat for the first real waiter like any game.
   const promoted = changed ? await settle(db, session, nowIso, settingsOf(group)) : [];
-  return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents: cash, creditReturnedCents: credit, lateFee };
+  return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents: cash, creditReturnedCents: credit, lateFee, ...(changed && guestName ? { guest: guestName } : {}) };
 }
 
 /**
@@ -477,6 +583,8 @@ async function cheaperDropStatements(
   playerId: string,
   onSeat: { id: string; amount_cents: number }[],
   nowIso: string,
+  /** Zip 42: 2 when the debt holds the guest's share too. */
+  units = 1,
 ) {
   const existing = await db
     .prepare('SELECT id, player_id, payment_status, payment_amount_cents, refunded_at, self_paid_at FROM session_players WHERE session_id = ? AND player_id = ?')
@@ -485,7 +593,7 @@ async function cheaperDropStatements(
   if (!existing) return [];
   const paid = existing.payment_status === 'paid' && !existing.refunded_at;
   if (paid && existing.self_paid_at) return [];
-  const fee = flatOf(session, settingsOf(group));
+  const fee = flatOf(session, settingsOf(group)) * units;
   const held = (
     await db
       .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND reason = 'cash' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
@@ -510,7 +618,7 @@ async function cheaperDropStatements(
  * after the payment) owes only the rest: { paid: false, oweCents } ("You owe $3 unless someone takes your spot"). Any other seat: exactly as
  * before (seatHoldsMoney: "Your $14 stays on this game", or "You owe $14").
  */
-async function lateFeeLeft(db: D1Database, sessionId: string, playerId: string, feeCents: number): Promise<{ paid: boolean; oweCents?: number }> {
+async function lateFeeLeft(db: D1Database, sessionId: string, playerId: string, feeCents: number, sayAmount = false): Promise<{ paid: boolean; oweCents?: number }> {
   const row = await db
     .prepare(
       `SELECT (SELECT payment_status FROM session_players WHERE session_id = ?1 AND player_id = ?2) AS ps,
@@ -520,7 +628,10 @@ async function lateFeeLeft(db: D1Database, sessionId: string, playerId: string, 
     .bind(sessionId, playerId)
     .first<{ ps: string | null; used: number; held: number }>();
   if (row?.ps === 'unpaid' && (row.held ?? 0) > 0) return { paid: false, oweCents: Math.max(0, feeCents - (row.used ?? 0)) };
-  return { paid: await seatHoldsMoney(db, sessionId, playerId) };
+  const paid = await seatHoldsMoney(db, sessionId, playerId);
+  // Zip 42: a pair's debt says its own amount ("You owe $28"); every other debt exactly as before.
+  if (sayAmount && row?.ps === 'unpaid') return { paid, oweCents: Math.max(0, feeCents - (row.used ?? 0)) };
+  return { paid };
 }
 
 /** The seat still carries money (a payment, or credit used on it): "Your $14 stays on this game". */
@@ -581,6 +692,7 @@ export async function clearLateDrop(db: D1Database, sessionId: string, playerId:
 /** "No" to a suggestion: remembered so it isn't suggested again. Never touches someone who is in. */
 export async function decline(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);
+  const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(false);
   const nowIso = new Date(nowMs).toISOString();
   const existing = await existingRow(db, session.id, playerId);
   if (existing?.status === 'confirmed' || existing?.status === 'waitlisted' || existing?.status === 'declined') return;
@@ -610,6 +722,7 @@ export async function decline(db: D1Database, session: SessionRow, playerId: str
  * nothing changed. Never touches credits.
  */
 export async function setCourtPaid(db: D1Database, session: SessionRow, playerId: string, paid: boolean, amountCents: number, nowIso: string): Promise<boolean> {
+  const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(false);
   const existing = await db
     .prepare('SELECT id, status, payment_status FROM session_players WHERE session_id = ? AND player_id = ?')
     .bind(session.id, playerId)
@@ -677,12 +790,21 @@ export async function moveToWaitlist(db: D1Database, session: SessionRow, player
   if (existing.status === 'waitlisted') return;
   // An open late-drop debt (shared/lateFees.ts) is not a seat to move: it would wipe the debt or strand its money.
   if (isOpenLateDrop(existing)) throw new HttpError(409, 'late_fee_open', 'They dropped late and still owe their $14. Clear it on the Money tab first.');
+  const g = await hasGuestColumns(db);
+  const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(g);
   try {
     await db.batch([
       db
         .prepare(
           `UPDATE session_players SET status = 'waitlisted', claimed_at = ?2, claim_seq = ${NEXT_CLAIM_SEQ}, confirmed_at = NULL, confirm_seq = NULL,
-             attendance_confirmed_at = NULL, promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL, played = NULL,
+             attendance_confirmed_at = NULL, promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL, played = NULL,${
+               // Zip 42: the guest goes to the waitlist right behind the host.
+               g
+                 ? `
+             guest_seq = CASE WHEN guest_name IS NOT NULL AND guest_status IN ('confirmed', 'waitlisted') THEN ${NEXT_CLAIM_SEQ} + 1 ELSE guest_seq END,
+             guest_status = CASE WHEN guest_name IS NOT NULL AND guest_status = 'confirmed' THEN 'waitlisted' ELSE guest_status END,`
+                 : ''
+             }
              payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'not_applicable' END,
              updated_at = ?2
            WHERE id = ?3 AND status <> 'waitlisted' AND NOT ${OPEN_LATE_DROP('session_players')}`,

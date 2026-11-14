@@ -1,0 +1,29 @@
+/* Zip 42 "Guest spot" (shared/guestSpot.ts). Only the guest's own bits; a game with no guest draws none of these. */
+
+/* "Rowan + Sam (guest)" in a names line: the plus and the word "guest" in the line's own gray, never bold. */
+.names-line .guest-plus,
+.waitlist-line .guest-plus {
+  white-space: pre;
+}
+.names-line .guest-tag,
+.waitlist-line .guest-tag {
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* Players sheet: "Owes $28 (with Sam)" reads as one amber line that may wrap before the bracket (mock admin_pair_3). */
+.ps-with-guest {
+  white-space: nowrap;
+}
+
+/* The guest's own row under the host: same row, gray second line ("Guest of Rowan"). */
+.ps-guest-row .ps-sub {
+  color: var(--ps-sub);
+}
+
+.ps-guest-form .ps-guest-label input {
+  margin-top: 8px;
+}
+.ps-guest-note {
+  margin: 0;
+}

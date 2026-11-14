@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { DB_LIMIT_MESSAGE } from '../../../shared/zip10';
@@ -15,6 +15,7 @@ import { payChip, payMoneyLine, useRosterOps } from './Sessions';
 import { lateFeeLine } from './LateFees';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import '../../players-sheet.css';
+import '../../guest-spot.css';
 
 /**
  * The "Players · Thu, Nov 12" sheet, redone (PLAYERS_SHEET_REDO, Zip 32, Alex's mock mocks/1_players_sheet). Everything on it is an action the
@@ -32,6 +33,11 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const { busy, run, removing, setRemoving, held, removeHeld, live, act, others, cleanup, full } = ops;
   const [remind, setRemind] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Zip 42 "Guest spot": "Add a guest" (the host's row menu, while the switch is on) and the organizer's "Remove guest".
+  const guestOn = ctx.d.guestSpot === true;
+  const [guestFor, setGuestFor] = useState<AdminRosterEntry | null>(null);
+  const [guestName, setGuestName] = useState('');
+  const [unGuest, setUnGuest] = useState<AdminRosterEntry | null>(null);
   const canceled = s.state.flags.canceled;
   const fin = s.finalized;
   const meId = ctx.d.me?.id ?? null;
@@ -77,6 +83,28 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       // The same call and words as Give spot. If the server says no (the game filled up), it says why and the rest are not tried.
       if (!(await act(p.id, 'confirm', `${p.name} got a spot`))) break;
     }
+  }
+
+  async function addGuest() {
+    const host = guestFor;
+    const name = guestName.trim();
+    if (!host || !name) return;
+    setGuestFor(null);
+    setGuestName('');
+    let said = '';
+    const ok = await run(async () => {
+      const d = await api<{ guest: { name: string; status: string } }>('POST', `/api/admin/sessions/${s.id}/guest`, { playerId: host.playerId, name });
+      said = d.guest.status === 'waitlisted' ? `${d.guest.name} is on the waitlist behind ${host.name}` : `${d.guest.name} added to ${host.name}'s tab`;
+    });
+    if (ok && said) toast(said);
+  }
+  async function removeGuest(host: AdminRosterEntry) {
+    let said = '';
+    const ok = await run(async () => {
+      const d = await api<{ creditBackCents: number }>('POST', `/api/admin/sessions/${s.id}/guest/remove`, { playerId: host.playerId });
+      said = d.creditBackCents > 0 ? `${host.guest?.name} removed. ${formatPrice(d.creditBackCents)} back to ${host.name} as credit.` : `${host.guest?.name} removed.`;
+    });
+    if (ok && said) toast(said);
   }
 
   const markPaid = (r: AdminRosterEntry) =>
@@ -145,6 +173,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
             // Wide actions (two buttons, or a long chip such as "Paid with credit") drop under the name on a narrow screen; a plain "Paid" stays beside it.
             const wide = !isHeld && (owes || (!paid && !!chip) || (paid && chip?.label === 'Paid with credit'));
             return (
+              <Fragment key={r.playerId}>
               <li key={r.playerId} className="ps-row" data-ps-row={r.name} data-ps-long={longName(r.name) || undefined} data-ps-wide={wide || undefined} data-ps-state={isHeld ? 'removed' : paid ? 'paid' : owes ? 'owes' : 'other'}>
                 <span className="ps-ball" aria-hidden="true">
                   <Pickleball />
@@ -160,6 +189,8 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                   ) : owes ? (
                     <span className="ps-sub ps-owes" data-ps-owes-line>
                       Owes {formatPrice(r.owesCents + (r.extCents ?? 0))}
+                      {/* Zip 42: the guest's share is on this tab (mock admin_pair_3). */}
+                      {r.guest?.status === 'confirmed' ? <span className="ps-with-guest"> (with {r.guest.name})</span> : null}
                       {/* Zip 31: extra time riding on this game; Mark paid takes both. */}
                       {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extension)` : ''}
                       {r.lateFee ? <span className="ps-fee"> · {lateFeeLine(r)?.split(' · ')[0]}</span> : null}
@@ -199,11 +230,30 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     name={r.name}
                     onRemove={() => setRemoving(r)}
                     onWaitlist={r.status === 'confirmed' && !cleanup ? () => void act(r.playerId, 'waitlist', `${r.name} moved to waitlist`) : undefined}
+                    onAddGuest={guestOn && !r.guest ? () => setGuestFor(r) : undefined}
                   />
                 ) : (
                   <span className="ps-dots-gap" aria-hidden="true" />
                 )}
               </li>
+              {/* Zip 42: the guest is its own row right under the host ("Sam / Guest of Rowan"), with Remove guest in its menu. */}
+              {r.guest && r.guest.status !== 'late' && !isHeld ? (
+                    <li key={`${r.playerId}:guest`} className="ps-row ps-guest-row" data-ps-guest={r.guest.name} data-ps-state="guest">
+                      <span className="ps-ball" aria-hidden="true">
+                        <Pickleball />
+                      </span>
+                      <div className="ps-who">
+                        <strong className="ps-name">{r.guest.name}</strong>
+                        <span className="ps-sub">
+                          Guest of {r.name}
+                          {r.guest.status === 'waitlisted' && r.guest.waitlistPosition ? ` · #${r.guest.waitlistPosition} on waitlist` : ''}
+                        </span>
+                      </div>
+                      <div className="ps-acts" />
+                      {live ? <RowMenu name={r.guest.name} removeLabel="Remove guest" onRemove={() => setUnGuest(r)} /> : <span className="ps-dots-gap" aria-hidden="true" />}
+                    </li>
+              ) : null}
+              </Fragment>
             );
           })}
         </ul>
@@ -240,8 +290,13 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       <ConfirmDialog
         open={!!removing}
         title={`Remove ${removing?.name}?`}
-        body="They'll show as withdrawn. If they held a spot, it opens up for someone else."
-        confirmLabel="Remove"
+        body={
+          // Zip 42: the host's guest comes off with them (mock admin_pair_5).
+          removing?.guest && removing.guest.status !== 'late'
+            ? `${removing.guest.name} is ${removing.name}'s guest, so ${removing.guest.name} comes off too. ${removing.guest.status === 'confirmed' ? `Both ${formatPrice(price)} shares are removed.` : 'Both spots open up.'}`
+            : "They'll show as withdrawn. If they held a spot, it opens up for someone else."
+        }
+        confirmLabel={removing?.guest && removing.guest.status !== 'late' ? 'Remove both' : 'Remove'}
         danger
         busy={busy}
         onConfirm={() => {
@@ -249,6 +304,57 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           setRemoving(null);
         }}
         onCancel={() => setRemoving(null)}
+      />
+
+      {/* Zip 42 "Guest spot": Add a guest (first name only) and the organizer's Remove guest. */}
+      <Sheet open={!!guestFor} title={`Add a guest · ${guestFor?.name ?? ''}`} onClose={() => setGuestFor(null)}>
+        {guestFor && (
+          <form
+            className="stack ps-guest-form"
+            data-ps-guest-form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void addGuest();
+            }}
+          >
+            <label className="field ps-guest-label">
+              Guest's first name
+              <input type="text" data-ps-guest-input autoComplete="off" autoCapitalize="words" maxLength={20} value={guestName} onChange={(e) => setGuestName(e.target.value)} />
+            </label>
+            <p className="ps-guest-note">
+              {guestFor.paymentStatus === 'paid' && !guestFor.refundedAt
+                ? `Their ${formatPrice(price)} goes on ${guestFor.name}'s tab. ${guestFor.name} will owe ${formatPrice(price)} more.`
+                : `Their ${formatPrice(price)} goes on ${guestFor.name}'s tab. ${guestFor.name} will owe ${formatPrice((guestFor.shareCents ?? price) + price)}.`}
+            </p>
+            <div className="btn-row">
+              <button type="button" className="btn secondary" onClick={() => setGuestFor(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn" data-ps-guest-add disabled={busy || guestName.trim() === ''}>
+                {guestName.trim() ? `Add ${guestName.trim().split(/\s+/)[0]}` : 'Add guest'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Sheet>
+      <ConfirmDialog
+        open={!!unGuest}
+        title={`Remove ${unGuest?.guest?.name ?? 'guest'}?`}
+        cancelLabel={`Keep ${unGuest?.guest?.name ?? 'guest'}`}
+        body={
+          unGuest?.guest?.status === 'confirmed'
+            ? unGuest.paymentStatus === 'paid' && !unGuest.refundedAt
+              ? `${unGuest.guest.name} comes off ${unGuest.name}'s tab. ${unGuest.guest.name}'s ${formatPrice(price)} goes to ${unGuest.name}'s credit.`
+              : `${unGuest.guest.name} comes off ${unGuest.name}'s tab. ${unGuest.name} owes ${formatPrice(price)} less.`
+            : `${unGuest?.guest?.name ?? 'The guest'} comes off the waitlist.`
+        }
+        confirmLabel={`Remove ${unGuest?.guest?.name ?? 'guest'}`}
+        busy={busy}
+        onConfirm={() => {
+          if (unGuest) void removeGuest(unGuest);
+          setUnGuest(null);
+        }}
+        onCancel={() => setUnGuest(null)}
       />
 
       {/* The same Remind sheet the Home money card opens (one tap per person, "Text all" with the Money rework). */}
@@ -288,7 +394,7 @@ function paidLine(r: AdminRosterEntry, tz: string): ReactNode {
 }
 
 /** The small three-dot menu at the end of a row. It holds Remove (and To waitlist, the old sheet's other button, when the game has a waitlist). Opens under the dots, or above them when there is no room below. */
-function RowMenu({ name, onRemove, onWaitlist }: { name: string; onRemove: () => void; onWaitlist?: () => void }) {
+function RowMenu({ name, onRemove, onWaitlist, onAddGuest, removeLabel = 'Remove' }: { name: string; onRemove: () => void; onWaitlist?: () => void; onAddGuest?: () => void; removeLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
@@ -337,6 +443,21 @@ function RowMenu({ name, onRemove, onWaitlist }: { name: string; onRemove: () =>
       </button>
       {open && (
         <div className={`ps-pop${up ? ' ps-up' : ''}`} ref={pop} role="menu" aria-label={`Actions for ${name}`}>
+          {onAddGuest && (
+            <button
+              type="button"
+              role="menuitem"
+              className="ps-pop-item ps-pop-plain"
+              data-ps-add-guest={name}
+              aria-label={`Add a guest for ${name}`}
+              onClick={() => {
+                setOpen(false);
+                onAddGuest();
+              }}
+            >
+              Add a guest
+            </button>
+          )}
           {onWaitlist && (
             <button
               type="button"
@@ -357,13 +478,13 @@ function RowMenu({ name, onRemove, onWaitlist }: { name: string; onRemove: () =>
             role="menuitem"
             className="ps-pop-item"
             data-ps-remove={name}
-            aria-label={`Remove ${name}`}
+            aria-label={removeLabel === 'Remove' ? `Remove ${name}` : `${removeLabel} ${name}`}
             onClick={() => {
               setOpen(false);
               onRemove();
             }}
           >
-            Remove
+            {removeLabel}
           </button>
         </div>
       )}

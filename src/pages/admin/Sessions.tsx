@@ -1,5 +1,6 @@
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import { useEffect, useState } from 'react';
+import { rosterLine } from '../../../shared/guestSpot';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
   canceledMessage,
@@ -128,8 +129,12 @@ function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
           )}
           {!s.state.flags.canceled && (
             <PlayersLine
-              names={s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name)}
-              waitlist={s.roster.filter((r) => r.status === 'waitlisted').map((r) => r.name)}
+              {...(() => {
+                // Zip 42 "Guest spot": each guest right after its host (no guest: the plain names, as before).
+                const a = rosterLine(s.roster, 'confirmed');
+                const b = rosterLine(s.roster, 'waitlisted');
+                return { names: a.names, waitlist: b.names, ...(a.guestAt ? { guestAt: a.guestAt } : {}), ...(b.guestAt ? { waitGuestAt: b.guestAt } : {}) };
+              })()}
               waitLabel="Waitlist"
               everyone={ctx.d.players.map((p) => p.name)}
               maxPlayers={ctx.d.group.settings.maxPlayers}

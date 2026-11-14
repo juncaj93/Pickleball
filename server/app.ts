@@ -4,6 +4,7 @@ import { type Ctx, makeCtx } from './context';
 import type { Env } from './db';
 import { HttpError, json, readJson } from './http';
 import * as player from './player';
+import * as guest from './guestActions';
 import * as playersRedo from './playersRedo';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
@@ -76,6 +77,8 @@ route('POST', '/api/sessions/:id/use-credit', (ctx) => player.playerUseCredit(ct
 route('POST', '/api/sessions/:id/undo-credit', (ctx) => player.playerUndoCredit(ctx));
 route('POST', '/api/sessions/:id/use-cash-out', player.playerUseCashOut);
 route('POST', '/api/sessions/:id/decline', (ctx) => player.playerDecline(ctx));
+// Zip 42 (server/guestActions.ts): Guest spot, the host's own Remove guest.
+route('POST', '/api/sessions/:id/remove-guest', (ctx) => player.playerRemoveGuest(ctx));
 route('POST', '/api/me/refund-request', player.playerRequestRefund);
 route('POST', '/api/me/extension-paid', player.playerExtensionPaidRoute);
 route('POST', '/api/me/extension-seen', player.playerExtensionSeenRoute);
@@ -174,6 +177,10 @@ route('PUT', '/api/admin/cheaper-fix-switch', admin.setCheaperFixSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
 // Zip 35 (server/tapGuardFix.ts): Tap guard fix.
 route('PUT', '/api/admin/tap-guard-switch', admin.setTapGuardFixSwitch);
+// Zip 42 (server/guestActions.ts): Guest spot. The switch row, Add a guest, and the organizer's Remove guest.
+route('PUT', '/api/admin/guest-spot-switch', guest.setGuestSpotSwitch);
+route('POST', '/api/admin/sessions/:id/guest', guest.addGuest);
+route('POST', '/api/admin/sessions/:id/guest/remove', guest.adminRemoveGuest);
 // Zip 34 (server/checkInPay.ts): Check-in pay line.
 route('PUT', '/api/admin/checkin-pay-switch', admin.setCheckInPaySwitch);
 // Zip 32 (server/playersSheetRedo.ts): Players sheet redo.
