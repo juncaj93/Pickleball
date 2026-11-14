@@ -94,6 +94,8 @@ import { christmasSkinMode, setChristmasSkinMode } from './christmasSkin';
 import { parseMode } from '../shared/christmasSkin';
 import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
+import { markVenuePaid, setVenueAlertForAll, venueAlertFlags, venueAlertsNow } from './venueAlert';
+import { venueDaysChangedAt, venueDaysOf, normalizeVenueDays, MEMBERSHIP_DAY_MAX, COURT_DAY_MAX, COURT_LAST_DAY } from '../shared/venueAlert';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { cheaperFixFlags, cheaperFixFor, setCheaperFixForAll } from './cheaperFix';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
@@ -261,6 +263,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const redo = await zip13Flags(ctx, group.id, 'playersRedo');
   // Zip 23 "Totals refresh" (server/totalsRefresh.ts): the new Totals look, only while on (off: this answer is exactly main's).
   const totals = await totalsRefreshFlags(ctx, group.id);
+  // Zip 43 "Venue charge alert" (server/venueAlert.ts): the amber "should have charged you" cards at the top of Home and the two charge days in
+  // Settings > Money, only while on (off: this answer is exactly main's and nothing more is read).
+  const venue = await venueAlertFlags(ctx, group.id);
+  const venueNow = venue.on ? await venueAlertsNow(ctx, group, venue.forAll) : null;
   // Zip 32 "Players sheet redo" (server/playersSheetRedo.ts): the new Players sheet look, only while on (off: this answer is exactly main's).
   const playersSheet = await playersSheetRedoFlags(ctx, group.id);
   // Zip 34 "Check-in pay line" (server/checkInPay.ts): a pay line in the Check-in text, only while on (off: this answer is exactly main's).
@@ -414,6 +420,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
     ...(totals.on ? { totalsRefresh: true as const } : {}),
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
+    ...(venueNow ? { venueAlert: true as const, venueAlerts: venueNow.alerts, venueDays: venueNow.days } : {}),
+    ...(venue.forAll ? { venueAlertForAll: true as const } : {}),
     ...(spentMatch.on ? { spentTotals: true as const } : {}),
     ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
     ...(cheaper.forAll ? { cheaperFixForAll: true as const } : {}),
@@ -1885,7 +1893,34 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     if (z !== null && !/^[0-9+().\s-]{7,24}$/.test(z)) throw new HttpError(400, 'invalid_zelleNumber', 'Enter a phone number, like 248-555-0123.');
     zelleRaw = z ?? '';
   }
-  const storedSettings = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
+  // Zip 43 (server/venueAlert.ts): the two charge days also live inside settings_json (`venueDays`). Every save keeps them (normalizeSettings only keeps
+  // the numbers, so they are put back here, like the Zelle number); a save that names them changes them. Nothing here reads a switch.
+  const venueBefore = venueDaysOf(group.settings_json);
+  let venueDays = venueBefore;
+  let venueChangedAt = venueDaysChangedAt(group.settings_json);
+  const hadVenueDays = (() => {
+    try {
+      return (JSON.parse(group.settings_json || '{}') as { venueDays?: unknown }).venueDays !== undefined;
+    } catch {
+      return false;
+    }
+  })();
+  if (body.venueDays !== undefined) {
+    const raw = (body.venueDays ?? {}) as Record<string, unknown>;
+    const whole = (x: unknown, name: string, min: number, max: number) => {
+      if (typeof x !== 'number' || !Number.isInteger(x) || x < min || x > max) throw new HttpError(400, `invalid_${name}`, 'Pick a day from the list.');
+      return x;
+    };
+    venueDays = {
+      membershipDay: raw.membershipDay === undefined ? venueDays.membershipDay : whole(raw.membershipDay, 'membershipDay', 1, MEMBERSHIP_DAY_MAX),
+      courtDay: raw.courtDay === undefined ? venueDays.courtDay : whole(raw.courtDay, 'courtDay', COURT_LAST_DAY, COURT_DAY_MAX),
+    };
+    venueDays = normalizeVenueDays(venueDays);
+    // A day that really moved starts the no-backfill clock over (shared/venueAlert.ts venueDaysChangedAt); picking the same day again changes nothing.
+    if (venueDays.membershipDay !== venueBefore.membershipDay || venueDays.courtDay !== venueBefore.courtDay) venueChangedAt = ctx.nowMs;
+  }
+  const withZelle = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
+  const storedSettings = body.venueDays !== undefined || hadVenueDays ? { ...withZelle, venueDays: { ...venueDays, ...(venueChangedAt > 0 ? { changedAt: venueChangedAt } : {}) } } : withZelle;
   // Zip 27 (A-01): a new "Price per player" or "Typical court cost" never re-prices a finalized game. Its rules are written down first,
   // from what it shows right now (a failure here changes nothing). Any other save is untouched.
   {
@@ -1910,7 +1945,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     group.id,
     null,
     'settings_updated',
-    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, openAccess, groupWordSet: !!wordHash, settings, ...(zelleRaw === undefined ? {} : { zelleNumber: zelleRaw }) },
+    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, openAccess, groupWordSet: !!wordHash, settings, ...(zelleRaw === undefined ? {} : { zelleNumber: zelleRaw }), ...(body.venueDays !== undefined ? { venueDays } : {}) },
     ctx.nowIso,
   );
   await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(storedSettings), first_session_date: firstSessionDate }, ctx.nowMs);
@@ -2602,6 +2637,22 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
   await setTotalsRefreshForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'totals_refresh_on' : 'totals_refresh_off', {}, ctx.nowIso);
   return { ok: true, on };
+}
+
+/** PUT /api/admin/venue-alert-switch { on }: Settings > Feature switches > "Venue charge alert" (Zip 43). Display only; moves no money. */
+export async function setVenueAlertSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  const changed = await setVenueAlertForAll(ctx.db, group.id, on, ctx.nowIso);
+  // Already on and asked to be on again (a second phone, a retry): nothing was written, so nothing is logged.
+  if (changed) await audit(ctx.db, group.id, null, on ? 'venue_alert_on' : 'venue_alert_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** POST /api/admin/venue-alert/paid { keys, cents }: "Mark paid" on a Venue charge alert card (Zip 43). One History line; moves no money. */
+export async function venueChargePaid(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  return markVenuePaid(ctx, group, body);
 }
 
 /** PUT /api/admin/christmas-skin-switch { mode: 'off' | 'me' | 'all' }: Settings > Feature switches > "Christmas skin" (Zip 38), a 3-way switch. Look only: the player screens' Christmas theme. */

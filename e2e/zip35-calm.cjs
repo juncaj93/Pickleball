@@ -45,6 +45,13 @@ async function main() {
   rmSync(dbFile, { force: true });
   const seeded = spawnSync('npx', ['vite-node', 'scripts/load-small-local.ts', '--', dbFile, NOW_ISO, '--calm'], { cwd: ROOT, encoding: 'utf8' });
   if (seeded.status !== 0) throw new Error(`could not build the calm world: ${seeded.stderr || seeded.stdout}`);
+  // Zip 43: the preview also carries the Venue charge alert's cards at the top of Home; this check is about Zip 35's own calm Home, so its row is taken out here.
+  {
+    const { DatabaseSync } = require('node:sqlite');
+    const d = new DatabaseSync(dbFile);
+    d.prepare("DELETE FROM task_log WHERE task = 'venue_alert_on'").run();
+    d.close();
+  }
   if (await fetch(`${BASE}/api/status`).then((r) => r.ok, () => false)) throw new Error(`port ${PORT} is already in use`);
   const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
     cwd: ROOT,

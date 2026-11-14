@@ -1,0 +1,13 @@
+/* Zip 43, "Venue charge alert": the two day dropdowns in Settings > Money ("Membership charged on", "Court costs charged on"). They sit in the same
+ * .set-row as the dollar boxes above them and look like them (a boxed value on the right), a little wider so "Last day" and "26th" never cut off. Only the
+ * site's own tokens, so light and dark follow the theme. The cards themselves are the site's amber alert cards (src/alert-cards.css). */
+.set-row select.set-input.venue-day {
+  flex: 0 0 auto;
+  width: 7.25rem;
+  max-width: 46%;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 16px;
+  text-align: right;
+  text-align-last: right;
+}
