@@ -4607,3 +4607,19 @@ game without a guest reads exactly as before. SQL only names the new columns onc
 - Fresh reviewer (did not write the code): 1 serious (organizer as host, a sub trimmed the court payment), 3 medium, small ones. Fixed: the organizer's seat is
   never trimmed, a guest taking a spot is a sub, the card's late-drop warning ignores the host's own waiting guest, a cleared late guest share. Left (see report):
   Extended time ignores guests in its split; a host who drops late with a guest and rejoins keeps $28 on the seat until Finalize gives $14 back.
+
+### Round 2 (Sat Nov 14, 2026): fixes from Alex's zip42b
+- Migration 0022 (preview only): `guest_played` (after Finalize, 0 when the guest did not play) and `guest_first` (1 when the guest's share was marked
+  paid before the host's). Live needs 0021 AND 0022 run together before this code goes out. Undo: DROP COLUMN guest_first, then guest_played.
+- Did not play is per person: guest out drops one share (the host keeps one, N is the real head count); host out takes the guest out too and the
+  guest's tile is locked until the host is back on. A no-show under late fees with a guest in owes two fees.
+- Extended time counts guests: a host with a guest pays two shares.
+- Paid per person on the Players sheet (one money record): the first share marked paid is held as $14 cash on the seat; `sharesPaid` splits what the
+  seat holds between the two. Undo works per person. Request on a guest row goes to the host ("you owe $14 for your guest Billy").
+- Every ConfirmDialog: two equal buttons, safe choice solid green, backing-out choice red outline (src/confirm-buttons.css, one shared rule).
+  This changes how confirms look even with the switch off; the rest of switch off still matches main (zip42-off 38/38).
+- Tests: unit 3072 passed, 2 skipped (57 in tests/guest-spot.test.ts); one run tripped the known random-id flake in tests/audit-money.test.ts
+  (6/6 on rerun). Browser: 75 of 77 green in the full run, zip35-calm updated for Billy; text-fix still fails the same date-dependent checks as main.
+  e2e/zip42.cjs 31/31 at 390, 360, 320, light and dark. Second fresh reviewer: per-row owes, no-show pair fee, unmark after Finalize, undo after a price
+  change, guest_first reset; all fixed.
+- Preview: another channel re-seeded the shared preview DB on Nov 14, so the scene went back on through the API (fake names only), not by a re-seed.

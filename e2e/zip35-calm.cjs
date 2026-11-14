@@ -5,7 +5,7 @@
  * The CALM small world on its own dev server (PREVIEW_CALM and SECOND_CHANCE_TEST on, as on a preview), at 390 px wide, light and dark:
  *   (Zip 42: the calm profile now holds the Guest spot games; the Second Chance and "Test game" checks this file had moved to the full world.)
  *   C1  admin Home: the "Guest test" card is on the first screen, Home fits two screens at most, no unrelated money rows (Remind, Finalize, haven't paid);
- *   C2  the money cell opens the Players sheet with Rowan, his guest Sam, Parker and Christopher (two taps from the preview link);
+ *   C2  the money cell opens the Players sheet with Rowan, his guest Sam, Parker, his guest Billy and Christopher (two taps from the preview link);
  *   C4  player Home (Rowan): no alert cards, no money, at most three plain games and "More sessions".
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -118,7 +118,7 @@ async function main() {
     });
   }
 
-  await check('C2: two taps from the preview link: the money cell opens the Players sheet with Rowan, his guest Sam, Parker and Christopher', async () => {
+  await check('C2: two taps from the preview link: the money cell opens the Players sheet with Rowan, his guest Sam, Parker, his guest Billy and Christopher', async () => {
     const { ctx, page } = await openAdmin('light', '/admin');
     const cell = page.locator(`article[id="session-${guestTest.id}"] [data-paid-cell]`);
     await cell.scrollIntoViewIfNeeded();
@@ -127,7 +127,7 @@ async function main() {
     await dlg.waitFor({ timeout: 10000 });
     await page.waitForTimeout(400);
     const names = (await dlg.locator('.ps-row .ps-name').allInnerTexts()).map((t) => t.trim());
-    assert(names.join('|') === 'Rowan|Sam|Parker|Christopher Vanderberg', `rows: ${names.join(', ')}`);
+    assert(names.join('|') === 'Rowan|Sam|Parker|Billy|Christopher Vanderberg', `rows: ${names.join(', ')}`);
     await ctx.close();
   });
 
