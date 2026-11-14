@@ -73,9 +73,6 @@ describe('court cost is private', () => {
     expect(leaks((await alex.call('GET', '/api/group')).text)).toBe(false);
     const asAlex = await ctx.organizer.call('GET', '/api/group', undefined, { 'X-View-As': ctx.byName.Alex });
     expect(leaks(asAlex.text)).toBe(false);
-    const links = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/links`, { kind: 'attendance' });
-    const token = links.data.drafts[0].url.split('/t/')[1];
-    expect(leaks((await ctx.app.client().call('POST', '/api/link', { token })).text)).toBe(false);
     expect(leaks((await ctx.app.client().call('GET', `/api/sessions/${s.id}/calendar.ics`)).text)).toBe(false);
     expect(leaks((await ctx.organizer.call('GET', '/api/admin/export')).text)).toBe(false);
   });

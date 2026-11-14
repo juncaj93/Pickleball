@@ -153,7 +153,7 @@ describe('player routes act only on the player whose phone it is (IDOR)', () => 
     await casey.call('POST', `/api/sessions/${session.id}/join`, {});
     const before = snapshot();
     for (const r of PLAYER_ROUTES) {
-      if (r.path === '/api/me' || r.path === '/api/players/self' || r.path === '/api/access' || r.path.startsWith('/api/link') || r.path === '/api/go') continue;
+      if (r.path === '/api/me' || r.path === '/api/players/self' || r.path === '/api/access' || r.path === '/api/go') continue;
       const body = { playerId: caseyId, player_id: caseyId, id: caseyId, cents: 1400, amountCents: 1400, days: [2] };
       const res = await blair.call(r.method, fill(r.path, session.id), r.method === 'DELETE' ? undefined : body);
       expect(res.status, `${r.method} ${r.path}`).toBeLessThan(500);

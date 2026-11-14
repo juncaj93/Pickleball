@@ -240,9 +240,11 @@ describe('built files keep a year; nothing else changes', () => {
     const blocks = headers.split(/\n(?=\S)/).map((b) => b.trim());
     const assets = blocks.find((b) => b.startsWith('/assets/*'));
     expect(assets).toContain('Cache-Control: public, max-age=31536000, immutable');
-    // Only one Cache-Control rule in the file, and it is the /assets/* one (the page, icons, theme.js and /api are untouched).
-    expect(headers.match(/Cache-Control/g)).toHaveLength(1);
-    expect(blocks.filter((b) => /^\/(\*|api|index|theme|logo)/.test(b)).every((b) => !/Cache-Control/.test(b))).toBe(true);
+    // Zip 44 added a day's keep for four small files (theme.js, logo.png, logo-xmas.png, favicon-32.png; tests/zip44.test.ts pins them).
+    // Everything else is as Zip 12 left it: the /assets/* rule is the only year-long one, the page ("/"), "/*", /api and the other icons have none.
+    expect(headers.match(/Cache-Control/g)).toHaveLength(5);
+    expect(headers.match(/Cache-Control: public, max-age=31536000/g)).toHaveLength(1);
+    expect(blocks.filter((b) => /^\/(\*|api|index)/.test(b)).every((b) => !/Cache-Control/.test(b))).toBe(true);
   });
   it('a missing built file is a real 404 page (public/assets/404.html), never the home page kept for a year', () => {
     const page = readFileSync(join(process.cwd(), 'public/assets/404.html'), 'utf8');

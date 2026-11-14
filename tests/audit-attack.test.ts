@@ -1448,16 +1448,6 @@ async function randomLife(seed: number, steps: number) {
     [1, async () => w.org.call('POST', `/api/admin/sessions/${pick(r, games)}/payment`, { playerId: w.ids[ORG], paid: r() < 0.7 })],
     [1, async () => w.org.call('POST', `/api/admin/players/${w.ids[pick(r, people)]}/credit-refund`, { refunded: false })],
     [2, async () => {
-      // A substitute claim link (texted by the organizer).
-      const g = openGame();
-      const links = await w.org.call('POST', `/api/admin/sessions/${g}/links`, { kind: 'claim' });
-      const draft = links.data?.drafts?.find((d: any) => people.includes(d.name));
-      if (!draft) return null;
-      const token = String(draft.url).split('/t/')[1];
-      const c = await phone(w, draft.name);
-      return c.call('POST', '/api/link/act', { token, action: 'claim' });
-    }],
-    [2, async () => {
       // Pay what the screen says on a finalized game (after the price changed).
       const [p, g] = smart(seatWhere("sp.status = 'confirmed' AND sp.payment_status = 'unpaid' AND s.finalized_at IS NOT NULL"), anySeat);
       const shown = await shownOwe(w, p, g);
@@ -1590,29 +1580,22 @@ describe('confirmed failures (exact interleavings with the clock moving)', () =>
   });
 });
 
-describe('claim links', () => {
-  it('claim link tapped twice at once, plus I in on the phone, plus a claim on another game, with $14 of credit', async () => {
+describe('sign-ups from two phones', () => {
+  it('"I\'m in" tapped twice at once on two phones, plus a third, plus a sign-up on another game, with $14 of credit', async () => {
     SCENARIOS++;
     const w = await world();
     const a = await on(w, NOV3);
     const b = await on(w, NOV5);
     await givePot(w, 'Lee', 1400);
-    const tokenFor = async (sid: string) => {
-      const links = await w.org.call('POST', `/api/admin/sessions/${sid}/links`, { kind: 'claim', playerIds: [w.ids.Lee] });
-      expect(links.status, links.text).toBe(200);
-      return String(links.data.drafts[0].url).split('/t/')[1];
-    };
-    const ta = await tokenFor(a);
-    const tb = await tokenFor(b);
     const c1 = await phone(w, 'Lee');
     const c2 = await phone(w, 'Lee', 1);
     await Promise.all([
-      c1.call('POST', '/api/link/act', { token: ta, action: 'claim' }),
-      c2.call('POST', '/api/link/act', { token: ta, action: 'claim' }),
+      c1.call('POST', `/api/sessions/${a}/join`, {}),
+      c2.call('POST', `/api/sessions/${a}/join`, {}),
       join(w, 'Lee', a, 2),
-      c2.call('POST', '/api/link/act', { token: tb, action: 'claim' }),
+      c2.call('POST', `/api/sessions/${b}/join`, {}),
     ]);
-    await books(w, 'claims');
+    await books(w, 'signups');
     expect(usedOn(w, a, 'Lee') + usedOn(w, b, 'Lee')).toBe(1400);
   });
 });

@@ -723,7 +723,6 @@ describe('privacy of every player-facing answer', () => {
     // Back in with $5 of credit in the pot: the join answer carries his own credit used, and nothing else.
     expect((await alex.call('POST', `/api/sessions/${s.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 500, paidWithCredit: false });
     await alex.call('GET', '/api/group');
-    await alex.call('POST', '/api/link', { token: 'x'.repeat(40) });
     await alex.call('GET', `/api/sessions/${s.id}/calendar.ics`);
     await alex.call('GET', '/api/admin/dashboard');
     await alex.call('GET', '/api/admin/money?month=2026-11');

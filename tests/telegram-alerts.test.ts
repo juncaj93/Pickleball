@@ -175,7 +175,7 @@ describe('Telegram alerts', () => {
     expect(sent[0].body.reply_markup.inline_keyboard[0][0]).toEqual({ text: 'Open site', url: 'https://pickleball.juncaj.net/admin' });
   });
 
-  it('a texted back-out link alerts like a tap, using the booking\'s own deadline', async () => {
+  it('a back-out by tap alerts, using the booking\'s own deadline', async () => {
     const { ctx, texts, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-27');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
@@ -186,11 +186,8 @@ describe('Telegram alerts', () => {
       cancellationDeadlineAt: new Date(Date.parse(s.startsAt) - 30 * HOUR).toISOString(),
     });
     expect(booked.status).toBe(200);
-    const links = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/links`, { kind: 'attendance' });
-    const draft = links.data.drafts.find((d: any) => d.name === 'Casey');
-    const token = String(draft.url).split('/t/')[1];
     ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
-    const r = await ctx.app.client().call('POST', '/api/link/act', { token, action: 'withdraw' });
+    const r = await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
     expect(r.status).toBe(200);
     expect(await texts()).toEqual(['Late drop: Casey dropped out of Tue Oct 27, 8:00 PM (20 hrs before). 3 in now, under 4.']);
   });

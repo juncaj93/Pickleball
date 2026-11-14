@@ -2,11 +2,10 @@ import { readOnlyPin, viewOnlyCookie } from './viewOnly';
 import { lastCallFor, lastCallForAll, setLastCallForAll } from './lastCall';
 import { backupObject } from './backupData';
 import { alertsView } from './alerts';
-import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
+import type { ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents, formatPrice } from '../shared/money';
 import { usableFor } from './creditActions';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
-import { openSpots } from '../shared/spots';
 import { MONEY_STATE, reopenBlockers, reopenBlockersRead, sqlText } from './finalize';
 import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenAdminFlags, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenAdminForAll, setLastScreenForAll } from './speed';
 import { pendingRequestViews } from './creditActions';
@@ -41,7 +40,6 @@ import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
 import {
   audit,
-  confirmedOf,
   courtCostOf,
   defaultDeadline,
   ensureSessions,
@@ -69,8 +67,7 @@ import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, moneyPictureFirstReads, pendingRequestsRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
-import { invalidateSessionTokens, issueToken } from './tokens';
-import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
+import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
 import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
 import { adminChangeStamp } from './stamp';
@@ -113,7 +110,6 @@ import { setZip13ForAll, zip13Flags } from './zip13';
 import { monthPlayedCounts } from './playersRedo';
 import type { Zip13Switch } from '../shared/zip13';
 import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
-import { capOf } from '../shared/settings';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -585,7 +581,6 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
       if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') return { ok: true, changed: false };
       throw new HttpError(409, 'changed', 'This game just changed. Look again.');
     }
-    await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
     await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned, creditBackCents: back, ...(reason ? { reason } : {}), ...(lateFees ? { venueWaived: true } : {}) }, ctx.nowIso);
     return { ok: true, changed: true };
   }
@@ -798,7 +793,6 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
     if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') return { ok: true, changed: false };
     throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   }
-  await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
   const names = new Map((await loadRoster(ctx.db, session.id)).map((r) => [r.player_id, r.display_name]));
   for (const m of await moneyBackAt(ctx.db, session.id, null, 'canceled', ctx.nowIso)) {
     const splitSeat = !!plan?.seats.some((x) => x.playerId === m.playerId);
@@ -1134,7 +1128,6 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
         )
         .bind(ctx.nowIso, ctx.nowIso, session.id),
     );
-    await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
   }
   await audit(ctx.db, group.id, session.id, `court_${action}`, {}, ctx.nowIso);
   return { ok: true };
@@ -1767,39 +1760,6 @@ export async function markTold(ctx: Ctx, body: Record<string, unknown>) {
     .bind(ctx.nowIso, ctx.nowIso, session.id, playerId)
     .run();
   return { ok: true };
-}
-
-/**
- * Create personal links for text messages. The server picks who is
- * eligible; the browser only gets to narrow that list down.
- */
-export async function prepareLinks(ctx: Ctx, body: Record<string, unknown>): Promise<{ drafts: ActionLinkDraft[] }> {
-  const { group, session } = await adminSession(ctx);
-  const kind = v.oneOf(body.kind, 'kind', ['attendance', 'claim'] as const);
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
-  if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
-  const wanted = Array.isArray(body.playerIds) ? new Set(body.playerIds.map((x) => v.id(x, 'playerIds'))) : null;
-  const roster = await loadRoster(ctx.db, session.id);
-
-  let recipients: { playerId: string; name: string; phone: string | null }[];
-  if (kind === 'attendance') {
-    recipients = confirmedOf(roster)
-      .filter((r) => !r.attendance_confirmed_at)
-      .map((r) => ({ playerId: r.player_id, name: r.display_name, phone: r.phone_number }));
-  } else {
-    if (openSpots(headCount(confirmedOf(roster)), capOf(settingsOf(group))) === 0) {
-      throw new HttpError(409, 'session_full', 'No spots are open right now.');
-    }
-    recipients = eligibleSubstitutes(roster, await getPlayers(ctx.db, group.id));
-  }
-  if (wanted) recipients = recipients.filter((r) => wanted.has(r.playerId));
-
-  const drafts: ActionLinkDraft[] = [];
-  for (const r of recipients) {
-    const token = await issueToken(ctx.db, session, r.playerId, kind, ctx.nowIso);
-    drafts.push({ ...r, url: `${ctx.url.origin}/t/${token}` });
-  }
-  return { drafts };
 }
 
 export async function generateSessions(ctx: Ctx) {

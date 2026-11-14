@@ -4,7 +4,7 @@
    blue links and credit, gray neutral. Checked light and dark (4.5:1 for every text). */
 
 :root[data-card-cleanup] {
-  --cl-later-bg: #ebebe4;
+  --cl-later-bg: #f9f9f6;
   --cl-later-line: #dad9cf;
 }
 :root[data-card-cleanup][data-theme='dark'] {

@@ -117,6 +117,13 @@ View as and Pretend it's... (Zip 18): the organizer's demo copy (both use it) ge
 - **Smaller logo.** `public/logo.png` is 72 x 72 (3 times its 24 px size, sharp on every phone), 3.2 KB instead of 31.7 KB, the same look in light and
   dark (checked pixel by pixel at 2x and 3x). The full-size original stays in git history and `branding/logo.jpg`. To undo: put the old file back.
 
+## Not switched (Zip 44, speed leftovers; one block to put back)
+- **A day's keep for four small files.** `public/_headers`: `/theme.js`, `/logo.png`, `/logo-xmas.png` and `/favicon-32.png` get `Cache-Control: public, max-age=86400`.
+  They are not fingerprinted, and every open of the page used to ask the network about each (theme.js blocks the page from drawing). The page (`/`), the
+  manifest, the other icons and every `/api` answer keep today's rules. It is a static header, so it has no Settings row (like Zip 12's year-long built files).
+  A change to one of the four files reaches phones within a day, or at once if it gets a new file name. To undo: delete the four blocks at the end of
+  `public/_headers` and deploy.
+
 ## Not switched (Zip 13, live at deploy)
 - **Projected costs count every game still to come.** Money > Totals, the Projected card: a game that is Not booked or on the venue Waitlist now counts
   as if it will be played, the same as a Booked one, until or unless it is canceled (a canceled game stays out). All three projected lines follow

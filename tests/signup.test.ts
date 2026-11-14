@@ -60,25 +60,18 @@ describe('claiming spots and the waitlist', () => {
     expect(rows.n).toBe(1);
   });
 
-  it('lets exactly one of two simultaneous claims win the last spot', async () => {
+  it('lets exactly one of three simultaneous sign-ups win the last spot', async () => {
     const ctx = await setupGroup();
     await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const s = await firstSession(ctx);
     for (const name of ['Alex', 'Blair', 'Casey']) {
       await (await playerPhone(ctx, name)).call('POST', `/api/sessions/${s.id}/join`, {});
     }
-    const links = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/links`, { kind: 'claim' });
-    const emeryLink = links.data.drafts.find((d: any) => d.name === 'Emery').url.split('/t/')[1];
-    const frankieLink = links.data.drafts.find((d: any) => d.name === 'Frankie').url.split('/t/')[1];
-    const devonLink = links.data.drafts.find((d: any) => d.name === 'Devon').url.split('/t/')[1];
-    const anon = ctx.app.client();
-    const results = await Promise.all([
-      anon.call('POST', '/api/link/act', { token: emeryLink, action: 'claim' }),
-      anon.call('POST', '/api/link/act', { token: frankieLink, action: 'claim' }),
-      anon.call('POST', '/api/link/act', { token: devonLink, action: 'claim' }),
-    ]);
-    const outcomes = results.map((r) => r.data.outcome).sort();
-    expect(outcomes).toEqual(['claimed', 'spot_taken', 'spot_taken']);
+    const results = await Promise.all(
+      ['Emery', 'Frankie', 'Devon'].map(async (name) => (await playerPhone(ctx, name)).call('POST', `/api/sessions/${s.id}/join`, {})),
+    );
+    const outcomes = results.map((r) => r.data.result).sort();
+    expect(outcomes).toEqual(['confirmed', 'waitlisted', 'waitlisted']);
     const n = ctx.app.db.raw
       .prepare("SELECT COUNT(*) AS n FROM session_players WHERE session_id = ? AND status = 'confirmed'")
       .get(s.id) as { n: number };

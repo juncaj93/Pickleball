@@ -784,24 +784,6 @@ export interface AdminDashboard {
   now: string;
 }
 
-export interface ActionLinkDraft {
-  playerId: string;
-  name: string;
-  phone: string | null;
-  url: string;
-}
-
-export interface ActionTokenView {
-  scope: 'attendance' | 'claim';
-  playerName: string;
-  timezone: string;
-  session: { id: string; startsAt: string; endsAt: string; canceled: boolean; venueName: string | null; openSpots: number };
-  myStatus: RosterStatus | null;
-  attendanceConfirmed: boolean;
-  valid: boolean;
-  invalidReason: string | null;
-}
-
 /** The organizer's private monthly money page. Never sent to players. */
 export interface MonthlyMoney {
   /** "2026-11" */

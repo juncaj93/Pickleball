@@ -251,7 +251,7 @@ describe('the server (server/unpaidNudge.ts)', () => {
     }
   });
 
-  it('a claim link (a sign-up from a text) is refused too; the private test link alone turns it on for one phone; the kill switch wins', async () => {
+  it('a sign-up is refused; the private test link alone turns it on for one phone; the kill switch wins', async () => {
     const w = await setupGroup();
     const games = await owesFor(w, 3);
     // No Settings row: only a phone with the private link is blocked.
@@ -262,17 +262,9 @@ describe('the server (server/unpaidNudge.ts)', () => {
     expect((await view(w, 'Blair', ON)).unpaidNudge).toBeUndefined();
     w.app.env.UNPAID_NUDGE = 'on';
     await switchOn(w);
-    const links = await w.organizer.call('POST', `/api/admin/sessions/${games[3].id}/links`, { kind: 'claim', playerIds: [w.byName.Blair] });
-    expect(links.status).toBe(200);
-    const url = links.data.drafts[0]?.url as string | undefined;
-    expect(url).toBeTruthy();
-    const token = url!.split('/t/')[1];
-    const claim = await w.app.client().call('POST', '/api/link/act', { token, action: 'claim' });
-    expect(claim.status).toBe(409);
-    expect(claim.data.error).toBe(BLOCKED_CODE);
-    // Then it is off for everyone: the same link works.
+    // Then it is off for everyone: the same sign-up works.
     await switchOn(w, false);
-    expect((await w.app.client().call('POST', '/api/link/act', { token, action: 'claim' })).status).toBe(200);
+    expect((await join(w, 'Blair', games[3].id)).status).toBe(200);
   });
 
   it('no one sees another player\'s balance: Casey\'s answer carries only Casey\'s own games', async () => {

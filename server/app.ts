@@ -9,7 +9,6 @@ import * as playersRedo from './playersRedo';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
-import { actOnToken, lookupToken } from './tokens';
 import { requireAdmin } from './auth';
 import { demoExtras } from './zip18';
 import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
@@ -87,10 +86,6 @@ route('GET', '/api/sessions/:id/calendar.ics', (ctx) => player.sessionCalendarFi
 // The old calendar subscription feed is gone: its links now get a plain "Not found".
 route('GET', '/api/cal/:token', async () => new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }));
 
-// Personal links from text messages. Tokens travel in the body, not the URL.
-route('POST', '/api/link', lookupToken);
-route('POST', '/api/link/act', actOnToken);
-
 // Organizer
 route('POST', '/api/admin/login', admin.login);
 route('POST', '/api/admin/logout', (ctx) => admin.logout(ctx));
@@ -132,7 +127,6 @@ route('POST', '/api/admin/sessions/:id/hide', admin.hideFromPlayers);
 route('POST', '/api/admin/sessions/:id/holiday-hours', admin.holidayHours);
 route('POST', '/api/admin/sessions/:id/card-done', admin.cardDone);
 route('POST', '/api/admin/sessions/:id/told', admin.markTold);
-route('POST', '/api/admin/sessions/:id/links', admin.prepareLinks);
 route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
 route('GET', '/api/admin/backup', (ctx) => admin.backupFile(ctx));
 // Zip 18: what the View as copy needs besides the backup (the switch rows and the on/off settings), read only. server/zip18.ts.
