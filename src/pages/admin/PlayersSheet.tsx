@@ -307,6 +307,8 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       />
 
       {/* Zip 42 "Guest spot": Add a guest (first name only) and the organizer's Remove guest. */}
+      {/* (Only drawn while the switch is on, or a guest exists: with neither, this sheet is main's HTML exactly.) */}
+      {guestOn && (
       <Sheet open={!!guestFor} title={`Add a guest · ${guestFor?.name ?? ''}`} onClose={() => setGuestFor(null)}>
         {guestFor && (
           <form
@@ -337,6 +339,8 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           </form>
         )}
       </Sheet>
+      )}
+      {s.roster.some((r) => !!r.guest) && (
       <ConfirmDialog
         open={!!unGuest}
         title={`Remove ${unGuest?.guest?.name ?? 'guest'}?`}
@@ -356,6 +360,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         }}
         onCancel={() => setUnGuest(null)}
       />
+      )}
 
       {/* The same Remind sheet the Home money card opens (one tap per person, "Text all" with the Money rework). */}
       {ctx.d.moneyRework === true ? (

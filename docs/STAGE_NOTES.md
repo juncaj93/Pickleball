@@ -4576,3 +4576,34 @@ The calm profile now also keeps the games the skin needs, for PLAYERS only: toni
   cream #fbf6ea with a red word). Every other tile follows the normal rule. Variables in `src/skin/christmas.css`.
 - Tests: `e2e/zip41.cjs` (13 checks), `tests/zip38.test.ts` updated, `e2e/zip29.cjs`, `e2e/time-shift.cjs`, `e2e/zip38.cjs` updated. Full unit suite 171 files / 3016 tests green; full browser run 75 of 76 scripts green.
 - `e2e/zip18.cjs` "View as Parker (light)": fails the same way on today's main (the credit chip has an `m-in` class on the real page but not in the View-as copy); not touched here.
+
+## Zip 42: Guest spot (🎾42.guest, GUEST_SPOT, ships OFF) - built Fri Nov 13, 2026; on a preview, waiting for Alex
+Branch `claude/new-session-v00cxc` (the brief's name "🎾42.guest" is the session name), built on main `44293be`. MOVES MONEY AND SEATS. One database change,
+migration `0021_guest_spot` (four nullable columns on `session_players`), applied to `pickleball-preview` ONLY. NOT run on live, NOT deployed.
+
+### Design
+A guest is not a player record. It is four columns on the HOST's own seat row: `guest_name`, `guest_status` ('confirmed', 'waitlisted', or 'late' while it is
+part of the host's open late-drop debt), `guest_seq` (its place in the join order), `guest_at`. So the guest's $14 is the host's seat money: every payment,
+credit entry, refund and late fee is the host's by construction, and the credit ledger never names a guest. A seat with its guest in counts as 2 people
+(`seatUnits`, shared/guestSpot.ts): priced at two shares, and every count of who is in adds the guests (`headCount`, `waitQueue`). No guest: units 1, so a
+game without a guest reads exactly as before. SQL only names the new columns once the migration ran (`hasGuestColumns`, cached per database).
+
+### Rules as built (shared/guestSpot.ts)
+- Add (organizer, switch on): Players sheet > three dots > Add a guest, first name only (letters, 1 to 20). Room and the host in: the guest is in; else waits
+  behind the host (Card cleanup on: a full game refuses). A host who paid $14 is held at $14 and owes $14 more. Refused while the host has an unconfirmed I paid.
+  A guest taking a spot clears the oldest open late-drop debt like any sub.
+- Remove (host from the card with the switch on, organizer always): paid $28 gives $14 back as credit; unpaid owes $14 less; the spot goes to the first waiter.
+  The organizer gets one Telegram when a HOST removes a guest.
+- Drop out: the guest goes too. Inside the 12 hours with the game left short, the debt is two shares; the first sub takes the guest's spot ($14 off or back),
+  the second the host's. Organizer Remove of the host takes both.
+- Finalize: the guest played when the host did (one switch for the pair); N counts the guest; the host's due is two final prices.
+- Late cancel with the fee kept: the pair owes two shares; with the split on, N counts the guest.
+- Names: "Rowan + Sam (guest)" on player cards, organizer cards, folded rows, Who played, History. Texts carry counts and amounts, not names.
+
+### Tests
+- Unit: 3056 passed, 2 skipped (main: 3016 + 40 new in tests/guest-spot.test.ts). Browser: full run 75 of 77 scripts green first time; round2 green alone;
+  money-rework fixed for the new top row; text-fix fails the same 2 checks on today's main (date-dependent), left alone. e2e/zip42.cjs 23/23 (390, 360, 320,
+  light and dark). e2e/zip42-off.cjs 38/38 against main (switch off = main, HTML and pictures).
+- Fresh reviewer (did not write the code): 1 serious (organizer as host, a sub trimmed the court payment), 3 medium, small ones. Fixed: the organizer's seat is
+  never trimmed, a guest taking a spot is a sub, the card's late-drop warning ignores the host's own waiting guest, a cleared late guest share. Left (see report):
+  Extended time ignores guests in its split; a host who drops late with a guest and rejoins keeps $28 on the seat until Finalize gives $14 back.
