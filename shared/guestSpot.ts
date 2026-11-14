@@ -36,6 +36,8 @@ export interface GuestCols {
   guest_name?: string | null;
   guest_status?: string | null;
   played?: number | null;
+  late_drop_at?: string | null;
+  late_drop_done_at?: string | null;
 }
 
 export type GuestStatus = 'confirmed' | 'waitlisted' | 'late';
@@ -57,7 +59,8 @@ export function hasGuest(r: GuestCols): boolean {
 
 /** The host dropped late with the guest in, and the guest's share is still part of that open debt. */
 export function guestLate(r: GuestCols): boolean {
-  return r.status === 'withdrawn' && r.guest_status === 'late' && !!r.guest_name;
+  // Only while that debt is open (a sub or the organizer's Clear ends it).
+  return r.status === 'withdrawn' && r.guest_status === 'late' && !!r.guest_name && !!r.late_drop_at && !r.late_drop_done_at;
 }
 
 /**
@@ -118,7 +121,7 @@ export function guestViewOf(r: GuestCols): GuestView | null {
   if (!r.guest_name || !r.guest_status) return null;
   if (r.guest_status === 'confirmed' && r.status !== 'confirmed') return null;
   if (r.guest_status === 'waitlisted' && !(r.status === 'confirmed' || r.status === 'waitlisted')) return null;
-  if (r.guest_status === 'late' && r.status !== 'withdrawn') return null;
+  if (r.guest_status === 'late' && !guestLate(r)) return null;
   return { name: r.guest_name, status: r.guest_status as GuestStatus };
 }
 
@@ -166,4 +169,9 @@ export function rosterLine(
     ...rows.filter((r) => r.guest?.status === 'waitlisted').map((r) => ({ name: r.guest!.name, guestOf: r.name, pos: r.guest!.waitlistPosition ?? 0 })),
   ].sort((a, b) => a.pos - b.pos);
   return guestLine(waiting.map(({ pos: _pos, ...p }) => p));
+}
+
+/** A names line as plain text: "Rowan + Sam (guest), Parker" (no guest: the names joined with ", ", exactly as before). */
+export function lineText(line: { names: string[]; guestAt?: boolean[] }): string {
+  return line.names.map((n, i) => (line.guestAt?.[i] ? ` + ${n} (guest)` : `${i > 0 ? ', ' : ''}${n}`)).join('');
 }

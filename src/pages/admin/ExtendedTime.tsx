@@ -43,7 +43,8 @@ export function WhoPlayedTiles({
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const [played, setPlayed] = useState<Set<string>>(() => new Set(inNow.map((r) => r.playerId)));
   const [extra, setExtra] = useState<ExtraMinutes>(0);
-  const n = played.size;
+  // Zip 42 "Guest spot": a guest played when the host did (no guest: played.size, as before).
+  const n = played.size + inNow.filter((r) => r.guest?.status === 'confirmed' && played.has(r.playerId)).length;
   const organizerPlayed = inNow.some((r) => r.isOrganizer && played.has(r.playerId));
   const split = extensionSplit(extra, n, organizerPlayed);
   const line = splitLine(split);

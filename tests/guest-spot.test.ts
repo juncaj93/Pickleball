@@ -93,7 +93,8 @@ describe('rules (pure)', () => {
     expect(seatUnits({ status: 'confirmed', guest_name: 'Sam', guest_status: 'confirmed' })).toBe(2);
     expect(seatUnits({ status: 'confirmed', guest_name: 'Sam', guest_status: 'waitlisted' })).toBe(1);
     expect(seatUnits({ status: 'confirmed' })).toBe(1);
-    expect(seatUnits({ status: 'withdrawn', guest_name: 'Sam', guest_status: 'late' })).toBe(2);
+    expect(seatUnits({ status: 'withdrawn', guest_name: 'Sam', guest_status: 'late', late_drop_at: 'x', late_drop_done_at: null })).toBe(2);
+    expect(seatUnits({ status: 'withdrawn', guest_name: 'Sam', guest_status: 'late', late_drop_at: 'x', late_drop_done_at: 'y' })).toBe(1);
     expect(headCount([{ status: 'confirmed', guest_name: 'Sam', guest_status: 'confirmed' }, { status: 'confirmed' }, { status: 'waitlisted' }])).toBe(3);
     expect(cleanGuestName('  sam  ')).toBe('Sam');
     expect(cleanGuestName("mary-jo o'neil")).toBe("Mary-jo o'neil");
@@ -621,5 +622,62 @@ describe('more money and seats', () => {
     expect(await credit(w, 'Blair')).toBe(2800);
     const s = await mineOn(w, 'Emery', g.id);
     expect(s.confirmed.map((c) => c.name)).toEqual(['Casey', 'Devon', 'Emery', 'Frankie', 'Gale']);
+  });
+});
+
+describe('fresh review fixes', () => {
+  it('the organizer brings a guest and drops late: a sub never turns the court payment into credit', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Casey', 'Devon']);
+    expect((await addGuest(w, g.id, 'Alex')).status).toBe(200);
+    // Court paid: the organizer's own row (Mark paid on Alex records the venue payment).
+    expect((await markPaid(w, g.id, 'Alex')).status).toBe(200);
+    const before = (await adminGame(w, g.id)).roster.find((r: any) => r.name === 'Alex');
+    w.app.now = g.start - 6 * HOUR;
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: false })).status).toBe(200);
+    await join(w, g.id, ['Emery']);
+    w.app.advance(60_000);
+    await join(w, g.id, ['Frankie']);
+    const after = (await adminGame(w, g.id)).roster.find((r: any) => r.name === 'Alex');
+    expect(after.paymentAmountCents).toBe(before.paymentAmountCents);
+    expect(await credit(w, 'Alex')).toBe(0);
+    expect(before.paymentAmountCents).toBeGreaterThan(0);
+  });
+  it('a guest added to an open spot clears a late dropper\'s $14 like any sub', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w, g.id, 'Emery');
+    w.app.now = g.start - 6 * HOUR;
+    const d = await call(w, 'Emery', 'POST', `/api/sessions/${g.id}/withdraw`, {});
+    expect(d.data.lateFee).toMatchObject({ paid: true });
+    expect(await credit(w, 'Emery')).toBe(0);
+    expect((await addGuest(w, g.id, 'Casey')).status).toBe(200);
+    expect(await credit(w, 'Emery')).toBe(1400);
+    expect((await mineOn(w, 'Emery', g.id)).mine?.lateFee ?? null).toBeNull();
+  });
+  it('a waiting guest moving in clears a late dropper\'s $14 too', async () => {
+    const w = await world({ lateFees: true, maxPlayers: 4 });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    expect((await addGuest(w, g.id, 'Blair')).data.guest.status).toBe('waitlisted');
+    w.app.now = g.start - 6 * HOUR;
+    // Emery leaves 3 in plus Sam waiting: Sam moves in at once, so the game is not short and Emery owes nothing.
+    const d = await call(w, 'Emery', 'POST', `/api/sessions/${g.id}/withdraw`, {});
+    expect(d.data.lateFee).toBeUndefined();
+    expect((await mineOn(w, 'Blair', g.id)).mine?.guest?.status).toBe('confirmed');
+  });
+  it("the card's late-drop warning agrees with the server when the host's own guest is waiting", async () => {
+    const w = await world({ lateFees: true, maxPlayers: 4 });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.start - 6 * HOUR;
+    const card = await mineOn(w, 'Blair', g.id);
+    const r = await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/withdraw`, {});
+    expect(!!card.mine?.lateDrop?.owes).toBe(!!r.data.lateFee);
+    expect(card.mine?.lateDrop?.owes).toBe(true);
   });
 });

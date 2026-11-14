@@ -97,7 +97,8 @@ export function playerSessionView(
   const lateWindow =
     lateFees && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
   // The real waitlist (also when hidden), the same count the server's late-drop rule uses.
-  const dropOwes = lateWindow && dropLeavesShort(heads - (myUnits - 1), waitQueue(roster).length);
+  // Zip 42: my own waiting guest leaves with me, so it is not someone who could take my spot (server/lateFees.ts LEAVES_SHORT says the same).
+  const dropOwes = lateWindow && dropLeavesShort(heads - (myUnits - 1), waitQueue(roster).filter((e) => !(e.guest && e.row.id === mine?.id)).length);
   const openFee = mine ? lateFeeKind(mine, session, isOrganizer) : null;
   const ownRow: PlayerSessionView['mine'] = mine
     ? {
@@ -309,7 +310,7 @@ export function adminSessionView(
         // The organizer's own late drop: owed until cleared, never "paid" (their seat's payment is the court payment).
         lateFee: fee
           ? me
-            ? { kind: fee, paid: false, oweCents: flatOf(session, settings) }
+            ? { kind: fee, paid: false, oweCents: flatOf(session, settings) * seatUnits(r) }
             : { kind: fee, paid: r.payment_status === 'paid' && !r.refunded_at, oweCents: owes }
           : null,
         isOrganizer: me,

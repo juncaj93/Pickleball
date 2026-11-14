@@ -93,12 +93,15 @@ export function finishLateDropClear(db: D1Database, sessionId: string, nowIso: s
  * tagged as cleared (one each, a clear is final). The caller then adds the money-back statements for tagged seats and
  * finishLateDropClear. Nothing happens when the joiner was themselves the debtor (their own seat came back instead).
  */
-export function tagOldestLateDrop(db: D1Database, sessionId: string, joinerId: string, nowIso: string, guests = false): D1PreparedStatement {
+export function tagOldestLateDrop(db: D1Database, sessionId: string, joinerId: string, nowIso: string, guests = false, guestJoin = false): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE session_players SET late_drop_done_at = ?3, updated_at = ?3
        WHERE id = (SELECT x.id FROM session_players x WHERE x.session_id = ?1 AND ${OPEN_LATE_DROP('x')} ORDER BY x.late_drop_at, x.rowid LIMIT 1)
-         AND EXISTS (SELECT 1 FROM session_players j WHERE j.session_id = ?1 AND j.player_id = ?2 AND j.status = 'confirmed' AND j.confirmed_at = ?3)
+         AND EXISTS (SELECT 1 FROM session_players j WHERE j.session_id = ?1 AND j.player_id = ?2 AND j.status = 'confirmed' AND ${
+           // Zip 42: a guest who just took a spot (its host's row changed at this moment) is a sub too.
+           guestJoin ? "j.guest_status = 'confirmed' AND j.updated_at = ?3" : 'j.confirmed_at = ?3'
+         })
          -- One clear per game per moment: a losing duplicate tap in the same millisecond (its seat already given) can
          -- never clear a second debt. Two different subs in the very same millisecond clear one; the other stays owed.
          AND NOT EXISTS (SELECT 1 FROM session_players t WHERE t.session_id = ?1 AND t.status = 'withdrawn' AND t.late_drop_at IS NOT NULL AND t.late_drop_done_at = ?3)${

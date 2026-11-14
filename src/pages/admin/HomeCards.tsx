@@ -37,7 +37,8 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const busy = saving || held;
   const [changing, setChanging] = useState(false);
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
-  const n = inNow.length;
+  // Zip 42 "Guest spot": a guest in counts as a player (the server counts them the same way). No guest: inNow.length, as before.
+  const n = inNow.length + inNow.filter((r) => r.guest?.status === 'confirmed').length;
   const under = n < 4;
   const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
   const day = formatShortDate(s.startsAt, tz);
@@ -174,7 +175,8 @@ function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePr
   const price = gp.flatCents;
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const [played, setPlayed] = useState<Set<string>>(() => new Set(inNow.map((r) => r.playerId)));
-  const n = played.size;
+  // Zip 42: a guest played when the host did (the pair is one switch).
+  const n = played.size + inNow.filter((r) => r.guest?.status === 'confirmed' && played.has(r.playerId)).length;
   const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
   return (
     <div className="stack" data-who-played>
@@ -188,6 +190,7 @@ function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePr
               <span className="set-label">
                 <span className="set-name">
                   {r.name}
+                  {r.guest?.status === 'confirmed' ? ` + ${r.guest.name} (guest)` : ''}
                   {r.isOrganizer ? ' (you)' : ''}
                 </span>
                 <span className="set-hint">{played.has(r.playerId) ? 'played' : 'did not play'}</span>

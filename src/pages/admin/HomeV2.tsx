@@ -1,6 +1,6 @@
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
-import { rosterLine } from '../../../shared/guestSpot';
+import { lineText, rosterLine } from '../../../shared/guestSpot';
 import { type CourtSwitch, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { countText, MIN_PLAYERS } from '../../../shared/spots';
 import { cardTime, formatShortDate } from '../../../shared/time';
@@ -133,7 +133,8 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
   const switchValue = courtSwitchOf(s);
   const canceled = s.state.flags.canceled;
   // Zip 42 "Guest spot": guests are names (and balls) right after their hosts; no guest: the same list.
-  const names = rosterLine(s.roster, 'confirmed').names;
+  const inLine = rosterLine(s.roster, 'confirmed');
+  const names = inLine.names;
   const me = ctx.d.me;
   const mine = !!me && s.roster.some((r) => r.playerId === me.id && r.status === 'confirmed');
   const ts = tsKind(court.kind, false);
@@ -143,7 +144,7 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
   // Zip 9 "Short games": a 1.5 hour game's row says so on its second line ("1.5 hr game · $11 each"); the names show when it opens.
   const tag = canceled ? null : shortGameLine(ctx, s);
   const cleanup = ctx.d.cardCleanup === true;
-  const second = canceled ? (s.cancelReason ?? 'Canceled') : tag ? tag : court.kind === 'later' ? court.text : names.length > 0 ? names.join(', ') : 'Nobody in yet';
+  const second = canceled ? (s.cancelReason ?? 'Canceled') : tag ? tag : court.kind === 'later' ? court.text : names.length > 0 ? lineText(inLine) : 'Nobody in yet';
   const key = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {

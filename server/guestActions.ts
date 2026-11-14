@@ -14,7 +14,7 @@ import { HttpError } from './http';
 import * as v from './validate';
 import { holdShortCashStatements } from './credit';
 import { audit, flatOf, getSession, type GroupRow, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
-import { settle } from './roster';
+import { auditSubClears, settle, subClearStatements, subCleared } from './roster';
 import { confirmedHeads, guestSpotFlags, hasGuestColumns, nextClaimSeq, setGuestSpotForAll, trimSeatStatements } from './guestSpot';
 import { capOf } from '../shared/settings';
 import { DB_LIMIT_MESSAGE } from '../shared/zip10';
@@ -80,7 +80,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
         `UPDATE session_players SET guest_name = ?2,
            guest_status = CASE WHEN status = 'confirmed' AND ${confirmedHeads(true)} < ?4 THEN 'confirmed' ELSE 'waitlisted' END,
            guest_seq = ${nextClaimSeq(true)}, guest_at = ?3, updated_at = ?3
-         WHERE id = ?5 AND session_id = ?1 AND status IN ('confirmed', 'waitlisted') AND guest_status IS NULL
+         WHERE id = ?5 AND session_id = ?1 AND status IN ('confirmed', 'waitlisted') AND (guest_status IS NULL OR guest_status = 'late')
            AND NOT (payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL)
            ${noWaitlist ? `AND status = 'confirmed' AND ${confirmedHeads(true)} < ?4` : ''}
            AND (SELECT status FROM sessions WHERE id = ?1) <> 'canceled' AND (SELECT finalized_at FROM sessions WHERE id = ?1) IS NULL`,
@@ -95,6 +95,8 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
       organizerId,
       seatWhere: (sp) => `${sp}.guest_at = ?1 AND ${sp}.guest_status = 'confirmed' AND ${sp}.status = 'confirmed'`,
     }),
+    // A guest taking a spot is a sub (shared/lateFees.ts rule 3): it clears the oldest open late-drop debt of the game, like any player would.
+    ...subClearStatements(ctx.db, { groupId: group.id, organizerId, priceCents: flat }, session.id, playerId, now, true, true),
   ]);
   if (out[0].meta.changes !== 1) {
     const fresh = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
@@ -102,6 +104,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
     if (noWaitlist) throw new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE);
     throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   }
+  if (subCleared(out, out.length - 6, true)) await auditSubClears(ctx.db, group.id, session.id, playerId, now, flat);
   const after = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
   const status = after?.guest_status === 'confirmed' ? 'confirmed' : 'waitlisted';
   await audit(ctx.db, group.id, session.id, 'guest_added', { player: host.display_name, playerId, guest: name, ...(status === 'waitlisted' ? { waitlisted: true } : {}) }, now);

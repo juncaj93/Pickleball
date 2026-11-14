@@ -1,6 +1,7 @@
 import type { Ctx } from './context';
 import type { D1Database, D1PreparedStatement } from './db';
 import { splitSeatStatements, type SplitSeat } from './credit';
+import { type GroupRow, organizerIdOf } from './repo';
 import { newId } from './crypto';
 import { GUEST_SPOT, guestSpotAllowed } from '../shared/guestSpot';
 
@@ -92,6 +93,9 @@ export async function trimSeatStatements(
     .bind(args.sessionId, args.playerId)
     .first<{ payment_status: string; payment_amount_cents: number | null; refunded_at: string | null; self_paid_at: string | null }>();
   if (!row) return { statements: [], backCents: 0 };
+  // The organizer's seat holds the court payment, never group money: it is never trimmed (fresh review, Zip 42).
+  const group = await db.prepare('SELECT * FROM groups WHERE id = ?').bind(args.groupId).first<GroupRow>();
+  if (group && args.playerId === (await organizerIdOf(db, group))) return { statements: [], backCents: 0 };
   const paid = row.payment_status === 'paid' && !row.refunded_at;
   if (paid && row.self_paid_at) return { statements: [], backCents: 0 };
   if (!paid && row.payment_status !== 'unpaid') return { statements: [], backCents: 0 };

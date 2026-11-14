@@ -80,7 +80,8 @@ function PastSessions({ ctx }: { ctx: AdminCtx }) {
       <ul className="card history-list" aria-label="Past sessions">
         {past.map((s) => {
           // Once finalized, the people who actually played; until then everyone who was in.
-          const played = s.roster.filter((r) => r.status === 'confirmed' && (s.finalized ? r.played !== false : true)).map((r) => r.name);
+          // Zip 42: "Rowan + Sam (guest)" (no guest: the names, as before).
+          const played = s.roster.filter((r) => r.status === 'confirmed' && (s.finalized ? r.played !== false : true)).map((r) => (r.guest?.status === 'confirmed' ? `${r.name} + ${r.guest.name} (guest)` : r.name));
           const money = moneyStatus(s);
           const late = lateDropsAll(s).length;
           return (

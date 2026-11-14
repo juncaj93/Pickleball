@@ -86,14 +86,14 @@ async function existingRow(db: D1Database, sessionId: string, playerId: string) 
  * the seat this batch tagged, so a retry, a second tap or a request cut off halfway can't clear twice or half.
  * With no open debts (always, while LATE_FEES was never on) these statements change nothing.
  */
-function subClearStatements(db: D1Database, auto: AutoCredit, sessionId: string, joinerId: string, nowIso: string, g = false) {
+export function subClearStatements(db: D1Database, auto: AutoCredit, sessionId: string, joinerId: string, nowIso: string, g = false, guestJoin = false) {
   return [
     // Zip 42: a late-drop debt that holds the host AND their guest ("If no one takes your 2 spots") is cleared one spot at a time. When
     // the oldest debt still has its guest's share, this sub takes the GUEST's spot: the guest's share comes off the debt (guest_status
     // goes, guest_at marks this moment) and the tag below does nothing this time (one clear per game per moment). The money part of the
     // guest's $14 is handed back right after the batch (auditSubClears). The next sub clears the host's own spot the usual way.
-    ...(g ? [guestHalfClear(db, sessionId, joinerId, nowIso)] : []),
-    tagOldestLateDrop(db, sessionId, joinerId, nowIso, g),
+    ...(g ? [guestHalfClear(db, sessionId, joinerId, nowIso, guestJoin)] : []),
+    tagOldestLateDrop(db, sessionId, joinerId, nowIso, g, guestJoin),
     ...seatMoneyBackStatements(db, {
       groupId: auto.groupId,
       sessionId,
@@ -108,13 +108,13 @@ function subClearStatements(db: D1Database, auto: AutoCredit, sessionId: string,
 }
 
 /** Zip 42: the guest's share of the oldest open late-drop debt comes off it (see subClearStatements). */
-function guestHalfClear(db: D1Database, sessionId: string, joinerId: string, nowIso: string) {
+function guestHalfClear(db: D1Database, sessionId: string, joinerId: string, nowIso: string, guestJoin = false) {
   return db
     .prepare(
       `UPDATE session_players SET guest_status = NULL, guest_at = ?3, updated_at = ?3
        WHERE id = (SELECT x.id FROM session_players x WHERE x.session_id = ?1 AND ${OPEN_LATE_DROP('x')} ORDER BY x.late_drop_at, x.rowid LIMIT 1)
          AND guest_status = 'late' AND guest_name IS NOT NULL
-         AND EXISTS (SELECT 1 FROM session_players j WHERE j.session_id = ?1 AND j.player_id = ?2 AND j.status = 'confirmed' AND j.confirmed_at = ?3)
+         AND EXISTS (SELECT 1 FROM session_players j WHERE j.session_id = ?1 AND j.player_id = ?2 AND j.status = 'confirmed' AND ${guestJoin ? "j.guest_status = 'confirmed' AND j.updated_at = ?3" : 'j.confirmed_at = ?3'})
          AND NOT EXISTS (SELECT 1 FROM session_players t WHERE t.session_id = ?1 AND t.status = 'withdrawn' AND t.late_drop_at IS NOT NULL
                            AND (t.late_drop_done_at = ?3 OR (t.guest_at = ?3 AND t.guest_status IS NULL AND t.guest_name IS NOT NULL)))`,
     )
@@ -122,7 +122,7 @@ function guestHalfClear(db: D1Database, sessionId: string, joinerId: string, now
 }
 
 /** Did this batch's sub clear something (a whole debt, or a guest's share of one)? `at`: where the sub statements start. */
-function subCleared(out: { meta: { changes: number } }[], at: number, g: boolean): boolean {
+export function subCleared(out: { meta: { changes: number } }[], at: number, g: boolean): boolean {
   return g ? out[at].meta.changes === 1 || out[at + 1].meta.changes === 1 : out[at].meta.changes === 1;
 }
 
@@ -245,7 +245,8 @@ async function tryConfirm(
 
 /** Put the player at the back of the waitlist (no-op if already waiting). */
 async function addToWaitlist(db: D1Database, session: SessionRow, playerId: string, nowIso: string) {
-  const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(await hasGuestColumns(db));
+  const g = await hasGuestColumns(db);
+  const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(g);
   try {
     const existing = await existingRow(db, session.id, playerId);
     if (existing?.status === 'waitlisted') return;
@@ -254,7 +255,7 @@ async function addToWaitlist(db: D1Database, session: SessionRow, playerId: stri
         .prepare(
           `UPDATE session_players SET status = 'waitlisted', claimed_at = ?2, claim_seq = ${NEXT_CLAIM_SEQ}, confirmed_at = NULL, confirm_seq = NULL,
              attendance_confirmed_at = NULL, promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
-             time_confirmed = NULL, played = NULL,
+             time_confirmed = NULL, played = NULL,${g ? ' guest_name = NULL, guest_status = NULL, guest_seq = NULL,' : ''}
              payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'not_applicable' END,
              updated_at = ?2
            WHERE id = ?3 AND status <> 'waitlisted'`,
@@ -305,6 +306,7 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
       // The guest takes the spot. The host's seat now costs two shares: a seat already paid for one is held at what it paid and
       // owes the rest (the same move Finalize makes when a price goes up), never the organizer's court payment.
       const two = (auto?.priceCents ?? 0) * 2;
+      let guestCleared = false;
       const res = await db
         .batch([
           db
@@ -323,9 +325,16 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
                 seatWhere: (sp) => `${sp}.status = 'confirmed' AND ${sp}.guest_status = 'confirmed' AND ${sp}.updated_at = ?1`,
               })
             : []),
+          // A guest moving in is a sub too (shared/lateFees.ts rule 3).
+          ...(auto ? subClearStatements(db, auto, session.id, row.player_id, nowIso, g, true) : []),
         ])
-        .then((all) => all[0]);
+        .then((all) => {
+          // The sub statements are the last ones (subClearStatements: the guest half, the tag, three money moves, the finish).
+          if (auto) guestCleared = subCleared(all, all.length - 6, g);
+          return all[0];
+        });
       if (res.meta.changes === 0) break;
+      if (auto && guestCleared) await auditSubClears(db, auto.groupId, session.id, row.player_id, nowIso, auto.priceCents);
       await audit(db, session.group_id, session.id, 'guest_moved_in', { player: row.display_name, playerId: row.player_id, guest: row.guest_name ?? 'Guest' }, nowIso);
       continue;
     }
