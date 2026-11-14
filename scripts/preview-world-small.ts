@@ -535,13 +535,13 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
     // (The calm profile drops credit entries, so his $14 is recorded as cash: the credit goes back to his pot, then his own share is marked paid.)
     await w.org.ok('POST', `/api/admin/sessions/${guestA.id}/payment`, { playerId: w.ids.Parker, paid: false });
     await w.org.ok('POST', `/api/admin/sessions/${guestA.id}/guest/share`, { playerId: w.ids.Parker, who: 'host', paid: true });
-    // Round 3 (Alex): three late drop-out scenes, each Rowan + Sam (guest), the next day at 8:00, 8:30 and 9:00 PM (like "Guest test", the
-    // late window, 12 hours before the start, opens that morning). Drop out on each says a different thing (late fees on for that phone):
+    // Round 3 (Alex): three late drop-out scenes, each Rowan + Sam (guest), the next day at 5:30, 6:00 and 6:30 PM, 2 hours each (inside the
+    // venue's booking hours on any day; like "Guest test", the late window, 12 hours before the start, opens that morning). Drop out on each says a different thing (late fees on for that phone):
     //   "Late: 4 seats"   Rowan + Sam, Parker, Christopher Vanderberg (4): both drop, 2 left, "you still owe $28";
     //   "Late: host 4th"  Parker, Christopher Vanderberg, Reese, then Rowan + Sam (5): 3 left, "you still owe $14";
     //   "Late: host 5th"  Parker, Christopher Vanderberg, Reese, Sage, then Rowan + Sam (6): 4 left, "You don't owe anything".
     const half = 30 * 60_000;
-    const lateAt = localAt(N + DAY, 20);
+    const lateAt = localAt(N + DAY, 17, 30);
     const lateScenes: { note: string; first: string[]; after: string[] }[] = [
       { note: 'Late: 4 seats', first: [], after: ['Parker', SMALL_LONG] },
       { note: 'Late: host 4th', first: ['Parker', SMALL_LONG, 'Reese'], after: [] },
@@ -559,7 +559,7 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
     keep.push(guestA.id, guestB.id, ...lateIds);
     lateMove = undefined;
     await refresh();
-    summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg; "Guest test" also Parker + Billy (guest), 5 in; Rowan owes $28 on the first and paid $28 on the second; round 3: "Late: 4 seats", "Late: host 4th", "Late: host 5th" (next day 8:00, 8:30, 9:00 PM, Rowan + Sam in each: Drop out owes $28, $14, nothing)');
+    summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg; "Guest test" also Parker + Billy (guest), 5 in; Rowan owes $28 on the first and paid $28 on the second; round 3: "Late: 4 seats", "Late: host 4th", "Late: host 5th" (next day 5:30, 6:00, 6:30 PM, Rowan + Sam in each: Drop out owes $28, $14, nothing)');
   }
 
   await refresh();

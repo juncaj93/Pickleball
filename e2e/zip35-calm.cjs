@@ -107,12 +107,12 @@ async function main() {
       const { ctx, page } = await openAdmin(scheme, '/admin');
       const ids = await page.locator('article[data-r2-card]').evaluateAll((els) => els.map((e) => e.id));
       if (process.env.CALM_SHOT) await page.screenshot({ path: process.env.CALM_SHOT, fullPage: true });
-      // Round 3: the three late scenes (next day 8:00 to 9:00 PM) sit between "Guest test" and "Guest paid": all five Guest spot games come first.
-      const want = [guestTest, ...lateScenes, guestPaid].map((g) => `session-${g.id}`);
+      // Round 3: the three late scenes (next day 5:30 to 6:30 PM) come right before "Guest test" (7:30 PM): all five Guest spot games come first.
+      const want = [...lateScenes, guestTest, guestPaid].map((g) => `session-${g.id}`);
       assert(ids.slice(0, 5).join('|') === want.join('|'), `first cards: ${ids.slice(0, 6)}`);
       await page.evaluate(() => window.scrollTo(0, 0));
-      const box = await page.locator(`article[id="session-${guestTest.id}"]`).boundingBox();
-      assert(box && box.y + 120 < 844, `the Guest test card is not on the first screen: ${JSON.stringify(box)}`);
+      const box = await page.locator(`article[id="${want[0]}"]`).boundingBox();
+      assert(box && box.y + 120 < 844, `the first Guest spot card is not on the first screen: ${JSON.stringify(box)}`);
       const fit = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, w: window.innerHeight }));
       assert(fit.h <= fit.w * 2 + 2, `Home needs more than two screens: page ${fit.h}px, screen ${fit.w}px`);
       const text = await page.locator('body').innerText();

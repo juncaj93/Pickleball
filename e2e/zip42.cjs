@@ -19,7 +19,7 @@
  *   W1  Who played: guest tiles, guest out and host out
  *   A3  Add a guest for Parker (Lee): the panel's words, the new row, Parker owes $28; then Remove guest on Lee's row; Remove Rowan's words
  *   S1  Settings: "Guest spot" is the top switch row
- *   R3  round 3: the three late scenes ("Late: 4 seats", "Late: host 4th", "Late: host 5th", next day 8:00 to 9:00 PM): Drop out says $28, $14 or
+ *   R3  round 3: the three late scenes ("Late: 4 seats", "Late: host 4th", "Late: host 5th", next day 5:30 to 6:30 PM): Drop out says $28, $14 or
  *       nothing; Remove guest says the $14 stays owed only on the 4 seat game (light and dark)
  * Screenshots of every step: .data/zip42-shots (not in git).
  */
@@ -226,7 +226,7 @@ async function main() {
       await ctx.close();
     });
 
-  // Round 3 (Alex): the three late scenes (next day 8:00, 8:30, 9:00 PM; the clock is inside each one's 12 hours). Drop out says what the game
+  // Round 3 (Alex): the three late scenes (next day 5:30, 6:00, 6:30 PM; the clock is inside each one's 12 hours). Drop out says what the game
   // is short (2 spots: $28, 1 spot: $14, none: nothing); Remove guest owes the $14 only when the game would drop below 4. Nothing is tapped.
   const late = ['Late: 4 seats', 'Late: host 4th', 'Late: host 5th'].map((note) => d.sessions.find((s) => s.note === note));
   assert(late.every(Boolean), 'the three round 3 late scenes are in the calm world');
@@ -235,11 +235,11 @@ async function main() {
       const { ctx, page } = await playerPage('Rowan', { scheme });
       const words = [
         [
-          "It's past the 8:00 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
-          "It's past the 8:00 AM cancel-by and the game would drop below 4. If no one takes Sam's spot, you still owe $14.",
+          "It's past the 5:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
+          "It's past the 5:30 AM cancel-by and the game would drop below 4. If no one takes Sam's spot, you still owe $14.",
         ],
         [
-          "It's past the 8:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed.",
+          "It's past the 6:00 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed.",
           'Sam comes off your tab. You owe $14 less.',
         ],
         ["Your guest Sam drops out too. Both spots open up. You don't owe anything because the game still has 4 players.", 'Sam comes off your tab. You owe $14 less.'],
