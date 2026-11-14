@@ -265,10 +265,9 @@ GAME_DAY_TEXT = "on"
 # price, money rule, seat or data. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Tap guard fix" (off at ship = nobody),
 # plus a phone opened once with ?tapguard=on. "off" = the kill switch: nobody, not even the test link. Needs a deploy.
 TAP_GUARD_FIX = "on"
-# Zip 42 "Guest spot" (shared/guestSpot.ts): the organizer adds a guest (a plus one) to a player's sign-up; the guest takes a spot and the guest's $14
-# goes on that player's tab. MOVES MONEY and needs migration 0021 first. "on" here only ALLOWS it; who gets it is Settings > Feature switches >
-# "Guest spot" (off at ship = nobody), plus the organizer's phone opened once with /admin?guestspot=on. "off" = the kill switch. Needs a deploy.
-GUEST_SPOT = "on"
+# Zip 42 "Guest spot" (shared/guestSpot.ts): NO line here on purpose. Cloudflare's free plan allows 64 variables per site and the preview is at
+# that limit, and a missing GUEST_SPOT means ALLOWED (the same rule as every switch): who gets it is Settings > Feature switches > "Guest spot"
+# (off at ship = nobody), plus the organizer's phone opened once with /admin?guestspot=on. The kill switch: add GUEST_SPOT = "off" here, deploy.
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -347,10 +346,7 @@ CHRISTMAS_SKIN = "on"
 CHRISTMAS_SKIN_PREVIEW = "on"
 GAME_DAY_TEXT = "on"
 GAME_DAY_TEXT_PREVIEW = "on"
-GUEST_SPOT = "on"
-# Zip 42, PREVIEW ONLY (never in [vars]): this preview shows Guest spot whatever the shared fake database's Settings row says (another branch's
-# re-seed drops it). Live only ever follows the Settings row and the private link.
-GUEST_SPOT_PREVIEW = "on"
+# Zip 42: no GUEST_SPOT line (the 64 variable limit, see [vars]); the preview's seed turns the Settings row on.
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
 PREVIEW_CALM = "on"
 
