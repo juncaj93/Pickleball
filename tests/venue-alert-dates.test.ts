@@ -248,3 +248,16 @@ describe('the amounts', () => {
     expect(a[0]).toMatchObject({ cents: 19200 + 4500, line: '4 games x $48 = $192, plus membership $45' });
   });
 });
+
+describe('a moved court day never bills a game an earlier paid charge covered', () => {
+  const games = [game(2026, 10, 29), game(2026, 11, 3)];
+  const args = { ...base, games, onAtMs: et(2026, 10, 1), nowMs: et(2026, 11, 28, 6), days: { membershipDay: 26, courtDay: 28 }, paid: new Set(['membership:2026-10', 'membership:2026-11', 'court:2026-10']) };
+  it('without the paid-through date the new Nov 28 period (Oct 29 to Nov 28) would hold both games; with it only the November game', () => {
+    expect(dueAlerts(args).map((a) => a.line)).toEqual(['2 games x $48 = $96']);
+    expect(dueAlerts({ ...args, courtPaidThrough: '2026-10-31' }).map((a) => a.line)).toEqual(['1 game x $48 = $48']);
+  });
+  it('the usual same-day-every-month cycle is unchanged by it', () => {
+    const cyc = { ...base, games: four(2026, 11), onAtMs: et(2026, 10, 1), nowMs: et(2026, 11, 30, 6), paid: new Set(['court:2026-10', 'membership:2026-10', 'membership:2026-11']) };
+    expect(dueAlerts({ ...cyc, courtPaidThrough: '2026-10-31' })).toEqual(dueAlerts(cyc));
+  });
+});

@@ -13,6 +13,7 @@ import {
   addDays,
   VENUE_ALERT,
   venueAlertAllowed,
+  venueDaysChangedAt,
   venueDaysOf,
   type ChargeKind,
   type VenueAlert,
@@ -40,11 +41,17 @@ async function forAll(db: D1Database, groupId: string): Promise<boolean> {
 /** The Settings row alone (no phone, no request). The kill switch is not visible there. */
 export const venueAlertForAll = (db: D1Database, groupId: string) => forAll(db, groupId);
 
-export async function setVenueAlertForAll(db: D1Database, groupId: string, on: boolean, nowIso: string): Promise<void> {
+/**
+ * Turns the Settings row on or off. Returns false when nothing changed. On while it is already on does NOTHING: the row's time is the no-backfill start,
+ * so a second "on" (another phone, a retry) must never move it forward and hide a charge that is still unpaid.
+ */
+export async function setVenueAlertForAll(db: D1Database, groupId: string, on: boolean, nowIso: string): Promise<boolean> {
+  if (on && (await forAll(db, groupId))) return false;
   await db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark'").bind(groupId, VENUE_ALERT.task).run();
   if (on) {
     await db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)").bind(newId(), groupId, VENUE_ALERT.task, nowIso).run();
   }
+  return true;
 }
 
 /** The switch for this screen, and the Settings row: one read of the row for both. `on`: the kill switch allows it and the row is on or this phone has the private test link. */
@@ -69,12 +76,25 @@ async function onSince(ctx: Ctx, groupId: string, rowOn: boolean): Promise<numbe
 }
 
 /** Which "court:2026-11" style charges are already marked paid. */
-async function paidKeys(db: D1Database, groupId: string): Promise<Set<string>> {
+async function paidRows(db: D1Database, groupId: string): Promise<{ keys: Set<string>; courtThrough: string | null }> {
   const { results } = await db
-    .prepare("SELECT task FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?")
+    .prepare("SELECT task, detail FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?")
     .bind(groupId, `${PAID_PREFIX}%`)
-    .all<{ task: string }>();
-  return new Set(results.map((r) => r.task.slice(PAID_PREFIX.length)));
+    .all<{ task: string; detail: string | null }>();
+  let courtThrough: string | null = null;
+  for (const r of results) {
+    if (!r.task.slice(PAID_PREFIX.length).startsWith('court:')) continue;
+    try {
+      const date = (JSON.parse(r.detail ?? '{}') as { date?: unknown }).date;
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && (!courtThrough || date > courtThrough)) courtThrough = date;
+    } catch {
+      /* a row without a readable date: ignored */
+    }
+  }
+  return { keys: new Set(results.map((r) => r.task.slice(PAID_PREFIX.length))), courtThrough };
+}
+async function paidKeys(db: D1Database, groupId: string): Promise<Set<string>> {
+  return (await paidRows(db, groupId)).keys;
 }
 
 /** The cards due right now (oldest charge day first) and the two days, from the site's own numbers. Read only. */
@@ -82,7 +102,8 @@ export async function venueAlertsNow(ctx: Ctx, group: GroupRow, rowOn: boolean):
   const days = venueDaysOf(group.settings_json);
   const settings = settingsOf(group);
   const tz = group.timezone;
-  const onAtMs = await onSince(ctx, group.id, rowOn);
+  // No backfill: the later of the switch going on and the charge days last being changed (a moved day never brings back a day that already passed).
+  const onAtMs = Math.max(await onSince(ctx, group.id, rowOn), venueDaysChangedAt(group.settings_json));
   const first = earliestGameDate(days, onAtMs, ctx.nowMs, tz);
   if (!first) return { alerts: [], days };
   // Every game from the first period's first day through today (Eastern calendar days, so a 11:30 PM game on the 30th is November).
@@ -94,7 +115,8 @@ export async function venueAlertsNow(ctx: Ctx, group: GroupRow, rowOn: boolean):
     .all<SessionRow>();
   // The same per-game cost Money > Totals uses (the game's own court cost, else the Typical court cost, priced by its length).
   const games: VenueGame[] = results.map((s) => ({ startsAt: s.starts_at, booked: s.booking_status === 'booked', canceled: s.status === 'canceled', costCents: courtCostOf(s, settings) }));
-  const alerts = dueAlerts({ days, membershipCents: settings.monthlyMembershipCents, games, nowMs: ctx.nowMs, tz, onAtMs, paid: await paidKeys(ctx.db, group.id) });
+  const paid = await paidRows(ctx.db, group.id);
+  const alerts = dueAlerts({ days, membershipCents: settings.monthlyMembershipCents, games, nowMs: ctx.nowMs, tz, onAtMs, paid: paid.keys, courtPaidThrough: paid.courtThrough });
   return { alerts, days };
 }
 

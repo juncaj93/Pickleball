@@ -322,6 +322,58 @@ describe('no backfill', () => {
   });
 });
 
+describe('review fixes: moved days, a repeated "on", a $0 amount', () => {
+  it('moving a charge day after the switch is on never brings back a day that already passed (and never re-bills a marked month)', async () => {
+    const w = await world();
+    w.app.now = edt(10, 26, 13);
+    await on(w);
+    await booked(w, ['2026-10-27', '2026-10-29']);
+    await jump(w, edt(10, 31, 8));
+    expect((await mark(w, ['court:2026-10'], 9600)).status).toBe(200);
+    await jump(w, est(11, 27, 9));
+    expect((await dash(w)).venueAlerts.map((x: any) => x.keys.join('+'))).toEqual(['membership:2026-11']);
+    // Nov 27: the membership day is moved to the 10th and the courts to the 4th. Both already passed: nothing appears for them (not the 4th's courts,
+    // whose new period would re-bill October's games, and not a second membership).
+    expect((await w.organizer.call('PUT', '/api/admin/group', { venueDays: { membershipDay: 10, courtDay: 4 } })).status).toBe(200);
+    expect((await dash(w)).venueAlerts).toEqual([]);
+    // A later save of anything else keeps that start; so does picking the same day again.
+    await w.organizer.call('PUT', '/api/admin/group', { settings: { pricePerPlayerCents: 1500 } });
+    await w.organizer.call('PUT', '/api/admin/group', { venueDays: { membershipDay: 10 } });
+    expect((await dash(w)).venueAlerts).toEqual([]);
+    // A day that is still ahead works: move courts to the 28th, and on the 28th the card is there.
+    await jump(w, est(11, 27, 10));
+    await w.organizer.call('PUT', '/api/admin/group', { venueDays: { membershipDay: 28, courtDay: 28 } });
+    expect((await dash(w)).venueAlerts).toEqual([]);
+    await jump(w, est(11, 28, 0, 1));
+    const a = (await dash(w)).venueAlerts;
+    expect(a).toHaveLength(1);
+    // The courts period for the 28th would start Oct 29 and re-bill the Oct 29 game, which October's paid courts charge (Oct 31) already covered: it
+    // starts the day after that charge (Nov 1) instead, so no court card.
+    expect(a[0].kinds).toEqual(['membership']);
+    expect((await w.organizer.call('GET', '/api/admin/dashboard')).data.venueDays).toEqual({ membershipDay: 28, courtDay: 28 });
+  });
+  it('a second "on" while it is already on changes nothing: the start does not move, a still-unpaid card stays, one Activity line', async () => {
+    const w = await world();
+    w.app.now = edt(10, 14, 9);
+    await on(w);
+    await jump(w, est(11, 27, 9));
+    expect((await dash(w)).venueAlerts.map((x: any) => x.keys.join('+'))).toEqual(['membership:2026-10', 'membership:2026-11']);
+    expect((await on(w)).status).toBe(200);
+    expect((await dash(w)).venueAlerts.map((x: any) => x.keys.join('+'))).toEqual(['membership:2026-10', 'membership:2026-11']);
+    const lines = ((await w.organizer.call('GET', '/api/admin/activity')).data.entries as any[]).filter((e) => e.action === 'venue_alert_on');
+    expect(lines).toHaveLength(1);
+  });
+  it('a $0 membership makes no card; courts that add up to $0 make none either', async () => {
+    const w = await world();
+    await w.organizer.call('PUT', '/api/admin/group', { settings: { monthlyMembershipCents: 0, typicalCourtCostCents: 0 } });
+    w.app.now = edt(10, 14, 9);
+    await on(w);
+    await booked(w, ['2026-10-27']);
+    await jump(w, edt(11, 1, 8));
+    expect((await dash(w)).venueAlerts).toEqual([]);
+  });
+});
+
 describe('Money > Totals', () => {
   const rw = { [MONEY_REWORK_HEADER]: 'on' };
   it('a finished month: the card total equals Totals "Court costs" (same per-game cost, same whole dollars)', async () => {

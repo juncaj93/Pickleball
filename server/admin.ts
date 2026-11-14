@@ -95,7 +95,7 @@ import { parseMode } from '../shared/christmasSkin';
 import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { markVenuePaid, setVenueAlertForAll, venueAlertFlags, venueAlertsNow } from './venueAlert';
-import { venueDaysOf, normalizeVenueDays, MEMBERSHIP_DAY_MAX, COURT_DAY_MAX, COURT_LAST_DAY } from '../shared/venueAlert';
+import { venueDaysChangedAt, venueDaysOf, normalizeVenueDays, MEMBERSHIP_DAY_MAX, COURT_DAY_MAX, COURT_LAST_DAY } from '../shared/venueAlert';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { cheaperFixFlags, cheaperFixFor, setCheaperFixForAll } from './cheaperFix';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
@@ -1895,7 +1895,9 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   }
   // Zip 43 (server/venueAlert.ts): the two charge days also live inside settings_json (`venueDays`). Every save keeps them (normalizeSettings only keeps
   // the numbers, so they are put back here, like the Zelle number); a save that names them changes them. Nothing here reads a switch.
-  let venueDays = venueDaysOf(group.settings_json);
+  const venueBefore = venueDaysOf(group.settings_json);
+  let venueDays = venueBefore;
+  let venueChangedAt = venueDaysChangedAt(group.settings_json);
   const hadVenueDays = (() => {
     try {
       return (JSON.parse(group.settings_json || '{}') as { venueDays?: unknown }).venueDays !== undefined;
@@ -1914,9 +1916,11 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
       courtDay: raw.courtDay === undefined ? venueDays.courtDay : whole(raw.courtDay, 'courtDay', COURT_LAST_DAY, COURT_DAY_MAX),
     };
     venueDays = normalizeVenueDays(venueDays);
+    // A day that really moved starts the no-backfill clock over (shared/venueAlert.ts venueDaysChangedAt); picking the same day again changes nothing.
+    if (venueDays.membershipDay !== venueBefore.membershipDay || venueDays.courtDay !== venueBefore.courtDay) venueChangedAt = ctx.nowMs;
   }
   const withZelle = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
-  const storedSettings = body.venueDays !== undefined || hadVenueDays ? { ...withZelle, venueDays } : withZelle;
+  const storedSettings = body.venueDays !== undefined || hadVenueDays ? { ...withZelle, venueDays: { ...venueDays, ...(venueChangedAt > 0 ? { changedAt: venueChangedAt } : {}) } } : withZelle;
   // Zip 27 (A-01): a new "Price per player" or "Typical court cost" never re-prices a finalized game. Its rules are written down first,
   // from what it shows right now (a failure here changes nothing). Any other save is untouched.
   {
@@ -2639,8 +2643,9 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
 export async function setVenueAlertSwitch(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const on = v.bool(body.on, 'on');
-  await setVenueAlertForAll(ctx.db, group.id, on, ctx.nowIso);
-  await audit(ctx.db, group.id, null, on ? 'venue_alert_on' : 'venue_alert_off', {}, ctx.nowIso);
+  const changed = await setVenueAlertForAll(ctx.db, group.id, on, ctx.nowIso);
+  // Already on and asked to be on again (a second phone, a retry): nothing was written, so nothing is logged.
+  if (changed) await audit(ctx.db, group.id, null, on ? 'venue_alert_on' : 'venue_alert_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

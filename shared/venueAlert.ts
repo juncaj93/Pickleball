@@ -60,6 +60,19 @@ export function venueDaysOf(settingsJson: string | null | undefined): VenueDays 
   }
 }
 
+/**
+ * When the charge days were last CHANGED (ms), kept next to them in settings_json (`venueDays.changedAt`); 0 = never. No backfill follows it: moving a day
+ * never brings back a charge day that already passed, so only days that begin at or after the change can make a card.
+ */
+export function venueDaysChangedAt(settingsJson: string | null | undefined): number {
+  try {
+    const v = (JSON.parse(settingsJson || '{}') as { venueDays?: { changedAt?: unknown } }).venueDays?.changedAt;
+    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export const daysInMonth = (year: number, month: number): number => new Date(Date.UTC(year, month, 0)).getUTCDate();
 
 /** The real day of the month a charge day means in that month: a day past the end (31 in June) is the last day; 0 is the last day. */
@@ -153,10 +166,15 @@ export interface VenueInput {
   games: VenueGame[];
   nowMs: number;
   tz: string;
-  /** The instant the switch was turned on (or the phone's private link was first opened). Charge days that start before it never show. */
+  /** The instant the switch was turned on (or the phone's private link was first opened), or the charge days were last changed, whichever is later. Charge days that start before it never show. */
   onAtMs: number;
   /** "court:2026-11" style keys already marked paid. */
   paid: ReadonlySet<string>;
+  /**
+   * The charge date ("2026-10-31") of the latest court charge already marked paid, if any. A court period never starts before the day after it, so a moved
+   * charge day can never bill a game that an earlier, paid court charge already covered. Same days every month: it changes nothing.
+   */
+  courtPaidThrough?: string | null;
 }
 
 const COURT_NAME = 'Northville Pickleball';
@@ -195,10 +213,13 @@ export function dueAlerts(input: VenueInput): VenueAlert[] {
     const dates = chargeDatesOf(days, year, month);
     const reached = (date: string) => date <= todayYmd && startOfDayMs(date, tz) >= input.onAtMs;
     if (reached(dates.court) && !input.paid.has(`court:${key}`)) {
-      const costs = periodGames(input.games, courtPeriod(days, year, month), tz).map((g) => g.costCents);
-      if (costs.length > 0) due.push({ date: dates.court, kind: 'court', month: key, cents: costs.reduce((a, b) => a + b, 0), line: courtLine(costs) });
+      const period = courtPeriod(days, year, month);
+      if (input.courtPaidThrough && addDays(input.courtPaidThrough, 1) > period.from) period.from = addDays(input.courtPaidThrough, 1);
+      const costs = periodGames(input.games, period, tz).map((g) => g.costCents);
+      if (costs.length > 0 && costs.reduce((a, b) => a + b, 0) > 0) due.push({ date: dates.court, kind: 'court', month: key, cents: costs.reduce((a, b) => a + b, 0), line: courtLine(costs) });
     }
-    if (reached(dates.membership) && !input.paid.has(`membership:${key}`)) {
+    // (A membership set to $0 charges nothing, so there is nothing to check: no card.)
+    if (input.membershipCents > 0 && reached(dates.membership) && !input.paid.has(`membership:${key}`)) {
       due.push({ date: dates.membership, kind: 'membership', month: key, cents: input.membershipCents, line: `Monthly membership, ${COURT_NAME}` });
     }
   }
