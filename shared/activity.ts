@@ -280,6 +280,13 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} switched "Spent matches Totals" on`;
     case 'spent_totals_off':
       return `${who} switched "Spent matches Totals" off`;
+    case 'venue_alert_on':
+      return `${who} switched "Venue charge alert" on`;
+    case 'venue_alert_off':
+      return `${who} switched "Venue charge alert" off`;
+    case 'venue_charge_paid':
+      // Zip 43: the whole line is the History entry Alex asked for ("Venue charge marked paid: $192"); the amount is the card's total in cents.
+      return `Venue charge marked paid: ${formatPrice(typeof d.cents === 'number' ? d.cents : 0)}`;
     case 'totals_refresh_on':
       return `${who} switched "Totals refresh" on`;
     case 'totals_refresh_off':

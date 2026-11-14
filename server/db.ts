@@ -110,6 +110,8 @@ export interface Env {
   AFTER_GAME_CARD?: string;
   /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?totalsrefresh=on. Display only. */
   TOTALS_REFRESH?: string;
+  /** Zip 43 "Venue charge alert" (shared/venueAlert.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?venuealert=on. Display only. */
+  VENUE_ALERT?: string;
   /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?spenttotals=on. Display only. */
   SPENT_TOTALS?: string;
   /** Zip 39 "Made cheaper after paying" (shared/cheaperFix.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?cheaperfix=on (organizer phone only). Moves money. */

@@ -4,6 +4,7 @@ import { GAME_DAY_CARD, GAME_DAY_TEST } from '../shared/gameDay';
 import { UNPAID_NUDGE } from '../shared/unpaidNudge';
 import { AFTER_GAME_CARD } from '../shared/afterGame';
 import { TOTALS_REFRESH } from '../shared/totalsRefresh';
+import { VENUE_ALERT } from '../shared/venueAlert';
 import { SPENT_TOTALS } from '../shared/spentTotals';
 import { CHEAPER_FIX } from '../shared/cheaperFix';
 import { ACTING_OTHERS, PHONE_TAG_HEADER } from '../shared/actingForOthers';
@@ -225,6 +226,13 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(AFTER_GAME_CARD.link)) headers[AFTER_GAME_CARD.header] = 'on';
   // Zip 23 "Totals refresh" private test switch for this phone (/admin?totalsrefresh=on, =off ends it). See server/totalsRefresh.ts.
   if (gameDayTest(TOTALS_REFRESH.link)) headers[TOTALS_REFRESH.header] = 'on';
+  // Zip 43 "Venue charge alert" private test switch for this phone (/admin?venuealert=on, =off ends it), with the moment this phone first opened the link
+  // (so a private test can never show an old charge day). See server/venueAlert.ts.
+  if (gameDayTest(VENUE_ALERT.link)) {
+    headers[VENUE_ALERT.header] = 'on';
+    const since = storageGet(`pb_${VENUE_ALERT.link}_since`);
+    if (since) headers[VENUE_ALERT.sinceHeader] = since;
+  }
   // Zip 27 "Spent matches Totals" private test switch for this phone (/admin?spenttotals=on, =off ends it). See server/spentTotals.ts.
   if (gameDayTest(SPENT_TOTALS.link)) headers[SPENT_TOTALS.header] = 'on';
   // Zip 39 "Made cheaper after paying" private test switch for this phone (/admin?cheaperfix=on, =off ends it). Only an organizer phone's counts (server/cheaperFix.ts).
@@ -808,10 +816,16 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link, HOME_SCREEN_TIP.link, TAP_GUARD_FIX.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, VENUE_ALERT.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link, HOME_SCREEN_TIP.link, TAP_GUARD_FIX.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
-    if (want === 'on') storageSet(`pb_${link}`, 'on');
-    else if (want === 'off') storageRemove(`pb_${link}`);
+    if (want === 'on') {
+      storageSet(`pb_${link}`, 'on');
+      // Zip 43: the Venue charge alert's private link remembers when this phone FIRST turned it on (a second ?venuealert=on does not move it).
+      if (link === VENUE_ALERT.link && !storageGet(`pb_${link}_since`)) storageSet(`pb_${link}_since`, String(Date.now()));
+    } else if (want === 'off') {
+      storageRemove(`pb_${link}`);
+      if (link === VENUE_ALERT.link) storageRemove(`pb_${link}_since`);
+    }
   }
   // Zip 38 (previews only in effect): ?xmasdate=2026-12-05 pretends today is that day (=off ends it); ?xmasmode=me|all acts like that Settings choice.
   // ?xmasreset=1 makes this phone forget its Christmas theme choice and the first-visit bubbles, so a tester can see the first visit again.
