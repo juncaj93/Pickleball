@@ -29,8 +29,8 @@ import {
 } from './repo';
 import { bookingOpensMs } from '../shared/time';
 import { agreedStart, isWaitingOnTime } from '../shared/timeShift';
-import { guestIn, guestViewOf, headCount, seatUnits, sharesPaid } from '../shared/guestSpot';
-import { dropLeavesShort, FEE_KEPT, feeSplitOf, lateFeeCutoffMs, lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
+import { guestIn, guestOwed, guestViewOf, headCount, lateShortSpots, seatUnits, sharesPaid } from '../shared/guestSpot';
+import { dropLeavesShort, FEE_KEPT, FEE_MIN_PLAYERS, feeSplitOf, lateFeeCutoffMs, lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 
 /** `{ shortGame }` for a game priced from its own game-length row ("Short games" on, a 1.5 hour game), else nothing at all. */
 function shortGameOf(session: SessionRow, settings: GroupSettings): { shortGame?: ShortGameInfo } {
@@ -98,7 +98,16 @@ export function playerSessionView(
     lateFees && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
   // The real waitlist (also when hidden), the same count the server's late-drop rule uses.
   // Zip 42: my own waiting guest leaves with me, so it is not someone who could take my spot (server/lateFees.ts LEAVES_SHORT says the same).
-  const dropOwes = lateWindow && dropLeavesShort(heads - (myUnits - 1), waitQueue(roster).filter((e) => !(e.guest && e.row.id === mine?.id)).length);
+  const waitersLeft = waitQueue(roster).filter((e) => !(e.guest && e.row.id === mine?.id)).length;
+  // Round 3 (Alex): a host and guest leaving owe only the spots the game is short: 4 minus everyone left, at most the spots they take.
+  // A host who still owes a guest's spot removed late leaves 2 spots too (that one is already owed). No guest: exactly dropLeavesShort.
+  const myHeads = mine && guestIn(mine) ? 2 : 1;
+  const mySpots = mine && (guestIn(mine) || guestOwed(mine)) ? 2 : 1;
+  const shortSpots = lateWindow ? lateShortSpots(heads - myHeads + waitersLeft, mySpots, FEE_MIN_PLAYERS) : 0;
+  const dropOwes = lateWindow && (mySpots === 1 ? dropLeavesShort(heads - (myUnits - 1), waitersLeft) : shortSpots > 0);
+  const owedUnits = mySpots === 1 ? myUnits : Math.max(1, shortSpots);
+  // Removing my guest alone (I stay) leaves the game below 4: the guest's share stays owed until someone takes the spot.
+  const removeOwes = lateWindow && !isOrganizer && !!mine && guestIn(mine) && heads - 1 + waitersLeft < FEE_MIN_PLAYERS;
   const openFee = mine ? lateFeeKind(mine, session, isOrganizer) : null;
   const ownRow: PlayerSessionView['mine'] = mine
     ? {
@@ -131,9 +140,12 @@ export function playerSessionView(
                 owes: dropOwes,
                 // Zip 27 (A-02): a seat paid below the fee (the game was made longer after the payment) would owe only the rest: the dialog says
                 // that ("you still owe $3"). Every other seat: exactly as before.
-                ...(!isOrganizer && mine.payment_status === 'paid' && !mine.refunded_at && !claimed && paidNow > 0 && paidNow < feeCents * myUnits
-                  ? { paid: false, feeCents: feeCents * myUnits - paidNow }
-                  : { paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents: feeCents * myUnits }),
+                ...(!isOrganizer && mine.payment_status === 'paid' && !mine.refunded_at && !claimed && paidNow > 0 && paidNow < feeCents * owedUnits
+                  ? { paid: false, feeCents: feeCents * owedUnits - paidNow }
+                  : { paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents: feeCents * owedUnits }),
+                // Zip 42 round 3: only for a host with a guest: how many spots a drop would leave short (0 to 2), and whether removing the
+                // guest alone would leave the game below 4.
+                ...(mySpots === 2 ? { guestSpots: shortSpots, ...(guestIn(mine) ? { removeOwes } : {}) } : {}),
               },
             }
           : {}),
@@ -147,7 +159,9 @@ export function playerSessionView(
           : null,
         ...(() => {
           const gv = guestViewOf(mine);
-          return gv && gv.status !== 'late' ? { guest: { name: gv.name, status: gv.status, shareCents: feeCents } } : {};
+          if (gv && gv.status !== 'late') return { guest: { name: gv.name, status: gv.status, shareCents: feeCents } };
+          // Round 3: a guest removed late whose spot is still owed ("Sam's spot: you owe $14 unless someone takes it").
+          return gv && guestOwed(mine) && !canceled ? { guestOwed: { name: gv.name, cents: feeCents, paid: mine.payment_status === 'paid' && !mine.refunded_at } } : {};
         })(),
       }
     : null;

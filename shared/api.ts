@@ -93,9 +93,15 @@ export interface PlayerSessionView {
      * `owes`: dropping now would leave the game short, so their $14 stays (or is owed) unless someone takes the spot.
      * `paid`: money is on the seat ("Your $14 stays on this game"). Missing: the drop works exactly as before.
      */
-    lateDrop?: { cancelByAt: string; owes: boolean; paid: boolean; feeCents: number };
+    /**
+     * Zip 42 round 3, only for a host with a guest: `guestSpots`, how many spots dropping out now would leave the game short (0 to 2: the
+     * dialog's wording); `removeOwes`, removing the guest alone would leave the game below 4 (the guest's share stays owed).
+     */
+    lateDrop?: { cancelByAt: string; owes: boolean; paid: boolean; feeCents: number; guestSpots?: number; removeOwes?: boolean };
     /** Zip 42 "Guest spot": this player's guest for this game (in or waiting) and one person's share. Missing: no guest. */
     guest?: { name: string; status: 'confirmed' | 'waitlisted'; shareCents: number };
+    /** Zip 42 round 3: a guest removed late whose spot is still owed on this seat until someone takes it. */
+    guestOwed?: { name: string; cents: number; paid: boolean };
     /** An open late fee on this seat (e.g. a game canceled late that the venue charged): what kind, and what is still owed. */
     /** priceCents: only for a late cancel with the fee split (LATE_FEE_SPLIT), what this seat's share is. */
     lateFee?: { kind: LateFeeKind; oweCents: number; priceCents?: number } | null;

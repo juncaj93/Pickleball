@@ -3023,6 +3023,14 @@ export function ScheduleRow({
             <NamesLine {...guestLine(s.waitlist)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
           {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You're in if someone drops.</p>}
+          {/* Zip 42 round 3: a guest removed late whose spot is still owed. */}
+          {isIn && mine?.guestOwed && (
+            <p className="sched-sub" data-guest-owed>
+              {mine.guestOwed.paid
+                ? `${mine.guestOwed.name}'s spot: your ${formatPrice(mine.guestOwed.cents)} stays on this game unless someone takes it.`
+                : `${mine.guestOwed.name}'s spot: ${formatPrice(mine.guestOwed.cents)} owed unless someone takes it.`}
+            </p>
+          )}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
           {s.canceled && (inSession || waiting) && mine.lateFee?.kind === 'canceled_late' ? (
             <p className="sched-sub" data-late-fee>
@@ -3058,9 +3066,24 @@ export function ScheduleRow({
             ? myGuest
               ? `You lose your place in line. Your guest ${myGuest.name} comes off too.`
               : 'You lose your place in line.'
+            : myGuest && myGuest.status === 'waitlisted' && mine?.lateDrop
+              ? // Round 3 review: a guest still waiting takes no spot, so the host's own late-drop words apply, and the guest comes off the line.
+                `${lateDropDialogText(
+                  formatTime(mine.lateDrop.cancelByAt, tz),
+                  mine.lateDrop.owes,
+                  formatPrice(mine.lateDrop.feeCents),
+                  mine.dropCreditCents + mine.dropCashCents > 0 ? `your ${formatPrice(mine.dropCreditCents + mine.dropCashCents)} comes back as credit` : null,
+                )} Your guest ${myGuest.name} comes off the waitlist too.`
             : myGuest
               ? // Zip 42: the guest drops out too. "You still owe $28 if no one takes your 2 spots" only inside the 12 hours (mocks 4 and 5).
-                hostDropText(myGuest.name, mine?.lateDrop?.owes ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz), owesCents: mine.lateDrop.feeCents } : null, formatPrice)
+                // Round 3: the wording follows how many spots the game would be short (2, 1 or none).
+                hostDropText(
+                  myGuest.name,
+                  mine?.lateDrop && myGuest.status === 'confirmed'
+                    ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz), spots: mine.lateDrop.owes ? (mine.lateDrop.guestSpots ?? 2) : 0, owesCents: mine.lateDrop.feeCents }
+                    : null,
+                  formatPrice,
+                )
             : mine?.lateDrop
               ? // Past the cancel-by with late fees on: what this drop costs (shared/lateFees.ts rule 9).
                 lateDropDialogText(
@@ -3094,14 +3117,26 @@ export function ScheduleRow({
           body={
             myGuest.status === 'waitlisted'
               ? `${myGuest.name} comes off the waitlist.`
-              : removeGuestText(myGuest.name, myGuest.shareCents, mine?.paymentStatus === 'paid', formatPrice)
+              : removeGuestText(
+                  myGuest.name,
+                  myGuest.shareCents,
+                  mine?.paymentStatus === 'paid',
+                  formatPrice,
+                  mine?.lateDrop?.removeOwes ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz) } : null,
+                )
           }
           confirmLabel={`Remove ${myGuest.name}`}
           danger
           busy={busy}
           onConfirm={() => {
             setAskGuest(false);
-            void run('remove-guest', (d) => (d?.creditBackCents > 0 ? `${myGuest.name} is off. ${formatPrice(d.creditBackCents)} back as credit.` : `${myGuest.name} is off your tab.`));
+            void run('remove-guest', (d) =>
+              d?.lateOwesCents > 0
+                ? `${myGuest.name} is off. ${formatPrice(d.lateOwesCents)} still owed unless someone takes the spot.`
+                : d?.creditBackCents > 0
+                  ? `${myGuest.name} is off. ${formatPrice(d.creditBackCents)} back as credit.`
+                  : `${myGuest.name} is off your tab.`,
+            );
           }}
           onCancel={() => setAskGuest(false)}
         />

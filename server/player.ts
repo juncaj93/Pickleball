@@ -598,7 +598,7 @@ export async function playerRemoveGuest(ctx: Ctx) {
   const who = await actingOn(ctx);
   if (!(await guestSpotFlags(ctx, who.group.id)).on) throw new HttpError(403, 'guest_spot_off', 'Ask Alex to remove your guest.');
   const res = await removeGuestCore(ctx, who.group, who.session, who.playerId, 'host');
-  return { result: 'removed', guest: res.guest, creditBackCents: res.creditBackCents };
+  return { result: 'removed', guest: res.guest, creditBackCents: res.creditBackCents, ...(res.lateOwesCents ? { lateOwesCents: res.lateOwesCents } : {}) };
 }
 
 /**

@@ -4623,3 +4623,20 @@ game without a guest reads exactly as before. SQL only names the new columns onc
   e2e/zip42.cjs 31/31 at 390, 360, 320, light and dark. Second fresh reviewer: per-row owes, no-show pair fee, unmark after Finalize, undo after a price
   change, guest_first reset; all fixed.
 - Preview: another channel re-seeded the shared preview DB on Nov 14, so the scene went back on through the API (fake names only), not by a re-seed.
+
+### Round 3 (Sat Nov 14, 2026): a late pair owes only the spots the game is short
+- Alex's rule: when a host and guest drop out late, spots short = 4 minus everyone left (people waiting count), at most 2, never below 0;
+  the host owes $14 per short spot unless someone takes it. Host + guest + 2 others: $28. Host 4th, guest 5th: $14. Host 5th, guest 6th: nothing.
+  Server: `withdraw` keeps the guest's share on the debt ('late') only when the game is short by two; short by one, a paid $28 gets $14 back at
+  once. Dialog words follow `lateShortSpots` (shared/guestSpot.ts), the same count the server uses (`LEAVES_SHORT` with `need`).
+- Late Remove guest (host, late fees on, inside 12 hours) that leaves the game below 4: the host stays in and owes the guest's $14 ('late' on a
+  confirmed seat, `guestOwed`) until a sub takes the spot; a paid $28 keeps it on the game. The organizer can clear it (Players sheet, three dots,
+  "Clear Sam's spot"); adding a new guest fills it. Finalize with it still owed: the host pays both shares. Cancel returns everything.
+  "To waitlist" is refused while it is owed. Subs take the oldest debt first (`OLDEST_DEBT`), including a spot owed since a late removal.
+- No schema change. Unchanged on purpose (Alex): a guest no-show costs no extra fee; a host who drops late and rejoins alone keeps $28 until Finalize.
+- Tests: unit 71 in tests/guest-spot.test.ts (the three examples, with and without a sub, paid and unpaid, late remove both ways, dialog words).
+  Browser: e2e/zip42.cjs adds R3 (the three scenes' Drop out and Remove guest words, light and dark); zip35-calm expects the five Guest spot games.
+- Fresh reviewer: nothing serious. Fixed: a waiting guest's drop dialog lost the late-fee words; debt order after an owed spot; To waitlist could
+  wipe an owed spot; paid wording on the owed line and the Clear dialog. Left (see report): an owed spot is dropped if the late-fees switch is
+  turned off before the host drops or at Finalize; the $14 back after a one-short pair drop is a second step (like the sub's own money back).
+

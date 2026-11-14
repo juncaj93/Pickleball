@@ -22,7 +22,7 @@ import { flatOf, priceLockStatements, priceOf, specialFlatOf } from './repo';
 import { gameFinalPrice } from '../shared/gameLength';
 import { auditPlan, extendedTimeFor, extensionPlan, hasExtension, restoreAfterFailedReopen, unwindForReopen } from './extension';
 import { type ExtraMinutes, isExtraMinutes } from '../shared/extension';
-import { guestIn } from '../shared/guestSpot';
+import { guestIn, guestOwed } from '../shared/guestSpot';
 import { hasGuestColumns } from './guestSpot';
 
 /** Over, not canceled, not finalized, and someone was in (or paid): the Finalize card shows. */
@@ -99,7 +99,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   // marked on their own; a guest who did not play comes off (the host keeps one share), and a host who did not play takes the guest out too.
   // No guest: N is the people marked played and every seat is one share, exactly as before.
   const guestPlayed = (r: RosterRow) => guestIn(r) && playedIds.has(r.player_id) && !guestsOut.has(r.player_id);
-  const units = (r: RosterRow) => (guestPlayed(r) ? 2 : 1);
+  // Round 3: a host who still owes a guest's spot removed late (no one took it) pays that share too.
+  const units = (r: RosterRow) => (guestPlayed(r) || guestOwed(r) ? 2 : 1);
   const n = playedIds.size + confirmed.filter(guestPlayed).length;
   const guests = await hasGuestColumns(ctx.db);
   // The final price for this game: floor(4 x $14 / N) for a normal game, the 1.5 hour row's table with "Short games" on.
@@ -154,7 +155,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     if (owing.has(r.player_id)) {
       const paidCash = r.payment_status === 'paid' && !r.refunded_at && !r.self_paid_at ? (r.payment_amount_cents ?? 0) : 0;
       // (A no-show host with a guest owes for both, as in round 1: the guest could not play without them.)
-      const fee = gp.flatCents * (guestIn(r) ? 2 : 1);
+      const fee = gp.flatCents * (guestIn(r) || guestOwed(r) ? 2 : 1);
       if (paidCash > 0 && paidCash < fee) {
         const onSeat = await usedOn(ctx, session.id, r.player_id);
         statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paidCash - onSeat), paymentCents: paidCash }));

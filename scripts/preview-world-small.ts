@@ -535,11 +535,31 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
     // (The calm profile drops credit entries, so his $14 is recorded as cash: the credit goes back to his pot, then his own share is marked paid.)
     await w.org.ok('POST', `/api/admin/sessions/${guestA.id}/payment`, { playerId: w.ids.Parker, paid: false });
     await w.org.ok('POST', `/api/admin/sessions/${guestA.id}/guest/share`, { playerId: w.ids.Parker, who: 'host', paid: true });
+    // Round 3 (Alex): three late drop-out scenes, each Rowan + Sam (guest), the next day at 8:00, 8:30 and 9:00 PM (like "Guest test", the
+    // late window, 12 hours before the start, opens that morning). Drop out on each says a different thing (late fees on for that phone):
+    //   "Late: 4 seats"   Rowan + Sam, Parker, Christopher Vanderberg (4): both drop, 2 left, "you still owe $28";
+    //   "Late: host 4th"  Parker, Christopher Vanderberg, Reese, then Rowan + Sam (5): 3 left, "you still owe $14";
+    //   "Late: host 5th"  Parker, Christopher Vanderberg, Reese, Sage, then Rowan + Sam (6): 4 left, "You don't owe anything".
+    const half = 30 * 60_000;
+    const lateAt = localAt(N + DAY, 20);
+    const lateScenes: { note: string; first: string[]; after: string[] }[] = [
+      { note: 'Late: 4 seats', first: [], after: ['Parker', SMALL_LONG] },
+      { note: 'Late: host 4th', first: ['Parker', SMALL_LONG, 'Reese'], after: [] },
+      { note: 'Late: host 5th', first: ['Parker', SMALL_LONG, 'Reese', 'Sage'], after: [] },
+    ];
+    const lateIds: string[] = [];
+    for (const [i, sc] of lateScenes.entries()) {
+      const lg = await makeAt(lateAt + i * half, 120, sc.note);
+      await setCourt(lg, 'booked');
+      for (const n of [...sc.first, 'Rowan', ...sc.after]) await join(n, lg);
+      await w.org.ok('POST', `/api/admin/sessions/${lg.id}/guest`, { playerId: w.ids.Rowan, name: 'Sam' });
+      lateIds.push(lg.id);
+    }
     keep.length = 0;
-    keep.push(guestA.id, guestB.id);
+    keep.push(guestA.id, guestB.id, ...lateIds);
     lateMove = undefined;
     await refresh();
-    summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg; "Guest test" also Parker + Billy (guest), 5 in; Rowan owes $28 on the first and paid $28 on the second');
+    summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg; "Guest test" also Parker + Billy (guest), 5 in; Rowan owes $28 on the first and paid $28 on the second; round 3: "Late: 4 seats", "Late: host 4th", "Late: host 5th" (next day 8:00, 8:30, 9:00 PM, Rowan + Sam in each: Drop out owes $28, $14, nothing)');
   }
 
   await refresh();
@@ -548,7 +568,7 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
 
   let calmSql = '';
   if (opts.calm) {
-    // Zip 42: the calm profile keeps only this zip's two games (the Zip 38 tonight and tomorrow player games stay in the full world, --full).
+    // Zip 42: the calm profile keeps only this zip's games (two Guest spot games and round 3's three late scenes) (the Zip 38 tonight and tomorrow player games stay in the full world, --full).
     calmSql = calmDown(w.db.raw, keep, N, lateMove, []);
     summary.push('CALM profile (Zip 42): only the two Guest spot games are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
   }

@@ -8,7 +8,7 @@
  *   P1  Rowan's card (390, 360, 320; light and dark): "Rowan + Sam (guest), Parker, Christopher", four balls, "$28 due", I paid, Remove guest,
  *       Drop out, nothing cut off or wider than the screen
  *   P2  the paid card: "Paid $28", Remove guest, Drop out
- *   P3  Drop out inside the 12 hours: "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28."
+ *   P3  Drop out inside the 12 hours (5 in, so 3 left, one spot owed): "... If no one takes your spot, you still owe $14. Your guest's spot isn't needed."
  *       (Stay in / Drop out both); outside: "Your guest Sam drops out too. Both spots open up for someone else."
  *   P4  Remove guest on the paid card: "Remove Sam?" / "Sam comes off your tab. Sam's $14 goes to your credit." (Keep Sam / Remove Sam), then the
  *       card reads Paid $14 with three balls and the CREDIT chip shows $14
@@ -19,6 +19,8 @@
  *   W1  Who played: guest tiles, guest out and host out
  *   A3  Add a guest for Parker (Lee): the panel's words, the new row, Parker owes $28; then Remove guest on Lee's row; Remove Rowan's words
  *   S1  Settings: "Guest spot" is the top switch row
+ *   R3  round 3: the three late scenes ("Late: 4 seats", "Late: host 4th", "Late: host 5th", next day 8:00 to 9:00 PM): Drop out says $28, $14 or
+ *       nothing; Remove guest says the $14 stays owed only on the 4 seat game (light and dark)
  * Screenshots of every step: .data/zip42-shots (not in git).
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -202,7 +204,8 @@ async function main() {
     await check(`P3 Drop out confirm, inside and outside the 12 hours (${scheme})`, async () => {
       const { ctx, page } = await playerPage('Rowan', { scheme });
       for (const [g, want] of [
-        [gA, "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28."],
+        // Round 3: "Guest test" has 5 in (Rowan + Sam, Parker + Billy, Christopher): Rowan and Sam leaving leaves 3, so only one spot is owed.
+        [gA, "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed."],
         [gB, 'Your guest Sam drops out too. Both spots open up for someone else.'],
       ]) {
         const c = card(page, g.id);
@@ -219,6 +222,48 @@ async function main() {
         await page.screenshot({ path: path.join(SHOTS, `P3-drop-${g === gA ? 'inside' : 'outside'}-${scheme}.png`) });
         await dlg.locator('.btn-row button', { hasText: 'Stay in' }).click();
         await page.waitForTimeout(400);
+      }
+      await ctx.close();
+    });
+
+  // Round 3 (Alex): the three late scenes (next day 8:00, 8:30, 9:00 PM; the clock is inside each one's 12 hours). Drop out says what the game
+  // is short (2 spots: $28, 1 spot: $14, none: nothing); Remove guest owes the $14 only when the game would drop below 4. Nothing is tapped.
+  const late = ['Late: 4 seats', 'Late: host 4th', 'Late: host 5th'].map((note) => d.sessions.find((s) => s.note === note));
+  assert(late.every(Boolean), 'the three round 3 late scenes are in the calm world');
+  for (const scheme of ['light', 'dark'])
+    await check(`R3 late Drop out and Remove guest words for 4 seats, host 4th, host 5th (${scheme})`, async () => {
+      const { ctx, page } = await playerPage('Rowan', { scheme });
+      const words = [
+        [
+          "It's past the 8:00 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
+          "It's past the 8:00 AM cancel-by and the game would drop below 4. If no one takes Sam's spot, you still owe $14.",
+        ],
+        [
+          "It's past the 8:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed.",
+          'Sam comes off your tab. You owe $14 less.',
+        ],
+        ["Your guest Sam drops out too. Both spots open up. You don't owe anything because the game still has 4 players.", 'Sam comes off your tab. You owe $14 less.'],
+      ];
+      for (const [i, g] of late.entries()) {
+        const c = card(page, g.id);
+        await c.scrollIntoViewIfNeeded();
+        await insideCard(c, `${g.note} card`);
+        for (const [link, want, keep, tag] of [
+          ['.drop-link', words[i][0], 'Stay in', 'drop'],
+          ['[data-remove-guest]', words[i][1], 'Keep Sam', 'remove'],
+        ]) {
+          await c.locator(link).click();
+          const dlg = page.locator('dialog.sheet[open]').first();
+          await dlg.waitFor();
+          await page.waitForTimeout(350);
+          const body = flat(await dlg.innerText());
+          assert(body.includes(want), `${g.note} ${tag}: ${body}`);
+          await equalButtons(dlg, `${g.note} ${tag} confirm`);
+          await noSideScroll(page, `${g.note} ${tag}`);
+          await page.screenshot({ path: path.join(SHOTS, `R3-${i + 1}-${tag}-${scheme}.png`) });
+          await dlg.locator('.btn-row button', { hasText: keep }).click();
+          await page.waitForTimeout(400);
+        }
       }
       await ctx.close();
     });

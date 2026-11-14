@@ -66,12 +66,25 @@ export const OPEN_FEE = (sp: string) =>
  * SQL for "this seat leaving now leaves the game short": the others still in plus everyone waiting (the first ones
  * move in at once) are fewer than 4. ?sid is the session id, `id` the seat's own row id expression.
  */
-export const LEAVES_SHORT = (sessionParam: string, seatId: string, guests = false) =>
+export const LEAVES_SHORT = (sessionParam: string, seatId: string, guests = false, need: number = FEE_MIN_PLAYERS) =>
   guests
-    ? // Zip 42: everyone else counts, their guests too (in or waiting); this seat's own guest leaves with it.
+    ? // Zip 42: everyone else counts, their guests too (in or waiting); this seat's own guest leaves with it. Round 3: `need` 3 asks "short by
+      // two" (a host and guest leaving owe both spots), and is also "removing this seat's guest alone leaves the game below 4" (the host stays).
       `((SELECT COALESCE(SUM(1 + CASE WHEN x.guest_name IS NOT NULL AND x.guest_status IN ('confirmed', 'waitlisted') THEN 1 ELSE 0 END), 0)
-         FROM session_players x WHERE x.session_id = ${sessionParam} AND x.status IN ('confirmed', 'waitlisted') AND x.id <> ${seatId}) < ${FEE_MIN_PLAYERS})`
+         FROM session_players x WHERE x.session_id = ${sessionParam} AND x.status IN ('confirmed', 'waitlisted') AND x.id <> ${seatId}) < ${need})`
     : `((SELECT COUNT(*) FROM session_players x WHERE x.session_id = ${sessionParam} AND x.status IN ('confirmed', 'waitlisted') AND x.id <> ${seatId}) < ${FEE_MIN_PLAYERS})`;
+
+/**
+ * Round 3 (Zip 42): the oldest open late debt of the game that a sub takes first, as a row id: a seat that left late (OPEN_LATE_DROP, in the
+ * order it left), or a host still in who removed their guest late (guest_status 'late', from the moment of the removal).
+ */
+export const OLDEST_DEBT = (sessionParam: string) =>
+  `(SELECT x.id FROM session_players x WHERE x.session_id = ${sessionParam}
+      AND (${OPEN_LATE_DROP('x')} OR (x.status = 'confirmed' AND x.guest_status = 'late' AND x.guest_name IS NOT NULL))
+    ORDER BY CASE WHEN x.status = 'confirmed' THEN x.guest_at
+                  -- A host who owed a removed guest's spot and then dropped too: the debt is as old as that spot (guest_at, set when it became owed).
+                  WHEN x.guest_status = 'late' AND x.guest_at IS NOT NULL AND x.guest_at < x.late_drop_at THEN x.guest_at
+                  ELSE x.late_drop_at END, x.rowid LIMIT 1)`;
 
 /**
  * After a seat was tagged (late_drop_done_at = the tap's time) for clearing: what is left of the late-drop marks goes,
@@ -108,7 +121,7 @@ export function tagOldestLateDrop(db: D1Database, sessionId: string, joinerId: s
            // Zip 42: a sub that just took a guest's share of a debt (same moment) clears nothing else.
            guests
              ? `
-         AND NOT EXISTS (SELECT 1 FROM session_players h WHERE h.session_id = ?1 AND h.status = 'withdrawn' AND h.guest_at = ?3 AND h.guest_status IS NULL AND h.guest_name IS NOT NULL)`
+         AND NOT EXISTS (SELECT 1 FROM session_players h WHERE h.session_id = ?1 AND h.status IN ('withdrawn', 'confirmed') AND h.guest_at = ?3 AND h.guest_status IS NULL AND h.guest_name IS NOT NULL)`
              : ''
          }`,
     )

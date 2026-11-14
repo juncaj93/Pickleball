@@ -21,7 +21,9 @@ import { auditSubClears, settle, subClearStatements, subCleared } from './roster
 import { confirmedHeads, guestSpotFlags, hasGuestColumns, nextClaimSeq, setGuestSpotForAll, trimSeatStatements } from './guestSpot';
 import { capOf } from '../shared/settings';
 import { DB_LIMIT_MESSAGE } from '../shared/zip10';
-import { cleanGuestName, GUEST_NAME_MAX, guestIn, guestWaiting, headCount, seatUnits, sharesPaid } from '../shared/guestSpot';
+import { cleanGuestName, GUEST_NAME_MAX, guestIn, guestOwed, guestWaiting, headCount, seatUnits, sharesPaid } from '../shared/guestSpot';
+import { FEE_MIN_PLAYERS, lateFeeCutoffMs } from '../shared/lateFees';
+import { LEAVES_SHORT, lateFeesFor } from './lateFees';
 import { connected, deliver, prefsOfGroup } from './alerts';
 import { isPretend } from './pretend';
 import { alertWhen } from '../shared/alerts';
@@ -77,6 +79,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
   const flat = flatOf(session, settings);
   const organizerId = await organizerIdOf(ctx.db, group);
   const now = ctx.nowIso;
+  const ownSpot = guestOwed(host);
   const out = await ctx.db.batch([
     ctx.db
       .prepare(
@@ -99,7 +102,8 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
       seatWhere: (sp) => `${sp}.guest_at = ?1 AND ${sp}.guest_status = 'confirmed' AND ${sp}.status = 'confirmed'`,
     }),
     // A guest taking a spot is a sub (shared/lateFees.ts rule 3): it clears the oldest open late-drop debt of the game, like any player would.
-    ...subClearStatements(ctx.db, { groupId: group.id, organizerId, priceCents: flat }, session.id, playerId, now, true, true),
+    // Round 3: not when the host still owes a removed guest's spot: the new guest fills that very spot (the host's own debt ends, nobody else's).
+    ...(ownSpot ? [] : subClearStatements(ctx.db, { groupId: group.id, organizerId, priceCents: flat }, session.id, playerId, now, true, true)),
   ]);
   if (out[0].meta.changes !== 1) {
     const fresh = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
@@ -107,7 +111,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
     if (noWaitlist) throw new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE);
     throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   }
-  if (subCleared(out, out.length - 6, true)) await auditSubClears(ctx.db, group.id, session.id, playerId, now, flat);
+  if (!ownSpot && subCleared(out, out.length - 6, true)) await auditSubClears(ctx.db, group.id, session.id, playerId, now, flat);
   const after = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
   const status = after?.guest_status === 'confirmed' ? 'confirmed' : 'waitlisted';
   await audit(ctx.db, group.id, session.id, 'guest_added', { player: host.display_name, playerId, guest: name, ...(status === 'waitlisted' ? { waitlisted: true } : {}) }, now);
@@ -124,7 +128,9 @@ export async function removeGuestCore(ctx: Ctx, group: GroupRow, session: Sessio
   if (by === 'host' && ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This game already started. Ask Alex.');
   const roster = await loadRoster(ctx.db, session.id);
   const host = roster.find((r) => r.player_id === playerId);
-  if (!host || !(guestIn(host) || guestWaiting(host))) throw new HttpError(409, 'no_guest', 'There is no guest to remove.');
+  // Round 3: the organizer can also take off a guest whose spot is still owed (removed late): that clears the $14 like a Clear would.
+  const owedSpot = !!host && by === 'organizer' && guestOwed(host);
+  if (!host || !(guestIn(host) || guestWaiting(host) || owedSpot)) throw new HttpError(409, 'no_guest', 'There is no guest to remove.');
   if (host.payment_status === 'paid' && !host.refunded_at && host.self_paid_at)
     throw new HttpError(
       409,
@@ -136,9 +142,15 @@ export async function removeGuestCore(ctx: Ctx, group: GroupRow, session: Sessio
   const now = ctx.nowIso;
   const settings = settingsOf(group);
   const organizerId = await organizerIdOf(ctx.db, group);
+  // Round 3 (Alex): the host removing their guest inside the 12 hours (late fees on) when that leaves the game below 4: the guest's share
+  // stays owed on the host's seat ('late') until someone takes the spot (shared/guestSpot.ts guestOwed). The statement decides, so two taps
+  // at the same moment can't both see "still 4". The organizer removing a guest never makes a debt (like Remove for a player).
+  const lateTap =
+    by === 'host' && wasIn && playerId !== organizerId && ctx.nowMs >= lateFeeCutoffMs(session.starts_at) && (await lateFeesFor(ctx, group.id)) ? 1 : 0;
+  const stays = `(?5 = 1 AND status = 'confirmed' AND guest_status = 'confirmed' AND ${LEAVES_SHORT('session_players.session_id', 'session_players.id', true, FEE_MIN_PLAYERS - 1)})`;
   // The seat goes back to one share: what it holds above that comes back as credit (the organizer's seat never holds group money).
   const trim =
-    wasIn && playerId !== organizerId
+    (wasIn || owedSpot) && playerId !== organizerId
       ? await trimSeatStatements(ctx.db, {
           groupId: group.id,
           sessionId: session.id,
@@ -153,20 +165,31 @@ export async function removeGuestCore(ctx: Ctx, group: GroupRow, session: Sessio
   const out = await ctx.db.batch([
     ctx.db
       .prepare(
-        `UPDATE session_players SET guest_name = NULL, guest_status = NULL, guest_seq = NULL, guest_first = NULL, guest_played = NULL, guest_at = ?2, updated_at = ?2
+        `UPDATE session_players SET guest_name = CASE WHEN ${stays} THEN guest_name ELSE NULL END, guest_status = CASE WHEN ${stays} THEN 'late' ELSE NULL END,
+           guest_seq = NULL, guest_first = NULL, guest_played = NULL, guest_at = ?2, updated_at = ?2
          WHERE id = ?1 AND guest_status = ?3 AND guest_name = ?4 AND NOT (payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL)`,
       )
-      .bind(host.id, now, host.guest_status, guest),
+      .bind(host.id, now, host.guest_status, guest, lateTap),
     ...trim.statements,
   ]);
   if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   // A credit entry only goes in when this batch's own change held (its guard): read back what really came back.
   const back = trim.backCents > 0 ? await creditBackAt(ctx, session.id, playerId, now) : 0;
-  await audit(ctx.db, group.id, session.id, 'guest_removed', { player: host.display_name, playerId, guest, by, ...(back > 0 ? { creditBackCents: back } : {}) }, now, by === 'host' ? host.display_name : 'organizer');
+  const owed = lateTap === 1 && (await ctx.db.prepare('SELECT guest_status FROM session_players WHERE id = ?').bind(host.id).first<{ guest_status: string | null }>())?.guest_status === 'late';
+  const owedCents = owed ? flatOf(session, settings) : 0;
+  await audit(
+    ctx.db,
+    group.id,
+    session.id,
+    'guest_removed',
+    { player: host.display_name, playerId, guest, by, ...(back > 0 ? { creditBackCents: back } : {}), ...(owed ? { lateOwesCents: owedCents } : {}), ...(owedSpot ? { clearedLate: true } : {}) },
+    now,
+    by === 'host' ? host.display_name : 'organizer',
+  );
   if (back > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: host.display_name, playerId, amountCents: back, reason: 'dropped' }, now);
   if (wasIn) await settle(ctx.db, session, now, settings);
   if (by === 'host') await notifyGuestRemoved(ctx, group, session, host.display_name, guest);
-  return { ok: true, guest, creditBackCents: back };
+  return { ok: true, guest, creditBackCents: back, ...(owed ? { lateOwesCents: owedCents } : {}) };
 }
 
 /** What came back to the host as credit at `now` from this game (cash that became credit, plus credit that went back to the pot). */

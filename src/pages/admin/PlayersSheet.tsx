@@ -102,7 +102,8 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     let said = '';
     const ok = await run(async () => {
       const d = await api<{ creditBackCents: number }>('POST', `/api/admin/sessions/${s.id}/guest/remove`, { playerId: host.playerId });
-      said = d.creditBackCents > 0 ? `${host.guest?.name} removed. ${formatPrice(d.creditBackCents)} back to ${host.name} as credit.` : `${host.guest?.name} removed.`;
+      const what = host.guest?.status === 'late' ? `${host.guest.name}'s spot cleared.` : `${host.guest?.name} removed.`;
+      said = d.creditBackCents > 0 ? `${what} ${formatPrice(d.creditBackCents)} back to ${host.name} as credit.` : what;
     });
     if (ok && said) toast(said);
   }
@@ -207,6 +208,8 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       Owes {formatPrice(r.owesCents + (r.extCents ?? 0))}
                       {/* Zip 42: the guest's share is on this tab. */}
                       {r.guest?.status === 'confirmed' ? <span className="ps-with-guest"> (with {r.guest.name})</span> : null}
+                      {/* Round 3: a guest removed late whose spot no one has taken yet. */}
+                      {r.guest?.status === 'late' && r.status === 'confirmed' ? <span className="ps-with-guest" data-ps-guest-owed> (incl. {r.guest.name}'s spot)</span> : null}
                       {/* Zip 31: extra time riding on this game; Mark paid takes both. */}
                       {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extension)` : ''}
                       {r.lateFee ? <span className="ps-fee"> · {lateFeeLine(r)?.split(' · ')[0]}</span> : null}
@@ -255,6 +258,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     onWaitlist={r.status === 'confirmed' && !cleanup ? () => void act(r.playerId, 'waitlist', `${r.name} moved to waitlist`) : undefined}
                     onAddGuest={guestOn && !r.guest ? () => setGuestFor(r) : undefined}
                     onUnpay={pm && pm.hostPaid ? () => void markShare(r, 'host', false) : undefined}
+                    onClearGuest={r.guest?.status === 'late' && r.status === 'confirmed' ? { guest: r.guest.name, run: () => setUnGuest(r) } : undefined}
                   />
                 ) : (
                   <span className="ps-dots-gap" aria-hidden="true" />
@@ -408,16 +412,20 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       {s.roster.some((r) => !!r.guest) && (
       <ConfirmDialog
         open={!!unGuest}
-        title={`Remove ${unGuest?.guest?.name ?? 'guest'}?`}
-        cancelLabel={`Keep ${unGuest?.guest?.name ?? 'guest'}`}
+        title={unGuest?.guest?.status === 'late' ? `Clear ${unGuest.guest.name}'s spot?` : `Remove ${unGuest?.guest?.name ?? 'guest'}?`}
+        cancelLabel={unGuest?.guest?.status === 'late' ? 'Keep it' : `Keep ${unGuest?.guest?.name ?? 'guest'}`}
         body={
-          unGuest?.guest?.status === 'confirmed'
+          unGuest?.guest?.status === 'late'
+            ? unGuest.paymentStatus === 'paid' && !unGuest.refundedAt
+              ? `${unGuest.name} gets ${formatPrice(price)} back as credit for ${unGuest.guest.name}'s spot.`
+              : `${unGuest.name} won't owe ${formatPrice(price)} for ${unGuest.guest.name}'s spot any more.`
+            : unGuest?.guest?.status === 'confirmed'
             ? unGuest.paymentStatus === 'paid' && !unGuest.refundedAt
               ? `${unGuest.guest.name} comes off ${unGuest.name}'s tab. ${unGuest.guest.name}'s ${formatPrice(price)} goes to ${unGuest.name}'s credit.`
               : `${unGuest.guest.name} comes off ${unGuest.name}'s tab. ${unGuest.name} owes ${formatPrice(price)} less.`
             : `${unGuest?.guest?.name ?? 'The guest'} comes off the waitlist.`
         }
-        confirmLabel={`Remove ${unGuest?.guest?.name ?? 'guest'}`}
+        confirmLabel={unGuest?.guest?.status === 'late' ? 'Clear' : `Remove ${unGuest?.guest?.name ?? 'guest'}`}
         danger
         busy={busy}
         onConfirm={() => {
@@ -471,6 +479,7 @@ function RowMenu({
   onWaitlist,
   onAddGuest,
   onUnpay,
+  onClearGuest,
   removeLabel = 'Remove',
 }: {
   name: string;
@@ -479,6 +488,8 @@ function RowMenu({
   onAddGuest?: () => void;
   /** Zip 42 round 2: "Didn't pay?" for one person of a pair (their $14 comes off the host's tab). */
   onUnpay?: () => void;
+  /** Zip 42 round 3: the host still owes a guest's spot removed late: "Clear Sam's spot" (the $14 comes off). */
+  onClearGuest?: { guest: string; run: () => void };
   removeLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -542,6 +553,21 @@ function RowMenu({
               }}
             >
               Didn't pay?
+            </button>
+          )}
+          {onClearGuest && (
+            <button
+              type="button"
+              role="menuitem"
+              className="ps-pop-item ps-pop-plain"
+              data-ps-clear-guest={name}
+              aria-label={`Clear ${onClearGuest.guest}'s spot for ${name}`}
+              onClick={() => {
+                setOpen(false);
+                onClearGuest.run();
+              }}
+            >
+              Clear {onClearGuest.guest}'s spot
             </button>
           )}
           {onAddGuest && (

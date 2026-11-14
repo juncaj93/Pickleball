@@ -61,10 +61,28 @@ export function hasGuest(r: GuestCols): boolean {
   return guestIn(r) || guestWaiting(r);
 }
 
-/** The host dropped late with the guest in, and the guest's share is still part of that open debt. */
+/**
+ * The guest's share is an open late debt on the host's seat: the host dropped late with the guest in and the game was left 2 short, or
+ * (round 3) the host stayed in and removed the guest late with the game left below 4. A sub or the organizer ends it.
+ */
 export function guestLate(r: GuestCols): boolean {
-  // Only while that debt is open (a sub or the organizer's Clear ends it).
-  return r.status === 'withdrawn' && r.guest_status === 'late' && !!r.guest_name && !!r.late_drop_at && !r.late_drop_done_at;
+  if (r.guest_status !== 'late' || !r.guest_name) return false;
+  if (r.status === 'confirmed') return true;
+  return r.status === 'withdrawn' && !!r.late_drop_at && !r.late_drop_done_at;
+}
+
+/** Round 3: the host is still in, and owes their removed guest's spot until someone takes it. */
+export function guestOwed(r: GuestCols): boolean {
+  return r.status === 'confirmed' && guestLate(r);
+}
+
+/**
+ * Round 3 (Alex): how many spots a late leave leaves the game short. `othersLeft`: everyone still in after the leave (the people waiting move
+ * in at once, so they count). The game needs `min` (4, the organizer counted); a leave owes for at most the spots it takes (`spots`: 2 for a
+ * host and guest, 1 for one person). A guest is an extra person: a game that still has 4 needs neither spot.
+ */
+export function lateShortSpots(othersLeft: number, spots: number, min = 4): number {
+  return Math.max(0, Math.min(spots, min - othersLeft));
 }
 
 /**
@@ -131,14 +149,27 @@ export function guestViewOf(r: GuestCols): GuestView | null {
   return { name: r.guest_name, status: r.guest_status as GuestStatus };
 }
 
-/** The confirm a host reads before dropping out with a guest in (Alex's wording, mocks player_pair_4 and _5). */
-export function hostDropText(guest: string, late: { cancelBy: string; owesCents: number } | null, fmt: (cents: number) => string): string {
-  if (late) return `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your 2 spots, you still owe ${fmt(late.owesCents)}.`;
-  return `Your guest ${guest} drops out too. Both spots open up for someone else.`;
+/**
+ * The confirm a host reads before dropping out with a guest in (Alex's wording). `late`: inside the 12 hours with late fees on; `spots` is
+ * how many spots the game would be left short (0 to 2) and `owesCents` what that costs if nobody takes them. Outside the window: as before.
+ */
+export function hostDropText(guest: string, late: { cancelBy: string; spots: number; owesCents: number } | null, fmt: (cents: number) => string): string {
+  if (!late) return `Your guest ${guest} drops out too. Both spots open up for someone else.`;
+  if (late.spots <= 0) return `Your guest ${guest} drops out too. Both spots open up. You don't owe anything because the game still has 4 players.`;
+  if (late.spots === 1)
+    return `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your spot, you still owe ${fmt(late.owesCents)}. Your guest's spot isn't needed.`;
+  return `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your 2 spots, you still owe ${fmt(late.owesCents)}.`;
 }
 
-/** The confirm a host reads before removing their guest (mock player_pair_3). `paidCents`: what of the guest's share was already paid. */
-export function removeGuestText(guest: string, guestShareCents: number, paid: boolean, fmt: (cents: number) => string): string {
+/**
+ * The confirm a host reads before removing their guest (mock player_pair_3). `late`: inside the 12 hours with late fees on, and removing the
+ * guest would leave the game below 4: the guest's share stays owed until someone takes the spot. Otherwise as before.
+ */
+export function removeGuestText(guest: string, guestShareCents: number, paid: boolean, fmt: (cents: number) => string, late: { cancelBy: string } | null = null): string {
+  if (late)
+    return paid
+      ? `It's past the ${late.cancelBy} cancel-by and the game would drop below 4. ${guest}'s ${fmt(guestShareCents)} stays on this game unless someone takes the spot.`
+      : `It's past the ${late.cancelBy} cancel-by and the game would drop below 4. If no one takes ${guest}'s spot, you still owe ${fmt(guestShareCents)}.`;
   return paid ? `${guest} comes off your tab. ${guest}'s ${fmt(guestShareCents)} goes to your credit.` : `${guest} comes off your tab. You owe ${fmt(guestShareCents)} less.`;
 }
 

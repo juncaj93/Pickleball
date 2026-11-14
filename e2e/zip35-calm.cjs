@@ -73,6 +73,8 @@ async function main() {
   const guestTest = d0.sessions.find((s) => s.note === 'Guest test');
   const guestPaid = d0.sessions.find((s) => s.note === 'Guest paid');
   assert(guestTest && guestPaid, 'the two Guest spot games are missing from the calm world');
+  const lateScenes = ['Late: 4 seats', 'Late: host 4th', 'Late: host 5th'].map((note) => d0.sessions.find((s) => s.note === note));
+  assert(lateScenes.every(Boolean), 'the three round 3 late scenes are missing from the calm world');
 
   const shift = (ctx) =>
     ctx.addInitScript((delta) => {
@@ -101,11 +103,13 @@ async function main() {
   }
 
   for (const scheme of ['light', 'dark']) {
-    await check(`C1 (${scheme}): admin Home at 390 px: the two Guest spot games come first, Home fits two screens at most, no unrelated money rows`, async () => {
+    await check(`C1 (${scheme}): admin Home at 390 px: the five Guest spot games come first, Home fits two screens at most, no unrelated money rows`, async () => {
       const { ctx, page } = await openAdmin(scheme, '/admin');
       const ids = await page.locator('article[data-r2-card]').evaluateAll((els) => els.map((e) => e.id));
       if (process.env.CALM_SHOT) await page.screenshot({ path: process.env.CALM_SHOT, fullPage: true });
-      assert(ids[0] === `session-${guestTest.id}` && ids[1] === `session-${guestPaid.id}`, `first cards: ${ids.slice(0, 3)}`);
+      // Round 3: the three late scenes (next day 8:00 to 9:00 PM) sit between "Guest test" and "Guest paid": all five Guest spot games come first.
+      const want = [guestTest, ...lateScenes, guestPaid].map((g) => `session-${g.id}`);
+      assert(ids.slice(0, 5).join('|') === want.join('|'), `first cards: ${ids.slice(0, 6)}`);
       await page.evaluate(() => window.scrollTo(0, 0));
       const box = await page.locator(`article[id="session-${guestTest.id}"]`).boundingBox();
       assert(box && box.y + 120 < 844, `the Guest test card is not on the first screen: ${JSON.stringify(box)}`);

@@ -252,7 +252,11 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'guest_added':
       return `${who} added ${typeof d.guest === 'string' ? d.guest : 'a guest'} as ${player}'s guest${d.waitlisted === true ? ' (waitlist)' : ''}${forDay}`;
     case 'guest_removed':
-      return `${d.by === 'host' ? `${player} removed their` : `${who} removed ${player}'s`} guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}`;
+      // Round 3: a late removal that left the game short ("$14 still owed"), and the organizer clearing that owed spot.
+      if (d.clearedLate === true) return `${who} cleared ${player}'s owed spot for guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}`;
+      return `${d.by === 'host' ? `${player} removed their` : `${who} removed ${player}'s`} guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}${
+        typeof d.lateOwesCents === 'number' && d.lateOwesCents > 0 ? ` (late: ${formatPrice(d.lateOwesCents)} owed unless someone takes the spot)` : ''
+      }`;
     case 'guest_moved_in':
       return `${player}'s guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''} moved up from the waitlist${forDay}`;
     case 'tap_guard_fix_on':

@@ -2,7 +2,7 @@
 // The guest takes a real spot, the host owes $28 for both, and every money move lands on the host. With the switch off nobody can add
 // a guest. Players: Alex (organizer), Blair (the host in most cases), Casey, Devon, Emery, Frankie, Gale, Harper, Indy, Jules, Kit.
 import { describe, expect, it } from 'vitest';
-import { cleanGuestName, GUEST_SPOT, guestSpotAllowed, headCount, hostDropText, pairName, removeGuestText, seatUnits } from '../shared/guestSpot';
+import { cleanGuestName, GUEST_SPOT, guestSpotAllowed, headCount, hostDropText, lateShortSpots, pairName, removeGuestText, seatUnits } from '../shared/guestSpot';
 import { formatPrice } from '../shared/money';
 import { LATE_FEES_HEADER } from '../shared/lateFees';
 import type { GroupView } from '../shared/api';
@@ -103,7 +103,7 @@ describe('rules (pure)', () => {
     expect(cleanGuestName('Sam2')).toBeNull();
     expect(cleanGuestName('a'.repeat(21))).toBeNull();
     expect(hostDropText('Sam', null, formatPrice)).toBe('Your guest Sam drops out too. Both spots open up for someone else.');
-    expect(hostDropText('Sam', { cancelBy: '9:30 AM', owesCents: 2800 }, formatPrice)).toBe(
+    expect(hostDropText('Sam', { cancelBy: '9:30 AM', spots: 2, owesCents: 2800 }, formatPrice)).toBe(
       "It's past the 9:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
     );
     expect(removeGuestText('Sam', 1400, true, formatPrice)).toBe("Sam comes off your tab. Sam's $14 goes to your credit.");
@@ -923,5 +923,268 @@ describe('round 2 review fixes', () => {
     await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: [w.byName.Casey, w.byName.Devon] });
     const b = await rowOf(w, g.id, 'Blair');
     expect(b.lateFee).toMatchObject({ kind: 'no_show', oweCents: 2800 });
+  });
+});
+
+describe('round 3: a late pair owes only the spots the game is short', () => {
+  const late = (w: W, g: { start: number }) => (w.app.now = g.start - 6 * HOUR);
+  const drop = (w: W, sid: string, name: string) => call(w, name, 'POST', `/api/sessions/${sid}/withdraw`, {});
+  const removeOwn = (w: W, sid: string, name: string) => call(w, name, 'POST', `/api/sessions/${sid}/remove-guest`, {});
+
+  it('the dialog wording, one sentence per case (Alex)', () => {
+    const at = { cancelBy: '7:30 AM' };
+    expect(hostDropText('Sam', { ...at, spots: 2, owesCents: 2800 }, formatPrice)).toBe(
+      "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
+    );
+    expect(hostDropText('Sam', { ...at, spots: 1, owesCents: 1400 }, formatPrice)).toBe(
+      "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed.",
+    );
+    expect(hostDropText('Sam', { ...at, spots: 0, owesCents: 0 }, formatPrice)).toBe(
+      "Your guest Sam drops out too. Both spots open up. You don't owe anything because the game still has 4 players.",
+    );
+    // Outside the late window: the wording as before.
+    expect(hostDropText('Sam', null, formatPrice)).toBe('Your guest Sam drops out too. Both spots open up for someone else.');
+    expect(removeGuestText('Sam', 1400, false, formatPrice, at)).toBe(
+      "It's past the 7:30 AM cancel-by and the game would drop below 4. If no one takes Sam's spot, you still owe $14.",
+    );
+    expect(removeGuestText('Sam', 1400, true, formatPrice, at)).toBe(
+      "It's past the 7:30 AM cancel-by and the game would drop below 4. Sam's $14 stays on this game unless someone takes the spot.",
+    );
+    expect(removeGuestText('Sam', 1400, false, formatPrice, null)).toBe('Sam comes off your tab. You owe $14 less.');
+    expect(lateShortSpots(2, 2)).toBe(2);
+    expect(lateShortSpots(3, 2)).toBe(1);
+    expect(lateShortSpots(4, 2)).toBe(0);
+    expect(lateShortSpots(0, 2)).toBe(2);
+    expect(lateShortSpots(3, 1)).toBe(1);
+  });
+
+  it('example 1: host + guest + 2 others, both drop late: 2 left, short 2, owes $28', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    late(w, g);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.lateDrop).toMatchObject({ owes: true, feeCents: 2800, guestSpots: 2, removeOwes: true });
+    const r = await drop(w, g.id, 'Blair');
+    expect(r.data.lateFee).toEqual({ cents: 2800, paid: false });
+    expect((await mineOn(w, 'Blair', g.id)).mine?.lateFee?.oweCents).toBe(2800);
+  });
+
+  it('example 2: host is the 4th and guest the 5th, both drop late: 3 left, short 1, owes $14; a sub clears it', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Blair']);
+    await addGuest(w, g.id, 'Blair');
+    late(w, g);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.lateDrop).toMatchObject({ owes: true, feeCents: 1400, guestSpots: 1, removeOwes: false });
+    const r = await drop(w, g.id, 'Blair');
+    expect(r.data.lateFee).toMatchObject({ paid: false });
+    let s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.lateFee?.oweCents).toBe(1400);
+    const a = (await adminGame(w, g.id)).roster.find((x: any) => x.name === 'Blair');
+    expect(a.lateFee).toMatchObject({ paid: false, oweCents: 1400 });
+    expect(a.guest).toBeUndefined();
+    // One sub brings the game back to 4: nothing owed.
+    await join(w, g.id, ['Frankie']);
+    s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.lateFee ?? null).toBeNull();
+  });
+
+  it('example 2, host paid $28: $14 comes back at once, $14 stays; a sub gives that back too', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Blair']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    late(w, g);
+    const r = await drop(w, g.id, 'Blair');
+    expect(r.data.lateFee).toMatchObject({ paid: true });
+    expect(await credit(w, 'Blair')).toBe(1400);
+    await join(w, g.id, ['Frankie']);
+    expect(await credit(w, 'Blair')).toBe(2800);
+  });
+
+  it('example 2, no sub: Finalize keeps the $14 (3 played at the flat $14)', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Blair']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    late(w, g);
+    await drop(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ['Casey', 'Devon', 'Emery'].map((n) => w.byName[n]) });
+    expect(f.status, f.text).toBe(200);
+    expect(await credit(w, 'Blair')).toBe(1400);
+    expect((await adminGame(w, g.id)).roster.find((x: any) => x.name === 'Blair').lateFee).toMatchObject({ paid: true });
+  });
+
+  it('example 3: host is the 5th and guest the 6th, both drop late: 4 left, owes nothing, all $28 back', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Frankie', 'Blair']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    late(w, g);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.lateDrop).toMatchObject({ owes: false, guestSpots: 0, removeOwes: false });
+    const r = await drop(w, g.id, 'Blair');
+    expect(r.data.lateFee ?? null).toBeNull();
+    expect(await credit(w, 'Blair')).toBe(2800);
+  });
+
+  it('late Remove guest that leaves the game below 4: the host owes $14 for the spot until a sub takes it', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    late(w, g);
+    const r = await removeOwn(w, g.id, 'Blair');
+    expect(r.status, r.text).toBe(200);
+    expect(r.data.lateOwesCents).toBe(1400);
+    let s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.guest).toBeUndefined();
+    expect(s.mine?.guestOwed).toEqual({ name: 'Sam', cents: 1400, paid: false });
+    expect(s.mine?.oweCents).toBe(2800);
+    expect(s.countText).toBe('3 of 4 in');
+    const a = (await adminGame(w, g.id)).roster.find((x: any) => x.name === 'Blair');
+    expect(a.owesCents).toBe(2800);
+    expect(a.guest).toMatchObject({ name: 'Sam', status: 'late' });
+    // A sub takes Sam's spot: Blair owes one share again.
+    await join(w, g.id, ['Emery']);
+    s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.guestOwed).toBeUndefined();
+    expect(s.mine?.oweCents).toBe(1400);
+    const lines = (await dash(w)).audit.map((a: any) => activityText({ ...a, sessionStartsAt: new Date(g.start).toISOString() }, 'America/Detroit', ORG));
+    expect(lines.some((l: string) => /Blair removed their guest Sam .*\(late: \$14 owed unless someone takes the spot\)/.test(l)), lines.join(' | ')).toBe(true);
+  });
+
+  it('late Remove guest with $28 paid: nothing back while the spot is owed; the sub gives $14 back', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    late(w, g);
+    const r = await removeOwn(w, g.id, 'Blair');
+    expect(r.data.creditBackCents).toBe(0);
+    expect(await credit(w, 'Blair')).toBe(0);
+    await join(w, g.id, ['Emery']);
+    expect(await credit(w, 'Blair')).toBe(1400);
+    // The sub cleared Sam's spot, nobody else's, and only once.
+    w.app.advance(60_000);
+    await join(w, g.id, ['Frankie']);
+    expect(await credit(w, 'Blair')).toBe(1400);
+  });
+
+  it('late Remove guest that keeps 4: owes nothing for the guest', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w, g.id, 'Blair');
+    late(w, g);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.lateDrop?.removeOwes).toBe(false);
+    const r = await removeOwn(w, g.id, 'Blair');
+    expect(r.data.lateOwesCents).toBeUndefined();
+    const s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.guestOwed).toBeUndefined();
+    expect(s.mine?.oweCents).toBe(1400);
+  });
+
+  it('the organizer clears an owed guest spot; adding a new guest fills it without clearing anyone else', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    late(w, g);
+    await removeOwn(w, g.id, 'Blair');
+    const c = await admin(w, 'POST', `/api/admin/sessions/${g.id}/guest/remove`, { playerId: w.byName.Blair });
+    expect(c.status, c.text).toBe(200);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.oweCents).toBe(1400);
+
+    const w2 = await world({ lateFees: true });
+    const g2 = await game(w2);
+    await join(w2, g2.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w2, g2.id, 'Blair');
+    late(w2, g2);
+    // Emery drops late (the game stays at 4 with Sam): no debt. Then Blair removes Sam: 3 left, Sam's spot owed.
+    await drop(w2, g2.id, 'Emery');
+    expect((await mineOn(w2, 'Emery', g2.id)).mine?.lateFee ?? null).toBeNull();
+    await removeOwn(w2, g2.id, 'Blair');
+    expect((await mineOn(w2, 'Blair', g2.id)).mine?.guestOwed?.name).toBe('Sam');
+    const add = await addGuest(w2, g2.id, 'Blair', 'Tom');
+    expect(add.status, add.text).toBe(200);
+    const s = await mineOn(w2, 'Blair', g2.id);
+    expect(s.mine?.guestOwed).toBeUndefined();
+    expect(s.mine?.guest).toMatchObject({ name: 'Tom', status: 'confirmed' });
+    expect(s.mine?.oweCents).toBe(2800);
+  });
+
+  it('owed guest spot at Finalize (no sub): the host pays both shares; cancel instead returns everything', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    late(w, g);
+    await removeOwn(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ['Blair', 'Casey', 'Devon'].map((n) => w.byName[n]) });
+    expect(f.status, f.text).toBe(200);
+    expect(f.data.priceCents).toBe(1400);
+    expect(await credit(w, 'Blair')).toBe(0);
+
+    const w2 = await world({ lateFees: true });
+    const g2 = await game(w2);
+    await join(w2, g2.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w2, g2.id, 'Blair');
+    await markPaid(w2, g2.id, 'Blair');
+    late(w2, g2);
+    await removeOwn(w2, g2.id, 'Blair');
+    const c = await admin(w2, 'POST', `/api/admin/sessions/${g2.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: true });
+    expect(c.status, c.text).toBe(200);
+    expect(await credit(w2, 'Blair')).toBe(2800);
+  });
+
+  it('a host who owes a removed guest\'s spot and then drops late owes both spots when the game is 2 short', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    late(w, g);
+    await removeOwn(w, g.id, 'Blair');
+    expect((await mineOn(w, 'Blair', g.id)).mine?.lateDrop).toMatchObject({ owes: true, feeCents: 2800 });
+    const r = await drop(w, g.id, 'Blair');
+    expect(r.data.lateFee).toEqual({ cents: 2800, paid: false });
+  });
+
+  it('review: the oldest debt goes first even when the host who owed a guest spot then dropped too', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    late(w, g);
+    await removeOwn(w, g.id, 'Blair');
+    w.app.advance(60_000);
+    await drop(w, g.id, 'Casey');
+    w.app.advance(60_000);
+    await drop(w, g.id, 'Blair');
+    // The first sub takes the spot owed longest: Sam's (Blair's $28 seat gives $14 back), not Casey's.
+    w.app.advance(60_000);
+    await join(w, g.id, ['Frankie']);
+    expect(await credit(w, 'Blair')).toBe(1400);
+    expect((await mineOn(w, 'Casey', g.id)).mine?.lateFee?.oweCents).toBe(1400);
+  });
+
+  it('review: To waitlist is refused while a guest spot is owed', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    late(w, g);
+    await removeOwn(w, g.id, 'Blair');
+    const mv = await admin(w, 'POST', `/api/admin/sessions/${g.id}/roster`, { playerId: w.byName.Blair, action: 'waitlist' });
+    expect(mv.status).toBe(409);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.guestOwed?.name).toBe('Sam');
   });
 });
