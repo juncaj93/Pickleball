@@ -4703,3 +4703,9 @@ Branch `claude/new-session-jjeng2`. No database change, no money change, no new 
 
 ### Tests
 - `tests/zip44.test.ts` 12 new (routes Not found for anyone, code gone, no sender builds a `/t/` link, old address opens home, table stays and the backup lists it, the Later color light and dark, the skin sets none, the four headers and nothing else). `e2e/zip44.cjs` 12 browser checks.
+
+### Deploy (Sat Nov 14, 2026, 6:25 PM Eastern, quiet window)
+- Restore point first: SQL export of live `live-before-zip44-20261114.sql` (246 KB, kept out of git, phone numbers inside), Time Travel bookmark `00001344-00000000-00005123-13cc4012263bba6b903e96118f33f402`. No database change, so nothing to restore unless something unrelated goes wrong.
+- Merged to `main` as a fast-forward (`838f105`), then `npm run deploy` from main. Production deployment `5b008432-037e-410d-b89b-601b3bf9895b`. Rollback: Pages deployment `07f10bae-97e1-4276-ad4c-3c67a4f03835` (main `87f05e6`, the code that was live before).
+- Tests on the final code: unit 174 files / 3150 passed, 2 skipped; browser 78 of 79 scripts green, 2895 checks; the one red script is `text-fix`, which hard-codes "Nov 13" and the real clock, so it fails on any day after Nov 13 and is untouched by this zip. Fresh reviewer: found two stale test lines (fixed, `admin-security`, `decisions`), nothing in the production code.
+- Live check after (read only, no PIN): the built style file holds `--cl-later-bg: #f9f9f6` once (light) and `#1b2620` twice (dark), the old `#ebebe4` is gone; `/api/link` and `/api/link/act` answer 404; `/t/<anything>` opens the page (200); the four small files answer `max-age=86400`, the page and the other icons still `max-age=0`. A repeat open of the live page now takes 7 ms for `/theme.js` (was 70 ms) and 1 ms for `/logo.png` (was 118 ms) from this machine.
