@@ -37,3 +37,11 @@ export function venmoRequestLinks(handle: string | null | undefined, owesCents: 
   const query = `txn=charge&recipients=${user}&amount=${venmoAmount(owesCents)}&note=${venmoEncode(venmoNote(startsAt, tz))}`;
   return { url: `https://venmo.com/?${query}`, appUrl: `venmo://paycharge?${query}` };
 }
+
+/** Zip 42 round 2: a Venmo request to the HOST for their guest's share. The note names the guest: "Pickleball Thu Nov 12 - guest Billy". */
+export function guestVenmoRequestLinks(hostHandle: string | null | undefined, cents: number, startsAt: string, tz: string, guest: string): { url: string; appUrl: string } | null {
+  const user = venmoUsername(hostHandle);
+  if (!user || !Number.isInteger(cents) || cents <= 0) return null;
+  const query = `txn=charge&recipients=${user}&amount=${venmoAmount(cents)}&note=${venmoEncode(`${venmoNote(startsAt, tz)} - guest ${guest}`)}`;
+  return { url: `https://venmo.com/?${query}`, appUrl: `venmo://paycharge?${query}` };
+}

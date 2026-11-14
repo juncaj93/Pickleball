@@ -1,5 +1,6 @@
 import { createContext, type CSSProperties, Fragment, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import './confirm-buttons.css';
 import { type CourtKind } from '../shared/court';
 import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
@@ -598,11 +599,13 @@ export function ConfirmDialog({
     <Sheet open={open} title={title} onClose={onCancel}>
       <div className="stack">
         <div>{body}</div>
-        <div className="btn-row">
-          <button className="btn secondary" onClick={onCancel} disabled={busy}>
+        {/* Zip 42 round 2 (Alex): one rule for every confirm on the site: two buttons of exactly the same width, the safe choice solid green,
+            the backing-out choice (danger) a red outline (src/confirm-buttons.css). */}
+        <div className="btn-row confirm-row">
+          <button className="btn confirm-safe" onClick={onCancel} disabled={busy} data-confirm-safe>
             {cancelLabel ?? 'Go back'}
           </button>
-          <button className={`btn ${danger ? 'danger' : ''}`} onClick={onConfirm} disabled={busy}>
+          <button className={`btn ${danger ? 'danger confirm-out' : 'confirm-go'}`} onClick={onConfirm} disabled={busy} data-confirm-go>
             {busy ? 'Working…' : confirmLabel}
           </button>
         </div>

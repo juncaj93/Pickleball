@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { DB_LIMIT_MESSAGE } from '../../../shared/zip10';
@@ -10,7 +10,7 @@ import type { AdminCtx } from '../Admin';
 import { opTap } from './action';
 import { RemindList } from './MoneyV2';
 import { ReworkRemind } from './MoneyReworkParts';
-import { RowRequest } from './VenmoRequest';
+import { GuestRequest, RowRequest } from './VenmoRequest';
 import { payChip, payMoneyLine, useRosterOps } from './Sessions';
 import { lateFeeLine } from './LateFees';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
@@ -107,6 +107,15 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     if (ok && said) toast(said);
   }
 
+  /** Round 2: one person's $14 of a pair, on the host's tab (server/guestActions.ts setGuestShare). */
+  async function markShare(host: AdminRosterEntry, who: 'host' | 'guest', paid: boolean) {
+    const name = who === 'guest' ? (host.guest?.name ?? 'Guest') : host.name;
+    await run(
+      () => api('POST', `/api/admin/sessions/${s.id}/guest/share`, { playerId: host.playerId, who, paid }),
+      paid ? `${name} marked paid` : `${name} unmarked`,
+    );
+  }
+
   const markPaid = (r: AdminRosterEntry) =>
     void run(
       () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true, seen: r.moneySeen, cents: r.owesCents, ...(r.extCents ? { extCents: r.extCents } : {}) }),
@@ -166,14 +175,17 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         <ul className="ps-card" aria-label="Players in this game" data-ps-list>
           {listed.map((r) => {
             const isHeld = held.has(r.playerId);
-            const paid = !isHeld && (r.lateFee ? r.lateFee.paid : r.status === 'confirmed' && r.paymentStatus === 'paid' && !r.refundedAt);
-            const owes = !isHeld && owing(r);
+            // Zip 42 round 2 (Alex): a host and the guest are one group, each person with their own paid line (the money is still one record on
+            // the host's seat). `pm`: the pair's own money (both in, a game that is on, no late fee). Every row without a guest: exactly as before.
+            const pair = !!r.guest && r.guest.status !== 'late' && !isHeld;
+            const pm = pair && r.status === 'confirmed' && r.guest!.status === 'confirmed' && r.guest!.shareCents !== undefined && !r.lateFee && !canceled ? r.guest! : null;
+            const paid = !isHeld && (pm ? !!pm.hostPaid : r.lateFee ? r.lateFee.paid : r.status === 'confirmed' && r.paymentStatus === 'paid' && !r.refundedAt);
+            const owes = !isHeld && (pm ? !pm.hostPaid : owing(r));
             const canEdit = live && !isHeld && (r.status === 'confirmed' || r.status === 'waitlisted');
             const chip = r.status === 'confirmed' ? payChip(r, s) : null;
             // Wide actions (two buttons, or a long chip such as "Paid with credit") drop under the name on a narrow screen; a plain "Paid" stays beside it.
             const wide = !isHeld && (owes || (!paid && !!chip) || (paid && chip?.label === 'Paid with credit'));
-            return (
-              <Fragment key={r.playerId}>
+            const hostRow = (
               <li key={r.playerId} className="ps-row" data-ps-row={r.name} data-ps-long={longName(r.name) || undefined} data-ps-wide={wide || undefined} data-ps-state={isHeld ? 'removed' : paid ? 'paid' : owes ? 'owes' : 'other'}>
                 <span className="ps-ball" aria-hidden="true">
                   <Pickleball />
@@ -182,14 +194,18 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                   <strong className="ps-name">{r.name}</strong>
                   {isHeld ? (
                     <span className="ps-sub">Removed</span>
-                  ) : paid ? (
+                  ) : pm && paid ? null : paid ? (
                     <span className="ps-sub" data-ps-paid-line>
                       {r.lateFee ? lateFeeLine(r) : paidLine(r, tz)}
+                    </span>
+                  ) : pm ? (
+                    <span className="ps-sub ps-owes" data-ps-owes-line>
+                      Owes {formatPrice(pm.shareCents! + (r.extCents ?? 0))}
                     </span>
                   ) : owes ? (
                     <span className="ps-sub ps-owes" data-ps-owes-line>
                       Owes {formatPrice(r.owesCents + (r.extCents ?? 0))}
-                      {/* Zip 42: the guest's share is on this tab (mock admin_pair_3). */}
+                      {/* Zip 42: the guest's share is on this tab. */}
                       {r.guest?.status === 'confirmed' ? <span className="ps-with-guest"> (with {r.guest.name})</span> : null}
                       {/* Zip 31: extra time riding on this game; Mark paid takes both. */}
                       {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extension)` : ''}
@@ -205,15 +221,22 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="m3.6 8.4 2.8 2.8 6-6.4" />
                       </svg>
-                      {chip?.label === 'Paid with credit' ? 'Paid with credit' : 'Paid'}
+                      {pm ? `Paid ${formatPrice(pm.shareCents!)}` : chip?.label === 'Paid with credit' ? 'Paid with credit' : 'Paid'}
                     </span>
                   )}
                   {owes && (
                     <>
-                      <button type="button" className="ps-btn ps-amber" disabled={busy} data-ps-markpaid={r.name} aria-label={`Mark ${r.name} paid`} onClick={() => markPaid(r)}>
+                      <button
+                        type="button"
+                        className="ps-btn ps-amber"
+                        disabled={busy}
+                        data-ps-markpaid={r.name}
+                        aria-label={`Mark ${r.name} paid`}
+                        onClick={() => (pm ? void markShare(r, 'host', true) : markPaid(r))}
+                      >
                         Mark paid
                       </button>
-                      {ctx.d.venmoRequest === true && <RowRequest ctx={ctx} s={s} r={r} />}
+                      {ctx.d.venmoRequest === true && <RowRequest ctx={ctx} s={s} r={pm ? { ...r, owesCents: pm.shareCents!, extCents: r.extCents } : r} />}
                     </>
                   )}
                   {canEdit && r.status === 'waitlisted' && (
@@ -231,29 +254,71 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     onRemove={() => setRemoving(r)}
                     onWaitlist={r.status === 'confirmed' && !cleanup ? () => void act(r.playerId, 'waitlist', `${r.name} moved to waitlist`) : undefined}
                     onAddGuest={guestOn && !r.guest ? () => setGuestFor(r) : undefined}
+                    onUnpay={pm && pm.hostPaid ? () => void markShare(r, 'host', false) : undefined}
                   />
                 ) : (
                   <span className="ps-dots-gap" aria-hidden="true" />
                 )}
               </li>
-              {/* Zip 42: the guest is its own row right under the host ("Sam / Guest of Rowan"), with Remove guest in its menu. */}
-              {r.guest && r.guest.status !== 'late' && !isHeld ? (
-                    <li key={`${r.playerId}:guest`} className="ps-row ps-guest-row" data-ps-guest={r.guest.name} data-ps-state="guest">
-                      <span className="ps-ball" aria-hidden="true">
-                        <Pickleball />
-                      </span>
-                      <div className="ps-who">
-                        <strong className="ps-name">{r.guest.name}</strong>
-                        <span className="ps-sub">
-                          Guest of {r.name}
-                          {r.guest.status === 'waitlisted' && r.guest.waitlistPosition ? ` · #${r.guest.waitlistPosition} on waitlist` : ''}
+            );
+            if (!pair) return hostRow;
+            const gst = r.guest!;
+            const gPaid = !!pm?.paid;
+            // The guest's row, right under the host: "Guest of Parker · Parker owes $14", its own Mark paid and Request (the request goes to the HOST).
+            const guestRow = (
+              <li key={`${r.playerId}:guest`} className="ps-row ps-guest-row" data-ps-guest={gst.name} data-ps-state={pm ? (gPaid ? 'paid' : 'owes') : 'guest'}>
+                <span className="ps-link" aria-hidden="true" />
+                <span className="ps-ball" aria-hidden="true">
+                  <Pickleball />
+                </span>
+                <div className="ps-who">
+                  <strong className="ps-name">{gst.name}</strong>
+                  <span className="ps-sub" data-ps-guest-line>
+                    <span className="ps-guest-of">Guest of {r.name}</span>
+                    {gst.status === 'waitlisted' && gst.waitlistPosition ? ` · #${gst.waitlistPosition} on waitlist` : ''}
+                    {gst.played === false ? ' · did not play' : ''}
+                    {pm && !gPaid ? (
+                      <>
+                        {' · '}
+                        <span className="ps-owes">
+                          {r.name} owes {formatPrice(pm.shareCents!)}
                         </span>
-                      </div>
-                      <div className="ps-acts" />
-                      {live ? <RowMenu name={r.guest.name} removeLabel="Remove guest" onRemove={() => setUnGuest(r)} /> : <span className="ps-dots-gap" aria-hidden="true" />}
-                    </li>
-              ) : null}
-              </Fragment>
+                      </>
+                    ) : null}
+                  </span>
+                </div>
+                <div className="ps-acts">
+                  {pm && gPaid && (
+                    <span className="ps-chip ps-paid" data-ps-paid-chip>
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="m3.6 8.4 2.8 2.8 6-6.4" />
+                      </svg>
+                      Paid {formatPrice(pm.shareCents!)}
+                    </span>
+                  )}
+                  {pm && !gPaid && (
+                    <>
+                      <button type="button" className="ps-btn ps-amber" disabled={busy} data-ps-markpaid={gst.name} aria-label={`Mark ${gst.name} paid (on ${r.name}'s tab)`} onClick={() => void markShare(r, 'guest', true)}>
+                        Mark paid
+                      </button>
+                      {ctx.d.venmoRequest === true && <GuestRequest ctx={ctx} s={s} host={r} guest={gst.name} cents={pm.shareCents!} />}
+                    </>
+                  )}
+                </div>
+                {live ? (
+                  <RowMenu name={gst.name} removeLabel="Remove guest" onRemove={() => setUnGuest(r)} onUnpay={pm && gPaid ? () => void markShare(r, 'guest', false) : undefined} />
+                ) : (
+                  <span className="ps-dots-gap" aria-hidden="true" />
+                )}
+              </li>
+            );
+            return (
+              <li key={`${r.playerId}:pair`} className="ps-pair" data-ps-pair={r.name}>
+                <ul className="ps-pair-rows" aria-label={`${r.name} and guest ${gst.name}`}>
+                  {hostRow}
+                  {guestRow}
+                </ul>
+              </li>
             );
           })}
         </ul>
@@ -328,7 +393,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                 ? `Their ${formatPrice(price)} goes on ${guestFor.name}'s tab. ${guestFor.name} will owe ${formatPrice(price)} more.`
                 : `Their ${formatPrice(price)} goes on ${guestFor.name}'s tab. ${guestFor.name} will owe ${formatPrice((guestFor.shareCents ?? price) + price)}.`}
             </p>
-            <div className="btn-row">
+            <div className="btn-row confirm-row">
               <button type="button" className="btn secondary" onClick={() => setGuestFor(null)}>
                 Cancel
               </button>
@@ -353,6 +418,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
             : `${unGuest?.guest?.name ?? 'The guest'} comes off the waitlist.`
         }
         confirmLabel={`Remove ${unGuest?.guest?.name ?? 'guest'}`}
+        danger
         busy={busy}
         onConfirm={() => {
           if (unGuest) void removeGuest(unGuest);
@@ -399,7 +465,22 @@ function paidLine(r: AdminRosterEntry, tz: string): ReactNode {
 }
 
 /** The small three-dot menu at the end of a row. It holds Remove (and To waitlist, the old sheet's other button, when the game has a waitlist). Opens under the dots, or above them when there is no room below. */
-function RowMenu({ name, onRemove, onWaitlist, onAddGuest, removeLabel = 'Remove' }: { name: string; onRemove: () => void; onWaitlist?: () => void; onAddGuest?: () => void; removeLabel?: string }) {
+function RowMenu({
+  name,
+  onRemove,
+  onWaitlist,
+  onAddGuest,
+  onUnpay,
+  removeLabel = 'Remove',
+}: {
+  name: string;
+  onRemove: () => void;
+  onWaitlist?: () => void;
+  onAddGuest?: () => void;
+  /** Zip 42 round 2: "Didn't pay?" for one person of a pair (their $14 comes off the host's tab). */
+  onUnpay?: () => void;
+  removeLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
@@ -448,6 +529,21 @@ function RowMenu({ name, onRemove, onWaitlist, onAddGuest, removeLabel = 'Remove
       </button>
       {open && (
         <div className={`ps-pop${up ? ' ps-up' : ''}`} ref={pop} role="menu" aria-label={`Actions for ${name}`}>
+          {onUnpay && (
+            <button
+              type="button"
+              role="menuitem"
+              className="ps-pop-item ps-pop-plain"
+              data-ps-unpay={name}
+              aria-label={`${name} didn't pay`}
+              onClick={() => {
+                setOpen(false);
+                onUnpay();
+              }}
+            >
+              Didn't pay?
+            </button>
+          )}
           {onAddGuest && (
             <button
               type="button"

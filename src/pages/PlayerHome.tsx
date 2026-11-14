@@ -3097,6 +3097,7 @@ export function ScheduleRow({
               : removeGuestText(myGuest.name, myGuest.shareCents, mine?.paymentStatus === 'paid', formatPrice)
           }
           confirmLabel={`Remove ${myGuest.name}`}
+          danger
           busy={busy}
           onConfirm={() => {
             setAskGuest(false);

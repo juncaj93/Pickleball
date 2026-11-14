@@ -1,0 +1,42 @@
+/* Zip 42 round 2 (Alex): every confirm pop-up on the site (ConfirmDialog in src/ui.tsx, and the Add a guest panel).
+   The two buttons are exactly the same width side by side, whatever their words. The safe choice (Go back, Stay in, Keep Sam, Cancel) is
+   the solid green primary button; the backing-out choice (Drop out, Remove, Remove Sam) is a transparent button with a 2px red outline
+   and red text (--danger-fg: light #a11c1c, dark #ffaba1). Strong selectors on purpose: older sheet rules must not undo it. */
+dialog.sheet .btn-row.confirm-row,
+.btn-row.confirm-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+dialog.sheet .btn-row.confirm-row > .btn,
+.btn-row.confirm-row > .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  box-sizing: border-box;
+  min-height: 52px;
+  border-width: 2px;
+  border-style: solid;
+  white-space: normal;
+  text-align: center;
+}
+dialog.sheet .btn-row.confirm-row > .btn.confirm-safe,
+dialog.sheet .btn-row.confirm-row > .btn.confirm-go,
+.btn-row.confirm-row > .btn.confirm-safe,
+.btn-row.confirm-row > .btn.confirm-go {
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: var(--primary);
+}
+dialog.sheet .btn-row.confirm-row > .btn.confirm-out,
+.btn-row.confirm-row > .btn.confirm-out {
+  background: transparent;
+  color: var(--danger-fg);
+  border-color: var(--danger-fg);
+}
+/* The Add a guest panel: Cancel stays the soft button, Add is the green one; the same equal widths. */
+.btn-row.confirm-row > .btn.secondary {
+  background: var(--fill);
+  color: var(--ink);
+  border-color: var(--fill);
+}

@@ -27,3 +27,118 @@
 .ps-guest-note {
   margin: 0;
 }
+
+/* Zip 42 round 2 (Alex, mocks/admin_players_guest_rows): a host and the guest are ONE group on the Players sheet: a shared tinted block,
+   the host row on top, the guest row under it, indented with a small connector line, a thin dashed divider between them, rounded outer
+   corners and a gap after the group. Rows without a guest are untouched. */
+.ps {
+  --gs-pair: #e6f0e2;
+  --gs-link: #2f7a52;
+  --gs-dash: #7fae8f;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme='light']) .ps {
+    --gs-pair: #1f3328;
+    --gs-link: #5fbf8a;
+    --gs-dash: #3f6b52;
+  }
+}
+html[data-theme='dark'] .ps {
+  --gs-pair: #1f3328;
+  --gs-link: #5fbf8a;
+  --gs-dash: #3f6b52;
+}
+.ps-card > .ps-pair {
+  list-style: none;
+  margin: 6px;
+  border-radius: 14px;
+  background: var(--gs-pair);
+  overflow: hidden;
+}
+.ps-card > .ps-pair:first-child {
+  margin-top: 6px;
+}
+.ps-card > .ps-pair + .ps-row {
+  border-top: 0;
+}
+.ps-pair-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ps-pair-rows > .ps-row {
+  border-top: 0;
+  padding-left: 10px;
+}
+/* The guest row: indented, a connector line from the host, the dashed divider above it, buttons always on their own line. */
+.ps-pair-rows > .ps-guest-row {
+  grid-template-columns: 14px 24px minmax(0, 1fr) auto;
+  border-top: 1.5px dashed var(--gs-dash);
+  padding-left: 14px;
+}
+.ps-guest-row .ps-link {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
+  width: 12px;
+  margin: -4px 0 14px;
+  border-left: 2.5px solid var(--gs-link);
+  border-bottom: 2.5px solid var(--gs-link);
+  border-bottom-left-radius: 8px;
+}
+.ps-guest-row .ps-ball {
+  grid-column: 2;
+  grid-row: 1;
+}
+.ps-guest-row .ps-who {
+  grid-column: 3;
+  grid-row: 1;
+}
+.ps-guest-row .ps-menu,
+.ps-guest-row .ps-dots-gap {
+  grid-column: 4;
+  grid-row: 1;
+}
+.ps-guest-row .ps-acts {
+  grid-column: 3 / 5;
+  grid-row: 2;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.ps-guest-row .ps-acts:empty {
+  display: none;
+}
+.ps-guest-row .ps-sub .ps-owes {
+  font-size: inherit;
+}
+.ps-guest-row .ps-guest-of {
+  white-space: nowrap;
+}
+
+/* Zip 42 round 2 (mocks who_played_guest_out / _host_out): the guest's own tile on the Who played sheet, right after the host. "Parker's
+   guest" in small gray under the name. A host tapped off takes the guest off too: the guest tile is dimmed (and cannot be tapped) until the
+   host is back on. The note under the tiles says what that means for the money. */
+.xt-tile .xt-guest-of {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  line-height: 1.2;
+}
+.xt-tile.xt-guest.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.xt-guest-note,
+.who-played-note {
+  margin: 4px 2px 0;
+  color: var(--ink-2);
+  font-size: 0.98rem;
+  line-height: 1.35;
+}
+.guest-played-row .set-name {
+  padding-left: 18px;
+}
+.guest-played-row input:disabled {
+  opacity: 0.45;
+}

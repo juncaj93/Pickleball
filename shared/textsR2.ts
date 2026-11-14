@@ -10,7 +10,7 @@
 import { formatPrice } from './money';
 import { textDay } from './messages';
 import { COURT_PUBLIC_BOOKING_URL, COURTS_PHONE } from './settings';
-import { localParts } from './time';
+import { formatShortDate, localParts } from './time';
 
 /** The phone-only test switch: the organizer screen sends this header when the phone opened /admin?textsr2=on. */
 export const TEXTS_R2_HEADER = 'X-Texts-R2';
@@ -161,6 +161,11 @@ export function paymentTextR2(name: string, totalCents: number, games: SessionLi
   const owe = formatPrice(totalCents);
   const first = games.length === 1 ? `Hey ${name}, you owe ${owe} for pickleball ${dayWordR2(games[0].startsAt, tz, nowMs)}.` : `Hey ${name}, you owe ${owe} for pickleball.`;
   return lines([first, 'Pay here:'], link);
+}
+
+/** Zip 42 round 2 (Alex): a guest's share, asked of the HOST: "Hey Parker, you owe $14 for your guest Billy for Thu, Nov 12." then the pay link. */
+export function guestPaymentText(host: string, guest: string, cents: number, startsAt: string, tz: string, link: string): string {
+  return lines([`Hey ${host}, you owe ${formatPrice(cents)} for your guest ${guest} for ${formatShortDate(startsAt, tz)}.`, 'Pay here:'], link);
 }
 
 /** 9. REMIND ALL UNPAID. */

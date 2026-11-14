@@ -4,9 +4,10 @@
 //  - ExtensionOwedCard: Home's money card rows for shares still owed ("$3 extension · Thu, Nov 12") with Mark paid / Request / Text / Remind.
 // Only drawn while the switch is on for this phone; off, Admin draws the old sheet and no card, exactly as main.
 import { useState } from 'react';
-import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
+import type { AdminDashboard, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
-import { type ExtraMinutes, extensionSplit, splitLine } from '../../../shared/extension';
+import { type ExtraMinutes, extensionSplitHeads, splitLine } from '../../../shared/extension';
+import { whoPlayedNotes } from '../../../shared/guestSpot';
 import { type GamePrice, gameFinalPreview } from '../../../shared/gameLength';
 import { formatShortDate } from '../../../shared/time';
 import { siteAddress, smsHref } from '../../../shared/messages';
@@ -18,6 +19,7 @@ import { AcIcon, AcTitle } from '../../AlertCard';
 import type { AdminCtx } from '../Admin';
 import { useAction } from './action';
 import '../../extended-time.css';
+import '../../guest-spot.css';
 
 const CHOICES: { m: ExtraMinutes; label: string }[] = [
   { m: 0, label: 'None' },
@@ -37,16 +39,29 @@ export function WhoPlayedTiles({
   gp: GamePrice;
   busy: boolean;
   unconfirmedNames: string[];
-  onConfirm: (ids: string[], extraMinutes: ExtraMinutes) => void;
+  onConfirm: (ids: string[], extraMinutes: ExtraMinutes, guestsOut: string[]) => void;
 }) {
   const price = gp.flatCents;
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const [played, setPlayed] = useState<Set<string>>(() => new Set(inNow.map((r) => r.playerId)));
   const [extra, setExtra] = useState<ExtraMinutes>(0);
-  // Zip 42 "Guest spot": a guest played when the host did (no guest: played.size, as before).
-  const n = played.size + inNow.filter((r) => r.guest?.status === 'confirmed' && played.has(r.playerId)).length;
+  // Zip 42 round 2 (Alex): each guest is its own tile right after the host. A host tapped off takes the guest off too (dimmed, cannot be
+  // turned on until the host is back on). No guest: exactly as before.
+  const [guestOut, setGuestOut] = useState<Set<string>>(() => new Set());
+  const hasGuest = (r: AdminRosterEntry) => r.guest?.status === 'confirmed';
+  const guestOn = (r: AdminRosterEntry) => played.has(r.playerId) && !guestOut.has(r.playerId);
+  const n = played.size + inNow.filter((r) => hasGuest(r) && guestOn(r)).length;
   const organizerPlayed = inNow.some((r) => r.isOrganizer && played.has(r.playerId));
-  const split = extensionSplit(extra, n, organizerPlayed);
+  const orgGuest = inNow.some((r) => r.isOrganizer && hasGuest(r) && guestOn(r));
+  const split = extensionSplitHeads(extra, n, organizerPlayed ? (orgGuest ? 2 : 1) : 0);
+  const notes = whoPlayedNotes(inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })));
+  const toggleGuest = (id: string) =>
+    setGuestOut((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const line = splitLine(split);
   const unconfirmed = unconfirmedPaidWarning(unconfirmedNames);
   const summary = n < 4 ? `${n} played · ${formatPrice(price)} each` : gameFinalPreview(gp, n, formatPrice);
@@ -65,9 +80,9 @@ export function WhoPlayedTiles({
         {rest.length > 0 && <span className="xt-summary-rest"> · {rest.join(' · ')}</span>}
       </p>
       <ul className="xt-grid xt-scroll" aria-label="Who played">
-        {inNow.map((r) => {
+        {inNow.flatMap((r) => {
           const on = played.has(r.playerId);
-          return (
+          const tile = (
             <li key={r.playerId}>
               <button
                 type="button"
@@ -94,8 +109,49 @@ export function WhoPlayedTiles({
               </button>
             </li>
           );
+          if (!hasGuest(r)) return [tile];
+          const g = r.guest!;
+          const gOn = guestOn(r);
+          const locked = !on;
+          return [
+            tile,
+            <li key={`${r.playerId}:guest`}>
+              <button
+                type="button"
+                className={`xt-tile xt-guest${gOn || locked ? ' on' : ' off'}${locked ? ' locked' : ''}`}
+                aria-pressed={gOn}
+                aria-disabled={locked || undefined}
+                aria-label={`${g.name}, ${r.name}'s guest, ${gOn ? 'played' : 'did not play'}${locked ? ` (${r.name} did not play)` : ''}`}
+                data-tile={g.name}
+                data-guest-tile={g.name}
+                onClick={() => {
+                  if (!locked) toggleGuest(r.playerId);
+                }}
+              >
+                <span className="xt-ball" aria-hidden="true">
+                  <Pickleball />
+                </span>
+                <span className="xt-name">
+                  <b>{g.name}</b>
+                  <span className="xt-guest-of">{r.name}'s guest</span>
+                </span>
+                {(gOn || locked) && (
+                  <span className="xt-check" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" width="14" height="14">
+                      <path d="M5 10.5l3.2 3.2L15 7" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                )}
+              </button>
+            </li>,
+          ];
         })}
       </ul>
+      {notes.length > 0 && (
+        <p className="xt-guest-note" data-who-played-note aria-live="polite">
+          {notes.join(' ')}
+        </p>
+      )}
       <div className="xt-extra">
         <span className="xt-label" id={`xt-label-${s.id}`}>
           EXTENDED TIME
@@ -120,7 +176,7 @@ export function WhoPlayedTiles({
         </p>
       )}
       <div className="xt-confirm">
-        <button className="btn block" disabled={busy} data-confirm-played onClick={() => onConfirm([...played], extra)}>
+        <button className="btn block" disabled={busy} data-confirm-played onClick={() => onConfirm([...played], extra, [...guestOut].filter((id) => played.has(id)))}>
           {busy ? 'Saving…' : 'Confirm'}
         </button>
       </div>

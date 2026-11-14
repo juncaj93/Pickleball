@@ -193,3 +193,13 @@ export function sharesPaid(coveredCents: number, priceCents: number, guestFirst:
   const both = coveredCents >= priceCents;
   return guestFirst ? { host: both, guest: first, shareCents: share } : { host: first, guest: both, shareCents: share };
 }
+
+/**
+ * Round 2 (Alex): the Who played sheet's notes for pairs. A host marked out takes the guest out too: "Parker didn't play, so Billy didn't
+ * either." A guest marked out alone: "Billy didn't play. Parker pays for 1 share." Nothing for a pair that both played.
+ */
+export function whoPlayedNotes(pairs: { host: string; guest: string; hostPlayed: boolean; guestOut: boolean }[]): string[] {
+  return pairs.flatMap((p) =>
+    !p.hostPlayed ? [`${p.host} didn't play, so ${p.guest} didn't either.`] : p.guestOut ? [`${p.guest} didn't play. ${p.host} pays for 1 share.`] : [],
+  );
+}

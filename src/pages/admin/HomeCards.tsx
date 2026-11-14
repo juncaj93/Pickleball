@@ -1,5 +1,7 @@
+import { whoPlayedNotes } from '../../../shared/guestSpot';
+import '../../guest-spot.css';
 import { useState } from 'react';
-import type { AdminDashboard, AdminSessionView, RefundRequestView } from '../../../shared/api';
+import type { AdminDashboard, AdminSessionView, RefundRequestView, AdminRosterEntry } from '../../../shared/api';
 import { formatPrice, venmoRefundUrl } from '../../../shared/money';
 import { paymentClaimText, unconfirmedPaidWarning } from '../../../shared/credit';
 import { formatShortDate } from '../../../shared/time';
@@ -46,10 +48,10 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   // Zip 31 "Extended time": only while on for this phone. Off: the old label and the old sheet, and finalize sends exactly what it sent.
   const ext = ctx.d.extendedTime === true;
   const changeLabel = ext ? 'Edit players / time' : 'Change who played';
-  const finalize = (played: string[], extraMinutes?: ExtraMinutes) =>
+  const finalize = (played: string[], extraMinutes?: ExtraMinutes, guestsOut: string[] = []) =>
     tapsHeld()
       ? Promise.resolve(false)
-      : run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, extraMinutes === undefined ? { played } : { played, extraMinutes }), `${day} is final`, {
+      : run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, { played, ...(extraMinutes === undefined ? {} : { extraMinutes }), ...(guestsOut.length ? { guestsOut } : {}) }), `${day} is final`, {
           // Instant taps (INSTANT_TAPS): the price and the credit are the server's, so the button shows it is working; only where Money
           // files the game moves at once (finalized games that are fully paid go to Previous games). A failed save moves it back.
           key: `finalize:${s.id}`,
@@ -105,9 +107,9 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
           {changing &&
             (ext ? (
-              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra) => (await finalize(ids, extra)) && setChanging(false)} />
+              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra, out) => (await finalize(ids, extra, out)) && setChanging(false)} />
             ) : (
-              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />
+              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids, out) => (await finalize(ids, undefined, out)) && setChanging(false)} />
             ))}
         </Sheet>
       </article>
@@ -148,9 +150,9 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
         {changing &&
             (ext ? (
-              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra) => (await finalize(ids, extra)) && setChanging(false)} />
+              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra, out) => (await finalize(ids, extra, out)) && setChanging(false)} />
             ) : (
-              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />
+              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids, out) => (await finalize(ids, undefined, out)) && setChanging(false)} />
             ))}
       </Sheet>
     </article>
@@ -171,26 +173,36 @@ function UnconfirmedWarning({ text }: { text: string }) {
 }
 
 /** The sheet: everyone who was in, a switch each, the preview updating live, and Confirm. */
-function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePrice; busy: boolean; onConfirm: (ids: string[]) => void }) {
+function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePrice; busy: boolean; onConfirm: (ids: string[], guestsOut: string[]) => void }) {
   const price = gp.flatCents;
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const [played, setPlayed] = useState<Set<string>>(() => new Set(inNow.map((r) => r.playerId)));
-  // Zip 42: a guest played when the host did (the pair is one switch).
-  const n = played.size + inNow.filter((r) => r.guest?.status === 'confirmed' && played.has(r.playerId)).length;
+  // Zip 42 round 2 (Alex): each guest has their own switch, right after the host; a host who did not play takes the guest out too.
+  const [guestOut, setGuestOut] = useState<Set<string>>(() => new Set());
+  const hasGuest = (r: AdminRosterEntry) => r.guest?.status === 'confirmed';
+  const guestOn = (r: AdminRosterEntry) => played.has(r.playerId) && !guestOut.has(r.playerId);
+  const n = played.size + inNow.filter((r) => hasGuest(r) && guestOn(r)).length;
+  const notes = whoPlayedNotes(inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })));
   const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
+  const flip = (set: (f: (cur: Set<string>) => Set<string>) => void, id: string, on: boolean) =>
+    set((cur) => {
+      const next = new Set(cur);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   return (
     <div className="stack" data-who-played>
       <p className="finalize-live" data-finalize-live>
         {n < 4 ? `${n} played · ${formatPrice(price)} each` : gameFinalPreview(gp, n, formatPrice)}
       </p>
       <ul className="list who-played">
-        {inNow.map((r) => (
+        {inNow.flatMap((r) => [
           <li key={r.playerId}>
             <label className="set-row played-row">
               <span className="set-label">
                 <span className="set-name">
                   {r.name}
-                  {r.guest?.status === 'confirmed' ? ` + ${r.guest.name} (guest)` : ''}
                   {r.isOrganizer ? ' (you)' : ''}
                 </span>
                 <span className="set-hint">{played.has(r.playerId) ? 'played' : 'did not play'}</span>
@@ -201,21 +213,42 @@ function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePr
                 className="switch"
                 checked={played.has(r.playerId)}
                 aria-label={`${r.name} played`}
-                onChange={(e) =>
-                  setPlayed((cur) => {
-                    const next = new Set(cur);
-                    if (e.target.checked) next.add(r.playerId);
-                    else next.delete(r.playerId);
-                    return next;
-                  })
-                }
+                onChange={(e) => flip(setPlayed, r.playerId, e.target.checked)}
               />
             </label>
-          </li>
-        ))}
+          </li>,
+          ...(hasGuest(r)
+            ? [
+                <li key={`${r.playerId}:guest`} data-guest-played={r.guest!.name}>
+                  <label className="set-row played-row guest-played-row">
+                    <span className="set-label">
+                      <span className="set-name">{r.guest!.name}</span>
+                      <span className="set-hint">
+                        {r.name}'s guest · {guestOn(r) ? 'played' : 'did not play'}
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      className="switch"
+                      checked={guestOn(r)}
+                      disabled={!played.has(r.playerId)}
+                      aria-label={`${r.guest!.name} played`}
+                      onChange={(e) => flip(setGuestOut, r.playerId, !e.target.checked)}
+                    />
+                  </label>
+                </li>,
+              ]
+            : []),
+        ])}
       </ul>
+      {notes.length > 0 && (
+        <p className="small muted who-played-note" data-who-played-note>
+          {notes.join(' ')}
+        </p>
+      )}
       {unconfirmed && <UnconfirmedWarning text={unconfirmed} />}
-      <button className="btn block" disabled={busy} data-confirm-played onClick={() => onConfirm([...played])}>
+      <button className="btn block" disabled={busy} data-confirm-played onClick={() => onConfirm([...played], [...guestOut].filter((id) => played.has(id)))}>
         {busy ? 'Saving…' : 'Confirm'}
       </button>
     </div>

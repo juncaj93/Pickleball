@@ -3,9 +3,9 @@ import { AcIcon, AcTitle } from '../../AlertCard';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { siteAddress, smsHref } from '../../../shared/messages';
-import { paymentTextR2 } from '../../../shared/textsR2';
+import { guestPaymentText, paymentTextR2 } from '../../../shared/textsR2';
 import { formatShortDate, formatTime, formatWeekdayShort, localParts } from '../../../shared/time';
-import { venmoRequestLinks } from '../../../shared/venmoRequest';
+import { guestVenmoRequestLinks, venmoRequestLinks } from '../../../shared/venmoRequest';
 import { api, isIOS, openVenmo } from '../../lib';
 import { Sheet } from '../../ui';
 import type { AdminCtx } from '../Admin';
@@ -146,6 +146,39 @@ export function RowRequest({ ctx, s, r }: { ctx: AdminCtx; s: AdminSessionView; 
   const body = paymentTextR2(first, r.owesCents, [s], ctx.d.group.timezone, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink));
   return (
     <a className="sc-req sc-req-text" href={smsHref(p.phone, body, isIOS)} data-sc-textone={r.name} aria-label={`Text ${r.name} about the ${formatPrice(r.owesCents)}`}>
+      Text
+    </a>
+  );
+}
+
+/**
+ * Zip 42 round 2: "Request" on a guest's row. It always goes to the HOST, never the guest (a guest has no phone): Venmo when the host has a
+ * username saved (the note names the guest), else Messages to the host with "Hey Parker, you owe $14 for your guest Billy for Thu, Nov 12."
+ */
+export function GuestRequest({ ctx, s, host, guest, cents }: { ctx: AdminCtx; s: AdminSessionView; host: AdminRosterEntry; guest: string; cents: number }) {
+  const p = ctx.d.players.find((x) => x.id === host.playerId);
+  const link = guestVenmoRequestLinks(p?.venmo ?? null, cents, s.startsAt, ctx.d.group.timezone, guest);
+  if (link) {
+    return (
+      <a
+        className="sc-req"
+        href={link.url}
+        data-app-href={link.appUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => openVenmo(e, link)}
+        data-venmo-request={guest}
+        aria-label={`Venmo request ${formatPrice(cents)} from ${host.name} for guest ${guest}`}
+      >
+        Request
+      </a>
+    );
+  }
+  if (!p?.phone) return <span className="mp-none">no Venmo saved</span>;
+  const first = host.name.trim().split(/\s+/)[0] || host.name;
+  const body = guestPaymentText(first, guest, cents, s.startsAt, ctx.d.group.timezone, siteAddress(ctx.d.group.playerLink));
+  return (
+    <a className="sc-req sc-req-text" href={smsHref(p.phone, body, isIOS)} data-sc-textone={guest} aria-label={`Text ${host.name} about ${guest}'s ${formatPrice(cents)}`}>
       Text
     </a>
   );
