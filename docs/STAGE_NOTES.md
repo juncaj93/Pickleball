@@ -4679,3 +4679,14 @@ game without a guest reads exactly as before. SQL only names the new columns onc
 - Stopped: pushing the merged code to `main` (which `npm run deploy` requires) was refused by this session's permissions. Next: branch
   `claude/new-session-v00cxc` (commit below) goes to main (fast-forward, no conflicts), then `npm run deploy` from main, live checks, integrity checks.
 
+### Zip 42 deployed (Sat Nov 14, 2026, about 4:27 PM Eastern, quiet window)
+- Alex allowed the push to main: main fast-forwarded a61c879 -> 87f05e6 (no force), then `npm run deploy` from main; the guard passed (live 80405da was
+  17 commits behind, all Zip 42).
+- Deployment: 07f10bae-97e1-4276-ad4c-3c67a4f03835 (commit 87f05e6). Rollback: the previous production deployment dcc28149-552a-4264-9572-af227c6fdad8
+  (commit 80405da, Zip 43) in Cloudflare Pages > pickleball-club > Deployments > Rollback. Rolling back the site leaves the six empty columns (harmless).
+- Bookmark before the migrations: 00001317-00000000-00005123-a4430f1b55c81c29dc9f346ff6692e61. Backup export saved as export-20261114212813 in
+  pickleball-backups. Integrity checks 21/21 at 0 before, after the migrations and after the deploy.
+- Live checks (read-only, no PIN): Guest spot switch OFF (0 `guest_spot_on` rows, 0 seats with a guest); /api/admin/dashboard 401 without the PIN;
+  /admin shows the PIN sign-in; the player page opens on "Who are you?" as before; the equal confirm button rule is in the live CSS; no write requests.
+- Turn on: Settings > Feature switches > "Guest spot" (top row), or one phone with /admin?guestspot=on.
+
