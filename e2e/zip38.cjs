@@ -233,25 +233,25 @@ async function main() {
       assert(cap.height === '12px' && cap.left === '30px' && cap.right === '30px', `cap: ${JSON.stringify(cap)}`);
       assert((await pseudo(page, '.schedule > .sched:not(.xs-top)', '::before', ['content'])).content !== '""', 'no cap on other cards');
       // Red tonight / tomorrow bands and red tile borders; canceled stays gray.
-      const band = await page.evaluate(() => getComputedStyle(document.querySelector('.tile .day-tag.tonight')).backgroundColor);
-      assert(isRed(band), `TONIGHT band ${band}`);
-      const tom = await page.evaluate(() => getComputedStyle(document.querySelector('.tile .day-tag.tomorrow')).backgroundColor);
-      assert(isRed(tom), `TOMORROW band ${tom}`);
+      // Zip 41: TONIGHT and TOMORROW tiles only: a true red 2 px outline and a band (light: red band, white word; dark: cream band, red word).
+      const dark = scheme === 'dark';
+      const bandOf = (sel) => page.evaluate((q) => { const c = getComputedStyle(document.querySelector(q)); return [c.backgroundColor, c.color]; }, sel);
+      const [band, bandInk] = await bandOf('.tile .day-tag.tonight');
+      assert(dark ? band === 'rgb(251, 246, 234)' && isRed(bandInk) : isRed(band) && bandInk === 'rgb(255, 255, 255)', `TONIGHT band ${band} / ${bandInk}`);
+      const [tom, tomInk] = await bandOf('.tile .day-tag.tomorrow');
+      assert(dark ? tom === 'rgb(251, 246, 234)' && isRed(tomInk) : isRed(tom) && tomInk === 'rgb(255, 255, 255)', `TOMORROW band ${tom} / ${tomInk}`);
       const borders = await page.evaluate(() =>
         [...document.querySelectorAll('.schedule > article.sched')].map((a) => {
           const t = a.querySelector('.tile.ptile');
-          return [a.classList.contains('off'), t.classList.contains('ts'), t.classList.contains('ts-booked'), getComputedStyle(t).borderTopColor, getComputedStyle(t.querySelector('.tb-solid') || t).boxShadow];
+          return [a.classList.contains('off'), t.classList.contains('day-tonight') || t.classList.contains('day-tomorrow'), getComputedStyle(t).borderTopColor, getComputedStyle(t).borderTopWidth, t.querySelectorAll('.tb').length];
         }),
       );
-      // Red outlines on games with a SET time (no court-status ring): their tile border is red. Booked games' ring (.tb-solid) is red too.
-      const plainTiles = borders.filter(([off, ts]) => !off && !ts);
-      assert(plainTiles.length > 0 && plainTiles.every(([, , , c]) => isRed(c)), `set-time tiles red: ${JSON.stringify(plainTiles)}`);
-      assert(borders.filter(([off, , booked]) => !off && booked).every(([, , , , shadow]) => /200, 49, 47/.test(shadow)), 'the court-booked ring is red too');
-      // The "~8 PM" and no-court games keep the regular theme's ring: a see-through border plus the status ring, never a red border doubling it.
-      const ringTiles = borders.filter(([off, ts, booked]) => !off && ts && !booked);
-      assert(ringTiles.length > 0, 'the world has tiles with a court-status ring');
-      assert(ringTiles.every(([, , , c]) => !isRed(c) && /rgba\(0, 0, 0, 0\)|transparent/.test(c)), `court-status tiles keep their own ring: ${JSON.stringify(ringTiles)}`);
-      assert(borders.filter(([off]) => off).length > 0 && borders.filter(([off]) => off).every(([, , , c]) => !isRed(c)), 'canceled tile is not red');
+      const special = borders.filter(([off, day]) => !off && day);
+      assert(special.length > 0 && special.every(([, , c, w]) => c === (dark ? 'rgb(217, 58, 53)' : 'rgb(200, 49, 47)') && w === '2px'), `tonight and tomorrow tiles: true red, 2 px: ${JSON.stringify(special)}`);
+      const rest = borders.filter(([off, day]) => !off && !day);
+      assert(rest.length > 0 && rest.every(([, , c]) => !isRed(c) && c !== 'rgb(217, 58, 53)'), `no other tile has a red outline: ${JSON.stringify(rest)}`);
+      assert(borders.every(([, , , , layers]) => layers === 0), 'no court-status layer on any player tile');
+      assert(borders.filter(([off]) => off).length > 0 && borders.filter(([off]) => off).every(([, , c]) => !isRed(c) && c !== 'rgb(217, 58, 53)'), 'canceled tile is not red');
       const ordinary = await page.evaluate(() => {
         const t = [...document.querySelectorAll('.schedule > article.sched:not(.off) .tile.ptile:not(.day-tonight):not(.day-tomorrow)')][0];
         return t ? [getComputedStyle(t.querySelector('.dow')).color, getComputedStyle(t).borderTopColor] : null;

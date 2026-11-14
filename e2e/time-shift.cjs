@@ -181,8 +181,9 @@ async function main() {
             tiles: [a, b, c].map((id) => tile(id).className),
             times: [a, b, c].map((id) => time(id).textContent),
             timeColors: [a, b, c].map((id) => getComputedStyle(time(id)).color),
-            solid: getComputedStyle(tile(a).querySelector('.tb-solid')).borderColor,
-            dash: [getComputedStyle(tile(b).querySelector('.tb-dash')).borderStyle, getComputedStyle(tile(b).querySelector('.tb-dash')).opacity],
+            // Zip 41: the court status is no longer on the tile's edge: every tile has the same plain solid outline, and no status layer.
+            outlines: [a, b, c].map((id) => { const cs = getComputedStyle(tile(id)); return `${cs.borderTopStyle} ${cs.borderTopWidth} ${cs.borderTopColor}`; }),
+            layers: [a, b, c].map((id) => tile(id).querySelectorAll('.tb').length),
           };
         },
         { a: A.id, b: B.id, c: C.id },
@@ -209,8 +210,9 @@ async function main() {
       assert(/ts-booked/.test(info.tiles[0]) && /ts-wait/.test(info.tiles[1]) && /ts-none/.test(info.tiles[2]), `tiles ${info.tiles}`);
       assert(info.times[1].startsWith('~') && !info.times[0].startsWith('~') && !info.times[2].startsWith('~'), `times ${info.times}`);
       assert(info.timeColors[1] === info.timeColors[2] && info.timeColors[0] !== info.timeColors[1], `muted vs bright ${info.timeColors}`);
-      if (scheme === 'dark') assert(info.solid === 'rgb(139, 217, 163)', `dark booked border is green ${info.solid}`);
-      assert(info.dash[0] === 'dashed' && info.dash[1] === '1', `dashed ${info.dash}`);
+      assert(new Set(info.outlines).size === 1 && /^solid /.test(info.outlines[0]), `booked, ~time and no-court tiles share one solid outline ${info.outlines}`);
+      if (scheme === 'dark') assert(/rgb\(139, 217, 163\)$|rgb\(142, 152, 143\)$/.test(info.outlines[0]), `dark outline is the row's mint (this week) or charcoal (next week, later) ${info.outlines[0]}`);
+      assert(info.layers.every((n) => n === 0), `no status layers on player tiles ${info.layers}`);
       await page.screenshot({ path: path.join(SHOTS, `time-shift-player-${width}-${scheme}.png`), fullPage: true });
       // The 5-second refresh and a reload keep it.
       await page.waitForTimeout(5600);

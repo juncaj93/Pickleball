@@ -360,10 +360,12 @@ async function main() {
           if (ink) assert(lum(bg) < 0.14 && lum(fg) > 0.9, `light mode band ${T.tagBg} letters ${T.tagColor}`);
           else assert(lum(bg) > 0.3 && lum(fg) < 0.1, `dark mode band ${T.tagBg} letters ${T.tagColor}`);
           assert(contrast(bg, fg) >= 4.5, `contrast ${contrast(bg, fg).toFixed(2)}`);
-          const ring = parseRgb(T.ring && T.ring !== 'none' ? T.ring : T.ringBorder);
-          assert(ring, `ring ${T.ring}`);
-          if (ink) assert(lum(ring) < 0.05, `outline should be black-ish: ${T.ring}`);
-          else assert(lum(ring) > 0.45 && ring[1] > ring[0], `outline should be green: ${T.ring}`);
+          // Zip 41: every tile's outline is its own plain border (no court-status ring layer on player tiles any more).
+          assert(T.ring === null, `no status ring layer on a player tile: ${T.ring}`);
+          const ring = parseRgb(T.ownBorder);
+          assert(ring, `outline ${T.ownBorder}`);
+          if (ink) assert(lum(ring) < 0.05, `outline should be black-ish: ${T.ownBorder}`);
+          else assert(lum(ring) > 0.45 && ring[1] > ring[0], `outline should be green: ${T.ownBorder}`);
           // An added game's Tonight tile has no court ring: its own border must be the same ink / green.
           const own = m.bare && parseRgb(m.bare.ownBorder);
           assert(own, `no plain-border Tonight tile (${m.bare && m.bare.ownBorder})`);

@@ -21,6 +21,9 @@
   --pc-blue-ink: #ffffff;
   --pc-ring: #18241d;
   --pc-shadow: rgb(24 36 29 / 45%);
+  /* Date tile outline (Zip 41): ONE solid line, color by ROW only. This week = ink (mint in dark), next week and later = charcoal. */
+  --pc-ol-this: #18241d;
+  --pc-ol-quiet: #5b625a;
 }
 :root[data-theme='dark'] .schedule,
 :root[data-theme='dark'] .pay-card,
@@ -42,6 +45,8 @@
   --pc-blue-ink: #0f1612;
   --pc-ring: #d5dacf;
   --pc-shadow: rgb(0 0 0 / 70%);
+  --pc-ol-this: #8bd9a3;
+  --pc-ol-quiet: #8e988f;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .schedule,
@@ -63,6 +68,8 @@
     --pc-blue-ink: #0f1612;
     --pc-ring: #d5dacf;
     --pc-shadow: rgb(0 0 0 / 70%);
+    --pc-ol-this: #8bd9a3;
+    --pc-ol-quiet: #8e988f;
   }
 }
 
@@ -185,11 +192,36 @@
 .tile-wrap {
   position: relative;
 }
+/* The outline of every date tile: one solid line. Width and color come from the row (the two variables below); nothing else draws on a tile's edge.
+   Court status (booked, not booked, waitlist, "~8 PM") is NOT shown here. A theme can change just --tile-ol-c for a tile (src/skin/christmas.css). */
+.schedule .sched {
+  --tile-ol-w: 1px;
+  --tile-ol-c: var(--pc-ol-quiet);
+}
+.schedule .sched.tier-this {
+  --tile-ol-w: 2px;
+  --tile-ol-c: var(--pc-ol-this);
+}
+.schedule .sched.tier-next {
+  --tile-ol-w: 1.5px;
+}
+.schedule .sched.cl-later {
+  --tile-ol-w: 1px;
+}
+/* Canceled games keep the outline they always had. */
+.schedule .sched.off {
+  --tile-ol-c: var(--pc-ink);
+}
+.schedule .sched.off.cl-later,
+.schedule .sched.off.tier-later {
+  --tile-ol-w: 1.5px;
+  --tile-ol-c: var(--pc-line);
+}
 .schedule .tile.ptile {
   width: 100%;
   box-sizing: border-box;
   align-self: auto;
-  border: 2px solid var(--pc-ink);
+  border: var(--tile-ol-w) solid var(--tile-ol-c);
   border-radius: 16px;
   background: var(--pc-tile);
   color: var(--pc-ink);
@@ -213,7 +245,6 @@
   color: var(--pc-ink);
 }
 .tier-next .tile.ptile {
-  border-width: 1.5px;
   border-radius: 13px;
   padding: 7px 0 6px;
 }
@@ -226,7 +257,6 @@
   margin: 4px 0 2px;
 }
 .tier-later .tile.ptile {
-  border: 1.5px solid var(--pc-line);
   border-radius: 12px;
   padding: 6px 0 6px;
 }
@@ -260,47 +290,6 @@
   margin: 0 2px;
   padding: 3px 0;
   font-size: 0.42rem;
-}
-
-/* Extra (added by hand): ink tile in light mode, cream tile in dark mode. */
-.schedule .tile.ptile.extra {
-  background: #18241d;
-  border-color: #18241d;
-}
-.schedule .ptile.extra .dow,
-.schedule .ptile.extra .mon {
-  color: #d9e2d4;
-}
-.schedule .ptile.extra .day {
-  color: #ffffff;
-}
-:root[data-theme='dark'] .schedule .tile.ptile.extra {
-  background: #e9ede4;
-  border-color: #e9ede4;
-}
-:root[data-theme='dark'] .schedule .ptile.extra .dow {
-  color: #8a3a28;
-}
-:root[data-theme='dark'] .schedule .ptile.extra .mon {
-  color: #3c4139;
-}
-:root[data-theme='dark'] .schedule .ptile.extra .day {
-  color: #0f1612;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .schedule .tile.ptile.extra {
-    background: #e9ede4;
-    border-color: #e9ede4;
-  }
-  :root:not([data-theme='light']) .schedule .ptile.extra .dow {
-    color: #8a3a28;
-  }
-  :root:not([data-theme='light']) .schedule .ptile.extra .mon {
-    color: #3c4139;
-  }
-  :root:not([data-theme='light']) .schedule .ptile.extra .day {
-    color: #0f1612;
-  }
 }
 
 /* The check badge: top-right corner of the tile, never over the TONIGHT strip. */

@@ -4565,3 +4565,14 @@ The calm profile now also keeps the games the skin needs, for PLAYERS only: toni
 - Deployment: b31b5d96-f290-4085-baf4-9adf2f58e0d7 (commit b5fc08d). Rollback: the previous production deployment (live before was f73a557) in Cloudflare Pages > pickleball-club > Deployments > Rollback.
 - Time Travel bookmark before: 00001199-00000000-00005122-8d90f62f76e4e8c4afa95631c0178b49. Backup export saved as export-20261113145513 in pickleball-backups. Integrity checks all 0 before and after.
 - Tests: unit 2,961 passed (17 new); full browser run 73 of 74 scripts green, 2,799 checks. zip18 ("View as Parker" Demo banner check) fails on main without this change too (it failed on a different Parker check there), so it was not touched.
+
+## Zip 41: one simple outline rule for the date tiles (look only, built Fri Nov 13, 2026, not deployed yet)
+
+- Player Home date tiles: the same fill on every tile (extra games no longer get an ink tile) and ONE solid outline, whatever the court status
+  (booked, not booked, waitlist, "~8 PM", none). Color and thickness come from the ROW only: this week 2 px (ink in light, mint #8bd9a3 in dark),
+  next week 1.5 px charcoal (#5b625a / #8e988f), later 1 px charcoal. Canceled games keep their old outline. The variables are `--tile-ol-w` and
+  `--tile-ol-c` per row in `src/player-cards.css`; the old status layers (.tb) are no longer drawn on player tiles (the organizer's tiles keep them).
+- Christmas skin: only the TONIGHT and TOMORROW tiles change (red 2 px outline #c8312f light / #d93a35 dark; light band red with a white word, dark band
+  cream #fbf6ea with a red word). Every other tile follows the normal rule. Variables in `src/skin/christmas.css`.
+- Tests: `e2e/zip41.cjs` (13 checks), `tests/zip38.test.ts` updated, `e2e/zip29.cjs`, `e2e/time-shift.cjs`, `e2e/zip38.cjs` updated. Full unit suite 171 files / 3016 tests green; full browser run 75 of 76 scripts green.
+- `e2e/zip18.cjs` "View as Parker (light)": fails the same way on today's main (the credit chip has an `m-in` class on the real page but not in the View-as copy); not touched here.

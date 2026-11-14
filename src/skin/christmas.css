@@ -168,29 +168,34 @@ html[data-skin='christmas'] .schedule > .sched.xs-top::before {
   z-index: 2;
 }
 
-/* Slot: calendar tiles. TONIGHT and TOMORROW bands go red with a red tile border; every ordinary game tile gets a red outline (the
-   court-booked inset ring too); canceled games stay gray; the not-booked and waitlist rings keep their status colors; the TONIGHT glow
-   stays green and so does the check badge. */
+/* Slot: calendar tiles (Zip 41). Only the TONIGHT and TOMORROW tiles change: a true red 2 px outline and a band (light: red band, white word;
+   dark: cream band, red word). Every other tile keeps the normal outline by row. The TONIGHT glow stays green and so does the check badge. */
+html[data-skin='christmas'] {
+  --xmas-tile-ol: #c8312f;
+  --xmas-band-bg: #c8312f;
+  --xmas-band-ink: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-skin='christmas']:not([data-theme='light']) {
+    --xmas-tile-ol: #d93a35;
+    --xmas-band-bg: #fbf6ea;
+    --xmas-band-ink: #c8312f;
+  }
+}
+html[data-skin='christmas'][data-theme='dark'] {
+  --xmas-tile-ol: #d93a35;
+  --xmas-band-bg: #fbf6ea;
+  --xmas-band-ink: #c8312f;
+}
+html[data-skin='christmas'] .schedule .tile.day-tonight,
+html[data-skin='christmas'] .schedule .tile.day-tomorrow {
+  --tile-ol-c: var(--xmas-tile-ol);
+}
 html[data-skin='christmas'] .schedule .tile .day-tag.tonight,
 html[data-skin='christmas'] .schedule .tile .day-tag.tomorrow,
 html[data-skin='christmas'] .schedule .tile .tonight-tag {
-  background: var(--xmas-red) !important;
-  color: #fff !important;
-}
-/* Red outlines are for games with a SET time only. A tile that carries a court-status ring (the "~8 PM" games and the games with no court set: class .ts) keeps
-   the regular theme's ring and its own colors (dotted for a waitlist, gray for not booked); only a booked ring turns red (the rule below). */
-html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile:not(.ts),
-html[data-skin='christmas'] .schedule .tile.day-tonight:not(.ts),
-html[data-skin='christmas'] .schedule .tile.day-tomorrow:not(.ts) {
-  border-color: var(--xmas-red) !important;
-}
-html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tonight:not(.ts-none):not(.ts-wait),
-html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tomorrow:not(.ts-none):not(.ts-wait) {
-  outline-color: var(--xmas-red) !important;
-}
-html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .tb-solid {
-  box-shadow: inset 0 0 0 var(--tb-w, 2px) var(--xmas-red) !important;
-  border-color: var(--xmas-red) !important;
+  background: var(--xmas-band-bg);
+  color: var(--xmas-band-ink);
 }
 
 /* ---------- 3. Motion ---------- */

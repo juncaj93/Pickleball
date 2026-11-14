@@ -786,11 +786,38 @@ describe('Part E: the look and the motion (Alex, rounds 1 and 2)', () => {
     const longest = 0.7 + 5 * 0.16 + 0.9;
     expect(longest).toBeLessThan(4.5);
   });
-  it('tiles with a court-status ring (the "~8 PM" games and games with no court set) keep the regular theme\'s ring; red outlines only on set-time games', () => {
-    expect(css).toMatch(/\.tile\.ptile:not\(\.ts\),\s*html\[data-skin='christmas'\] \.schedule \.tile\.day-tonight:not\(\.ts\),\s*html\[data-skin='christmas'\] \.schedule \.tile\.day-tomorrow:not\(\.ts\) \{\s*border-color: var\(--xmas-red\) !important;/);
-    expect(css).toMatch(/\.ts-booked \.tb-solid \{\s*box-shadow: inset 0 0 0 var\(--tb-w, 2px\) var\(--xmas-red\) !important;/);
-    // The regular theme keeps a status tile's own border see-through (its ring is drawn by .tb), which is what stops the doubled ring.
-    expect(readFileSync(new URL('../src/time-shift.css', import.meta.url), 'utf8')).toMatch(/\.tile\.ts \{\s*border-color: transparent !important;/);
+  it('Zip 41: only the TONIGHT and TOMORROW tiles change for Christmas (true red 2 px outline; red band with a white word in light, cream band with a red word in dark); no other tile gets red, no !important', () => {
+    expect(css).toMatch(/html\[data-skin='christmas'\] \{\s*--xmas-tile-ol: #c8312f;\s*--xmas-band-bg: #c8312f;\s*--xmas-band-ink: #ffffff;\s*\}/);
+    // Dark twice (Dark picked, and following the phone): outline #d93a35, cream band #fbf6ea, red word #c8312f.
+    expect(css.match(/--xmas-tile-ol: #d93a35;\s*--xmas-band-bg: #fbf6ea;\s*--xmas-band-ink: #c8312f;/g)).toHaveLength(2);
+    // The outline is one variable on just the tonight and tomorrow tiles; the outline width stays the row's 2 px.
+    expect(css).toMatch(/\.schedule \.tile\.day-tonight,\s*html\[data-skin='christmas'\] \.schedule \.tile\.day-tomorrow \{\s*--tile-ol-c: var\(--xmas-tile-ol\);\s*\}/);
+    expect(css).toMatch(/\.day-tag\.tomorrow,\s*html\[data-skin='christmas'\] \.schedule \.tile \.tonight-tag \{\s*background: var\(--xmas-band-bg\);\s*color: var\(--xmas-band-ink\);\s*\}/);
+    // The old rules are gone: red on every ordinary tile, the red court ring, the status-ring exceptions.
+    expect(css).not.toContain('.tb-solid');
+    expect(css).not.toMatch(/tile\.ptile:not\(\.ts\)/);
+    const tileSlot = css.slice(css.indexOf('/* Slot: calendar tiles'), css.indexOf('/* ---------- 3. Motion'));
+    expect(tileSlot).not.toContain('!important');
+  });
+  it('Zip 41: every player date tile is one plain solid outline by ROW (this week 2 px ink / mint, next week 1.5 px charcoal, later 1 px charcoal); the old status layers cannot draw on a player tile', () => {
+    const pc = readFileSync(new URL('../src/player-cards.css', import.meta.url), 'utf8');
+    expect(pc).toContain('--pc-ol-this: #18241d;');
+    expect(pc).toContain('--pc-ol-quiet: #5b625a;');
+    expect(pc.match(/--pc-ol-this: #8bd9a3;\s*--pc-ol-quiet: #8e988f;/g)).toHaveLength(2);
+    expect(pc).toMatch(/\.schedule \.sched\.tier-this \{\s*--tile-ol-w: 2px;\s*--tile-ol-c: var\(--pc-ol-this\);/);
+    expect(pc).toMatch(/\.schedule \.sched\.tier-next \{\s*--tile-ol-w: 1\.5px;/);
+    expect(pc).toMatch(/\.schedule \.sched \{\s*--tile-ol-w: 1px;\s*--tile-ol-c: var\(--pc-ol-quiet\);/);
+    expect(pc).toContain('border: var(--tile-ol-w) solid var(--tile-ol-c);');
+    // Extra games share the normal fill: no ink tile any more.
+    expect(pc).not.toContain('ptile.extra');
+    // The old status layers (.tb) stay only for the organizer's tiles.
+    const ts = readFileSync(new URL('../src/time-shift.css', import.meta.url), 'utf8');
+    expect(ts).toMatch(/\.tile\.ts:not\(\.ptile\) \{\s*border-color: transparent !important;/);
+    expect(ts).not.toMatch(/\.ptile\s*\{[^}]*--tb-w/);
+    const ui = readFileSync(new URL('../src/pages/PlayerHome.tsx', import.meta.url), 'utf8');
+    const at = ui.indexOf('function PlayerTile(');
+    expect(at).toBeGreaterThan(0);
+    expect(ui.slice(at, at + 1800)).not.toContain('TileBorders');
   });
   it('the tonight shimmer: round 1 halved it (17 / 15 / 15), round 2 took another 20 to 25 percent off (13 / 12 / 12, from 35 / 30 / 30 originally), softer band, same timing (this change is on live)', () => {
     const z7 = readFileSync(new URL('../src/zip7.css', import.meta.url), 'utf8');
