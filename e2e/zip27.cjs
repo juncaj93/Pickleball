@@ -126,7 +126,7 @@ async function main() {
       await check(`Settings at ${width} ${scheme}: "Spent matches Totals" sits right under Zip 31's Extended time, Zip 34's Check-in pay line, Zip 32's Players sheet redo and Zip 30's Acting for others at the top of Feature switches, fits, and is on`, async () => {
         const { ctx, page, errors } = await openTab({ width, scheme }, 'Settings');
         for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 8));
+        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 8));
         assert(first.join('|') === 'tapGuardFixAll|extendedTimeAll|checkInPayAll|playersSheetRedoAll|actingOthersAll|spentTotalsAll|bookingHoursAll|totalsRefreshAll', `newest first: ${first}`);
         const row = page.locator('[data-row="spentTotalsAll"]');
         assert((await row.locator('.set-name').innerText()).includes('Spent matches Totals'), 'its name');

@@ -37,13 +37,17 @@ export const SMALL_NO_NUMBER = 'Reese';
 // Read on live with the read-only PIN, Sun Nov 8, 7:05 PM Eastern: every Settings row is on, these three included. Unpaid nudge: on live
 // since Sun Nov 8 evening (Alex, Zip 18 round 2).
 export const LATER_ON_LIVE: readonly string[] = ['game_day_card_on', 'second_chance_on', 'after_game_card_on', 'unpaid_nudge_on'];
-/** Being built: Tap guard fix (Zip 35). Extended time (Zip 31) is still being tried too. Check-in pay line (Zip 34) is still being tried too. Players sheet redo (Zip 32) is still being tried too. Acting for others (Zip 30) is still being tried too. Spent matches Totals (Zip 27), Booking hours (Zip 24) and Totals refresh (Zip 23) shipped OFF and are still being tried, so they stay on here too. */
-export const BUILDING_ON: readonly string[] = ['totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on', 'guest_spot_on'];
+/** Being built: Guest spot (Zip 42). Venue charge alert (Zip 43), its row back-dated (smallSwitchRows). Tap guard fix (Zip 35). Extended time (Zip 31) is still being tried too. Check-in pay line (Zip 34) is still being tried too. Players sheet redo (Zip 32) is still being tried too. Acting for others (Zip 30) is still being tried too. Spent matches Totals (Zip 27), Booking hours (Zip 24) and Totals refresh (Zip 23) shipped OFF and are still being tried, so they stay on here too. */
+export const BUILDING_ON: readonly string[] = ['venue_alert_on', 'totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on', 'guest_spot_on'];
 
 export function smallSwitchRows(nowMs: number): string {
   const at = new Date(nowMs).toISOString();
+  // Zip 43 (Venue charge alert): the preview's row says the switch was turned on at 12:00 AM on the 1st of LAST month (Eastern), so last month's two charge
+  // days (the 26th and the last day) are charge days "after the switch was turned on" and there is a card to tap today. Live's row will carry the real moment.
+  const q = localParts(nowMs, TZ);
+  const venueAt = new Date(zonedTimeToUtc(q.month === 1 ? q.year - 1 : q.year, q.month === 1 ? 12 : q.month - 1, 1, 0, 0, TZ)).toISOString();
   const rows = [...PREVIEW_SWITCHES_ON.filter((t) => !OFF_ON_LIVE.includes(t)), ...ZIP13_SWITCHES_ON, ...LATER_ON_LIVE, ...BUILDING_ON];
-  return [...new Set(rows)].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  return [...new Set(rows)].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${task === 'venue_alert_on' ? venueAt : at}' FROM groups;`).join('\n') + '\n';
 }
 
 /**
@@ -88,6 +92,8 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
   const skinKeep: string[] = [];
+  /** Zip 43's two last-month booked games (the calm profile keeps them, hidden from the lists). */
+  const venueKeep: string[] = [];
   let lateMove: { id: string; startsAt: string; endsAt: string } | undefined;
   const w = new World();
   const summary: string[] = [];
@@ -169,6 +175,12 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
       await at(ms(g.endsAt) + 2 * HOUR);
       await w.org.ok('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
       w.db.raw.prepare('UPDATE sessions SET shown_early = 1 WHERE id = ?').run(g.id);
+      // Zip 43 (Venue charge alert): last month's two booked games are what its court card adds up ("2 games x $48 = $96"); the calm profile keeps them,
+      // hidden from the organizer's lists (they stay in Money > Totals, which counts a game with money in it, so the card and Totals agree).
+      if (back === 1) {
+        skinKeep.push(g.id);
+        venueKeep.push(g.id);
+      }
       oldGames++;
     }
   }
@@ -568,9 +580,10 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
 
   let calmSql = '';
   if (opts.calm) {
-    // Zip 42: the calm profile keeps only this zip's games (two Guest spot games and round 3's three late scenes) (the Zip 38 tonight and tomorrow player games stay in the full world, --full).
-    calmSql = calmDown(w.db.raw, keep, N, lateMove, []);
-    summary.push('CALM profile (Zip 42): only the two Guest spot games are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
+    // Zip 42: the calm profile keeps this zip's games (two Guest spot games and round 3's three late scenes) and Zip 43's two last-month booked
+    // games the Venue charge alert adds up (hidden from the lists). The Zip 38 tonight and tomorrow player games stay in the full world (--full).
+    calmSql = calmDown(w.db.raw, keep, N, lateMove, venueKeep);
+    summary.push('CALM profile (Zip 42 and 43): the two Guest spot games, the three late scenes and last month\'s two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
   }
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);

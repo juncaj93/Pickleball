@@ -96,7 +96,8 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
 
 /** The red number on the Home tab: Needs attention items plus courts to book, from 7:00 AM on the day booking opens. */
 export function homeBadgeCount(d: AdminDashboard): number {
-  return buildTodo(d).length + d.sessions.filter((s) => s.state.flags.bookingPromptDue).length;
+  // Zip 43: each Venue charge alert card counts like the other money alerts (absent unless the switch is on).
+  return buildTodo(d).length + d.sessions.filter((s) => s.state.flags.bookingPromptDue).length + (d.venueAlerts?.length ?? 0);
 }
 
 /** The players who are in: their numbers, and the names with none saved. */

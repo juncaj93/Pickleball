@@ -171,6 +171,9 @@ route('PUT', '/api/admin/after-game-card-switch', admin.setAfterGameCardSwitch);
 // Zip 15 (server/secondChance.ts): Second Chance.
 route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
 route('PUT', '/api/admin/totals-refresh-switch', admin.setTotalsRefreshSwitch);
+// Zip 43 (server/venueAlert.ts): Venue charge alert.
+route('PUT', '/api/admin/venue-alert-switch', admin.setVenueAlertSwitch);
+route('POST', '/api/admin/venue-alert/paid', admin.venueChargePaid);
 route('PUT', '/api/admin/spent-totals-switch', admin.setSpentTotalsSwitch);
 // Zip 39 (server/cheaperFix.ts): Made cheaper after paying.
 route('PUT', '/api/admin/cheaper-fix-switch', admin.setCheaperFixSwitch);

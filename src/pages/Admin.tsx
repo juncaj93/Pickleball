@@ -28,6 +28,7 @@ import { GameTimeCard, startForDate } from './admin/TimePicker';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
+import { VenueAlertCards } from './admin/VenueAlert';
 import { DoNowCard, useServerNow } from './admin/DoNowCard';
 import { OwedVenmoCards } from './admin/VenmoRequest';
 import { ExtensionOwedCard } from './admin/ExtendedTime';
@@ -457,6 +458,7 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   if (ctx.d.previewCalm === true) {
     return (
       <>
+        <VenueAlertCards ctx={ctx} />
         <ActingOthersCard ctx={ctx} onHistory={onHistory} />
         <SecondChanceHome ctx={ctx} />
         <UnpaidTextSheet ctx={ctx} />
@@ -466,6 +468,8 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   }
   return (
     <>
+      {/* Zip 43, Venue charge alert (only while on): "Northville Pickleball should have charged you $192", at the very top of Home. */}
+      <VenueAlertCards ctx={ctx} />
       {/* Zip 30, Acting for others (only while on): taps made for someone else, at the very top of Home. */}
       <ActingOthersCard ctx={ctx} onHistory={onHistory} />
       {/* Zip 15, Second Chance (only while on): same-day game cards at the top of Home, and Telegram 1's "text who hasn't paid" sheet. */}

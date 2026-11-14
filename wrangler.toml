@@ -210,6 +210,10 @@ AFTER_GAME_CARD = "on"
 # gets it is Settings > Feature switches > "Totals refresh" (off at ship = nobody), plus a phone opened once with /admin?totalsrefresh=on.
 # "off" = the kill switch: nobody, not even the test link. Needs a deploy.
 TOTALS_REFRESH = "on"
+# Zip 43 "Venue charge alert" (shared/venueAlert.ts) has NO variable here on purpose: Cloudflare's free plan allows 64 variables (secrets + text)
+# per site and the preview was already at 64, so one more made the preview deploy fail ("65 variables"). Its kill switch is the Settings row
+# (Settings > Feature switches > "Venue charge alert", off at ship = nobody; no deploy needed). The code still honors VENUE_ALERT = "off" if one is
+# ever set (it counts as a variable), and a missing value means allowed.
 # Zip 27 "Spent matches Totals" (shared/spentTotals.ts, Audit A item A-05): Players "Spent" counts exactly what Money > Totals counts as
 # "Players paid" (late fees kept, cash held on a seat whose price went up), and the organizer's own Spent is the Totals "So far" figure, a
 # credit month shown as "$8 credit". Organizer only, display only. "on" here only ALLOWS it; who gets it is Settings > Feature switches >

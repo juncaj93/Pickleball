@@ -6,6 +6,8 @@ import { UNPAID_LIMIT } from '../../../shared/unpaidNudge';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
 import { checkUsualTime, hoursMessageAnyDay } from '../../../shared/bookingHours';
+import { COURT_DAY_MAX, COURT_LAST_DAY, dayLabel, DEFAULT_VENUE_DAYS, MEMBERSHIP_DAY_MAX } from '../../../shared/venueAlert';
+import '../../venue-alert.css';
 import '../../booking-hours.css';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
@@ -375,6 +377,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           </p>
           {money('typicalCourtCostCents', 'Typical court cost', 'Only you see this')}
           {money('monthlyMembershipCents', 'Monthly membership', 'Only you see this')}
+          {/* Zip 43, Venue charge alert (only while on): the two days the venue charges your card. Off: these rows are not here at all. */}
+          {ctx.d.venueAlert === true && <VenueDayRows ctx={ctx} auto={auto} />}
           {ctx.d.adminR2 === true &&
             text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
               hint: 'Where Pay sends players',
@@ -470,7 +474,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.guestSpotForAll ? 'Guest spot on' : '', ctx.d.christmasSkinMode ? `Christmas skin ${ctx.d.christmasSkinMode === 'me' ? 'just me' : 'everyone'}` : '', ctx.d.cheaperFixForAll ? 'Made cheaper after paying on' : '', ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.tapGuardFixForAll ? 'Tap guard fix on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.guestSpotForAll ? 'Guest spot on' : '', ctx.d.venueAlertForAll ? 'Venue charge alert on' : '', ctx.d.christmasSkinMode ? `Christmas skin ${ctx.d.christmasSkinMode === 'me' ? 'just me' : 'everyone'}` : '', ctx.d.cheaperFixForAll ? 'Made cheaper after paying on' : '', ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.tapGuardFixForAll ? 'Tap guard fix on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -479,6 +483,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           ) : (
             <>
               <GuestSpotRow ctx={ctx} auto={auto} />
+              <VenueAlertRow ctx={ctx} auto={auto} />
               <ChristmasSkinRow ctx={ctx} auto={auto} />
               <CheaperFixRow ctx={ctx} auto={auto} />
               <HomeScreenTipRow ctx={ctx} auto={auto} />
@@ -1489,6 +1494,64 @@ function SpentTotalsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="spentTotalsAll" path="/api/admin/spent-totals-switch" name="Spent matches Totals" hint="Players: Spent also counts late fees kept, like Money > Totals, and your own Spent can show a credit month. Display only" flag={!!ctx.d.spentTotalsForAll} dataAttr="data-spent-totals-all" />;
 }
 
+/** Zip 43, "Venue charge alert" (VENUE_ALERT, server/venueAlert.ts): an amber Home card on the venue's charge days with what it should have charged. Organizer only, display only. Off: only /admin?venuealert=on. */
+function VenueAlertRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="venueAlertAll" path="/api/admin/venue-alert-switch" name="Venue charge alert" hint="Home card on the venue's charge days: what Northville Pickleball should have charged you, with Mark paid. Only charge days after you turn it on" flag={!!ctx.d.venueAlertForAll} dataAttr="data-venue-alert-all" />;
+}
+
+/**
+ * Zip 43, Settings > Money, under Monthly membership (only while the Venue charge alert is on): "Membership charged on" (1st to 31st, a day past the end of a short
+ * month means that month's last day) and "Court costs charged on" (1st to 28th or Last day). Normal dropdowns; each saves itself the moment it changes, and
+ * can be changed any time (the first real bill will tell you the venue's real days).
+ */
+function VenueDayRows({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const days = ctx.d.venueDays ?? DEFAULT_VENUE_DAYS;
+  const row = (key: 'membershipDay' | 'courtDay', label: string, hint: string, options: number[]) => (
+    <VenueDayRow key={key} ctx={ctx} auto={auto} rowKey={key} label={label} hint={hint} value={days[key]} options={options} />
+  );
+  return (
+    <>
+      {row('membershipDay', 'Membership charged on', 'Day of month', Array.from({ length: MEMBERSHIP_DAY_MAX }, (_, i) => i + 1))}
+      {row('courtDay', 'Court costs charged on', 'Day of month', [...Array.from({ length: COURT_DAY_MAX }, (_, i) => i + 1), COURT_LAST_DAY])}
+    </>
+  );
+}
+function VenueDayRow({ ctx, auto, rowKey, label, hint, value, options }: { ctx: AdminCtx; auto: Autosave; rowKey: 'membershipDay' | 'courtDay'; label: string; hint: string; value: number; options: number[] }) {
+  const toast = useToast();
+  const [mine, setMine] = useState<number | null>(null);
+  const shown = mine ?? value;
+  const id = `venue-${rowKey}`;
+  async function pick(next: number) {
+    setMine(next);
+    const ok = await auto.save(rowKey, { venueDays: { [rowKey]: next } });
+    // A save that did not go through puts the box back to what the server has.
+    if (!ok) {
+      setMine(null);
+      if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+    }
+  }
+  return (
+    <div className="set-row-wrap" data-row={rowKey}>
+      <div className="set-row">
+        <label className="set-label" htmlFor={id}>
+          <span className="set-name">
+            {label} <SaveMark state={auto.rows[rowKey]} />
+          </span>
+          <span className="set-hint">{hint}</span>
+        </label>
+        <select id={id} className="set-input venue-day" value={shown} onChange={(e) => void pick(Number(e.target.value))} data-venue-day={rowKey}>
+          {options.map((n) => (
+            <option key={n} value={n}>
+              {dayLabel(n)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <SaveProblem state={auto.rows[rowKey]} />
+    </div>
+  );
+}
+
 /** Zip 23, "Totals refresh" (TOTALS_REFRESH, server/totalsRefresh.ts): the new Money > Totals look. Organizer only, display only. Off: only /admin?totalsrefresh=on. */
 function TotalsRefreshRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="totalsRefreshAll" path="/api/admin/totals-refresh-switch" name="Totals refresh" hint="Money > Totals: two cards with the cost per court, and a Month by month list. Same numbers" flag={!!ctx.d.totalsRefreshForAll} dataAttr="data-totals-refresh-all" />;
@@ -1716,6 +1779,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   return (
     <div className="switches-tidy" data-switches-tidy>
       <GuestSpotRow ctx={ctx} auto={auto} />
+      <VenueAlertRow ctx={ctx} auto={auto} />
       <ChristmasSkinRow ctx={ctx} auto={auto} />
       <CheaperFixRow ctx={ctx} auto={auto} />
       <HomeScreenTipRow ctx={ctx} auto={auto} />

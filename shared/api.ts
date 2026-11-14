@@ -667,6 +667,14 @@ export interface AdminDashboard {
   /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts), only while on (off: the answer is exactly as before): the new Money > Totals look; and its Settings row. */
   totalsRefresh?: true;
   totalsRefreshForAll?: true;
+  /**
+   * Zip 43 "Venue charge alert" (shared/venueAlert.ts), only while on (off: the answer is exactly as before): the amber "should have charged you" cards due
+   * right now (oldest first, none marked paid), the two charge days for Settings > Money, and the Settings row's own flag.
+   */
+  venueAlert?: true;
+  venueAlerts?: import('./venueAlert').VenueAlert[];
+  venueDays?: import('./venueAlert').VenueDays;
+  venueAlertForAll?: true;
   /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts), only while on (off: the answer is exactly as before): Players "Spent" counted the way Totals counts; and its Settings row. */
   spentTotals?: true;
   spentTotalsForAll?: true;
