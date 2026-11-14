@@ -78,16 +78,13 @@
 }
 :root[data-tonight-glow] .schedule .tile.ptile {
   --z7-r: 16px;
-  --z7-bw: 2px;
+  --z7-bw: var(--tile-ol-w, 2px); /* the tile's real outline width (src/player-cards.css), so the banner's corners always meet it */
 }
-:root[data-tonight-glow] .schedule.tier-next .tile.ptile,
 :root[data-tonight-glow] .tier-next .tile.ptile {
   --z7-r: 13px;
-  --z7-bw: 1.5px;
 }
 :root[data-tonight-glow] .tier-later .tile.ptile {
   --z7-r: 12px;
-  --z7-bw: 1.5px;
 }
 /* The banner: a solid strip across the TOP of the date tile, flush with the tile's top edge and corners, full width. It REPLACES the weekday
    (the date number and the month stay below it). 9 px type, like the approved mockup. */

@@ -1,5 +1,7 @@
-/* "Time may shift" (Nov 2026): the court status on the date tile's border, the tilde time under it, the
-   "time changed" notice at the top of the player Home, and the organizer's "Confirmed 2 of 3" line. */
+/* "Time may shift" (Nov 2026): the court status on the ORGANIZER's date tile border, the tilde time under it, the
+   "time changed" notice at the top of the player Home, and the organizer's "Confirmed 2 of 3" line.
+   Zip 41: the player Home's date tiles (.ptile) no longer show court status on their edge at all (one solid outline by row, src/player-cards.css),
+   so everything about the border layers below applies to the organizer's tiles only. */
 
 :root {
   --ts-booked: #18241d;
@@ -37,8 +39,8 @@
   }
 }
 
-/* ---- Tile border: two layers, cross-faded (border-style itself never animates) ---- */
-.tile.ts {
+/* ---- Organizer tile border: two layers, cross-faded (border-style itself never animates) ---- */
+.tile.ts:not(.ptile) {
   border-color: transparent !important;
 }
 .tile .tb {
@@ -68,18 +70,6 @@
 }
 .tile.ts-wait .tb-dash {
   opacity: 1;
-}
-/* Border widths of each tile size (the same as before). */
-.schedule .tile.ptile {
-  --tb-w: 2px;
-}
-.tier-next .tile.ptile {
-  --tb-w: 1.5px;
-}
-/* LATER rows: a thinner outline, so each tier still steps down (this 2px, next 1.5px, later 1px). */
-.tier-later .tile.ptile.ts {
-  --tb-w: 1px;
-  border-width: 1px;
 }
 .tile .tile-check,
 .tile .tonight-tag {

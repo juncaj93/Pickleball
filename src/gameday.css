@@ -78,34 +78,10 @@ html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
 html[data-game-day] .schedule > .sched.gd .ptile .day {
   margin-top: 0;
 }
-/* A tile with no court ring of its own (an added game): the band is cut to the tile's rounded inside edge, so no cream corner shows. */
-html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight:not(.ts) {
+/* The outline is the tile's own plain border (src/player-cards.css, same for every game whatever its court status). The band sits inside it, and the
+   tile cuts the band to its rounded inside edge, so no cream corner shows. */
+html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight {
   overflow: hidden;
-  /* Its own outline is the same ink (light) or green (dark) as the court ring on the other Tonight tiles. */
-  border-color: var(--ts-booked);
-}
-/* A tile with the court ring (Booked, Not booked, Waitlist): the ring is the tile's border. The band runs out under it to the tile's outer
-   edge and the ring is drawn on top, so the band meets the outline with no gap at the corners, light or dark. The solid ring is an inset
-   shadow (a border can round to a whole pixel, an inset shadow cannot), as on the organizer's tiles. */
-html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts {
-  background-clip: border-box;
-}
-html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts .day-tag {
-  width: calc(100% + 2 * var(--tb-w, 2px));
-  height: calc(9px + var(--gd-dow) + var(--tb-w, 2px));
-  margin: calc(var(--tb-w, 2px) * -1) calc(var(--tb-w, 2px) * -1) 5px;
-  padding-top: var(--tb-w, 2px);
-  border-radius: var(--z7-r, 16px) var(--z7-r, 16px) 0 0;
-}
-html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts .tb {
-  z-index: 1;
-}
-html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts .tb-solid {
-  border-width: 0;
-  box-shadow: inset 0 0 0 var(--tb-w, 2px) var(--ts-booked);
-}
-html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts-none .tb-solid {
-  box-shadow: inset 0 0 0 var(--tb-w, 2px) var(--ts-none);
 }
 /* The glow: one soft green blur around the tile only. No hard-edged ring, and it breathes between two blurs (the old pulse had a
    5 px solid ring that read as a cut-off line). Nothing around the tile clips it (a test checks every ancestor). */

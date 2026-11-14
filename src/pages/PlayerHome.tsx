@@ -2268,10 +2268,10 @@ const CHECK = (
 
 /**
  * The player card's date tile. Normal: weekday, big day, month. Tonight: a
- * blue TONIGHT strip where the weekday would be. Extra (added by hand): an
- * ink tile (cream in dark mode). A check badge on the corner when you're in.
+ * blue TONIGHT strip where the weekday would be. Every tile has the same fill and one plain outline (by row, src/player-cards.css).
+ * A check badge on the corner when you're in.
  */
-function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string; day?: TileDay }) {
+function PlayerTile({ iso, tz, mine, tonight, ts = '', day }: { iso: string; tz: string; mine: boolean; tonight: boolean; ts?: string; day?: TileDay }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   // TONIGHT_GLOW on: `day` is given (tonight, tomorrow or null) and decides the tag; off, `day` is undefined and the old blue TONIGHT strip is drawn.
@@ -2289,8 +2289,7 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: stri
     );
   return (
     <div className="tile-wrap" aria-hidden="true">
-      <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}${ts}${day ? ` day-${day}` : ''}`}>
-        {ts && <TileBorders />}
+      <div className={`tile ptile${mine ? ' mine' : ''}${ts}${day ? ` day-${day}` : ''}`}>
         {tag}
         {/* Zip 29: no weekday under the TONIGHT band any more (TONIGHT, 10, NOV), as in the approved mock. */}
         <span className="day">{p.day}</span>
@@ -2934,7 +2933,7 @@ export function ScheduleRow({
       aria-labelledby={`s-${s.id}`}
     >
       <div className="sched-tilecol">
-        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={(tonight || gameDay) && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} day={dayTag} />
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={(tonight || gameDay) && !s.canceled} ts={s.extra ? '' : tsClass(ts, flip)} day={dayTag} />
         <div className="sched-when-col">
         {(() => {
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
