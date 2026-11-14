@@ -348,7 +348,7 @@ export async function returnSeatCredit(
  */
 export function repriceStatements(db: D1Database, sessionId: string, flatCents: number, nowIso: string, guests = false): D1PreparedStatement[] {
   // Zip 42 "Guest spot" (`guests`: migration 0021 ran): a seat with its guest in is priced for two. Without it: main's words exactly.
-  const units = (sp: string) => (guests ? ` * (1 + CASE WHEN ${sp}.guest_status = 'confirmed' AND ${sp}.guest_name IS NOT NULL THEN 1 ELSE 0 END)` : '');
+  const units = (sp: string) => (guests ? ` * (1 + CASE WHEN ${sp}.guest_status = 'confirmed' AND ${sp}.guest_name IS NOT NULL AND COALESCE(${sp}.guest_played, 1) = 1 THEN 1 ELSE 0 END)` : '');
   const price = `((SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN session_players.played = 1 THEN s.final_price_cents ELSE NULL END
                   FROM sessions s WHERE s.id = session_players.session_id)${units('session_players')})`;
   const used = `(${SEAT_USED('session_players')} + ${SEAT_CASH('session_players')})`;

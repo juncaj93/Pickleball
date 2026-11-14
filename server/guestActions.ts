@@ -13,12 +13,15 @@ import { requireAdmin } from './auth';
 import { HttpError } from './http';
 import * as v from './validate';
 import { holdShortCashStatements } from './credit';
-import { audit, flatOf, getSession, type GroupRow, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
+import { audit, flatOf, getSession, type GroupRow, loadRoster, organizerIdOf, type SessionRow, settingsOf, sharesFor } from './repo';
+import { applyPayment } from './admin';
+import { moneyPicture } from './credit';
+import { seatCredit } from '../shared/credit';
 import { auditSubClears, settle, subClearStatements, subCleared } from './roster';
 import { confirmedHeads, guestSpotFlags, hasGuestColumns, nextClaimSeq, setGuestSpotForAll, trimSeatStatements } from './guestSpot';
 import { capOf } from '../shared/settings';
 import { DB_LIMIT_MESSAGE } from '../shared/zip10';
-import { cleanGuestName, GUEST_NAME_MAX, guestIn, guestWaiting, headCount } from '../shared/guestSpot';
+import { cleanGuestName, GUEST_NAME_MAX, guestIn, guestWaiting, headCount, seatUnits, sharesPaid } from '../shared/guestSpot';
 import { connected, deliver, prefsOfGroup } from './alerts';
 import { isPretend } from './pretend';
 import { alertWhen } from '../shared/alerts';
@@ -203,4 +206,105 @@ async function notifyGuestRemoved(ctx: Ctx, group: GroupRow, session: SessionRow
   } catch {
     // An alert is never worth failing a tap over.
   }
+}
+
+// ---------- Round 2: one person's $14 of a pair (Players sheet, each row its own Mark paid / Unmark) ----------
+// The money stays ONE record on the host's seat. One share paid while the other still owes is the state the site already uses for "paid
+// $14 of $28": the seat is unpaid with that $14 held against it as a 'cash' pair (the pot does not change), so it owes only the rest.
+// `guest_first` says which person that held $14 belongs to (NULL or 0: the host). Paying the second share is the ordinary Mark paid (the
+// seat paid in full); taking one share off a seat paid in full in cash leaves the other share held the same way.
+
+/** POST /api/admin/sessions/:id/guest/share { playerId (the host), who: 'host' | 'guest', paid }. */
+export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  await needColumns(ctx);
+  const session = await getSession(ctx.db, group.id, v.id(ctx.params.id, 'session'));
+  if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
+  const playerId = v.id(body.playerId, 'playerId');
+  const who = v.oneOf(body.who, 'who', ['host', 'guest'] as const);
+  const paid = v.bool(body.paid, 'paid');
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
+  if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You pay the venue: there is no share to mark.');
+  const roster = await loadRoster(ctx.db, session.id);
+  const row = roster.find((r) => r.player_id === playerId);
+  if (!row || !guestIn(row) || seatUnits(row) !== 2) {
+    // No pair any more (the guest came off, or did not play): the seat is one person, the ordinary Mark paid.
+    if (who === 'guest') throw new HttpError(409, 'no_guest', 'There is no guest share to mark.');
+    return applyPayment(ctx, group, session, playerId, paid, null);
+  }
+  const price = sharesFor(session, roster, settingsOf(group)).get(playerId);
+  if (price === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
+  const half = Math.floor(price / 2);
+  const ledger = (await moneyPicture(ctx.db, group, ctx.nowMs)).ledger;
+  const seat = seatCredit(ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
+  const isPaid = row.payment_status === 'paid' && !row.refunded_at;
+  const covered = isPaid ? (row.payment_amount_cents ?? 0) : seat.usedCents + seat.cashCents;
+  const now = ctx.nowIso;
+  const guestName = row.guest_name ?? 'Guest';
+  const label = who === 'guest' ? `${guestName} (${row.display_name}'s guest)` : row.display_name;
+  const state = isPaid ? { host: true, guest: true } : sharesPaid(covered, price, row.guest_first === 1);
+  const mine = who === 'guest' ? state.guest : state.host;
+  const other = who === 'guest' ? state.host : state.guest;
+  const organizerId = await organizerIdOf(ctx.db, group);
+  if (paid) {
+    if (mine) return { ok: true, changed: false };
+    // The other share is paid already (or the seat holds enough): this one makes the seat paid in full, the ordinary Mark paid.
+    if (other || covered + half >= price) return applyPayment(ctx, group, session, playerId, true, null);
+    const asRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
+    const out = await ctx.db.batch([
+      // Paid with exactly this person's share on top of what the seat holds, and whose share it is ...
+      ctx.db
+        .prepare(
+          `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = NULL, guest_first = ?7,
+             payment_updated_at = ?1, updated_at = ?1
+           WHERE session_id = ?3 AND player_id = ?4 AND status = 'confirmed' AND payment_status = 'unpaid' AND guest_status = 'confirmed'
+             AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?3 AND player_id = ?4 AND ended_at IS NULL) = ?5
+             AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?3) = ?6
+             AND (SELECT status FROM sessions WHERE id = ?3) <> 'canceled'`,
+        )
+        .bind(now, covered + half, session.id, playerId, seat.usedCents + seat.cashCents, asRead, covered === 0 ? (who === 'guest' ? 1 : 0) : (row.guest_first ?? 0)),
+      // ... then held against the seat, which owes only the other share (the same move as a price going up after a payment).
+      ...holdShortCashStatements(ctx.db, { sessionId: session.id, feeCents: price, nowIso: now, playerId, organizerId, seatWhere: (sp) => `${sp}.payment_updated_at = ?1` }),
+    ]);
+    if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+    await audit(ctx.db, group.id, session.id, 'marked_paid', { player: label, playerId, ...(who === 'guest' ? { guest: guestName } : {}), amountCents: half, share: true }, now);
+    return { ok: true, changed: true };
+  }
+  // Unmark one person's share.
+  if (!mine) return { ok: true, changed: false };
+  if (isPaid && row.self_paid_at) throw new HttpError(409, 'unconfirmed_paid', `${row.display_name} tapped I paid for both. Use Unmark on ${row.display_name}'s row.`);
+  if (isPaid) {
+    // Paid in full: only the latest cash can come off this way (credit on the seat stays as it is; Unmark on the host's row takes all of it).
+    const latestCash = (row.payment_amount_cents ?? 0) - seat.usedCents - seat.cashCents;
+    if (session.finalized_at || latestCash < half)
+      throw new HttpError(409, 'use_host_unmark', `Part of this was paid with credit${session.finalized_at ? ', or the game is finalized' : ''}. Use Unmark on ${row.display_name}'s row.`);
+    const out = await ctx.db.batch([
+      ctx.db
+        .prepare(
+          `UPDATE session_players SET payment_amount_cents = ?2, guest_first = ?6, payment_updated_at = ?1, updated_at = ?1
+           WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NULL AND payment_amount_cents = ?5`,
+        )
+        .bind(now, price - half, session.id, playerId, row.payment_amount_cents ?? 0, who === 'host' ? 1 : 0),
+      ...holdShortCashStatements(ctx.db, { sessionId: session.id, feeCents: price, nowIso: now, playerId, organizerId, seatWhere: (sp) => `${sp}.payment_updated_at = ?1` }),
+    ]);
+    if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+  } else if (seat.cashCents === half && seat.usedCents === 0) {
+    // One share held as cash: it goes (the payment never happened). The pot does not change (the pair nets to nothing).
+    const out = await ctx.db.batch([
+      ctx.db
+        .prepare(
+          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'unmarked'
+           WHERE session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'cash'
+             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND payment_status = 'unpaid')`,
+        )
+        .bind(now, session.id, playerId),
+      ctx.db.prepare('UPDATE session_players SET guest_first = NULL, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3').bind(now, session.id, playerId),
+    ]);
+    if (out[0].meta.changes === 0) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+  } else {
+    // Credit on the seat (used at sign-up, or with Use credit): the ordinary Unmark on the host's row puts it back in the pot.
+    throw new HttpError(409, 'use_host_unmark', `That share was paid with credit. Use Unmark on ${row.display_name}'s row.`);
+  }
+  await audit(ctx.db, group.id, session.id, 'marked_unpaid', { player: label, playerId, ...(who === 'guest' ? { guest: guestName } : {}), amountCents: half, share: true }, now);
+  return { ok: true, changed: true };
 }

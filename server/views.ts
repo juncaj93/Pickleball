@@ -29,7 +29,7 @@ import {
 } from './repo';
 import { bookingOpensMs } from '../shared/time';
 import { agreedStart, isWaitingOnTime } from '../shared/timeShift';
-import { guestIn, guestViewOf, headCount, seatUnits } from '../shared/guestSpot';
+import { guestIn, guestViewOf, headCount, seatUnits, sharesPaid } from '../shared/guestSpot';
 import { dropLeavesShort, FEE_KEPT, feeSplitOf, lateFeeCutoffMs, lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 
 /** `{ shortGame }` for a game priced from its own game-length row ("Short games" on, a 1.5 hour game), else nothing at all. */
@@ -319,7 +319,17 @@ export function adminSessionView(
           const gv = guestViewOf(r);
           if (!gv) return {};
           const at = queue.findIndex((e) => e.guest && e.row.id === r.id);
-          return { guest: { name: gv.name, status: gv.status, ...(gv.status === 'waitlisted' ? { waitlistPosition: at >= 0 ? at + 1 : null } : {}) } };
+          // Round 2: each person's own paid line (the money is still one record on this seat).
+          const p = gv.status === 'confirmed' && share !== null && seatUnits(r) === 2 ? pairPaid(r, share, me ? NO_SEAT_CREDIT : potFor(r)) : null;
+          return {
+            guest: {
+              name: gv.name,
+              status: gv.status,
+              ...(gv.status === 'waitlisted' ? { waitlistPosition: at >= 0 ? at + 1 : null } : {}),
+              ...(p ? { shareCents: p.shareCents, paid: p.guest, hostPaid: p.host } : {}),
+              ...(gv.status === 'confirmed' && session.finalized_at && r.played === 1 ? { played: r.guest_played !== 0 } : {}),
+            },
+          };
         })(),
         promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
         refundedAt: r.payment_status === 'paid' ? r.refunded_at : null,
@@ -336,8 +346,15 @@ export function adminSessionView(
   // Seats that pay: everyone in a game that is on, plus open late fees (a late drop, a no-show, a late cancel the venue charged).
   const feeRows = roster.filter((r) => r.player_id !== organizerId && lateFeeKind(r, session));
   const payers = [...(session.status !== 'canceled' ? others.filter((r) => prices.has(r.player_id) && !lateFeeKind(r, session)) : []), ...feeRows];
-  const payable = payers.length;
-  const paidCount = payable ? payers.filter((r) => r.payment_status === 'paid').length : 0;
+  // Round 2 (Alex): "x of y paid" counts people: a host and the guest each count, each with their own paid share. No guest: seats, as before.
+  const pairOf = (r: RosterRow) => (seatUnits(r) === 2 && guestIn(r) && prices.has(r.player_id) ? pairPaid(r, prices.get(r.player_id)!.cents, potFor(r)) : null);
+  const payable = payers.reduce((n, r) => n + (pairOf(r) ? 2 : 1), 0);
+  const paidCount = payable
+    ? payers.reduce((n, r) => {
+        const p = pairOf(r);
+        return n + (p ? Number(p.host) + Number(p.guest) : r.payment_status === 'paid' ? 1 : 0);
+      }, 0)
+    : 0;
   const feeKept = session.status === 'canceled' && session.canceled_by === FEE_KEPT;
 
   // The organizer's court row: the full court cost, what the other players
@@ -434,6 +451,12 @@ export function adminSessionView(
     eligibleSubstitutes: state.flags.openSpots > 0 ? eligibleSubstitutes(roster, players) : [],
     timeCheck: timeShift ? timeCheckOf(session, confirmed, organizerId, nowMs) : null,
   };
+}
+
+/** Zip 42 round 2: which person of a pair is paid. A paid seat (an I paid too) counts both; an unpaid one splits what it holds. */
+function pairPaid(r: RosterRow, priceCents: number, seat: SeatCredit): { host: boolean; guest: boolean; shareCents: number } {
+  if (r.payment_status === 'paid' && !r.refunded_at) return { host: true, guest: true, shareCents: Math.floor(priceCents / 2) };
+  return sharesPaid(seat.usedCents + seat.cashCents, priceCents, r.guest_first === 1);
 }
 
 /**

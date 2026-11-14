@@ -145,6 +145,9 @@ export interface RosterRow {
   guest_status?: 'confirmed' | 'waitlisted' | 'late' | null;
   guest_seq?: number | null;
   guest_at?: string | null;
+  /** Round 2 (migration 0022): did the guest play (after Finalize), and was the guest's share paid first. */
+  guest_played?: number | null;
+  guest_first?: number | null;
   display_name: string;
   phone_number: string | null;
 }

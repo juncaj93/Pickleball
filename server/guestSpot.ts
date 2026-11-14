@@ -49,7 +49,8 @@ export async function hasGuestColumns(db: D1Database): Promise<boolean> {
   const now = Date.now();
   if (seen && (seen.yes || now - seen.at < 60_000)) return seen.yes;
   const yes = await db
-    .prepare('SELECT guest_status FROM session_players LIMIT 0')
+    // Both Guest spot migrations (0021 and 0022): with only the first, the feature stays off (nothing names a missing column).
+    .prepare('SELECT guest_status, guest_played, guest_first FROM session_players LIMIT 0')
     .all()
     .then(() => true)
     .catch(() => false);

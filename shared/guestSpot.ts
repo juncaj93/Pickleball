@@ -38,6 +38,10 @@ export interface GuestCols {
   played?: number | null;
   late_drop_at?: string | null;
   late_drop_done_at?: string | null;
+  /** Round 2 (migration 0022): after Finalize, did the guest play (0: no; NULL: not finalized, or played with the host). */
+  guest_played?: number | null;
+  /** Round 2: 1 when the guest's share was marked paid before the host's. */
+  guest_first?: number | null;
 }
 
 export type GuestStatus = 'confirmed' | 'waitlisted' | 'late';
@@ -69,7 +73,9 @@ export function guestLate(r: GuestCols): boolean {
  * nothing for either, and a no-show late fee covers both.
  */
 export function seatUnits(r: GuestCols): number {
-  return guestIn(r) || guestLate(r) ? 2 : 1;
+  // Round 2 (Alex): a guest marked "did not play" at Finalize comes off: the host keeps one share.
+  if (guestIn(r)) return r.guest_played === 0 ? 1 : 2;
+  return guestLate(r) ? 2 : 1;
 }
 
 /** Everyone in: the confirmed seats plus their guests who are in. */
@@ -174,4 +180,16 @@ export function rosterLine(
 /** A names line as plain text: "Rowan + Sam (guest), Parker" (no guest: the names joined with ", ", exactly as before). */
 export function lineText(line: { names: string[]; guestAt?: boolean[] }): string {
   return line.names.map((n, i) => (line.guestAt?.[i] ? ` + ${n} (guest)` : `${i > 0 ? ', ' : ''}${n}`)).join('');
+}
+
+/**
+ * Round 2 (Alex): each person of a pair has their own paid line, while the money stays ONE record on the host's seat. `coveredCents` is
+ * what the seat holds now (its payment when paid, else credit and earlier cash on it), `priceCents` the seat's whole price (two shares).
+ * The covered money belongs to the host's share first, unless the guest's share was marked paid first (`guestFirst`).
+ */
+export function sharesPaid(coveredCents: number, priceCents: number, guestFirst: boolean): { host: boolean; guest: boolean; shareCents: number } {
+  const share = Math.floor(priceCents / 2);
+  const first = coveredCents >= share;
+  const both = coveredCents >= priceCents;
+  return guestFirst ? { host: both, guest: first, shareCents: share } : { host: first, guest: both, shareCents: share };
 }

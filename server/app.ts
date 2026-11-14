@@ -181,6 +181,7 @@ route('PUT', '/api/admin/tap-guard-switch', admin.setTapGuardFixSwitch);
 route('PUT', '/api/admin/guest-spot-switch', guest.setGuestSpotSwitch);
 route('POST', '/api/admin/sessions/:id/guest', guest.addGuest);
 route('POST', '/api/admin/sessions/:id/guest/remove', guest.adminRemoveGuest);
+route('POST', '/api/admin/sessions/:id/guest/share', guest.setGuestShare);
 // Zip 34 (server/checkInPay.ts): Check-in pay line.
 route('PUT', '/api/admin/checkin-pay-switch', admin.setCheckInPaySwitch);
 // Zip 32 (server/playersSheetRedo.ts): Players sheet redo.

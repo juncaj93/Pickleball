@@ -59,7 +59,11 @@ export async function finalizeSession(ctx: Ctx, body: Record<string, unknown>) {
   if (body.extraMinutes !== undefined && body.extraMinutes !== null && !isExtraMinutes(body.extraMinutes)) throw new HttpError(400, 'invalid_extra', 'Pick None, +30 min or +1 hr.');
   // Zip 39 "Made cheaper after paying" (server/cheaperFix.ts): only with late fees on is there a no-show to trim.
   const lateFees = await lateFeesFor(ctx, group.id);
-  return applyFinalize(ctx, group, session, playedIds, lateFees, extra, lateFees && (await cheaperFixFor(ctx, group.id, true)));
+  // Zip 42 round 2 (Alex): each guest has their own Played / Did not play. `guestsOut` lists the hosts whose guest did not play; a host who did
+  // not play takes their guest out too (a guest cannot play without the host). Missing: every guest of a host who played, played.
+  const guestsOut = new Set<string>(Array.isArray(body.guestsOut) ? body.guestsOut.map((x) => v.id(x, 'guestsOut')) : []);
+  for (const id of guestsOut) if (!confirmed.some((r) => r.player_id === id && guestIn(r))) throw new HttpError(400, 'invalid_played', 'Only a guest who was in can be marked as not played.');
+  return applyFinalize(ctx, group, session, playedIds, lateFees, extra, lateFees && (await cheaperFixFor(ctx, group.id, true)), guestsOut);
 }
 
 /** A value put straight into SQL text (an id or a time this server made), refused if it could break out of quotes. */
@@ -85,16 +89,18 @@ export async function moneyState(ctx: Ctx, sessionId: string): Promise<string> {
  * paying at the same moment, or a request cut off halfway can never leave a
  * game half-finalized.
  */
-export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>, lateFees = false, extra: ExtraMinutes | null = null, cheaperFix = false) {
+export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>, lateFees = false, extra: ExtraMinutes | null = null, cheaperFix = false, guestsOut: Set<string> = new Set()) {
   const settings = settingsOf(group);
   const state = await moneyState(ctx, session.id);
   const roster = await loadRoster(ctx.db, session.id);
   const confirmed = confirmedOf(roster);
   const organizerId = await organizerIdOf(ctx.db, group);
-  // Zip 42 "Guest spot": a guest played when their host did (the pair is marked together), and counts in N like any player. The seat
-  // pays for two (units). No guest: N is the people marked played and every seat is one share, exactly as before.
-  const units = (r: RosterRow) => (guestIn(r) ? 2 : 1);
-  const n = playedIds.size + confirmed.filter((r) => guestIn(r) && playedIds.has(r.player_id)).length;
+  // Zip 42 "Guest spot": a guest who played counts in N like any player and the seat pays for two (units). Round 2 (Alex): each person is
+  // marked on their own; a guest who did not play comes off (the host keeps one share), and a host who did not play takes the guest out too.
+  // No guest: N is the people marked played and every seat is one share, exactly as before.
+  const guestPlayed = (r: RosterRow) => guestIn(r) && playedIds.has(r.player_id) && !guestsOut.has(r.player_id);
+  const units = (r: RosterRow) => (guestPlayed(r) ? 2 : 1);
+  const n = playedIds.size + confirmed.filter(guestPlayed).length;
   const guests = await hasGuestColumns(ctx.db);
   // The final price for this game: floor(4 x $14 / N) for a normal game, the 1.5 hour row's table with "Short games" on.
   // A redo after Reopen uses the rules the game was first finalized under (its price lock, Zip 27 A-01), not today's switches.
@@ -114,7 +120,11 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       )
       .bind(now, price, n, session.id, state),
     ...confirmed.map((r) =>
-      ctx.db.prepare(`UPDATE session_players SET played = ?, updated_at = ? WHERE id = ? AND ${claimed}`).bind(playedIds.has(r.player_id) ? 1 : 0, now, r.id),
+      guestIn(r)
+        ? ctx.db
+            .prepare(`UPDATE session_players SET played = ?, guest_played = ?, updated_at = ? WHERE id = ? AND ${claimed}`)
+            .bind(playedIds.has(r.player_id) ? 1 : 0, guestPlayed(r) ? 1 : 0, now, r.id)
+        : ctx.db.prepare(`UPDATE session_players SET played = ?, updated_at = ? WHERE id = ? AND ${claimed}`).bind(playedIds.has(r.player_id) ? 1 : 0, now, r.id),
     ),
     // The no-show debt mark: late_drop_at equal to this finalize's time (Reopen takes it away again).
     ...[...owing].map((pid) =>
@@ -201,7 +211,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   statements.push(...repriceStatements(ctx.db, session.id, flatOf(session, settings), now, guests));
   // Zip 31 "Extended time" (server/extension.ts): the shares go in the SAME batch, after the credit back above (so credit that came back
   // from this very game can pay a share), and only if this finalize went in. Null: the switch is off, nothing about it is written.
-  const plan = extra === null ? null : extensionPlan(ctx.db, { groupId: group.id, session, roster, organizerId, playedIds, minutes: extra, nowIso: now, guard: claimed });
+  const plan = extra === null ? null : extensionPlan(ctx.db, { groupId: group.id, session, roster, organizerId, playedIds, minutes: extra, nowIso: now, guard: claimed, guestsOut });
   const planAt = statements.length;
   if (plan) statements.push(...plan.statements);
   const results = await ctx.db.batch(statements);
@@ -365,6 +375,10 @@ async function reopenChecked(ctx: Ctx, group: GroupRow, session: SessionRow) {
       .bind(now, session.id, session.finalized_at, flatOf(session, settingsOf(group))),
     // Not a seat that left: played = 0 there is an open late-drop debt (shared/lateFees.ts), which Reopen does not touch.
     ctx.db.prepare("UPDATE session_players SET played = NULL, updated_at = ?1 WHERE session_id = ?2 AND played IS NOT NULL AND status <> 'withdrawn' AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL").bind(now, session.id),
+    // Zip 42 round 2: each guest's Played / Did not play goes with it (the guest counts again until the redo says).
+    ...((await hasGuestColumns(ctx.db))
+      ? [ctx.db.prepare("UPDATE session_players SET guest_played = NULL, updated_at = ?1 WHERE session_id = ?2 AND guest_played IS NOT NULL AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL").bind(now, session.id)]
+      : []),
     // The no-show debts that finalize made go with it (open or cleared): the game is not finalized any more.
     ctx.db
       .prepare("UPDATE session_players SET late_drop_at = NULL, late_drop_done_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND status = 'confirmed' AND late_drop_at = ?3 AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL")

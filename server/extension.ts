@@ -13,6 +13,7 @@
 //     also claims the shares, `ext_via` = that seat). The organizer's Mark paid confirms, Unmark undoes the latest payment.
 // Every statement is guarded by the seat's own extension numbers as they were read, so a second device or a retry changes nothing.
 
+import { guestIn } from '../shared/guestSpot';
 import type { Ctx } from './context';
 import type { D1Database, D1PreparedStatement } from './db';
 import { newId } from './crypto';
@@ -24,11 +25,11 @@ import {
   EXTENDED_TIME,
   type ExtShareView,
   extendedTimeAllowed,
-  extensionSplit,
   extOwed,
   extReasonColumn,
   isExtraMinutes,
   type ExtraMinutes,
+  extensionSplitHeads,
 } from '../shared/extension';
 import { formatPrice } from '../shared/money';
 
@@ -113,12 +114,17 @@ export interface ExtensionPlan {
  */
 export function extensionPlan(
   db: D1Database,
-  args: { groupId: string; session: SessionRow; roster: RosterRow[]; organizerId: string | null; playedIds: Set<string>; minutes: ExtraMinutes; nowIso: string; guard: string },
+  args: { groupId: string; session: SessionRow; roster: RosterRow[]; organizerId: string | null; playedIds: Set<string>; minutes: ExtraMinutes; nowIso: string; guard: string; guestsOut?: Set<string> },
 ): ExtensionPlan {
   const { groupId, session, roster, organizerId, playedIds, minutes, nowIso, guard } = args;
   const confirmedPlayed = roster.filter((r) => r.status === 'confirmed' && playedIds.has(r.player_id));
   const organizerPlayed = !!organizerId && confirmedPlayed.some((r) => r.player_id === organizerId);
-  const split = extensionSplit(minutes, confirmedPlayed.length, organizerPlayed);
+  // Zip 42 round 2 (Alex): a guest who played takes a seat, so the host pays a second share. `guestsOut` (Finalize) says whose guest did
+  // not play; without it the seat's own guest_played says (a Reopen putting shares back). No guest: exactly as before.
+  const guestPlayed = (r: RosterRow) => guestIn(r) && playedIds.has(r.player_id) && (args.guestsOut ? !args.guestsOut.has(r.player_id) : r.guest_played !== 0);
+  const heads = confirmedPlayed.length + confirmedPlayed.filter(guestPlayed).length;
+  const orgRow = organizerPlayed ? confirmedPlayed.find((r) => r.player_id === organizerId) : undefined;
+  const split = extensionSplitHeads(minutes, heads, organizerPlayed ? 1 + (orgRow && guestPlayed(orgRow) ? 1 : 0) : 0);
   const statements: D1PreparedStatement[] = [];
   const seatStatement: number[] = [];
   const changes: ShareChange[] = [];
@@ -135,7 +141,7 @@ export function extensionPlan(
     if (r.player_id === organizerId) continue;
     const played = r.status === 'confirmed' && playedIds.has(r.player_id);
     const from = r.ext_cents ?? null;
-    const to = played ? split.shareCents : 0;
+    const to = played ? split.shareCents * (guestPlayed(r) ? 2 : 1) : 0;
     if (from === null && to === 0) continue;
     if (from === to) continue;
     const credit = int(r.ext_credit_cents);

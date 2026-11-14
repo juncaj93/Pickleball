@@ -67,6 +67,24 @@ export function extensionSplit(minutes: number, played: number, organizerPlayed:
   return { costCents, played: n, payers, shareCents, organizerCents: Math.max(0, costCents - shareCents * payers) };
 }
 
+/**
+ * Zip 42 round 2 (Alex): guests count. `heads` is everyone who played, guests included; `organizerHeads` is the organizer plus their own
+ * guest if any (the organizer covers those). Every other person pays one share; a host pays one more for a guest who played.
+ * With no guest this is exactly extensionSplit.
+ */
+export function extensionSplitHeads(minutes: number, heads: number, organizerHeads: number): ExtensionSplit {
+  if (organizerHeads <= 1) return extensionSplit(minutes, heads, organizerHeads === 1);
+  const costCents = isExtraMinutes(minutes) ? EXTRA_COST_CENTS[minutes] : 0;
+  const n = Math.max(0, Math.floor(heads));
+  const payers = Math.max(0, n - organizerHeads);
+  if (costCents <= 0 || n === 0 || payers === 0) return { costCents, played: n, payers, shareCents: 0, organizerCents: costCents };
+  const dollars = costCents / 100;
+  let share = Math.ceil(dollars / n);
+  if (share * payers > dollars) share = Math.floor(dollars / n);
+  const shareCents = share * 100;
+  return { costCents, played: n, payers, shareCents, organizerCents: Math.max(0, costCents - shareCents * payers) };
+}
+
 /** The amber line on the sheet: "3 others pay $3 each" and "You cover $3". */
 export function splitLine(s: ExtensionSplit): { left: string; right: string } {
   const left = s.payers === 0 ? 'Nobody else pays' : `${s.payers} ${s.payers === 1 ? 'other pays' : 'others pay'} ${formatPrice(s.shareCents)}${s.payers === 1 ? '' : ' each'}`;

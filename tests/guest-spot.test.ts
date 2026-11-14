@@ -170,9 +170,10 @@ describe('adding a guest', () => {
     const a = await adminGame(w, g.id);
     expect(a.confirmedCount).toBe(4);
     const host = a.roster.find((x: any) => x.name === 'Blair');
-    expect(host.guest).toEqual({ name: 'Sam', status: 'confirmed' });
+    expect(host.guest).toMatchObject({ name: 'Sam', status: 'confirmed', shareCents: 1400, paid: false, hostPaid: false });
     expect(host.owesCents).toBe(2800);
-    expect(a.payableCount).toBe(3);
+    // Round 2 (Alex): "x of y paid" counts people: Blair and Sam each count.
+    expect(a.payableCount).toBe(4);
     // One guest per player per game.
     const again = await addGuest(w, g.id, 'Blair', 'Lee');
     expect(again.status).toBe(409);
@@ -679,5 +680,166 @@ describe('fresh review fixes', () => {
     const r = await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/withdraw`, {});
     expect(!!card.mine?.lateDrop?.owes).toBe(!!r.data.lateFee);
     expect(card.mine?.lateDrop?.owes).toBe(true);
+  });
+});
+
+describe('round 2: each person played or not', () => {
+  const ids = (w: W, names: string[]) => names.map((n) => w.byName[n]);
+  it('4 players, the 4th brings a guest as the 5th, the guest backs out: 4 played at $14, the host keeps one share', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w, g.id, 'Emery');
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await markPaid(w, g.id, n);
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ids(w, ['Blair', 'Casey', 'Devon', 'Emery']), guestsOut: ids(w, ['Emery']) });
+    expect(f.status, f.text).toBe(200);
+    expect(f.data.played).toBe(4);
+    expect(f.data.priceCents).toBe(1400);
+    // Emery paid $28 for two; one share is gone: $14 back.
+    expect(await credit(w, 'Emery')).toBe(1400);
+    expect(await credit(w, 'Blair')).toBe(0);
+    const a = await adminGame(w, g.id);
+    expect(a.roster.find((r: any) => r.name === 'Emery').guest.played).toBe(false);
+  });
+  it('the guest played, the host is unpaid: the host owes two final shares', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ids(w, ['Blair', 'Casey', 'Devon', 'Emery']) });
+    expect(f.data.played).toBe(5);
+    expect((await adminGame(w, g.id)).roster.find((r: any) => r.name === 'Blair').owesCents).toBe(2200);
+  });
+  it('guest marked did not play while the host owes: the host owes one share', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ids(w, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']), guestsOut: ids(w, ['Blair']) });
+    expect(f.data.played).toBe(5);
+    expect(f.data.priceCents).toBe(1100);
+    expect((await adminGame(w, g.id)).roster.find((r: any) => r.name === 'Blair').owesCents).toBe(1100);
+  });
+  it('the host did not play: the guest did not either (no share for either), even if the screen forgot to say so', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ids(w, ['Casey', 'Devon', 'Emery', 'Frankie']) });
+    expect(f.data.played).toBe(4);
+    expect(await credit(w, 'Blair')).toBe(2800);
+    const a = await adminGame(w, g.id);
+    expect(a.roster.find((r: any) => r.name === 'Blair').guest.played).toBeUndefined();
+  });
+  it('reopen brings the guest back in the count; the redo can say again', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w, g.id, 'Emery');
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await markPaid(w, g.id, n);
+    w.app.now = g.start + 3 * HOUR;
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ids(w, ['Blair', 'Casey', 'Devon', 'Emery']), guestsOut: ids(w, ['Emery']) });
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/reopen`, {})).status).toBe(200);
+    expect(await credit(w, 'Emery')).toBe(0);
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    expect(f.data.played).toBe(5);
+    expect(await credit(w, 'Emery')).toBe(600);
+  });
+  it('a guest who was not in cannot be marked', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true, guestsOut: ids(w, ['Blair']) });
+    expect(f.status).toBe(400);
+  });
+  it('extended time counts the guest: the host pays two shares', async () => {
+    const w = await world();
+    expect((await admin(w, 'PUT', '/api/admin/extended-time-switch', { on: true })).status).toBe(200);
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    // 4 played (Blair, Sam, Casey, Devon), +1 hr = $24: $6 each; Blair pays $12.
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: ids(w, ['Blair', 'Casey', 'Devon']), extraMinutes: 60 });
+    expect(f.status, f.text).toBe(200);
+    expect(f.data.extension).toMatchObject({ shareCents: 600, payers: 4 });
+    const ext = (n: string) => ((w.app.db as any).raw.prepare('SELECT ext_cents AS c FROM session_players WHERE session_id = ? AND player_id = ?').get(g.id, w.byName[n]) as { c: number }).c;
+    expect(ext('Blair')).toBe(1200);
+    expect(ext('Casey')).toBe(600);
+  });
+});
+
+describe('round 2: each person paid or not (one money record on the host)', () => {
+  const share = (w: W, sid: string, host: string, who: 'host' | 'guest', paid: boolean) => admin(w, 'POST', `/api/admin/sessions/${sid}/guest/share`, { playerId: w.byName[host], who, paid });
+  const pairOf = async (w: W, sid: string, host: string) => {
+    const a = await adminGame(w, sid);
+    const r = a.roster.find((x: any) => x.name === host);
+    return { host: r.guest.hostPaid, guest: r.guest.paid, owes: r.owesCents, paid: a.paidCount, of: a.payableCount };
+  };
+  it('mark the guest paid first: the guest is paid, the host still owes $14; "x of y paid" counts people', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    expect(await pairOf(w, g.id, 'Blair')).toEqual({ host: false, guest: false, owes: 2800, paid: 0, of: 4 });
+    const r = await share(w, g.id, 'Blair', 'guest', true);
+    expect(r.status, r.text).toBe(200);
+    expect(await pairOf(w, g.id, 'Blair')).toEqual({ host: false, guest: true, owes: 1400, paid: 1, of: 4 });
+    expect(await credit(w, 'Blair')).toBe(0);
+    // Then the host: paid in full.
+    expect((await share(w, g.id, 'Blair', 'host', true)).status).toBe(200);
+    expect(await pairOf(w, g.id, 'Blair')).toEqual({ host: true, guest: true, owes: 0, paid: 2, of: 4 });
+    const s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.paymentStatus).toBe('paid');
+    expect(s.mine?.shareCents).toBe(2800);
+  });
+  it('undo per person: unmark the guest on a seat paid in full in cash leaves the host paid', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    expect((await share(w, g.id, 'Blair', 'guest', false)).status).toBe(200);
+    expect(await pairOf(w, g.id, 'Blair')).toEqual({ host: true, guest: false, owes: 1400, paid: 1, of: 4 });
+    // Unmark the host too: nothing paid, nothing became credit.
+    expect((await share(w, g.id, 'Blair', 'host', false)).status).toBe(200);
+    expect(await pairOf(w, g.id, 'Blair')).toEqual({ host: false, guest: false, owes: 2800, paid: 0, of: 4 });
+    expect(await credit(w, 'Blair')).toBe(0);
+  });
+  it('a share paid with credit is not undone per person (Unmark on the host row instead)', async () => {
+    const w = await world();
+    const g0 = await game(w, 0);
+    const g1 = await game(w, 1);
+    await join(w, g0.id, ['Blair']);
+    await markPaid(w, g0.id, 'Blair');
+    await call(w, 'Blair', 'POST', `/api/sessions/${g0.id}/withdraw`, {});
+    await join(w, g1.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g1.id, 'Blair');
+    expect(await pairOf(w, g1.id, 'Blair')).toMatchObject({ host: true, guest: false });
+    expect((await share(w, g1.id, 'Blair', 'host', false)).status).toBe(409);
+  });
+  it('the host paid $14 before the guest came: the host is paid, the guest owes (Parker and Billy in the picture)', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await markPaid(w, g.id, 'Blair');
+    await addGuest(w, g.id, 'Blair', 'Billy');
+    expect(await pairOf(w, g.id, 'Blair')).toEqual({ host: true, guest: false, owes: 1400, paid: 1, of: 4 });
+    expect((await share(w, g.id, 'Blair', 'guest', true)).status).toBe(200);
+    expect(await pairOf(w, g.id, 'Blair')).toEqual({ host: true, guest: true, owes: 0, paid: 2, of: 4 });
+  });
+  it('a game with no guest counts seats exactly as before', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await markPaid(w, g.id, 'Casey');
+    const a = await adminGame(w, g.id);
+    expect([a.paidCount, a.payableCount]).toEqual([1, 3]);
   });
 });

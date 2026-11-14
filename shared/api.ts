@@ -346,7 +346,17 @@ export interface AdminRosterEntry {
    */
   isOrganizer: boolean;
   /** Zip 42 "Guest spot": this player's guest for the game (in, waiting, or still on an open late-drop debt). Missing: no guest. */
-  guest?: { name: string; status: 'confirmed' | 'waitlisted' | 'late'; waitlistPosition?: number | null };
+  guest?: {
+    name: string;
+    status: 'confirmed' | 'waitlisted' | 'late';
+    waitlistPosition?: number | null;
+    /** Round 2: one person's share ($14), whether the guest's share is paid, whether the host's own share is paid. Only for a guest who is in. */
+    shareCents?: number;
+    paid?: boolean;
+    hostPaid?: boolean;
+    /** The guest played (after Finalize; false: did not). */
+    played?: boolean | null;
+  };
 }
 
 /** Organizer only: the court row on a session's Who paid list. Never sent to players. */
