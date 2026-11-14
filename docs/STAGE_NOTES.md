@@ -4664,3 +4664,18 @@ game without a guest reads exactly as before. SQL only names the new columns onc
   wipe an owed spot; paid wording on the owed line and the Clear dialog. Left (see report): an owed spot is dropped if the late-fees switch is
   turned off before the host drops or at Finalize; the $14 back after a one-short pair drop is a second step (like the sub's own money back).
 
+### Zip 42 ship, part 1 (Sat Nov 14, 2026, about 3:00 PM Eastern, quiet window): database changed, site NOT deployed yet
+- Alex said "ship it" and approved the database change and the deploy. Main (Zip 43, a61c879) merged into the branch (both new switch rows kept: Guest
+  spot on top, Venue charge alert under it); unit 3,145 passed, 2 skipped; browser 77 of 78 scripts (text-fix fails the same 2 date checks on main);
+  e2e/zip42-off.cjs 38/38 against main a61c879.
+- Backup export before: live-before-zip42-20261114.sql (241 KB, kept out of git, to be saved with deploy-export.mjs after the site deploy).
+- Time Travel bookmark before the migrations: 00001317-00000000-00005123-a4430f1b55c81c29dc9f346ff6692e61. Integrity checks 21/21 at 0 before and after.
+- Migrations `0021_guest_spot` and `0022_guest_spot_people` applied to live together (six empty columns on `session_players`; 0 rows use them; nothing
+  pending). The live code (Zip 43) never reads them, so live is unchanged until the site deploy.
+- Undo (only if needed, newest first): `ALTER TABLE session_players DROP COLUMN guest_first; ALTER TABLE session_players DROP COLUMN guest_played;
+  ALTER TABLE session_players DROP COLUMN guest_at; ALTER TABLE session_players DROP COLUMN guest_seq; ALTER TABLE session_players DROP COLUMN guest_status;
+  ALTER TABLE session_players DROP COLUMN guest_name; DELETE FROM d1_migrations WHERE name IN ('0021_guest_spot.sql', '0022_guest_spot_people.sql');`
+  (only with the Zip 42 site NOT live), or Time Travel to the bookmark above.
+- Stopped: pushing the merged code to `main` (which `npm run deploy` requires) was refused by this session's permissions. Next: branch
+  `claude/new-session-v00cxc` (commit below) goes to main (fast-forward, no conflicts), then `npm run deploy` from main, live checks, integrity checks.
+
