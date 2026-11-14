@@ -61,7 +61,10 @@ export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: s
   for (const t of tables) {
     if (t === 'sessions') continue;
     const cols = (raw.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
-    if (t === 'credit_ledger' || t === 'refund_requests') raw.exec(`DELETE FROM ${t}`);
+    // Zip 42 round 2: a kept game's 'cash' pairs stay ("paid $14 of $28" on a guest's host: the pair nets to nothing in every pot, so no
+    // credit chip or card appears). Every other credit entry and cash-out request goes, as before.
+    if (t === 'credit_ledger') raw.exec(`DELETE FROM credit_ledger WHERE NOT (reason = 'cash' AND session_id IN (${keep.map((k) => `'${k}'`).join(',') || "''"}))`);
+    else if (t === 'refund_requests') raw.exec(`DELETE FROM ${t}`);
     else if (cols.includes('session_id')) raw.exec(`DELETE FROM ${t} WHERE session_id IN ${doomed}`);
   }
   raw.exec(`DELETE FROM sessions WHERE id IN ${doomed}`);
@@ -526,11 +529,17 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
       await w.org.ok('POST', `/api/admin/sessions/${gg.id}/guest`, { playerId: w.ids.Rowan, name: 'Sam' });
     }
     await orgPays('Rowan', guestB);
+    // Round 2 (Alex's picture): Parker brings Billy on "Guest test" too. Parker's own $14 is paid, so Parker reads "Paid $14" and Billy
+    // "Parker owes $14".
+    await w.org.ok('POST', `/api/admin/sessions/${guestA.id}/guest`, { playerId: w.ids.Parker, name: 'Billy' });
+    // (The calm profile drops credit entries, so his $14 is recorded as cash: the credit goes back to his pot, then his own share is marked paid.)
+    await w.org.ok('POST', `/api/admin/sessions/${guestA.id}/payment`, { playerId: w.ids.Parker, paid: false });
+    await w.org.ok('POST', `/api/admin/sessions/${guestA.id}/guest/share`, { playerId: w.ids.Parker, who: 'host', paid: true });
     keep.length = 0;
     keep.push(guestA.id, guestB.id);
     lateMove = undefined;
     await refresh();
-    summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg (4 in); Rowan owes $28 on the first and paid $28 on the second');
+    summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg; "Guest test" also Parker + Billy (guest), 5 in; Rowan owes $28 on the first and paid $28 on the second');
   }
 
   await refresh();

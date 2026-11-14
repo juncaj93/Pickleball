@@ -14,7 +14,9 @@
  *       card reads Paid $14 with three balls and the CREDIT chip shows $14
  *   P5  Parker sees the pair, his own name bold, and no Remove guest
  *   A1  organizer Home: the card names "Rowan + Sam (guest)" and has four balls
- *   A2  Players sheet: Rowan "Owes $28 (with Sam)", a Sam row "Guest of Rowan", Rowan's menu has no Add a guest, Parker's does
+ *   A2  Players sheet (round 2): each host and guest one tinted group; Parker paid with Billy owing; Rowan and Sam each owe $14; "1 of 5 paid"
+ *   A4  Mark paid on Sam's row pays Sam's $14 only; Didn't pay? undoes it.  C1  every confirm: two equal buttons, back-out in red outline
+ *   W1  Who played: guest tiles, guest out and host out
  *   A3  Add a guest for Parker (Lee): the panel's words, the new row, Parker owes $28; then Remove guest on Lee's row; Remove Rowan's words
  *   S1  Settings: "Guest spot" is the top switch row
  * Screenshots of every step: .data/zip42-shots (not in git).
@@ -145,6 +147,23 @@ async function main() {
     assert(bad.length === 0, `${what}: sticks out of the card: ${bad.join(' | ')}`);
   };
 
+  /** Alex (round 2): the two buttons of a confirm are exactly the same width; the backing-out one (danger) is a red outline on no fill. */
+  const equalButtons = async (dlg, what, redOutline = true) => {
+    const m = await dlg.locator('.btn-row.confirm-row > button').evaluateAll((els) =>
+      els.map((e) => {
+        const r = e.getBoundingClientRect();
+        const cs = getComputedStyle(e);
+        return { w: r.width, h: r.height, bg: cs.backgroundColor, bw: cs.borderTopWidth, bc: cs.borderTopColor, color: cs.color, out: e.classList.contains('confirm-out') };
+      }),
+    );
+    assert(m.length === 2, `${what}: two buttons (${m.length})`);
+    assert(Math.abs(m[0].w - m[1].w) <= 1 && Math.abs(m[0].h - m[1].h) <= 1, `${what}: widths ${m[0].w} vs ${m[1].w}, heights ${m[0].h} vs ${m[1].h}`);
+    if (redOutline) {
+      assert(m[1].out && m[1].bg === 'rgba(0, 0, 0, 0)' && m[1].bw === '2px' && m[1].bc === m[1].color, `${what}: the back-out button is a red outline: ${JSON.stringify(m[1])}`);
+      assert(m[0].bg !== 'rgba(0, 0, 0, 0)', `${what}: the safe button is solid`);
+    }
+  };
+
   // ================================================================ player screens
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])
@@ -153,9 +172,9 @@ async function main() {
         const c = card(page, gA.id);
         await c.scrollIntoViewIfNeeded();
         const names = flat(await c.locator('.names-line').first().innerText());
-        assert(names === 'Rowan + Sam (guest), Parker, Christopher', `names: ${names}`);
+        assert(names === 'Rowan + Sam (guest), Parker + Billy (guest), Christopher', `names: ${names}`);
         assert((await c.locator('.names-line strong').allInnerTexts()).join('|') === 'Rowan|Sam', 'Rowan and his guest are bold');
-        assert((await c.locator('.dots svg.ball, .dots .ball').count()) >= 4, 'four balls');
+        assert((await c.locator('.dots svg.ball, .dots .ball').count()) >= 5, 'five balls');
         assert(/\$28 due/.test(await c.locator('[data-owe]').innerText()), 'the chip says $28 due');
         const links = (await c.locator('.inline-links button, .inline-links a').allInnerTexts()).map(flat);
         assert(links.includes('Remove guest') && links.includes('Drop out'), `links: ${links}`);
@@ -196,6 +215,7 @@ async function main() {
         assert(body.includes(want), `dialog: ${body}`);
         const buttons = (await dlg.locator('.btn-row button').allInnerTexts()).map(flat);
         assert(buttons.join('|') === 'Stay in|Drop out both', `buttons: ${buttons}`);
+        await equalButtons(dlg, 'Drop out confirm');
         await page.screenshot({ path: path.join(SHOTS, `P3-drop-${g === gA ? 'inside' : 'outside'}-${scheme}.png`) });
         await dlg.locator('.btn-row button', { hasText: 'Stay in' }).click();
         await page.waitForTimeout(400);
@@ -215,6 +235,7 @@ async function main() {
       const text = flat(await dlg.innerText());
       assert(text.includes('Remove Sam?') && text.includes("Sam comes off your tab. Sam's $14 goes to your credit."), text);
       assert((await dlg.locator('.btn-row button').allInnerTexts()).map(flat).join('|') === 'Keep Sam|Remove Sam', 'Keep Sam / Remove Sam');
+      await equalButtons(dlg, 'Remove Sam confirm');
       await page.screenshot({ path: path.join(SHOTS, `P4-remove-sheet-${scheme}.png`) });
       if (scheme === 'light') {
         await dlg.locator('.btn-row button', { hasText: 'Keep Sam' }).click();
@@ -245,26 +266,27 @@ async function main() {
   });
 
   for (const scheme of ['light', 'dark'])
-    await check(`P5 Parker sees the pair, his own name bold, no guest buttons (${scheme})`, async () => {
+    await check(`P5 Parker sees both pairs, his own pair bold (${scheme})`, async () => {
       const { ctx, page } = await playerPage('Parker', { scheme });
       const c = card(page, gA.id);
       await c.scrollIntoViewIfNeeded();
-      assert(flat(await c.locator('.names-line').first().innerText()) === 'Rowan + Sam (guest), Parker, Christopher', 'names');
-      assert((await c.locator('.names-line strong').allInnerTexts()).join('|') === 'Parker', 'only Parker bold');
-      assert((await c.locator('[data-remove-guest]').count()) === 0, 'no Remove guest');
+      assert(flat(await c.locator('.names-line').first().innerText()) === 'Rowan + Sam (guest), Parker + Billy (guest), Christopher', 'names');
+      assert((await c.locator('.names-line strong').allInnerTexts()).join('|') === 'Parker|Billy', 'Parker and his own guest bold');
+      // Parker is a host too (Billy): his card has Remove guest for Billy; Rowan's Sam is never his to remove.
+      assert((await c.locator('[data-remove-guest]').count()) === 1, 'his own Remove guest');
       await c.screenshot({ path: path.join(SHOTS, `P5-parker-${scheme}.png`) });
       await ctx.close();
     });
 
   // ================================================================ organizer screens
   for (const scheme of ['light', 'dark'])
-    await check(`A1 organizer Home: "Rowan + Sam (guest)" and four balls (${scheme})`, async () => {
+    await check(`A1 organizer Home: both pairs and five balls (${scheme})`, async () => {
       const { ctx, page } = await adminPage({ scheme });
       const c = page.locator(`article[id="session-${gA.id}"]`);
       await c.scrollIntoViewIfNeeded();
       const names = flat(await c.locator('.names-line').first().innerText());
-      assert(/Rowan \+ Sam \(guest\)/.test(names), `names: ${names}`);
-      assert((await c.locator('.dots .ball, .dots svg.ball').count()) === 4, 'four balls');
+      assert(/Rowan \+ Sam \(guest\)/.test(names) && /Parker \+ Billy \(guest\)/.test(names), `names: ${names}`);
+      assert((await c.locator('.dots .ball, .dots svg.ball').count()) === 5, 'five balls');
       await noSideScroll(page, 'organizer Home');
       await c.screenshot({ path: path.join(SHOTS, `A1-home-${scheme}.png`) });
       await ctx.close();
@@ -280,52 +302,84 @@ async function main() {
   };
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])
-      await check(`A2 Players sheet: Owes $28 (with Sam), a guest row, Add a guest only for Parker (${width} ${scheme})`, async () => {
+      await check(`A2 Players sheet grouped: Parker paid with Billy owing, Rowan and Sam each owing, Add a guest only where none (${width} ${scheme})`, async () => {
         const { ctx, page } = await adminPage({ scheme, width });
         const dlg = await openSheet(page, gA.id);
+        assert(/1 of 5 paid/.test(flat(await dlg.locator('[data-ps-summary]').innerText())), `people count: ${flat(await dlg.locator('[data-ps-summary]').innerText())}`);
+        // Each pair is ONE group: the host on top, the guest under it.
+        for (const [host, guest] of [['Parker', 'Billy'], ['Rowan', 'Sam']]) {
+          const grp = dlg.locator(`[data-ps-pair="${host}"]`);
+          const rows = (await grp.locator('.ps-row .ps-name').allInnerTexts()).map(flat);
+          assert(rows.join('|') === `${host}|${guest}`, `${host}'s group: ${rows}`);
+          const bg = await grp.evaluate((el) => getComputedStyle(el).backgroundColor);
+          assert(bg !== 'rgba(0, 0, 0, 0)', `${host}'s group is tinted`);
+        }
+        const parker = dlg.locator('[data-ps-row="Parker"]');
+        assert(flat(await parker.locator('[data-ps-paid-chip]').innerText()) === 'Paid $14', 'Parker: Paid $14');
+        assert((await parker.locator('[data-ps-markpaid]').count()) === 0, 'Parker: no buttons');
+        const billy = dlg.locator('[data-ps-guest="Billy"]');
+        assert(flat(await billy.locator('[data-ps-guest-line]').innerText()) === 'Guest of Parker · Parker owes $14', await billy.locator('[data-ps-guest-line]').innerText());
+        assert((await billy.locator('[data-ps-markpaid="Billy"]').count()) === 1, 'Billy: Mark paid');
         const rowan = dlg.locator('[data-ps-row="Rowan"]');
-        assert(flat(await rowan.locator('[data-ps-owes-line]').innerText()) === 'Owes $28 (with Sam)', await rowan.locator('[data-ps-owes-line]').innerText());
+        assert(flat(await rowan.locator('[data-ps-owes-line]').innerText()) === 'Owes $14', await rowan.locator('[data-ps-owes-line]').innerText());
         const sam = dlg.locator('[data-ps-guest="Sam"]');
-        assert(flat(await sam.locator('.ps-sub').innerText()) === 'Guest of Rowan', 'Guest of Rowan');
-        const names = (await dlg.locator('.ps-row .ps-name').allInnerTexts()).map(flat);
-        assert(names.indexOf('Sam') === names.indexOf('Rowan') + 1, `Sam right under Rowan: ${names}`);
+        assert(flat(await sam.locator('[data-ps-guest-line]').innerText()) === 'Guest of Rowan · Rowan owes $14', 'Sam line');
         await rowan.locator('.ps-dots').click();
         await page.waitForTimeout(250);
         assert((await dlg.locator('[data-ps-add-guest]').count()) === 0, 'Rowan has a guest: no Add a guest');
-        await page.screenshot({ path: path.join(SHOTS, `A2-rowan-menu-${width}-${scheme}.png`) });
         await rowan.locator('.ps-dots').click();
         await page.waitForTimeout(200);
-        await dlg.locator('[data-ps-row="Parker"] .ps-dots').click();
+        await dlg.locator('[data-ps-row="Christopher Vanderberg"] .ps-dots').click();
         await page.waitForTimeout(250);
-        assert((await dlg.locator('[data-ps-add-guest="Parker"]').count()) === 1, 'Parker: Add a guest');
-        await page.screenshot({ path: path.join(SHOTS, `A2-parker-menu-${width}-${scheme}.png`) });
+        assert((await dlg.locator('[data-ps-add-guest="Christopher Vanderberg"]').count()) === 1, 'Christopher: Add a guest');
+        await dlg.locator('[data-ps-row="Christopher Vanderberg"] .ps-dots').click();
+        await page.waitForTimeout(200);
+        await dlg.locator('[data-ps-list]').screenshot({ path: path.join(SHOTS, `A2-grouped-${width}-${scheme}.png`) });
         await noSideScroll(page, 'Players sheet');
         await insideCard(dlg.locator('[data-ps-list]'), 'Players list');
         await ctx.close();
       });
 
-  await check('A3 Add a guest for Parker, then Remove guest; Remove Rowan says both shares go', async () => {
+  await check('A4 Mark paid on Sam (the guest): Sam paid, Rowan still owes; Didn\'t pay? on Sam puts it back', async () => {
+    const { ctx, page } = await adminPage({ scheme: 'light' });
+    let dlg = await openSheet(page, gA.id);
+    await dlg.locator('[data-ps-markpaid="Sam"]').click();
+    await page.waitForTimeout(1800);
+    let r = (await dash()).sessions.find((x) => x.id === gA.id).roster.find((x) => x.name === 'Rowan');
+    assert(r.guest.paid === true && r.guest.hostPaid === false && r.owesCents === 1400, `server: ${JSON.stringify(r.guest)} owes ${r.owesCents}`);
+    dlg = page.locator('dialog.sheet[open]').first();
+    await dlg.locator('[data-ps-guest="Sam"] [data-ps-paid-chip]').waitFor({ timeout: 8000 });
+    assert(flat(await dlg.locator('[data-ps-row="Rowan"] [data-ps-owes-line]').innerText()) === 'Owes $14', 'Rowan still owes $14');
+    await page.screenshot({ path: path.join(SHOTS, 'A4-sam-paid.png') });
+    await dlg.locator('[data-ps-guest="Sam"] .ps-dots').click();
+    await page.waitForTimeout(250);
+    await dlg.locator('[data-ps-unpay="Sam"]').click();
+    await page.waitForTimeout(1800);
+    r = (await dash()).sessions.find((x) => x.id === gA.id).roster.find((x) => x.name === 'Rowan');
+    assert(r.guest.paid === false && r.owesCents === 2800, 'Sam unpaid again');
+    await ctx.close();
+  });
+
+  await check('A3 Add a guest for Christopher, then Remove guest; Remove Rowan says both shares go; equal buttons on each', async () => {
     const { ctx, page } = await adminPage({ scheme: 'dark' });
     let dlg = await openSheet(page, gA.id);
-    await dlg.locator('[data-ps-row="Parker"] .ps-dots').click();
+    await dlg.locator('[data-ps-row="Christopher Vanderberg"] .ps-dots').click();
     await page.waitForTimeout(250);
-    await dlg.locator('[data-ps-add-guest="Parker"]').click();
+    await dlg.locator('[data-ps-add-guest="Christopher Vanderberg"]').click();
     const form = page.locator('[data-ps-guest-form]');
     await form.waitFor();
     await page.waitForTimeout(350);
     const words = flat(await page.locator('dialog.sheet[open]').last().innerText());
-    // (In the calm world Parker's seat is already paid, with credit from before: so "will owe $14 more". An unpaid host reads "will owe $28".)
-    const parkerPaid = (await dash()).sessions.find((s) => s.id === gA.id).roster.find((r) => r.name === 'Parker').paymentStatus === 'paid';
-    const owe = parkerPaid ? "Parker will owe $14 more." : 'Parker will owe $28.';
-    assert(words.includes('Add a guest · Parker') && words.includes("Guest's first name") && words.includes(`Their $14 goes on Parker's tab. ${owe}`), words);
+    assert(words.includes('Add a guest · Christopher Vanderberg') && words.includes("Guest's first name") && words.includes("Their $14 goes on Christopher Vanderberg's tab. Christopher Vanderberg will owe $28."), words);
+    await equalButtons(page.locator('dialog.sheet[open]').last(), 'Add a guest panel', false);
     await form.locator('[data-ps-guest-input]').fill('lee');
     assert(flat(await form.locator('[data-ps-guest-add]').innerText()) === 'Add lee', 'button names the guest');
     await page.screenshot({ path: path.join(SHOTS, 'A3-add-panel-dark.png') });
     await form.locator('[data-ps-guest-add]').click();
     await page.waitForTimeout(1800);
     let g = (await dash()).sessions.find((s) => s.id === gA.id);
-    const parker = g.roster.find((r) => r.name === 'Parker');
-    assert(parker.guest && parker.guest.name === 'Lee' && parker.owesCents === (parkerPaid ? 1400 : 2800), `server: ${JSON.stringify(parker.guest)} owes ${parker.owesCents}`);
+    const chris = g.roster.find((r) => r.name === 'Christopher Vanderberg');
+    assert(chris.guest && chris.guest.name === 'Lee' && chris.owesCents === 2800, `server: ${JSON.stringify(chris.guest)} owes ${chris.owesCents}`);
     dlg = page.locator('dialog.sheet[open]').first();
     await dlg.locator('[data-ps-guest="Lee"]').waitFor({ timeout: 8000 });
     await page.screenshot({ path: path.join(SHOTS, 'A3-after-add-dark.png') });
@@ -335,12 +389,13 @@ async function main() {
     const conf = page.locator('dialog.sheet[open]').last();
     await page.waitForTimeout(350);
     const t = flat(await conf.innerText());
-    assert(t.includes('Remove Lee?') && t.includes("Lee comes off Parker's tab. Parker owes $14 less."), t);
+    assert(t.includes('Remove Lee?') && t.includes("Lee comes off Christopher Vanderberg's tab. Christopher Vanderberg owes $14 less."), t);
+    await equalButtons(conf, 'Remove Lee confirm');
     await page.screenshot({ path: path.join(SHOTS, 'A3-remove-guest-dark.png') });
     await conf.locator('.btn-row button', { hasText: 'Remove Lee' }).click();
     await page.waitForTimeout(1800);
     g = (await dash()).sessions.find((s) => s.id === gA.id);
-    assert(!g.roster.find((r) => r.name === 'Parker').guest, 'server: Lee is off');
+    assert(!g.roster.find((r) => r.name === 'Christopher Vanderberg').guest, 'server: Lee is off');
     dlg = page.locator('dialog.sheet[open]').first();
     await dlg.locator('[data-ps-row="Rowan"] .ps-dots').click();
     await page.waitForTimeout(250);
@@ -348,8 +403,89 @@ async function main() {
     await page.waitForTimeout(350);
     const rm = flat(await page.locator('dialog.sheet[open]').last().innerText());
     assert(rm.includes("Sam is Rowan's guest, so Sam comes off too. Both $14 shares are removed.") && rm.includes('Remove both'), rm);
+    await equalButtons(page.locator('dialog.sheet[open]').last(), 'Remove both confirm');
     await page.screenshot({ path: path.join(SHOTS, 'A3-remove-rowan-dark.png') });
     await ctx.close();
+  });
+
+  for (const scheme of ['light', 'dark'])
+    for (const width of [390, 360, 320])
+      await check(`C1 confirm buttons the same width (${width} ${scheme}): Drop out, Remove Sam, and the organizer's Remove`, async () => {
+        const { ctx, page } = await playerPage('Rowan', { width, scheme });
+        const c = card(page, gB.id);
+        await c.scrollIntoViewIfNeeded();
+        await c.locator('.drop-link').click();
+        let dlg = page.locator('dialog.sheet[open]').first();
+        await dlg.waitFor();
+        await page.waitForTimeout(350);
+        await equalButtons(dlg, `Drop out ${width}`);
+        await dlg.locator('[data-confirm-safe]').click();
+        await page.waitForTimeout(400);
+        await c.locator('[data-remove-guest]').click();
+        dlg = page.locator('dialog.sheet[open]').first();
+        await dlg.waitFor();
+        await page.waitForTimeout(350);
+        await equalButtons(dlg, `Remove Sam ${width}`);
+        await page.screenshot({ path: path.join(SHOTS, `C1-remove-sam-${width}-${scheme}.png`) });
+        await ctx.close();
+        const a = await adminPage({ scheme, width });
+        const sheet = await openSheet(a.page, gA.id);
+        await sheet.locator('[data-ps-row="Christopher Vanderberg"] .ps-dots').click();
+        await a.page.waitForTimeout(250);
+        await sheet.locator('[data-ps-remove="Christopher Vanderberg"]').click();
+        await a.page.waitForTimeout(350);
+        await equalButtons(a.page.locator('dialog.sheet[open]').last(), `organizer Remove ${width}`);
+        await a.ctx.close();
+      });
+
+  await check('W1 Who played: a guest tile after the host; guest off = 1 share for the host; host off takes the guest off and dims it', async () => {
+    const after = Date.parse('2026-11-14T03:30:00.000Z'); // Fri Nov 13, 10:30 PM Eastern: "Guest test" is over
+    await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: after }) });
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, colorScheme: 'light', isMobile: true, hasTouch: true, userAgent: UA, reducedMotion: 'reduce' });
+    await ctx.addInitScript((delta) => {
+      const Real = Date;
+      class Shifted extends Real {
+        constructor(...x) {
+          if (x.length === 0) super(Real.now() + delta);
+          else super(...x);
+        }
+        static now() {
+          return Real.now() + delta;
+        }
+      }
+      window.Date = Shifted;
+    }, after - Date.now());
+    assert((await ctx.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } })).ok(), 'login');
+    const page = await ctx.newPage();
+    // (The calm preview shows only this zip's cards; ?alerts=all shows every card, as on live.)
+    await page.goto(BASE + '/admin?alerts=all');
+    await page.locator(`[data-finalize="${gA.id}"] [data-change-played]`).waitFor({ timeout: 20000 });
+    await page.locator(`[data-finalize="${gA.id}"] [data-change-played]`).click();
+    const sheet = page.locator('dialog.sheet[open] [data-who-played]');
+    await sheet.waitFor();
+    await page.waitForTimeout(400);
+    const tiles = (await sheet.locator('[data-tile]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile'))));
+    assert(tiles.indexOf('Billy') === tiles.indexOf('Parker') + 1 && tiles.indexOf('Sam') === tiles.indexOf('Rowan') + 1, `guest right after host: ${tiles}`);
+    assert(/Parker's guest/.test(await sheet.locator('[data-guest-tile="Billy"]').innerText()), 'Parker\'s guest under Billy');
+    const live = async () => flat(await sheet.locator('[data-finalize-live]').innerText());
+    assert(/^5 played/.test(await live()), await live());
+    await sheet.locator('[data-guest-tile="Billy"]').click();
+    await page.waitForTimeout(250);
+    assert(/^4 played · \$14 each/.test(await live()), await live());
+    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Billy didn't play. Parker pays for 1 share.", 'guest-out note');
+    await page.screenshot({ path: path.join(SHOTS, 'W1-guest-out.png') });
+    await sheet.locator('[data-guest-tile="Billy"]').click();
+    await sheet.locator('[data-tile="Parker"]').click();
+    await page.waitForTimeout(250);
+    assert(/^3 played · \$14 each/.test(await live()), await live());
+    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Parker didn't play, so Billy didn't either.", 'host-out note');
+    assert((await sheet.locator('[data-guest-tile="Billy"]').getAttribute('aria-disabled')) === 'true', 'Billy is locked');
+    await sheet.locator('[data-guest-tile="Billy"]').click({ force: true });
+    await page.waitForTimeout(200);
+    assert(/^3 played/.test(await live()), 'a locked guest cannot be turned on');
+    await page.screenshot({ path: path.join(SHOTS, 'W1-host-out.png') });
+    await ctx.close();
+    await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: NOW_MS }) });
   });
 
   await check('S1 Settings: Guest spot is the top switch row', async () => {

@@ -8,14 +8,16 @@ dialog.sheet .btn-row.confirm-row,
   flex-wrap: nowrap;
   gap: 12px;
 }
-dialog.sheet .btn-row.confirm-row > .btn,
-.btn-row.confirm-row > .btn {
+:root dialog.sheet .btn-row.confirm-row > .btn,
+:root .btn-row.confirm-row > .btn {
   flex: 1 1 0;
   min-width: 0;
   width: auto;
   box-sizing: border-box;
   min-height: 52px;
-  border-width: 2px;
+  /* The same padding and border on both, so nothing but the words differs (an older dark-mode rule gives gray buttons a 1px border). */
+  padding: 10px 12px !important;
+  border-width: 2px !important;
   border-style: solid;
   white-space: normal;
   text-align: center;
@@ -35,7 +37,7 @@ dialog.sheet .btn-row.confirm-row > .btn.confirm-out,
   border-color: var(--danger-fg);
 }
 /* The Add a guest panel: Cancel stays the soft button, Add is the green one; the same equal widths. */
-.btn-row.confirm-row > .btn.secondary {
+:root .btn-row.confirm-row > .btn.secondary {
   background: var(--fill);
   color: var(--ink);
   border-color: var(--fill);
