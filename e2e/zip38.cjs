@@ -453,11 +453,16 @@ async function main() {
       await page.goto(`${BASE}/admin${query}`);
       await page.locator('.tabbar').waitFor({ timeout: 30000 });
       await sleep(900);
-      return page.evaluate(() => document.querySelector('main').outerHTML.replace(/ id="[^"]*"/g, '').replace(/aria-labelledby="[^"]*"/g, ''));
+      // (Zip 43: Instant admin's dimmed-money marker comes and goes with the saved copy on the Venue cards' amounts; it is not part of what this compares.)
+      return page.evaluate(() => document.querySelector('main').outerHTML.replace(/ id="[^"]*"/g, '').replace(/aria-labelledby="[^"]*"/g, '').replace(/ data-held-money=""/g, ''));
     };
     const plain = await html('?xmasmode=off');
     const stored = await html('?xmasmode=me');
-    assert(plain === stored, 'the organizer Home is the same with the preview mode set');
+    {
+      let i = 0;
+      while (i < plain.length && plain[i] === stored[i]) i++;
+      assert(plain === stored, `the organizer Home is the same with the preview mode set (differs at ${i}: «${plain.slice(Math.max(0, i - 80), i + 120)}» vs «${stored.slice(Math.max(0, i - 80), i + 120)}»)`);
+    }
     assert((await attr(page)) === null && (await logoSrc(page)) === '/logo.png', 'admin never gets the theme or logo');
     await ctx.close();
   });
@@ -511,7 +516,7 @@ async function main() {
       await page.locator('.tabbar button', { hasText: 'Settings' }).click();
       await sleep(500);
       for (const sm of await page.locator('details > summary').all()) await sm.click().catch(() => {});
-      const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').first().getAttribute('data-row');
+      const first = (await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')))).filter((k) => k !== 'venueAlertAll')[0]; // (Zip 43's Venue charge alert is newer and sits on top)
       assert(first === 'christmasSkinAll', `newest first: ${first}`);
       const row = page.locator('[data-row="christmasSkinAll"]');
       assert((await row.locator('.set-name').innerText()).includes('Christmas skin'), 'its name');

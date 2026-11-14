@@ -125,8 +125,15 @@ async function main() {
     const d = new DatabaseSync(dbFile);
     d.prepare("DELETE FROM task_log WHERE task LIKE 'venue_paid:%'").run();
     d.prepare("DELETE FROM admin_audit_log WHERE action = 'venue_charge_paid'").run();
+    // Back to never-changed days (no `venueDays` key at all). The dropdowns' own saves note WHEN a day moved, and a moved day never brings back an
+    // earlier charge day (that is the point), so the days these checks need are written straight into the saved settings instead.
+    d.prepare("UPDATE groups SET settings_json = json_remove(settings_json, '$.venueDays')").run();
     d.close();
-    await call('PUT', '/api/admin/group', { venueDays: { membershipDay: 26, courtDay: 0 } });
+  };
+  const setDaysDirect = (membershipDay, courtDay) => {
+    const d = new DatabaseSync(dbFile);
+    d.prepare("UPDATE groups SET settings_json = json_set(settings_json, '$.venueDays', json(?))").run(JSON.stringify({ membershipDay, courtDay }));
+    d.close();
   };
   const d0 = await dash();
   assert(d0.venueAlert === true && d0.venueAlerts.length === 2, `the preview world should have two cards, has ${JSON.stringify(d0.venueAlerts)}`);
@@ -208,8 +215,7 @@ async function main() {
     const d2 = new DatabaseSync(dbFile);
     d2.prepare("DELETE FROM task_log WHERE task LIKE 'venue_paid:%'").run();
     d2.close();
-    const set = await call('PUT', '/api/admin/group', { venueDays: { membershipDay: 31, courtDay: 0 } });
-    assert(set.status === 200, 'save days');
+    setDaysDirect(31, 0);
     await page.reload();
     await page.locator('[data-venue-alerts]').waitFor();
     assert((await text()) === 'Northville Pickleball should have charged you $126 2 games x $48 = $96, plus membership $30 Mark paid', `combined: ${await text()}`);

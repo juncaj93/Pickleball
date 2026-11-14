@@ -157,7 +157,7 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 8));
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 8));
     // (Zip 35's Tap guard fix, Zip 24's Booking hours row, Zip 27's Spent matches Totals row, Zip 30's Acting for others row Zip 32's Players sheet redo row, Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit above it.)
     assert(first[0] === 'tapGuardFixAll' && first[1] === 'extendedTimeAll' && first[2] === 'checkInPayAll' && first[3] === 'playersSheetRedoAll' && first[4] === 'actingOthersAll' && first[5] === 'spentTotalsAll' && first[6] === 'bookingHoursAll' && first[7] === 'totalsRefreshAll', `newest first: ${first}`);
     const row = page.locator('[data-row="totalsRefreshAll"]');
