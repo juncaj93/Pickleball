@@ -23,7 +23,6 @@ async function busyGroup() {
   const names = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
   for (const n of names) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
   await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
-  await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/links`, { kind: 'attendance' });
   const dash = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
   const later = dash.sessions.filter((x: { startsAt: string }) => Date.parse(x.startsAt) > Date.parse(s.startsAt))[1];
   await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${later.id}/join`, {});

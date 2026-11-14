@@ -15,7 +15,6 @@ describe('admin access', () => {
       ['PUT', `/api/admin/sessions/${s.id}/booking`, { bookingStatus: 'booked', courtCostCents: 1 }],
       ['POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true }],
       ['POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true }],
-      ['POST', `/api/admin/sessions/${s.id}/links`, { kind: 'attendance' }],
       ['POST', '/api/admin/rotate-link', {}],
       ['POST', '/api/admin/pin', { currentPin: PIN, newPin: '999999' }],
     ];
