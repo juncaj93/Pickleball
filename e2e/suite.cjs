@@ -82,5 +82,6 @@ module.exports = {
   'zip41',
   'zip42',
   'zip43',
+  'zip44',
   ],
 };
