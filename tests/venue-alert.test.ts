@@ -429,8 +429,20 @@ describe('the preview and wrangler', () => {
     expect(row).toContain("'2026-10-01T");
     expect(row.startsWith('INSERT')).toBe(true);
   });
-  it('wrangler.toml allows it on live and on previews', async () => {
+  it('wrangler.toml adds NO variable for it (Cloudflare free plan: 64 variables per site, the preview was already at 64); a missing value means allowed', async () => {
     const toml = (await import('node:fs')).readFileSync('wrangler.toml', 'utf8');
-    expect(toml.match(/^VENUE_ALERT = "on"$/gm)).toHaveLength(2);
+    expect(toml.match(/^VENUE_ALERT\s*=/gm)).toBeNull();
+    const { venueAlertAllowed } = await import('../shared/venueAlert');
+    expect(venueAlertAllowed(undefined)).toBe(true);
+    expect(venueAlertAllowed('off')).toBe(false);
+    // Variables in [vars] and [env.preview.vars]: never more than main's own count (53 and 59) plus nothing from this zip.
+    const count = (header: string) => {
+      const start = toml.indexOf(`[${header}]`);
+      const rest = toml.slice(start + header.length + 2);
+      const end = rest.search(/^\[/m);
+      return (end < 0 ? rest : rest.slice(0, end)).split('\n').filter((l) => /^[A-Z0-9_]+\s*=/.test(l)).length;
+    };
+    expect(count('vars')).toBe(53);
+    expect(count('env.preview.vars')).toBe(59);
   });
 });
