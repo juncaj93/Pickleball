@@ -123,7 +123,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       guestIn(r)
         ? ctx.db
             .prepare(`UPDATE session_players SET played = ?, guest_played = ?, updated_at = ? WHERE id = ? AND ${claimed}`)
-            .bind(playedIds.has(r.player_id) ? 1 : 0, guestPlayed(r) ? 1 : 0, now, r.id)
+            // A host who did not play: the guest did not either, and their no-show fee (late fees on) still covers both, as designed: NULL.
+            .bind(playedIds.has(r.player_id) ? 1 : 0, playedIds.has(r.player_id) ? (guestPlayed(r) ? 1 : 0) : null, now, r.id)
         : ctx.db.prepare(`UPDATE session_players SET played = ?, updated_at = ? WHERE id = ? AND ${claimed}`).bind(playedIds.has(r.player_id) ? 1 : 0, now, r.id),
     ),
     // The no-show debt mark: late_drop_at equal to this finalize's time (Reopen takes it away again).
@@ -152,7 +153,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     // seat owes the rest of the fee instead of reading "paid".
     if (owing.has(r.player_id)) {
       const paidCash = r.payment_status === 'paid' && !r.refunded_at && !r.self_paid_at ? (r.payment_amount_cents ?? 0) : 0;
-      const fee = gp.flatCents * units(r);
+      // (A no-show host with a guest owes for both, as in round 1: the guest could not play without them.)
+      const fee = gp.flatCents * (guestIn(r) ? 2 : 1);
       if (paidCash > 0 && paidCash < fee) {
         const onSeat = await usedOn(ctx, session.id, r.player_id);
         statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paidCash - onSeat), paymentCents: paidCash }));

@@ -80,7 +80,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
   const out = await ctx.db.batch([
     ctx.db
       .prepare(
-        `UPDATE session_players SET guest_name = ?2,
+        `UPDATE session_players SET guest_name = ?2, guest_first = NULL, guest_played = NULL,
            guest_status = CASE WHEN status = 'confirmed' AND ${confirmedHeads(true)} < ?4 THEN 'confirmed' ELSE 'waitlisted' END,
            guest_seq = ${nextClaimSeq(true)}, guest_at = ?3, updated_at = ?3
          WHERE id = ?5 AND session_id = ?1 AND status IN ('confirmed', 'waitlisted') AND (guest_status IS NULL OR guest_status = 'late')
@@ -153,7 +153,7 @@ export async function removeGuestCore(ctx: Ctx, group: GroupRow, session: Sessio
   const out = await ctx.db.batch([
     ctx.db
       .prepare(
-        `UPDATE session_players SET guest_name = NULL, guest_status = NULL, guest_seq = NULL, guest_at = ?2, updated_at = ?2
+        `UPDATE session_players SET guest_name = NULL, guest_status = NULL, guest_seq = NULL, guest_first = NULL, guest_played = NULL, guest_at = ?2, updated_at = ?2
          WHERE id = ?1 AND guest_status = ?3 AND guest_name = ?4 AND NOT (payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL)`,
       )
       .bind(host.id, now, host.guest_status, guest),
@@ -248,8 +248,10 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
   const organizerId = await organizerIdOf(ctx.db, group);
   if (paid) {
     if (mine) return { ok: true, changed: false };
-    // The other share is paid already (or the seat holds enough): this one makes the seat paid in full, the ordinary Mark paid.
-    if (other || covered + half >= price) return applyPayment(ctx, group, session, playerId, true, null);
+    // The other share is paid already: this one makes the seat paid in full (exactly what it still owes), the ordinary Mark paid.
+    if (other) return applyPayment(ctx, group, session, playerId, true, null);
+    // Neither is paid yet (the seat may hold a little credit): this person's share becomes the first one, covered up to one share.
+    if (half >= price) return applyPayment(ctx, group, session, playerId, true, null);
     const asRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
     const out = await ctx.db.batch([
       // Paid with exactly this person's share on top of what the seat holds, and whose share it is ...
@@ -262,7 +264,7 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
              AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?3) = ?6
              AND (SELECT status FROM sessions WHERE id = ?3) <> 'canceled'`,
         )
-        .bind(now, covered + half, session.id, playerId, seat.usedCents + seat.cashCents, asRead, covered === 0 ? (who === 'guest' ? 1 : 0) : (row.guest_first ?? 0)),
+        .bind(now, Math.max(covered, half), session.id, playerId, seat.usedCents + seat.cashCents, asRead, who === 'guest' ? 1 : 0),
       // ... then held against the seat, which owes only the other share (the same move as a price going up after a payment).
       ...holdShortCashStatements(ctx.db, { sessionId: session.id, feeCents: price, nowIso: now, playerId, organizerId, seatWhere: (sp) => `${sp}.payment_updated_at = ?1` }),
     ]);
@@ -282,13 +284,15 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
       ctx.db
         .prepare(
           `UPDATE session_players SET payment_amount_cents = ?2, guest_first = ?6, payment_updated_at = ?1, updated_at = ?1
-           WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NULL AND payment_amount_cents = ?5`,
+           WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NULL AND payment_amount_cents = ?5
+             AND (SELECT finalized_at FROM sessions WHERE id = ?3) IS NULL`,
         )
-        .bind(now, price - half, session.id, playerId, row.payment_amount_cents ?? 0, who === 'host' ? 1 : 0),
+        // The other person's share stays paid and becomes the first one.
+        .bind(now, half, session.id, playerId, row.payment_amount_cents ?? 0, who === 'host' ? 1 : 0),
       ...holdShortCashStatements(ctx.db, { sessionId: session.id, feeCents: price, nowIso: now, playerId, organizerId, seatWhere: (sp) => `${sp}.payment_updated_at = ?1` }),
     ]);
     if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
-  } else if (seat.cashCents === half && seat.usedCents === 0) {
+  } else if (seat.cashCents > 0 && seat.usedCents === 0) {
     // One share held as cash: it goes (the payment never happened). The pot does not change (the pair nets to nothing).
     const out = await ctx.db.batch([
       ctx.db

@@ -843,3 +843,85 @@ describe('round 2: each person paid or not (one money record on the host)', () =
     expect([a.paidCount, a.payableCount]).toEqual([1, 3]);
   });
 });
+
+describe('round 2 review fixes', () => {
+  const share = (w: W, sid: string, host: string, who: 'host' | 'guest', paid: boolean) => admin(w, 'POST', `/api/admin/sessions/${sid}/guest/share`, { playerId: w.byName[host], who, paid });
+  const rowOf = async (w: W, sid: string, n: string) => (await adminGame(w, sid)).roster.find((x: any) => x.name === n);
+  it('after a final price change each row owes exactly its part (they add up to what the seat owes), and undo still works', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w, g.id, 'Blair');
+    await addGuest(w, g.id, 'Blair', 'Billy');
+    for (const n of ['Casey', 'Devon', 'Emery']) await markPaid(w, g.id, n);
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    expect(f.data.priceCents).toBe(1100);
+    let b = await rowOf(w, g.id, 'Blair');
+    expect(b.owesCents).toBe(800);
+    expect(b.guest).toMatchObject({ hostPaid: true, paid: false, hostOwesCents: 0, guestOwesCents: 800 });
+    // Mark Billy paid: the seat is paid in full at exactly what it owed.
+    expect((await share(w, g.id, 'Blair', 'guest', true)).status).toBe(200);
+    b = await rowOf(w, g.id, 'Blair');
+    expect(b.owesCents).toBe(0);
+    expect(b.paymentAmountCents).toBe(2200);
+  });
+  it('undo of a held share works after the price changed (no "paid with credit" dead end)', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w, g.id, 'Blair');
+    await addGuest(w, g.id, 'Blair', 'Billy');
+    w.app.now = g.start + 3 * HOUR;
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    expect((await share(w, g.id, 'Blair', 'host', false)).status).toBe(200);
+    const b = await rowOf(w, g.id, 'Blair');
+    expect(b.owesCents).toBe(2200);
+    expect(b.guest).toMatchObject({ hostPaid: false, paid: false });
+    expect(await credit(w, 'Blair')).toBe(0);
+  });
+  it('part credit on the seat: marking the GUEST paid pays the guest (not the host), and each row owes its own part', async () => {
+    const w = await world();
+    const g0 = await game(w, 0);
+    const g1 = await game(w, 1);
+    // $3 credit for Blair: paid $14, then a hand adjustment would be simpler, but a finalize at 5 gives exactly $3.
+    await join(w, g0.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await markPaid(w, g0.id, n);
+    const t = w.app.now;
+    w.app.now = g0.start + 3 * HOUR;
+    await admin(w, 'POST', `/api/admin/sessions/${g0.id}/finalize`, { everyone: true });
+    expect(await credit(w, 'Blair')).toBe(300);
+    w.app.now = Math.max(t, g0.start + 4 * HOUR);
+    await join(w, g1.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g1.id, 'Blair');
+    let b = await rowOf(w, g1.id, 'Blair');
+    expect(b.owesCents).toBe(2500);
+    expect(b.guest).toMatchObject({ hostOwesCents: 1100, guestOwesCents: 1400 });
+    expect((await share(w, g1.id, 'Blair', 'guest', true)).status).toBe(200);
+    b = await rowOf(w, g1.id, 'Blair');
+    expect(b.guest).toMatchObject({ paid: true, hostPaid: false, guestOwesCents: 0, hostOwesCents: 1400 });
+    expect(b.owesCents).toBe(1400);
+  });
+  it('remove the guest whose share was paid, add another: the new guest owes (nothing carried over)', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    await share(w, g.id, 'Blair', 'guest', true);
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/guest/remove`, { playerId: w.byName.Blair });
+    await addGuest(w, g.id, 'Blair', 'Billy');
+    const b = await rowOf(w, g.id, 'Blair');
+    // Sam's $14 is now Blair's own share (it stayed on the seat): Blair paid, Billy owes.
+    expect(b.guest).toMatchObject({ name: 'Billy', hostPaid: true, paid: false, guestOwesCents: 1400 });
+  });
+  it('late fees: a host and guest who were no-shows (fewer than 4 played) owe $28, the pair as designed', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: [w.byName.Casey, w.byName.Devon] });
+    const b = await rowOf(w, g.id, 'Blair');
+    expect(b.lateFee).toMatchObject({ kind: 'no_show', oweCents: 2800 });
+  });
+});

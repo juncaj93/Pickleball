@@ -200,7 +200,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     </span>
                   ) : pm ? (
                     <span className="ps-sub ps-owes" data-ps-owes-line>
-                      Owes {formatPrice(pm.shareCents! + (r.extCents ?? 0))}
+                      Owes {formatPrice((pm.hostOwesCents ?? pm.shareCents!) + (r.extCents ?? 0))}
                     </span>
                   ) : owes ? (
                     <span className="ps-sub ps-owes" data-ps-owes-line>
@@ -236,7 +236,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       >
                         Mark paid
                       </button>
-                      {ctx.d.venmoRequest === true && <RowRequest ctx={ctx} s={s} r={pm ? { ...r, owesCents: pm.shareCents!, extCents: r.extCents } : r} />}
+                      {ctx.d.venmoRequest === true && <RowRequest ctx={ctx} s={s} r={pm ? { ...r, owesCents: pm.hostOwesCents ?? pm.shareCents!, extCents: r.extCents } : r} />}
                     </>
                   )}
                   {canEdit && r.status === 'waitlisted' && (
@@ -281,7 +281,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       <>
                         {' · '}
                         <span className="ps-owes">
-                          {r.name} owes {formatPrice(pm.shareCents!)}
+                          {r.name} owes {formatPrice(pm.guestOwesCents ?? pm.shareCents!)}
                         </span>
                       </>
                     ) : null}
@@ -301,7 +301,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       <button type="button" className="ps-btn ps-amber" disabled={busy} data-ps-markpaid={gst.name} aria-label={`Mark ${gst.name} paid (on ${r.name}'s tab)`} onClick={() => void markShare(r, 'guest', true)}>
                         Mark paid
                       </button>
-                      {ctx.d.venmoRequest === true && <GuestRequest ctx={ctx} s={s} host={r} guest={gst.name} cents={pm.shareCents!} />}
+                      {ctx.d.venmoRequest === true && <GuestRequest ctx={ctx} s={s} host={r} guest={gst.name} cents={pm.guestOwesCents ?? pm.shareCents!} />}
                     </>
                   )}
                 </div>

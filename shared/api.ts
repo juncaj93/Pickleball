@@ -354,6 +354,9 @@ export interface AdminRosterEntry {
     shareCents?: number;
     paid?: boolean;
     hostPaid?: boolean;
+    /** What each person's part of the seat still owes (they add up to what the seat owes): the rows show and request exactly these. */
+    hostOwesCents?: number;
+    guestOwesCents?: number;
     /** The guest played (after Finalize; false: did not). */
     played?: boolean | null;
   };

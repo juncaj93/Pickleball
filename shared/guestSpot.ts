@@ -187,11 +187,21 @@ export function lineText(line: { names: string[]; guestAt?: boolean[] }): string
  * what the seat holds now (its payment when paid, else credit and earlier cash on it), `priceCents` the seat's whole price (two shares).
  * The covered money belongs to the host's share first, unless the guest's share was marked paid first (`guestFirst`).
  */
-export function sharesPaid(coveredCents: number, priceCents: number, guestFirst: boolean): { host: boolean; guest: boolean; shareCents: number } {
+export function sharesPaid(
+  coveredCents: number,
+  priceCents: number,
+  guestFirst: boolean,
+): { host: boolean; guest: boolean; shareCents: number; hostOwesCents: number; guestOwesCents: number } {
+  // What the seat holds is the first person's share first (up to one share), the rest is the second person's. So the two "owes" always add up
+  // to exactly what the seat still owes (after a final price change, or with part credit on it, too).
   const share = Math.floor(priceCents / 2);
-  const first = coveredCents >= share;
-  const both = coveredCents >= priceCents;
-  return guestFirst ? { host: both, guest: first, shareCents: share } : { host: first, guest: both, shareCents: share };
+  const second = priceCents - share;
+  const c = Math.max(0, coveredCents);
+  const firstOwes = Math.max(0, share - c);
+  const secondOwes = Math.max(0, second - Math.max(0, c - share));
+  return guestFirst
+    ? { host: secondOwes === 0, guest: firstOwes === 0, shareCents: share, hostOwesCents: secondOwes, guestOwesCents: firstOwes }
+    : { host: firstOwes === 0, guest: secondOwes === 0, shareCents: share, hostOwesCents: firstOwes, guestOwesCents: secondOwes };
 }
 
 /**

@@ -326,7 +326,7 @@ export function adminSessionView(
               name: gv.name,
               status: gv.status,
               ...(gv.status === 'waitlisted' ? { waitlistPosition: at >= 0 ? at + 1 : null } : {}),
-              ...(p ? { shareCents: p.shareCents, paid: p.guest, hostPaid: p.host } : {}),
+              ...(p ? { shareCents: p.shareCents, paid: p.guest, hostPaid: p.host, hostOwesCents: p.hostOwesCents, guestOwesCents: p.guestOwesCents } : {}),
               ...(gv.status === 'confirmed' && session.finalized_at && r.played === 1 ? { played: r.guest_played !== 0 } : {}),
             },
           };
@@ -454,8 +454,8 @@ export function adminSessionView(
 }
 
 /** Zip 42 round 2: which person of a pair is paid. A paid seat (an I paid too) counts both; an unpaid one splits what it holds. */
-function pairPaid(r: RosterRow, priceCents: number, seat: SeatCredit): { host: boolean; guest: boolean; shareCents: number } {
-  if (r.payment_status === 'paid' && !r.refunded_at) return { host: true, guest: true, shareCents: Math.floor(priceCents / 2) };
+function pairPaid(r: RosterRow, priceCents: number, seat: SeatCredit): ReturnType<typeof sharesPaid> {
+  if (r.payment_status === 'paid' && !r.refunded_at) return { host: true, guest: true, shareCents: Math.floor(priceCents / 2), hostOwesCents: 0, guestOwesCents: 0 };
   return sharesPaid(seat.usedCents + seat.cashCents, priceCents, r.guest_first === 1);
 }
 
