@@ -26,9 +26,10 @@ dialog.sheet .btn-row.confirm-row > .btn.confirm-safe,
 dialog.sheet .btn-row.confirm-row > .btn.confirm-go,
 .btn-row.confirm-row > .btn.confirm-safe,
 .btn-row.confirm-row > .btn.confirm-go {
-  background: var(--primary);
-  color: var(--primary-ink);
-  border-color: var(--primary);
+  /* On a player card the card's own green (mint in dark mode, like Pay); elsewhere the site's primary green. */
+  background: var(--pc-btn, var(--primary));
+  color: var(--pc-btn-ink, var(--primary-ink));
+  border-color: var(--pc-btn, var(--primary));
 }
 dialog.sheet .btn-row.confirm-row > .btn.confirm-out,
 .btn-row.confirm-row > .btn.confirm-out {

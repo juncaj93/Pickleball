@@ -142,6 +142,3 @@ html[data-theme='dark'] .ps {
 .guest-played-row input:disabled {
   opacity: 0.45;
 }
-.ps-pair-rows .ps-owes {
-  white-space: nowrap;
-}
