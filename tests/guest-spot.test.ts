@@ -6,6 +6,7 @@ import { cleanGuestName, GUEST_SPOT, guestSpotAllowed, headCount, hostDropText, 
 import { formatPrice } from '../shared/money';
 import { LATE_FEES_HEADER } from '../shared/lateFees';
 import type { GroupView } from '../shared/api';
+import { activityText } from '../shared/activity';
 import { type Client, DAY, HOUR, PIN, setupGroup, TestApp } from './harness';
 
 const ORG = 'Alex';
@@ -389,6 +390,17 @@ describe('money', () => {
     expect(a.confirmedCount).toBe(3);
     expect(a.roster.find((x: any) => x.name === 'Blair').guest).toBeUndefined();
   });
+  it('late cancel, fee kept, no split (4 in with the guest): the pair owes two flat shares', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.start - 6 * HOUR;
+    const r = await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false });
+    expect(r.status, r.text).toBe(200);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.lateFee?.oweCents).toBe(2800);
+    expect((await mineOn(w, 'Casey', g.id)).mine?.lateFee?.oweCents).toBe(1400);
+  });
   it('cancel: everything on the seat ($28) comes back to the host', async () => {
     const w = await world();
     const g = await game(w);
@@ -432,5 +444,182 @@ describe('a game with no guest is exactly as before', () => {
     }
     expect(JSON.stringify(answers[1]).replace(/[0-9a-f-]{36}/g, 'ID')).toBe(JSON.stringify(answers[0]).replace(/[0-9a-f-]{36}/g, 'ID'));
     expect(DAY).toBeGreaterThan(0);
+  });
+});
+
+describe('alerts and texts', () => {
+  async function withTelegram() {
+    const bodies: any[] = [];
+    const w = await world({
+      env: {
+        SITE_URL: 'https://pickleball.juncaj.net',
+        TELEGRAM_BOT_TOKEN: '123:abc',
+        TELEGRAM_CHAT_ID: '42',
+      } as Record<string, string>,
+    });
+    (w.app.env as any).TELEGRAM_FETCH = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+    return { w, bodies };
+  }
+  it('one combined alert when a host drops with a guest: "Blair (and guest Sam) dropped out", the count counts the guest', async () => {
+    const { w, bodies } = await withTelegram();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.start - 20 * HOUR;
+    bodies.length = 0;
+    expect((await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/withdraw`, {})).status).toBe(200);
+    await w.app.settle();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].text).toMatch(/^Blair \(and guest Sam\) dropped out of /);
+    expect(bodies[0].text).toMatch(/2 in now, under 4\./);
+    expect(bodies[0].text).not.toMatch(/Sam dropped/);
+  });
+  it('the organizer gets one alert when the host removes the guest; nothing is ever sent to a guest', async () => {
+    const { w, bodies } = await withTelegram();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w, g.id, 'Blair');
+    bodies.length = 0;
+    expect((await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/remove-guest`, {})).status).toBe(200);
+    await w.app.settle();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].text).toMatch(/^Blair removed guest Sam from .+\. 4 in now\.$/);
+    expect(bodies[0].chat_id).toBe('42');
+    // The organizer's own Remove guest sends nothing (only player taps cause alerts).
+    await addGuest(w, g.id, 'Blair');
+    bodies.length = 0;
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/guest/remove`, { playerId: w.byName.Blair })).status).toBe(200);
+    await w.app.settle();
+    expect(bodies).toHaveLength(0);
+  });
+  it('History lines name the guest by first name', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair']);
+    await addGuest(w, g.id, 'Blair');
+    await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/remove-guest`, {});
+    const lines = (await dash(w)).audit.map((a: any) => activityText({ ...a, sessionStartsAt: new Date(g.start).toISOString() }, 'America/Detroit', ORG));
+    expect(lines.some((l: string) => /^Alex added Sam as Blair's guest for /.test(l)), lines.join(' | ')).toBe(true);
+    expect(lines.some((l: string) => /^Blair removed their guest Sam for /.test(l)), lines.join(' | ')).toBe(true);
+  });
+  it('texts: the guest has no row, so no prepared text ever has a guest recipient; the reminder amount is the host\'s $28', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    const a = await adminGame(w, g.id);
+    // Rows are seats: Sam is never a row with a phone.
+    expect(a.roster.map((r: any) => r.name).sort()).toEqual(['Blair', 'Casey', 'Devon']);
+    expect(a.roster.find((r: any) => r.name === 'Blair').owesCents).toBe(2800);
+    // The count every text uses counts Sam.
+    expect(a.confirmedCount).toBe(4);
+  });
+});
+
+describe('more money and seats', () => {
+  it.each([
+    // [seats with no guest besides Blair, played count, price, Blair back, Casey back]
+    [4, 6, 900, 1000, 500],
+    [5, 7, 800, 1200, 600],
+    [8, 10, 500, 1800, 900],
+  ])('final price with a guest: Blair + Sam and %i others: %i played, $%i each', async (others, played, price, blairBack, caseyBack) => {
+    const w = await world({ maxPlayers: 10 });
+    const g = await game(w);
+    const names = ['Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules'].slice(0, others);
+    await join(w, g.id, ['Blair', ...names]);
+    await addGuest(w, g.id, 'Blair');
+    for (const n of ['Blair', ...names]) expect((await markPaid(w, g.id, n)).status).toBe(200);
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    expect(f.status, f.text).toBe(200);
+    expect(f.data.played).toBe(played);
+    expect(f.data.priceCents).toBe(price);
+    expect(await credit(w, 'Blair')).toBe(blairBack);
+    expect(await credit(w, 'Casey')).toBe(caseyBack);
+  });
+  it('the host did not play: nothing for either, all $28 back; reopen takes it back and the pair owes again', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    w.app.now = g.start + 3 * HOUR;
+    const played = ['Casey', 'Devon', 'Emery', 'Frankie'].map((n) => w.byName[n]);
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played });
+    expect(f.data.played).toBe(4);
+    expect(await credit(w, 'Blair')).toBe(2800);
+    const r = await admin(w, 'POST', `/api/admin/sessions/${g.id}/reopen`, {});
+    expect(r.status, r.text).toBe(200);
+    expect(await credit(w, 'Blair')).toBe(0);
+    const again = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    expect(again.data.played).toBe(6);
+    expect(again.data.priceCents).toBe(900);
+    expect(await credit(w, 'Blair')).toBe(1000);
+  });
+  it('late cancel, fee kept and split: the guest counts in N, the host keeps two shares', async () => {
+    const w = await world({ lateFees: true });
+    expect((await admin(w, 'PUT', '/api/admin/late-fee-split', { on: true })).status).toBe(200);
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await addGuest(w, g.id, 'Blair');
+    for (const n of ['Blair', 'Casey']) await markPaid(w, g.id, n);
+    w.app.now = g.start - 6 * HOUR;
+    const r = await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false });
+    expect(r.status, r.text).toBe(200);
+    expect(r.data.split).toEqual({ count: 6, priceCents: 900 });
+    // Blair paid $28 for two shares of $9: $10 back. Casey paid $14: $5 back. Devon owes $9.
+    expect(await credit(w, 'Blair')).toBe(1000);
+    expect(await credit(w, 'Casey')).toBe(500);
+    expect((await mineOn(w, 'Devon', g.id)).mine?.lateFee?.oweCents).toBe(900);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.shareCents).toBe(1800);
+  });
+  it('a waitlisted host with a waitlisted guest: the host moves in first, then the guest, each on its own spot', async () => {
+    const w = await world({ maxPlayers: 4 });
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Frankie', 'Blair']);
+    expect((await mineOn(w, 'Blair', g.id)).mine?.status).toBe('waitlisted');
+    const r = await addGuest(w, g.id, 'Blair');
+    expect(r.data.guest.status).toBe('waitlisted');
+    expect((await mineOn(w, 'Casey', g.id)).waitlist.map((x) => x.name)).toEqual(['Blair', 'Sam']);
+    await call(w, 'Casey', 'POST', `/api/sessions/${g.id}/withdraw`, {});
+    let s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.status).toBe('confirmed');
+    expect(s.mine?.guest?.status).toBe('waitlisted');
+    expect(s.mine?.oweCents).toBe(1400);
+    await call(w, 'Devon', 'POST', `/api/sessions/${g.id}/withdraw`, {});
+    s = await mineOn(w, 'Blair', g.id);
+    expect(s.mine?.guest?.status).toBe('confirmed');
+    expect(s.mine?.oweCents).toBe(2800);
+    expect(s.countText).toBe('4 in, full');
+  });
+  it('under 4 with the guest gone: removing the guest from a 4-player game leaves 3 (the game is short again)', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    expect((await mineOn(w, 'Casey', g.id)).countText).toBe('4 in');
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/guest/remove`, { playerId: w.byName.Blair });
+    expect((await mineOn(w, 'Casey', g.id)).countText).toBe('3 of 4 in');
+  });
+  it('a sub replacing a late pair is never charged twice and the books balance (every cent the host paid comes back or stays once)', async () => {
+    const w = await world({ lateFees: true });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    w.app.now = g.start - 6 * HOUR;
+    await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/withdraw`, {});
+    await join(w, g.id, ['Emery']);
+    w.app.advance(60_000);
+    await join(w, g.id, ['Frankie']);
+    w.app.advance(60_000);
+    // A third sub clears nothing more.
+    await join(w, g.id, ['Gale']);
+    expect(await credit(w, 'Blair')).toBe(2800);
+    const s = await mineOn(w, 'Emery', g.id);
+    expect(s.confirmed.map((c) => c.name)).toEqual(['Casey', 'Devon', 'Emery', 'Frankie', 'Gale']);
   });
 });
