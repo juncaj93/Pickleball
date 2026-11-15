@@ -25,6 +25,7 @@
 const { spawn, spawnSync } = require('node:child_process');
 const { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 const { chromium } = require('playwright');
 
@@ -79,7 +80,8 @@ function viteBuild(cwd, outDir) {
 function buildMain() {
   if (process.env.Z48_MAIN_DIST) return process.env.Z48_MAIN_DIST;
   const wt = path.join(ROOT, '.data', 'zip48-main-wt');
-  const out = path.join(ROOT, '.data', 'zip48-main-dist');
+  // Built copies go to the system temp folder (a copy under the project would be read by tests that scan every file).
+  const out = path.join(os.tmpdir(), 'zip48-main-dist');
   spawnSync('git', ['worktree', 'remove', '--force', wt], { cwd: ROOT });
   rmSync(wt, { recursive: true, force: true });
   const add = spawnSync('git', ['worktree', 'add', '--detach', wt, 'origin/main'], { cwd: ROOT, encoding: 'utf8' });
@@ -130,7 +132,7 @@ async function main() {
   mkdirSync(path.join(ROOT, '.data'), { recursive: true });
   if (SHOTS) mkdirSync(SHOTS, { recursive: true });
   console.log('Building the branch and main...');
-  const branchDist = path.join(ROOT, '.data', 'zip48-branch-dist');
+  const branchDist = path.join(os.tmpdir(), 'zip48-branch-dist');
   viteBuild(ROOT, branchDist);
   const mainDist = buildMain();
   assert(existsSync(path.join(branchDist, 'admin.html')), 'branch build has no admin.html');
