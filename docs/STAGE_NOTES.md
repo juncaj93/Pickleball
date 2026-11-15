@@ -4988,3 +4988,7 @@ lasts 400 days and survives sign-out (it only skips the overall cap). Test gaps 
   "Who are you?" with no page errors and never fetches the organizer files; /admin asks for the PIN with no page errors; organizer data
   (dashboard, money, demo-extras, backup, activity) and Change PIN answer 401 without it. The Zelle number is in none of the live scripts
   (the same check finds it in Zip 49's deployment, so the check works).
+- Weekly copy on live with the new clock: asked at 5:57 PM (`node scripts/weekly-backup.mjs ask`, one row in `pickleball-backups`), made
+  at 6:00 PM as `2026-11-15-asked-1800` (207,614 characters, 4 pieces). `npm run restore-test -- --weekly 2026-11-15-asked-1800`: PASS,
+  all 573 rows in 13 tables (version 2: switches, price locks, alert settings and real sign-ins included), its own saved counts, the
+  money and the 21 health checks match. The regular Sunday copies are version 2 from Sun Nov 22.
