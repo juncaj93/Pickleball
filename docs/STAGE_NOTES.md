@@ -4796,3 +4796,25 @@ what is kept always agree.
 Daylight saving cancel-by on clock-change Sundays; M-2 (backup format) has its own zip. Not in this zip (F-7 is item 7, F-8 is item 8): F-5, F-9,
 F-10 to F-20, F-22 to F-24. Known small one: the player's credit sheet line for Remove guest still reads "(you dropped)" (it comes from the credit
 entry's stored reason, which other money code reads; changing it is not a wording-only change).
+
+### Fresh reviewer (did not write the code)
+Two real bugs, both fixed: (1) Text all asked for $7 after a one-share no-show pair (the guest view now carries `units`, the seat's people count);
+(2) Unmark after a trim left the trimmed $14 as credit from nothing (also true before this zip for Remove guest and the round 3 one-short drop):
+Unmark now takes back 'dropped' credit made after the seat's payment while the seat is still paid (`undoTrimBackStatements`), or refuses when it
+was spent. Also fixed: the "Paid $14 · $14 due" card and the confirm's cash hold apply only to a seat whose price went up because of its guest (a
+single player reads exactly as before); the confirm's follow-up step is guarded against a Finalize or Reopen at the same moment; Finalize gives a
+one-share no-show pair back only whole $14 shares; the Who played note never says the organizer owes. Left, display only: a Reopen after a confirm
+that came after Finalize can read Paid at $14 on a $28 seat until the redo (the redo settles it); the moved-game notice names the new date.
+
+### Tests
+- Unit: 177 files, 3,197 passed, 2 skipped, 0 failed (34 new in tests/zip49-money.test.ts, every item with its exact numbers).
+- Audit C probes re-run: the 44 guest scenarios: 42 pass as written, 2 (K2, K3) pinned the old "$14" / "(dropped out)" words that item 3 fixed on
+  purpose; the 7 that failed on main all pass. Late fee and venue probes that pinned the old behaviour (D1 to D5, A11, F1, P-V06, P-S04) now show the fix.
+- Browser: full run 80 of 80 scripts, 2,920 checks (round2 needed its rerun alone, a busy machine); e2e/zip49.cjs 23 of 23 (390, 360, 320, light
+  and dark: the drop words, the confirm flow, the Players sheet, Text all, a 20-letter guest name, the Who played note); e2e/zip42-off.cjs against
+  main b8ba448: 38 of 38 (Guest spot off = main).
+- e2e/zip42.cjs W1 now expects the new Who played note ("Parker owes $14, for the 1 spot the game was short."), item 7.
+
+### Preview (Sun Nov 15, 11:06 AM seed; code redeployed 11:16 AM)
+https://claude-new-session-r7eh7b.pickleball-club-9h0.pages.dev, calm Zip 49 profile, every live switch on (Late fees, Guest spot, Venue alert
+included). Late games tonight 8:00 PM and 9:00 PM (late window open until then). NOT merged, NOT deployed: waiting for Alex.
