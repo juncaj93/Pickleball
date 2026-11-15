@@ -194,7 +194,7 @@ export function gamePriceCents(d: Pick<AdminDashboard, 'group'>, s: AdminSession
   // Zip 49 (F-2): a host with a guest owes two people's shares on one row: the group text asks each person for ONE share (the host's own
   // reminder still says the full amount). So a pair counts as two people at half its price, and the group is never asked for $28.
   for (const r of unpaidRows(s)) {
-    if (r.shareCents === null || r.shareCents <= 0) continue;
+    if (r.shareCents === null || !(r.shareCents > 0)) continue;
     const people = pairPeople(r);
     const each = Math.round(r.shareCents / people);
     counts.set(each, (counts.get(each) ?? 0) + people);

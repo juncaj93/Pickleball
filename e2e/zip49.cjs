@@ -2,8 +2,8 @@
  *
  *   node e2e/zip49.cjs      (also run by npm run test:e2e)
  *
- * The world is built as of Sun Nov 15 2026, 12:00 PM Eastern; the clock is 1:00 PM. "Late, 1 short" starts at 11:00 PM and "Late, 2 short" at
- * 11:30 PM, so both are inside their 12 hours. Rowan + Sam (guest) in each; Rowan tapped I paid $28 (not confirmed). "Text all" is Mon Nov 16,
+ * The world is built as of Sun Nov 15 2026, 12:00 PM Eastern; the clock is 1:00 PM. "Late, 1 short" and "Late, 2 short" start about 9 and 9.5
+ * hours after the seed, so both are inside their 12 hours. Rowan + Sam (guest) in each; Rowan tapped I paid $28 (not confirmed). "Text all" is Mon Nov 16,
  * 7:00 PM: Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid.
  *   L1  Drop out words on both late games (390, 360, 320; light and dark): "$14 ... Your guest's spot isn't needed" and "your 2 spots ... $28"
  *   L2  the flow on "Late, 1 short": Rowan drops, Alex confirms the I paid: Rowan's credit chip $14, the Players sheet shows Rowan's late drop
@@ -142,6 +142,13 @@ async function main() {
     assert(bad.length === 0, `${what}: sticks out: ${bad.join(' | ')}`);
   };
   const openSheet = async (page, id) => {
+    // Home opens the first game; the others are folded rows: unfold this one first.
+    const folded = page.locator(`div.hv2-short[data-session="${id}"]`);
+    if ((await folded.count()) > 0) {
+      await folded.scrollIntoViewIfNeeded();
+      await folded.click();
+      await page.waitForTimeout(500);
+    }
     const cell = page.locator(`article[id="session-${id}"] [data-paid-cell]`);
     await cell.scrollIntoViewIfNeeded();
     await cell.click();

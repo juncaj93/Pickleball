@@ -578,15 +578,15 @@ export async function buildSmallPreview(
     summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg; "Guest test" also Parker + Billy (guest), 5 in; Rowan owes $28 on the first and paid $28 on the second; round 3: "Late: 4 seats", "Late: host 4th", "Late: host 5th" (next day 5:30, 6:00, 6:30 PM, Rowan + Sam in each: Drop out owes $28, $14, nothing)');
   }
 
-  // 25. Zip 49 (money fixes): Alex's three taps. The late games start 11 to 11.5 hours after the seed, so their late window (12 hours before the
-  //     start) is open from the seed until they start; a later test needs a fresh seed. Rowan + Sam (guest) in each, Rowan tapped I paid $28
+  // 25. Zip 49 (money fixes): Alex's three taps. The late games start about 9 and 9.5 hours after the seed (a little later when that time is taken), so
+  //     their late window (12 hours before the start) is open from the seed until they start; a later test needs a fresh seed. Rowan + Sam (guest) in each, Rowan tapped I paid $28
   //     (not confirmed yet: that is the case the fix is about).
   //     "Late, 1 short": Parker, Christopher Vanderberg, Reese, then Rowan + Sam (5): Drop out says $14; confirm the I paid: $14 back.
   //     "Late, 2 short": Rowan + Sam, Parker, Christopher Vanderberg (4): Drop out says $28; Sage taps I'm in (takes Sam's spot); confirm: $14 back.
   //     "Text all": the day after at 7:00 PM, Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid: Text all asks for $14.
   if (opts.zip49) {
     const step = 30 * 60_000;
-    const lateStart = Math.floor((N + 11.5 * HOUR) / step) * step;
+    const lateStart = Math.floor((N + 9.5 * HOUR) / step) * step;
     const one = await makeAt(lateStart - step, 120, 'Late, 1 short');
     const two = await makeAt(lateStart, 120, 'Late, 2 short');
     const text = await makeAt(localAt(N + DAY, 19), 120, 'Text all');
@@ -605,7 +605,7 @@ export async function buildSmallPreview(
     keep.push(one.id, two.id, text.id);
     lateMove = undefined;
     await refresh();
-    summary.push('Zip 49 money fixes: "Late, 1 short" and "Late, 2 short" (start 11 and 11.5 hours after the seed; Rowan + Sam in each, Rowan tapped I paid $28, not confirmed) and "Text all" (the day after, 7:00 PM: Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid)');
+    summary.push('Zip 49 money fixes: "Late, 1 short" and "Late, 2 short" (start about 9 and 9.5 hours after the seed; Rowan + Sam in each, Rowan tapped I paid $28, not confirmed) and "Text all" (the day after, 7:00 PM: Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid)');
   }
 
   await refresh();
