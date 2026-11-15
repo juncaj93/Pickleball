@@ -25,7 +25,8 @@ script_name = "pickleball-error-box"
 # removed those lines: production went from 58 variables to 9, preview from 60 to 12. tests/variables-proof.test.ts runs the site's own
 # switch code on the old list and on this file and fails if any switch would answer differently.
 # These need NO line (missing = allowed; who gets each one is its Settings > Feature switches row). To kill one, add NAME = "off" here
-# (and in the preview list further down, for a preview), then deploy:
+# (and in the preview list further down, for a preview), write the same value into
+# tests/fixtures/cloudflare-vars-before-zip45.json so the proof test knows it is meant, then deploy. Double quotes, no indent. These need no line:
 #   TIME_SHIFT, PAY_ALWAYS, ADMIN_V2, PAY_NOTE, ADMIN_R2, ADMIN_R3, LATE_FEES, PLAYER_FIX1, PAY_SHEET, TEXTS_R2, LATE_FEE_SPLIT, MONEY_REWORK,
 #   INSTANT_TAPS, ADJUST_CREDIT, VENMO_REQUEST, HOME_COLLAPSE, TONIGHT_GLOW, COLOR_CLEANUP, PLAYER_CARDS_SIMPLE, LAST_CALL_TEXTS, SHORT_GAMES,
 #   CARD_TIME_BUTTONS, CARD_CLEANUP, ALERT_CARDS, SPEED_FEWER_QUERIES, SPEED_DIRECT_LOAD, SPEED_LAST_SCREEN, SPEED_LAST_SCREEN_ADMIN, SEAT_DOTS,
