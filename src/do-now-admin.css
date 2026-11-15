@@ -1,0 +1,6 @@
+/*
+ * Zip 48 (speed split): the organizer screens' copy of do-now.css. do-now.css is also used by two small organizer link pages in the player
+ * download (/go/ and /gt/), so the player style file has it, early. Before the split the organizer screens brought it in here, between their
+ * own style files; importing this copy keeps it exactly there on /admin (see src/admin-late.css for the twin rule).
+ */
+@import './do-now.css';
