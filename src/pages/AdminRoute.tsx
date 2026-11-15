@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { loadedAdmin, loadOrRecover } from '../adminChunk';
+import { loadAdmin, loadedAdmin, loadOrRecover } from '../adminChunk';
 import { TopBar } from '../Shell';
 import { AdminLoadingScreen } from './AdminLoading';
 
@@ -9,7 +9,7 @@ import { AdminLoadingScreen } from './AdminLoading';
 // - Failed: an old page after a deploy reloads once by itself; with no signal, a "Try again" screen (never a blank page), which also tries
 //   again by itself when the phone is back online.
 
-type Status = 'loading' | 'offline' | 'failed';
+type Status = 'loading' | 'offline' | 'failed' | 'slow';
 
 export function AdminRoute() {
   const [mod, setMod] = useState(loadedAdmin);
@@ -23,8 +23,14 @@ export function AdminRoute() {
     loadOrRecover(attempt.userAsked).then((r) => {
       if (!live) return;
       if (r === 'loaded') setMod(loadedAdmin);
-      else if (r === 'offline' || r === 'failed') setStatus(r);
+      else if (r === 'offline' || r === 'failed' || r === 'slow') setStatus(r);
       // 'reloading': the page is being replaced; keep the loading screen.
+      // Slow: the fetch keeps going behind the Try again screen, and draws Admin the moment it lands.
+      if (r === 'slow')
+        loadAdmin().then(
+          () => live && setMod(loadedAdmin),
+          () => undefined,
+        );
     });
     return () => {
       live = false;
@@ -41,11 +47,11 @@ export function AdminRoute() {
 
   if (mod) return <mod.AdminApp />;
   if (status === 'loading') return <AdminLoadingScreen />;
-  return <AdminLoadFailed offline={status === 'offline'} onRetry={() => setAttempt((a) => ({ n: a.n + 1, userAsked: true }))} />;
+  return <AdminLoadFailed offline={status === 'offline'} slow={status === 'slow'} onRetry={() => setAttempt((a) => ({ n: a.n + 1, userAsked: true }))} />;
 }
 
 /** The organizer file did not arrive: the same title bar and the same card as any other "Something went wrong", with Try again. */
-export function AdminLoadFailed({ offline, onRetry }: { offline: boolean; onRetry: () => void }) {
+export function AdminLoadFailed({ offline, slow = false, onRetry }: { offline: boolean; slow?: boolean; onRetry: () => void }) {
   return (
     <>
       <TopBar eyebrow="Organizer" title="Dashboard" />
@@ -55,7 +61,9 @@ export function AdminLoadFailed({ offline, onRetry }: { offline: boolean; onRetr
           <p className="muted">
             {offline
               ? 'No connection right now, so the organizer page could not load. It tries again by itself when your signal is back.'
-              : 'The organizer page could not load.'}
+              : slow
+                ? 'The organizer page is taking a long time to load. It keeps trying, or tap Try again.'
+                : 'The organizer page could not load.'}
           </p>
           <button className="btn" onClick={onRetry}>
             Try again

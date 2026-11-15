@@ -622,7 +622,8 @@ export function PlayerHome({
   }, [plain, load.error, onLinkOnly, onWordNeeded]);
   // Zip 48 (speed split): on the organizer's own phone (it opened /admin with a PIN before, or the server says this is the organizer's own
   // name), fetch the organizer file quietly a few seconds after this screen is up, so Admin opens at once. Never in View as, never for a player.
-  const organizerHere = !viewAs && !!g && (g.goToAdmin === true || isOrganizerPhone());
+  const [organizerPhone] = useState(isOrganizerPhone);
+  const organizerHere = !viewAs && !!g && (g.goToAdmin === true || organizerPhone);
   useEffect(() => {
     if (organizerHere) preloadAdminSoon();
   }, [organizerHere]);

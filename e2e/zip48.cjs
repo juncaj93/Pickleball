@@ -4,6 +4,9 @@
  *   node e2e/zip48.cjs                 builds both (main from a throw-away git worktree of origin/main), then checks
  *   Z48_MAIN_DIST=<dir> node e2e/zip48.cjs     use an already built main instead
  *   E2E_SHOTS=<folder>                 keeps the pictures
+ *   Z48_SIZES=390 Z48_SCHEMES=light    fewer sizes; Z48_ONLY=<regex> only the checks whose names match
+ *
+ * Not in the full run (e2e/suite.cjs): like zip23-off it needs a second checkout (main's build). Started by hand; about 10 minutes.
  *
  * 1. Same look: player screens (Who are you?, a player's Home, the credit sheet, the Christmas skin) and organizer screens (Home, Players,
  *    Money, History, Settings, a game menu, the Players sheet, View as), 390 / 360 / 320 px, light and dark: every element's place, size,
@@ -528,6 +531,42 @@ async function main() {
     await page.unroute(/AdminEntry-.*\.js$/);
     await page.getByRole('button', { name: 'Try again' }).click();
     await page.locator('nav.tabbar').waitFor({ timeout: 30000 });
+    await ctx.close();
+  });
+
+  await check('storage blocked (private mode style): a missing organizer file shows Try again, never a reload loop', async () => {
+    const { ctx, page } = await phone(BRANCH, 390, 'light', { organizer: true });
+    await ctx.addInitScript(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        get() {
+          throw new Error('blocked');
+        },
+      });
+    });
+    await page.goto(BRANCH + '/?as=Parker');
+    await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await page.route(/AdminEntry-.*\.js$/, (route) => route.fulfill({ status: 404, body: 'Not found' }));
+    let loads = 0;
+    page.on('load', () => loads++);
+    await toAdmin(page);
+    await page.getByRole('button', { name: 'Try again' }).waitFor({ timeout: 30000 });
+    await sleep(3000);
+    assert(loads === 0, `page reloaded ${loads} time(s) with storage blocked`);
+    await ctx.close();
+  });
+
+  await check('a stalled download: Try again ("taking a long time") after 15 seconds, then Admin opens by itself when the file lands', async () => {
+    const { ctx, page } = await phone(BRANCH, 390, 'light', { organizer: true });
+    await page.goto(BRANCH + '/?as=Parker');
+    await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    const held = [];
+    await page.route(/AdminEntry-.*\.js$/, (route) => held.push(route));
+    await toAdmin(page);
+    await page.getByText(/taking a long time/).waitFor({ timeout: 25000 });
+    assert(held.length > 0, 'the file was never asked for');
+    for (const r of held) await r.continue();
+    await page.locator('nav.tabbar').waitFor({ timeout: 30000 });
+    assert(page.errors.length === 0, page.errors.join(' | '));
     await ctx.close();
   });
 

@@ -90,6 +90,7 @@ describe('Zip 48: the organizer phone flag', () => {
     const admin = readFileSync(join(__dirname, '../src/pages/Admin.tsx'), 'utf8');
     expect(admin).toContain('if (load.data) markOrganizerPhone(true);');
     const player = readFileSync(join(__dirname, '../src/pages/PlayerHome.tsx'), 'utf8');
-    expect(player).toContain("const organizerHere = !viewAs && !!g && (g.goToAdmin === true || isOrganizerPhone());");
+    expect(player).toContain('const [organizerPhone] = useState(isOrganizerPhone);');
+    expect(player).toContain('const organizerHere = !viewAs && !!g && (g.goToAdmin === true || organizerPhone);');
   });
 });

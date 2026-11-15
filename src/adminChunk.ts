@@ -52,24 +52,48 @@ function readReloadAt(): number | null {
   }
 }
 
-/** Tries once more. Answers 'loaded', or 'reloading' (the page is being reloaded), or 'offline' / 'failed' for the Try again screen. */
-export async function loadOrRecover(userAsked: boolean): Promise<'loaded' | 'reloading' | 'offline' | 'failed'> {
+/** How long one try may take before the Try again screen shows (the fetch keeps going behind it and draws Admin if it lands). */
+export const SLOW_MS = 15_000;
+
+/**
+ * Tries once more. Answers 'loaded', or 'reloading' (the page is being reloaded), or 'offline' / 'failed' / 'slow' for the Try again
+ * screen. A reload happens only when it can be written down first (so storage that is blocked can never cause a reload loop), except
+ * after a tap on Try again.
+ */
+export async function loadOrRecover(userAsked: boolean): Promise<'loaded' | 'reloading' | 'offline' | 'failed' | 'slow'> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const slow = new Promise<'slow'>((resolve) => {
+    timer = setTimeout(() => resolve('slow'), SLOW_MS);
+  });
   try {
-    await loadAdmin();
-    return 'loaded';
+    const r = await Promise.race([loadAdmin().then(() => 'loaded' as const), slow]);
+    if (r === 'loaded') return r;
+    // Still on its way after 15 seconds: a tap on Try again with the site answering reloads; on its own, just show Try again.
+    if (userAsked && (await siteAnswers())) {
+      window.location.reload();
+      return 'reloading';
+    }
+    return 'slow';
   } catch {
     const online = await siteAnswers();
     const next = afterLoadFailed({ online, userAsked, lastReloadAt: readReloadAt(), nowMs: Date.now() });
     if (next === 'reload') {
+      let written = false;
       try {
         sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+        written = sessionStorage.getItem(RELOAD_KEY) !== null;
       } catch {
-        /* storage off: the reload still happens (a tap is needed for any further one only if storage works) */
+        written = false;
       }
-      window.location.reload();
-      return 'reloading';
+      if (written || userAsked) {
+        window.location.reload();
+        return 'reloading';
+      }
+      return 'failed';
     }
     return online ? 'failed' : 'offline';
+  } finally {
+    clearTimeout(timer);
   }
 }
 

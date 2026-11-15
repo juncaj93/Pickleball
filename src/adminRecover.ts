@@ -16,15 +16,15 @@ if (typeof document !== 'undefined') {
 }
 
 /**
- * Did this style link fail? Any of: its error event was seen; it has no sheet; or it is our own file and its rules cannot be read (Chrome
- * keeps an empty, unreadable sheet for a style file that failed, and our own files are always readable when they arrived).
+ * Did this style link fail? Any of: its error event was seen; it has no sheet; its rules cannot be read (Chrome keeps an empty, unreadable
+ * sheet for a style file that failed; our own files are always readable when they arrived); or it has no rules at all.
  */
 export function styleLinkFailed(l: HTMLLinkElement): boolean {
   if (failedLinks.has(l)) return true;
   if (!l.sheet) return true;
   try {
-    void l.sheet.cssRules;
-    return false;
+    // Our built style files are never empty: an empty sheet is one that did not arrive (some browsers keep one after a failure).
+    return l.sheet.cssRules.length === 0;
   } catch {
     return true;
   }
@@ -54,6 +54,13 @@ export async function refetchFailedStyles(doc: Document = document): Promise<voi
             fresh.remove();
             reject(new Error(`Unable to load ${fresh.href}`));
           });
+          // A copy that never answers counts as failed after 15 seconds, so Try again can show instead of the loading screen forever.
+          setTimeout(() => {
+            if (fresh.isConnected && !fresh.sheet) {
+              fresh.remove();
+              reject(new Error(`Timed out loading ${fresh.href}`));
+            }
+          }, 15_000);
           old.after(fresh);
         }),
     ),
