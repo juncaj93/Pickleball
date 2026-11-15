@@ -4964,3 +4964,27 @@ lasts 400 days and survives sign-out (it only skips the overall cap). Test gaps 
 - Found by the real-data check before the deploy (a copy of live, on this computer only): the restore test counted the 14 read-only
   sign-ins the backup leaves out on purpose and would have said FAIL on live. It now leaves them out on both sides and says so in a
   NOTE (`tablesOf` and `leftOutOnPurpose` in scripts/restore-test-lib.ts; tests/restore-test.test.ts).
+
+### Deploy (Sun Nov 15, 2026, 5:56 PM Eastern, quiet window)
+- Checks first: no group text in the 6 hours before (History and the task marks, read only); nothing else deploying (the newest production
+  deployment was Zip 49's, `0d0fbfc7`, `f81f22a`, about 2 hours earlier, and main contained it).
+- Tests on the final code: unit 184 files, 3,292 passed, 2 skipped, 0 failed (the restore test fix that came after was re-run with its
+  files: 18 of 18); typecheck and file name check clean; browser suite 81 of 81 scripts, 2,946 checks, all green (3 lanes).
+- Restore point: SQL export of live (247 KB) saved in `pickleball-backups` as `export-20261115224549` and checked, local copy deleted
+  (phone numbers inside). Time Travel bookmark `00001461-00000000-00005124-c247d86e7ab6b5c5c8ddf0dd75d861d7` (5:46 PM). Integrity checks
+  21 of 21 at 0 before and after. No schema change.
+- Real-data check on that export (this computer only, nothing sent anywhere): a version 2 file built from it restores into an empty
+  database with all 573 rows in 13 tables matching, every value (52 switch rows, 9 price locks, Settings > Alerts, 3 real sign-ins; the
+  14 read-only sign-ins left out on purpose), the same money (4 finalized games of 17, paid in $182, owed $196 on 14 seats) and the same
+  21 health checks.
+- Zelle: live had no saved number (the Pay sheet showed the built-in one). At 5:55 PM the same number was saved into live's settings
+  (`settings_json.zelleNumber`, one row, nothing else changed: checked read only after), so the old code and the new code show the same.
+- Main fast-forwarded to `5af9745`, then `npm run deploy` from main (the guard's five rules passed). Production deployment
+  `46a86caf-a0b6-4d02-822a-b6c89fa7c159`. Rollback: Pages deployment `0d0fbfc7-020d-4df1-9914-618c5e1e1c60` (Zip 49, `f81f22a`).
+- Clock Worker `pickleball-alerts-clock` deployed (the weekly copy writes version 2 now): version `5564757b-178a-46dd-a653-0743d3b8065a`.
+  Rollback: `npx wrangler rollback 6b12b5f8-8d3f-4356-a493-97cd92af03d3 --config worker/wrangler.toml` (the Nov 9 version; nothing else
+  it uses changed since).
+- Live check (public files only, no PIN, the backup address `pickleball-club-9h0.pages.dev`): the page loads (200); a fresh phone sees
+  "Who are you?" with no page errors and never fetches the organizer files; /admin asks for the PIN with no page errors; organizer data
+  (dashboard, money, demo-extras, backup, activity) and Change PIN answer 401 without it. The Zelle number is in none of the live scripts
+  (the same check finds it in Zip 49's deployment, so the check works).
