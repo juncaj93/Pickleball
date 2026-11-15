@@ -73,7 +73,8 @@ async function main() {
     { name: 'organizer, opened again', url: '/admin', organizer: true, again: true, ready: (p) => p.locator('nav.tabbar').waitFor({ timeout: 120000 }) },
   ];
   const out = {};
-  for (const scene of scenes) {
+  const only = process.env.Z48M_ONLY ? new RegExp(process.env.Z48M_ONLY) : null;
+  for (const scene of scenes.filter((x) => !only || only.test(x.name))) {
     for (const [label, base] of [['before', BEFORE], ['after', AFTER]]) {
       const runs = [];
       // Alternate is not needed: each run is a fresh phone and the two previews share one fake database.
