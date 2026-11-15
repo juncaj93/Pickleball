@@ -4961,3 +4961,6 @@ box would have saved nothing when the same number was retyped). Accepted and wri
 its moment (docs/RESTORE.md Plan B step 7: change the PIN again if it changed since); the weekly copy may be thrown away and redone an
 hour later more often, because the alert settings and alert marks can change during its few seconds; the "known organizer phone" mark
 lasts 400 days and survives sign-out (it only skips the overall cap). Test gaps closed: View as row count, a changed real mark.
+- Found by the real-data check before the deploy (a copy of live, on this computer only): the restore test counted the 14 read-only
+  sign-ins the backup leaves out on purpose and would have said FAIL on live. It now leaves them out on both sides and says so in a
+  NOTE (`tablesOf` and `leftOutOnPurpose` in scripts/restore-test-lib.ts; tests/restore-test.test.ts).

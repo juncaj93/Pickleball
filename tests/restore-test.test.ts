@@ -55,6 +55,14 @@ describe('the restore test', () => {
     // Zip 50: a version 2 backup brings the switch rows itself, so there is nothing to warn about.
     expect(text).toContain('task_log 1');
     expect(r.notes.join('\n')).not.toContain('switch rows');
+    // Zip 50: read-only sign-ins on the source are left out of the file on purpose, and the test still passes, with a NOTE.
+    source.raw.prepare("INSERT INTO admin_sessions (id, group_id, token_hash, created_at, expires_at) SELECT 'ro:abcdef012345:t1', id, 'hash-t1', '2026-10-20T00:00:00.000Z', '2026-10-20T12:00:00.000Z' FROM groups").run();
+    const withRo = JSON.parse(JSON.stringify(await backupObject(source, 'x', new Date(SUN).toISOString()))) as Backup;
+    expect(withRo.tables.admin_sessions.some((r) => String(r.id).startsWith('ro:'))).toBe(false);
+    const ro = compare('test ro', source, withRo);
+    expect(ro.checks.filter((c) => !c.ok)).toEqual([]);
+    expect(ro.notes.join('\n')).toContain('1 read-only sign-ins on the source are left out');
+    source.raw.exec("DELETE FROM admin_sessions WHERE id = 'ro:abcdef012345:t1'");
     // An old version 1 file (no task_log, organizer_alerts or admin_sessions) still passes, and says which switches it resets.
     const v1 = JSON.parse(JSON.stringify(backup)) as Backup;
     v1.version = 1;

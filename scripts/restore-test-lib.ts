@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeD1 } from '../dev/nodeD1';
 import { backupToSql, isReadOnlyDownload, TABLES } from './backup-sql.mjs';
+import { backupWhere } from '../server/backupData';
 
 type Db = ReturnType<typeof createNodeD1>;
 type Row = Record<string, unknown>;
@@ -87,14 +88,23 @@ export function fileSource(backup: Backup): Db {
   return db;
 }
 
-/** Every backed-up table's rows, in order (what a backup is made of). */
+/**
+ * Every backed-up table's rows, in order (what a backup is made of): the rows a backup keeps (Zip 50: read-only sign-ins are left
+ * out on purpose, server/backupData.ts BACKUP_WHERE), so a source and its copy compare like for like.
+ */
 export function tablesOf(db: Db): Record<string, Row[]> {
   const out: Record<string, Row[]> = {};
   for (const t of TABLES) {
     const exists = db.raw.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
-    out[t] = exists ? (db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all() as Row[]).map((r) => ({ ...r })) : [];
+    out[t] = exists ? (db.raw.prepare(`SELECT * FROM ${t} WHERE ${backupWhere(t)} ORDER BY rowid`).all() as Row[]).map((r) => ({ ...r })) : [];
   }
   return out;
+}
+
+/** How many rows of the source a backup leaves out on purpose (read-only sign-ins), for a NOTE line. */
+export function leftOutOnPurpose(db: Db): number {
+  const has = db.raw.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'admin_sessions'").get();
+  return has ? Number((db.raw.prepare(`SELECT COUNT(*) AS n FROM admin_sessions WHERE NOT (${backupWhere('admin_sessions')})`).get() as { n: number }).n) : 0;
 }
 
 /** The money totals both sides must agree on (cents; plain sums over the raw rows, the same SQL on both). */
@@ -232,6 +242,8 @@ export function compare(label: string, source: Db, backup: Backup, header?: Reco
       `NOTE (old version 1 file): ${switches.length} switch rows on the source (${[...new Set(switches.map((r) => `${String(r.task).split(':')[0]}${r.kind === 'off' ? ' (off)' : ''}`))].join(', ')}) are not in a backup: after a real restore every one is reset until set again${changed.length ? ` (without them the copy reads ${changed.map((c) => `${c} ${bare[c]}`).join(', ')})` : ''}.`,
     );
   }
+  const skipped = backup.version === 1 ? 0 : leftOutOnPurpose(source);
+  if (skipped) notes.push(`NOTE: ${skipped} read-only sign-ins on the source are left out of every backup on purpose (a helper signs in again).`);
   return { label, ok: checks.every((c) => c.ok), checks, notes };
 }
 
