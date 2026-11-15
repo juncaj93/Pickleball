@@ -20,7 +20,7 @@ Everything a restore needs to give the site back as it was: settings, the PIN (s
 their phone number, every game, who signed up, payments, refunds, credits, the History log, which phones remember which name,
 **every Settings > Feature switch, the price lock of every finalized game, Settings > Alerts, the venue months marked paid, the
 Christmas choice, hidden canceled games, "Do this now" taps, the "already sent" marks of alerts, and the organizer sign-ins**
-(stored scrambled).
+(stored scrambled; read-only PIN sign-ins are never in it: a helper signs in again).
 
 Not in it, on purpose: the wrong-PIN counters and the spam counters (short-lived; a restore leaves them as they are).
 
