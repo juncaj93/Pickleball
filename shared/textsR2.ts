@@ -208,10 +208,10 @@ export function courtStillBookedTextR2(phone: string = COURTS_PHONE, game: strin
   ]);
 }
 
-// ---------- Telegram: dropped / reached 4 ----------
+// ---------- Telegram: dropped ----------
 
 /**
- * How a drop or "it's on" alert names the game: "tomorrow's 8:00 PM game", "tonight's game", "today's game", or for a
+ * How a drop alert names the game: "tomorrow's 8:00 PM game", "tonight's game", "today's game", or for a
  * game further away "the Thu Nov 5, 8:00 PM game". `time` is the usual "8:00 PM".
  */
 export function alertGame(iso: string, tz: string, nowMs: number, time: string): string {
