@@ -6,7 +6,7 @@
  * only (?paysheet=off ends it); Settings > Feature switches > "Pay sheet" turns it on for everyone with no deploy. On: both
  * Pay buttons (the "Tonight: you owe" card at the top and a game card) open a small bottom sheet: title "Pay Alex $14", two
  * equal buttons ("Have the Venmo app? Click here" = the same Venmo link, "Copy Venmo @handle"), a gray Apple Pay / Zelle /
- * cash line, and "I paid". Nothing else. The Zelle number is Settings > Money (default 248-247-9231).
+ * cash line, and "I paid". Nothing else. The Zelle number is Settings > Money (Zip 50: no built-in number; this script saves a fake one).
  * The real Venmo app cannot be opened here: the link's address is checked, the tap itself is the owner's phone test.
  *
  * Starts its own dev server with a fresh fake group (e2e/layout-lib.cjs). Nothing here touches the live site.
@@ -44,6 +44,8 @@ async function main() {
   const { BASE } = await L.startSite({ port: PORT, name: 'pay-sheet', token: TOKEN });
   const w = await L.seed({ BASE, token: TOKEN });
   const { browser, post, put, ok, S, idOf, areq } = w;
+  // Zip 50: the code has no built-in Zelle number any more; the organizer's number lives in Settings > Money. A fake one for this script.
+  ok(await put(areq, '/api/admin/group', { zelleNumber: '(313) 555-0100' }), 'save a fake Zelle number');
   const phone = (width, scheme) => ({ viewport: { width, height: 900 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, userAgent: L.UA, colorScheme: scheme });
 
   async function open(name, { width = 390, scheme = 'light', pct = 100, query = '' } = {}) {
@@ -116,13 +118,13 @@ async function main() {
     assert(squash(await buttons.nth(0).innerText()) === 'Have the Venmo app? Click here', 'first button');
     assert(squash(await buttons.nth(1).innerText()) === 'Copy Venmo @organizer', `second button: ${await buttons.nth(1).innerText()}`);
     assert(squash(await buttons.nth(2).innerText()) === 'I paid', 'third button');
-    assert(squash(await sheet(a.page).locator('.pay-alt').innerText()) === 'No Venmo? Apple Pay or Zelle 248-247-9231, or cash.', 'gray line');
+    assert(squash(await sheet(a.page).locator('.pay-alt').innerText()) === 'No Venmo? Apple Pay or Zelle (313) 555-0100, or cash.', 'gray line');
     // The green button is the same link Pay always had.
     assert((await buttons.nth(0).getAttribute('href')) === href && (await buttons.nth(0).getAttribute('data-app-href')) === appHref, 'the same Venmo link');
     assert(/amount=14/.test(href) && /note=Pickleball/.test(href), 'the amount and note');
     // Nothing else in the sheet.
     const words = await body(a.page);
-    assert(words === 'Pay Alex $14 ✕ Have the Venmo app? Click here Copy Venmo @organizer No Venmo? Apple Pay or Zelle 248-247-9231, or cash. I paid', `sheet text: ${words}`);
+    assert(words === 'Pay Alex $14 ✕ Have the Venmo app? Click here Copy Venmo @organizer No Venmo? Apple Pay or Zelle (313) 555-0100, or cash. I paid', `sheet text: ${words}`);
     assert((await sheet(a.page).locator('a[href]').count()) === 1, 'only the Venmo link, no web link');
     // Another phone is not switched on.
     const other = await open(L.NOSPACE);
@@ -214,7 +216,7 @@ async function main() {
     await ctx.close();
   });
 
-  await check('Settings > Money has "Apple Pay / Zelle number" (default 248-247-9231): a new number shows on the sheet, blank leaves the line out, a bad number is refused', async () => {
+  await check('Settings > Money has "Apple Pay / Zelle number" (Zip 50: a fake saved number, no built-in one): a new number shows on the sheet, blank leaves the line out, a bad number is refused', async () => {
     const ctx = await browser.newContext(phone(390, 'light'));
     await post(ctx.request, '/api/admin/login', { pin: L.PIN });
     const page = await ctx.newPage();
@@ -225,7 +227,7 @@ async function main() {
     await money.waitFor();
     if (!(await money.evaluate((d) => d.open))) await money.locator('summary').click();
     const box = money.locator('[data-row="zelleNumber"] input');
-    assert((await box.inputValue()) === '248-247-9231', `default: ${await box.inputValue()}`);
+    assert((await box.inputValue()) === '(313) 555-0100', `default: ${await box.inputValue()}`);
     await box.fill('313-555-0142');
     await box.blur();
     await money.locator('.save-mark.saved').first().waitFor();
@@ -247,10 +249,10 @@ async function main() {
     await box.blur();
     await page.waitForTimeout(500);
     assert(/phone number/i.test(await money.innerText()), 'a bad number is refused with a message');
-    await box.fill('248-247-9231');
+    await box.fill('(313) 555-0100');
     await box.blur();
     await page.waitForTimeout(900);
-    assert((await dash()).group.zelleNumber === '248-247-9231', 'back to the default number');
+    assert((await dash()).group.zelleNumber === '(313) 555-0100', 'back to the saved number');
     await ctx.close();
   });
 

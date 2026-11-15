@@ -1,7 +1,7 @@
 import { actingWhoChanged, InstantContext, markPressed, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
 import { declinePatch, iPaidPatch, leaveWaitlistPatch } from '../playerPatches';
 import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { DEFAULT_ZELLE_NUMBER, SITE_NAME } from '../../shared/settings';
+import { SITE_NAME } from '../../shared/settings';
 import { setSiteName } from '../siteName';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, parseVenmoHandle, venmoNote, venmoPayUrl } from '../../shared/money';
@@ -1412,7 +1412,7 @@ function PaySheet({
   const first = (g.group.organizerName ?? '').trim().split(/\s+/)[0] || 'the organizer';
   const parsed = parseVenmoHandle(g.group.venmoUrl);
   const handle = parsed.ok && parsed.handle && !parsed.handle.startsWith('id:') ? parsed.handle : null;
-  const zelle = (g.group.zelleNumber ?? DEFAULT_ZELLE_NUMBER).trim();
+  const zelle = (g.group.zelleNumber ?? '').trim();
   return (
     <Sheet open={open} title={`Pay ${first} ${formatPrice(cents)}`} onClose={onClose}>
       <div className="pay-sheet" data-pay-sheet>

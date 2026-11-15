@@ -163,7 +163,8 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
     venmoUrl: 'https://venmo.com/u/pickleball-preview-fake',
     players,
   });
-  await w.org.ok('PUT', '/api/admin/group', { organizerName: ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way' });
+  // Zip 50: no built-in Zelle number any more (live has Alex's saved in Settings > Money); the preview gets a fake one.
+  await w.org.ok('PUT', '/api/admin/group', { organizerName: ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way', zelleNumber: '(313) 555-0100' });
   // One made-up player with NO phone number saved, for Text all on the Money page's Remind sheet (it skips a person with no number).
   await w.org.ok('POST', '/api/admin/players', { name: NO_NUMBER });
   // Zip 6 (Venmo request, Adjust credit): a long made-up name, and Venmo usernames for some players (the rest have none saved), so the

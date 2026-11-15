@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { PAY_SHEET_HEADER, paySheetAllowed } from '../shared/paySheet';
 import { PIN, playerPhone, setupGroup, TestApp } from './harness';
 import { readdirSync, readFileSync } from 'node:fs';
-import { DEFAULT_ZELLE_NUMBER, zelleNumberOf } from '../shared/settings';
+import * as settingsModule from '../shared/settings';
+import { zelleNumberOf } from '../shared/settings';
 import { allowedOnBoth } from './tomlVars';
 
 async function world(env: Record<string, string> = {}) {
@@ -108,21 +109,23 @@ describe('PAY_SHEET switch', () => {
     expect(readFileSync('docs/FEATURE_SWITCHES.md', 'utf8')).toMatch(/`PAY_SHEET`/);
   });
 
-  it('Z1 the Zelle number defaults to 248-247-9231 for players and the organizer, and nothing is stored until it is changed', async () => {
+  it('Z1 Zip 50: no number is built into the code; with nothing saved none is shown, to players or the organizer', async () => {
     const w = await world();
-    expect(DEFAULT_ZELLE_NUMBER).toBe('248-247-9231');
-    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('248-247-9231');
-    expect((await dash(w)).group.zelleNumber).toBe('248-247-9231');
+    expect('DEFAULT_ZELLE_NUMBER' in settingsModule).toBe(false);
+    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('');
+    expect((await dash(w)).group.zelleNumber).toBe('');
     const row = await w.app.db.prepare('SELECT settings_json FROM groups LIMIT 1').first<{ settings_json: string }>();
     expect(JSON.parse(row!.settings_json).zelleNumber).toBeUndefined();
-    expect(zelleNumberOf(row!.settings_json)).toBe('248-247-9231');
+    expect(zelleNumberOf(row!.settings_json)).toBe('');
+    expect(zelleNumberOf('not json')).toBe('');
   });
-  it('Z1b with the sheet off the number is not sent to players at all', async () => {
+  it('Z1b with the sheet off the saved number is not sent to players at all', async () => {
     const w = await world();
+    expect((await w.organizer.call('PUT', '/api/admin/group', { zelleNumber: '(313) 555-0100' })).status).toBe(200);
     expect((await group(w, 'Alex')).group.zelleNumber).toBeUndefined();
-    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('248-247-9231');
+    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('(313) 555-0100');
     await w.organizer.call('PUT', '/api/admin/pay-sheet', { on: true });
-    expect((await group(w, 'Blair')).group.zelleNumber).toBe('248-247-9231');
+    expect((await group(w, 'Blair')).group.zelleNumber).toBe('(313) 555-0100');
   });
   it('Z2 Settings > Money saves a new number, it shows to players, and saving other settings keeps it', async () => {
     const w = await world();
@@ -141,16 +144,17 @@ describe('PAY_SHEET switch', () => {
     expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('');
     await w.organizer.call('PUT', '/api/admin/group', { name: 'Pickleball' });
     expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('');
-    await w.organizer.call('PUT', '/api/admin/group', { zelleNumber: '248-247-9231' });
-    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('248-247-9231');
+    await w.organizer.call('PUT', '/api/admin/group', { zelleNumber: '(313) 555-0100' });
+    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('(313) 555-0100');
   });
   it('Z4 something that is not a phone number is refused and nothing changes', async () => {
     const w = await world();
-    for (const bad of ['hello', '12', '<b>1</b>', '248-247-9231; DROP TABLE players']) {
+    expect((await w.organizer.call('PUT', '/api/admin/group', { zelleNumber: '(313) 555-0100' })).status).toBe(200);
+    for (const bad of ['hello', '12', '<b>1</b>', '(313) 555-0100; DROP TABLE players']) {
       const r = await w.organizer.call('PUT', '/api/admin/group', { zelleNumber: bad });
       expect(r.status, bad).toBe(400);
     }
-    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('248-247-9231');
+    expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('(313) 555-0100');
     expect((await w.app.client().call('PUT', '/api/admin/group', { zelleNumber: '313-555-0142' })).status).toBe(401);
   });
   it('Z5 no schema change: the number lives in settings_json and the migrations folder is untouched', () => {

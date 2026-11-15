@@ -3,7 +3,7 @@ import { flushHolds } from '../../undoHold';
 import { clearLastAdmin, signedOutLastAdmin } from '../../lastAdmin';
 import { parseDollars } from '../../../shared/money';
 import { UNPAID_LIMIT } from '../../../shared/unpaidNudge';
-import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
+import { DEFAULT_VENUE_NAME, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
 import { checkUsualTime, hoursMessageAnyDay } from '../../../shared/bookingHours';
 import { COURT_DAY_MAX, COURT_LAST_DAY, dayLabel, DEFAULT_VENUE_DAYS, MEMBERSHIP_DAY_MAX } from '../../../shared/venueAlert';
@@ -384,7 +384,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               hint: 'Where Pay sends players',
               check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
             })}
-          {text('zelleNumber', 'Apple Pay / Zelle number', g.zelleNumber ?? DEFAULT_ZELLE_NUMBER, { type: 'tel', inputMode: 'tel', maxLength: 24, placeholder: DEFAULT_ZELLE_NUMBER }, {
+          {text('zelleNumber', 'Apple Pay / Zelle number', g.zelleNumber ?? '', { type: 'tel', inputMode: 'tel', maxLength: 24, placeholder: 'Phone number' }, {
             hint: 'Shown on the Pay sheet',
             check: (t) => (/^[0-9+().\s-]{7,24}$/.test(t) ? null : 'Enter a phone number, like 248-555-0123.'),
           })}

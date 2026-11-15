@@ -22,7 +22,7 @@
 // - Free: D1 is on the free plan (5 GB in all, this is well under 1 MB a week), and it rides on the existing cron trigger
 //   (the free plan's 5 cron triggers are all in use, so a new one was not an option).
 import type { D1Database } from '../server/db';
-import { BACKUP_TABLES } from '../server/backupData';
+import { BACKUP_TABLES, BACKUP_VERSION } from '../server/backupData';
 import { localParts } from '../shared/time';
 
 export const BACKUP_TZ = 'America/Detroit';
@@ -128,14 +128,12 @@ export function splitParts(text: string, size = PART_CHARS): string[] {
 
 /**
  * Tables in the database that are NOT in a backup, and why. Every table must be in BACKUP_TABLES or here
- * (tests/backup-coverage.test.ts reads the migrations), so a new table is never forgotten by accident.
+ * (tests/backup-zip19.test.ts reads the migrations), so a new table is never forgotten by accident. Since Zip 50 (version 2) the
+ * switches (task_log), the alert settings (organizer_alerts) and the organizer sign-ins (admin_sessions) are in the backup.
  */
 export const BACKUP_LEFT_OUT: Record<string, string> = {
-  admin_sessions: 'organizer sign-ins: short-lived, and a restore signs everyone out',
   login_attempts: 'wrong-PIN counts: short-lived',
   rate_events: 'spam counters: short-lived',
-  organizer_alerts: 'Telegram alert switches and the last try: a restore empties it, so every alert type comes back On (as since Zip 8)',
-  task_log: 'feature switches, "Do this now" taps and sent alerts: a restore empties it (docs/RESTORE.md says what to check after)',
 };
 
 const NAME = /^[a-z_][a-z0-9_]*$/;
@@ -171,7 +169,7 @@ export async function backupText(db: D1Database, groupName: string, nowIso: stri
     }),
   );
   const rows: Record<string, number> = {};
-  const out = [`{"format":"pickleball-backup","version":1,"createdAt":${JSON.stringify(nowIso)},"groupName":${JSON.stringify(groupName)},"tables":{`];
+  const out = [`{"format":"pickleball-backup","version":${BACKUP_VERSION},"createdAt":${JSON.stringify(nowIso)},"groupName":${JSON.stringify(groupName)},"tables":{`];
   BACKUP_TABLES.forEach((t, i) => {
     const pieces = read[i].results as { n: number; j: string }[];
     rows[t] = pieces.reduce((sum, p) => sum + Number(p.n), 0);
@@ -277,7 +275,7 @@ export function planSteps(id: string, groupName: string, nowIso: string, buckets
       step.chars += b.len;
     });
   });
-  const head = `{"format":"pickleball-backup","version":1,"createdAt":${JSON.stringify(nowIso)},"groupName":${JSON.stringify(groupName)},"tables":{`;
+  const head = `{"format":"pickleball-backup","version":${BACKUP_VERSION},"createdAt":${JSON.stringify(nowIso)},"groupName":${JSON.stringify(groupName)},"tables":{`;
   return steps.map((s, part) => ({
     id,
     part,

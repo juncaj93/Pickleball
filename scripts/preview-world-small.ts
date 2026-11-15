@@ -113,7 +113,8 @@ export async function buildSmallPreview(
     venmoUrl: 'https://venmo.com/u/pickleball-preview-fake',
     players: SMALL_NAMES.filter((n) => phones[n]).map((name) => ({ name, phone: phones[name] })),
   });
-  await w.org.ok('PUT', '/api/admin/group', { organizerName: SMALL_ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way' });
+  // Zip 50: no built-in Zelle number any more (live has Alex's saved in Settings > Money); the preview gets a fake one.
+  await w.org.ok('PUT', '/api/admin/group', { organizerName: SMALL_ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way', zelleNumber: '(313) 555-0100' });
   await w.org.ok('POST', '/api/admin/players', { name: SMALL_NO_NUMBER });
   let dash = await w.org.ok('GET', '/api/admin/dashboard');
   for (const name of SMALL_WITH_VENMO) {

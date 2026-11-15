@@ -45,11 +45,14 @@ export async function adminLogin(ctx: Ctx, pin: string): Promise<GroupRow> {
       `SELECT
          SUM(CASE WHEN client_key = ? THEN 1 ELSE 0 END) AS mine,
          COUNT(*) AS total
-       FROM login_attempts WHERE succeeded = 0 AND attempted_at > ?`,
+       FROM login_attempts WHERE succeeded = 0 AND attempted_at > ? AND client_key NOT LIKE '${PIN_CHANGE_KEY}%'`,
     )
     .bind(clientKey(ctx), since)
     .first<{ mine: number | null; total: number }>();
-  if ((counts?.mine ?? 0) > MAX_FAILS_PER_CLIENT || (counts?.total ?? 0) > MAX_FAILS_GLOBAL) {
+  // Zip 50 (Audit C F-10, A-09): a phone that signed in with the real PIN before (it carries a valid "known organizer phone" mark)
+  // skips the OVERALL cap, so a stranger sending wrong PINs cannot keep Alex's own phone from signing in. Its own cap of 5 still holds.
+  const known = await isKnownOrganizerPhone(ctx, group);
+  if ((counts?.mine ?? 0) > MAX_FAILS_PER_CLIENT || (!known && (counts?.total ?? 0) > MAX_FAILS_GLOBAL)) {
     // A blocked try isn't a guess, so it doesn't extend the lockout.
     await ctx.db.prepare('DELETE FROM login_attempts WHERE id = ?').bind(attemptId).run();
     throw new HttpError(429, 'locked_out', 'Too many wrong PINs. Wait 15 minutes and try again.');
@@ -67,7 +70,69 @@ export async function adminLogin(ctx: Ctx, pin: string): Promise<GroupRow> {
   if (!ok && !viewOnly) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
   await ctx.db.prepare('UPDATE login_attempts SET succeeded = 1 WHERE id = ?').bind(attemptId).run();
   await startAdminSession(ctx, group.id, viewOnly);
+  if (ok) await markKnownOrganizerPhone(ctx, group.admin_pin_hash);
   return group;
+}
+
+/**
+ * Zip 50 (Audit C F-10): the "known organizer phone" mark. A cookie set when the REAL PIN signs in (never the read-only one):
+ * a random value plus a fingerprint of it made with the stored PIN hash, so nobody can make one without the PIN hash (which never
+ * leaves the server or a real-PIN backup file), and every mark stops counting the moment the PIN changes. No database row and no new
+ * variable. It only lets that phone past the overall wrong-PIN cap (20 in 15 minutes from everyone); it never skips the PIN itself or
+ * the phone's own cap of 5.
+ */
+export const KNOWN_ORGANIZER_COOKIE = 'pb_known_org';
+const KNOWN_ORGANIZER_DAYS = 400;
+
+async function knownMark(pinHash: string, nonce: string): Promise<string> {
+  return sha256(`known-organizer:${pinHash}:${nonce}`);
+}
+
+export async function markKnownOrganizerPhone(ctx: Ctx, pinHash: string) {
+  const nonce = randomToken(18);
+  setCookie(ctx, KNOWN_ORGANIZER_COOKIE, `${nonce}.${await knownMark(pinHash, nonce)}`, KNOWN_ORGANIZER_DAYS * 86_400, 'Strict');
+}
+
+export async function isKnownOrganizerPhone(ctx: Ctx, group: GroupRow): Promise<boolean> {
+  const raw = ctx.cookies[KNOWN_ORGANIZER_COOKIE];
+  if (!raw || raw.length > 200 || !group.admin_pin_hash) return false;
+  const dot = raw.indexOf('.');
+  if (dot <= 0) return false;
+  return timingSafeEqual(raw.slice(dot + 1), await knownMark(group.admin_pin_hash, raw.slice(0, dot)));
+}
+
+/**
+ * Zip 50 (Audit C F-5): Change PIN's own wrong-guess limit, for a phone that is already signed in. Its guesses go in the same
+ * login_attempts table (no schema change) under their own key, `pin-change:` + this sign-in's stored hash, so:
+ * - they NEVER count toward sign-in's limits (sign-in skips these keys above), so Change PIN can never lock anyone out of signing in
+ *   or out of the organizer screens; only Change PIN itself waits;
+ * - the limit is per signed-in phone: 5 wrong current PINs within 15 minutes, then Change PIN answers "wait" for 15 minutes (it does
+ *   not even check the PIN while waiting, so waiting reveals nothing). Each guess is written down BEFORE the PIN is checked, so a burst
+ *   of guesses at once still gets at most 5 checks. A right PIN clears the count.
+ */
+export const PIN_CHANGE_KEY = 'pin-change:';
+export const PIN_CHANGE_MAX_FAILS = 5;
+export const PIN_CHANGE_WINDOW_MS = LOCKOUT_WINDOW_MS;
+
+/** Change PIN's current-PIN check, counted. Throws 429 while this phone must wait, 401 for a wrong PIN; returns when it is right. */
+export async function checkCurrentPinCounted(ctx: Ctx, group: GroupRow, pin: unknown): Promise<void> {
+  const token = ctx.cookies[ADMIN_COOKIE] ?? '';
+  const key = PIN_CHANGE_KEY + (await sha256(`pin-change:${token}`));
+  const attemptId = newId();
+  await ctx.db.prepare('INSERT INTO login_attempts (id, client_key, succeeded, attempted_at) VALUES (?, ?, 0, ?)').bind(attemptId, key, ctx.realNowIso).run();
+  const since = new Date(Date.parse(ctx.realNowIso) - PIN_CHANGE_WINDOW_MS).toISOString();
+  const row = await ctx.db
+    .prepare('SELECT COUNT(*) AS n FROM login_attempts WHERE client_key = ? AND succeeded = 0 AND attempted_at > ?')
+    .bind(key, since)
+    .first<{ n: number }>();
+  if ((row?.n ?? 0) > PIN_CHANGE_MAX_FAILS) {
+    // A refused try while waiting is not a guess, so it does not make the wait longer.
+    await ctx.db.prepare('DELETE FROM login_attempts WHERE id = ?').bind(attemptId).run();
+    throw new HttpError(429, 'locked_out', 'Too many wrong PINs. Wait 15 minutes and try again.');
+  }
+  const ok = typeof pin === 'string' && (await verifyPin(pin, group.admin_pin_hash));
+  if (!ok) throw new HttpError(401, 'wrong_pin', 'Current PIN is not right.');
+  await ctx.db.prepare('DELETE FROM login_attempts WHERE client_key = ?').bind(key).run();
 }
 
 /** `viewOnly`: a read-only sign-in (its own id and cookie prefix, 12 hours). Real sign-ins are exactly as before. */

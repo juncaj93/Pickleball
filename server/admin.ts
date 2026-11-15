@@ -10,9 +10,9 @@ import { MONEY_STATE, reopenBlockers, reopenBlockersRead, sqlText } from './fina
 import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenAdminFlags, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenAdminForAll, setLastScreenForAll } from './speed';
 import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../shared/time';
-import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
+import { adminLogin, adminLogout, checkCurrentPinCounted, hashGroupWord, markKnownOrganizerPhone, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
-import { hashPin, newId, randomToken, verifyPin } from './crypto';
+import { hashPin, newId, randomToken } from './crypto';
 import { motionAdminFor, motionForAll, motionSettingRead, setMotionForAll } from './motion';
 import { adjustCreditFor, adjustCreditForAll, setAdjustCreditForAll } from './adjustCredit';
 import { homeCollapseForAll, setHomeCollapseForAll } from './homeCollapse';
@@ -2062,15 +2062,17 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
 
 export async function changePin(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
-  if (typeof body.currentPin !== 'string' || !(await verifyPin(body.currentPin, group.admin_pin_hash))) {
-    throw new HttpError(401, 'wrong_pin', 'Current PIN is not right.');
-  }
+  // Zip 50 (Audit C F-5): 5 wrong current PINs on this phone, then 15 minutes' wait (Change PIN only; sign-in is never affected).
+  await checkCurrentPinCounted(ctx, group, body.currentPin);
   const next = v.pin(body.newPin, 'newPin');
   // Never let the real PIN become the read-only one (that PIN is meant to be handed to helpers).
   if (next === readOnlyPin(ctx.env)) throw new HttpError(400, 'invalid', 'Pick a different PIN.');
   await ctx.db.prepare('UPDATE groups SET admin_pin_hash = ? WHERE id = ?').bind(await hashPin(next), group.id).run();
   await revokeAdminSessions(ctx, group.id);
   await startAdminSession(ctx, group.id);
+  // Zip 50 (F-10): the new PIN ends every old "known organizer phone" mark; this phone gets a new one.
+  const fresh = await ctx.db.prepare('SELECT admin_pin_hash FROM groups WHERE id = ?').bind(group.id).first<{ admin_pin_hash: string }>();
+  if (fresh?.admin_pin_hash) await markKnownOrganizerPhone(ctx, fresh.admin_pin_hash);
   await audit(ctx.db, group.id, null, 'pin_changed', {}, ctx.nowIso);
   return { ok: true };
 }
@@ -2162,6 +2164,8 @@ export async function backupFile(ctx: Ctx): Promise<Response> {
   if (viewOnlyCookie(ctx)) backup.tables.groups = backup.tables.groups.map((g) => ({ ...g, admin_pin_hash: '', group_word_hash: null }));
   // Zip 30: nor the phone codes (History's device_tag): a helper with the read-only PIN gets the History lines without them.
   if (viewOnlyCookie(ctx) && backup.tables.admin_audit_log) backup.tables.admin_audit_log = backup.tables.admin_audit_log.map((r) => ('device_tag' in r ? { ...r, device_tag: null } : r));
+  // Zip 50 (version 2 files): nor the organizer sign-ins (stored as hashes; such a file cannot be restored anyway, F-11).
+  if (viewOnlyCookie(ctx) && backup.tables.admin_sessions) backup.tables.admin_sessions = [];
   const body = JSON.stringify(backup, null, 1);
   return new Response(body, {
     headers: {

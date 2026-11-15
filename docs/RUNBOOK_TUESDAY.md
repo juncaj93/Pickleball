@@ -115,7 +115,7 @@ Every change is in the Activity log and in Cloudflare's 7-day history.
 3. Restore points taken before each deploy are listed in `docs/STAGE_NOTES.md`
    (bookmark plus a SQL export kept out of git). `docs/RESTORE.md` has the
    step-by-step for a backup file.
-4. After any restore, check Settings, Alerts, Smart alerts (it comes back On).
+4. After a Time Travel restore or a version 2 backup file (Zip 50 on), Settings, Alerts, Smart alerts are as they were at that moment. After an OLD backup file (version 1, before Zip 50), Smart alerts comes back On: check it.
 5. Run the read-only health check (changes nothing, prints zeros when all is well):
 
    ```

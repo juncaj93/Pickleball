@@ -12,7 +12,7 @@ const TZ = 'America/Detroit';
 /** Every row of every backed-up table, sorted, so two databases can be compared. */
 function snapshot(db: ReturnType<typeof createNodeD1>) {
   const out: Record<string, unknown[]> = {};
-  for (const t of TABLES) out[t] = db.raw.prepare(`SELECT * FROM ${t} ORDER BY id`).all().map((r) => ({ ...r }));
+  for (const t of TABLES) out[t] = db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all().map((r) => ({ ...r }));
   return out;
 }
 
@@ -79,8 +79,9 @@ describe('backup file', () => {
     await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Oops' });
     ctx.app.db.raw.exec(backupToSql(backup));
     expect(snapshot(ctx.app.db)).toEqual(want);
-    // Organizer devices were signed out; the PIN from the backup works.
-    expect((await ctx.organizer.call('GET', '/api/admin/dashboard')).status).toBe(401);
+    // Zip 50 (file version 2): the organizer sign-ins come back as they were at the backup, so this phone is still signed in; the PIN
+    // from the backup works too.
+    expect((await ctx.organizer.call('GET', '/api/admin/dashboard')).status).toBe(200);
     expect((await ctx.organizer.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(200);
     const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     expect(d.group.name).toBe('Tuesday Thursday Dinks');

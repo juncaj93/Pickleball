@@ -250,7 +250,10 @@ describe('read-only organizer PIN (Zip 8)', () => {
     expect(ro.tables.groups[0].group_word_hash).toBeNull();
     expect(JSON.stringify(ro)).not.toContain(real.tables.groups[0].admin_pin_hash);
     // Everything else is the same file.
-    const strip = (b: any) => ({ ...b, tables: { ...b.tables, groups: b.tables.groups.map((g: any) => ({ ...g, admin_pin_hash: '', group_word_hash: null })) } });
+    // Zip 50 (file version 2): nor the organizer sign-ins (hashes, but still not handed out).
+    expect(real.tables.admin_sessions.length).toBeGreaterThan(0);
+    expect(ro.tables.admin_sessions).toEqual([]);
+    const strip = (b: any) => ({ ...b, tables: { ...b.tables, admin_sessions: [], groups: b.tables.groups.map((g: any) => ({ ...g, admin_pin_hash: '', group_word_hash: null })) } });
     expect(ro).toEqual(strip(real));
     // No other read answer carries the hash either.
     for (const r of routeList().filter((x) => x.method === 'GET' && !x.path.includes(':param'))) {

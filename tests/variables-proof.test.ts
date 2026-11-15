@@ -173,6 +173,33 @@ describe('Zip 45: Cloudflare variables (the reduced set)', () => {
     expect(() => tomlSection('[vars]', toml('PAY_SHEET="off"'))).toThrow(/cannot read/);
   });
 
+  // Zip 50 (Audit C F-14): a variable the code reads that is in neither saved list used to pass unseen. Now every name the code reads
+  // must be in the Zip 45 lists, or below: the switches added since Zip 45 (each checked: missing = its default, "off" kills it) and
+  // the bindings that are not on/off settings. A new switch fails here until it is added (and documented in docs/FEATURE_SWITCHES.md).
+  const NEWER_SWITCHES: Record<string, { missing: unknown; off: unknown }> = {
+    GUEST_SPOT: { missing: true, off: false }, // Zip 42, allowed unless "off"
+    VENUE_ALERT: { missing: true, off: false }, // Zip 43, allowed unless "off"
+    GUEST_SPOT_PREVIEW: { missing: false, off: false }, // Zip 42, preview only: on only when it says "on"
+  };
+  const NOT_SETTINGS = ['DB', 'ERROR_BOX', 'SANDBOX', 'TELEGRAM_FETCH']; // the database, the error box binding, View as, a test hook
+  it('every variable the code reads is known: in the Zip 45 lists, a newer switch (checked), or a binding (F-14)', () => {
+    const unknown = [...new Set(READS.map((r) => r.name))].filter((n) => !PLAIN_NAMES.has(n) && !SECRET_NAMES.has(n) && !(n in NEWER_SWITCHES) && !NOT_SETTINGS.includes(n)).sort();
+    expect(unknown).toEqual([]);
+    const docs = readFileSync(join(ROOT, 'docs/FEATURE_SWITCHES.md'), 'utf8');
+    for (const [name, want] of Object.entries(NEWER_SWITCHES)) {
+      const reads = READS.filter((r) => r.name === name);
+      expect(reads.length, name).toBeGreaterThan(0);
+      for (const r of reads) {
+        expect(r.rule, `${r.file}:${r.line} ${name}`).not.toBeNull();
+        expect([name, Boolean(r.rule!.run(undefined))]).toEqual([name, want.missing]);
+        expect([name, Boolean(r.rule!.run('off'))]).toEqual([name, want.off]);
+      }
+      expect(docs, name).toContain(`\`${name}\``);
+      // None is in wrangler.toml (no new Cloudflare variable).
+      for (const e of ENVS) expect([e, name, name in AFTER[e]]).toEqual([e, name, false]);
+    }
+  });
+
   it('recognizes every place the code reads one of these variables (an unknown way of reading one fails here)', () => {
     const unknown = READS.filter((r) => !r.rule && (PLAIN_NAMES.has(r.name) || r.name.startsWith('<'))).map((r) => `${r.file}:${r.line} ${r.name}: ${r.text}`);
     expect(unknown).toEqual([]);

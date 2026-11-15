@@ -49,10 +49,20 @@ describe('the restore test', () => {
     expect(r.checks.filter((c) => !c.ok)).toEqual([]);
     expect(r.ok).toBe(true);
     const text = r.checks.map((c) => c.line).join('\n');
-    expect(text).toMatch(/rows: all \d+ rows in 10 tables match the source, every value/);
+    expect(text).toMatch(/rows: all \d+ rows in 13 tables match the source, every value/);
     expect(text).toMatch(/money matches: finalized games 0 of \d+/);
     expect(text).toMatch(/integrity checks: all 21 the same on the copy as on the source \(19 problem checks/);
-    expect(r.notes.join('\n')).toContain('1 switch rows on the source (card_cleanup_on) are not in a backup');
+    // Zip 50: a version 2 backup brings the switch rows itself, so there is nothing to warn about.
+    expect(text).toContain('task_log 1');
+    expect(r.notes.join('\n')).not.toContain('switch rows');
+    // An old version 1 file (no task_log, organizer_alerts or admin_sessions) still passes, and says which switches it resets.
+    const v1 = JSON.parse(JSON.stringify(backup)) as Backup;
+    v1.version = 1;
+    for (const t of ['task_log', 'organizer_alerts', 'admin_sessions']) delete v1.tables[t];
+    const old = compare('test v1', fileSource(v1), v1, undefined, true);
+    expect(old.checks.filter((c) => !c.ok)).toEqual([]);
+    const oldVsLive = compare('test v1 vs live', source, v1);
+    expect(oldVsLive.notes.join('\n')).toContain('1 switch rows on the source (card_cleanup_on) are not in a backup');
     // No names or phone numbers in what it prints.
     for (const p of backup.tables.players as { display_name: string; phone_number: string | null }[]) {
       expect(text + r.notes.join('')).not.toContain(p.display_name);

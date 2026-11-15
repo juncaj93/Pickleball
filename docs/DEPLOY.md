@@ -20,7 +20,7 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 - Database change first (only when this deploy adds a file under `migrations/`; Audit A, A-07). Check what is pending, then apply it BEFORE the
   site, so the new code never runs against a column that is not there yet:
   `npx wrangler d1 migrations list pickleball --remote` (must show only the new file; if anything else is listed, stop: it would be applied too),
-  then `npm run db:migrate:remote`. The newest migration is `0020_games_index` (Zip 33: three indexes, no data, rollback statements inside the file; applied to live Wed Nov 11, see STAGE_NOTES), before it `0019_extended_time` (Zip 31; it goes AFTER `0018_phone_tag` from Zip 30, 0018 is live since Wed Nov 11). A deploy with no new migration file skips this step. After 0019, also run the extension checks
+  then `npm run db:migrate:remote`. The newest migration is `0022_guest_spot_people` (Zip 42, after `0021_guest_spot`; both applied to live Sat Nov 14, see STAGE_NOTES). Before them `0020_games_index` (Zip 33: three indexes, no data, rollback statements inside the file; applied to live Wed Nov 11), before it `0019_extended_time` (Zip 31; it goes AFTER `0018_phone_tag` from Zip 30, 0018 is live since Wed Nov 11). A deploy with no new migration file skips this step. After 0019, also run the extension checks
   (read-only, every column 0): `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks-extension.sql)"`.
 - Site (Pages): `npm run deploy` (from main). It is GUARDED (Zip 28, Audit A, A-06; the last two rules added in Zip 35). `scripts/deploy.mjs` checks five
   rules in this order, stops at the first one that fails, and prints `Stopped by the "<rule>" rule`. Nothing is built or sent when it stops.
@@ -60,7 +60,8 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 - Read-only live check with the read-only PIN (SITE_RULES, "Live check with the read-only PIN").
 - Integrity checks again (step 5).
 - Write the deployment ID, the rollback ID, the bookmark and the test counts in `docs/STAGE_NOTES.md`.
-- Price locks (Zip 27): a finalized game's price rules live in the switches table (`task_log`, task `price_lock`), which backup files skip. After a restore from a backup FILE the games follow the switches again (as before Zip 27); a Time Travel restore keeps them. After a file restore, switch the Settings rows back on as they were FIRST (a file restore turns them all off), then run the one-time lock below again.
+- Price locks (Zip 27): a finalized game's price rules live in the switches table (`task_log`, task `price_lock`). Since Zip 50 the backup file and the weekly copy hold them (file version 2), so a restore keeps them, like Time Travel. Only an OLD file (version 1, before Zip 50) skips them: after restoring one, switch the Settings rows back on as they were FIRST (it turns them all off), then run the one-time lock below again (docs/RESTORE.md, Plan B).
+- Clock Worker: the weekly copy is made by `pickleball-alerts-clock` (worker/backup.ts reads server/backupData.ts), so a change to what a backup holds needs the Worker deployed too (see Deploy).
 
 ## Zip 27 one-time step: lock the games finalized before Zip 27 (Alex OKed, Mon Nov 9)
 

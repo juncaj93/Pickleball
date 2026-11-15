@@ -1,71 +1,117 @@
 # Backups and restoring
 
-## Making a backup
+Plain-English steps. Times are Eastern. Every file and copy here has phone numbers: keep them private, never put them in git, a
+text or a chat.
 
-1. Sign in at pickleball.juncaj.net/admin.
-2. Go to **Settings > Backup** and tap **Download backup file**.
-3. You get a file named like `pickleball-backup-2026-11-03.json` (the date is Eastern).
+## What the backups are
 
-The file has everything: settings, the PIN (scrambled, never the real digits),
-every player with their phone number, every game, who signed up, payments,
-refunds, credits, the Activity log, and which phones remember which name.
-**It has phone numbers, so keep it private.** Don't text it or post it.
+There are four ways back, best first:
 
-Good habit: download one at the start of each month, and before any big change.
+| Way back | How far back | What it brings back |
+|---|---|---|
+| **Time Travel** (Cloudflare's own history) | the last 7 days, to the minute | everything, exactly |
+| **Deploy export** (taken before each deploy, `node scripts/deploy-export.mjs list`) | the newest 10 deploys | everything, exactly (loads only into an EMPTY database: ask Claude) |
+| **Weekly copy** (every Sunday from 3:00 AM, `node scripts/weekly-backup.mjs list`) | the newest 8 weeks | the backup file below |
+| **Backup file** (Settings > Backup > Download backup file) | whenever you downloaded one | see below |
 
-The **Download CSV** button next to it is a spreadsheet report for reading. It
-can't be restored from.
+### What the backup file and the weekly copy hold (since Zip 50, file version 2)
 
-Cloudflare also keeps its own history of the database for the last 7 days
-(called Time Travel), so a mistake from this week can be undone even without
-a file.
+Everything a restore needs to give the site back as it was: settings, the PIN (scrambled, never the real digits), every player with
+their phone number, every game, who signed up, payments, refunds, credits, the History log, which phones remember which name,
+**every Settings > Feature switch, the price lock of every finalized game, Settings > Alerts, the venue months marked paid, the
+Christmas choice, hidden canceled games, "Do this now" taps, the "already sent" marks of alerts, and the organizer sign-ins**
+(stored scrambled).
 
-## Restoring from a backup file
+Not in it, on purpose: the wrong-PIN counters and the spam counters (short-lived; a restore leaves them as they are).
 
-Restoring **replaces everything on the live site** with what's in the file.
-Anything that happened after the backup was made (sign-ups, payments) is lost.
-Organizer devices are signed out; sign in again with the PIN you had when the
-backup was made. Players' phones keep their names.
+**Older files (version 1, made before Sun Nov 15, 2026's Zip 50 deploy, and every weekly copy until the first Sunday after it,
+Nov 22) still restore**, but WITHOUT the switches, price locks, alert settings and sign-ins: after such a restore every feature switch
+is off, Settings > Alerts is all On, the venue months marked paid are forgotten, and finalized games are priced again at today's
+rules (Audit C, M-2: the audit's October court cost $408 became $386). The restore script says so when it reads one ("old (version 1)
+file"). Prefer Time Travel or a deploy export over an old file; Plan B step 1 says what to do if an old file is all there is.
 
-You need a computer with this project on it, and Node installed (the same setup
-used to deploy). In a terminal, in the project folder:
+**Never restore a file downloaded with the read-only PIN.** It has no PIN in it (nobody could sign in after) and the restore script
+refuses it.
 
-1. **Turn the file into database steps.** This prints a summary line, like
-   "Backup made Tue, Nov 3, 9:54 PM Eastern (Pickleball). Rows: ...", so
-   you can check it's the right file:
+The **Download CSV** button next to it is a spreadsheet report for reading. It cannot be restored from.
 
-   ```
-   node scripts/restore-backup.mjs pickleball-backup-2026-11-03.json > restore.sql
-   ```
+Good habit: download a file at the start of each month and before any big change.
 
-2. **Try it on a practice copy first** (on your computer only, the live site is
-   not touched):
+## Choose the way back
 
-   ```
-   npx wrangler d1 migrations apply pickleball --local
-   npx wrangler d1 execute pickleball --local --file restore.sql
-   ```
+- The problem started in the last 7 days: **Plan A, Time Travel**.
+- Older: **Plan B, a backup file or weekly copy**. If a deploy export is newer than the weekly copy you would use
+  (`node scripts/deploy-export.mjs list`), ask Claude to load that instead.
+- One wrong record (a seat, a payment): no restore. Fix it with the normal buttons (Players, Unmark, Remove player).
 
-   If both finish without a red error, the file is good.
+Both plans: pick a quiet time (not from 6:00 PM the night before a game until 11:00 PM game night, and not in the hour after a group
+text). Everything after the moment you go back to is lost (sign-ups, payments, drops): write it down first from Admin > History.
 
-3. **Make a safety copy of the live data as it is now**, in case you change your
-   mind:
+The commands run in a terminal in the project folder on a computer with this project (the same setup used to deploy).
 
-   ```
-   npx wrangler d1 export pickleball --remote --output before-restore.sql
-   ```
+## Plan A: Time Travel (last 7 days)
 
-4. **Restore the live site:**
+1. Write down what will be lost: Admin > History, every sign-up, payment, drop and change after the moment you go back to.
+2. Safety copy of live as it is now:
+   `npx wrangler d1 export pickleball --remote --output before-restore-<date>.sql`, then
+   `node scripts/deploy-export.mjs save before-restore-<date>.sql "before Time Travel restore"`. Then delete the local file.
+3. Write down "now" so you can undo the undo: `npx wrangler d1 time-travel info pickleball`. Copy the bookmark it prints.
+4. Health check now, keep its line:
+   `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks.sql)"`
+   Optional money snapshot (type the read-only PIN yourself, never write it down):
+   `READONLY_PIN=... npx vite-node scripts/money-check.ts -- --base https://pickleball.juncaj.net --out <scratch>/before.json`
+5. The bookmark to go back to: one written in docs/STAGE_NOTES.md (each deploy records one), or
+   `npx wrangler d1 time-travel info pickleball --timestamp=2026-11-15T19:00:00-05:00` for a time just before the problem
+   (`-05:00` is Eastern until March, then `-04:00`). Copy the bookmark.
+6. Migrations after that moment? docs/STAGE_NOTES.md says when each went live (0021 and 0022: Sat Nov 14, about 3:00 PM). If the
+   moment is before one, step 8 puts it back. The site keeps working in between.
+7. Restore: `npx wrangler d1 time-travel restore pickleball --bookmark=<bookmark from step 5>`, answer y. It prints "To undo this
+   operation, you can restore to the previous bookmark: ...": write that down too.
+8. Migrations: `npx wrangler d1 migrations list pickleball --remote` should list only files newer than your moment (anything else:
+   stop and ask). Then `npm run db:migrate:remote`, then
+   `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks-extension.sql)"`.
+9. Code: Time Travel changes only data. Roll the site back only if the problem was a bad deploy: Cloudflare Workers & Pages >
+   pickleball-club > Deployments > the one before > Rollback.
+10. Checks after: the health check (every column 0 except the `info_` ones), sign in at /admin with the PIN valid at that moment,
+    look at Home, Players and Money; with a money snapshot, compare:
+    `npx vite-node scripts/money-check.ts -- --compare <scratch>/before.json <scratch>/after.json`. Only changes made after the
+    moment should differ.
+11. By hand: redo the changes from step 1. Phones that signed in or picked a name after the moment do so again. An alert sent after
+    the moment may go out once more within the hour. Write the bookmarks from steps 3, 5 and 7 in docs/STAGE_NOTES.md.
+12. To undo the restore: `npx wrangler d1 time-travel restore pickleball --bookmark=<bookmark from step 7 or 3>`.
 
-   ```
-   npx wrangler d1 execute pickleball --remote --file restore.sql
-   ```
+## Plan B: a backup file or weekly copy (older than 7 days)
 
-5. Open pickleball.juncaj.net/admin, sign in, and check Home, Players and Money.
-
-If step 4 shows a red error, stop there and ask Claude for help. The safety
-copy from step 3 and Cloudflare's 7-day history (below) can both put things
-back the way they were.
+1. **Get the file.** A weekly copy: `node scripts/weekly-backup.mjs list`, then `node scripts/weekly-backup.mjs get <week>` (writes
+   `pickleball-backup-<week>.json`). Or Settings > Backup > Download backup file, signed in with the REAL PIN.
+2. **Make the database steps** and read the summary line it prints:
+   `node scripts/restore-backup.mjs pickleball-backup-<date>.json > restore.sql`
+   It says when the file was made, the group, the rows and the **file version**.
+   - "file version 2": everything comes back, switches and price locks included. Go on.
+   - "old (version 1) file": the switches, price locks, alert settings and sign-ins are NOT in it. Before going on, save today's
+     switch rows (keep the file private):
+     `npx wrangler d1 execute pickleball --remote --json --command "SELECT * FROM task_log WHERE session_id IS NULL OR task IN ('price_lock','hidden_from_players')" > switches-<date>.json`
+     If games were finalized under price rules that changed since, stop and ask Claude to load a deploy export instead (an old file
+     cannot bring the price locks back).
+   - "Could not read the backup: ... read-only PIN": the wrong file. Get one downloaded with the real PIN, or a weekly copy.
+3. **Test it**, no Cloudflare involved: `npm run restore-test -- --file pickleball-backup-<date>.json`. It must end RESULT: PASS.
+4. **Practice copy** (your computer only, live not touched):
+   `npx wrangler d1 migrations apply pickleball --local`, then `npx wrangler d1 execute pickleball --local --file restore.sql`.
+   No red errors means the file is good.
+5. **Safety copy, "now" bookmark, health check and optional money snapshot:** Plan A steps 2 to 4.
+6. **Restore live:** `npx wrangler d1 execute pickleball --remote --file restore.sql`. On a red error, stop: Time Travel to the step 5
+   bookmark puts it back.
+7. **Sign in** at /admin. With a version 2 file, a phone that was signed in when the file was made is still signed in; otherwise use
+   the PIN from when the file was made. If you changed the PIN after the file was made (for example a lost phone), **change it again
+   now** (Settings > Change PIN): that signs out every sign-in the file brought back.
+8. **Check** Home, Players, Money (compare with the money snapshot if you took one) and the health check.
+9. **Only for an old (version 1) file**, set back by hand from step 2's notes: the Feature switches, the price ones FIRST (Short games,
+   Booking hours, Money rework, Late fees, Fee split, Extended time, Guest spot, Made cheaper after paying), then Settings > Alerts
+   (Smart alerts comes back On), the Christmas choice, the Venue alert (cards already due will not show), and hide the canceled games
+   again. Price locks: only if no price rule changed since the oldest finalized game, run the one-time lock in docs/DEPLOY.md;
+   otherwise ask Claude.
+10. **Redo by hand** everything after the file's time. Record the restore in docs/STAGE_NOTES.md. Delete the local files (phone
+    numbers inside).
 
 ## Weekly copies (automatic, since Zip 8)
 
@@ -97,8 +143,7 @@ On a computer with this project (the same setup used to deploy), in a terminal i
 
    This writes `pickleball-backup-2026-11-08.json`. It has phone numbers: keep it private.
 
-3. **Restore it** with the steps in "Restoring from a backup file" above, starting at step 1 with that file name.
-   Try it on the practice copy first (step 2 there), and make the safety copy (step 3 there) before touching the live site.
+3. **Restore it** with Plan B below, using that file name.
 
 ### Stopping or checking the copies
 
@@ -138,28 +183,21 @@ Worker, so it stays well under the free plan's CPU guideline however big the dat
   that one run, so only for today's size, not for a copy many times bigger).
 - Never delete the `pickleball-backups` database unless you mean to throw every weekly copy away.
 
-## Undoing a mistake from the last 7 days without a file
-
-Cloudflare Time Travel can put the whole database back to a moment in the past
-week:
-
-```
-npx wrangler d1 time-travel restore pickleball --timestamp=2026-11-03T21:00:00-05:00
-```
-
-The time is Eastern: `-05:00` in winter (EST), `-04:00` in summer (EDT). The
-command prints a "bookmark" you can use to undo the undo.
-
 ## How this was tested
 
-- `tests/decisions.test.ts` backs up a busy group (6 players, payments, credits,
-  a canceled game with people in it, text links, Activity), restores it into an
-  empty database and over changed data, and checks every row matches. After the
-  restore the old PIN works and the money screens show the same numbers.
-- By hand on Oct 27, 2026: a backup downloaded from the site, turned into
-  `restore.sql` with step 1, and loaded twice into Cloudflare's own local
-  database (step 2). All rows came back, including names with apostrophes and
-  emoji, and the canceled game stayed canceled.
+- `tests/zip50-backup.test.ts` (Zip 50): a fake world with 12 finalized games, then every price rule changed after, plus the
+  Christmas choice, a hidden game, Settings > Alerts and a venue month marked paid. Backed up as a download and as a weekly copy,
+  restored with the real script into an EMPTY database: every row of every table, every switch, every price lock, every alert setting
+  and every money number on the organizer's and the players' screens are the same (October court cost $408 stays $408). Restoring
+  over changed data puts the file back exactly. An old version 1 file still restores (and shows why version 2 was needed: $386). The
+  read-only download is refused; a file from before Oct 29 no longer errors.
+- `tests/decisions.test.ts` backs up a busy group (6 players, payments, credits, a canceled game with people in it, text links,
+  Activity), restores it into an empty database and over changed data, and checks every row matches. After the restore the old PIN
+  works and the money screens show the same numbers.
+- By hand on Oct 27, 2026: a backup downloaded from the site, turned into `restore.sql` and loaded twice into Cloudflare's own local
+  database. All rows came back, including names with apostrophes and emoji, and the canceled game stayed canceled.
+
+## Older files, notes by date
 
 Backups made before Oct 28, 2026 (evening) have no Venmo field for players; they restore fine and leave it blank.
 
@@ -175,15 +213,8 @@ migration 0018 applied (run the migrations first, as above); onto an older pract
 (`npm run restore-test`) may say the rows lack a column when it checks a copy made before Zip 30 with the new code: expected until the first
 weekly copy after the deploy. A backup downloaded with the read-only PIN has the phone codes blanked.
 
-Restoring a backup file also empties the "Do this now" log (`task_log`, Nov 2026): which card buttons were
-tapped, which smart alerts went out, and the Smart alerts switch. After a restore, check Settings > Alerts >
-Smart alerts (it comes back On), and done tasks may show on Home again until tapped. An alert that came due
-in the hour before the restore could be sent once more.
 
-**Feature switches too (found by the restore test, Zip 19):** every switch in Settings > Feature switches is stored in that
-same `task_log` table, so after a restore **every feature switch is off** until it is turned on again (35 rows on live on
-Nov 8). The Telegram alert switches (Settings > Alerts, the `organizer_alerts` table) also come back all On. Before a real
-restore, write down which switches are on (or run `npm run restore-test -- --live`, whose NOTE line lists them), and set
-them again afterwards. Hidden games and players (Hide from list) are in `task_log` too and show again.
-"Error alerts" (Zip 21) is one of those rows. Its error box (worker/box.ts) keeps a copy, and the clock tells the box "off" within
-the hour after a restore, so nothing is sent while Settings shows it off. Switch it on again in Settings if wanted.
+Before Zip 50 (file version 1), restoring a file also emptied `task_log` (every Feature switch off, "Do this now" taps and "already
+sent" marks forgotten, price locks gone, Smart alerts back On), `organizer_alerts` (every Telegram alert type back On) and signed every
+organizer out. "Error alerts" (Zip 21) is one of those switch rows: its error box (worker/box.ts) keeps a copy, and the clock tells
+the box "off" within the hour after such a restore. A version 2 file brings all of these back.

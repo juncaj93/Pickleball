@@ -273,7 +273,7 @@ describe('safety', () => {
     for (const p of parts) expect(p.data.length).toBeLessThan(STEP_CHARS + 40_000); // never more than one 25-row bucket over
     // A step only runs for a copy still in progress: a step for a cleared copy saves nothing.
     await expect(runStep(ctx.app.db, backups, { id: 'gone', part: 0, prefix: '', suffix: '', slices: [], columns: {} })).rejects.toThrow('cleared');
-    await expect(runStep(ctx.app.db, backups, { id: 'gone', part: 0, prefix: '', suffix: '', slices: [{ table: 'admin_sessions', lo: 1, hi: 2, rows: 1, open: true, close: true, firstTable: false }], columns: { admin_sessions: ['id'] } })).rejects.toThrow('Not a backed-up table');
+    await expect(runStep(ctx.app.db, backups, { id: 'gone', part: 0, prefix: '', suffix: '', slices: [{ table: 'login_attempts', lo: 1, hi: 2, rows: 1, open: true, close: true, firstTable: false }], columns: { login_attempts: ['id'] } })).rejects.toThrow('Not a backed-up table');
   });
 
   it('the main run stays small: 3 statements to the live database, 15 to the backup database, whatever the size (each costs CPU)', async () => {

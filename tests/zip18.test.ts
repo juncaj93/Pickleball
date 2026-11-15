@@ -53,8 +53,13 @@ async function phoneOf(w: W, name: string): Promise<Client> {
 }
 
 /** The organizer's demo copy, built the way src/demo/load.ts builds it (the backup plus /api/admin/demo-extras). */
-async function demo(w: W, withExtras = true): Promise<Sandbox> {
+/** `withExtras` false = a server from before Zip 18, which also wrote the old version 1 backup file (no task_log: Zip 50 added it). */
+async function demo(w: W, withExtras = true, oldFile = !withExtras): Promise<Sandbox> {
   const backup = (await w.organizer.call('GET', '/api/admin/backup')).data;
+  if (oldFile) {
+    backup.version = 1;
+    for (const t of ['task_log', 'organizer_alerts', 'admin_sessions']) delete backup.tables[t];
+  }
   const extras = withExtras ? (await w.organizer.call('GET', '/api/admin/demo-extras')).data : null;
   return createSandbox(await initSqlJs(), backup, migrations(), ORIGIN, extras);
 }
@@ -182,6 +187,9 @@ describe('Zip 18: GET /api/admin/demo-extras', () => {
     const g = (await viewAs(sb, w, 'Vic')).data;
     expect(g.me.name).toBe('Vic');
     expect(g.cardCleanup).toBeUndefined();
+    // Zip 50: today's backup file (version 2) carries the switch rows itself, so even without the extras the copy has them.
+    const v2 = (await viewAs(await demo(w, false, false), w, 'Vic')).data;
+    expect(v2.cardCleanup).toBe(true);
   }, 120_000);
 });
 

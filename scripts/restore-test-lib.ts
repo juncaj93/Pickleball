@@ -12,7 +12,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeD1 } from '../dev/nodeD1';
-import { backupToSql, TABLES } from './backup-sql.mjs';
+import { backupToSql, isReadOnlyDownload, TABLES } from './backup-sql.mjs';
 
 type Db = ReturnType<typeof createNodeD1>;
 type Row = Record<string, unknown>;
@@ -155,6 +155,15 @@ export function compare(label: string, source: Db, backup: Backup, header?: Reco
     return want.filter((c) => rowsT.some((r) => !(c in r))).map((c) => `${t}.${c}`);
   });
   add(!missingCols.length, missingCols.length ? `the backup's rows lack columns: ${missingCols.join(', ')}` : "columns: every row in the backup has every column the database has");
+  // Zip 50 (Audit C F-22): and the other way. A column the backup has but this checkout's database does not is dropped on BOTH sides
+  // (the restore and the file source), so it would pass unseen: a newer backup checked on an older checkout. Say so.
+  const extraCols = TABLES.flatMap((t) => {
+    const cols = new Set((backup.tables[t] ?? []).flatMap((r) => Object.keys(r)));
+    return [...cols].filter((c) => !known[t].has(c)).map((c) => `${t}.${c}`);
+  });
+  add(!extraCols.length, extraCols.length ? `the backup has columns this checkout's database does not (they would be dropped): ${extraCols.join(', ')}; run the restore test from a newer checkout` : 'columns: the backup has no column this database lacks');
+  // Zip 50 (Audit C F-11): a file downloaded with the read-only PIN has its PIN blanked; restoring it would leave nobody able to sign in.
+  if (fromFile && isReadOnlyDownload(backup)) add(false, 'this file was downloaded with the read-only PIN (its PIN is blank): never restore it, nobody could sign in after');
 
   // 2. Rows per table, and every value of every row.
   const src = tablesOf(source);
@@ -193,11 +202,12 @@ export function compare(label: string, source: Db, backup: Backup, header?: Reco
   const moneyOff = Object.keys(m1).filter((k) => m1[k] !== m2[k]);
   add(!moneyOff.length, moneyOff.length ? `money differs: ${moneyOff.map((k) => `${k} source ${m1[k]}, copy ${m2[k]}`).join('; ')}` : `money matches: ${moneyLine}`);
 
-  // 4. The integrity checks. Feature switches live in task_log, which a backup leaves out (worker/backup.ts BACKUP_LEFT_OUT), so a
-  // real restore turns them all off. One check reads a switch (Card cleanup lifts the cap to 12), so the source's switch rows are put
-  // into the copy first to compare like for like, and a NOTE says which switches a restore would turn off.
+  // 4. The integrity checks. Before Zip 50 a backup (version 1) left out task_log, where the feature switches live, so a real restore
+  // turned them all off. One check reads a switch (Card cleanup lifts the cap to 12), so for a version 1 file the source's switch rows
+  // are put into the copy first to compare like for like, and a NOTE says which switches that restore would turn off. A version 2 file
+  // brings its switch rows itself: nothing is added, the copy is compared as restored.
   const bare = integrity(copy);
-  const switches = switchRows(source);
+  const switches = backup.version === 1 ? switchRows(source) : [];
   if (switches.length) {
     const ins = copy.raw.prepare(`INSERT INTO task_log (${Object.keys(switches[0]).join(', ')}) VALUES (${Object.keys(switches[0]).map(() => '?').join(', ')})`);
     for (const r of switches) ins.run(...(Object.values(r) as never[]));
@@ -219,7 +229,7 @@ export function compare(label: string, source: Db, backup: Backup, header?: Reco
   if (switches.length) {
     const changed = cols.filter((c) => bare[c] !== i2[c]);
     notes.push(
-      `NOTE: ${switches.length} switch rows on the source (${[...new Set(switches.map((r) => `${String(r.task).split(':')[0]}${r.kind === 'off' ? ' (off)' : ''}`))].join(', ')}) are not in a backup: after a real restore every one is reset until set again${changed.length ? ` (without them the copy reads ${changed.map((c) => `${c} ${bare[c]}`).join(', ')})` : ''}.`,
+      `NOTE (old version 1 file): ${switches.length} switch rows on the source (${[...new Set(switches.map((r) => `${String(r.task).split(':')[0]}${r.kind === 'off' ? ' (off)' : ''}`))].join(', ')}) are not in a backup: after a real restore every one is reset until set again${changed.length ? ` (without them the copy reads ${changed.map((c) => `${c} ${bare[c]}`).join(', ')})` : ''}.`,
     );
   }
   return { label, ok: checks.every((c) => c.ok), checks, notes };

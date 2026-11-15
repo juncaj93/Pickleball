@@ -81,21 +81,19 @@ export function normalizeSettings(input: unknown): GroupSettings {
   return out;
 }
 
-/** The Apple Pay / Zelle number shown on the Pay sheet when Settings > Money has none saved. Blank in Settings means "show no number". */
-export const DEFAULT_ZELLE_NUMBER = '248-247-9231';
-
 /**
- * The Apple Pay / Zelle number, kept inside the group's settings_json (no table or column of its own). Nothing saved: the
- * default above. Saved blank: "" (the Pay sheet then leaves the number out).
+ * The Apple Pay / Zelle number, kept inside the group's settings_json (no table or column of its own), typed in Settings > Money.
+ * Nothing saved, or saved blank: "" (the Pay sheet then leaves the number out). Zip 50 (Audit C F-19): there is NO built-in number in
+ * the code any more (the code is public to anyone who opens the site); the organizer's number lives only in the saved settings.
  */
 export function zelleNumberOf(settingsJson: string | null | undefined): string {
   try {
     const v = (JSON.parse(settingsJson || '{}') as { zelleNumber?: unknown }).zelleNumber;
     if (typeof v === 'string') return v.trim();
   } catch {
-    /* an unreadable settings value: the default */
+    /* an unreadable settings value: none */
   }
-  return DEFAULT_ZELLE_NUMBER;
+  return '';
 }
 
 export const DEFAULT_VENUE_NAME = 'Northville Pickleball Club';

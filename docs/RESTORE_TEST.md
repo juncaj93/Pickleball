@@ -62,11 +62,15 @@ of writes is refused and that the command line is reached in that one place only
 
 ## The NOTE about switches
 
-The test prints a NOTE like "35 switch rows on the source (...) are not in a backup". That is true of every backup, before and
-after Zip 19: the feature switches in Settings (and the Smart alerts switch, "Do this now" taps and sent alerts) live in the
-`task_log` table, which a backup leaves out on purpose (`worker/backup.ts`, `BACKUP_LEFT_OUT`). **After a real restore, every
-feature switch is off until set again.** To compare like for like, the test puts the source's switch rows into the copy before
-the integrity checks (one check, "more in than max", depends on the Card cleanup switch).
+Since Zip 50 a backup file (version 2) holds the switch rows itself (`task_log`, with the price locks), Settings > Alerts
+(`organizer_alerts`) and the organizer sign-ins (`admin_sessions`), so the test compares them like every other table and prints no
+NOTE. For an OLD file (version 1, made before Zip 50) it still prints "NOTE (old version 1 file): 35 switch rows on the source (...)
+are not in a backup": after a real restore of such a file every feature switch is off until set again. For that comparison only,
+the test puts the source's switch rows into the copy before the integrity checks (one check, "more in than max", depends on the Card
+cleanup switch).
+
+Two more checks since Zip 50: a backup with a column this checkout's database does not have fails (it would be dropped on both sides,
+so run the test from a newer checkout), and a file downloaded with the read-only PIN fails (never restore it).
 
 ## Result on Sun Nov 8, 2026, 3:56 PM Eastern (first run, live data)
 
