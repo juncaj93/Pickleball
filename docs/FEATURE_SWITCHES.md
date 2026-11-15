@@ -182,3 +182,13 @@ A player's first visit no longer downloads the organizer screens (about 92 KB of
 - What it is: `src/main.tsx` opens `/admin` through `src/pages/AdminRoute.tsx`, which fetches `src/pages/AdminEntry.tsx` (everything under `src/pages/admin/` and `src/pages/Admin.tsx`). The build writes `dist/admin.html` (the page plus three lines that start the organizer files at once; Cloudflare serves it for `/admin`). The organizer's own phone fetches the organizer file quietly a few seconds after its player screen shows (localStorage `pb_organizer_phone` = "1", set by the dashboard, cleared on sign out).
 - Rule going forward: a NEW style file imported at the end of `src/main.tsx` must also be added to `src/admin-late.css` (the test says so if forgotten). A player screen must not depend on a style rule that only an organizer style file has (`src/credit-history.css` is the one such block today, an exact copy).
 - To undo: revert the Zip 48 commits and deploy (or roll back to the deployment before it). Nothing in the database depends on it.
+
+## Not switched (Zip 50): safety fixes from Audit C
+Safety fixes, like the Audit A money fixes: a switch would only let the hole come back, and nothing a player sees changes.
+- Backup file version 2 (M-2): the backup and the weekly copy hold the switches, price locks, Settings > Alerts and sign-ins. Old files
+  still restore. To undo: revert the Zip 50 commits and deploy the site and the clock Worker (files already made in version 2 then need
+  a checkout from Zip 50 or later to read; docs/RESTORE.md).
+- Change PIN wrong-guess limit (F-5): 5 wrong current PINs on a phone, then 15 minutes' wait, Change PIN only. Sign-in never affected.
+- Known organizer phone (F-10): the `pb_known_org` cookie lets a phone that signed in with the real PIN past the overall wrong-PIN cap.
+  To stop honoring every mark at once: change the PIN.
+- Zelle number (F-19): no built-in number; Settings > Money holds it (blank = no number on the Pay sheet).

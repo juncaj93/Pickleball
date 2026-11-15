@@ -4875,3 +4875,77 @@ that $14 goes back, or how to do it. Now (src/pages/admin/lateRow.ts, the Player
 - Live check (read only, no PIN, the backup address `pickleball-club-9h0.pages.dev`: the custom domain is blocked from this sandbox's network and
   both serve the same production deployment): the page loads (200), a fresh phone sees "Who are you?" with no page errors, /admin asks for the
   PIN, organizer data (dashboard, money, demo-extras) answers 401 without it; the organizer download (AdminEntry) carries the new late-drop row.
+
+## Zip 50: protect ourselves (🎾50.protect), Sun Nov 15, 2026
+Branch `claude/new-session-c2gwa5` (the session is named "🎾50.protect"; the build system pins the branch name). Built on main `96caa6f`
+(Zips 48 and 49 live). No schema change, no new Cloudflare variable, no new switch, nothing a player sees changes. The Audit C doc
+(`docs/audits/AUDIT_C_2026-11.md`, PR #137) and its probes and `tests/dst-2027.test.ts` are merged in with this zip.
+
+### 1. Backups hold everything (Audit C M-2, F-13)
+- The backup file (Settings > Backup) and the weekly copy are now **file version 2**: `server/backupData.ts` BACKUP_TABLES adds `task_log`
+  (every Feature switch, the price locks, venue months marked paid, the Christmas choice, hidden games, "Do this now" taps, "already sent"
+  marks), `organizer_alerts` (Settings > Alerts) and `admin_sessions` (organizer sign-ins, hashes only). Still left out on purpose:
+  `login_attempts`, `rate_events` (short-lived counters).
+- Reader (`scripts/backup-sql.mjs`): takes version 1 and 2. A version 1 file restores exactly as before (the three come back empty,
+  even if something put rows in them); a version 2 file missing one is refused; an unknown version is refused with a plain message.
+  The restore now clears every table children first (the three included), instead of relying on the cascade.
+- The read-only PIN's download also blanks `admin_sessions` (plus the PIN hash, group word and phone codes as before).
+- The weekly copy (`worker/backup.ts`) writes the same version 2 file in its steps: the clock Worker must be deployed with the site.
+- View as (`src/demo/sandbox.ts`) loads the new file as is (its task_log copy uses INSERT OR IGNORE, so nothing doubles).
+- Restore test (`scripts/restore-test-lib.ts`): the switch-row workaround and its NOTE only for version 1 files; new FAIL lines for a
+  backup column this checkout lacks (F-22) and for a read-only download (F-11).
+- Restore script (`scripts/restore-backup.mjs`): refuses a read-only download (F-11); a file from before Oct 29 no longer errors after
+  writing the SQL (F-12, Audit A-21); the summary line names the file version and warns about an old one.
+- Proof: `tests/zip50-backup.test.ts` (12 tests). Fake world with 11 price locks, then every price rule changed, the Christmas choice,
+  a hidden game, three Settings > Alerts rows off and a venue month marked paid. Download and weekly copy (one run and in steps) are the
+  same file; each restored with the real script into an EMPTY database gives every row of all 13 tables, every switch row, every price
+  lock, Settings > Alerts, the venue cards, the Christmas choice, the hidden game and every money number on the organizer's and players'
+  screens back unchanged: October court cost $408 before and after. Restoring over changed data puts the file back exactly. An old
+  version 1 file still restores (and shows the old loss: $386).
+- Docs: docs/RESTORE.md rewritten as one plan for a non-developer (the ways back, Plan A Time Travel with the bookmarks, Plan B a
+  file or weekly copy, what to do with an old file); audit section 6 points to it; RESTORE_TEST.md, DEPLOY.md, RUNBOOK_TUESDAY.md fixed.
+- Weekly copies made before this deploy stay version 1 until the first Sunday copy after it (Nov 22).
+
+### 2. Change PIN guess limit (Audit C F-5)
+- `server/auth.ts` `checkCurrentPinCounted`, called by Change PIN: each guess is written down first in `login_attempts` under the key
+  `pin-change:` + a hash of that phone's sign-in, then counted: 5 wrong current PINs within 15 minutes, then 429 "Too many wrong PINs.
+  Wait 15 minutes and try again." without checking the PIN (a refused try is not counted, so it never makes the wait longer). A right PIN
+  clears the count. Sign-in's own counts skip these keys, so Change PIN can never lock anyone out of signing in or of the organizer
+  screens; other signed-in phones have their own count.
+- Tests: `tests/zip50-pin-limit.test.ts` (9): guesses 1 to 5 checked, the 6th refused even with the right PIN, the wait ending at 15
+  minutes, the count starting over, screens and sign-in working during the wait, 25 wrong Change PIN guesses not touching sign-in, a burst.
+
+### 3. Zelle number out of the public code (Audit C F-19, A-30)
+- Where it was: the built-in default in `shared/settings.ts` (`DEFAULT_ZELLE_NUMBER`), which shipped in the player download; also in
+  `tests/pay-sheet.test.ts`, `e2e/pay-sheet.cjs`, docs/FEATURE_SWITCHES.md and this file. All gone from the current files (git history
+  not rewritten: Alex decides).
+- Now: the number lives only in the group's settings (Settings > Money, `zelleNumber` in `settings_json`). Nothing saved = no number
+  shown. Live had nothing saved (read Sun Nov 15), so the deploy step saves the same number into live's settings first, then the code
+  goes out: players see the same Pay sheet. Previews get a fake one from the seed.
+
+### 4. Other security items (Audit C)
+- F-10 (Audit A-09) fixed: a phone that signed in with the real PIN carries a "known organizer phone" cookie (`pb_known_org`: a random
+  value plus a fingerprint made with the stored PIN hash; no database row, no variable). It skips only the OVERALL wrong-PIN cap (20 in 15
+  minutes), never its own cap of 5 or the PIN. A PIN change ends every old mark. Never set by the read-only PIN. `tests/zip50-signin.test.ts`.
+- Skipped: F-17 (names holding a web address): refusing them changes what a player sees when typing a name, and the Telegram app makes
+  addresses tappable on its own. F-18 (group word overall cap): a cap there would let a stranger lock real players out of typing the
+  word (the same trade-off as F-10). F-20 ("Acting for others" trusts any organizer cookie): the fix needs a database read on every
+  player tap and about ten call sites, for a flag that never touches money.
+
+### 5. Other FIX LATER items
+- Fixed: F-11, F-12, F-13 (with M-2), F-14 (`tests/variables-proof.test.ts` now fails on any variable the code reads that is in no list;
+  `GUEST_SPOT_PREVIEW` added to docs/FEATURE_SWITCHES.md), F-22, F-23 (doc lines; the worker comment names the right test).
+- Left for Alex (money or late fees, not fixed by Zip 49): F-9 (venue alert: moving the court charge day after a paid month leaves a gap),
+  F-15 (the organizer's In keeps a late-drop mark; late-drop marks feed the late fee code), F-16 (the drop dialog can be seconds out of date
+  at the cancel-by moment; player-facing money words). F-24 is wording in briefs only. Daylight saving cancel-by left as is (Alex).
+
+### 6. Re-check after the speed split (Zip 48)
+- (a) `tests/zip50-split-recheck.test.ts`: built with random fake secrets in the environment, none lands in any built file; the organizer
+  files hold no PIN, setup token, group key, Venmo or Zelle value, phone number (only 555 examples) or player name; all 110 `/api/admin`
+  routes answer 401 signed out, with only the group link, as a player and with forged cookies, with no data and no database change.
+- (b) Deep links: /admin, /admin/, /admin.html, ?unpaid=, every ?word=on test link (read by the player download before the organizer file
+  arrives), View as; player links never fetch the organizer file. `e2e/zip50-split.cjs` (16 checks, in the suite now) in a real browser.
+- (c) Old page after a deploy: the real loader with a fake missing file reloads exactly once, then Try again; storage blocked never
+  reloads by itself; no signal shows Try again.
+- No gap found. Two harmless oddities noted (still refusals): `POST /api/admin/sessions/:id/court-answer` signed out with an empty body
+  answers 400 before 401; any write with a cookie starting "ro." gets 403 before the cookie is checked.
