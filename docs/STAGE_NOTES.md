@@ -4849,3 +4849,16 @@ that came after Finalize can read Paid at $14 on a $28 seat until the redo (the 
 ### Preview (Sun Nov 15, 11:06 AM seed; code redeployed 11:16 AM)
 https://claude-new-session-r7eh7b.pickleball-club-9h0.pages.dev, calm Zip 49 profile, every live switch on (Late fees, Guest spot, Venue alert
 included). Late games tonight 8:00 PM and 9:00 PM (late window open until then). NOT merged, NOT deployed: waiting for Alex.
+
+### Round 2 (Sun Nov 15, afternoon): the late-drop row says the money (Alex tested "Late, 1 short")
+Alex's finding: Rowan's row read "late drop · paid $28 · self-marked" with a green Paid chip and no button, so nobody could see that he owes $14,
+that $14 goes back, or how to do it. Now (src/pages/admin/lateRow.ts, the Players sheet in the site's own styles):
+- Line 2: "Late drop · owes $14" (or "Did not play" / "Canceled late"): what the rule says the seat owes, never the amount paid.
+- Paid more (an I paid not confirmed yet, whole $14 shares above): muted "Paid $28 · $14 to give back" and an amber "Give back $14" button. It is the
+  organizer's Mark paid: the confirm keeps $14 and gives $14 back as credit (toast "$14 back to Rowan as credit").
+- Paid exactly: the green "Paid $14" chip; after a give-back a muted "$14 back" (`trimBackCents`, credit that came back from the seat's current
+  payment). Owes and unpaid: Mark paid and Request, as on every other row.
+- A host who dropped late two short keeps Sam's row grouped under him ("Guest of Rowan · late drop", no buttons: the money is the host's).
+- On a narrow phone the late row's chip or button goes under its two lines.
+- Main (Zip 48, the organizer screens in their own download) merged in; conflicts only in this file and tsconfig.node.json (both lists kept).
+- Alex said both questions are OK: Unmark takes a give-back back (or refuses once spent); a host who rejoins alone gets the guest's $14 back at once.
