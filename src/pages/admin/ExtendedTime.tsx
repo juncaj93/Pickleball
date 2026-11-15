@@ -58,7 +58,7 @@ export function WhoPlayedTiles({
   const orgGuest = inNow.some((r) => r.isOrganizer && hasGuest(r) && guestOn(r));
   const split = extensionSplitHeads(extra, n, organizerPlayed ? (orgGuest ? 2 : 1) : 0);
   const notes = whoPlayedNotes(
-    inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })),
+    inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId), organizer: r.isOrganizer })),
     lateFees ? { played: n, flatCents: price, fmt: formatPrice } : undefined,
   );
   const toggleGuest = (id: string) =>

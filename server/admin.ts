@@ -65,7 +65,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, moneyPictureFirstReads, pendingRequestsRead } from './credit';
+import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, undoTrimBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
@@ -1664,14 +1664,17 @@ export async function applyPayment(
     const before = await creditReturnedAt(ctx.db, session.id, playerId, 'unmarked', ctx.nowIso);
     // Everything below was worked out for the game as read: a Finalize or Reopen landing first means look again.
     const finalizeAsRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
-    const [, unpaid] = await ctx.db.batch([
+    const [, , unpaid] = await ctx.db.batch([
       ...undoFinalizedBackStatements(ctx.db, session.id, playerId, ctx.nowIso, finalizeAsRead),
+      // Zip 49 (review): credit a trim gave back from this still-paid seat goes back too (or the Unmark is refused below, if it was spent).
+      ...undoTrimBackStatements(ctx.db, session.id, playerId, ctx.nowIso),
       ctx.db
         .prepare(
           `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed'${fee ? ` OR ${OPEN_FEE('session_players')}` : ''} THEN 'unpaid' ELSE 'not_applicable' END,
              paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
            WHERE session_id = ?2 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL
              AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')
+             AND NOT ${TRIM_BACK_LIVE}
              AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?2) = ?4`,
         )
         .bind(ctx.nowIso, session.id, playerId, finalizeAsRead),
@@ -1714,7 +1717,7 @@ export async function applyPayment(
     if (unpaid.meta.changes !== 1) {
       const fresh = await getSession(ctx.db, group.id, session.id);
       if (`${fresh?.finalized_at ?? ''}:${fresh?.final_price_cents ?? -1}` !== finalizeAsRead) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
-      if ((await creditBackLeft(ctx.db, session.id, playerId)) > 0) {
+      if ((await creditBackLeft(ctx.db, session.id, playerId)) > 0 || (await trimBackLeft(ctx.db, session.id, playerId)) > 0) {
         if (await hasPendingRequest(ctx.db, playerId))
           throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can't be unmarked. Answer the refund request on Home first.`);
         throw new HttpError(409, 'credit_spent', `${row.display_name} already used the credit from this game, so this payment can't be unmarked.`);
@@ -1758,11 +1761,15 @@ async function fitConfirmedClaim(ctx: Ctx, group: GroupRow, session: SessionRow,
   const paid = now.payment_amount_cents ?? 0;
   const seatStatus = now.status === 'withdrawn' ? 'withdrawn' : 'confirmed';
   if (seatStatus === 'confirmed' && now.status !== 'confirmed') return;
+  // Only on the game as read: a Finalize or Reopen landing between the confirm and this step changes the price, so nothing moves (review).
+  const asRead = session.finalized_at ? `= ${sqlText(session.finalized_at)}` : 'IS NULL';
   const confirmedNow = `EXISTS (SELECT 1 FROM session_players g WHERE g.session_id = ${sqlText(session.id)} AND g.player_id = ${sqlText(row.player_id)} AND g.status = '${seatStatus}'
-    AND g.payment_status = 'paid' AND g.self_paid_at IS NULL AND g.payment_updated_at = ${sqlText(ctx.nowIso)})`;
+    AND g.payment_status = 'paid' AND g.self_paid_at IS NULL AND g.payment_updated_at = ${sqlText(ctx.nowIso)})
+    AND (SELECT finalized_at FROM sessions WHERE id = ${sqlText(session.id)}) ${asRead}`;
   if (paid > price) {
     await trimGuestShares(ctx.db, { groupId: group.id, sessionId: session.id, playerId: row.player_id, playerName: row.display_name, priceCents: price, flatCents: flatOf(session, settingsOf(group)), nowIso: ctx.nowIso, guard: confirmedNow, seatStatus });
-  } else if (paid > 0 && paid < price && (inGame ? guestIn(now) : fee === 'late_drop')) {
+  } else if (paid > 0 && paid < price && (inGame ? guestIn(now) : seatUnits(now) > 1)) {
+    // Only a seat whose price went up because of its guest (review: a single player's seat, Guest spot or not, is exactly as before).
     await ctx.db.batch(
       holdShortCashStatements(ctx.db, {
         sessionId: session.id,
@@ -1770,7 +1777,7 @@ async function fitConfirmedClaim(ctx: Ctx, group: GroupRow, session: SessionRow,
         nowIso: ctx.nowIso,
         playerId: row.player_id,
         organizerId: await organizerIdOf(ctx.db, group),
-        seatWhere: (sp) => `${sp}.status = '${seatStatus}' AND ${sp}.payment_updated_at = ?1`,
+        seatWhere: (sp) => `${sp}.status = '${seatStatus}' AND ${sp}.payment_updated_at = ?1 AND (SELECT finalized_at FROM sessions WHERE id = ${sqlText(session.id)}) ${asRead}`,
       }),
     );
   }

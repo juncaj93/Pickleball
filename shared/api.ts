@@ -379,6 +379,8 @@ export interface AdminRosterEntry {
     guestOwesCents?: number;
     /** The guest played (after Finalize; false: did not). */
     played?: boolean | null;
+    /** Zip 49: how many people's shares the seat's price is for (2 with the guest on it, 1 once the guest's share came off). */
+    units?: number;
   };
 }
 

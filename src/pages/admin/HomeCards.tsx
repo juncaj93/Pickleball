@@ -183,7 +183,7 @@ function WhoPlayed({ s, gp, busy, onConfirm, lateFees = false }: { s: AdminSessi
   const guestOn = (r: AdminRosterEntry) => played.has(r.playerId) && !guestOut.has(r.playerId);
   const n = played.size + inNow.filter((r) => hasGuest(r) && guestOn(r)).length;
   const notes = whoPlayedNotes(
-    inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })),
+    inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId), organizer: r.isOrganizer })),
     lateFees ? { played: n, flatCents: price, fmt: formatPrice } : undefined,
   );
   const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));

@@ -175,7 +175,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       if (paidCash > 0 && paidCash < fee) {
         const onSeat = await usedOn(ctx, session.id, r.player_id);
         statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paidCash - onSeat), paymentCents: paidCash }));
-      } else if (pairOne.has(r.player_id) && paidCash > fee) {
+      } else if (pairOne.has(r.player_id) && paidCash > fee && (paidCash - fee) % gp.flatCents === 0) {
+        // (Whole $14 shares only: a part share above the fee, a game made cheaper after paying, stays "Made cheaper after paying"'s job.)
         // Zip 49: a pair that paid $28 and owes one share: the other $14 comes back now as credit, the way a played seat's money back does
         // ('finalized': Totals counts the $14 kept, a Reopen or an Unmark takes it back).
         statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: paidCash - fee, reason: 'finalized', playedCount: n, settle: false }));
@@ -183,7 +184,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       } else if (pairOne.has(r.player_id) && paidCash === 0 && r.payment_status === 'unpaid') {
         // Credit used on the seat above the one share owed: the seat is paid with it and the rest comes back, as for a played seat.
         const used = await usedOn(ctx, session.id, r.player_id);
-        if (used > fee) {
+        if (used > fee && (used - fee) % gp.flatCents === 0) {
           statements.push(payWithCredit(r, used));
           statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: used - fee, reason: 'finalized', playedCount: n, settle: false }));
           backs.push({ player: r.display_name, playerId: r.player_id, cents: used - fee, reason: 'finalized' });

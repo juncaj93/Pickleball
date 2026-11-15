@@ -659,6 +659,36 @@ export function undoFinalizedBackStatements(db: D1Database, sessionId: string, p
   ];
 }
 
+/**
+ * Zip 49 (review): credit that came back from a seat that is STILL paid, after its payment (a trim: the guest's $14 of a $28 I paid confirmed
+ * after a late drop, a host who rejoined alone, Remove guest, "Made cheaper after paying"): live 'kept' entries, reason 'dropped', made at or
+ * after the seat's paid_at, while the seat is paid and not refunded. A normal drop settles the seat (refunded_at), so its entries never count.
+ * Unmark takes these back with the payment (only while the pot still has them), like the 'finalized' credit above.
+ */
+const TRIM_BACK = (sp: string) =>
+  `kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'dropped'
+   AND created_at >= (SELECT ${sp}.paid_at FROM session_players ${sp} WHERE ${sp}.session_id = ?2 AND ${sp}.player_id = ?3 AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL)`;
+
+export function undoTrimBackStatements(db: D1Database, sessionId: string, playerId: string, nowIso: string): D1PreparedStatement[] {
+  const back = `(SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE ${TRIM_BACK('tb')})`;
+  return [
+    db
+      .prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${TRIM_BACK('tb')} AND ${POT('?3')} - ${RESERVED('?3')} - ${back} >= 0`)
+      .bind(nowIso, sessionId, playerId),
+  ];
+}
+
+/** SQL: this seat still has trim credit live (see undoTrimBackStatements); ?2 session, ?3 player. */
+export const TRIM_BACK_LIVE = `EXISTS (SELECT 1 FROM credit_ledger WHERE ${TRIM_BACK('tb')})`;
+
+export async function trimBackLeft(db: D1Database, sessionId: string, playerId: string): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE ${TRIM_BACK('tb')}`)
+    .bind(null, sessionId, playerId)
+    .first<{ c: number }>();
+  return row?.c ?? 0;
+}
+
 /** Live credit that came back from a seat for being paid above the final price. */
 export async function creditBackLeft(db: D1Database, sessionId: string, playerId: string): Promise<number> {
   const row = await db

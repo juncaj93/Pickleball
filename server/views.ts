@@ -121,7 +121,7 @@ export function playerSessionView(
         selfPaid: !!mine.self_paid_at,
         signupAt: mine.confirmed_at ?? mine.claimed_at,
         // Zip 49 (F-4): an I paid below what the seat costs now (the guest moved in after it) owes the rest; confirmed, the seat says so too.
-        ...(claimed && !isOrganizer && price > paidNow ? { oweCents: price - paidNow, claimCents: paidNow } : { oweCents: owe }),
+        ...(claimed && !isOrganizer && guestIn(mine) && price > paidNow ? { oweCents: price - paidNow, claimCents: paidNow } : { oweCents: owe }),
         creditCents: mine.payment_status === 'unpaid' ? pot.seat.usedCents : 0,
         // What a drop out would give back right now (the same sums as seatMoneyBackStatements): credit used on the
         // seat goes back to the pot; cash paid toward it (and cash held against it) comes back as credit.
@@ -346,6 +346,8 @@ export function adminSessionView(
               ...(gv.status === 'waitlisted' ? { waitlistPosition: at >= 0 ? at + 1 : null } : {}),
               ...(p ? { shareCents: p.shareCents, paid: p.guest, hostPaid: p.host, hostOwesCents: p.hostOwesCents, guestOwesCents: p.guestOwesCents } : {}),
               ...(gv.status === 'confirmed' && session.finalized_at && r.played === 1 ? { played: r.guest_played !== 0 } : {}),
+              // Zip 49 (review): how many people's shares the seat's price is for right now (2, or 1 once the guest is off it).
+              units: seatUnits(r),
             },
           };
         })(),

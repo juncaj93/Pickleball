@@ -248,7 +248,7 @@ export function sharesPaid(
  * either." A guest marked out alone: "Billy didn't play. Parker pays for 1 share." Nothing for a pair that both played.
  */
 export function whoPlayedNotes(
-  pairs: { host: string; guest: string; hostPlayed: boolean; guestOut: boolean }[],
+  pairs: { host: string; guest: string; hostPlayed: boolean; guestOut: boolean; organizer?: boolean }[],
   /**
    * Zip 49 (Alex): with late fees on and fewer than 4 played (`played`, the organizer counted), a pair that did not play owes only the spots the
    * game is short: "Parker owes $14, for the 1 spot the game was short." Left out: the notes exactly as before.
@@ -261,6 +261,7 @@ export function whoPlayedNotes(
     return ` ${host} owes ${fee.fmt(fee.flatCents * spots)}, for the ${spots === 1 ? '1 spot' : `${spots} spots`} the game was short.`;
   };
   return pairs.flatMap((p) =>
-    !p.hostPlayed ? [`${p.host} didn't play, so ${p.guest} didn't either.${owes(p.host)}`] : p.guestOut ? [`${p.guest} didn't play. ${p.host} pays for 1 share.`] : [],
+    // (The organizer pays the venue, never the group: no "owes" for them.)
+    !p.hostPlayed ? [`${p.host} didn't play, so ${p.guest} didn't either.${p.organizer ? '' : owes(p.host)}`] : p.guestOut ? [`${p.guest} didn't play. ${p.host} pays for 1 share.`] : [],
   );
 }

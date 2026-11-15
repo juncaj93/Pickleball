@@ -208,6 +208,7 @@ export function gamePriceCents(d: Pick<AdminDashboard, 'group'>, s: AdminSession
 function pairPeople(r: AdminSessionView['roster'][number]): number {
   const g = r.guest;
   if (!g) return 1;
+  if (typeof g.units === 'number' && g.units >= 1) return g.units;
   if (g.status === 'late') return 2;
   return g.status === 'confirmed' && g.played !== false ? 2 : 1;
 }

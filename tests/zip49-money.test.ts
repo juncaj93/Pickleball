@@ -491,3 +491,81 @@ describe('Item 9 (F-1): marking a newer court month paid never hides an older ca
     expect(octPaid.map((a) => [a.keys[0], a.cents])).toEqual([['court:2026-11', 4800]]);
   });
 });
+
+describe('Fresh review fixes', () => {
+  it('R1 Text all after a one-share no-show pair asks for $14, not $7', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await addGuest(w, g.id, 'Blair');
+    for (const n of ['Casey', 'Devon', 'Emery']) await markPaid(w, g.id, n);
+    w.app.now = g.end + HOUR;
+    expect((await finalize(w, g.id, ['Casey', 'Devon', 'Emery'])).status).toBe(200);
+    const s = await sessOf(w, g.id);
+    expect((await rowOf(w, g.id, 'Blair')).guest?.units ?? 1).toBe(1);
+    expect(gamePriceCents(await dash(w), s)).toBe(1400);
+  });
+
+  it('R2 Unmark after the confirm gave $14 back takes that $14 back too (no credit from nothing)', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Blair']);
+    await addGuest(w, g.id, 'Blair');
+    await selfPaid(w, g.id, 'Blair');
+    at(w, g.start, 6);
+    await drop(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    expect(await credit(w, 'Blair')).toBe(1400);
+    const u = await admin(w, 'POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.byName.Blair, paid: false });
+    expect(u.status, u.text).toBe(200);
+    expect(await credit(w, 'Blair')).toBe(0);
+    expect(await rowOf(w, g.id, 'Blair')).toMatchObject({ paymentStatus: 'unpaid', owesCents: 1400 });
+    expect(health(w)).toEqual({});
+  });
+
+  it('R2b the same after Remove guest ($28 paid, $14 back): Unmark takes the $14 back; spent credit refuses the Unmark', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await addGuest(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    expect((await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/remove-guest`, {})).status).toBe(200);
+    expect(await credit(w, 'Blair')).toBe(1400);
+    // The $14 is spent on the next game: the Unmark is refused (nothing moves).
+    const g2 = await game(w, 1);
+    await join(w, g2.id, ['Blair']);
+    expect(await credit(w, 'Blair')).toBe(0);
+    const u = await admin(w, 'POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.byName.Blair, paid: false });
+    expect(u.status).toBe(409);
+    expect(await rowOf(w, g.id, 'Blair')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1400 });
+    expect(health(w)).toEqual({});
+  });
+
+  it('R3 a single player (no guest) whose I paid is below the price reads exactly as before', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await selfPaid(w, g.id, 'Blair');
+    const mine = (await mineOn(w, 'Blair', g.id)).mine!;
+    expect(mine.claimCents).toBeUndefined();
+    expect(mine.oweCents).toBe(0);
+  });
+
+  it('R6 a no-show pair, 2 short, with only the host\'s $14 paid: the seat still owes the guest\'s $14', async () => {
+    const v = await guests();
+    const h = await game(v);
+    await join(v, h.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(v, h.id, 'Blair');
+    await admin(v, 'POST', `/api/admin/sessions/${h.id}/guest/share`, { playerId: v.byName.Blair, who: 'host', paid: true });
+    v.app.now = h.end + HOUR;
+    expect((await finalize(v, h.id, ['Casey', 'Devon'])).status).toBe(200);
+    expect((await rowOf(v, h.id, 'Blair')).lateFee).toMatchObject({ kind: 'no_show', oweCents: 1400 });
+    expect(health(v)).toEqual({});
+  });
+
+  it('R6c the Who played note never says the organizer owes', () => {
+    expect(whoPlayedNotes([{ host: 'Alex', guest: 'Sam', hostPlayed: false, guestOut: false, organizer: true }], { played: 3, flatCents: 1400, fmt: formatPrice })).toEqual([
+      "Alex didn't play, so Sam didn't either.",
+    ]);
+  });
+});
