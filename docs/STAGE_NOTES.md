@@ -4755,3 +4755,12 @@ Branch `claude/new-session-86zb5a`. No database change, no money change. Plain-E
 
 ### Item 2: the date-bound test
 - `e2e/text-fix.cjs` set the dev server's clock to Fri Nov 13, 2026 but let the browser use the real day, so after Nov 13 the Nov 13 and Nov 14 games read as past and their gear menus were gone (4 of 6 checks failed on main too). It now uses `e2e/fixed-clock.cjs` (the server and every browser page start from the same fake moment, Fri Nov 13, 2026, 12:00 PM Eastern, before the fake group is made). No site behaviour changed.
+
+### Time-shift fix and tests (Zip 46)
+- `e2e/time-shift.cjs` also failed on any Sunday through Tuesday (weeks start on Sunday, so a game's tier and its tile border depend on the day; it failed on Zip 45's code today too). It now starts from Sat Nov 7, 2026, 12:00 PM Eastern on the server and in the browser. This was the only other date-bound test found; no unit test depended on today's date.
+- Tests on the final code: unit 175 files, 3163 passed, 2 skipped; typecheck clean; browser 79 of 79 scripts green (`run` and `credit` failed under load in the full run and passed alone; `time-shift` was fixed as above). Fresh reviewer: nothing wrong; two stale comments fixed.
+
+### Deploy (Sun Nov 15, 2026, 9:50 AM Eastern, quiet window)
+- Restore point first: SQL export of live `live-before-zip46-20261115.sql` (246 KB), saved in `pickleball-backups` as `export-20261115144940` and checked, local copy deleted. Time Travel bookmark `00001401-00000008-00005124-6faab5b22b1427f6e98d82b760306a51`. Integrity checks 21 of 21 at 0 before and after. No database change.
+- Main fast-forwarded to `b8ba448`, then `npm run deploy` from main (the guard's five rules passed). Production deployment `7fce37ad-0c49-42f4-bab5-4e3513a471fa`. Rollback: `ff9339de-8178-4141-9dbf-08ec91a9d437` (Zip 45, `80b6093`).
+- Live check (read only, no PIN, backup address `pickleball-club-9h0.pages.dev`; the custom domain is blocked from the build sandbox): the page loads, a fresh phone shows "Who are you?" with no page errors, `/api/status` and `/api/group` answer, `/api/admin/dashboard`, `/api/admin/money` and `/api/admin/demo-extras` answer 401 without the PIN.
