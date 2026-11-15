@@ -10,6 +10,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5271;
@@ -59,10 +60,13 @@ async function main() {
     } catch {}
     await new Promise((r) => setTimeout(r, 500));
   }
-  const setClock = (atMs) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs }) });
-  await setClock(Date.now());
+  // Fake clock (so this passes on any real day): Sat Nov 7, 2026, 12:00 PM Eastern, on the server and in every browser page. A game's tier
+  // (THIS WEEK / NEXT WEEK / LATER, weeks start on Sunday) decides its tile border (2px this week, 1px after), and this script wants the first
+  // three games more than 36 hours out to share one look: on a Saturday they are Tue and Thu of next week and the Tuesday after.
+  const clock = fixedClock(BASE);
+  await clock.set(Date.parse('2026-11-07T17:00:00Z'));
 
-  const browser = await chromium.launch();
+  const browser = clock.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;
@@ -80,7 +84,7 @@ async function main() {
   for (const h of d.hiddenSessions || []) await post(areq, `/api/admin/sessions/${h.id}/show`, { shown: true });
   d = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
   // Games far enough out that no deadline is near: A booked (the changed one), B on the venue's waitlist, C not booked.
-  const ahead = d.sessions.filter((s) => !s.state.flags.past && Date.parse(s.startsAt) > Date.now() + 36 * 3600_000);
+  const ahead = d.sessions.filter((s) => !s.state.flags.past && Date.parse(s.startsAt) > clock.now() + 36 * 3600_000);
   const [A, B, C] = ahead;
   const idOf = (n) => d.players.find((p) => p.name === n).id;
   const phones = {};
