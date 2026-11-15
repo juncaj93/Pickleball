@@ -271,6 +271,24 @@ describe('Zip 50: the backup holds the switches, price locks, alert settings and
     expect(bad.checks.filter((c) => !c.ok).map((c) => c.line).join('\n')).toContain('sessions.some_future_column');
   });
 
+  it('read-only sign-ins never go into a backup (their id carries a fingerprint of the read-only PIN): download and weekly copy alike', async () => {
+    source.raw.prepare("INSERT INTO admin_sessions (id, group_id, token_hash, created_at, expires_at) SELECT 'ro:abcdef012345:x1', id, 'hash-x1', '2026-11-30T17:00:00.000Z', '2026-12-01T05:00:00.000Z' FROM groups").run();
+    try {
+      const real = (await w.organizer.call('GET', '/api/admin/backup')).data;
+      expect(real.tables.admin_sessions.length).toBeGreaterThan(0);
+      expect(real.tables.admin_sessions.some((r: Row) => String(r.id).startsWith('ro:'))).toBe(false);
+      expect(JSON.stringify(real)).not.toContain('abcdef012345');
+      const store = createNodeD1(':memory:', mkdtempSync(join(tmpdir(), 'zip50-no-mig-')));
+      expect((await weeklyBackup(source as never, store as never, Date.parse(real.createdAt), { force: true })).made).toBe(true);
+      const h = store.raw.prepare('SELECT * FROM weekly_backups').get() as any;
+      const weekly = joinParts(h, store.raw.prepare('SELECT part, data FROM weekly_backup_parts WHERE backup_id = ? ORDER BY part').all(h.id) as any[]);
+      expect(weekly).toEqual(real);
+      expect(JSON.parse(h.rows_json).admin_sessions).toBe(real.tables.admin_sessions.length);
+    } finally {
+      source.raw.exec("DELETE FROM admin_sessions WHERE id = 'ro:abcdef012345:x1'");
+    }
+  });
+
   it('View as (the in-browser copy) loads the new file: the switch rows are not duplicated', async () => {
     const { default: initSqlJs } = await import('sql.js');
     const { readdirSync, readFileSync } = await import('node:fs');
@@ -278,8 +296,20 @@ describe('Zip 50: the backup holds the switches, price locks, alert settings and
     const dir = join(process.cwd(), 'migrations');
     const migrations = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(join(dir, f), 'utf8'));
     const extras = (await w.organizer.call('GET', '/api/admin/demo-extras')).data;
-    const sb = await createSandbox(await initSqlJs(), download, migrations, 'https://example.test', extras);
+    const SQL = await initSqlJs();
+    const realDb = SQL.Database;
+    let made: any = null;
+    // Catch the copy's database to count its rows (the sandbox keeps it private).
+    (SQL as any).Database = function (...a: any[]) {
+      made = new (realDb as any)(...a);
+      return made;
+    };
+    const sb = await createSandbox(SQL, download, migrations, 'https://example.test', extras);
+    (SQL as any).Database = realDb;
     const res = await sb.request('GET', '/api/admin/dashboard', undefined, {}, w.app.now);
     expect(res.status).toBe(200);
+    const n = made.exec('SELECT COUNT(*) FROM task_log')[0].values[0][0];
+    expect(n).toBe(rowsOf(source, 'task_log').length);
+    expect(n).toBe(extras.taskLog.length);
   }, 120_000);
 });

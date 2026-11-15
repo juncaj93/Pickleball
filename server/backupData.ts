@@ -26,6 +26,17 @@ export const BACKUP_TABLES = [
   'admin_sessions',
 ] as const;
 
+/**
+ * Rows a backup leaves out of a table (Zip 50 review): read-only sign-ins. Their id starts with "ro:" and a short fingerprint of the
+ * read-only PIN (server/viewOnly.ts), which must never leave the database; a helper simply signs in again after a restore. Used by
+ * the download here and by every read of the weekly copy (worker/backup.ts), so both files stay the same.
+ */
+export const BACKUP_WHERE: Partial<Record<(typeof BACKUP_TABLES)[number], string>> = {
+  admin_sessions: "id NOT LIKE 'ro:%'",
+};
+/** The WHERE condition for a table ("1" when it keeps every row). */
+export const backupWhere = (t: string): string => (BACKUP_WHERE as Record<string, string>)[t] ?? '1';
+
 /** The file's version: 2 since Zip 50 (task_log, organizer_alerts and admin_sessions added). The reader takes 1 and 2. */
 export const BACKUP_VERSION = 2;
 
@@ -39,7 +50,7 @@ export interface BackupObject {
 
 /** Every backed-up table, read in one batch, so the file is one consistent moment (no row without its parent). */
 export async function backupObject(db: D1Database, groupName: string, nowIso: string): Promise<BackupObject> {
-  const read = await db.batch(BACKUP_TABLES.map((t) => db.prepare(`SELECT * FROM ${t} ORDER BY rowid`)));
+  const read = await db.batch(BACKUP_TABLES.map((t) => db.prepare(`SELECT * FROM ${t} WHERE ${backupWhere(t)} ORDER BY rowid`)));
   const tables: Record<string, Record<string, unknown>[]> = {};
   BACKUP_TABLES.forEach((t, i) => (tables[t] = read[i].results as Record<string, unknown>[]));
   return { format: 'pickleball-backup', version: BACKUP_VERSION, createdAt: nowIso, groupName, tables };

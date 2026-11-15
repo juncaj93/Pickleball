@@ -22,7 +22,7 @@
 // - Free: D1 is on the free plan (5 GB in all, this is well under 1 MB a week), and it rides on the existing cron trigger
 //   (the free plan's 5 cron triggers are all in use, so a new one was not an option).
 import type { D1Database } from '../server/db';
-import { BACKUP_TABLES, BACKUP_VERSION } from '../server/backupData';
+import { BACKUP_TABLES, BACKUP_VERSION, backupWhere } from '../server/backupData';
 import { localParts } from '../shared/time';
 
 export const BACKUP_TZ = 'America/Detroit';
@@ -165,7 +165,7 @@ export async function backupText(db: D1Database, groupName: string, nowIso: stri
   const read = await db.batch(
     BACKUP_TABLES.map((t, i) => {
       const row = rowJsonSql((cols[i].results as { name: string }[]).map((c) => c.name));
-      return db.prepare(`SELECT rowid / ${CHUNK_ROWS} AS chunk, COUNT(*) AS n, group_concat(${row}, ',' ORDER BY rowid) AS j FROM ${t} GROUP BY chunk ORDER BY chunk`);
+      return db.prepare(`SELECT rowid / ${CHUNK_ROWS} AS chunk, COUNT(*) AS n, group_concat(${row}, ',' ORDER BY rowid) AS j FROM ${t} WHERE ${backupWhere(t)} GROUP BY chunk ORDER BY chunk`);
     }),
   );
   const rows: Record<string, number> = {};
@@ -231,7 +231,7 @@ export function measureSql(names: Record<string, string[]>, numbers: Record<stri
       return `(COALESCE(unicode("${c}"), 0) + COALESCE(unicode(substr("${c}", -1)), 0) * 7)${time} * ${w}`;
     });
     const sum = terms.join(' + ');
-    return `(SELECT json_group_array(json_array(n, lo, hi, len, sum) ORDER BY lo) FROM (SELECT COUNT(*) AS n, MIN(rowid) AS lo, MAX(rowid) AS hi, TOTAL(length(${rowJsonSql(names[t])})) AS len, TOTAL(${sum}) AS sum FROM ${t} GROUP BY rowid / ${BUCKET_ROWS})) AS "${t}"`;
+    return `(SELECT json_group_array(json_array(n, lo, hi, len, sum) ORDER BY lo) FROM (SELECT COUNT(*) AS n, MIN(rowid) AS lo, MAX(rowid) AS hi, TOTAL(length(${rowJsonSql(names[t])})) AS len, TOTAL(${sum}) AS sum FROM ${t} WHERE ${backupWhere(t)} GROUP BY rowid / ${BUCKET_ROWS})) AS "${t}"`;
   });
   return `SELECT ${parts.join(', ')}`;
 }
@@ -297,7 +297,7 @@ export async function runStep(live: D1Database, store: D1Database, body: StepBod
   const read = withRows.length
     ? await live.batch(
         withRows.map((s) =>
-          live.prepare(`SELECT COUNT(*) AS n, group_concat(${rowJsonSql(body.columns[s.table])}, ',' ORDER BY rowid) AS j FROM ${s.table} WHERE rowid BETWEEN ? AND ?`).bind(s.lo, s.hi),
+          live.prepare(`SELECT COUNT(*) AS n, group_concat(${rowJsonSql(body.columns[s.table])}, ',' ORDER BY rowid) AS j FROM ${s.table} WHERE rowid BETWEEN ? AND ? AND ${backupWhere(s.table)}`).bind(s.lo, s.hi),
         ),
       )
     : [];

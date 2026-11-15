@@ -21,7 +21,9 @@ const MAX_FAILS_PER_CLIENT = 5;
 const MAX_FAILS_GLOBAL = 20;
 
 function clientKey(ctx: Ctx): string {
-  return ctx.req.headers.get('CF-Connecting-IP') ?? 'local';
+  const ip = ctx.req.headers.get('CF-Connecting-IP') ?? 'local';
+  // Zip 50 review: a key can never look like Change PIN's own keys (sign-in skips those), whatever the header says.
+  return ip.startsWith('pin-change:') ? `ip:${ip}` : ip;
 }
 
 /**

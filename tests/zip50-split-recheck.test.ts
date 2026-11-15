@@ -131,8 +131,8 @@ describe('Zip 50 (a): the organizer files hold no private value', () => {
     expect(realPhones(`(${a}) 555-${c}`).length).toBe(0);
   });
 
-  it('no Zelle or Venmo value in the organizer files: the settings default lives in the player download only, Venmo only as a hint', () => {
-    // The organizer file reads the Zelle default from the player download (one shared copy), never its own copy.
+  it('no Zelle or Venmo value in the organizer files (Zip 50: no built-in Zelle number anywhere), Venmo only as a hint', () => {
+    // Zip 50: there is no Zelle default in the code any more; the organizer file has no Zelle value of its own either.
     expect(sourcesOf.get(mainJs)).toContain('shared/settings.ts');
     for (const f of organizerFiles.filter((x) => x.endsWith('.js'))) {
       expect(sourcesOf.get(f) ?? [], f).not.toContain('shared/settings.ts');

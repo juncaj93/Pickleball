@@ -56,6 +56,25 @@ describe('Zip 50: a stranger cannot keep the organizer\'s own phone from signing
     }
   });
 
+  it('a real mark with its random part changed counts for nothing', async () => {
+    const ctx = await setupGroup();
+    const r = await login(ctx.app.client(), PIN, '10.9.8.1');
+    const value = r.headers.getSetCookie().find((x) => x.startsWith(`${KNOWN_ORGANIZER_COOKIE}=`))!.split(';')[0].split('=').slice(1).join('=');
+    const [nonce, mark] = value.split('.');
+    await flood(ctx);
+    const changed = `${nonce.slice(0, -1)}${nonce.endsWith('A') ? 'B' : 'A'}.${mark}`;
+    expect((await ctx.app.client().call('POST', '/api/admin/login', { pin: PIN }, { ...ip('10.9.8.2'), Cookie: `${KNOWN_ORGANIZER_COOKIE}=${changed}` })).status).toBe(429);
+    expect((await ctx.app.client().call('POST', '/api/admin/login', { pin: PIN }, { ...ip('10.9.8.3'), Cookie: `${KNOWN_ORGANIZER_COOKIE}=${value}` })).status).toBe(200);
+  });
+
+  it('an address header made to look like a Change PIN key still meets both sign-in caps', async () => {
+    const ctx = await setupGroup();
+    const statuses: number[] = [];
+    for (let i = 0; i < 7; i++) statuses.push((await login(ctx.app.client(), '111111', 'pin-change:x')).status);
+    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
+    expect(statuses.slice(5)).toEqual([429, 429]);
+  });
+
   it('the read-only PIN never makes a phone known', async () => {
     const ctx = await setupGroup();
     ctx.app.env.ORGANIZER_READONLY_PIN = RO;

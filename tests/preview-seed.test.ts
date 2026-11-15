@@ -128,8 +128,10 @@ describe('fake-data preview seed', () => {
     expect(JSON.stringify(harper)).toContain('1400'); // Harper's $14 credit shows
     const kai = await asPlayer('Kai');
     expect(kai.sessions.length).toBeGreaterThan(3);
-    // Players never see other players' money or phone numbers.
-    expect(JSON.stringify(kai)).not.toMatch(/555-01\d\d/);
+    // Players never see other players' money or phone numbers. (Zip 50: the organizer's own Apple Pay / Zelle number is meant for
+    // players on the Pay sheet; the preview's is a fake one from Settings > Money, checked on its own.)
+    expect(kai.group.zelleNumber ?? '(313) 555-0100').toBe('(313) 555-0100');
+    expect(JSON.stringify({ ...kai, group: { ...kai.group, zelleNumber: undefined } })).not.toMatch(/555-01\d\d/);
   });
 
   it('can be loaded again over a database that already holds the seed (and leftovers)', async () => {

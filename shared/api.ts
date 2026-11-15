@@ -171,7 +171,7 @@ export interface AfterGameCredit {
 }
 
 export interface GroupView {
-  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; /** Apple Pay / Zelle number for the Pay sheet; "" = none to show; missing = the default. */ zelleNumber?: string; priceCents: number; maxPlayers: number; usualMinutes: number };
+  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; /** Apple Pay / Zelle number for the Pay sheet; "" = none to show; missing = none (Zip 50: no built-in number). */ zelleNumber?: string; priceCents: number; maxPlayers: number; usualMinutes: number };
   players: { id: string; name: string }[];
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */

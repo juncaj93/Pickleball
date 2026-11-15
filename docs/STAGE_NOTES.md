@@ -4908,7 +4908,8 @@ Branch `claude/new-session-c2gwa5` (the session is named "🎾50.protect"; the b
 
 ### 2. Change PIN guess limit (Audit C F-5)
 - `server/auth.ts` `checkCurrentPinCounted`, called by Change PIN: each guess is written down first in `login_attempts` under the key
-  `pin-change:` + a hash of that phone's sign-in, then counted: 5 wrong current PINs within 15 minutes, then 429 "Too many wrong PINs.
+  `pin-change:` + a hash of that phone's sign-in, then counted: 5 wrong current PINs within any 15 minutes (a rolling window, the same
+  rule sign-in uses), then 429 "Too many wrong PINs.
   Wait 15 minutes and try again." without checking the PIN (a refused try is not counted, so it never makes the wait longer). A right PIN
   clears the count. Sign-in's own counts skip these keys, so Change PIN can never lock anyone out of signing in or of the organizer
   screens; other signed-in phones have their own count.
@@ -4949,3 +4950,14 @@ Branch `claude/new-session-c2gwa5` (the session is named "🎾50.protect"; the b
   reloads by itself; no signal shows Try again.
 - No gap found. Two harmless oddities noted (still refusals): `POST /api/admin/sessions/:id/court-answer` signed out with an empty body
   answers 400 before 401; any write with a cookie starting "ro." gets 403 before the cookie is checked.
+
+### Fresh reviewer (did not write the code)
+One real failure, fixed: `tests/preview-seed.test.ts` saw the preview's new fake Zelle number as a phone number (the check now
+leaves out the Zelle number, which players are meant to see, and checks it on its own). Risks fixed: (1) read-only sign-ins never go
+into a backup (their id carries a short fingerprint of the read-only PIN; `BACKUP_WHERE` in server/backupData.ts, used by the download
+and every read of the weekly copy, so both files stay the same); (2) a sign-in address header that looks like a Change PIN key is
+renamed, so it can never skip sign-in's caps; (3) the live Zelle save is done straight in the database and checked (the old Settings
+box would have saved nothing when the same number was retyped). Accepted and written down: a restore brings back the real sign-ins of
+its moment (docs/RESTORE.md Plan B step 7: change the PIN again if it changed since); the weekly copy may be thrown away and redone an
+hour later more often, because the alert settings and alert marks can change during its few seconds; the "known organizer phone" mark
+lasts 400 days and survives sign-out (it only skips the overall cap). Test gaps closed: View as row count, a changed real mark.
