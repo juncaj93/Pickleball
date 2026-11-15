@@ -523,7 +523,7 @@ async function main() {
     await sheet.locator('[data-tile="Parker"]').click();
     await page.waitForTimeout(250);
     assert(/^3 played · \$14 each/.test(await live()), await live());
-    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Parker didn't play, so Billy didn't either.", 'host-out note');
+    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Parker didn't play, so Billy didn't either. Parker owes $14, for the 1 spot the game was short.", 'host-out note (Zip 49: late fees on, 3 played, 1 short)');
     assert((await sheet.locator('[data-guest-tile="Billy"]').getAttribute('aria-disabled')) === 'true', 'Billy is locked');
     await sheet.locator('[data-guest-tile="Billy"]').click({ force: true });
     await page.waitForTimeout(200);
