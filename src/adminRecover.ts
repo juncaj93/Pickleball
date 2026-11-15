@@ -1,13 +1,42 @@
 // Zip 48 (speed split): the pure parts of getting the organizer file back after a failed fetch (src/adminChunk.ts uses them). No React,
 // no organizer code, so the rules are tested on their own (tests/zip48-loader.test.ts).
 
+/** Style links whose file failed to arrive (their "error" event), noted from the moment this module runs. */
+const failedLinks = new WeakSet<Element>();
+if (typeof document !== 'undefined') {
+  // "error" does not bubble, so listen while it travels down (capture).
+  document.addEventListener(
+    'error',
+    (e) => {
+      const t = e.target;
+      if (t instanceof HTMLLinkElement && t.rel === 'stylesheet') failedLinks.add(t);
+    },
+    true,
+  );
+}
+
 /**
- * A <link rel="stylesheet"> that failed has no sheet. Put a fresh copy right after it (same place, so the style order stays the same), wait
- * for it, then remove the failed one. Only built files under /assets/ are touched.
+ * Did this style link fail? Any of: its error event was seen; it has no sheet; or it is our own file and its rules cannot be read (Chrome
+ * keeps an empty, unreadable sheet for a style file that failed, and our own files are always readable when they arrived).
+ */
+export function styleLinkFailed(l: HTMLLinkElement): boolean {
+  if (failedLinks.has(l)) return true;
+  if (!l.sheet) return true;
+  try {
+    void l.sheet.cssRules;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * A <link rel="stylesheet"> for one of our built files that failed: put a fresh copy right after it (same place, so the style order stays
+ * the same), wait for it, then remove the failed one. Only built files under /assets/ are touched.
  */
 export async function refetchFailedStyles(doc: Document = document): Promise<void> {
   const failed = Array.from(doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).filter(
-    (l) => !l.sheet && /\/assets\/[^/]+\.css$/.test(l.getAttribute('href') ?? ''),
+    (l) => /^\/assets\/[^/]+\.css$/.test(l.getAttribute('href') ?? '') && styleLinkFailed(l),
   );
   await Promise.all(
     failed.map(

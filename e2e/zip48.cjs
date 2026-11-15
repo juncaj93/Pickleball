@@ -39,7 +39,9 @@ const SCHEMES = (process.env.Z48_SCHEMES || 'light,dark').split(',');
 
 let passed = 0;
 let failed = 0;
+const ONLY = process.env.Z48_ONLY ? new RegExp(process.env.Z48_ONLY) : null;
 async function check(name, fn) {
+  if (ONLY && !ONLY.test(name)) return;
   try {
     await fn();
     passed++;
@@ -206,7 +208,7 @@ async function main() {
         const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(' ');
         out.push({
           k: `${el.tagName.toLowerCase()}.${[...el.classList].join('.')}`,
-          t: own.replace(/Updated .*/, 'Updated'),
+          t: own.replace(/Updated .*/, 'Updated').replace(/localhost:\d+/g, 'localhost'),
           b: [r.x, r.y, r.width, r.height].map((v) => Math.round(v * 10) / 10).join(','),
           s: props(getComputedStyle(el)),
           a: getComputedStyle(el, '::before').content + '|' + getComputedStyle(el, '::after').content,
@@ -224,11 +226,12 @@ async function main() {
       if (x.t !== y.t) return `#${i} ${x.k} words "${x.t}" vs "${y.t}"`;
       if (x.b !== y.b) return `#${i} ${x.k} box ${x.b} vs ${y.b}`;
       if (x.a !== y.a) return `#${i} ${x.k} before/after ${x.a} vs ${y.a}`;
-      for (const p of Object.keys(y.s)) if (x.s[p] !== y.s[p]) return `#${i} ${x.k} ${p}: ${x.s[p]} vs ${y.s[p]}`;
+      for (const p of Object.keys(y.s)) if (x.s[p] !== y.s[p] && !ROOT_VARS.has(p)) return `#${i} ${x.k} ${p}: ${x.s[p]} vs ${y.s[p]}`;
     }
     return null;
   }
 
+  const ROOT_VARS = new Set();
   /** Organizer-only style rules (in the organizer file, not in the player file) that match anything on the page right now. */
   const adminOnly = (() => {
     const split = (css) => {
@@ -246,10 +249,18 @@ async function main() {
     };
     const main = new Set(split(mainCss));
     const sels = [];
+    // A rule on the page root that only SETS custom properties (--name) cannot change the player screen unless the player style reads them.
+    // (Those properties are also left out of the before/after comparison: they exist on main's player page and not on the branch's, by design.)
+    const rootOnlyVars = (rule) => /^(:root|html)([:\[][^{ >+~]*)?\{/.test(rule) && rule.slice(rule.indexOf('{') + 1, -1).split(';').filter(Boolean).every((d) => d.trim().startsWith('--'));
     for (const r of split(adminCss).filter((x) => !main.has(x))) {
       const walk = (rule) => {
         if (rule.startsWith('@media') || rule.startsWith('@supports')) return split(rule.slice(rule.indexOf('{') + 1, rule.lastIndexOf('}'))).forEach(walk);
         if (rule.startsWith('@')) return;
+        if (rootOnlyVars(rule)) {
+          for (const v of rule.match(/--[\w-]+(?=\s*:)/g) || []) ROOT_VARS.add(v);
+          for (const v of rule.match(/--[\w-]+(?=\s*:)/g) || []) if (mainCss.includes(`var(${v}`)) throw new Error(`the player style reads ${v}, which only the organizer file sets`);
+          return;
+        }
         sels.push(rule.slice(0, rule.indexOf('{')));
       };
       walk(r);
@@ -278,11 +289,11 @@ async function main() {
     { name: 'Who are you?', url: '/', ready: (p) => p.getByText('Who are you?').first().waitFor({ timeout: 30000 }) },
     { name: "Parker's Home", url: '/?as=Parker', ready: (p) => p.locator('.schedule article.sched').first().waitFor({ timeout: 30000 }) },
     {
-      name: "Parker's credit sheet",
-      url: '/?as=Parker',
+      name: "Reese's credit sheet",
+      url: '/?as=Reese',
       ready: async (p) => {
         await p.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-        await p.locator('[data-credit-chip], .credit-chip').first().click();
+        await p.locator('[data-credit-chip]').first().click();
         await p.locator('[data-credit-history]').first().waitFor({ timeout: 10000 });
       },
     },
@@ -553,12 +564,24 @@ async function main() {
     await page.getByRole('button', { name: 'Try again' }).waitFor({ timeout: 30000 });
     await page.getByRole('button', { name: 'Try again' }).click();
     await page.locator('nav.tabbar').waitFor({ timeout: 30000 });
-    const state = await page.evaluate(() =>
-      [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => ({ href: l.getAttribute('href'), ok: !!l.sheet && l.sheet.cssRules.length > 0 })),
-    );
+    const state = await page.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => ({ href: l.getAttribute('href'), ok: !!l.sheet })));
     assert(state.every((s) => s.ok), JSON.stringify(state));
     assert(state.filter((s) => /AdminEntry-/.test(s.href)).length === 1, JSON.stringify(state));
+    await settle(page);
+    const got = await snapshot(page);
     await ctx.close();
+    // The same steps with nothing failing.
+    const n = await phone(BRANCH, 390, 'light', { organizer: true });
+    await n.page.goto(BRANCH + '/?as=Parker');
+    await n.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await toAdmin(n.page);
+    await n.page.locator('nav.tabbar').waitFor({ timeout: 30000 });
+    await settle(n.page);
+    const want = await snapshot(n.page);
+    await n.ctx.close();
+    const d = diff(got, want);
+    if (d && SHOTS) writeFileSync(path.join(SHOTS, 'refetch-diff.json'), JSON.stringify({ got: got.map((e) => [e.k, e.t, e.b, e.s]), want: want.map((e) => [e.k, e.t, e.b, e.s]) }, null, 0));
+    assert(!d, `after the style file came back: ${d}`);
   });
 
   for (const s of servers) s.close();
