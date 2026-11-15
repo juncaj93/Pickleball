@@ -4862,3 +4862,16 @@ that $14 goes back, or how to do it. Now (src/pages/admin/lateRow.ts, the Player
 - On a narrow phone the late row's chip or button goes under its two lines.
 - Main (Zip 48, the organizer screens in their own download) merged in; conflicts only in this file and tsconfig.node.json (both lists kept).
 - Alex said both questions are OK: Unmark takes a give-back back (or refuses once spent); a host who rejoins alone gets the guest's $14 back at once.
+
+### Deploy (Sun Nov 15, 2026, 4:04 PM Eastern, quiet window; Alex approved after testing the three taps on his iPhone)
+- Main had not moved past Zip 48's deploy notes (`80f1bcb`, already merged): the full runs on this exact code stand (unit 179 files, 3,218
+  passed, 2 skipped; browser 80 of 80 scripts, 2,930 checks); re-checked just before: typecheck clean, tests/zip49-money.test.ts and the suite
+  runner test 49 of 49. No other deploy in flight (the last production deployment was Zip 48's, 2 hours before).
+- Restore point first: SQL export of live (247 KB) saved in `pickleball-backups` as `export-20261115210451` and checked, local copy deleted
+  (phone numbers inside). Time Travel bookmark `0000144d-00000000-00005124-53ae4d35ad8907299b99573262d4a147` (4:03 PM). Integrity checks 21 of 21
+  at 0 before and after. No database change.
+- Main fast-forwarded to `f81f22a`, then `npm run deploy` from main (the guard's five rules passed). Production deployment
+  `0d0fbfc7-020d-4df1-9914-618c5e1e1c60`. Rollback: Pages deployment `562d6c58-1d12-4c7f-8e97-a4975053e1da` (Zip 48, `670230f`).
+- Live check (read only, no PIN, the backup address `pickleball-club-9h0.pages.dev`: the custom domain is blocked from this sandbox's network and
+  both serve the same production deployment): the page loads (200), a fresh phone sees "Who are you?" with no page errors, /admin asks for the
+  PIN, organizer data (dashboard, money, demo-extras) answers 401 without it; the organizer download (AdminEntry) carries the new late-drop row.
