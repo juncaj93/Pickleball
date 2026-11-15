@@ -16,14 +16,15 @@ import { lateFeesFor } from './lateFees';
 import { cheaperFixFor } from './cheaperFix';
 import { auditLateFeeOwed } from './roster';
 import { FEE_MIN_PLAYERS, lateFeeKind } from '../shared/lateFees';
+import { lateShortSpots } from '../shared/guestSpot';
 import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 import { flatOf, priceLockStatements, priceOf, specialFlatOf } from './repo';
 import { gameFinalPrice } from '../shared/gameLength';
 import { auditPlan, extendedTimeFor, extensionPlan, hasExtension, restoreAfterFailedReopen, unwindForReopen } from './extension';
 import { type ExtraMinutes, isExtraMinutes } from '../shared/extension';
-import { guestIn, guestOwed } from '../shared/guestSpot';
-import { hasGuestColumns } from './guestSpot';
+import { guestIn, guestOwed, seatUnits } from '../shared/guestSpot';
+import { hasGuestColumns, trimSeatStatements } from './guestSpot';
 
 /** Over, not canceled, not finalized, and someone was in (or paid): the Finalize card shows. */
 export function needsFinalize(session: SessionRow, roster: { status: string; payment_status: string }[], nowMs: number): boolean {
@@ -113,6 +114,18 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   // flat. Their money stays on the game (nothing comes back), and they are not counted in N. 4 or more played: as before.
   const noShowOwes = lateFees && n < FEE_MIN_PLAYERS;
   const owing = new Set(noShowOwes ? confirmed.filter((r) => r.player_id !== organizerId && !playedIds.has(r.player_id)).map((r) => r.player_id) : []);
+  // Zip 49 (Alex): a host and guest who BOTH did not play owe only the spots the game is short of 4 (organizer counted), the same rule as a
+  // late drop: 1 short, one share ($14); 2 or more short, both ($28). The pair's other share comes off the seat by marking the guest out
+  // (guest_played 0: the seat pays for one), which a Reopen undoes. A single no-show is unchanged.
+  const pairShort = lateShortSpots(n, 2, FEE_MIN_PLAYERS);
+  const pairOne = new Set(
+    guests && pairShort < 2
+      ? [...owing].filter((pid) => {
+          const r = confirmed.find((x) => x.player_id === pid);
+          return !!r && (guestIn(r) || guestOwed(r));
+        })
+      : [],
+  );
   const statements = [
     ctx.db
       .prepare(
@@ -125,8 +138,10 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
         ? ctx.db
             .prepare(`UPDATE session_players SET played = ?, guest_played = ?, updated_at = ? WHERE id = ? AND ${claimed}`)
             // A host who did not play: the guest did not either, and their no-show fee (late fees on) still covers both, as designed: NULL.
-            .bind(playedIds.has(r.player_id) ? 1 : 0, playedIds.has(r.player_id) ? (guestPlayed(r) ? 1 : 0) : null, now, r.id)
-        : ctx.db.prepare(`UPDATE session_players SET played = ?, updated_at = ? WHERE id = ? AND ${claimed}`).bind(playedIds.has(r.player_id) ? 1 : 0, now, r.id),
+            .bind(playedIds.has(r.player_id) ? 1 : 0, playedIds.has(r.player_id) ? (guestPlayed(r) ? 1 : 0) : pairOne.has(r.player_id) ? 0 : null, now, r.id)
+        : guests && guestOwed(r) && pairOne.has(r.player_id)
+          ? ctx.db.prepare(`UPDATE session_players SET played = 0, guest_played = 0, updated_at = ? WHERE id = ? AND ${claimed}`).bind(now, r.id)
+          : ctx.db.prepare(`UPDATE session_players SET played = ?, updated_at = ? WHERE id = ? AND ${claimed}`).bind(playedIds.has(r.player_id) ? 1 : 0, now, r.id),
     ),
     // The no-show debt mark: late_drop_at equal to this finalize's time (Reopen takes it away again).
     ...[...owing].map((pid) =>
@@ -138,6 +153,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     ...priceLockStatements(ctx.db, group.id, session.id, gp, now, claimed),
   ];
   const backs: { player: string; playerId: string; cents: number; reason: 'finalized' | 'not_played' }[] = [];
+  const droppedBacks: { player: string; playerId: string; cents: number }[] = [];
   const base = { groupId: group.id, sessionId: session.id, nowIso: now, guard: claimed };
   /** Mark an unpaid seat paid with the credit on it (what they put in), so money above the price can come back. */
   const payWithCredit = (r: RosterRow, used: number) =>
@@ -155,10 +171,23 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     if (owing.has(r.player_id)) {
       const paidCash = r.payment_status === 'paid' && !r.refunded_at && !r.self_paid_at ? (r.payment_amount_cents ?? 0) : 0;
       // (A no-show host with a guest owes for both, as in round 1: the guest could not play without them.)
-      const fee = gp.flatCents * (guestIn(r) || guestOwed(r) ? 2 : 1);
+      const fee = gp.flatCents * (guestIn(r) || guestOwed(r) ? (pairOne.has(r.player_id) ? 1 : 2) : 1);
       if (paidCash > 0 && paidCash < fee) {
         const onSeat = await usedOn(ctx, session.id, r.player_id);
         statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paidCash - onSeat), paymentCents: paidCash }));
+      } else if (pairOne.has(r.player_id) && paidCash > fee) {
+        // Zip 49: a pair that paid $28 and owes one share: the other $14 comes back now as credit, the way a played seat's money back does
+        // ('finalized': Totals counts the $14 kept, a Reopen or an Unmark takes it back).
+        statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: paidCash - fee, reason: 'finalized', playedCount: n, settle: false }));
+        backs.push({ player: r.display_name, playerId: r.player_id, cents: paidCash - fee, reason: 'finalized' });
+      } else if (pairOne.has(r.player_id) && paidCash === 0 && r.payment_status === 'unpaid') {
+        // Credit used on the seat above the one share owed: the seat is paid with it and the rest comes back, as for a played seat.
+        const used = await usedOn(ctx, session.id, r.player_id);
+        if (used > fee) {
+          statements.push(payWithCredit(r, used));
+          statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: used - fee, reason: 'finalized', playedCount: n, settle: false }));
+          backs.push({ player: r.display_name, playerId: r.player_id, cents: used - fee, reason: 'finalized' });
+        }
       } else if (cheaperFix && paidCash > fee) {
         // Zip 39 ("Made cheaper after paying", server/cheaperFix.ts; off: nothing here): the mirror. Paid MORE than the fee (the game was made
         // cheaper after they paid): the part above it comes back as credit exactly the way a played seat's does ('finalized', the payment stays
@@ -169,7 +198,19 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       continue;
     }
     // An open late-drop debt on a seat that left: its money stays on the game until it is cleared or paid.
-    if (lateFeeKind(r, session)) continue;
+    // Zip 49 (M-1): except whole guest shares the debt no longer holds (it owes one share and $28 sits on it): those come back now, in this
+    // batch, so the game never keeps more than the spots it was short. Confirmed money only; the paths above normally did this already.
+    if (lateFeeKind(r, session)) {
+      if (guests && lateFeeKind(r, session) === 'late_drop' && r.status === 'withdrawn') {
+        const owed = gp.flatCents * seatUnits(r);
+        const trim = await trimSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, priceCents: owed, nowIso: now, guard: claimed, seatStatus: 'withdrawn', reason: 'dropped', wholeSharesOf: gp.flatCents });
+        if (trim.statements.length && trim.backCents > 0) {
+          statements.push(...trim.statements);
+          droppedBacks.push({ player: r.display_name, playerId: r.player_id, cents: trim.backCents });
+        }
+      }
+      continue;
+    }
     const paid = r.payment_status === 'paid' && !r.refunded_at ? (r.payment_amount_cents ?? 0) : 0;
     const played = r.status === 'confirmed' && playedIds.has(r.player_id);
     if (played) {
@@ -230,7 +271,13 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   const extSkipped = plan ? plan.changes.filter((_, i) => results[planAt + plan.seatStatement[i]]?.meta.changes !== 1).map((c) => c.name) : [];
   if (plan && (plan.minutes > 0 || plan.changes.length > 0)) await auditPlan(ctx.db, group.id, session.id, plan, now, 'finalize');
   for (const b of backs) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: b.reason }, now);
-  for (const pid of owing) await auditLateFeeOwed(ctx.db, group.id, session.id, pid, 'no_show', now, 'organizer', specialFlatOf(session, settings));
+  for (const b of droppedBacks) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: 'dropped' }, now);
+  for (const pid of owing) {
+    // Zip 49 (F-3): a pair that owes both shares says $28 in History; one share (or a single no-show) exactly as before.
+    const r = confirmed.find((x) => x.player_id === pid);
+    const debt = r && guests && (guestIn(r) || guestOwed(r)) && !pairOne.has(pid) ? gp.flatCents * 2 : null;
+    await auditLateFeeOwed(ctx.db, group.id, session.id, pid, 'no_show', now, 'organizer', debt ?? specialFlatOf(session, settings));
+  }
   // Finalized means it was played: a later Reopen never asks "Did you guys play?" (a display mark, no money; never fails the tap).
   await writeMark(ctx.db, group.id, session.id, 'played', now).catch(() => {});
   return {

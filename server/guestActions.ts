@@ -186,7 +186,8 @@ export async function removeGuestCore(ctx: Ctx, group: GroupRow, session: Sessio
     now,
     by === 'host' ? host.display_name : 'organizer',
   );
-  if (back > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: host.display_name, playerId, amountCents: back, reason: 'dropped' }, now);
+  // Zip 49 (F-3): "(guest removed)", not "(dropped out)": the host is still in.
+  if (back > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: host.display_name, playerId, amountCents: back, reason: 'guest_removed' }, now);
   if (wasIn) await settle(ctx.db, session, now, settings);
   if (by === 'host') await notifyGuestRemoved(ctx, group, session, host.display_name, guest);
   return { ok: true, guest, creditBackCents: back, ...(owed ? { lateOwesCents: owedCents } : {}) };

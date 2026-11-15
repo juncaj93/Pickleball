@@ -176,7 +176,9 @@ export function lateDropToast(feeText: string, paid: boolean): string {
  * Sub: "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." (paid: "... Your $14 is back as credit.")
  * The organizer (venue waived, my choice, or the game was canceled): "You no longer owe $14 for Tue, Nov 3."
  */
-export function feeClearedNotice(why: 'sub' | 'cleared', day: string, feeText: string, creditText: string | null): string {
+export function feeClearedNotice(why: 'sub' | 'cleared', day: string, feeText: string, creditText: string | null, guest: string | null = null): string {
+  // Zip 49 (F-3): a sub took only the guest's spot of a pair's debt: the host's own share may still be owed, so the words name the guest.
+  if (why === 'sub' && guest) return `Good news: someone took ${guest}'s spot for ${day}. ${creditText ? `Your ${creditText} is back as credit.` : `You no longer owe ${feeText} for ${guest}.`}`;
   if (why === 'sub') return `Good news: someone took your spot for ${day}. ${creditText ? `Your ${creditText} is back as credit.` : `You no longer owe ${feeText}.`}`;
   return `You no longer owe ${feeText} for ${day}.${creditText ? ` Your ${creditText} is back as credit.` : ''}`;
 }

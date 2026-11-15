@@ -50,11 +50,21 @@ async function feeNoticesFor(ctx: Ctx, groupId: string, playerId: string, settin
   const out: NonNullable<GroupView['feeNotices']> = [];
   for (const r of results) {
     try {
-      const d = JSON.parse(r.details_json) as { playerId?: string; why?: string; amountCents?: number };
+      const d = JSON.parse(r.details_json) as { playerId?: string; why?: string; amountCents?: number; debtCents?: number; guest?: string };
       if (d.playerId !== playerId) continue;
       // A 1.5 hour game ("Short games" on) owed its own price: "You no longer owe $11". Every other game: nothing added (the $14 as before).
+      // Zip 49 (F-3): a line that stored the debt's real amount ($28 for a pair, $11 split) says that amount; a sub who took only a guest's
+      // spot names the guest ("someone took Sam's spot ... You no longer owe $14 for Sam").
       const gp = priceOf(r, settings);
-      out.push({ id: r.id, startsAt: r.starts_at, why: d.why === 'sub' ? 'sub' : 'cleared', creditCents: typeof d.amountCents === 'number' && d.amountCents > 0 ? d.amountCents : 0, ...(gp.special ? { feeCents: gp.flatCents } : {}) });
+      const debt = typeof d.debtCents === 'number' && d.debtCents > 0 ? d.debtCents : null;
+      out.push({
+        id: r.id,
+        startsAt: r.starts_at,
+        why: d.why === 'sub' ? 'sub' : 'cleared',
+        creditCents: typeof d.amountCents === 'number' && d.amountCents > 0 ? d.amountCents : 0,
+        ...(debt !== null ? { feeCents: debt } : gp.special ? { feeCents: gp.flatCents } : {}),
+        ...(d.why === 'sub' && typeof d.guest === 'string' && d.guest ? { guest: d.guest } : {}),
+      });
     } catch {
       /* an unreadable line shows nothing */
     }
@@ -582,7 +592,10 @@ export async function playerWithdraw(ctx: Ctx) {
   const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group), lateFees) : false;
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   if (res.changed) await logAction(ctx, who, 'withdraw', result, { late, ...(res.lateFee ? { owes: true } : {}) });
-  if (res.lateFee) await auditLateFeeOwed(ctx.db, who.group.id, who.session.id, who.playerId, 'late_drop', ctx.nowIso, 'organizer', specialFlatOf(who.session, settingsOf(who.group)));
+  // Zip 49 (F-3): a pair's $28 debt says $28 in History; every other debt exactly as before.
+  const debt = res.lateFee?.debtCents;
+  if (res.lateFee)
+    await auditLateFeeOwed(ctx.db, who.group.id, who.session.id, who.playerId, 'late_drop', ctx.nowIso, 'organizer', debt !== undefined && debt !== flatOf(who.session, settingsOf(who.group)) ? debt : specialFlatOf(who.session, settingsOf(who.group)));
   if (res.creditBackCents > 0) {
     const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
     await audit(ctx.db, who.group.id, who.session.id, 'credit_back', { player: p?.display_name ?? 'A player', playerId: who.playerId, amountCents: res.creditBackCents, reason: 'dropped' }, ctx.nowIso);

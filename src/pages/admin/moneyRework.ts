@@ -191,10 +191,25 @@ export function missingNumberNote(names: string[]): string {
  */
 export function gamePriceCents(d: Pick<AdminDashboard, 'group'>, s: AdminSessionView): number {
   const counts = new Map<number, number>();
-  for (const r of unpaidRows(s)) if (r.shareCents !== null && r.shareCents > 0) counts.set(r.shareCents, (counts.get(r.shareCents) ?? 0) + 1);
+  // Zip 49 (F-2): a host with a guest owes two people's shares on one row: the group text asks each person for ONE share (the host's own
+  // reminder still says the full amount). So a pair counts as two people at half its price, and the group is never asked for $28.
+  for (const r of unpaidRows(s)) {
+    if (r.shareCents === null || r.shareCents <= 0) continue;
+    const people = pairPeople(r);
+    const each = Math.round(r.shareCents / people);
+    counts.set(each, (counts.get(each) ?? 0) + people);
+  }
   const common = [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
   if (common) return common[0];
   return s.finalized ? s.finalized.priceCents : viewFlat(s, d.group.settings.pricePerPlayerCents);
+}
+
+/** How many people a roster row's price is for: 2 for a host whose guest is in (or whose guest's spot is still owed), else 1. */
+function pairPeople(r: AdminSessionView['roster'][number]): number {
+  const g = r.guest;
+  if (!g) return 1;
+  if (g.status === 'late') return 2;
+  return g.status === 'confirmed' && g.played !== false ? 2 : 1;
 }
 
 /** The "Text all" message for a game: one text for the group chat (no recipients), the site address alone on the last line. */

@@ -34,12 +34,15 @@ export function WhoPlayedTiles({
   busy,
   unconfirmedNames,
   onConfirm,
+  lateFees = false,
 }: {
   s: AdminSessionView;
   gp: GamePrice;
   busy: boolean;
   unconfirmedNames: string[];
   onConfirm: (ids: string[], extraMinutes: ExtraMinutes, guestsOut: string[]) => void;
+  /** Zip 49: late fees on, so the pair note says what a pair that did not play owes. */
+  lateFees?: boolean;
 }) {
   const price = gp.flatCents;
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
@@ -54,7 +57,10 @@ export function WhoPlayedTiles({
   const organizerPlayed = inNow.some((r) => r.isOrganizer && played.has(r.playerId));
   const orgGuest = inNow.some((r) => r.isOrganizer && hasGuest(r) && guestOn(r));
   const split = extensionSplitHeads(extra, n, organizerPlayed ? (orgGuest ? 2 : 1) : 0);
-  const notes = whoPlayedNotes(inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })));
+  const notes = whoPlayedNotes(
+    inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })),
+    lateFees ? { played: n, flatCents: price, fmt: formatPrice } : undefined,
+  );
   const toggleGuest = (id: string) =>
     setGuestOut((cur) => {
       const next = new Set(cur);

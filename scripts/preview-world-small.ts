@@ -88,7 +88,11 @@ export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: s
   return hide + '\n' + hidePlayerOnly + '\n';
 }
 
-export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boolean } = {}): Promise<Seed> {
+export async function buildSmallPreview(
+  startMs = Date.now(),
+  /** `zip49`: add Zip 49's three games and keep only them in the calm profile (the preview seed). Left out: the world exactly as before (the local browser tests). */
+  opts: { calm?: boolean; zip49?: boolean } = {},
+): Promise<Seed> {
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
   const skinKeep: string[] = [];
@@ -574,16 +578,46 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
     summary.push('Zip 42 Guest spot: "Guest test" (next day 7:30 PM) and "Guest paid" (3 days out, 7:00 PM), each Rowan + Sam (guest), Parker, Christopher Vanderberg; "Guest test" also Parker + Billy (guest), 5 in; Rowan owes $28 on the first and paid $28 on the second; round 3: "Late: 4 seats", "Late: host 4th", "Late: host 5th" (next day 5:30, 6:00, 6:30 PM, Rowan + Sam in each: Drop out owes $28, $14, nothing)');
   }
 
+  // 25. Zip 49 (money fixes): Alex's three taps. The late games start 11 to 11.5 hours after the seed, so their late window (12 hours before the
+  //     start) is open from the seed until they start; a later test needs a fresh seed. Rowan + Sam (guest) in each, Rowan tapped I paid $28
+  //     (not confirmed yet: that is the case the fix is about).
+  //     "Late, 1 short": Parker, Christopher Vanderberg, Reese, then Rowan + Sam (5): Drop out says $14; confirm the I paid: $14 back.
+  //     "Late, 2 short": Rowan + Sam, Parker, Christopher Vanderberg (4): Drop out says $28; Sage taps I'm in (takes Sam's spot); confirm: $14 back.
+  //     "Text all": the day after at 7:00 PM, Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid: Text all asks for $14.
+  if (opts.zip49) {
+    const step = 30 * 60_000;
+    const lateStart = Math.floor((N + 11.5 * HOUR) / step) * step;
+    const one = await makeAt(lateStart - step, 120, 'Late, 1 short');
+    const two = await makeAt(lateStart, 120, 'Late, 2 short');
+    const text = await makeAt(localAt(N + DAY, 19), 120, 'Text all');
+    for (const [gg, first, after] of [
+      [one, ['Parker', SMALL_LONG, 'Reese'], []],
+      [two, [], ['Parker', SMALL_LONG]],
+      [text, [], ['Parker', SMALL_LONG]],
+    ] as const) {
+      await setCourt(gg, 'booked');
+      for (const n of [...first, 'Rowan', ...after]) await join(n, gg);
+      await w.org.ok('POST', `/api/admin/sessions/${gg.id}/guest`, { playerId: w.ids.Rowan, name: 'Sam' });
+    }
+    for (const gg of [one, two]) await (await w.pick('Rowan')).ok('POST', `/api/sessions/${gg.id}/paid`, { paid: true });
+    await orgPays(SMALL_LONG, text);
+    keep.length = 0;
+    keep.push(one.id, two.id, text.id);
+    lateMove = undefined;
+    await refresh();
+    summary.push('Zip 49 money fixes: "Late, 1 short" and "Late, 2 short" (start 11 and 11.5 hours after the seed; Rowan + Sam in each, Rowan tapped I paid $28, not confirmed) and "Text all" (the day after, 7:00 PM: Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid)');
+  }
+
   await refresh();
   const names = (dash.players as { name: string }[]).map((p) => p.name).sort();
   if (names.join('|') !== [...SMALL_NAMES].sort().join('|')) throw new Error(`the small preview must have exactly the fixed names, has: ${names.join(', ')}`);
 
   let calmSql = '';
   if (opts.calm) {
-    // Zip 42: the calm profile keeps this zip's games (two Guest spot games and round 3's three late scenes) and Zip 43's two last-month booked
-    // games the Venue charge alert adds up (hidden from the lists). The Zip 38 tonight and tomorrow player games stay in the full world (--full).
+    // The calm profile keeps the zip's games (Zip 49's three with `zip49`, else Zip 42's guest games and late scenes) and Zip 43's two last-month
+    // booked games the Venue charge alert adds up (hidden from the lists). The Zip 38 tonight and tomorrow player games stay in the full world (--full).
     calmSql = calmDown(w.db.raw, keep, N, lateMove, venueKeep);
-    summary.push('CALM profile (Zip 42 and 43): the two Guest spot games, the three late scenes and last month\'s two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
+    summary.push(`CALM profile (${opts.zip49 ? 'Zip 49' : 'Zip 42'} and 43): that zip's games and last month's two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)`);
   }
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);

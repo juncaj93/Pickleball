@@ -1257,9 +1257,10 @@ function FeeNotices({ g }: { g: GroupView }) {
               key={n.id}
               tone="blue"
               icon="ok"
-              title={credit ? `Your ${credit} is back as credit` : `You no longer owe ${fee}`}
-              // The date never splits across lines, and "spot" stays with it (non-breaking spaces; the same words).
-              sub={n.why === 'sub' ? `Someone took your ${day.replace(/ /g, '\u00a0')}\u00a0spot` : `For ${day.replace(/ /g, '\u00a0')}`}
+              title={credit ? `Your ${credit} is back as credit` : n.guest ? `You no longer owe ${fee} for ${n.guest}` : `You no longer owe ${fee}`}
+              // The date never splits across lines, and "spot" stays with it (non-breaking spaces; the same words). Zip 49: a sub who took only
+              // the guest's spot says so ("Someone took Sam's Tue, Nov 3 spot").
+              sub={n.why === 'sub' ? `Someone took ${n.guest ? `${n.guest}'s` : 'your'} ${day.replace(/ /g, '\u00a0')}\u00a0spot` : `For ${day.replace(/ /g, '\u00a0')}`}
               data={{ 'data-fee-notice': n.why }}
               action={
                 <button type="button" className="ac-btn ac-out" onClick={() => dismiss(n.id)}>
@@ -1278,7 +1279,7 @@ function FeeNotices({ g }: { g: GroupView }) {
         <div key={n.id} className="fee-notice" data-fee-notice={n.why}>
           <Notice tone="ok">
             <span className="fee-notice-row">
-              <span>{feeClearedNotice(n.why, formatShortDate(n.startsAt, tz), formatPrice(n.feeCents ?? g.group.priceCents), n.creditCents > 0 ? formatPrice(n.creditCents) : null)}</span>
+              <span>{feeClearedNotice(n.why, formatShortDate(n.startsAt, tz), formatPrice(n.feeCents ?? g.group.priceCents), n.creditCents > 0 ? formatPrice(n.creditCents) : null, n.guest ?? null)}</span>
               <button type="button" className="btn small ghost" onClick={() => dismiss(n.id)}>
                 Dismiss
               </button>
@@ -2349,12 +2350,18 @@ function RowPay({
   // PLAYER_FIX1 off: the card at the top takes over the buttons on game day, as always.
   const chipOnly = onTop && !g.playerFix1;
   if (mine.paymentStatus === 'paid') {
-    const amount = mine.shareCents;
+    // Zip 49 (F-4): an I paid below what the seat costs now (their guest moved in after it): "Paid $14" and what is still due.
+    const amount = mine.claimCents ?? mine.shareCents;
     return (
       <div className="sched-money stacked">
         <span className="pchip chip-ok paid-tag" data-paid>
           <RollText text={mine.paidWithCredit ? 'Paid with credit' : amount ? `Paid ${formatPrice(amount)}` : 'Paid'} />
         </span>
+        {mine.claimCents !== undefined && mine.oweCents > 0 && (
+          <span className="pchip chip-warn" data-owe data-claim-short>
+            <RollText text={`${formatPrice(mine.oweCents)} due`} />
+          </span>
+        )}
         <span className="inline-links">
           {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
           {mine.paidWithCredit && (

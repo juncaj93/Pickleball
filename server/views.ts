@@ -120,7 +120,8 @@ export function playerSessionView(
         paymentStatus: mine.payment_status,
         selfPaid: !!mine.self_paid_at,
         signupAt: mine.confirmed_at ?? mine.claimed_at,
-        oweCents: owe,
+        // Zip 49 (F-4): an I paid below what the seat costs now (the guest moved in after it) owes the rest; confirmed, the seat says so too.
+        ...(claimed && !isOrganizer && price > paidNow ? { oweCents: price - paidNow, claimCents: paidNow } : { oweCents: owe }),
         creditCents: mine.payment_status === 'unpaid' ? pot.seat.usedCents : 0,
         // What a drop out would give back right now (the same sums as seatMoneyBackStatements): credit used on the
         // seat goes back to the pot; cash paid toward it (and cash held against it) comes back as credit.
@@ -140,9 +141,12 @@ export function playerSessionView(
                 owes: dropOwes,
                 // Zip 27 (A-02): a seat paid below the fee (the game was made longer after the payment) would owe only the rest: the dialog says
                 // that ("you still owe $3"). Every other seat: exactly as before.
-                ...(!isOrganizer && mine.payment_status === 'paid' && !mine.refunded_at && !claimed && paidNow > 0 && paidNow < feeCents * owedUnits
-                  ? { paid: false, feeCents: feeCents * owedUnits - paidNow }
-                  : { paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents: feeCents * owedUnits }),
+                // Zip 49 (F-3): the same for part credit on an unpaid seat ($3 credit: "You owe $11"), so the words match what stays owed.
+                ...(() => {
+                  if (isOrganizer) return { paid: false, feeCents: feeCents * owedUnits };
+                  const covered = paidNow > 0 ? paidNow : pot.seat.usedCents + pot.seat.cashCents;
+                  return covered > 0 && covered < feeCents * owedUnits ? { paid: false, feeCents: feeCents * owedUnits - covered } : { paid: covered > 0, feeCents: feeCents * owedUnits };
+                })(),
                 // Zip 42 round 3: only for a host with a guest: how many spots a drop would leave short (0 to 2), and whether removing the
                 // guest alone would leave the game below 4.
                 ...(mySpots === 2 ? { guestSpots: shortSpots, ...(guestIn(mine) ? { removeOwes } : {}) } : {}),
@@ -469,6 +473,8 @@ export function adminSessionView(
 
 /** Zip 42 round 2: which person of a pair is paid. A paid seat (an I paid too) counts both; an unpaid one splits what it holds. */
 function pairPaid(r: RosterRow, priceCents: number, seat: SeatCredit): ReturnType<typeof sharesPaid> {
+  // Zip 49 (F-4): an I paid of one share, tapped while the guest was still waiting: it covers one person, the other still owes.
+  if (r.payment_status === 'paid' && !r.refunded_at && r.self_paid_at && (r.payment_amount_cents ?? 0) < priceCents) return sharesPaid(r.payment_amount_cents ?? 0, priceCents, r.guest_first === 1);
   if (r.payment_status === 'paid' && !r.refunded_at) return { host: true, guest: true, shareCents: Math.floor(priceCents / 2), hostOwesCents: 0, guestOwesCents: 0 };
   return sharesPaid(seat.usedCents + seat.cashCents, priceCents, r.guest_first === 1);
 }

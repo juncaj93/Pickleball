@@ -175,6 +175,11 @@ export interface VenueInput {
    * charge day can never bill a game that an earlier, paid court charge already covered. Same days every month: it changes nothing.
    */
   courtPaidThrough?: string | null;
+  /**
+   * Zip 49 (audit F-1): the charge date of EVERY court charge marked paid. A card's period only starts after a paid court charge EARLIER than its
+   * own charge day, so marking a newer month paid never trims (or hides) an older unpaid card. Missing: courtPaidThrough, used the same way.
+   */
+  courtPaidDates?: readonly string[];
 }
 
 const COURT_NAME = 'Northville Pickleball';
@@ -214,7 +219,9 @@ export function dueAlerts(input: VenueInput): VenueAlert[] {
     const reached = (date: string) => date <= todayYmd && startOfDayMs(date, tz) >= input.onAtMs;
     if (reached(dates.court) && !input.paid.has(`court:${key}`)) {
       const period = courtPeriod(days, year, month);
-      if (input.courtPaidThrough && addDays(input.courtPaidThrough, 1) > period.from) period.from = addDays(input.courtPaidThrough, 1);
+      const before = (input.courtPaidDates ?? (input.courtPaidThrough ? [input.courtPaidThrough] : [])).filter((d) => d < dates.court).sort();
+      const through = before.length ? before[before.length - 1] : null;
+      if (through && addDays(through, 1) > period.from) period.from = addDays(through, 1);
       const costs = periodGames(input.games, period, tz).map((g) => g.costCents);
       if (costs.length > 0 && costs.reduce((a, b) => a + b, 0) > 0) due.push({ date: dates.court, kind: 'court', month: key, cents: costs.reduce((a, b) => a + b, 0), line: courtLine(costs) });
     }

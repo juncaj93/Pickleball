@@ -8,8 +8,8 @@ import { FEE_MIN_PLAYERS, lateFeeCutoffMs } from '../shared/lateFees';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
-import { audit, flatOf, type GroupRow, type SessionRow, waitlistOf, loadRoster, confirmedOf, organizerIdOf, settingsOf, waitQueue } from './repo';
-import { confirmedHeads, hasGuestColumns, nextClaimSeq, trimSeatStatements } from './guestSpot';
+import { audit, flatOf, type GroupRow, type SessionRow, waitlistOf, loadRoster, confirmedOf, organizerIdOf, settingsOf, sharesFor, waitQueue } from './repo';
+import { confirmedHeads, hasGuestColumns, nextClaimSeq, trimGuestShares, trimSeatStatements } from './guestSpot';
 import { headCount } from '../shared/guestSpot';
 
 // One court, any number from 4 up to the organizer's max (see shared/spots.ts).
@@ -152,7 +152,7 @@ export async function auditSubClears(db: D1Database, groupId: string, sessionId:
         : `EXISTS (SELECT 1 FROM session_players g WHERE g.id = '${id}' AND g.status = 'withdrawn' AND g.guest_at = '${at}' AND g.late_drop_done_at IS NULL)`;
       const trim = await trimSeatStatements(db, { groupId, sessionId, playerId: h.player_id, priceCents: flatCents, nowIso, guard, seatStatus: stillIn ? 'confirmed' : 'withdrawn', reason: 'dropped' });
       if (trim.statements.length) await db.batch(trim.statements);
-      await audit(db, groupId, sessionId, 'late_fee_cleared', { player: h.name, playerId: h.player_id, why: 'sub', sub: h.sub ?? 'A player', guest: h.guest_name, amountCents: trim.backCents }, nowIso);
+      await audit(db, groupId, sessionId, 'late_fee_cleared', { player: h.name, playerId: h.player_id, why: 'sub', sub: h.sub ?? 'A player', guest: h.guest_name, amountCents: trim.backCents, debtCents: flatCents }, nowIso);
       // A host still in keeps no trace of the removed guest once the debt is cleared.
       if (stillIn) await db.prepare("UPDATE session_players SET guest_name = NULL WHERE id = ? AND status = 'confirmed' AND guest_status IS NULL AND guest_at = ?").bind(h.id, nowIso).run();
     }
@@ -170,7 +170,7 @@ export async function auditSubClears(db: D1Database, groupId: string, sessionId:
     .all<{ player_id: string; name: string; sub: string | null }>();
   for (const r of results) {
     const back = (await moneyBackAt(db, sessionId, r.player_id, 'dropped', nowIso))[0];
-    await audit(db, groupId, sessionId, 'late_fee_cleared', { player: r.name, playerId: r.player_id, why: 'sub', sub: r.sub ?? 'A player', amountCents: (back?.cashCents ?? 0) + (back?.creditCents ?? 0) }, nowIso);
+    await audit(db, groupId, sessionId, 'late_fee_cleared', { player: r.name, playerId: r.player_id, why: 'sub', sub: r.sub ?? 'A player', amountCents: (back?.cashCents ?? 0) + (back?.creditCents ?? 0), ...(flatCents > 0 ? { debtCents: flatCents } : {}) }, nowIso);
     if (back && back.cashCents > 0) await audit(db, groupId, sessionId, 'credit_back', { player: r.name, playerId: r.player_id, amountCents: back.cashCents, reason: 'dropped' }, nowIso);
   }
   return results.map((r) => r.player_id);
@@ -251,6 +251,25 @@ async function tryConfirm(
     }
     throw err;
   }
+}
+
+/** Zip 49 (M-1): see joinSession. Only the seat this rejoin confirmed (confirmed at `nowIso`), and only whole guest shares above its price. */
+async function trimRejoined(db: D1Database, session: SessionRow, playerId: string, nowIso: string, settings: GroupSettings) {
+  const group = await db.prepare('SELECT * FROM groups WHERE id = ?').bind(session.group_id).first<GroupRow>();
+  if (!group) return;
+  const roster = await loadRoster(db, session.id);
+  const row = roster.find((r) => r.player_id === playerId);
+  if (!row || row.status !== 'confirmed') return;
+  const price = sharesFor(session, roster, settings).get(playerId);
+  if (price === undefined) return;
+  const guard = `EXISTS (SELECT 1 FROM session_players g WHERE g.session_id = ${sqlQuote(session.id)} AND g.player_id = ${sqlQuote(playerId)} AND g.status = 'confirmed' AND g.confirmed_at = ${sqlQuote(nowIso)})`;
+  await trimGuestShares(db, { groupId: group.id, sessionId: session.id, playerId, playerName: row.display_name, priceCents: price, flatCents: flatOf(session, settings), nowIso, guard, seatStatus: 'confirmed' });
+}
+
+/** An id or a time this server made, put straight into SQL text (refused if it could break out of quotes). */
+function sqlQuote(value: string): string {
+  if (!/^[0-9A-Za-z:.\-]+$/.test(value)) throw new Error('unsafe sql text');
+  return `'${value}'`;
 }
 
 /** Put the player at the back of the waitlist (no-op if already waiting). */
@@ -419,6 +438,9 @@ export async function joinSession(
   const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto, mode !== 'organizer', sub);
   if (got) {
     if (got === 'new' && auto && sub.cleared) await auditSubClears(db, auto.groupId, session.id, playerId, nowIso, auto.priceCents);
+    // Zip 49 (M-1): a host who dropped late with a guest and comes back alone holds one seat now: guest shares above it come back as credit
+    // at once (a confirmed $28 keeps $14), instead of waiting for Finalize. An unconfirmed I paid waits for the organizer's Mark paid.
+    if (got === 'new' && isOpenLateDrop(existing)) await trimRejoined(db, session, playerId, nowIso, settings);
     // A second tap or device that found the seat already taken by the first reports (and logs) nothing new.
     const credit = auto && got === 'new' ? await auditAutoCredit(db, auto.groupId, session.id, playerId, nowIso) : { cents: 0, paid: false };
     return credit.cents > 0 ? { result: 'confirmed', creditCents: credit.cents, paidWithCredit: credit.paid } : { result: 'confirmed' };
@@ -456,7 +478,7 @@ export async function withdraw(
   /** LATE_FEES on for this tap (server/lateFees.ts): a player's own drop inside the 12 hours that leaves the game short owes. */
   /** cheaperFix (Zip 39, server/cheaperFix.ts): such a drop on a seat paid ABOVE the fee (the game was made cheaper after they paid) keeps only the fee. */
   opts: { lateFees?: boolean; cheaperFix?: boolean } = {},
-): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number } | null; guest?: string | null }> {
+): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number; debtCents?: number } | null; guest?: string | null }> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
   // Zip 42 "Guest spot": the guest leaves with the host. Read before the seat changes (the alert and History name the guest).
@@ -609,11 +631,22 @@ export async function withdraw(
       }
     }
   }
+  // Zip 49 (M-1): any other late drop that owes one share, on a seat that holds whole guest shares above it (a host who rejoined alone with
+  // $28 confirmed on the seat, then dropped late again): the debt is $14, so the rest comes back now, the same way.
+  if (changed && feeDrop && !isOrg && !pairSeat && g && /^[0-9A-Za-z-]+$/.test(existing.id) && /^[0-9A-Za-z:.\-]+$/.test(nowIso)) {
+    const name = (await db.prepare('SELECT display_name FROM players WHERE id = ?').bind(playerId).first<{ display_name: string }>())?.display_name ?? 'A player';
+    const guard = `EXISTS (SELECT 1 FROM session_players g WHERE g.id = '${existing.id}' AND g.status = 'withdrawn' AND g.played = 0 AND g.late_drop_at = '${nowIso}' AND g.late_drop_done_at IS NULL AND g.guest_status IS NULL)`;
+    pairBack += await trimGuestShares(db, { groupId: group.id, sessionId: session.id, playerId, playerName: name, priceCents: flatOf(session, settingsOf(group)), flatCents: flatOf(session, settingsOf(group)), nowIso, guard, seatStatus: 'withdrawn' });
+  }
   // Did this drop leave an open late-drop debt (its money stayed on the game)?
   const after = changed && feeDrop ? await existingRow(db, session.id, playerId) : null;
   // Zip 42: a debt that kept the guest's share is two shares.
   const units = g && after && isOpenLateDrop(after) ? ((await db.prepare("SELECT guest_status FROM session_players WHERE id = ?").bind(after.id).first<{ guest_status: string | null }>())?.guest_status === 'late' ? 2 : 1) : 1;
-  const lateFee = isOpenLateDrop(after) ? (isOrg ? { paid: false } : await lateFeeLeft(db, session.id, playerId, flatOf(session, settingsOf(group)) * units, units > 1)) : null;
+  const lateFee = isOpenLateDrop(after)
+    ? isOrg
+      ? { paid: false }
+      : { ...(await lateFeeLeft(db, session.id, playerId, flatOf(session, settingsOf(group)) * units)), debtCents: flatOf(session, settingsOf(group)) * units }
+    : null;
   if (!changed && cash === 0 && credit === 0) return nothing;
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.
@@ -669,36 +702,25 @@ async function cheaperDropStatements(
 }
 
 /**
- * What a new late-drop debt says (Zip 27, A-02). A seat whose cash was just held because it was paid below the fee (the game was made longer
- * after the payment) owes only the rest: { paid: false, oweCents } ("You owe $3 unless someone takes your spot"). Any other seat: exactly as
- * before (seatHoldsMoney: "Your $14 stays on this game", or "You owe $14").
+ * What a new late-drop debt says. `oweCents` is the amount the words name: what stays on the game when the seat covers the debt ({ paid:
+ * true }: "Your $28 stays on this game"), else what is still owed ({ paid: false }: "You owe $11 unless someone takes your spot").
  */
-async function lateFeeLeft(db: D1Database, sessionId: string, playerId: string, feeCents: number, sayAmount = false): Promise<{ paid: boolean; oweCents?: number }> {
+async function lateFeeLeft(db: D1Database, sessionId: string, playerId: string, feeCents: number): Promise<{ paid: boolean; oweCents?: number }> {
   const row = await db
     .prepare(
       `SELECT (SELECT payment_status FROM session_players WHERE session_id = ?1 AND player_id = ?2) AS ps,
-         (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?1 AND player_id = ?2 AND ended_at IS NULL) AS used,
-         (SELECT COUNT(*) FROM credit_ledger WHERE kind = 'used' AND reason = 'cash' AND session_id = ?1 AND player_id = ?2 AND ended_at IS NULL) AS held`,
-    )
-    .bind(sessionId, playerId)
-    .first<{ ps: string | null; used: number; held: number }>();
-  if (row?.ps === 'unpaid' && (row.held ?? 0) > 0) return { paid: false, oweCents: Math.max(0, feeCents - (row.used ?? 0)) };
-  const paid = await seatHoldsMoney(db, sessionId, playerId);
-  // Zip 42: a pair's debt says its own amount ("You owe $28"); every other debt exactly as before.
-  if (sayAmount && row?.ps === 'unpaid') return { paid, oweCents: Math.max(0, feeCents - (row.used ?? 0)) };
-  return { paid };
-}
-
-/** The seat still carries money (a payment, or credit used on it): "Your $14 stays on this game". */
-async function seatHoldsMoney(db: D1Database, sessionId: string, playerId: string): Promise<boolean> {
-  const row = await db
-    .prepare(
-      `SELECT (SELECT payment_status FROM session_players WHERE session_id = ?1 AND player_id = ?2) AS ps,
+         (SELECT payment_amount_cents FROM session_players WHERE session_id = ?1 AND player_id = ?2) AS amt,
+         (SELECT refunded_at FROM session_players WHERE session_id = ?1 AND player_id = ?2) AS refunded,
          (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?1 AND player_id = ?2 AND ended_at IS NULL) AS used`,
     )
     .bind(sessionId, playerId)
-    .first<{ ps: string | null; used: number }>();
-  return row?.ps === 'paid' || (row?.used ?? 0) > 0;
+    .first<{ ps: string | null; amt: number | null; refunded: string | null; used: number }>();
+  // Zip 49 (F-3): the answer always says the real amount. What the seat covers: its payment when paid, else the credit (and cash held) on it.
+  // Covers the debt: "Your $28 stays on this game" (a pair short by two), "Your $14 stays". Covers part: "You owe $11" ($3 credit on it), or
+  // the rest of the fee when cash paid at a lower price was held (Zip 27, A-02). Nothing: "You owe $14".
+  const covered = row?.ps === 'paid' && !row.refunded ? (row.amt ?? 0) : (row?.used ?? 0);
+  if (covered >= feeCents && covered > 0) return { paid: true, oweCents: feeCents };
+  return { paid: false, oweCents: Math.max(0, feeCents - covered) };
 }
 
 /** History line when a drop or a Finalize leaves someone owing their $14 (shared/lateFees.ts). */

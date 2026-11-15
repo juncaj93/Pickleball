@@ -93,6 +93,9 @@ export function lateShortSpots(othersLeft: number, spots: number, min = 4): numb
 export function seatUnits(r: GuestCols): number {
   // Round 2 (Alex): a guest marked "did not play" at Finalize comes off: the host keeps one share.
   if (guestIn(r)) return r.guest_played === 0 ? 1 : 2;
+  // Zip 49: a host who removed their guest late and then did not play, in a game only one short: the no-show owes one share (Finalize marks
+  // the owed guest spot out with guest_played 0; a Reopen puts it back).
+  if (guestLate(r) && r.status === 'confirmed' && r.guest_played === 0) return 1;
   return guestLate(r) ? 2 : 1;
 }
 
@@ -129,10 +132,15 @@ export const GUEST_NAME_MAX = 20;
  */
 export function cleanGuestName(input: unknown): string | null {
   if (typeof input !== 'string') return null;
-  const s = input.replace(/\s+/g, ' ').trim();
+  // Zip 49 (audit F-21): one spelling for the same letters ("José" typed with a separate accent mark is the same name), and at most 2 accent
+  // marks on a letter (stacked marks draw over the lines above and below).
+  const s = input.normalize('NFC').replace(/\s+/g, ' ').trim();
   if (s.length < 1 || s.length > GUEST_NAME_MAX) return null;
   if (!/^[\p{L}][\p{L}\p{M} '’.-]*$/u.test(s)) return null;
-  return s.charAt(0).toLocaleUpperCase('en-US') + s.slice(1);
+  if (/\p{M}{3,}/u.test(s)) return null;
+  // A first letter whose capital is two letters ("ß" is "SS") stays as typed, so the name never grows past 20.
+  const cap = s.charAt(0).toLocaleUpperCase('en-US');
+  return (cap.length === 1 ? cap : s.charAt(0)) + s.slice(1);
 }
 
 /** The guest of a player-screen or admin roster entry, as sent to the screens. */
@@ -239,8 +247,20 @@ export function sharesPaid(
  * Round 2 (Alex): the Who played sheet's notes for pairs. A host marked out takes the guest out too: "Parker didn't play, so Billy didn't
  * either." A guest marked out alone: "Billy didn't play. Parker pays for 1 share." Nothing for a pair that both played.
  */
-export function whoPlayedNotes(pairs: { host: string; guest: string; hostPlayed: boolean; guestOut: boolean }[]): string[] {
+export function whoPlayedNotes(
+  pairs: { host: string; guest: string; hostPlayed: boolean; guestOut: boolean }[],
+  /**
+   * Zip 49 (Alex): with late fees on and fewer than 4 played (`played`, the organizer counted), a pair that did not play owes only the spots the
+   * game is short: "Parker owes $14, for the 1 spot the game was short." Left out: the notes exactly as before.
+   */
+  fee?: { played: number; flatCents: number; fmt: (cents: number) => string },
+): string[] {
+  const owes = (host: string) => {
+    if (!fee || fee.played >= 4) return '';
+    const spots = lateShortSpots(fee.played, 2);
+    return ` ${host} owes ${fee.fmt(fee.flatCents * spots)}, for the ${spots === 1 ? '1 spot' : `${spots} spots`} the game was short.`;
+  };
   return pairs.flatMap((p) =>
-    !p.hostPlayed ? [`${p.host} didn't play, so ${p.guest} didn't either.`] : p.guestOut ? [`${p.guest} didn't play. ${p.host} pays for 1 share.`] : [],
+    !p.hostPlayed ? [`${p.host} didn't play, so ${p.guest} didn't either.${owes(p.host)}`] : p.guestOut ? [`${p.guest} didn't play. ${p.host} pays for 1 share.`] : [],
   );
 }

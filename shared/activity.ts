@@ -116,7 +116,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'finalize_reopened':
       return `${who} reopened the finalize${forDay}`;
     case 'credit_back':
-      return `${player} got ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'money'} back as credit${forDay}${d.reason === 'dropped' ? ' (dropped out)' : d.reason === 'canceled' ? (d.split === true ? ' (canceled late, fee split)' : ' (canceled)') : d.reason === 'not_played' ? ' (did not play)' : ''}`;
+      return `${player} got ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'money'} back as credit${forDay}${d.reason === 'dropped' ? ' (dropped out)' : d.reason === 'canceled' ? (d.split === true ? ' (canceled late, fee split)' : ' (canceled)') : d.reason === 'not_played' ? ' (did not play)' : d.reason === 'guest_removed' ? ' (guest removed)' : ''}`;
     case 'refund_requested':
       return `${player} asked for ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'a'} refund of their credit`;
     case 'refund_request_canceled':
@@ -414,14 +414,19 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} switched "Late drops owe $14" off`;
     case 'late_fee_owed':
       return `${player} owes ${d.kind === 'canceled_late' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (canceled late, fee not waived)` : d.kind === 'no_show' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (did not play, fewer than 4 played)` : `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (late drop, game short)`}${forDay}`;
-    case 'late_fee_cleared':
+    case 'late_fee_cleared': {
+      // Zip 49 (F-3): the real amount the debt was ($28 for a pair, $11 split); lines written before it was stored say $14, as they always did.
+      const debt = typeof d.debtCents === 'number' && d.debtCents > 0 ? formatPrice(d.debtCents) : '$14';
       return d.why === 'sub'
         ? typeof d.guest === 'string'
-          ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s guest's spot: ${d.guest}'s $14 cleared${forDay}`
-          : `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s $14 cleared${forDay}`
+          ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s guest's spot: ${d.guest}'s ${debt} cleared${forDay}`
+          : `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s ${debt} cleared${forDay}`
         : d.why === 'canceled'
           ? `${player}'s late drop cleared (game canceled)${forDay}`
-          : `${who} cleared ${player}'s $14 (${d.why === 'venue' ? 'venue waived' : 'my choice'})${forDay}`;
+          : d.why === 'moved'
+            ? `${player}'s ${debt} late drop cleared (game moved to another day)${forDay}`
+            : `${who} cleared ${player}'s ${debt} (${d.why === 'venue' ? 'venue waived' : 'my choice'})${forDay}`;
+    }
     case 'admin_r2_on':
       return `${who} switched the admin screens round 2 on`;
     case 'admin_r2_off':

@@ -351,7 +351,7 @@ export function repriceStatements(db: D1Database, sessionId: string, flatCents: 
   // Round 3: a host still in who owes a guest's spot removed late ('late' on a confirmed seat) pays for two as well.
   const units = (sp: string) =>
     guests
-      ? ` * (1 + CASE WHEN ${sp}.guest_name IS NOT NULL AND ((${sp}.guest_status = 'confirmed' AND COALESCE(${sp}.guest_played, 1) = 1) OR (${sp}.guest_status = 'late' AND ${sp}.status = 'confirmed')) THEN 1 ELSE 0 END)`
+      ? ` * (1 + CASE WHEN ${sp}.guest_name IS NOT NULL AND ((${sp}.guest_status = 'confirmed' AND COALESCE(${sp}.guest_played, 1) = 1) OR (${sp}.guest_status = 'late' AND ${sp}.status = 'confirmed' AND COALESCE(${sp}.guest_played, 1) = 1)) THEN 1 ELSE 0 END)`
       : '';
   const price = `((SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN session_players.played = 1 THEN s.final_price_cents ELSE NULL END
                   FROM sessions s WHERE s.id = session_players.session_id)${units('session_players')})`;

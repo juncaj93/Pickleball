@@ -4755,3 +4755,44 @@ Branch `claude/new-session-86zb5a`. No database change, no money change. Plain-E
 
 ### Item 2: the date-bound test
 - `e2e/text-fix.cjs` set the dev server's clock to Fri Nov 13, 2026 but let the browser use the real day, so after Nov 13 the Nov 13 and Nov 14 games read as past and their gear menus were gone (4 of 6 checks failed on main too). It now uses `e2e/fixed-clock.cjs` (the server and every browser page start from the same fake moment, Fri Nov 13, 2026, 12:00 PM Eastern, before the fake group is made). No site behaviour changed.
+
+## Zip 49: money fixes from Audit C (🎾49.moneyfix), Sun Nov 15, 2026
+Branch `claude/new-session-r7eh7b` (the session is named "🎾49.moneyfix"; the build system pins the branch name). Built on main `b8ba448`. MOVES MONEY.
+No schema change, no new Cloudflare variable, no new switch: Late fees and Guest spot stay as Alex set them (both ON on live). Findings and
+reproductions: docs/audits/AUDIT_C_2026-11.md on branch `claude/new-session-am79iy` (PR #137, not merged).
+
+### The rule behind items 1, 7 and 8 (Alex)
+A late drop owes only the spots the game is short of 4 (organizer counted), at most 2 for a host and guest. What is charged, what is shown and
+what is kept always agree.
+
+### What changed
+1. M-1 (must-fix). A seat that holds whole guest shares it no longer owes gives them back as credit the moment the money is real:
+   - Alex confirms an I paid (`fitConfirmedClaim`, server/admin.ts): on an open late drop or no-show, or a seat in a game that is on;
+   - the host rejoins alone after a late pair drop (`trimRejoined`, server/roster.ts): $14 back at once (it used to wait for Finalize);
+   - any one-share late drop (server/roster.ts withdraw, after the pair trim);
+   - Finalize, for an open late-drop seat, as a safety net (server/finalize.ts).
+   The trim only moves WHOLE $14 shares (`wholeSharesOf`, server/guestSpot.ts `trimGuestShares`), so a game made cheaper after paying stays
+   "Made cheaper after paying"'s job, switch and all. An unconfirmed I paid never moves by itself.
+2. F-2. `gamePriceCents` (src/pages/admin/moneyRework.ts) counts a host-with-guest row as two people at half its price: Text all asks for $14.
+   The host's own reminder still says $28.
+3. F-3. History and notices say the real amount: `late_fee_owed` stores $28 for a pair (`priceCents`), `late_fee_cleared` stores `debtCents`
+   (pair $28, split $11); the "You no longer owe" notice uses it; a sub who took only the guest's spot says "someone took Sam's spot ... You no
+   longer owe $14 for Sam"; part credit on an unpaid seat reads "You owe $11" in the dialog, toast and server answer; a paid pair two short reads
+   "Your $28 stays"; Remove guest's money back reads "(guest removed)". Old History lines (no stored amount) read exactly as before.
+4. F-4. Confirming an I paid below the seat's price (I paid $14, then the guest moved in) holds the $14 as cash: the seat owes $14. Before the
+   confirm the host's card reads "Paid $14" with "$14 due" (`claimCents`), Sam's row reads unpaid and the paid count is 1 of 2.
+5. F-6. The organizer's Give spot (Players sheet) runs the normal move-ins, so a guest left waiting behind the host moves in when there is room.
+6. F-21. Guest names: one spelling (NFC), at most 2 accent marks on a letter, a first letter whose capital is two letters ("ß") stays as typed
+   (never past 20). Emoji, markup, digits, invisible characters and 21+ letters were already refused.
+7. No-show pair (Alex). Host and guest both "did not play" with fewer than 4 played: the host owes $14 x the spots short (1 short $14, 2 or more
+   $28). Finalize marks the guest's share out (`guest_played` 0, which Reopen clears); a paid $28 gets $14 back. Who played note: "Blair didn't
+   play, so Sam didn't either. Blair owes $14, for the 1 spot the game was short."
+8. Moved game (Alex). Edit game to another day clears every open late-drop debt (money back as credit, History "Blair's $14 late drop cleared
+   (game moved to another day)") and takes off a guest spot owed after a late removal. A time change on the same day changes nothing.
+9. F-1. Venue alert: each court card's period only starts after a paid court charge EARLIER than its own charge day (`courtPaidDates`), so
+   marking November paid leaves October's card until its own Mark paid.
+
+### Left alone (Alex)
+Daylight saving cancel-by on clock-change Sundays; M-2 (backup format) has its own zip. Not in this zip (F-7 is item 7, F-8 is item 8): F-5, F-9,
+F-10 to F-20, F-22 to F-24. Known small one: the player's credit sheet line for Remove guest still reads "(you dropped)" (it comes from the credit
+entry's stored reason, which other money code reads; changing it is not a wording-only change).

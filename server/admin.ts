@@ -99,8 +99,9 @@ import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from '.
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
 import { setTapGuardFixForAll, tapGuardFixFlags } from './tapGuardFix';
-import { guestSpotFlags, hasGuestColumns } from './guestSpot';
-import { headCount, seatUnits } from '../shared/guestSpot';
+import { guestSpotFlags, hasGuestColumns, trimGuestShares } from './guestSpot';
+import { removeGuestCore } from './guestActions';
+import { guestIn, guestOwed, headCount, seatUnits } from '../shared/guestSpot';
 import { phoneTagOf } from './phoneTag';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
@@ -988,7 +989,9 @@ export async function clearLateFee(ctx: Ctx, body: Record<string, unknown>) {
   if (tag.meta.changes !== 1) return { ok: true, changed: false };
   const back = (await moneyBackAt(ctx.db, session.id, playerId, reason, now))[0];
   const amountCents = (back?.cashCents ?? 0) + (back?.creditCents ?? 0);
-  await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: row.display_name, playerId, why, kind, amountCents }, now);
+  // Zip 49 (F-3): the debt's real amount ($28 for a pair, $11 split), so History and the player's notice say it.
+  const debtCents = sharesFor(session, roster, settingsOf(group)).get(playerId);
+  await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: row.display_name, playerId, why, kind, amountCents, ...(debtCents ? { debtCents } : {}) }, now);
   if (back && back.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: row.display_name, playerId, amountCents: back.cashCents, reason }, now);
   return { ok: true, changed: true, creditBackCents: amountCents };
 }
@@ -1216,8 +1219,57 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileC
   }
   await audit(ctx.db, group.id, session.id, 'session_rescheduled', { from: session.starts_at, to: startsAt }, ctx.nowIso);
   const dayOf = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: group.timezone });
-  if (dayOf(startsAt) !== dayOf(session.starts_at)) await resetTasksForNewDay(ctx.db, session.id);
+  if (dayOf(startsAt) !== dayOf(session.starts_at)) {
+    await resetTasksForNewDay(ctx.db, session.id);
+    // Zip 49 (Alex): a game moved to another day: late drops on the old day no longer apply. Every open late-drop debt is cleared (its money
+    // back as credit, like Clear) and an owed guest spot (removed late) comes off, each with a History line. Moves on the same day: as before.
+    const fresh = await getSession(ctx.db, group.id, session.id);
+    if (fresh) await clearLateDebtsOnMove(ctx, group, fresh);
+  }
   return { ok: true, changed: true };
+}
+
+/** Zip 49: see reschedule. Only open late-drop debts and owed guest spots of this game; a second run finds nothing open and does nothing. */
+async function clearLateDebtsOnMove(ctx: Ctx, group: GroupRow, session: SessionRow) {
+  const roster = await loadRoster(ctx.db, session.id);
+  const organizerId = await organizerIdOf(ctx.db, group);
+  const prices = sharesFor(session, roster, settingsOf(group));
+  const open = roster.filter((r) => lateFeeKind(r, session, r.player_id === organizerId) === 'late_drop');
+  const now = ctx.nowIso;
+  if (open.length) {
+    await ctx.db.batch([
+      ctx.db.prepare(`UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1 WHERE session_id = ?2 AND ${OPEN_LATE_DROP('session_players')}`).bind(now, session.id),
+      ...seatMoneyBackStatements(ctx.db, {
+        groupId: group.id,
+        sessionId: session.id,
+        playerId: null,
+        organizerId,
+        reason: 'dropped',
+        nowIso: now,
+        when: (sp) => `${sp}.status = 'withdrawn' AND ${sp}.played = 0 AND ${sp}.late_drop_done_at = ?1`,
+      }),
+      finishLateDropClear(ctx.db, session.id, now, null),
+    ]);
+    for (const r of open) {
+      const tagged = await ctx.db.prepare('SELECT late_drop_done_at FROM session_players WHERE id = ?').bind(r.id).first<{ late_drop_done_at: string | null }>();
+      if (tagged?.late_drop_done_at !== now) continue;
+      const back = (await moneyBackAt(ctx.db, session.id, r.player_id, 'dropped', now))[0];
+      const amountCents = (back?.cashCents ?? 0) + (back?.creditCents ?? 0);
+      await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: r.display_name, playerId: r.player_id, why: 'moved', kind: 'late_drop', amountCents, debtCents: prices.get(r.player_id) ?? flatOf(session, settingsOf(group)) }, now);
+      if (back && back.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: r.display_name, playerId: r.player_id, amountCents: back.cashCents, reason: 'dropped' }, now);
+    }
+  }
+  // A guest removed late whose spot is still owed: the removal was not late for the new day. Taken off the way the organizer's "Clear Sam's
+  // spot" does it (a paid $28 gives $14 back). An unconfirmed I paid on that seat stops it: Alex answers the I paid, then clears it by hand.
+  if (await hasGuestColumns(ctx.db)) {
+    for (const r of roster.filter((x) => x.status === 'confirmed' && guestOwed(x) && x.player_id !== organizerId)) {
+      try {
+        await removeGuestCore(ctx, group, session, r.player_id, 'organizer');
+      } catch (err) {
+        if (!(err instanceof HttpError)) throw err;
+      }
+    }
+  }
 }
 
 /** Organizer fixes to the roster. Still goes through the same max-players rules. */
@@ -1236,6 +1288,9 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
     // "Card cleanup" (Zip 10): no cap, only the database's 12; never the word "full".
     if (r.result === 'spot_taken') throw settingsOf(group).noCap === true ? new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE) : new HttpError(409, 'session_full', `The game is full (${settingsOf(group).maxPlayers} in).`);
     result = r.result;
+    // Zip 49 (audit F-6): giving a host back their spot after To waitlist leaves their guest waiting behind them; with room, the guest (and
+    // anyone else waiting) moves in now, the same moves a drop makes. Nothing moves while the game is full or nobody waits.
+    if (r.result === 'confirmed') await settle(ctx.db, session, ctx.nowIso, settingsOf(group));
   } else if (action === 'waitlist') {
     // "Card cleanup" (Zip 10): there is no waitlist to move anyone to.
     if (settingsOf(group).noCap === true) throw new HttpError(409, 'no_waitlist', 'There is no waitlist anymore. Use Out instead.');
@@ -1545,6 +1600,8 @@ export async function applyPayment(
         throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
       }
       await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
+      // Zip 49 (M-1, F-4): the confirmed money now matches what the seat owes today (charged, shown and kept agree).
+      await fitConfirmedClaim(ctx, group, session, row, fee);
       return { ok: true, changed: true };
     }
     // The payment is the whole price: cash now, plus credit and cash already on this seat.
@@ -1677,6 +1734,46 @@ export async function applyPayment(
     );
   }
   return { ok: true, changed: true };
+}
+
+/**
+ * Zip 49 (M-1 and F-4). An I paid is a claim, so nothing ever trimmed or held it while it waited. The moment the organizer confirms it, the seat
+ * is brought to what it owes NOW:
+ * - it holds whole guest shares it no longer owes (a $28 I paid on a late pair whose debt went down to one share: the game was only one short,
+ *   or a sub took the guest's spot): those come back as credit ("$14 back"), so a seat that owes $14 keeps $14;
+ * - it holds LESS than it owes (an I paid of $14, then the waiting guest moved in): the cash is held against the seat, which owes the rest
+ *   ("$14 due"), so the host no longer reads Paid while their guest's $14 is owed (the same move a Finalize makes on a price rise).
+ * Only a seat that is in a game that is on and not finalized, or an open late drop or no-show. The organizer's seat never comes here.
+ */
+async function fitConfirmedClaim(ctx: Ctx, group: GroupRow, session: SessionRow, row: { player_id: string; display_name: string; status: string }, fee: ReturnType<typeof lateFeeKind>) {
+  if (!(await hasGuestColumns(ctx.db))) return;
+  const inGame = row.status === 'confirmed' && !fee && !session.finalized_at && session.status !== 'canceled';
+  const debt = fee === 'late_drop' || fee === 'no_show';
+  if (!inGame && !debt) return;
+  const roster = await loadRoster(ctx.db, session.id);
+  const now = roster.find((r) => r.player_id === row.player_id);
+  if (!now || now.payment_status !== 'paid' || now.refunded_at || now.self_paid_at) return;
+  const price = sharesFor(session, roster, settingsOf(group)).get(row.player_id);
+  if (price === undefined) return;
+  const paid = now.payment_amount_cents ?? 0;
+  const seatStatus = now.status === 'withdrawn' ? 'withdrawn' : 'confirmed';
+  if (seatStatus === 'confirmed' && now.status !== 'confirmed') return;
+  const confirmedNow = `EXISTS (SELECT 1 FROM session_players g WHERE g.session_id = ${sqlText(session.id)} AND g.player_id = ${sqlText(row.player_id)} AND g.status = '${seatStatus}'
+    AND g.payment_status = 'paid' AND g.self_paid_at IS NULL AND g.payment_updated_at = ${sqlText(ctx.nowIso)})`;
+  if (paid > price) {
+    await trimGuestShares(ctx.db, { groupId: group.id, sessionId: session.id, playerId: row.player_id, playerName: row.display_name, priceCents: price, flatCents: flatOf(session, settingsOf(group)), nowIso: ctx.nowIso, guard: confirmedNow, seatStatus });
+  } else if (paid > 0 && paid < price && (inGame ? guestIn(now) : fee === 'late_drop')) {
+    await ctx.db.batch(
+      holdShortCashStatements(ctx.db, {
+        sessionId: session.id,
+        feeCents: price,
+        nowIso: ctx.nowIso,
+        playerId: row.player_id,
+        organizerId: await organizerIdOf(ctx.db, group),
+        seatWhere: (sp) => `${sp}.status = '${seatStatus}' AND ${sp}.payment_updated_at = ?1`,
+      }),
+    );
+  }
 }
 
 /** The organizer paid the venue (or took that back). No share, no credit, nothing counted as collected. */

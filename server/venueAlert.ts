@@ -76,22 +76,26 @@ async function onSince(ctx: Ctx, groupId: string, rowOn: boolean): Promise<numbe
 }
 
 /** Which "court:2026-11" style charges are already marked paid. */
-async function paidRows(db: D1Database, groupId: string): Promise<{ keys: Set<string>; courtThrough: string | null }> {
+async function paidRows(db: D1Database, groupId: string): Promise<{ keys: Set<string>; courtThrough: string | null; courtDates: string[] }> {
   const { results } = await db
     .prepare("SELECT task, detail FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?")
     .bind(groupId, `${PAID_PREFIX}%`)
     .all<{ task: string; detail: string | null }>();
   let courtThrough: string | null = null;
+  const courtDates: string[] = [];
   for (const r of results) {
     if (!r.task.slice(PAID_PREFIX.length).startsWith('court:')) continue;
     try {
       const date = (JSON.parse(r.detail ?? '{}') as { date?: unknown }).date;
-      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && (!courtThrough || date > courtThrough)) courtThrough = date;
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        courtDates.push(date);
+        if (!courtThrough || date > courtThrough) courtThrough = date;
+      }
     } catch {
       /* a row without a readable date: ignored */
     }
   }
-  return { keys: new Set(results.map((r) => r.task.slice(PAID_PREFIX.length))), courtThrough };
+  return { keys: new Set(results.map((r) => r.task.slice(PAID_PREFIX.length))), courtThrough, courtDates };
 }
 async function paidKeys(db: D1Database, groupId: string): Promise<Set<string>> {
   return (await paidRows(db, groupId)).keys;
@@ -116,7 +120,7 @@ export async function venueAlertsNow(ctx: Ctx, group: GroupRow, rowOn: boolean):
   // The same per-game cost Money > Totals uses (the game's own court cost, else the Typical court cost, priced by its length).
   const games: VenueGame[] = results.map((s) => ({ startsAt: s.starts_at, booked: s.booking_status === 'booked', canceled: s.status === 'canceled', costCents: courtCostOf(s, settings) }));
   const paid = await paidRows(ctx.db, group.id);
-  const alerts = dueAlerts({ days, membershipCents: settings.monthlyMembershipCents, games, nowMs: ctx.nowMs, tz, onAtMs, paid: paid.keys, courtPaidThrough: paid.courtThrough });
+  const alerts = dueAlerts({ days, membershipCents: settings.monthlyMembershipCents, games, nowMs: ctx.nowMs, tz, onAtMs, paid: paid.keys, courtPaidThrough: paid.courtThrough, courtPaidDates: paid.courtDates });
   return { alerts, days };
 }
 

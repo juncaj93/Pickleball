@@ -107,9 +107,9 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
           {changing &&
             (ext ? (
-              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra, out) => (await finalize(ids, extra, out)) && setChanging(false)} />
+              <WhoPlayedTiles s={s} gp={gp} busy={busy} lateFees={ctx.d.lateFees === true} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra, out) => (await finalize(ids, extra, out)) && setChanging(false)} />
             ) : (
-              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids, out) => (await finalize(ids, undefined, out)) && setChanging(false)} />
+              <WhoPlayed s={s} gp={gp} busy={busy} lateFees={ctx.d.lateFees === true} onConfirm={async (ids, out) => (await finalize(ids, undefined, out)) && setChanging(false)} />
             ))}
         </Sheet>
       </article>
@@ -150,9 +150,9 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
         {changing &&
             (ext ? (
-              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra, out) => (await finalize(ids, extra, out)) && setChanging(false)} />
+              <WhoPlayedTiles s={s} gp={gp} busy={busy} lateFees={ctx.d.lateFees === true} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra, out) => (await finalize(ids, extra, out)) && setChanging(false)} />
             ) : (
-              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids, out) => (await finalize(ids, undefined, out)) && setChanging(false)} />
+              <WhoPlayed s={s} gp={gp} busy={busy} lateFees={ctx.d.lateFees === true} onConfirm={async (ids, out) => (await finalize(ids, undefined, out)) && setChanging(false)} />
             ))}
       </Sheet>
     </article>
@@ -173,7 +173,7 @@ function UnconfirmedWarning({ text }: { text: string }) {
 }
 
 /** The sheet: everyone who was in, a switch each, the preview updating live, and Confirm. */
-function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePrice; busy: boolean; onConfirm: (ids: string[], guestsOut: string[]) => void }) {
+function WhoPlayed({ s, gp, busy, onConfirm, lateFees = false }: { s: AdminSessionView; gp: GamePrice; busy: boolean; onConfirm: (ids: string[], guestsOut: string[]) => void; lateFees?: boolean }) {
   const price = gp.flatCents;
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const [played, setPlayed] = useState<Set<string>>(() => new Set(inNow.map((r) => r.playerId)));
@@ -182,7 +182,10 @@ function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePr
   const hasGuest = (r: AdminRosterEntry) => r.guest?.status === 'confirmed';
   const guestOn = (r: AdminRosterEntry) => played.has(r.playerId) && !guestOut.has(r.playerId);
   const n = played.size + inNow.filter((r) => hasGuest(r) && guestOn(r)).length;
-  const notes = whoPlayedNotes(inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })));
+  const notes = whoPlayedNotes(
+    inNow.filter(hasGuest).map((r) => ({ host: r.name, guest: r.guest!.name, hostPlayed: played.has(r.playerId), guestOut: guestOut.has(r.playerId) })),
+    lateFees ? { played: n, flatCents: price, fmt: formatPrice } : undefined,
+  );
   const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
   const flip = (set: (f: (cur: Set<string>) => Set<string>) => void, id: string, on: boolean) =>
     set((cur) => {

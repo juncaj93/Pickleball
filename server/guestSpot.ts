@@ -1,7 +1,7 @@
 import type { Ctx } from './context';
 import type { D1Database, D1PreparedStatement } from './db';
 import { splitSeatStatements, type SplitSeat } from './credit';
-import { type GroupRow, organizerIdOf } from './repo';
+import { audit, type GroupRow, organizerIdOf } from './repo';
 import { newId } from './crypto';
 import { GUEST_SPOT, guestSpotAllowed } from '../shared/guestSpot';
 
@@ -87,7 +87,21 @@ export const nextClaimSeq = (guests: boolean) =>
  */
 export async function trimSeatStatements(
   db: D1Database,
-  args: { groupId: string; sessionId: string; playerId: string; priceCents: number; nowIso: string; guard: string; seatStatus: 'confirmed' | 'withdrawn'; reason: 'dropped' | 'canceled' },
+  args: {
+    groupId: string;
+    sessionId: string;
+    playerId: string;
+    priceCents: number;
+    nowIso: string;
+    guard: string;
+    seatStatus: 'confirmed' | 'withdrawn';
+    reason: 'dropped' | 'canceled';
+    /**
+     * Zip 49 (M-1): trim only when what the seat holds above `priceCents` is a whole number of guest shares of this size (a $28 seat that now
+     * owes $14). Anything else (a game made cheaper after paying, which is "Made cheaper after paying"'s job) is left exactly as it is.
+     */
+    wholeSharesOf?: number;
+  },
 ): Promise<{ statements: D1PreparedStatement[]; backCents: number }> {
   const row = await db
     .prepare('SELECT payment_status, payment_amount_cents, refunded_at, self_paid_at FROM session_players WHERE session_id = ? AND player_id = ?')
@@ -119,6 +133,7 @@ export async function trimSeatStatements(
     heldCashCents: held,
   };
   const holds = paid ? seat.paymentCents : seat.used.reduce((s, u) => s + u.cents, 0) + held;
+  if (args.wholeSharesOf !== undefined && (args.wholeSharesOf <= 0 || holds <= args.priceCents || (holds - args.priceCents) % args.wholeSharesOf !== 0)) return { statements: [], backCents: 0 };
   if (holds <= args.priceCents) {
     // Holds the new price exactly on an unpaid seat (credit and held cash): it is paid now (splitSeatStatements does that too).
     if (!paid && holds > 0 && holds === args.priceCents) {
@@ -129,4 +144,24 @@ export async function trimSeatStatements(
   }
   const r = splitSeatStatements(db, { groupId: args.groupId, sessionId: args.sessionId, seat, priceCents: args.priceCents, nowIso: args.nowIso, guard: args.guard, seatStatus: args.seatStatus, reason: args.reason });
   return { statements: r.statements, backCents: r.cashBackCents + r.creditBackCents };
+}
+
+/**
+ * Zip 49 (M-1, Alex's rule): a late drop owes only the spots the game is short, and what is charged, shown and kept always agree. A seat that
+ * holds whole guest shares it no longer owes (a $28 I paid confirmed after the pair's debt went down to one share, a host who rejoined alone
+ * with $28 on the seat, a host who dropped late again) gives them back now as credit: one History line "$14 back". Confirmed money only (an
+ * unconfirmed I paid waits for the organizer, whose Mark paid runs this). Only while `guard` holds. Returns what came back.
+ */
+export async function trimGuestShares(
+  db: D1Database,
+  args: { groupId: string; sessionId: string; playerId: string; playerName: string; priceCents: number; flatCents: number; nowIso: string; guard: string; seatStatus: 'confirmed' | 'withdrawn' },
+): Promise<number> {
+  if (!(await hasGuestColumns(db))) return 0;
+  const trim = await trimSeatStatements(db, { ...args, reason: 'dropped', wholeSharesOf: args.flatCents });
+  if (!trim.statements.length) return 0;
+  const out = await db.batch(trim.statements);
+  // Nothing moved (the seat changed since it was read): nothing to say.
+  if (!out.some((r) => r.meta.changes > 0) || trim.backCents <= 0) return 0;
+  await audit(db, args.groupId, args.sessionId, 'credit_back', { player: args.playerName, playerId: args.playerId, amountCents: trim.backCents, reason: 'dropped' }, args.nowIso);
+  return trim.backCents;
 }

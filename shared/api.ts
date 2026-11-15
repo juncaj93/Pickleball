@@ -73,6 +73,11 @@ export interface PlayerSessionView {
     signupAt: string;
     /** What they still owe for this session, after credit used on it (0 when paid). */
     oweCents: number;
+    /**
+     * Zip 49 (F-4): only on a seat whose own I paid (not confirmed yet) is LESS than the seat costs now (a host tapped I paid $14, then their
+     * guest moved in): what they marked paid. `oweCents` is then the rest ("Paid $14 · $14 due").
+     */
+    claimCents?: number;
     /** Credit from their pot already used on this session. */
     /** What Drop out would give back right now: credit used on this seat (back to the pot) and cash paid toward it (becomes credit). */
     dropCreditCents: number;
@@ -249,7 +254,16 @@ export interface GroupView {
    * on this phone: 'sub' someone took their spot, 'cleared' the organizer cleared it (or the game was canceled).
    * `creditCents`: what came back to them as credit (0 when they had not paid).
    */
-  feeNotices?: { id: string; startsAt: string; why: 'sub' | 'cleared'; creditCents: number; /** Only for a 1.5 hour game with "Short games" on: what it owed. Missing: group.priceCents. */ feeCents?: number }[];
+  feeNotices?: {
+    id: string;
+    startsAt: string;
+    why: 'sub' | 'cleared';
+    creditCents: number;
+    /** What the debt was when it is not group.priceCents: a 1.5 hour game with "Short games" on, a pair's $28, a split $11 (Zip 49). Missing: group.priceCents. */
+    feeCents?: number;
+    /** Zip 49: a sub took only this guest's spot (the host's own share may still be owed). */
+    guest?: string;
+  }[];
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
