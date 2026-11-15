@@ -209,3 +209,11 @@ one first, it is the practice run. `npx wrangler d1 migrations list pickleball-p
 - **Just wipe the taps:** re-seed (`npm run db:seed:preview`). That is the only approved way to reset it. Never delete it.
 - **Delete one preview address:** Cloudflare dashboard, pickleball-club, Deployments,
   the three dots on that row, Delete.
+
+Zip 49 (money fixes, Sun Nov 15, 2026): no new names, no migration. `npm run db:seed:preview` now opens CALM on Zip 49's three games (the Zip 42
+guest games and late scenes are in `--full`): **"Late, 1 short"** (about 9 hours after the seed: Parker, Christopher Vanderberg, Reese, then Rowan +
+Sam; Rowan tapped I paid $28, not confirmed: Drop out says $14, confirming the I paid then gives $14 back), **"Late, 2 short"** (about 30 minutes later:
+Rowan + Sam, Parker, Christopher Vanderberg; Rowan tapped I paid $28: Drop out says $28; Sage tapping I'm in takes Sam's spot; confirming then gives
+$14 back) and **"Text all"** (the next day at 7:00 PM: Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid: Text all asks for $14).
+The two late games' late window is open from the seed until they start; to test later, re-seed. Zip 43's two venue cards stay on Home.
+`node e2e/zip49.cjs` checks the same scenes locally.
