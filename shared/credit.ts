@@ -129,9 +129,14 @@ export interface SeatCredit {
   backReason: CreditReason | null;
   /** Of `backCents`, what finalizing gave back (paid above the final price, or did not play). */
   finalizedBackCents: number;
+  /**
+   * Zip 49: credit that came back from this seat's CURRENT payment while it stays paid (a $28 I paid confirmed on a late drop that owes $14:
+   * "$14 back"). Not part of `backCents` (which, for a paid seat, counts only what finalizing gave back), so nothing older changes.
+   */
+  trimBackCents?: number;
 }
 
-export const NO_SEAT_CREDIT: SeatCredit = { usedCents: 0, cashCents: 0, backCents: 0, backReason: null, finalizedBackCents: 0 };
+export const NO_SEAT_CREDIT: SeatCredit = { usedCents: 0, cashCents: 0, backCents: 0, backReason: null, finalizedBackCents: 0, trimBackCents: 0 };
 
 /**
  * One seat's live ledger rows, read the way the screens need them. Money
@@ -162,6 +167,7 @@ export function seatCredit(rows: CreditRow[], sessionId: string, playerId: strin
     backCents: backs.reduce((sum, r) => sum + r.cents, 0) + returned.reduce((sum, r) => sum + r.cents, 0),
     backReason,
     finalizedBackCents: backs.filter((r) => r.reason === 'finalized' || r.reason === 'not_played').reduce((sum, r) => sum + r.cents, 0),
+    trimBackCents: current && seat.paidAt ? mine.filter((r) => r.kind === 'kept' && r.reason === 'dropped' && r.createdAt >= seat.paidAt!).reduce((sum, r) => sum + r.cents, 0) : 0,
   };
 }
 

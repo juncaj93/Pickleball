@@ -304,6 +304,8 @@ export function adminSessionView(
         paidEarlierCents: r.payment_status === 'unpaid' ? seat.cashCents : 0,
         creditBackCents: seat.backCents,
         creditBackReason: seat.backReason,
+        // Zip 49: "$14 back" on a late drop's row after its $28 I paid was confirmed (only when there is some).
+        ...(seat.trimBackCents ? { trimBackCents: seat.trimBackCents } : {}),
         // What Remove would give back right now (the same sums as a drop; a claim moves nothing).
         ...(() => {
           const paidNow = r.payment_status === 'paid' && !r.refunded_at ? (r.payment_amount_cents ?? 0) : 0;

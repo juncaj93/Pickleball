@@ -330,6 +330,8 @@ export interface AdminRosterEntry {
   shareCents: number | null;
   /** What they still owe right now (0 when paid or nothing owed). */
   owesCents: number;
+  /** Zip 49: credit that came back from this seat's current payment while it stays paid (a late drop's "$14 back"). Missing: none. */
+  trimBackCents?: number;
   /**
    * Zip 31 "Extended time", only while on: extra time owed that rides on THIS game (the player's "$17 due"); the row shows owesCents + this,
    * "incl. $3 extension", and its Mark paid takes both (sent as extCents). Not there: no extra time on this seat.

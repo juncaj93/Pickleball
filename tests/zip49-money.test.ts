@@ -569,3 +569,60 @@ describe('Fresh review fixes', () => {
     ]);
   });
 });
+
+describe('Round 2 (Alex): the late-drop row on the Players sheet says the money', async () => {
+  const { lateRowWords } = await import('../src/pages/admin/lateRow');
+  const words = (r: any) => lateRowWords(r, 1400);
+  it('host + guest, game 1 short, I paid $28 not confirmed: owes $14, $14 to give back; after the give-back: Paid $14, $14 back', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Blair']);
+    await addGuest(w, g.id, 'Blair');
+    await selfPaid(w, g.id, 'Blair');
+    at(w, g.start, 6);
+    await drop(w, g.id, 'Blair');
+    expect(words(await rowOf(w, g.id, 'Blair'))).toEqual({
+      line: 'Late drop · owes $14',
+      note: 'Paid $28 · $14 to give back',
+      button: { label: 'Give back $14', giveBack: true },
+      chip: null,
+      request: false,
+    });
+    await markPaid(w, g.id, 'Blair');
+    expect(words(await rowOf(w, g.id, 'Blair'))).toEqual({ line: 'Late drop · owes $14', note: '$14 back', button: null, chip: 'Paid $14', request: false });
+  });
+  it('host + guest, game 2 short, I paid $28: owes $28, Paid $28; a sub takes Sam\'s spot: owes $14, $14 to give back', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await addGuest(w, g.id, 'Blair');
+    await selfPaid(w, g.id, 'Blair');
+    at(w, g.start, 6);
+    await drop(w, g.id, 'Blair');
+    const r = await rowOf(w, g.id, 'Blair');
+    expect(r.guest).toMatchObject({ name: 'Sam', status: 'late' });
+    expect(words(r)).toEqual({ line: 'Late drop · owes $28', note: 'Marked paid by Blair', button: null, chip: 'Paid $28', request: false });
+    w.app.advance(60_000);
+    await join(w, g.id, ['Emery']);
+    expect(words(await rowOf(w, g.id, 'Blair'))).toMatchObject({ line: 'Late drop · owes $14', note: 'Paid $28 · $14 to give back', button: { label: 'Give back $14' } });
+  });
+  it('a plain late drop: unpaid owes $14 with Mark paid and Request; paid $14: the Paid $14 chip', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w, g.start, 6);
+    await drop(w, g.id, 'Blair');
+    expect(words(await rowOf(w, g.id, 'Blair'))).toEqual({ line: 'Late drop · owes $14', note: null, button: { label: 'Mark paid', giveBack: false }, chip: null, request: true });
+    await markPaid(w, g.id, 'Blair');
+    expect(words(await rowOf(w, g.id, 'Blair'))).toEqual({ line: 'Late drop · owes $14', note: null, button: null, chip: 'Paid $14', request: false });
+  });
+  it('a no-show pair one short reads "Did not play · owes $14"', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await addGuest(w, g.id, 'Blair');
+    w.app.now = g.end + HOUR;
+    await finalize(w, g.id, ['Casey', 'Devon', 'Emery']);
+    expect(words(await rowOf(w, g.id, 'Blair'))).toMatchObject({ line: 'Did not play · owes $14', button: { label: 'Mark paid' } });
+  });
+});

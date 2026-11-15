@@ -13,6 +13,7 @@ import { ReworkRemind } from './MoneyReworkParts';
 import { GuestRequest, RowRequest } from './VenmoRequest';
 import { payChip, payMoneyLine, useRosterOps } from './Sessions';
 import { lateFeeLine } from './LateFees';
+import { lateRowWords } from './lateRow';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import '../../players-sheet.css';
 import '../../guest-spot.css';
@@ -50,6 +51,8 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const owing = (r: AdminRosterEntry) => (r.lateFee ? !r.lateFee.paid && r.owesCents > 0 : !canceled && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.owesCents > 0);
   const anyOwes = listed.some((r) => owing(r));
   const price = fin ? fin.priceCents : viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
+  // One share of this game (a give-back only ever moves whole shares).
+  const flatCents = viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
 
   // The names to tap: everyone eligible and not in the game, never-signed-up first, then the ones who declined or dropped.
   const hadRow = new Set(s.roster.map((r) => r.playerId));
@@ -117,10 +120,10 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     );
   }
 
-  const markPaid = (r: AdminRosterEntry) =>
+  const markPaid = (r: AdminRosterEntry, said?: string) =>
     void run(
       () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true, seen: r.moneySeen, cents: r.owesCents, ...(r.extCents ? { extCents: r.extCents } : {}) }),
-      `${r.name} marked paid`,
+      said ?? `${r.name} marked paid`,
       opTap({ kind: 'paid', sessionId: s.id, playerId: r.playerId }, 'Mark paid', ctx.d.adminUndo === true),
     );
 
@@ -178,16 +181,23 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
             const isHeld = held.has(r.playerId);
             // Zip 42 round 2 (Alex): a host and the guest are one group, each person with their own paid line (the money is still one record on
             // the host's seat). `pm`: the pair's own money (both in, a game that is on, no late fee). Every row without a guest: exactly as before.
-            const pair = !!r.guest && r.guest.status !== 'late' && !isHeld;
+            // Zip 49: a host who dropped late with the guest's share still on the debt keeps the guest's row under them too (no buttons on it: the
+            // money is the host's), so "owes $28" reads as the two of them.
+            const latePair = !!r.guest && r.guest.status === 'late' && r.status !== 'confirmed' && !isHeld;
+            const pair = ((!!r.guest && r.guest.status !== 'late') || latePair) && !isHeld;
             const pm = pair && r.status === 'confirmed' && r.guest!.status === 'confirmed' && r.guest!.shareCents !== undefined && !r.lateFee && !canceled ? r.guest! : null;
-            const paid = !isHeld && (pm ? !!pm.hostPaid : r.lateFee ? r.lateFee.paid : r.status === 'confirmed' && r.paymentStatus === 'paid' && !r.refundedAt);
-            const owes = !isHeld && (pm ? !pm.hostPaid : owing(r));
+            // Zip 49 (Alex): a late fee's row says the money in plain words (src/pages/admin/lateRow.ts).
+            const late = !isHeld && !pm ? lateRowWords(r, flatCents) : null;
+            const paid = !isHeld && !late && (pm ? !!pm.hostPaid : r.lateFee ? r.lateFee.paid : r.status === 'confirmed' && r.paymentStatus === 'paid' && !r.refundedAt);
+            const owes = !isHeld && !late && (pm ? !pm.hostPaid : owing(r));
             const canEdit = live && !isHeld && (r.status === 'confirmed' || r.status === 'waitlisted');
             const chip = r.status === 'confirmed' ? payChip(r, s) : null;
             // Wide actions (two buttons, or a long chip such as "Paid with credit") drop under the name on a narrow screen; a plain "Paid" stays beside it.
-            const wide = !isHeld && (owes || (!paid && !!chip) || (paid && chip?.label === 'Paid with credit'));
+            // (A late row has two lines of its own: its chip or button always goes under them on a narrow phone.)
+            const wide = !isHeld && (owes || !!late || (!paid && !!chip) || (paid && chip?.label === 'Paid with credit'));
+            const state = isHeld ? 'removed' : late ? (late.chip ? 'paid' : late.button ? 'owes' : 'other') : paid ? 'paid' : owes ? 'owes' : 'other';
             const hostRow = (
-              <li key={r.playerId} className="ps-row" data-ps-row={r.name} data-ps-long={longName(r.name) || undefined} data-ps-wide={wide || undefined} data-ps-state={isHeld ? 'removed' : paid ? 'paid' : owes ? 'owes' : 'other'}>
+              <li key={r.playerId} className="ps-row" data-ps-row={r.name} data-ps-long={longName(r.name) || undefined} data-ps-wide={wide || undefined} data-ps-state={state}>
                 <span className="ps-ball" aria-hidden="true">
                   <Pickleball />
                 </span>
@@ -195,6 +205,17 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                   <strong className="ps-name">{r.name}</strong>
                   {isHeld ? (
                     <span className="ps-sub">Removed</span>
+                  ) : late ? (
+                    <>
+                      <span className={`ps-sub${late.chip || !late.button ? '' : ' ps-owes'}`} data-ps-late-line>
+                        {late.line}
+                      </span>
+                      {late.note && (
+                        <span className="ps-sub ps-late-note" data-ps-late-note>
+                          {late.note}
+                        </span>
+                      )}
+                    </>
                   ) : pm && paid ? null : paid ? (
                     <span className="ps-sub" data-ps-paid-line>
                       {r.lateFee ? lateFeeLine(r) : paidLine(r, tz)}
@@ -219,6 +240,30 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                   )}
                 </div>
                 <div className="ps-acts">
+                  {late?.chip && (
+                    <span className="ps-chip ps-paid" data-ps-paid-chip>
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="m3.6 8.4 2.8 2.8 6-6.4" />
+                      </svg>
+                      {late.chip}
+                    </span>
+                  )}
+                  {late?.button && (
+                    <>
+                      <button
+                        type="button"
+                        className="ps-btn ps-amber"
+                        disabled={busy}
+                        data-ps-markpaid={r.name}
+                        {...(late.button.giveBack ? { 'data-ps-giveback': r.name } : {})}
+                        aria-label={late.button.giveBack ? `${late.button.label} to ${r.name}` : `Mark ${r.name} paid`}
+                        onClick={() => markPaid(r, late.button!.giveBack ? `${late.button!.label.replace('Give back ', '')} back to ${r.name} as credit` : undefined)}
+                      >
+                        {late.button.label}
+                      </button>
+                      {late.request && ctx.d.venmoRequest === true && <RowRequest ctx={ctx} s={s} r={r} />}
+                    </>
+                  )}
                   {paid && (
                     <span className="ps-chip ps-paid" data-ps-paid-chip>
                       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -247,7 +292,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       Give spot
                     </button>
                   )}
-                  {!isHeld && !paid && !owes && chip && (
+                  {!isHeld && !late && !paid && !owes && chip && (
                     <span className={`ps-chip ps-${chip.tone}`}>{chip.label}</span>
                   )}
                 </div>
@@ -281,6 +326,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     <span className="ps-guest-of">Guest of {r.name}</span>
                     {gst.status === 'waitlisted' && gst.waitlistPosition ? ` · #${gst.waitlistPosition} on waitlist` : ''}
                     {gst.played === false ? ' · did not play' : ''}
+                    {latePair ? ' · late drop' : ''}
                     {pm && !gPaid ? (
                       <>
                         {' · '}
@@ -309,7 +355,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     </>
                   )}
                 </div>
-                {live ? (
+                {live && !latePair ? (
                   <RowMenu name={gst.name} removeLabel="Remove guest" onRemove={() => setUnGuest(r)} onUnpay={pm && gPaid ? () => void markShare(r, 'guest', false) : undefined} />
                 ) : (
                   <span className="ps-dots-gap" aria-hidden="true" />
