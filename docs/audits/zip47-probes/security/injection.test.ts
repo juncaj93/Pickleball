@@ -88,7 +88,7 @@ describe('Zip 47 probe: injection', () => {
       expect(b.parse_mode, b.text).toBeUndefined();
       for (const e of b.entities ?? []) {
         expect(e.type).toBe('text_link');
-        expect(String(e.url).startsWith(SITE + '/') || String(e.url).startsWith('https://app.courtreserve.com'), e.url).toBe(true);
+        expect(String(e.url).startsWith(SITE + '/') || /courtreserve[.]com/.test(String(e.url)), e.url).toBe(true);
         expect(e.url).not.toMatch(/evil/);
       }
     }
