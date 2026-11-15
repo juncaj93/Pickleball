@@ -124,6 +124,11 @@ function findReads(): Read[] {
         const post = text.slice(m.index! + m[0].length);
         reads.push({ file, line: i + 1, name: m[1], rule: ruleFor(source, pre, post), text: t });
       }
+      // Zip 45 review: a read the scan above cannot see. Destructuring (`const { X } = ctx.env`, `({ X }: Env)`) is refused outright; an
+      // alias (`const env = ctx.env`) is fine only when it is named env, so its reads are still `env.X` and seen above.
+      if (/\}\s*(?::\s*Env\b|=\s*(?:ctx\.)?env\b)/.test(text)) reads.push({ file, line: i + 1, name: '<destructured>', rule: null, text: t });
+      const alias = /\b(?:const|let|var)\s+(\w+)\s*(?::[^=]+)?=\s*(?:ctx\.)?env\s*;/.exec(text);
+      if (alias && alias[1] !== 'env') reads.push({ file, line: i + 1, name: '<alias>', rule: null, text: t });
       // The one read by a computed name: server/zip13.ts, zip13Allowed(ctx.env[z.env]) for PLAYERS_REDO, SWAP_BUTTON and ADMIN_UNDO.
       if (/\benv\[/.test(text)) {
         const known = file === 'server/zip13.ts' && text.includes('zip13Allowed(ctx.env[z.env])');
@@ -160,8 +165,16 @@ describe('Zip 45: Cloudflare variables (the reduced set)', () => {
     }
   });
 
+  it('refuses a wrangler.toml line it cannot read (a single-quoted or indented "off" would otherwise read as allowed)', () => {
+    const toml = (line: string) => `x\n[vars]\nGO_LINKS = "on"\n${line}\n\n[env.preview]\n`;
+    expect(tomlSection('[vars]', toml('PAY_SHEET = "off" # pulled'))).toEqual({ GO_LINKS: 'on', PAY_SHEET: 'off' });
+    expect(() => tomlSection('[vars]', toml("PAY_SHEET = 'off'"))).toThrow(/cannot read/);
+    expect(() => tomlSection('[vars]', toml('  PAY_SHEET = "off"'))).toThrow(/cannot read/);
+    expect(() => tomlSection('[vars]', toml('PAY_SHEET="off"'))).toThrow(/cannot read/);
+  });
+
   it('recognizes every place the code reads one of these variables (an unknown way of reading one fails here)', () => {
-    const unknown = READS.filter((r) => !r.rule && (PLAIN_NAMES.has(r.name) || r.name === '<computed>')).map((r) => `${r.file}:${r.line} ${r.name}: ${r.text}`);
+    const unknown = READS.filter((r) => !r.rule && (PLAIN_NAMES.has(r.name) || r.name.startsWith('<'))).map((r) => `${r.file}:${r.line} ${r.name}: ${r.text}`);
     expect(unknown).toEqual([]);
     // Every variable we hold is read somewhere, so every one of them is checked below.
     const read = new Set(READS.map((r) => r.name));

@@ -436,15 +436,16 @@ describe('the preview and wrangler', () => {
     const { venueAlertAllowed } = await import('../shared/venueAlert');
     expect(venueAlertAllowed(undefined)).toBe(true);
     expect(venueAlertAllowed('off')).toBe(false);
-    // Variables in [vars] and [env.preview.vars]: never more than Zip 45's reduced set (4 and 11; it was 53 and 59 before). Room is left on purpose.
+    // Variables in [vars] and [env.preview.vars]: Zip 45's budget (25 in production and 30 on the preview, secrets included: 5 and 1), so a
+    // kill switch set to "off" later still fits. It was 53 and 59 plain lines before Zip 45, 4 and 11 after.
     const count = (header: string) => {
       const start = toml.indexOf(`[${header}]`);
       const rest = toml.slice(start + header.length + 2);
       const end = rest.search(/^\[/m);
       return (end < 0 ? rest : rest.slice(0, end)).split('\n').filter((l) => /^[A-Z0-9_]+\s*=/.test(l)).length;
     };
-    expect(Object.keys(tomlSection('[vars]')).length).toBeLessThanOrEqual(4);
-    expect(Object.keys(tomlSection('[env.preview.vars]')).length).toBeLessThanOrEqual(11);
+    expect(Object.keys(tomlSection('[vars]')).length).toBeLessThanOrEqual(25 - 5);
+    expect(Object.keys(tomlSection('[env.preview.vars]')).length).toBeLessThanOrEqual(30 - 1);
     expect(count('vars')).toBe(Object.keys(tomlSection('[vars]')).length);
   });
 });

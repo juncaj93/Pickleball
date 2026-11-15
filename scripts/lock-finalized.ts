@@ -30,7 +30,15 @@ export function wranglerVars(toml: string, section: string): Record<string, stri
   const end = rest.search(/\n\[/);
   const body = end < 0 ? rest : rest.slice(0, end);
   const out: Record<string, string> = {};
-  for (const m of body.matchAll(/^([A-Z_][A-Z0-9_]*)\s*=\s*"([^"]*)"/gm)) out[m[1]] = m[2];
+  // Zip 45 review: every line must be readable. A single-quoted or indented line is valid TOML that Cloudflare would apply, so reading it
+  // as "missing" would call a pulled kill switch allowed. Anything that is not a comment, a blank or NAME = "value" stops here.
+  for (const line of body.split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const m = /^([A-Z_][A-Z0-9_]*) = "([^"]*)"\s*(#.*)?$/.exec(line);
+    if (!m) throw new Error(`wrangler.toml ${section}: cannot read this line, write it as NAME = "value" with no indent: ${line}`);
+    out[m[1]] = m[2];
+  }
   return out;
 }
 
