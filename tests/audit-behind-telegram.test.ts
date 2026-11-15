@@ -152,7 +152,7 @@ describe('message size and the bot token', () => {
       deadlineMs: at('2026-11-03T13:00:00Z'),
       nowMs: at('2026-11-03T20:00:00Z'),
       timezone: 'America/Detroit',
-      prefs: { enabled: true, drop36: true, belowMin: true, reachedMin: true, refundRequests: true },
+      prefs: { enabled: true, drop36: true, belowMin: true, refundRequests: true },
     })!;
     expect(text.length).toBeLessThan(1200);
     expect(text).toMatch(/Late drop: W+00 dropped out of Tue Nov 3, 8:00 PM \(5 hrs before\)\./);
@@ -211,7 +211,13 @@ describe('Telegram slow or down never slows or breaks a player tap', () => {
       expect(r.status).toBe(200);
       expect(Date.now() - t0).toBeLessThan(1000);
     }
-    expect(hung).toBe(1); // "reaches 4, it's on" went to the background
+    expect(hung).toBe(0); // the 4th join sends nothing any more (no "has 4 now, it's on")
+    // A drop inside 36 hours that leaves 3 does alert, and it goes to the background too: the tap answers at once while Telegram hangs.
+    const t1 = Date.now();
+    const drop = await (await playerPhone(g.ctx, 'Emery')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    expect(drop.status).toBe(200);
+    expect(Date.now() - t1).toBeLessThan(1000);
+    expect(hung).toBe(1);
     g.app.background.length = 0; // don't wait 5 seconds for the stub
   });
 
@@ -223,7 +229,7 @@ describe('Telegram slow or down never slows or breaks a player tap', () => {
     await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
     const phones = [];
     for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) phones.push(await playerPhone(g.ctx, n));
-    // 30 rounds of 4th in / 4th out inside 36 hours: each one an alert.
+    // 30 rounds of 4 in / 4th out inside 36 hours: each drop is an alert (the 4th join sends nothing).
     for (let i = 0; i < 30; i++) {
       for (const p of phones) await p.call('POST', `/api/sessions/${s.id}/join`, {});
       await phones[3].call('POST', `/api/sessions/${s.id}/withdraw`, {});

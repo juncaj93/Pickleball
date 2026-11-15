@@ -42,7 +42,7 @@ async function connectedGroup(fake?: (url: string, init: RequestInit) => Promise
     };
   }
   const texts = async () => (await app.settle(), sent.map((s) => s.body.text));
-  /** Forget what was sent so far (the "it's on" message a 4th sign-up sends, for one). */
+  /** Forget what was sent so far (a drop alert, for one). */
   const clear = async () => {
     await texts();
     sent.length = 0;
@@ -90,9 +90,11 @@ describe('alert wording', () => {
     expect(text).not.toMatch(/need|4 or 6/);
   });
 
-  it('reaching 4 says it is on; the 5th and 6th say nothing', () => {
+  it('reaching 4 says nothing (the old "has 4 now, it\'s on" alert is gone); the 5th and 6th say nothing either', () => {
     const on = alertMessage({ ...base, before: p('A', 'B', 'C'), after: [...p('A', 'B', 'C'), base.actor], nowMs: Date.parse('2026-11-01T16:00:00.000Z') });
-    expect(on).toBe('Thu Nov 5, 8:00 PM has 4 now, it\'s on.');
+    expect(on).toBeNull();
+    // Even a joiner whose tap goes from 3 to 4 inside the drop window, and with the "Telegram alerts to me" switch on.
+    expect(alertMessage({ ...base, before: p('A', 'B', 'C'), after: [...p('A', 'B', 'C'), base.actor], nowMs: Date.parse('2026-11-05T16:00:00.000Z') })).toBeNull();
     expect(alertMessage({ ...base, before: p('A', 'B', 'C', 'D'), after: [...p('A', 'B', 'C', 'D'), base.actor], nowMs: Date.parse('2026-11-01T16:00:00.000Z') })).toBeNull();
     expect(alertMessage({ ...base, before: p('A', 'B', 'C', 'D', 'E'), after: [...p('A', 'B', 'C', 'D', 'E'), base.actor], nowMs: Date.parse('2026-11-01T16:00:00.000Z') })).toBeNull();
   });
@@ -132,29 +134,28 @@ describe('Telegram alerts', () => {
     await out(ctx, s.id, 'Devon'); // 4 to 3, 80 hours ahead
     expect(await texts()).toEqual(['Devon dropped out of Thu Oct 29, 8:00 PM (3 days before). 3 in now, under 4.']);
     await clear();
-    await join(ctx, s.id, ['Devon']); // 3 to 4: it's on
-    await clear();
+    await join(ctx, s.id, ['Devon']); // 3 to 4: no alert
+    expect(await texts()).toEqual([]);
     await join(ctx, s.id, ['Emery', 'Frankie']); // 6
     await out(ctx, s.id, 'Frankie'); // 6 to 5
     await out(ctx, s.id, 'Emery'); // 5 to 4
     expect(await texts()).toEqual([]);
   });
 
-  it('reaching 4 alerts "it\'s on", again after a drop and a rejoin; the 5th and 6th say nothing', async () => {
+  it('reaching 4 sends no alert, not the first time and not after a drop and a rejoin; the 5th and 6th say nothing; a drop below 4 still speaks', async () => {
     const { ctx, texts, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-29');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey']);
     expect(await texts()).toEqual([]);
     await join(ctx, s.id, ['Devon']); // 3 to 4
-    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 4 now, it\'s on.']);
-    await clear();
+    expect(await texts()).toEqual([]);
     await join(ctx, s.id, ['Emery', 'Frankie']); // 4 to 6: nothing special
     expect(await texts()).toEqual([]);
     for (const n of ['Frankie', 'Emery', 'Devon']) await out(ctx, s.id, n); // 6 to 3: only the last drop speaks
     expect(await texts()).toEqual(['Devon dropped out of Thu Oct 29, 8:00 PM (3 days before). 3 in now, under 4.']);
     await clear();
     await join(ctx, s.id, ['Devon']); // back to 4
-    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 4 now, it\'s on.']);
+    expect(await texts()).toEqual([]);
   });
 
   it('"Late drop:" only after the cancellation deadline, in one combined message', async () => {
@@ -166,7 +167,7 @@ describe('Telegram alerts', () => {
     await out(ctx, s.id, 'Devon');
     expect(await texts()).toEqual(['Devon dropped out of Tue Oct 27, 8:00 PM (13 hrs before). 3 in now, under 4.']);
     await clear();
-    await join(ctx, s.id, ['Devon']); // back to 4: it's on
+    await join(ctx, s.id, ['Devon']); // back to 4: no alert
     await clear();
     ctx.app.now = Date.parse(s.startsAt) - 9 * HOUR; // after it
     await out(ctx, s.id, 'Devon'); // a drop inside 36 hours AND 4 to 3: one message
@@ -256,15 +257,16 @@ describe('Telegram alerts', () => {
   it('follows the switches in Settings', async () => {
     const { ctx, texts, sent, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-29');
+    // The old "A game reaches 4" switch is gone: an old phone that still sends it is ignored (200, nothing saved), and 3 to 4 says nothing either way.
     expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { reachedMin: false })).status).toBe(200);
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']); // 3 to 4: that switch is off
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']); // 3 to 4
     expect(await texts()).toEqual([]);
     expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { belowMin: false })).status).toBe(200);
     await out(ctx, s.id, 'Devon'); // 4 to 3, days out: that switch is off
     expect(await texts()).toEqual([]);
     await ctx.organizer.call('PUT', '/api/admin/alerts', { reachedMin: true });
-    await join(ctx, s.id, ['Devon']);
-    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 4 now, it\'s on.']);
+    await join(ctx, s.id, ['Devon']); // 3 to 4 again: still nothing, whatever an old phone sends
+    expect(await texts()).toEqual([]);
     await clear();
     await ctx.organizer.call('PUT', '/api/admin/alerts', { belowMin: true, enabled: false });
     await out(ctx, s.id, 'Devon');
@@ -274,8 +276,9 @@ describe('Telegram alerts', () => {
     await out(ctx, s.id, 'Devon');
     expect(await texts()).toHaveLength(1);
     const a = (await dash(ctx)).alerts;
-    expect(a).toMatchObject({ enabled: true, drop36: true, belowMin: true, reachedMin: true, refundRequests: true, connected: true, lastOk: true });
+    expect(a).toMatchObject({ enabled: true, drop36: true, belowMin: true, refundRequests: true, connected: true, lastOk: true });
     expect(a).not.toHaveProperty('reachedSix');
+    expect(a).not.toHaveProperty('reachedMin');
     expect(sent).toHaveLength(1);
     expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { enabled: 'yes' })).status).toBe(400);
     expect((await ctx.app.client().call('PUT', '/api/admin/alerts', { enabled: false })).status).toBe(401);
@@ -368,7 +371,7 @@ describe('Telegram alerts', () => {
       return new Promise<Response>(() => {}); // never answers
     });
     const s = await on(ctx, '2026-10-29');
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']); // the 4th join sends "it's on"
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']); // the 4th join sends nothing
     expect((await out(ctx, s.id, 'Devon')).status).toBe(200);
     await ctx.app.settle();
     expect((await dash(ctx)).alerts).toMatchObject({ lastOk: false, lastError: "Couldn't reach Telegram." });
@@ -385,8 +388,8 @@ describe('Telegram alerts', () => {
     await join(ctx, s.id, ['Devon']);
     const res = await Promise.race([out(ctx, s.id, 'Devon'), new Promise((r) => setTimeout(() => r('held up'), 2000))]);
     expect((res as { status: number }).status).toBe(200);
-    // Two sends per round (it's on, then the drop) plus the test button.
-    expect(sent.length).toBe(2 + 2 + 1 + 2);
+    // One send per round (the drop; the 4th join sends nothing) plus the test button.
+    expect(sent.length).toBe(1 + 1 + 1 + 1);
   });
 
   it('not connected: nothing sent, Settings says so, the test button explains', async () => {

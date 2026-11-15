@@ -644,7 +644,7 @@ describe('Settings', () => {
     const ctx = await group();
     expect((await dashboard(ctx)).alerts).toMatchObject({ refundRequests: true, enabled: true });
     const r = await ctx.organizer.call('PUT', '/api/admin/alerts', { refundRequests: false });
-    expect(r.data.alerts).toMatchObject({ refundRequests: false, enabled: true, drop36: true, belowMin: true, reachedMin: true });
+    expect(r.data.alerts).toMatchObject({ refundRequests: false, enabled: true, drop36: true, belowMin: true });
     expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { refundRequests: 'no' })).status).toBe(400);
   });
 

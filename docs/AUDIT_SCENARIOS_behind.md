@@ -82,7 +82,7 @@ Test files new in this audit: `tests/audit-behind-clock.test.ts`,
 | 62 | First real alert Mon Nov 2, 7:00 PM (Tue Nov 3, 8 PM, booked, 3 in on live) | One message at 7:00 PM: "Tuesday: 3 players in, need a 4th." with the direct text link; then 10:00 PM cancel warning and 10:30 PM follow-up if still 3 | Pass (live data read-only, replayed locally) | audit-behind-clock |
 | 63 | Thu Nov 5 (live: court on Waitlist, 2 in) | No booked-game alerts; morning-of check only if 4+ | Pass (read-only live) | five-week walk |
 | 64 | Tue Nov 17 (live: no court) | Booking heads-up Tue Nov 3 6:45 AM, follow-up 7:30 AM | Pass (read-only live) | audit-behind-clock |
-| 65 | Player alerts: drop within 36 hours, falls below 4, reaches 4 | One message per tap, names and game time only | Pass | telegram-alerts |
+| 65 | Player alerts: drop within 36 hours, falls below 4 (the "reaches 4" alert was removed in Zip 46) | One message per tap, names and game time only | Pass | telegram-alerts |
 | 66 | Cash-out request alert | First name and amount only, one per player per hour | Pass | telegram-alerts, audit-stage3 |
 | 67 | Cash out used for a game | One line under the Refund requests switch | Pass | auto-credit |
 | 68 | Alerts never contain phone numbers, Venmo names or money (except cash outs) | Checked on every message of the five-week walk | Pass | audit-behind-clock |

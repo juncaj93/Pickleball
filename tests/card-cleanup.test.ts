@@ -79,7 +79,7 @@ describe('the pieces (shared)', () => {
       deadlineMs: Date.parse('2026-11-09T13:00:00.000Z'),
       nowMs: Date.parse('2026-11-09T20:00:00.000Z'),
       timezone: 'America/Detroit',
-      prefs: { enabled: true, drop36: true, belowMin: true, reachedMin: true } as any,
+      prefs: { enabled: true, drop36: true, belowMin: true } as any,
     };
     expect(alertMessage(base)).toMatch(/moved up from the waitlist/);
     const off = alertMessage({ ...base, noWaitlist: true })!;

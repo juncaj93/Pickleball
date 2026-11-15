@@ -89,15 +89,15 @@ async function main() {
       });
 
       await sect.locator('summary').click();
-      await check(`${tag}: status line, the main switch and five alert switches all on (drops within 36 hours, falls below 4, reaches 4, refund requests, smart alerts), test buttons, no token or chat ID`, async () => {
+      await check(`${tag}: status line, the main switch and four alert switches all on (drops within 36 hours, falls below 4, refund requests, smart alerts; no "reaches 4" switch since Zip 46), test buttons, no token or chat ID`, async () => {
         const status = await page.getByTestId('alert-status').innerText();
         assert(/Not connected/.test(status) && /No alerts yet/.test(status), status);
         const switches = sect.getByRole('switch');
-        assert((await switches.count()) === 6, `found ${await switches.count()} switches`);
-        for (let i = 0; i < 6; i++) assert(await switches.nth(i).isChecked(), `switch ${i} off`);
+        assert((await switches.count()) === 5, `found ${await switches.count()} switches`);
+        for (let i = 0; i < 5; i++) assert(await switches.nth(i).isChecked(), `switch ${i} off`);
         const labels = (await sect.locator('.alert-subs .set-name').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
-        assert(JSON.stringify(labels) === JSON.stringify(['Someone drops within 36 hours', 'A game falls below 4', "A game reaches 4 (it's on)", 'Refund requests', 'Smart alerts ("Do this now" reminders)']), `switches were ${JSON.stringify(labels)}`);
-        assert(!/6 down to 5|reaches 6|Under 4, or|Finalize reminder/.test(await sect.innerText()), 'old alert wording');
+        assert(JSON.stringify(labels) === JSON.stringify(['Someone drops within 36 hours', 'A game falls below 4', 'Refund requests', 'Smart alerts ("Do this now" reminders)']), `switches were ${JSON.stringify(labels)}`);
+        assert(!/6 down to 5|reaches 6|reaches 4|it's on|Under 4, or|Finalize reminder/.test(await sect.innerText()), 'old alert wording');
         await sect.getByRole('button', { name: 'Send test alert' }).waitFor();
         await sect.getByRole('button', { name: 'Send TEST smart alert' }).waitFor();
         const text = await sect.innerText();
@@ -138,7 +138,7 @@ async function main() {
           const main = sect.getByRole('switch', { name: /Telegram alerts to me/ });
           await main.click();
           await sect.getByText('✓ Saved').first().waitFor({ timeout: 4000 });
-          for (const name of [/drops within 36 hours/, /falls below 4/, /reaches 4/, /Refund requests/]) assert(await sect.getByRole('switch', { name }).isDisabled(), `${name} not disabled`);
+          for (const name of [/drops within 36 hours/, /falls below 4/, /Refund requests/]) assert(await sect.getByRole('switch', { name }).isDisabled(), `${name} not disabled`);
           await main.click();
           await sect.getByText('✓ Saved').first().waitFor({ timeout: 4000 });
         });

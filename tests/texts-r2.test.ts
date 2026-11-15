@@ -382,7 +382,7 @@ describe('TEXTS_R2: the Text menu', () => {
 
 // ---------- Telegram: the tap alerts ----------
 
-describe('TEXTS_R2: drop and "it\'s on" alerts', () => {
+describe('TEXTS_R2: drop alerts', () => {
   const base = {
     actor: { playerId: 'r', name: 'Ryan' },
     startsAt: TUE.startsAt,
@@ -409,12 +409,11 @@ describe('TEXTS_R2: drop and "it\'s on" alerts', () => {
     expect(alertMessage({ ...short, dropperOwesCents: null })).not.toMatch(/owes/);
     expect(alertMessage({ ...short, textsR2: false, dropperOwesCents: 1400 })).not.toMatch(/owes/);
   });
-  it('11. reaches 4: "Tomorrow\'s 8:00 PM game has 4 now, it\'s on."', () => {
+  it('11. reaches 4: no alert any more (removed in Zip 46), with the new wording on or off, tomorrow or days out', () => {
     const input = { ...base, before: p('A', 'B', 'C'), after: [...p('A', 'B', 'C'), base.actor], nowMs: at('2026-11-02T16:00:00Z'), textsR2: true }; // Mon noon
-    expect(alertMessage(input)).toBe("Tomorrow's 8:00 PM game has 4 now, it's on.");
-    expect(alertMessage({ ...input, textsR2: false })).toBe('Tue Nov 3, 8:00 PM has 4 now, it\'s on.');
-    // Further away than tomorrow: the date, still named as a game.
-    expect(alertMessage({ ...input, nowMs: at('2026-10-30T16:00:00Z') })).toBe("The Tue Nov 3, 8:00 PM game has 4 now, it's on.");
+    expect(alertMessage(input)).toBeNull();
+    expect(alertMessage({ ...input, textsR2: false })).toBeNull();
+    expect(alertMessage({ ...input, nowMs: at('2026-10-30T16:00:00Z') })).toBeNull();
   });
   it('alertGame: tomorrow / tonight / today / a date', () => {
     expect(alertGame(TUE.startsAt, TZ, MON_7PM, '8:00 PM')).toBe("tomorrow's 8:00 PM game");
@@ -909,12 +908,12 @@ describe('TEXTS_R2: a drop through the real API', () => {
     await g.app.settle();
     expect(g.sent).toEqual(["Late drop: Emery dropped out of tonight's game (9 hrs before). 3 in now, under 4. Emery owes $14."]);
   });
-  it('a game reaching 4: "Tomorrow\'s 8:00 PM game has 4 now, it\'s on."', async () => {
+  it('a game reaching 4 sends no Telegram (the "has 4 now, it\'s on" alert was removed in Zip 46)', async () => {
     const g = await setup(true);
     const s = await g.sessionDate('2026-11-03');
     await joinAll(g.ctx, s.id, ['Blair', 'Casey', 'Devon', 'Emery']);
     await g.app.settle();
-    expect(g.sent).toEqual(["Tomorrow's 8:00 PM game has 4 now, it's on."]);
+    expect(g.sent).toEqual([]);
   });
 });
 

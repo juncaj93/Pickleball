@@ -42,8 +42,6 @@ How the samples were made: a fake clock, "now" = Fri Nov 13, 2026, 12:00 PM East
 | Alert | Today | Tomorrow | 4 days out |
 |---|---|---|---|
 | Player dropped (new) | Only inside 36 hours of the start; reads "[Name] dropped out of tonight's game (N hrs before)." | "...tomorrow's 8:00 PM game..." | No alert yet (more than 36 hours out) |
-| Reached 4, "it's on" (new) | Tonight's game has 4 now, it's on. | Tomorrow's 8:00 PM game has 4 now, it's on. | The Tue Nov 17, 8:00 PM game has 4 now, it's on. |
-| Reached 4 (old) | Fri Nov 13, 8:00 PM has 4 now, it's on. | Sat Nov 14, 8:00 PM ... | Tue Nov 17, 8:00 PM ... |
 | Court deadline reminder | Reminder: Friday, Nov 13 pickleball is not full. The court cancellation deadline is ... | Saturday, Nov 14 | Tuesday, Nov 17 |
 | Home alerts (not full, book-now, night-before card, finalize) | Start with the day label: "Tonight", "Tomorrow" (new wording) or the weekday (old wording), e.g. "Tonight: only 3 players in." | Tomorrow: ... | Tuesday: ... |
 | Game day text (Telegram an hour before) | "Pickleball tonight @ 8pm! (Court 12)" plus club name and directions | not sent | not sent |

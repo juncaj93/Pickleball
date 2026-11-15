@@ -84,7 +84,6 @@ database trip it already makes.
 | No court yet (4 or more in) | 15 min after cancel-by (8:15 AM for an 8 PM game) | **30 min before cancel-by, never before 7:00 AM** (7:30 AM for an 8 PM game; 7:00 AM for a 7 PM game). Never before the 24-hour window opens. Words: "Tonight: 5 in, no court yet. Check CourtReserve for an opening" ("Today:" for a daytime game) |
 | Finalize | "Tuesday: finalize who played" | "Tonight: finalize who played" ("Today:" for a daytime game) |
 | Someone dropped / game fell below 4 | "Ryan dropped out of Tue Nov 3, 8:00 PM (9 hrs before). 3 in now, under 4." | "Ryan dropped out of tomorrow's 8:00 PM game (9 hrs before). 3 in now, under 4." ("tonight's game" on game day); with late fees on and a debt made: "... Ryan owes $14." |
-| Game reaches 4 | "Tue Nov 3, 8:00 PM has 4 now, it's on." | "Tomorrow's 8:00 PM game has 4 now, it's on." |
 | Test smart alert | sample "Tuesday: 3 players in, need a 4th. ..." | sample "Tomorrow: 3 players in, need a 4th. ..." |
 
 The Home "no court yet" card and the booking card appear at the same new times as their alerts. Refund requests and cash-out

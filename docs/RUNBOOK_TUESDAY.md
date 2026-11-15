@@ -44,7 +44,7 @@ From your phone, fastest first:
 - **Smart alerts only** (the clock's messages: last call, cancel court,
   booking, finalize): sign in at /admin, Settings, Alerts, turn off **Smart
   alerts ("Do this now" reminders)**. The "Do this now" card on Home keeps working.
-- **All Telegram alerts** (also drops, "it's on", cash-out requests): Settings,
+- **All Telegram alerts** (also drops, cash-out requests): Settings,
   Alerts, turn off **Telegram alerts to me** (the top switch).
 - **Stop the clock itself** (only if the switches above don't help): Cloudflare
   dashboard, Workers & Pages, **pickleball-alerts-clock**, Settings, Triggers,

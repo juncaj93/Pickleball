@@ -20,12 +20,10 @@ import * as v from './validate';
 import { setSmartAlerts, smartAlertsOn } from './tasks';
 import { isAdminPage, linkText, ourAddress, type TextLink } from './telegram-links';
 import { textsR2ForAlerts } from './textsR2';
-import { secondChanceTakesReached } from './secondChance';
-import { MIN_PLAYERS } from '../shared/spots';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
-/** Alerts caused by player taps (drops, it's on, cash outs) stop at this many an hour, so the clock's alerts always keep a few of the 20. */
+/** Alerts caused by player taps (drops, cash outs) stop at this many an hour, so the clock's alerts always keep a few of the 20. */
 export const MAX_PLAYER_ALERTS_PER_HOUR = 15;
 const SEND_TIMEOUT_MS = 5000;
 /** What deliver() says when Telegram took too long: the message may still have arrived. */
@@ -38,7 +36,6 @@ export interface AlertRow {
   enabled: number;
   drop_36h: number;
   below_min: number;
-  reached_min: number;
   refund_requests: number;
   last_at: string | null;
   last_ok: number | null;
@@ -60,7 +57,6 @@ export function prefsOf(row: AlertRow | null): AlertPrefs {
     enabled: !!row.enabled,
     drop36: !!row.drop_36h,
     belowMin: !!row.below_min,
-    reachedMin: !!row.reached_min,
     refundRequests: !!row.refund_requests,
   };
 }
@@ -83,7 +79,7 @@ export async function alertsView(ctx: Ctx, groupId: string): Promise<AdminDashbo
   };
 }
 
-/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, reachedMin?, refundRequests?, smartAlerts? }: one switch at a time is fine. */
+/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, refundRequests?, smartAlerts? }: one switch at a time is fine. */
 export async function updateAlerts(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   if (body.smartAlerts !== undefined) await setSmartAlerts(ctx.db, group.id, v.bool(body.smartAlerts, 'smartAlerts'), ctx.nowIso);
@@ -93,16 +89,16 @@ export async function updateAlerts(ctx: Ctx, body: Record<string, unknown>) {
     enabled: pick('enabled'),
     drop36: pick('drop36'),
     belowMin: pick('belowMin'),
-    reachedMin: pick('reachedMin'),
     refundRequests: pick('refundRequests'),
   };
   const bit = (b: boolean) => (b ? 1 : 0);
   await ctx.db
     .prepare(
-      `INSERT INTO organizer_alerts (group_id, enabled, drop_36h, below_min, reached_min, refund_requests) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-       ON CONFLICT (group_id) DO UPDATE SET enabled = ?2, drop_36h = ?3, below_min = ?4, reached_min = ?5, refund_requests = ?6`,
+      // (The old reached_min column stays in the table, unused: no schema change. A new row gets its default.)
+      `INSERT INTO organizer_alerts (group_id, enabled, drop_36h, below_min, refund_requests) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT (group_id) DO UPDATE SET enabled = ?2, drop_36h = ?3, below_min = ?4, refund_requests = ?5`,
     )
-    .bind(group.id, bit(next.enabled), bit(next.drop36), bit(next.belowMin), bit(next.reachedMin), bit(next.refundRequests))
+    .bind(group.id, bit(next.enabled), bit(next.drop36), bit(next.belowMin), bit(next.refundRequests))
     .run();
   return { ok: true, alerts: await alertsView(ctx, group.id) };
 }
@@ -190,7 +186,7 @@ function siteUrl(ctx: Ctx): string {
 
 /** Rate limit, send, write down how it went. Never throws. */
 /**
- * `fromPlayer`: a message a player's tap caused (drops, it's on, cash outs). It carries names, so it is
+ * `fromPlayer`: a message a player's tap caused (drops, cash outs). It carries names, so it is
  * sent with no links at all (nothing in a name can turn into one), and it stops at
  * MAX_PLAYER_ALERTS_PER_HOUR so one player can't use up the hour and silence the clock's alerts.
  */
@@ -255,7 +251,7 @@ async function watchInner(ctx: Ctx, group: GroupRow, session: SessionRow, player
   if (session.status === 'canceled' || ctx.nowMs >= Date.parse(session.starts_at)) return null;
   if (session.starts_at < visibleFrom(group) && !session.shown_early) return null; // hidden before the first session date
   const prefs = prefsOf(await alertRow(ctx.db, group.id));
-  if (!prefs.enabled || !(prefs.drop36 || prefs.belowMin || prefs.reachedMin)) return null;
+  if (!prefs.enabled || !(prefs.drop36 || prefs.belowMin)) return null;
   const roster = await loadRoster(ctx.db, session.id);
   const me = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(playerId).first<{ display_name: string }>();
   // Zip 42: one alert for a pair, "Rowan (and guest Sam) dropped out ...". No guest: the name alone, as before.
@@ -316,10 +312,6 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null, dropperOwesCe
   if (!watch) return;
   try {
     const after = people(await loadRoster(ctx.db, watch.session.id));
-    // Zip 15 (server/secondChance.ts): with Second Chance on for everyone, a game today that is not booked gets Telegram 1 or 2 at 4 in
-    // instead of "has 4 now, it's on" (it is not on until the court is booked). Only costs a read when this tap reached 4.
-    const reached = watch.before.length < MIN_PLAYERS && after.length >= MIN_PLAYERS;
-    const prefs = reached && (await secondChanceTakesReached(ctx, watch.group, watch.session)) ? { ...watch.prefs, reachedMin: false } : watch.prefs;
     const input = {
       actor: watch.actor,
       before: watch.before,
@@ -328,7 +320,7 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null, dropperOwesCe
       deadlineMs: deadlineMs({ startsAt: watch.session.starts_at, cancellationDeadlineAt: watch.session.cancellation_deadline_at }, settingsOf(watch.group)),
       nowMs: ctx.nowMs,
       timezone: watch.group.timezone,
-      prefs,
+      prefs: watch.prefs,
       // Zip 10, "Card cleanup" on for this tap (it rides on the group row): no waitlist words.
       ...(watch.group.card_cleanup === true ? { noWaitlist: true } : {}),
     };

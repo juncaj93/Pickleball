@@ -442,7 +442,7 @@ async function smartGroup(failFirst = 0) {
   return { app, ctx, sent, tick, dash, sessionOn };
 }
 
-/** Put n players into a game, book its court, then forget the "it's on" style tap alerts. */
+/** Put n players into a game, book its court, then forget any tap alerts. */
 async function fill(g: Awaited<ReturnType<typeof smartGroup>>, date: string, n: number) {
   const s = await g.sessionOn(date);
   await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
@@ -571,7 +571,7 @@ describe('the tick endpoint', () => {
   });
 
   it('a failed Telegram send is written down and retried on the next tick, and the site keeps working', async () => {
-    const g = await smartGroup(2);
+    const g = await smartGroup(1); // one fake failure: the first tick's send (the 4th join sends no Telegram of its own since Zip 46)
     g.app.now = at('2026-11-02T17:00:00Z');
     await g.dash();
     const s = await fill(g, '2026-11-03', 3);
@@ -586,7 +586,7 @@ describe('the tick endpoint', () => {
     expect((await phone.call('POST', `/api/sessions/${s.id}/join`, {})).status).toBe(200);
     await g.app.settle();
     g.sent.length = 0;
-    // (The join's own "it's on" alert used up the second fake failure.) Retries wait 15 minutes.
+    // Retries wait 15 minutes.
     g.app.now += 5 * MIN;
     expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
     g.app.now += 10 * MIN;

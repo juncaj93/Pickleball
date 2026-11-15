@@ -13,13 +13,11 @@ export interface AlertPrefs {
   drop36: boolean;
   /** A game falls below 4. */
   belowMin: boolean;
-  /** A game reaches 4 (it's on). */
-  reachedMin: boolean;
   /** A player asks for a refund of their credit. */
   refundRequests: boolean;
 }
 
-export const DEFAULT_ALERT_PREFS: AlertPrefs = { enabled: true, drop36: true, belowMin: true, reachedMin: true, refundRequests: true };
+export const DEFAULT_ALERT_PREFS: AlertPrefs = { enabled: true, drop36: true, belowMin: true, refundRequests: true };
 
 export const DROP_WINDOW_MS = 36 * 3600_000;
 
@@ -94,8 +92,7 @@ export function alertMessage(a: AlertInput): string | null {
 
   const dropSoon = a.prefs.drop36 && dropped && left <= DROP_WINDOW_MS;
   const short = a.prefs.belowMin && b >= MIN_PLAYERS && n < MIN_PLAYERS;
-  const on = a.prefs.reachedMin && b < MIN_PLAYERS && n >= MIN_PLAYERS;
-  if (!dropSoon && !short && !on) return null;
+  if (!dropSoon && !short) return null;
 
   const when = a.textsR2 === true ? alertGame(a.startsAt, a.timezone, a.nowMs, formatTime(a.startsAt, a.timezone)) : alertWhen(a.startsAt, a.timezone);
   const newlyIn = a.after.filter((p) => !was.has(p.playerId));
@@ -107,7 +104,6 @@ export function alertMessage(a: AlertInput): string | null {
     lines.push(n < MIN_PLAYERS ? `${n} in now, under ${MIN_PLAYERS}.` : `${n} in now.`);
     if (a.textsR2 === true && a.dropperOwesCents && a.dropperOwesCents > 0) lines.push(`${a.actor.name} owes ${formatPrice(a.dropperOwesCents)}.`);
   }
-  if (on) lines.push(a.textsR2 === true ? `${when.charAt(0).toUpperCase()}${when.slice(1)} has ${n} now, it's on.` : `${when} has ${n} now, it's on.`);
   return lines.length ? lines.join(' ') : null;
 }
 

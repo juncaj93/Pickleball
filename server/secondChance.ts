@@ -334,16 +334,6 @@ async function mark(db: D1Database, groupId: string, sessionId: string, task: st
 
 // ---------- The two Telegrams ----------
 
-/** Does Telegram 1 or 2 stand in for the old "has 4 now, it's on" alert on this game (Second Chance on for everyone, today, not booked)? */
-export async function secondChanceTakesReached(ctx: Ctx, group: GroupRow, s: SessionRow): Promise<boolean> {
-  try {
-    if (!secondChanceAllowed(ctx.env.SECOND_CHANCE) || !(await secondChanceForAll(ctx.db, group.id))) return false;
-    return counts({ startsAt: s.starts_at, canceled: s.status === 'canceled', booked: s.booking_status === 'booked' }, await scNowMs(ctx, group), group.timezone);
-  } catch {
-    return false;
-  }
-}
-
 /** A failed Telegram is tried again on later taps or ticks, at most this many times in all. */
 const MAX_TRIES = 3;
 /** No Telegram before this hour (Eastern). */

@@ -31,7 +31,7 @@ async function world(env: Record<string, unknown> = {}) {
     TELEGRAM_BOT_TOKEN: 'bot-token',
     TELEGRAM_CHAT_ID: '12345',
     TELEGRAM_FETCH: (async (_url: string, init: RequestInit) => {
-      // The older alerts ("has 4 now, it's on" for a booked game) go to the same chat; these tests count only Zip 15's two.
+      // The older alerts (a drop, a game falling below 4) go to the same chat; these tests count only Zip 15's two.
       const text = sentText(JSON.parse(String(init.body)));
       all.push(text);
       if (/ paid/.test(text)) sent.push(text);
@@ -238,7 +238,7 @@ describe('Second Chance from start to booked (the live flow, with the real money
     // Devon joins: 4 in, 2 of 4 paid -> Telegram 1, naming the time, with the unpaid-only link.
     await join(w, 'Devon', s.id);
     expect(w.sent).toHaveLength(1);
-    expect(w.all.filter((t) => /it's on/.test(t))).toEqual([]); // Telegram 1 stands in for "has 4 now, it's on" (not booked yet)
+    expect(w.all.filter((t) => /it's on/.test(t))).toEqual([]); // the old "has 4 now, it's on" alert is gone for every game
     expect(w.sent[0]).toMatch(/^Tonight 8:30 PM: 4 in, 2 of 4 paid\.\nText the 2 who haven't paid: https:\/\/club\.example\/admin\?unpaid=/);
     // More taps: nothing again. Casey pays, then Devon: 4 paid -> Telegram 2 once.
     await markPaid(w, s.id, 'Casey');
@@ -313,7 +313,7 @@ describe('Telegrams on normal and same-day games', () => {
     await w.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
     for (const n of ['Blair', 'Casey', 'Devon']) await join(w, n, s.id);
     expect(w.sent).toEqual([]);
-    expect(w.all.filter((t) => /it's on/.test(t))).toHaveLength(1); // a booked game keeps the old "it's on" alert
+    expect(w.all.filter((t) => /it's on/.test(t))).toEqual([]); // a booked game sends no "it's on" alert either (removed in Zip 46)
     const q = await world();
     await switchOn(q);
     await q.organizer.call('PUT', '/api/admin/alerts', { enabled: false });

@@ -772,7 +772,6 @@ export interface AdminDashboard {
     enabled: boolean;
     drop36: boolean;
     belowMin: boolean;
-    reachedMin: boolean;
     refundRequests: boolean;
     /** Settings > Alerts > Smart alerts: the "Do this now" Telegram messages. */
     smartAlerts: boolean;

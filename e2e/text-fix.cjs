@@ -2,13 +2,14 @@
  *
  *   node e2e/text-fix.cjs
  *
- * Opens the gear menu > Text the players for a game today, tomorrow and 4 days out (fake clock: Fri Nov 13, 2026, 12:00 PM Eastern) and
- * reads the day word in both tabs. 390 px wide, light and dark. Starts its own dev server with a fake group. Nothing touches the live site.
+ * Opens the gear menu > Text the players for a game today, tomorrow and 4 days out (fake clock: Fri Nov 13, 2026, 12:00 PM Eastern, on the
+ * server AND in every browser page, so it passes on any real day) and reads the day word in both tabs. 390 px wide, light and dark. Starts its own dev server with a fake group. Nothing touches the live site.
  */
 const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5291;
@@ -56,10 +57,11 @@ async function main() {
     } catch {}
     await new Promise((r) => setTimeout(r, 500));
   }
-  const setClock = (atMs) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs }) });
-  await setClock(Date.now());
+  // Fake clock: Fri Nov 13, 2026, 12:00 PM Eastern, from the very first call. The server and every browser page read it, never the real day.
+  const clock = fixedClock(BASE);
+  await clock.set(Date.parse('2026-11-13T17:00:00Z'));
 
-  const browser = await chromium.launch();
+  const browser = clock.pin(await chromium.launch());
   const post = (req, url, data, headers = {}) => req.post(BASE + url, { data, headers: { Origin: BASE, ...headers } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;
@@ -84,8 +86,6 @@ async function main() {
     await post(c.request, '/api/me', { playerId: idOf(n) });
     phones[n] = c.request;
   }
-  // Fake clock: Fri Nov 13, 2026, 12:00 PM Eastern.
-  await setClock(Date.parse('2026-11-13T17:00:00Z'));
   const GAMES = [
     ['Today game', '2026-11-14T01:00:00Z', "today's game"],
     ['Tomorrow game', '2026-11-15T01:00:00Z', "tomorrow's game"],

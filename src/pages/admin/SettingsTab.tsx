@@ -591,11 +591,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedMin' | 'refundRequests' | 'smartAlerts';
+type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'refundRequests' | 'smartAlerts';
 const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
   { key: 'drop36', label: 'Someone drops within 36 hours' },
   { key: 'belowMin', label: 'A game falls below 4' },
-  { key: 'reachedMin', label: "A game reaches 4 (it's on)" },
   { key: 'refundRequests', label: 'Refund requests' },
   { key: 'smartAlerts', label: 'Smart alerts ("Do this now" reminders)' },
 ];
@@ -612,7 +611,6 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
     enabled: a.enabled,
     drop36: a.drop36,
     belowMin: a.belowMin,
-    reachedMin: a.reachedMin,
     refundRequests: a.refundRequests,
     smartAlerts: a.smartAlerts,
   });

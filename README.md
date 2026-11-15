@@ -284,7 +284,6 @@ The site sends the organizer a short Telegram message when:
 
 - someone drops out of a game within 36 hours of its start
 - a game falls below 4
-- a game reaches 4 (it's on)
 - a player requests a refund of their credit ("Refund requested: Mitchel wants $14 back.")
 
 A drop after the game's cancellation deadline starts with "Late drop:". One tap
