@@ -1,0 +1,22 @@
+/*
+ * Zip 48 (speed split): the organizer file's style rules arrive AFTER the player style file, so on their own they would now come after
+ * large-text.css, the switch looks and the Christmas skin, and win where they used to lose (same strength, later wins). Before the split
+ * every organizer rule sat BEFORE those files. This file repeats those files, in the same order as src/main.tsx, at the very end of the
+ * organizer style file, so on /admin the order is exactly as before: player rules, organizer rules, then these. The earlier copy in the
+ * player file is an exact twin of this one, so it can never win over it: nothing changes on screen.
+ *
+ * Must match the late imports at the end of src/main.tsx, same files, same order, EXCEPT a file the player code already brought in earlier
+ * (alert-cards.css: src/AlertCard.tsx imports it long before, so its place is early and it must not be repeated here). tests/zip48-split.test.ts builds the site both ways
+ * (split, and everything in one file as before) and fails if the order on /admin is not the same rule for rule.
+ */
+@import './large-text.css';
+@import './zip7.css';
+@import './view-only.css';
+@import './zip9.css';
+@import './zip10.css';
+@import './seat-dots.css';
+@import './swap-button.css';
+@import './gameday.css';
+@import './zip29.css';
+@import './unpaid-nudge.css';
+@import './skin/christmas.css';

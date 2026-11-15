@@ -1,0 +1,28 @@
+/*
+ * Zip 48 (speed split): the player's credit sheet (src/pages/CreditSheet.tsx, the list of the last credit changes) has always been drawn
+ * by these rules, which live in the organizer file src/credit-admin.css. Players no longer download that file, so this is an EXACT copy of
+ * that block, in the player download, at the place the organizer styles used to sit (src/main.tsx, just before the adminSlot line).
+ * On /admin the organizer file's own copy comes later and is identical, so nothing changes there either.
+ * Keep the two copies the same: tests/zip48-split.test.ts compares them.
+ */
+.credit-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.credit-history > li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.93rem;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.credit-history > li:last-child {
+  border-bottom: 0;
+}
+.credit-history > li.ended {
+  color: var(--ink-2);
+}
+.credit-history > li.ended .credit-line {
+  text-decoration: line-through;
+}

@@ -8,7 +8,7 @@ import { coveredByDoNow } from './doNow';
 import { DISMISSIBLE } from './dismiss';
 import { DismissX } from './DismissX';
 import '../../suggestions.css';
-import '../../do-now.css';
+import '../../do-now-admin.css';
 import { AlertCard } from '../../AlertCard';
 
 const KIND_LABEL: Record<SuggestionKind, string> = {

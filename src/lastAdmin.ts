@@ -9,6 +9,7 @@
 
 import type { AdminDashboard } from '../shared/api';
 import { LAST_SCREEN_MAX_AGE_MS } from '../shared/speed';
+import { markOrganizerPhone } from './organizerPhone';
 
 export const LAST_ADMIN_KEY = 'pb_last_admin';
 /** Set by Sign out and by a "sign in again" answer: nothing is kept until the next real sign-in (an answer still on its way cannot bring the copy back). */
@@ -46,7 +47,11 @@ export function clearLastAdmin(store: Store | null = browserStore(), signedOut =
 }
 
 /** Signed out (Sign out, or a "sign in again" answer): the copy goes and no answer may keep one until the next real sign-in. */
-export const signedOutLastAdmin = (store: Store | null = browserStore()) => clearLastAdmin(store, true);
+export const signedOutLastAdmin = (store: Store | null = browserStore()) => {
+  clearLastAdmin(store, true);
+  // Zip 48: signed out, so this phone's player screens stop fetching the organizer file ahead (src/adminChunk.ts).
+  markOrganizerPhone(false);
+};
 
 /** A real sign-in: copies may be kept again. */
 export function signedInLastAdmin(store: Store | null = browserStore()): void {

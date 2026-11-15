@@ -52,6 +52,7 @@ import { sameEasternDay } from '../../shared/christmasSkin';
 import { GameDayButtons, isGameDayCard } from '../GameDay';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
+import { isOrganizerPhone, preloadAdminSoon } from '../adminChunk';
 
 /** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
 function flatOfGame(g: GroupView | null | undefined, sessionId: string): number {
@@ -619,6 +620,12 @@ export function PlayerHome({
     if (load.error.status === 404) onLinkOnly?.();
     if (load.error.status === 403) onWordNeeded?.();
   }, [plain, load.error, onLinkOnly, onWordNeeded]);
+  // Zip 48 (speed split): on the organizer's own phone (it opened /admin with a PIN before, or the server says this is the organizer's own
+  // name), fetch the organizer file quietly a few seconds after this screen is up, so Admin opens at once. Never in View as, never for a player.
+  const organizerHere = !viewAs && !!g && (g.goToAdmin === true || isOrganizerPhone());
+  useEffect(() => {
+    if (organizerHere) preloadAdminSoon();
+  }, [organizerHere]);
   if (plain && (load.error?.status === 404 || load.error?.status === 403)) return <Spinner />;
   if (load.error?.status === 404 && !viewAs) {
     return (

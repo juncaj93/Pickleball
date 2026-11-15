@@ -1,4 +1,5 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from 'vite';
@@ -64,10 +65,68 @@ function localApi(setupToken: string): Plugin {
   };
 }
 
+/**
+ * Zip 48 (speed split): the organizer screens are their own file (src/pages/AdminEntry.tsx, fetched by src/adminChunk.ts). This writes
+ * dist/admin.html: the same page as dist/index.html plus three lines at the end of its head that start the organizer files at once,
+ * side by side with the main file (Cloudflare Pages serves admin.html for the /admin address). Players never get this page, so they never
+ * download the organizer files. The organizer style file goes AFTER the main style file (it must come later, as it did before the split).
+ * Checked by tests/zip48-split.test.ts.
+ */
+function adminPage(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'pb-admin-page',
+    apply: 'build',
+    configResolved(c) {
+      outDir = path.resolve(c.root, c.build.outDir);
+    },
+    writeBundle(_opts, bundle) {
+      const entry = Object.values(bundle).find((c) => c.type === 'chunk' && c.isDynamicEntry && /\/src\/pages\/AdminEntry\.tsx$/.test(c.facadeModuleId ?? ''));
+      if (process.env.PB_ONE_FILE === '1' || !entry || entry.type !== 'chunk') return; // the tests' old-layout build: no admin.html
+      const main = Object.values(bundle).find((c) => c.type === 'chunk' && c.isEntry);
+      const mainName = main?.type === 'chunk' ? main.fileName : '';
+      // The organizer file's own imports that the player page does not already have (the shared main file is already loading).
+      const js = [entry.fileName, ...entry.imports.filter((f) => f !== mainName)];
+      const css = [...(entry.viteMetadata?.importedCss ?? [])];
+      const lines = [
+        '    <!-- Zip 48: /admin only. The organizer files, started at once (vite.config.ts, adminPage). -->',
+        ...js.map((f) => `    <link rel="modulepreload" crossorigin href="/${f}">`),
+        ...css.map((f) => `    <link rel="stylesheet" crossorigin href="/${f}">`),
+      ];
+      const html = readFileSync(path.join(outDir, 'index.html'), 'utf8');
+      if (!/\n\s*<\/head>/.test(html)) throw new Error('adminPage: index.html has no </head>');
+      writeFileSync(path.join(outDir, 'admin.html'), html.replace(/\n\s*<\/head>/, `\n${lines.join('\n')}\n  </head>`));
+    },
+  };
+}
+
+/**
+ * Zip 48, tests only (PB_ONE_FILE=1, set by tests/zip48-split.test.ts, never by a deploy): builds the site's STYLE the way it was before
+ * the split, the organizer styles inside the main style file at their old place (src/adminSlot.ts stands for src/pages/AdminEntry.tsx), and the two
+ * order-keeping style copies switched back (do-now-admin.css is do-now.css itself; admin-late.css is empty). The test compares the style
+ * order /admin gets from the split build with this one.
+ */
+function oneFile(): Plugin {
+  const EMPTY = '\0pb-empty.css';
+  return {
+    name: 'pb-one-file',
+    enforce: 'pre',
+    async resolveId(source, importer) {
+      if (/(^|\/)adminSlot(\.ts)?$/.test(source)) return this.resolve('/src/pages/AdminEntry.tsx', importer, { skipSelf: true });
+      if (/(^|\/)do-now-admin\.css$/.test(source)) return this.resolve(source.replace('do-now-admin.css', 'do-now.css'), importer, { skipSelf: true });
+      if (/(^|\/)admin-late\.css$/.test(source)) return EMPTY;
+      return null;
+    },
+    load(id) {
+      return id === EMPTY ? '' : null;
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
-    plugins: [react(), localApi(env.SETUP_TOKEN || 'local-dev-setup-token')],
+    plugins: [react(), localApi(env.SETUP_TOKEN || 'local-dev-setup-token'), adminPage(), ...(process.env.PB_ONE_FILE === '1' ? [oneFile()] : [])],
     // Zip 12: the app version a saved copy of the player screen belongs to (src/lastScreen.ts throws away any other).
     define: { __APP_BUILD__: JSON.stringify(process.env.APP_BUILD || String(Date.now())) },
     test: {

@@ -7,7 +7,13 @@ import { ToastProvider } from './ui';
 import { SetupPage } from './pages/Setup';
 import { PlayerHome } from './pages/PlayerHome';
 import { SiteHome } from './pages/SiteHome';
-import { AdminApp } from './pages/Admin';
+// Zip 48 (speed split): the organizer screens are their own file now, fetched only for /admin (src/adminChunk.ts). The marker keeps the
+// place they had in the style order written down (src/adminSlot.ts); keep it on this line, before the late style files below.
+// The player's credit sheet list styles (they also live in the organizer file; see the file). Keep it just above the marker.
+import './credit-history.css';
+import './adminSlot';
+import { AdminRoute } from './pages/AdminRoute';
+import { isAdminPath, loadAdmin } from './adminChunk';
 import { GoPage } from './pages/GoPage';
 import { GameDayTextPage } from './pages/GameDayTextPage';
 import { watchKeyboard } from './keyboard';
@@ -45,7 +51,7 @@ function App() {
   if ((m = path.match(/^\/go\/([A-Za-z0-9_.-]+)\/?$/))) return <GoPage token={m[1]} />;
   // Zip 37: the hour-before Telegram's private "Text the players" link.
   if ((m = path.match(/^\/gt\/([A-Za-z0-9_.-]+)\/?$/))) return <GameDayTextPage token={m[1]} />;
-  if (/^\/admin\/?$/.test(path)) return <AdminApp />;
+  if (isAdminPath(path)) return <AdminRoute />;
   if (/^\/setup\/?$/.test(path)) return <SetupPage />;
   return <SiteHome />;
 }
@@ -54,10 +60,29 @@ watchKeyboard();
 // Zip 12, "Load games at once" (SPEED_DIRECT_LOAD): on the plain address, both first questions leave now (only while the switch is on).
 startEarlyLoads(window.location.pathname);
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ToastProvider>
-      <App />
-    </ToastProvider>
-  </StrictMode>,
-);
+function draw() {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </StrictMode>,
+  );
+}
+
+// Zip 48: opening /admin starts the organizer file now, and the first draw waits for it a moment (at most FIRST_DRAW_WAIT_MS), so a phone
+// that has it (or gets it fast) draws the organizer screen straight away, as before, instead of a loading screen first. A failed or slow
+// fetch draws at once: src/pages/AdminRoute.tsx shows the loading screen, recovers, or shows Try again. Every other address draws at once.
+const FIRST_DRAW_WAIT_MS = 1500;
+if (isAdminPath(window.location.pathname)) {
+  let drawn = false;
+  const drawOnce = () => {
+    if (drawn) return;
+    drawn = true;
+    draw();
+  };
+  loadAdmin().then(drawOnce, drawOnce);
+  setTimeout(drawOnce, FIRST_DRAW_WAIT_MS);
+} else {
+  draw();
+}

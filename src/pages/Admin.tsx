@@ -15,12 +15,14 @@ import '../admin-held.css';
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { ModeButton, TopBar } from '../Shell';
-import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, ScheduleSkeleton, Sheet, Spinner, useToast } from '../ui';
+import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
 import { setSiteName } from '../siteName';
 import { AcIcon, AcTitle } from '../AlertCard';
-import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
+import { useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
+import { AdminLoadingScreen } from './AdminLoading';
+import { markOrganizerPhone } from '../organizerPhone';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { checkBookingTimes, isPickerLength } from '../../shared/bookingHours';
 import { PICKER_MINUTES } from '../../shared/gameLength';
@@ -76,6 +78,8 @@ export function AdminApp() {
   }, [holding]);
   useEffect(() => {
     if (load.data) saveLastAdmin(load.data, { pretend: !!pretend, demo: demoOn() });
+    // Zip 48: this phone opens the organizer screens, so its player screens fetch the organizer file quietly ahead (src/adminChunk.ts).
+    if (load.data) markOrganizerPhone(true);
   }, [load.data, pretend]);
   useEffect(() => {
     if (load.error?.status === 401) signedOutLastAdmin();
@@ -92,13 +96,7 @@ export function AdminApp() {
     );
   }
   if (load.loading && !load.data && !load.error) {
-    return (
-      <>
-        <TopBar eyebrow="Organizer" title="Dashboard" />
-        {/* The soft placeholder cards (the same shimmer the player page uses) only when this phone already knows the organizer motion is on; otherwise the plain spinner, as before. */}
-        {rememberedAdminMotion() ? <AdminLoading /> : <Spinner />}
-      </>
-    );
+    return <AdminLoadingScreen />;
   }
   if (load.error?.status === 401)
     return (
@@ -178,24 +176,6 @@ function HeldAdmin({ held, savedAt, tz, children }: { held: boolean; savedAt: nu
       )}
       {children}
     </div>
-  );
-}
-
-/**
- * The first load, with the organizer motion on: soft placeholder cards (the same shimmer the player page uses), not drawn
- * at all if the data is here within 250 ms. The real cards then appear in place: nothing rises or slides in.
- */
-function AdminLoading() {
-  const [late, setLate] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setLate(true), 250);
-    return () => clearTimeout(t);
-  }, []);
-  return (
-    <main className="page stack-lg admin-page admin-loading" role="status">
-      <span className="sr-only">Loading…</span>
-      {late && <ScheduleSkeleton />}
-    </main>
   );
 }
 
