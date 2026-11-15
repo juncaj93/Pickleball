@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { PLAYER_FIX1_HEADER, playerFix1Allowed } from '../shared/playerFix1';
 import { PIN, playerPhone, setupGroup, TestApp } from './harness';
 import { readFileSync } from 'node:fs';
+import { allowedOnBoth } from './tomlVars';
 
 async function world(env: Record<string, string> = {}) {
   const app = new TestApp();
@@ -100,8 +101,7 @@ describe('PLAYER_FIX1 switch', () => {
     expect(await books()).toBe(before);
   });
   it('N9 wrangler.toml allows it for production and for previews, and docs/FEATURE_SWITCHES.md lists it', () => {
-    const toml = readFileSync('wrangler.toml', 'utf8');
-    expect((toml.match(/^PLAYER_FIX1 = "on"$/gm) ?? []).length).toBe(2);
+    expect(allowedOnBoth('PLAYER_FIX1')).toBe(true); // Zip 45: no line needed (missing = allowed)
     expect(readFileSync('docs/FEATURE_SWITCHES.md', 'utf8')).toMatch(/`PLAYER_FIX1`/);
   });
 });

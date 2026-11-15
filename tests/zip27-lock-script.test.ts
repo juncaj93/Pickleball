@@ -15,9 +15,11 @@ describe('scripts/lock-finalized.ts', () => {
   it('reads the kill switches of the right wrangler.toml section', () => {
     const live = wranglerVars(TOML, '[vars]');
     const preview = wranglerVars(TOML, '[env.preview.vars]');
-    expect(live.SHORT_GAMES).toBe('on');
-    expect(live.BOOKING_HOURS).toBe('on');
-    expect(preview.SHORT_GAMES).toBe('on');
+    // Zip 45: SHORT_GAMES and BOOKING_HOURS have no line (missing = allowed, which the site and planLocks read the same way).
+    expect(live.SHORT_GAMES).toBeUndefined();
+    expect(live.BOOKING_HOURS).toBeUndefined();
+    expect(preview.SHORT_GAMES).toBeUndefined();
+    expect(live.MOTION).toBe('on');
     expect(live.PREVIEW_CALM).toBeUndefined(); // preview-only values never leak into the live section
     expect(preview.PREVIEW_CALM).toBe('on');
   });

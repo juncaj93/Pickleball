@@ -28,6 +28,7 @@ import {
   type Memory,
 } from '../shared/christmasSkin';
 import { PIN, playerPhone, setupGroup } from './harness';
+import { allowedOnBoth } from './tomlVars';
 
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -557,9 +558,8 @@ describe('Part C: the 3-way switch (CHRISTMAS_SKIN: Off, Just me, Everyone; ship
     const prod = toml.slice(0, at2);
     const preview = toml.slice(at2);
     expect(prod).not.toMatch(/CHRISTMAS_SKIN_PREVIEW/);
-    expect(prod).toMatch(/^CHRISTMAS_SKIN = "on"$/m);
     expect(preview).toMatch(/^CHRISTMAS_SKIN_PREVIEW = "on"$/m);
-    expect(preview).toMatch(/^CHRISTMAS_SKIN = "on"$/m);
+    expect(allowedOnBoth('CHRISTMAS_SKIN')).toBe(true); // Zip 45: no line needed (missing = allowed)
   });
   it('History words and the Settings row: a 3-way control on top of both Feature switches lists (no deploy needed)', () => {
     const line = (action: string) => activityText({ id: 'x', action, details: {}, actorLabel: 'organizer', at: '2026-11-12T20:00:00.000Z', sessionId: null, playerId: null } as never, 'America/Detroit', 'Alex');

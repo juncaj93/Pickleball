@@ -7,6 +7,7 @@ import { MONEY_REWORK_HEADER } from '../shared/moneyRework';
 import { VENUE_ALERT } from '../shared/venueAlert';
 import { homeBadgeCount } from '../src/pages/admin/todo';
 import { DAY, HOUR, playerPhone, setupGroup, TestApp } from './harness';
+import { tomlSection } from './tomlVars';
 
 const TZ = 'America/Detroit';
 /** Eastern wall clock in the weeks this test world lives in: Oct (EDT, UTC-4) and Nov to Dec (EST, UTC-5, the clock changed on Sun Nov 1). */
@@ -435,14 +436,15 @@ describe('the preview and wrangler', () => {
     const { venueAlertAllowed } = await import('../shared/venueAlert');
     expect(venueAlertAllowed(undefined)).toBe(true);
     expect(venueAlertAllowed('off')).toBe(false);
-    // Variables in [vars] and [env.preview.vars]: never more than main's own count (53 and 59) plus nothing from this zip.
+    // Variables in [vars] and [env.preview.vars]: never more than Zip 45's reduced set (4 and 11; it was 53 and 59 before). Room is left on purpose.
     const count = (header: string) => {
       const start = toml.indexOf(`[${header}]`);
       const rest = toml.slice(start + header.length + 2);
       const end = rest.search(/^\[/m);
       return (end < 0 ? rest : rest.slice(0, end)).split('\n').filter((l) => /^[A-Z0-9_]+\s*=/.test(l)).length;
     };
-    expect(count('vars')).toBe(53);
-    expect(count('env.preview.vars')).toBe(59);
+    expect(Object.keys(tomlSection('[vars]')).length).toBeLessThanOrEqual(4);
+    expect(Object.keys(tomlSection('[env.preview.vars]')).length).toBeLessThanOrEqual(11);
+    expect(count('vars')).toBe(Object.keys(tomlSection('[vars]')).length);
   });
 });

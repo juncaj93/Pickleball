@@ -9,6 +9,7 @@ import { nextTasks, taskTimes } from '../shared/tasks';
 import { ALERT_CARDS_HEADER, splitFirst, zip11Allowed } from '../shared/zip11';
 import { PREVIEW_SWITCHES_ON } from '../scripts/seed-preview-world';
 import { PIN, playerPhone, setupGroup, TestApp } from './harness';
+import { allowedOnBoth } from './tomlVars';
 
 async function world(env: Record<string, string> = {}) {
   const app = new TestApp();
@@ -235,8 +236,8 @@ describe('the preview', () => {
     expect(PREVIEW_SWITCHES_ON).toContain('card_cleanup_on');
   });
   it('the kill switch is allowed on live and on the preview (wrangler.toml)', () => {
-    const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
-    expect(toml.match(/^ALERT_CARDS = "on"$/gm)).toHaveLength(2);
+    // Zip 45: no line needed (missing = allowed).
+    expect(allowedOnBoth('ALERT_CARDS')).toBe(true);
   });
 });
 
@@ -274,8 +275,7 @@ describe('Seat dots (SEAT_DOTS)', () => {
     expect(ui).toContain('<EmptySeat key={i} />');
   });
   it('the kill switch is allowed on live and on the preview (wrangler.toml), and the preview has it on', () => {
-    const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
-    expect(toml.match(/^SEAT_DOTS = "on"$/gm)).toHaveLength(2);
+    expect(allowedOnBoth('SEAT_DOTS')).toBe(true);
     expect(PREVIEW_SWITCHES_ON).toContain('seat_dots_on');
   });
 });

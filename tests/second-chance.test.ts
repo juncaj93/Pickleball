@@ -18,6 +18,7 @@ import {
 } from '../shared/secondChance';
 import { isAdminPage, linkText, ourAddress } from '../server/telegram-links';
 import { COURTRESERVE_BOOKING_URL } from '../shared/settings';
+import { allowedOnBoth, tomlSection } from './tomlVars';
 
 const TZ = 'America/Detroit';
 const ON = { [SECOND_CHANCE.header]: 'on' };
@@ -495,11 +496,12 @@ describe('round 2 (Alex, Nov 8)', () => {
     expect((await (await playerPhone(live, 'Blair')).call('GET', '/api/group')).data.previewCalm).toBeUndefined();
   });
   it('wrangler.toml: PREVIEW_CALM and SECOND_CHANCE_TEST only in [env.preview.vars]; SECOND_CHANCE allowed on live (the Settings row decides)', async () => {
-    const toml = (await import('node:fs')).readFileSync('wrangler.toml', 'utf8');
-    const [live, preview] = toml.split('[env.preview.vars]');
-    expect(live).not.toMatch(/^PREVIEW_CALM|^SECOND_CHANCE_TEST/m);
-    expect(preview).toMatch(/^PREVIEW_CALM = "on"$/m);
-    expect(preview).toMatch(/^SECOND_CHANCE_TEST = "on"$/m);
-    expect(live).toMatch(/^SECOND_CHANCE = "on"$/m);
+    const live = tomlSection('[vars]');
+    const preview = tomlSection('[env.preview.vars]');
+    expect(live.PREVIEW_CALM).toBeUndefined();
+    expect(live.SECOND_CHANCE_TEST).toBeUndefined();
+    expect(preview.PREVIEW_CALM).toBe('on');
+    expect(preview.SECOND_CHANCE_TEST).toBe('on');
+    expect(allowedOnBoth('SECOND_CHANCE')).toBe(true); // Zip 45: no line needed (missing = allowed)
   });
 });

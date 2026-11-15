@@ -18,13 +18,29 @@ name = "ERROR_BOX"
 class_name = "ErrorBox"
 script_name = "pickleball-error-box"
 
-# The address players use. Shown as the player link in Settings and used in texts.
+# ---------- Variables: read this before adding one (Zip 45, Sat Nov 14, 2026) ----------
+# "Allowed unless off" flags do not need a variable; add one only if it must differ from the default.
+# Cloudflare's free plan allows 64 variables per site, secrets included. Most feature switches read a missing variable exactly like "on"
+# (the code is (value ?? 'on').trim().toLowerCase() !== 'off'), so an "on" line for them did nothing and only used up the limit. Zip 45
+# removed those lines: production went from 58 variables to 9, preview from 60 to 12. tests/variables-proof.test.ts runs the site's own
+# switch code on the old list and on this file and fails if any switch would answer differently.
+# These need NO line (missing = allowed; who gets each one is its Settings > Feature switches row). To kill one, add NAME = "off" here
+# (and in the preview list further down, for a preview), then deploy:
+#   TIME_SHIFT, PAY_ALWAYS, ADMIN_V2, PAY_NOTE, ADMIN_R2, ADMIN_R3, LATE_FEES, PLAYER_FIX1, PAY_SHEET, TEXTS_R2, LATE_FEE_SPLIT, MONEY_REWORK,
+#   INSTANT_TAPS, ADJUST_CREDIT, VENMO_REQUEST, HOME_COLLAPSE, TONIGHT_GLOW, COLOR_CLEANUP, PLAYER_CARDS_SIMPLE, LAST_CALL_TEXTS, SHORT_GAMES,
+#   CARD_TIME_BUTTONS, CARD_CLEANUP, ALERT_CARDS, SPEED_FEWER_QUERIES, SPEED_DIRECT_LOAD, SPEED_LAST_SCREEN, SPEED_LAST_SCREEN_ADMIN, SEAT_DOTS,
+#   PLAYERS_REDO, SWAP_BUTTON, ADMIN_UNDO, GAME_DAY_CARD, SECOND_CHANCE, UNPAID_NUDGE, ERROR_ALERTS, AFTER_GAME_CARD, TOTALS_REFRESH, SPENT_TOTALS,
+#   CHEAPER_FIX, ACTING_FOR_OTHERS, CHECKIN_PAY_LINE, PLAYERS_SHEET_REDO, BOOKING_HOURS, EXTENDED_TIME, HOME_SCREEN_TIP, CHRISTMAS_SKIN,
+#   GAME_DAY_TEXT, TAP_GUARD_FIX.
+#   Also no line, since they shipped: GUEST_SPOT (Zip 42), VENUE_ALERT (Zip 43).
+# The lines below are the ones where a missing value reads DIFFERENTLY: SITE_URL (links would use whatever address was opened), GO_LINKS,
+# MOTION and MOTION_ADMIN (missing = off), and on previews the preview-only switches (missing = off). What each switch does:
+# docs/FEATURE_SWITCHES.md.
 [vars]
+# The address players use. Shown as the player link in Settings and used in texts and alerts. Missing = whatever address was opened.
 SITE_URL = "https://pickleball.juncaj.net"
 # "on": night-before Telegram alerts link to the direct text page /go/... (turn "off" to fall back to the admin link).
 GO_LINKS = "on"
-# "Time may shift" (tilde times, court borders, the Still in notice, Confirmed x of y). "off" hides them all.
-TIME_SHIFT = "on"
 # "Motion" (animations on the player screens). "on" = everyone (switched on Sun Nov 1, 2026, 8:2x PM Eastern).
 # "off" = dark for everyone; a phone opened once with ?motion=on still sees it (the private test switch). Needs a deploy.
 MOTION = "on"
@@ -32,246 +48,6 @@ MOTION = "on"
 # "on" = the organizer screens animate (switched on Sun Nov 1, 2026, about 10:10 PM Eastern, after Alex tested it on his phone).
 # "off" = dark. A phone opened once with ?motionadmin=on still sees it (the private test switch). Needs a deploy.
 MOTION_ADMIN = "on"
-# "Ask for payment on every game" (Pay shows on Not booked and Waitlist games too). "on" here only ALLOWS it; who
-# sees it is Settings > Money > "Ask for payment on every game" (off at ship = nobody), plus a phone opened once
-# with ?payalways=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-PAY_ALWAYS = "on"
-# "New admin layout" (organizer History, Money and Home, version 2). "on" here only ALLOWS it; who sees it is
-# Settings > Feature switches > "New admin layout" (off at ship = nobody), plus a phone opened once with
-# /admin?adminv2=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-ADMIN_V2 = "on"
-# "No Venmo? Pay Alex directly" (a small note on the player screen when Pay did not open the Venmo app). "on" here only
-# ALLOWS it; who sees it is Settings > Feature switches > "No Venmo? note" (off at ship = nobody), plus a phone opened
-# once with ?paynote=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-PAY_NOTE = "on"
-# "Admin screens, round 2" (organizer Home cards, Money, Players with Hide player, History highlight, header). "on" here only
-# ALLOWS it; who sees it is Settings > Feature switches > "Admin screens, round 2" (off at ship = nobody), plus a phone
-# opened once with /admin?adminr2=on (the private test switch). "off" = the kill switch: nobody, not even the test link.
-# Needs a deploy.
-ADMIN_R2 = "on"
-# "Admin screens, round 3" (organizer Edit game and Add game forms, the Settings clean-up, the Players page layout). "on" here
-# only ALLOWS it; who sees it is Settings > Feature switches > "Admin screens, round 3" (off at ship = nobody), plus a phone
-# opened once with /admin?adminr3=on (the private test switch). It also needs round 2 on. "off" = the kill switch: nobody,
-# not even the test link. Display only. Needs a deploy.
-ADMIN_R3 = "on"
-# "Late drops owe $14" (CHANGES MONEY: a late drop that leaves a game below 4 owes unless someone takes the spot; a no-show
-# with fewer than 4 played owes; a late cancel asks "Did the venue waive the fee?"). "on" here only ALLOWS it; who gets it
-# is Settings > Feature switches > "Late drops owe $14" (off at ship = nobody), plus a phone opened once with ?latefees=on
-# (the private test switch). "off" = the kill switch: nobody makes new debts, not even the test link. Needs a deploy.
-LATE_FEES = "on"
-# "Player screen small fixes, round 1" (Pay and "I paid" on tonight's game card as well as on the "Tonight: you owe" card at
-# the top, and a roomier blue TONIGHT tag). "on" here only ALLOWS it; who sees it is Settings > Feature switches
-# > "Player screen fixes" (off at ship = nobody), plus a phone opened once with ?playerfix1=on (the private test switch).
-# "off" = the kill switch: nobody, not even the test link. Display only: no money rule changes. Needs a deploy.
-PLAYER_FIX1 = "on"
-# "Pay sheet" (Pay opens a small bottom sheet: Pay with the Venmo app, Copy Venmo @handle, Apple Pay / Zelle / cash line,
-# I paid; it replaces the "No Venmo? note" while on). "on" here only ALLOWS it; who sees it is Settings > Feature
-# switches > "Pay sheet" (off at ship = nobody), plus a phone opened once with ?paysheet=on (the private test switch).
-# "off" = the kill switch: nobody, not even the test link. Display only: no money rule changes. Needs a deploy.
-PAY_SHEET = "on"
-# "Texts and alerts, round 2" (new wording for every prefilled text, new wording and timing for the Telegram alerts, the cancel sheet
-# answering No to "Did the venue waive the fee?" by default). "on" here only ALLOWS it; who gets it is Settings > Feature switches >
-# "Texts and alerts, round 2" (off at ship = nobody), plus a phone opened once with /admin?textsr2=on (the private test switch: it
-# changes the texts that phone opens and its cancel sheet; the Telegram alerts and the 5-minute clock change only when it is on for
-# everyone). "off" = the kill switch: nobody, not even the test link, and the clock sends the old alerts. No money rule, amount or game
-# rule depends on it. Needs a deploy.
-TEXTS_R2 = "on"
-# "Late-cancel fee split" (CHANGES MONEY: a cancel inside 12 hours where the venue kept the fee, with 5 or more in, prices every seat
-# like a played game instead of a flat $14; needs LATE_FEES on). "on" here only ALLOWS it; who gets it is Settings > Feature switches >
-# "Late-cancel fee split" (off at ship = nobody), plus a phone opened once with /admin?latefeesplit=on (the private test switch).
-# "off" = the kill switch: every new fee-kept cancel is a flat $14 again, not even the test link. Games already canceled keep
-# the price they were canceled with. Needs a deploy.
-LATE_FEE_SPLIT = "on"
-# "Money page rework" (organizer Money page: Games and Totals, Hide from list with Settings > Advanced > Hidden games, Edit charge on a
-# canceled game, the cancel sheet's "Were you charged?" default, a tidier Feature switches page, a quieter History). "on" here only ALLOWS
-# it; who sees it is Settings > Feature switches > "Money page rework" (off at ship = nobody), plus a phone opened once with
-# /admin?moneyrework=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Admin only, no money rule,
-# amount, seat or credit changes. Needs a deploy.
-MONEY_REWORK = "on"
-# "Instant taps" (a tapped button changes the screen at once, the save runs in the background, a failed save puts the screen back exactly
-# and says what failed; where the server decides, the button shows a pressed state and a small spinner). Player and organizer screens.
-# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Instant taps" (off at ship = nobody), plus a phone opened once
-# with ?instanttaps=on (the private test switch, works on /admin too). "off" = the kill switch: nobody, not even the test link. Tap
-# feedback only: no money rule, amount, seat or credit depends on it. Needs a deploy.
-INSTANT_TAPS = "on"
-# "Adjust credit" (the organizer adds or removes credit on one player by hand, with a required reason; gear sheet on the Players page).
-# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Adjust credit" (off at ship = nobody), plus a phone opened once
-# with /admin?adjustcredit=on (the private test switch). "off" = the kill switch: nobody, not even the test link, and the save is refused.
-# Organizer screens only. Uses the existing credit ledger (no new table). Needs a deploy.
-ADJUST_CREDIT = "on"
-# "Venmo request" (a blue "Venmo request" link per person who still owes, only where that player has a Venmo username saved).
-# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Venmo request" (off at ship = nobody), plus a phone opened once
-# with /admin?venmorequest=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Organizer screens
-# only; it only shows links (nothing is sent, charged or saved). Needs a deploy.
-VENMO_REQUEST = "on"
-# "Home collapse" (player Home: only THIS WEEK and NEXT WEEK show; every later game sits behind one "More sessions" button, collapsed on each load).
-# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Home collapse" (off at ship = nobody), plus a phone opened once with
-# /?homecollapse=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Player screens, display only. Needs a deploy.
-HOME_COLLAPSE = "on"
-
-# "Tonight glow" (the date tile on player cards and the organizer Home says TONIGHT in a solid green band, with a slow green glow and a gentle light sweep on the
-# date badge only, or TOMORROW in a soft green band with no motion; Eastern time; Reduce Motion holds everything still). "on" here only ALLOWS it; who gets it is
-# Settings > Feature switches > "Tonight glow" (off at ship = nobody), plus a phone opened once with ?tonightglow=on (the private test switch). "off" = the kill
-# switch: nobody, not even the test link. Display only. Needs a deploy.
-TONIGHT_GLOW = "on"
-# "Color cleanup" (one color system: green in and paid, amber owes, blue links and credit, purple texting only, gray neutral, red cancel and errors; Waitlist and the
-# Extra game tag go gray, the Canceled pill turns red, two Cancel sheet lines get shorter). "on" here only ALLOWS it; who gets it is Settings > Feature switches >
-# "Color cleanup" (off at ship = nobody), plus a phone opened once with ?colorcleanup=on (works on /admin too). "off" = the kill switch. Display only. Needs a deploy.
-COLOR_CLEANUP = "on"
-# "Simpler player cards" (no "Court booked / Court not booked" words or dot on player cards; the calendar icon only next to "You're in"; one small "On the waitlist"
-# label only for a player who is on a waitlist). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Simpler player cards" (off at ship =
-# nobody), plus a phone opened once with ?playercards=on. "off" = the kill switch. Display only. Needs a deploy.
-PLAYER_CARDS_SIMPLE = "on"
-# "Last call texts" (Zip 8, shared/lastCall.ts): the night-before Check-in and Need players words follow Alex's rules (still in? anyone else? / need X more
-# or the game is canceled to avoid fees). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Last call texts" (off at ship = nobody),
-# plus a phone opened once with /admin?lastcall=on. "off" = the kill switch. Words only. Needs a deploy.
-LAST_CALL_TEXTS = "on"
-# "Short games" (Zip 9, shared/gameLength.ts): a game that is exactly 1.5 hours (End minus Start) is priced from its own row of the one game-length table
-# ($11 each at 4 in, $9 at 5, $7 at 6, $6 at 7, $5 at 8; court $36), with a heads-up on Add game and Edit game, a "1.5 hr game · $11 each" tag on the
-# organizer tile and list row, and its real end time on Add to calendar. CHANGES MONEY for 1.5 hour games only. "on" here only ALLOWS it; who gets it is
-# Settings > Feature switches > "Short games" (off at ship = nobody), plus a phone opened once with ?shortgames=on. "off" = the kill switch. Needs a deploy.
-SHORT_GAMES = "on"
-# "Card time and buttons" (Zip 9): player cards show the start time and "2 hours" / "1.5 hours" under the date tile, and a card you are in gets one small
-# joined button (Add to calendar | Directions) at the top right of the "You're in" line. "on" here only ALLOWS it; who gets it is Settings > Feature
-# switches > "Card time and buttons" (off at ship = nobody), plus a phone opened once with ?cardtime=on. "off" = the kill switch. Display only. Needs a deploy.
-CARD_TIME_BUTTONS = "on"
-# "Card cleanup" (Zip 10, shared/zip10.ts): player and organizer cards lose the "3 of 4 in" / "5 in" text (only the pickleball circles, one row), get a small
-# people icon before the names, are vertically centered to the date tile, and Later games become a smaller tinted card. Also NO WAITLIST AND NO MAX PLAYERS
-# CAP: anyone can join (up to 12, the database's own limit), every player-facing waitlist word is gone, the "Spot opened" text card and the Telegram
-# "moved up from the waitlist" line too. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Card cleanup" (off at ship = nobody),
-# plus a phone opened once with ?cardcleanup=on. "off" = the kill switch. Needs a deploy.
-CARD_CLEANUP = "on"
-# "Alert cards" (Zip 11, shared/zip11.ts): every alert, notice, banner and popup on the player screen and the organizer Home gets one look: a slim
-# tinted card with a thin matching border, no icon, a bold title, an optional gray sub line and one button on the right (two-choice cards put both
-# buttons under the text; cards fine to ignore get a small X). Display only: every alert keeps its action, timing and order. "on" here only ALLOWS it;
-# who gets it is Settings > Feature switches > "Alert cards" (off at ship = nobody), plus a phone opened once with ?alertcards=on. "off" = the kill
-# switch. Needs a deploy.
-ALERT_CARDS = "on"
-# Zip 12 speed switches (shared/speed.ts, server/speed.ts). None changes money, what a screen says or what a tap does. "on" here only ALLOWS each;
-# who gets it is Settings > Feature switches (off at ship = nobody), plus a phone opened once with ?fewerqueries=on / ?directload=on / ?lastscreen=on.
-# "off" = the kill switch (needs a deploy). SPEED_FEWER_QUERIES: fewer database trips per screen, same answers byte for byte. SPEED_DIRECT_LOAD: the
-# plain address asks for the games together with its set-up check. SPEED_LAST_SCREEN: a returning player's phone draws its saved copy of the last
-# screen (no money in it) with every button held until the fresh answer lands.
-SPEED_FEWER_QUERIES = "on"
-SPEED_DIRECT_LOAD = "on"
-SPEED_LAST_SCREEN = "on"
-# Zip 12 step C "Instant admin": the organizer phone draws its saved copy of the dashboard at once (money dimmed, every action held). Allowed here;
-# who gets it is Settings > Feature switches > "Instant admin" (off at ship), plus /admin?lastscreenadmin=on. "off" = the kill switch.
-SPEED_LAST_SCREEN_ADMIN = "on"
-# "Seat dots" (shared/seatDots.ts): every EMPTY seat circle on the site (game cards, organizer cards, the Want in alert) becomes a slightly grayed
-# dashed ring; filled balls stay exactly as they are. Works with Alert cards on or off. Display only. "on" here only ALLOWS it; who gets it is
-# Settings > Feature switches > "Seat dots" (off at ship = nobody), plus a phone opened once with ?seatdots=on. "off" = the kill switch. Needs a deploy.
-SEAT_DOTS = "on"
-
-# Zip 13 (shared/zip13.ts), all three admin only, "on" here only ALLOWS them; who gets them is Settings > Feature switches (off at ship = nobody),
-# plus /admin?playersredo=on, ?swapbutton=on, ?adminundo=on on one phone. "off" = the kill switch (needs a deploy).
-# PLAYERS_REDO: the admin Players tab redone (one-line rows, one money chip, details and edit sheets). Display only.
-# SWAP_BUTTON: tap "Admin" in the organizer header to jump to your own player page; "Go to Admin" at the bottom of it to come back. Organizer only.
-# ADMIN_UNDO: Undo for 5 seconds on the toast after a money or game action; the save waits those 5 seconds and is dropped on Undo.
-PLAYERS_REDO = "on"
-SWAP_BUTTON = "on"
-ADMIN_UNDO = "on"
-
-# Zip 14 "Game day card" (shared/gameDay.ts): on the day of a game the player card shows "You're in", two buttons "Court 3" (opens the court map
-# with that court lit) and "Directions", and "Court TBD" while no court is set; the organizer's Add game and Edit game get a "Court" row with
-# the same map. Display only. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Game day card" (off at ship = nobody),
-# plus a phone opened once with ?gameday=on (works on /admin too). "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-# GAME_DAY_TEST (the "see the next game as today" link, ?gamedaytest=on) is deliberately NOT here: it exists only for previews, below.
-GAME_DAY_CARD = "on"
-
-# Zip 15 "Second Chance" (shared/secondChance.ts): same-day games that are not booked. A game canceled the night before with exactly 3 in
-# gets a card on admin Home (Book a court, then Reopen game at the same or a new time, then Text the group); a game added on its own day
-# gets a Text the group card; Telegram 1 at 4 in (not all paid) and Telegram 2 at 4 paid, once each per game; Venmo Request buttons on
-# Home. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Second Chance" (off at ship = nobody), plus a phone opened
-# once with /admin?secondchance=on (cards only; the Telegrams follow the Settings row alone). "off" = the kill switch. Needs a deploy.
-# SECOND_CHANCE_TEST (pretend noon on game day, fake Telegrams) is deliberately NOT here: it exists only for previews, below.
-SECOND_CHANCE = "on"
-
-# Zip 17 "Unpaid nudge" (shared/unpaidNudge.ts): the owe card says "You owe $28" / "$14 each: Nov 3 and Nov 5"; after I'm in with 1 or 2
-# unpaid games an 8 second toast asks them to pay; at 3 or more (UNPAID_LIMIT) the I'm in button is dimmed, a tap opens "You owe $42" with
-# Pay, and the SERVER refuses the player's own sign-up until they pay. The organizer is never blocked; the organizer's own add still works.
-# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Unpaid nudge" (off at ship = nobody), plus a phone opened once
-# with ?nudge=on. "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-UNPAID_NUDGE = "on"
-# Zip 21 "Error alerts" (shared/errorAlerts.ts): a short Telegram to Alex when the clock's tick fails, the weekly backup fails or ends
-# INCOMPLETE, the database fails (its free daily limit, or repeated errors) or the site answers a burst of server errors, and when the
-# clock stopped for 20 minutes or more. At most 1 an hour per kind and 6 a day. "on" here only ALLOWS it; who gets it is Settings >
-# Feature switches > "Error alerts" (off at ship = nothing sent). "off" = the kill switch: nothing, not even the test button. Needs a deploy.
-ERROR_ALERTS = "on"
-# Zip 16 "After-game cards" (shared/afterGame.ts): after the organizer finalizes a game, a player whose final price is below what they paid
-# sees one blue card the next time they open the site ("$5 back to your credit", X to close, gone after 7 days); a player who paid a lower
-# price earlier and now owes more sees "You owe $2 more" on the owe card that is already there. Display only. "on" here only ALLOWS it;
-# who gets it is Settings > Feature switches > "After-game cards" (off at ship = nobody), plus a phone opened once with ?aftergame=on.
-# "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-AFTER_GAME_CARD = "on"
-# Zip 23 "Totals refresh" (shared/totalsRefresh.ts): Money > Totals redone from Alex's mock: a "So far" card and a "Projected" card (Membership,
-# Court costs, Owed to venue, Players paid / pay, then the total with the cost per court, like $21/court) and one collapsed "Month by month"
-# card. Same numbers as before; money amounts use the site's own number font. Organizer only, display only. "on" here only ALLOWS it; who
-# gets it is Settings > Feature switches > "Totals refresh" (off at ship = nobody), plus a phone opened once with /admin?totalsrefresh=on.
-# "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-TOTALS_REFRESH = "on"
-# Zip 43 "Venue charge alert" (shared/venueAlert.ts) has NO variable here on purpose: Cloudflare's free plan allows 64 variables (secrets + text)
-# per site and the preview was already at 64, so one more made the preview deploy fail ("65 variables"). Its kill switch is the Settings row
-# (Settings > Feature switches > "Venue charge alert", off at ship = nobody; no deploy needed). The code still honors VENUE_ALERT = "off" if one is
-# ever set (it counts as a variable), and a missing value means allowed.
-# Zip 27 "Spent matches Totals" (shared/spentTotals.ts, Audit A item A-05): Players "Spent" counts exactly what Money > Totals counts as
-# "Players paid" (late fees kept, cash held on a seat whose price went up), and the organizer's own Spent is the Totals "So far" figure, a
-# credit month shown as "$8 credit". Organizer only, display only. "on" here only ALLOWS it; who gets it is Settings > Feature switches >
-# "Spent matches Totals" (off at ship = nobody), plus a phone opened once with /admin?spenttotals=on. "off" = the kill switch. Needs a deploy.
-SPENT_TOTALS = "on"
-# Zip 39 "Made cheaper after paying" (shared/cheaperFix.ts, server/cheaperFix.ts): a late fee kept on a game whose price went DOWN after a
-# player paid keeps only the fee and gives the rest back as credit (late cancel with the fee kept, late drop, no-show), and a new Price per
-# player reprices open games (Audit A, A-18). MOVES MONEY. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Made cheaper
-# after paying" (off at ship = nobody), plus an organizer phone opened once with /admin?cheaperfix=on. "off" = the kill switch. Needs a deploy.
-CHEAPER_FIX = "on"
-# Zip 30 "Acting for others" (shared/actingForOthers.ts): each phone keeps a random code and a player's own tap writes it into its History
-# line (migration 0018); organizer screens point out a tap made for someone else (a History note and a Home card). Organizer only, look
-# only. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Acting for others" (off at ship = nobody), plus a phone
-# opened once with /admin?actingothers=on. "off" = the kill switch, and it also stops recording the codes. Needs a deploy.
-ACTING_FOR_OTHERS = "on"
-# Zip 34 "Check-in pay line" (shared/checkInPay.ts): the night-before Check-in text (4 or more in) adds "Still in? Pay <price> to confirm." and "Need out? Tell me
-# tonight." while somebody signed up (not the organizer) still owes, and is exactly as before once everyone has paid. Needs Texts round 2 on. Words only: no
-# price, money rule or recipient changes. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Check-in pay line" (off at ship = nobody),
-# plus a phone opened once with /admin?checkinpay=on. "off" = the kill switch. Needs a deploy.
-CHECKIN_PAY_LINE = "on"
-# Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts): the "Players" sheet that opens from a game card's money cell (and the gear menu's
-# Players) redone from Alex's mock: "1 of 3 paid" with Remind, one list with Paid / Owes, Mark paid, Request and a three-dot menu for Remove, and
-# name chips to tap to add. Same actions as the old sheet. Organizer only, look only. "on" here only ALLOWS it; who sees it is Settings >
-# Feature switches > "Players sheet redo" (off at ship = nobody), plus a phone opened once with /admin?playerssheet=on. "off" = the kill
-# switch. Needs a deploy.
-PLAYERS_SHEET_REDO = "on"
-# Zip 24 "Booking hours" (shared/bookingHours.ts): a game outside the venue hours (8:00 AM to 10:00 PM Monday to Saturday, 8:00 AM to 7:00 PM
-# Sunday) is refused, on the screen and on the server, and Add game / Edit game get tap-to-pick times. Organizer only. Only a NEW game or a
-# CHANGED start or end is looked at; games that already exist are never touched. "on" here only ALLOWS it; who gets it is Settings > Feature
-# switches > "Booking hours" (off at ship = nobody), plus a phone opened once with /admin?bookinghours=on.
-# "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-BOOKING_HOURS = "on"
-# Zip 31 "Extended time" (shared/extension.ts): the Who played sheet gets None | +30 min | +1 hr; each player's share of the extra court time
-# rides on their next game ("$17 due") with an alert and "Pay now instead". MOVES MONEY (credit used at once, shares on the Money page and
-# Totals). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Extended time" (off at ship = nobody), plus a phone opened
-# once with ?extendedtime=on. "off" = the kill switch: nobody, not even the test link (shares already set stay owed and in Totals). Needs a deploy.
-EXTENDED_TIME = "on"
-# Zip 37 "Home Screen tip" (shared/homeScreenTip.ts): players on an iPhone or iPad in Safari (not already a Home Screen app) get one card at the top of Home from
-# their SECOND visit on ("Rather have this as an app?" with a "Show me how" sheet). Look only. "on" here only ALLOWS it; who gets it is Settings > Feature
-# switches > "Home Screen tip" (off at ship = nobody), plus a phone opened once with ?homescreentip=on. "off" = the kill switch. Needs a deploy.
-HOME_SCREEN_TIP = "on"
-# Zip 38 "Christmas skin" (shared/christmasSkin.ts): a look-only Christmas theme for the PLAYER screens (ornaments for the seat balls, candy canes, a snow cap, red
-# calendar tiles, a tinted page color). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Christmas skin", a 3-way switch: Off (ships so),
-# Just me (only the organizer's own player can tap the normal logo to try the theme, any date) or Everyone (a Christmas logo and the theme tap for every player,
-# only from the Friday after US Thanksgiving through Dec 31, Eastern). "off" = the kill switch: nobody. Needs a deploy.
-CHRISTMAS_SKIN = "on"
-# Zip 37 "Game day text" (shared/gameDayText.ts): about an hour before a booked game with 2 or more in, a Telegram to the organizer with a private "Text the
-# players" link that opens Messages to the players in that game (never the organizer), numbers looked up on the server, never in the message or the link.
-# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Game day text" (off at ship = nobody). "off" = the kill switch. Needs a deploy.
-GAME_DAY_TEXT = "on"
-# Zip 35 "Tap guard fix" (shared/tapGuard.ts): the page's fast-tap guard (Instant taps) drops only a repeat tap on the SAME button, or a tap on another
-# button when the one tapped before went away or moved; a quick tap on a neighbouring button (Hide from list, then Hide it) works. Look and feel only: no
-# price, money rule, seat or data. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Tap guard fix" (off at ship = nobody),
-# plus a phone opened once with ?tapguard=on. "off" = the kill switch: nobody, not even the test link. Needs a deploy.
-TAP_GUARD_FIX = "on"
-# Zip 42 "Guest spot" (shared/guestSpot.ts): NO line here on purpose. Cloudflare's free plan allows 64 variables per site and the preview is at
-# that limit, and a missing GUEST_SPOT means ALLOWED (the same rule as every switch): who gets it is Settings > Feature switches > "Guest spot"
-# (off at ship = nobody), plus the organizer's phone opened once with /admin?guestspot=on. The kill switch: add GUEST_SPOT = "off" here, deploy.
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -281,78 +57,31 @@ TAP_GUARD_FIX = "on"
 [env.preview]
 
 [env.preview.vars]
+# Same rule as the production list: no line for an "allowed unless off" switch (missing = allowed, the same as "on").
 GO_LINKS = "on"
-TIME_SHIFT = "on"
 MOTION = "on"
 MOTION_ADMIN = "on"
-PAY_ALWAYS = "on"
-ADMIN_V2 = "on"
-PAY_NOTE = "on"
-ADMIN_R2 = "on"
-ADMIN_R3 = "on"
-LATE_FEES = "on"
-PLAYER_FIX1 = "on"
-PAY_SHEET = "on"
-TEXTS_R2 = "on"
-LATE_FEE_SPLIT = "on"
-MONEY_REWORK = "on"
-INSTANT_TAPS = "on"
-ADJUST_CREDIT = "on"
-VENMO_REQUEST = "on"
-HOME_COLLAPSE = "on"
-TONIGHT_GLOW = "on"
-COLOR_CLEANUP = "on"
-PLAYER_CARDS_SIMPLE = "on"
-LAST_CALL_TEXTS = "on"
-SHORT_GAMES = "on"
-CARD_TIME_BUTTONS = "on"
-CARD_CLEANUP = "on"
-ALERT_CARDS = "on"
-SPEED_FEWER_QUERIES = "on"
-SPEED_DIRECT_LOAD = "on"
-SPEED_LAST_SCREEN = "on"
-SPEED_LAST_SCREEN_ADMIN = "on"
-SEAT_DOTS = "on"
-PLAYERS_REDO = "on"
-SWAP_BUTTON = "on"
-ADMIN_UNDO = "on"
-GAME_DAY_CARD = "on"
 # Preview only (never in [vars] above): lets a phone opened with ?gamedaytest=on see the next game as if it were today.
 GAME_DAY_TEST = "on"
-SECOND_CHANCE = "on"
-AFTER_GAME_CARD = "on"
 # Preview only (never in [vars] above): ?noontest=on pretends it is noon on game day for the Second Chance cards, and the two Telegrams
 # are a visible fake (shown on Home, never sent).
 SECOND_CHANCE_TEST = "on"
-UNPAID_NUDGE = "on"
-TOTALS_REFRESH = "on"
-SPENT_TOTALS = "on"
-CHEAPER_FIX = "on"
-ACTING_FOR_OTHERS = "on"
-CHECKIN_PAY_LINE = "on"
-PLAYERS_SHEET_REDO = "on"
+# Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
+PREVIEW_CALM = "on"
 # Zip 30, PREVIEW ONLY (never in [vars]): the shared preview database loses the Acting for others row whenever another channel re-seeds
 # it, so the preview shows the feature regardless. Live only ever follows the Settings row.
 ACTING_FOR_OTHERS_PREVIEW = "on"
-BOOKING_HOURS = "on"
-EXTENDED_TIME = "on"
-TAP_GUARD_FIX = "on"
 # Preview only (never in [vars] above): Zip 31's preview shows Extended time even if a re-seed from another branch dropped its Settings row.
 EXTENDED_TIME_PREVIEW = "on"
-HOME_SCREEN_TIP = "on"
 # Zip 37, PREVIEW ONLY (never in [vars]): this preview shows the Home Screen tip and Game day text whatever the shared fake database says (a re-seed from another
 # branch drops the rows), and /gt/preview opens the game day text page for the next game. Live only ever follows the Settings rows.
 HOME_SCREEN_TIP_PREVIEW = "on"
-CHRISTMAS_SKIN = "on"
+GAME_DAY_TEXT_PREVIEW = "on"
 # Zip 38, PREVIEW ONLY (never in [vars]): this preview acts like the Christmas skin switch is set from the link: ?xmasmode=me (Just me) or ?xmasmode=all (Everyone,
 # the default), and ?xmasdate=2026-12-05 pretends today is that day (Everyone only shows from Nov 27 to Dec 31). The live site has no such var, so it ignores both
 # and only follows the Settings switch and the real date.
 CHRISTMAS_SKIN_PREVIEW = "on"
-GAME_DAY_TEXT = "on"
-GAME_DAY_TEXT_PREVIEW = "on"
-# Zip 42: no GUEST_SPOT line (the 64 variable limit, see [vars]); the preview's seed turns the Settings row on.
-# Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
-PREVIEW_CALM = "on"
+# GUEST_SPOT (Zip 42) has no line either; the preview's seed turns its Settings row on.
 
 [[env.preview.d1_databases]]
 binding = "DB"

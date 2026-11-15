@@ -6,6 +6,7 @@ import { activityText } from '../shared/activity';
 import { MONEY_REWORK_HEADER } from '../shared/moneyRework';
 import { dollarsText, monthRowOf, pastMonths, perCourtDollars, projectedCard, soFarCard, TOTALS_REFRESH, totalsRefreshAllowed } from '../shared/totalsRefresh';
 import { firstSession, HOUR, playerPhone, setupGroup, TestApp } from './harness';
+import { allowedOnBoth } from './tomlVars';
 
 type Rework = NonNullable<MonthlyMoney['rework']>;
 const rw = { [MONEY_REWORK_HEADER]: 'on' };
@@ -197,9 +198,6 @@ describe('the preview', () => {
     expect(smallSwitchRows(Date.parse('2026-11-09T15:00:00Z'))).toContain(`'preview-${TOTALS_REFRESH.task}'`);
   });
   it('wrangler.toml allows it on live and on previews', async () => {
-    const toml = (await import('node:fs')).readFileSync('wrangler.toml', 'utf8');
-    const [live, preview] = toml.split('[env.preview]');
-    expect(live).toMatch(/^TOTALS_REFRESH = "on"$/m);
-    expect(preview).toMatch(/^TOTALS_REFRESH = "on"$/m);
+    expect(allowedOnBoth('TOTALS_REFRESH')).toBe(true); // Zip 45: no line needed (missing = allowed)
   });
 });

@@ -6,6 +6,7 @@ import { EXTENDED_TIME, extAlerts, extensionSplit, gameWhenWords, splitLine } fr
 import { activityText } from '../shared/activity';
 import { creditChanges } from '../shared/credit';
 import { DAY, HOUR, PIN, playerPhone, setupGroup, TestApp } from './harness';
+import { allowedOnBoth } from './tomlVars';
 
 const TZ = 'America/Detroit';
 const ON = { [EXTENDED_TIME.header]: 'on' };
@@ -506,7 +507,7 @@ describe('the preview and the switch files', () => {
     const live = toml.slice(toml.indexOf('[vars]'), toml.indexOf('[env.preview]'));
     const preview = toml.slice(toml.indexOf('[env.preview.vars]'));
     expect(live).not.toMatch(/EXTENDED_TIME_PREVIEW/);
-    expect(live).toMatch(/^EXTENDED_TIME = "on"/m);
+    expect(allowedOnBoth('EXTENDED_TIME')).toBe(true); // Zip 45: no line needed (missing = allowed)
     expect(preview).toMatch(/^EXTENDED_TIME_PREVIEW = "on"/m);
     const { BUILDING_ON } = await import('../scripts/preview-world-small');
     expect(BUILDING_ON).toContain('extended_time_on');

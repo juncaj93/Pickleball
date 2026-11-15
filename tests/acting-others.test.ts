@@ -11,6 +11,7 @@ import { phoneTagOf } from '../server/phoneTag';
 import { makeCtx } from '../server/context';
 import { audit } from '../server/repo';
 import { DAY, firstSession, HOUR, playerPhone, setupGroup, TestApp } from './harness';
+import { allowedOnBoth } from './tomlVars';
 
 // ---------------------------------------------------------------- the rule, on its own
 let seq = 0;
@@ -448,8 +449,8 @@ describe('preview (PREVIEW SWITCHES RULE)', () => {
   it('the preview seed has the Acting for others row on, and the preview vars allow it', async () => {
     const { BUILDING_ON } = await import('../scripts/preview-world-small');
     expect([...BUILDING_ON]).toContain(ACTING_OTHERS.task);
-    const toml = readFileSync('wrangler.toml', 'utf8');
-    expect(toml.match(/^ACTING_FOR_OTHERS = "on"$/gm)?.length).toBe(2);
+    // Zip 45: no line needed (missing = allowed); allowed on live and on the preview.
+    expect(allowedOnBoth('ACTING_FOR_OTHERS')).toBe(true);
   });
 });
 

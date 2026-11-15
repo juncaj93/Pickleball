@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { PAY_NOTE_HEADER, payNoteAllowed } from '../shared/payNote';
 import { PIN, playerPhone, setupGroup, TestApp } from './harness';
 import { readFileSync } from 'node:fs';
+import { allowedOnBoth } from './tomlVars';
 
 async function world(env: Record<string, string> = {}) {
   const app = new TestApp();
@@ -84,8 +85,7 @@ describe('PAY_NOTE switch', () => {
     expect(strip(await group(w, 'Alex', { [PAY_NOTE_HEADER]: 'on' }))).toBe(strip(await group(w, 'Alex')));
   });
   it('N9 wrangler.toml allows it for production and for previews, and docs/FEATURE_SWITCHES.md lists it', () => {
-    const toml = readFileSync('wrangler.toml', 'utf8');
-    expect((toml.match(/^PAY_NOTE = "on"$/gm) ?? []).length).toBe(2);
+    expect(allowedOnBoth('PAY_NOTE')).toBe(true); // Zip 45: no line needed (missing = allowed)
     expect(readFileSync('docs/FEATURE_SWITCHES.md', 'utf8')).toMatch(/`PAY_NOTE`/);
   });
 });

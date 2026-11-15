@@ -7,6 +7,7 @@ import { PAY_SHEET_HEADER, paySheetAllowed } from '../shared/paySheet';
 import { PIN, playerPhone, setupGroup, TestApp } from './harness';
 import { readdirSync, readFileSync } from 'node:fs';
 import { DEFAULT_ZELLE_NUMBER, zelleNumberOf } from '../shared/settings';
+import { allowedOnBoth } from './tomlVars';
 
 async function world(env: Record<string, string> = {}) {
   const app = new TestApp();
@@ -103,8 +104,7 @@ describe('PAY_SHEET switch', () => {
     expect(await books()).toBe(before);
   });
   it('N9 wrangler.toml allows it for production and for previews, and docs/FEATURE_SWITCHES.md lists it', () => {
-    const toml = readFileSync('wrangler.toml', 'utf8');
-    expect((toml.match(/^PAY_SHEET = "on"$/gm) ?? []).length).toBe(2);
+    expect(allowedOnBoth('PAY_SHEET')).toBe(true); // Zip 45: no line needed (missing = allowed)
     expect(readFileSync('docs/FEATURE_SWITCHES.md', 'utf8')).toMatch(/`PAY_SHEET`/);
   });
 

@@ -160,7 +160,10 @@ describe('Zip 18: GET /api/admin/demo-extras', () => {
     const rows = w.app.db.raw.prepare('SELECT COUNT(*) AS n FROM task_log').get() as { n: number };
     expect(r.data.taskLog.length).toBe(rows.n);
     expect(r.data.taskLog.some((t: any) => t.task === 'card_cleanup_on' && t.session_id === null && t.kind === 'mark')).toBe(true);
-    expect(r.data.env.CARD_CLEANUP).toBe('on');
+    // Zip 45: CARD_CLEANUP has no wrangler.toml line any more (missing = allowed), so the copy gets the lines that are left.
+    expect(r.data.env.CARD_CLEANUP).toBeUndefined();
+    expect(r.data.env.MOTION).toBe('on');
+    expect(r.data.env.GO_LINKS).toBe('on');
     expect(r.text).not.toMatch(/secret-token|55512345|"abc"|SITE_URL|TELEGRAM|SETUP_TOKEN|ORGANIZER_READONLY_PIN/);
     for (const v of Object.values(r.data.env)) expect(['on', 'off']).toContain(String(v).trim().toLowerCase());
     expect(w.snapshot()).toEqual(before);

@@ -33,6 +33,7 @@ import { dashboardTasks } from '../src/pages/admin/doNow';
 import { HOUR, PIN, playerPhone, sentText, setupGroup, TestApp } from './harness';
 import { SCENARIO as SWEEP_SESSIONS, sweep, TZ as SWEEP_TZ } from './tick-scenarios';
 import { zonedTimeToUtc } from '../shared/time';
+import { allowedOnBoth } from './tomlVars';
 
 const TZ = 'America/Detroit';
 const LINK = 'pickleball.juncaj.net';
@@ -277,8 +278,7 @@ describe('TEXTS_R2: the switch', () => {
     expect((await w.app.client().call('PUT', '/api/admin/texts-r2', { on: true })).status).toBe(401);
   });
   it('N7 wrangler.toml allows it for production and previews, and docs/FEATURE_SWITCHES.md lists it', () => {
-    const toml = readFileSync('wrangler.toml', 'utf8');
-    expect((toml.match(/^TEXTS_R2 = "on"$/gm) ?? []).length).toBe(2);
+    expect(allowedOnBoth('TEXTS_R2')).toBe(true); // Zip 45: no line needed (missing = allowed)
     expect(readFileSync('docs/FEATURE_SWITCHES.md', 'utf8')).toMatch(/`TEXTS_R2`/);
   });
   it('N8 no database change: the newest migration is still 0016 and none mentions this switch', () => {

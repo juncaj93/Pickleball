@@ -14,6 +14,7 @@ import { linkText, ourAddress } from '../server/telegram-links';
 import { makeGdtToken, readGdtToken, reminderMessage } from '../server/gameDayText';
 import { BUILDING_ON } from '../scripts/preview-world-small';
 import { HOUR, playerPhone, sentText, setupGroup, TestApp } from './harness';
+import { allowedOnBoth } from './tomlVars';
 
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -161,8 +162,9 @@ describe('Part A: the switch (HOME_SCREEN_TIP, ships OFF)', () => {
     expect(prod).not.toMatch(/GAME_DAY_TEXT_PREVIEW/);
     expect(preview).toMatch(/^HOME_SCREEN_TIP_PREVIEW = "on"$/m);
     expect(preview).toMatch(/^GAME_DAY_TEXT_PREVIEW = "on"$/m);
-    expect(prod).toMatch(/^HOME_SCREEN_TIP = "on"$/m);
-    expect(prod).toMatch(/^GAME_DAY_TEXT = "on"$/m);
+    // Zip 45: no line needed for the kill switches (missing = allowed).
+    expect(allowedOnBoth('HOME_SCREEN_TIP')).toBe(true);
+    expect(allowedOnBoth('GAME_DAY_TEXT')).toBe(true);
   });
   it('History words, and the preview has both switches on through its own preview-only vars (not through the shared seed)', () => {
     const line = (action: string) => activityText({ id: 'x', action, details: {}, actorLabel: 'organizer', at: '2026-11-12T20:00:00.000Z', sessionId: null, playerId: null } as never, 'America/Detroit', 'Alex');

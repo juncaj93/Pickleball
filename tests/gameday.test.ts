@@ -6,6 +6,7 @@ import { COURT_ROWS, GAME_DAY_CARD, GAME_DAY_TEST, courtOrNull, tbdText } from '
 import { DAY, firstSession, HOUR, playerPhone, setupGroup, TestApp } from './harness';
 import { DatabaseSync } from 'node:sqlite';
 import { PREVIEW_SWITCHES_ON, ZIP14_SWITCHES_ON } from '../scripts/seed-preview-world';
+import { allowedOnBoth } from './tomlVars';
 
 async function world(env: Record<string, string> = {}) {
   const app = new TestApp();
@@ -163,7 +164,7 @@ describe('preview-only "see the next game as today" (GAME_DAY_TEST)', () => {
   });
   it('wrangler.toml: GAME_DAY_CARD allowed on live and the preview; GAME_DAY_TEST only in [env.preview.vars]; the preview seed has the row on (and older local worlds do not)', () => {
     const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
-    expect(toml.match(/^GAME_DAY_CARD = "on"$/gm)).toHaveLength(2);
+    expect(allowedOnBoth('GAME_DAY_CARD')).toBe(true); // Zip 45: no line needed (missing = allowed)
     const [live, preview] = toml.split('[env.preview.vars]');
     expect(live).not.toMatch(/^GAME_DAY_TEST/m);
     expect(preview).toMatch(/^GAME_DAY_TEST = "on"$/m);
