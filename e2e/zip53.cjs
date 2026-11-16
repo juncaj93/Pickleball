@@ -106,7 +106,7 @@ async function main() {
   async function setIn(game, names) {
     d = await dash();
     const g = d.sessions.find((s) => s.id === game.id);
-    for (const r of g.roster) if (r.status === 'confirmed' && !names.includes(r.name)) await post(`/api/admin/sessions/${game.id}/roster`, { playerId: r.playerId, action: 'remove' });
+    for (const r of g.roster) if (r.status === 'confirmed' && !names.includes(r.name)) await post(`/api/admin/sessions/${game.id}/roster`, { playerId: r.playerId, action: 'withdraw' });
     for (const n of names) if (!inNames(g).includes(n)) await post(`/api/admin/sessions/${game.id}/roster`, { playerId: ids[n], action: 'confirm' });
     d = await dash();
   }
@@ -122,7 +122,12 @@ async function main() {
   assert(games.length >= 2, `need two games inside 8 days, found ${games.length}`);
   const [g1, g2, ...rest] = games;
   // Names: four outsiders (never in G1 or G2), and two insiders for G1.
-  const pool = players.map((p) => p.name);
+  // Ten brand-new fake players (no seat or answer anywhere), so no old row in the seed changes what they are offered.
+  const NEW = ['Nova', 'Ollie', 'Pax', 'Quill', 'Remy', 'Sky', 'Tate', 'Uma', 'Vale', 'Xan'];
+  for (const name of NEW) await post('/api/admin/players', { name, isRegular: false });
+  d = await dash();
+  for (const p of d.players) ids[p.name] = p.id;
+  const pool = NEW;
   assert(pool.length >= 9, `need 9 players, have ${pool.length}`);
   const inG1 = pool.slice(0, 2); // G1: 2 in
   const inG2 = pool.slice(2, 6); // G2: 4 in
@@ -136,7 +141,7 @@ async function main() {
     const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, colorScheme: scheme, isMobile: true, hasTouch: true, userAgent: UA, reducedMotion: 'reduce' });
     await shift(ctx);
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/?as=${encodeURIComponent(who)}`);
+    await page.goto(`${BASE}/?as=${encodeURIComponent(who)}&alerts=all`);
     await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
     await page.reload();
     await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
@@ -218,7 +223,7 @@ async function main() {
     const b = await playerPage(outsiders[1]);
     const before = await cardText(a.page);
     assert(before && before.startsWith(`${dayWord(g1.startsAt)} needs 2 more`), `before: ${before}`);
-    await a.page.locator('[data-suggest-card] button[aria-label^="No thanks"]').click();
+    await a.page.locator('[data-suggest-card] button.ac-x').click();
     await a.page.waitForTimeout(1500);
     const after = await cardText(a.page);
     assert(after !== before, `the card did not change: ${after}`);
@@ -231,7 +236,7 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- D
-  await check('D the organizer Players screen shows no days and the edit sheet has no Usual days', async () => {
+  await check('D the organizer Players screen and edit sheet have no Usual days', async () => {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: UA, reducedMotion: 'reduce' });
     await shift(ctx);
     assert((await ctx.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } })).ok(), 'admin login');
@@ -240,10 +245,17 @@ async function main() {
     await page.locator('article[data-r2-card], [data-venue-alerts]').first().waitFor({ timeout: 30000 });
     const body = await page.evaluate(() => document.body.innerText);
     assert(!/Usual days/i.test(body), 'Usual days on the organizer Home');
-    await page.getByRole('tab', { name: 'Players' }).click().catch(async () => page.getByRole('button', { name: 'Players' }).click());
+    await page.locator('.tabbar button', { hasText: 'Players' }).evaluate((b) => b.click());
     await page.waitForTimeout(800);
     const playersText = await page.evaluate(() => document.body.innerText);
-    assert(!/\bTue Thu\b|\bTue\b ·|· Tue\b|Usual days/.test(playersText), 'days on the Players screen');
+    // (The "Mon Tue Thu" under a name on the Players list is the days of the games that player is IN, read from the game rows. Not a preference.)
+    assert(!/Usual days/i.test(playersText), 'Usual days on the Players screen');
+    await page.locator('[data-pr-row]').first().click();
+    await page.locator('[data-pr-edit]').first().click();
+    await page.locator('dialog[open]').waitFor();
+    const sheet = await page.locator('dialog[open]').innerText();
+    assert(!/Usual days|preferred/i.test(sheet), `the edit sheet still has days: ${flat(sheet).slice(0, 200)}`);
+    await page.locator('dialog[open]').getByRole('button', { name: /close|✕/i }).first().click().catch(() => {});
     await page.screenshot({ path: path.join(SHOTS, 'D-players.png') });
     await ctx.close();
   });
