@@ -180,7 +180,9 @@ describe('Zip 52: Unmark never leaves a seat unpaid when the cash still on it co
     const u = await unmark(w, g.id, 'Harper');
     expect(u.status, u.text).toBe(200);
     // Before Zip 52: unpaid, "owes" $0, $6 held on the seat for good. Now the $6 still on the seat pays it (it is the cash she paid earlier,
-    // which an Unmark never takes off: only the latest cash).
+    // which an Unmark never takes off: only the latest cash), so the Unmark changes nothing and says so, with no History line.
+    expect(u.data.changed).toBe(false);
+    expect((await dash(w)).audit.filter((a: any) => a.action === 'marked_unpaid')).toEqual([]);
     expect(await rowOf(w, g.id, 'Harper')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 600 });
     expect(seatLedger(w, g.id, 'Harper')).toEqual(['kept/cash/600', 'used/cash/600']);
     expect(await credit(w, 'Harper')).toBe(0);
