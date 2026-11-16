@@ -5051,6 +5051,23 @@ no new switch. The only new words are F-16's "This just changed." in the Drop ou
   dropped); D2 (the money changed during the Undo: the server refuses, the dialog comes back, then the drop: $14 back as credit); B1 (Reese back In
   from the sheet, the game moved, a normal drop: no "Late drop" tag, light and dark); V1 (the two venue cards through a moved court day).
 
+### Deploy (Mon Nov 16, 2026, 8:57 AM Eastern, quiet window)
+- Alex approved F-9, F-15 and F-16 on the preview (taps 2 and 3 as given, tap 1 explained above). No group text before it (Alex), nothing
+  else deploying (the newest production deployment was Zip 50's `46a86caf`, `5af9745`, and main contained it). Main had not moved: nothing to merge.
+- Tests on the final code (`0bc1d4b`): unit 184 files, 3,319 passed, 2 skipped, 0 failed; typecheck and file name check clean; browser zip51
+  16 of 16; run, held, round2, audit-player-flows and zip49 all green (461 checks); the full browser suite earlier on this branch 81 of 82, the one
+  (round2) fixed and green alone.
+- Restore point: SQL export of live (247 KB, 8:43 AM) saved in `pickleball-backups` as `export-20261116140130` and checked, local copy deleted
+  (phone numbers inside). Time Travel bookmark `00001517-00000000-00005125-847197b0bf9813fe034519dc2b337ee0` (8:44 AM). Integrity checks
+  21 of 21 at 0 before and after. No schema change, no new Cloudflare variable, no new switch.
+- Main fast-forwarded to `0bc1d4b`, then `npm run deploy` from main (the guard's five rules passed). Production deployment
+  `36eaa76b-2f82-437b-a7f5-89693ddc67bc`. Rollback: Pages deployment `46a86caf-a0b6-4d02-822a-b6c89fa7c159` (Zip 50, `5af9745`). The clock
+  Worker did not change.
+- Live check (public files only, no PIN, the backup address `pickleball-club-9h0.pages.dev`; pickleball.juncaj.net cannot be reached from the
+  build sandbox): the page loads (200) with the new bundle; a fresh phone sees "Who are you?" with no page errors and never fetches the organizer
+  files; /admin asks for the PIN with no page errors; organizer data (dashboard, money, activity, backup, demo-extras) answers 401 without it.
+- Not in this deploy: the money-change note (Alex, Mon Nov 16), built next on this branch for the Wednesday Nov 18 quiet window.
+
 ### Alex's tap 1 (Mon Nov 16, 8:02 AM) and the preview-only ?holdrefresh=on
 Alex saw no "This just changed." The preview History shows why: Parker's drop reached the site at 8:02:33 AM with 4 in, so "you still owe $14"
 was right at the tap. Rowan joined at 8:03:04 (from the same browser), took the spot, and the sub rule cleared Parker's $14 back to credit: the
