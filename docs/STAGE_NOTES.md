@@ -5295,8 +5295,15 @@ Regular. On live (Mon Nov 16, 1:54 PM) Julian saw "Tomorrow needs 2 more" while 
   nits are fixed. Notes it raised: the organizer's own player now gets the card like everyone; new self-added names stay Occasional (the days step
   that used to turn them Regular is gone); a game at the Max players limit no longer gets a card (no "Join waitlist" card any more).
 
-### Deploy: NOT DONE (Mon Nov 16, about 3:55 PM Eastern, quiet window)
-- Stopped at the restore point. The Time Travel bookmark was read (read-only): `00001577-00000000-00005125-83118cfb438e7dbc55b7bd4559ce6557`.
-  The SQL export of live (and the integrity read) was refused by this session's permission check, so no export was taken and nothing was merged
-  or deployed. Branch `claude/new-session-z0wnrg` holds the finished work (main is `442ea4e`, the branch contains it). No schema change, no
-  Cloudflare variable, no switch, nothing about money.
+### Deploy (Mon Nov 16, 2026, 3:57 PM Eastern, quiet window; Alex allowed the export, the merge and the deploy)
+- Restore point: Time Travel bookmark `00001578-00000000-00005125-51a0867d4d9c433d60b9717cb2ee9f80` (3:56 PM; the earlier read
+  `00001577-00000000-00005125-83118cfb438e7dbc55b7bd4559ce6557` also works as the rollback point). SQL export of live (250 KB) saved in
+  `pickleball-backups` as `export-20261116205820` and checked, local copy deleted (phone numbers inside). Integrity checks 21 of 21 at 0 before and after.
+- Main fast-forwarded from `442ea4e` to `cbecfad` (plain push, no force), then `npm run deploy` from main (the guard's five rules passed).
+  Production deployment `5c9c4630-4b8f-4ec3-b5a5-3f24673bc404`. Rollback: Pages deployment `53faae1b-75ed-4bd9-aeca-e5a9c3552563` (Zip 52, `3c067be`).
+  No schema change, no Cloudflare variable, no switch; the clock Worker did not change.
+- Live check (public files only, no PIN, `pickleball-club-9h0.pages.dev`): page and /admin load (200), the new bundle (`index-BrRBoEVN.js`) is the one
+  built; a fresh phone sees "Who are you?" with no page errors and never fetches the organizer files; organizer data (dashboard, money, activity,
+  backup) answers 401 without the PIN. The top card read for each name from the live server (no taps, nothing saved): every player who is not in
+  a game gets the same card (the Tuesday game, 3 in); players in it get the next qualifying game; players who said No to it skip it.
+- View as on live needs the organizer PIN, which this session does not have, so Alex can tap View as for four players to see the same card.
