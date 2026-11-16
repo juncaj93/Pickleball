@@ -5083,8 +5083,8 @@ and drops nothing. Two tabs in one browser share the player picked on "Who are y
 `npm run db:seed:preview` now builds the Zip 51 calm profile (scripts/preview-world-small.ts step 26; docs/PREVIEW_FAKE_DB.md).
 
 ## Zip 51b: Money change note (Alex, Mon Nov 16, 2026)
-Branch `claude/new-session-uyfl03`, built on main `3dd6468` (Zip 51 live). NOT live yet: planned for the Wednesday Nov 18 quiet window (6 AM to 6 PM)
-after Alex's OK. New Settings > Feature switches row **Money change note** (task_log `money_note_on`), ships OFF; no schema change, no Cloudflare
+Branch `claude/new-session-uyfl03`, built on main `3dd6468` (Zip 51 live). LIVE since Mon Nov 16, 11:29 AM Eastern with the row OFF (Alex tested
+it on the preview and asked for it the same day, ahead of the Wednesday window; see Deploy below). New Settings > Feature switches row **Money change note** (task_log `money_note_on`), ships OFF; no schema change, no Cloudflare
 variable, no text or Telegram.
 
 ### What it does (only while the row is on)
@@ -5133,4 +5133,23 @@ from the shared switch read, no extra trip with Fewer trips on), no other read, 
 step 27): Parker, Quinn, Sage, Christopher Vanderberg; Parker has already dropped out late when the seed runs after 7:30 AM that day. On Mon
 Nov 16 the scene was built on the running preview with the site's own actions (no re-seed before 7 PM): the row switched on, "Note test" added
 at 7:30 PM and booked, the four joined, Parker dropped out late (owes $14).
+
+### Deploy (Mon Nov 16, 2026, 11:29 AM Eastern, quiet window)
+- Alex tested on the preview (sub, Got it, back In, light and dark) and said OK to both questions (a paid host with a guest reads "$14 is
+  cleared" with no "still owed"; the blue Good news line no longer repeats a clear that has the note). No group text; nothing else deploying
+  (the newest production deployment was Zip 51's `36eaa76b`, and main contained it; 🎾52 deploys after this one). Main had not moved.
+- Tests on the final code (`6050656`): unit 185 files, 3,334 passed, 2 skipped, 0 failed; typecheck and file name check clean; browser zip51,
+  run, held, round2, audit-player-flows, audit-player-look, zip49, admin-r3: 8 of 8 green, 647 checks (round2 green on its rerun alone).
+- Known, not from this zip (told Alex): tests/audit-r4.test.ts finalize-heavy fuzz now and then ends with "more credit than price" (a paid
+  player drops, Alex adds them back, then Finalize, Reopen, Finalize: e.g. $14 of credit on a $9 seat). Zip 50's code fails it too (2 of 6
+  runs; Zip 51's 1 of 6); the outcome depends on random ids, so a fixed seed does not always hit it. Needs its own fix.
+- Restore point: SQL export of live (247 KB, 11:28 AM) saved in `pickleball-backups` as `export-20261116163007` and checked, local copy deleted.
+  Time Travel bookmark `0000153a-00000000-00005125-249dd36b06717264aefbeaca8e969277` (11:28 AM). Integrity checks 21 of 21 at 0 before and
+  after. No `money_note` rows on live before or after (the row ships OFF). No schema change, no Cloudflare variable.
+- Main fast-forwarded to `6050656`, then `npm run deploy` from main. Production deployment `5404528b-3125-4a67-9033-2391ebf10be7`.
+  Rollback: Pages deployment `36eaa76b-2f82-437b-a7f5-89693ddc67bc` (Zip 51, `0bc1d4b`). The clock Worker did not change.
+- Live check (public files only, no PIN, `pickleball-club-9h0.pages.dev`): the page loads (200) with the new bundle; "Who are you?" with no page
+  errors and no organizer file fetched; /admin asks for the PIN; organizer data (dashboard, money, activity, backup, demo-extras) and the new
+  switch answer 401 without it; the organizer's file has the "Money change note" row; Got it without a player answers "not applied" and writes nothing.
+- To turn it on: Settings > Feature switches > Money change note (top row). Only clears from that moment on make a note (no backfill).
 
