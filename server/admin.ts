@@ -1673,9 +1673,10 @@ export async function applyPayment(
     const stays = self || latestCash > 0 ? onSeat.usedCents + onSeat.cashCents : onSeat.cashCents;
     // Zip 52 (review): a seat paid only by cash held from an earlier Finalize (no credit, no cash on top) that covers its price: the Unmark
     // below would take nothing off and pay the seat again with the same cash. Say "nothing changed" and write nothing (no History line).
+    // (Not with trim credit live: the full Unmark below takes that back.)
     if (!self && !fee && row.status === 'confirmed' && latestCash <= 0 && onSeat.usedCents === 0 && onSeat.cashCents > 0) {
       const price = sharesFor(session, roster, settingsOf(group)).get(playerId);
-      if (price !== undefined && price > 0 && onSeat.cashCents >= price) return { ok: true, changed: false };
+      if (price !== undefined && price > 0 && onSeat.cashCents >= price && (await trimBackLeft(ctx.db, session.id, playerId)) === 0) return { ok: true, changed: false };
     }
     // Everything below was worked out for the game as read: a Finalize or Reopen landing first means look again.
     const finalizeAsRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
