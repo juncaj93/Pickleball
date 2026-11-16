@@ -4,7 +4,9 @@
 // player decides again. A drop is never charged at an amount the screen did not show.
 //
 // The quote is built from the very fields the dialog and the drop toast read (PlayerSessionView.mine), so both sides agree by construction:
-//  - waiting or in (leaving the waitlist moves no money, but the words differ);
+//  - NOT whether the seat is in or waiting: the phone draws an old waiting seat on a game with no court as in (src/courtDisplay.ts), while the
+//    server reads it as waiting, so that part would never match and the player could never drop (Zip 51 reviewer). It changes no money by
+//    itself: a seat that moves in during the late window gains `lateDrop`, and the amounts below differ, so a real change is still caught;
 //  - inside the late window or not, whether the drop owes, the amount the words name, and whether it reads "stays" or "owe";
 //  - for a host with a guest, how many spots the drop leaves short (0, 1 or 2) and whether the guest is in or waiting;
 //  - what comes back as credit, and an unconfirmed I paid the drop would leave for the organizer.
@@ -19,14 +21,14 @@ export interface DropQuoteSeat {
   guest?: { status: string } | undefined;
 }
 
-/** The quote for one seat ("in|late:owes:1400:stays|spots:-|back:0|claim:0|guest:-"). Null: not in the game (nothing to drop). */
+/** The quote for one seat ("seat|late:owes:1400:stays|spots:-|back:0|claim:0|guest:-"). Null: not in the game (nothing to drop). */
 export function dropQuote(mine: DropQuoteSeat | null | undefined): string | null {
   if (!mine || (mine.status !== 'confirmed' && mine.status !== 'waitlisted')) return null;
   const l = mine.lateDrop;
   const late = l ? `late:${l.owes ? 'owes' : 'free'}:${l.owes ? l.feeCents : 0}:${l.owes ? (l.paid ? 'stays' : 'owe') : '-'}` : 'early';
   const spots = l && l.guestSpots !== undefined ? String(l.guestSpots) : '-';
   const back = mine.dropCreditCents + mine.dropCashCents;
-  return [mine.status === 'waitlisted' ? 'waiting' : 'in', late, `spots:${spots}`, `back:${back}`, `claim:${mine.dropClaimCents}`, `guest:${mine.guest?.status ?? '-'}`].join('|');
+  return ['seat', late, `spots:${spots}`, `back:${back}`, `claim:${mine.dropClaimCents}`, `guest:${mine.guest?.status ?? '-'}`].join('|');
 }
 
 /** The answer's code when the quote no longer matches (the phone looks for it). */

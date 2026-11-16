@@ -96,7 +96,7 @@ function limited<T>(p: Promise<T>): Promise<T> {
 /** Zip 51 (F-16): the server's "the Drop out money changed, look again" answer (nothing was dropped). */
 const isDropChanged = (err: unknown) => err instanceof ApiError && err.code === DROP_CHANGED;
 
-async function finishNotes(ok: () => boolean, done: (sessionId: string) => void = () => {}): Promise<number | null> {
+async function finishNotes(ok: () => boolean, done: (sessionId: string) => void = () => {}, changed: (sessionId: string) => void = () => {}): Promise<number | null> {
   let again: number | null = null;
   const soon = (ms: number) => {
     again = again === null ? ms : Math.min(again, ms);
@@ -135,6 +135,8 @@ async function finishNotes(ok: () => boolean, done: (sessionId: string) => void 
       if (err instanceof ApiError && err.code !== 'offline') {
         removeNote(note);
         done(due.sessionId);
+        // Zip 51 (F-16, reviewer): the money changed since the tap, so nothing was dropped: the player is told (they saw "You dropped out").
+        if (isDropChanged(err)) changed(due.sessionId);
       } else soon(15_000);
     }
     fresh = undefined; // the server changed: ask again for the next note
@@ -557,7 +559,11 @@ export function PlayerHome({
       clearTimeout(timer);
       try {
         const settled: string[] = [];
-        const next = await finishNotes(ok, (id) => settled.push(id));
+        const next = await finishNotes(
+          ok,
+          (id) => settled.push(id),
+          () => toast("Your drop out wasn't sent: the money changed. You're still in. Look again.", 'error'),
+        );
         if (!ok()) return;
         // The screen stops drawing those drops (and their credit); the real data shows.
         for (const id of settled) setOverlay(id, null);

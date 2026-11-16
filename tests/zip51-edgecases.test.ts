@@ -187,6 +187,30 @@ describe('F-9 a moved court day: nothing skipped, nothing billed twice (through 
   });
 });
 
+describe('F-9 a move saved before Zip 51 (only changedAt, no old days kept): no card for games a paid charge covered (reviewer)', () => {
+  it('court 15th, Nov 15 paid ($288), moved to Last day on Nov 16 the old way: Dec 1 shows only Nov 30 ($192), never an Oct 31 card', async () => {
+    const w = await venueWorld();
+    await setDays(w, { courtDay: 15 });
+    await noMembership(w);
+    await venueOn(w);
+    await jump(w, est(11, 10, 9));
+    bookRaw(w, between(w, '2026-10-27', '2026-11-15'));
+    await jump(w, est(11, 15, 9));
+    expect((await mark(w, ['court:2026-11'], 28800)).status).toBe(200);
+    await jump(w, est(11, 16, 9));
+    expect((await setDays(w, { courtDay: 0 })).status).toBe(200);
+    // As a pre-Zip-51 save would have left it: the new days and changedAt, no history.
+    const j = JSON.parse(raw(w).prepare('SELECT settings_json AS j FROM groups').get().j);
+    delete j.venueDays.history;
+    raw(w).prepare('UPDATE groups SET settings_json = ?').run(JSON.stringify(j));
+    await jump(w, est(11, 20, 9));
+    bookRaw(w, between(w, '2026-11-16', '2026-11-30'));
+    await jump(w, est(12, 1, 9));
+    expect((await dash(w)).venueAlerts).toMatchObject([{ keys: ['court:2026-11-30'], date: '2026-11-30', cents: 19200 }]);
+    expect((await dash(w)).venueAlerts).toHaveLength(1);
+  });
+});
+
 describe('F-9 the membership: one card a month, never skipped, never hidden', () => {
   it('a Nov 26 card still unpaid when the day moves to the 10th on Nov 27: it stays (Nov 26, $30) until Mark paid; no second card', async () => {
     const w = await venueWorld();
@@ -481,10 +505,11 @@ describe('F-15 a late dropper Alex puts back In', () => {
 describe('F-16 the Drop out dialog is checked again when the player taps it', () => {
   it('the quote reads the dialog\'s money', () => {
     const seat = { status: 'confirmed', dropCreditCents: 0, dropCashCents: 1400, dropClaimCents: 0 };
-    expect(dropQuote(seat)).toBe('in|early|spots:-|back:1400|claim:0|guest:-');
-    expect(dropQuote({ ...seat, dropCashCents: 0, lateDrop: { owes: true, paid: true, feeCents: 2800, guestSpots: 2 }, guest: { status: 'confirmed' } })).toBe('in|late:owes:2800:stays|spots:2|back:0|claim:0|guest:confirmed');
-    expect(dropQuote({ ...seat, lateDrop: { owes: false, paid: false, feeCents: 1400 } })).toBe('in|late:free:0:-|spots:-|back:1400|claim:0|guest:-');
-    expect(dropQuote({ ...seat, status: 'waitlisted' })).toBe('waiting|early|spots:-|back:1400|claim:0|guest:-');
+    expect(dropQuote(seat)).toBe('seat|early|spots:-|back:1400|claim:0|guest:-');
+    expect(dropQuote({ ...seat, dropCashCents: 0, lateDrop: { owes: true, paid: true, feeCents: 2800, guestSpots: 2 }, guest: { status: 'confirmed' } })).toBe('seat|late:owes:2800:stays|spots:2|back:0|claim:0|guest:confirmed');
+    expect(dropQuote({ ...seat, lateDrop: { owes: false, paid: false, feeCents: 1400 } })).toBe('seat|late:free:0:-|spots:-|back:1400|claim:0|guest:-');
+    // In or waiting reads the same (the phone draws an old waiting seat as in on a game with no court; reviewer finding).
+    expect(dropQuote({ ...seat, status: 'waitlisted' })).toBe(dropQuote(seat));
     expect(dropQuote({ ...seat, status: 'withdrawn' })).toBeNull();
     expect(dropQuote(null)).toBeNull();
   });
@@ -570,13 +595,27 @@ describe('F-16 the Drop out dialog is checked again when the player taps it', ()
     const r = await dropAsShown(w, g.id, 'Blair');
     expect(r.data).toMatchObject({ result: 'withdrawn', creditBackCents: 1400 });
     // The same tap again (a second phone, a retry): not in any more, so no quote check: answered as before.
-    const again = await drop(w, g.id, 'Blair', { quote: 'in|early|spots:-|back:1400|claim:0|guest:-' });
+    const again = await drop(w, g.id, 'Blair', { quote: 'seat|early|spots:-|back:1400|claim:0|guest:-' });
     expect(again.status).toBe(200);
     expect(again.data).toMatchObject({ result: 'not_in_session' });
     // No quote at all (a page from before this release): the drop is not checked.
     expect((await drop(w, g.id, 'Casey')).data).toMatchObject({ result: 'withdrawn' });
     // A quote that is junk or too long is ignored the same way.
     expect((await drop(w, g.id, 'Devon', { quote: 'x'.repeat(500) })).data).toMatchObject({ result: 'withdrawn' });
+  });
+
+  it('a seat the phone draws as in but the server has waiting (an unbooked game with room): Drop out works, not "look again" forever (reviewer)', async () => {
+    const w = await lateWorld();
+    const g = await nextGame(w);
+    await join(w, g.id, ['Blair', 'Casey']);
+    expect((await rosterAct(w, g.id, 'Blair', 'waitlist')).status).toBe(200);
+    const raw0 = await mineOf(w, 'Blair', g.id);
+    expect(raw0?.status).toBe('waitlisted');
+    // src/courtDisplay.ts redraws it as in; the quote is built from what the dialog shows.
+    const shown = { ...raw0!, status: 'confirmed' as const };
+    const r = await drop(w, g.id, 'Blair', { quote: dropQuote(shown) });
+    expect(r.status, r.text).toBe(200);
+    expect(seatRow(w, g.id, 'Blair').status).toBe('withdrawn');
   });
 
   it('two drops in the same instant: the seat only leaves when its statement still finds what was shown (the race inside the server)', async () => {

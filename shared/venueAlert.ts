@@ -263,9 +263,9 @@ export interface PlannedCharge {
 function chargeDays(input: VenueInput, months: { year: number; month: number }[], kind: ChargeKind): Map<string, string[]> {
   const { tz } = input;
   const current: VenueDaysSpan = { ...input.days, from: input.daysFrom && input.daysFrom > 0 ? input.daysFrom : (input.history?.length ? input.history[input.history.length - 1].until : 0), until: Infinity };
-  // The earliest kept days reach back to the start: a move saved before Zip 51 kept no old days, and the site always assumed the days it had.
-  const kept = [...(input.history ?? []), current];
-  const spans = kept.map((sp, i) => (i === 0 ? { ...sp, from: 0 } : sp));
+  // Before the earliest kept days (a move saved before Zip 51 kept no old days) nothing is known: no day counts there, and a month left with
+  // none gets the current days' day below, which bounds a period but never shows as a card (venuePlan: knownFrom).
+  const spans = [...(input.history ?? []), current];
   const dayOf = (d: VenueDays, year: number, month: number) => ymd(year, month, dayIn(kind === 'court' ? d.courtDay : d.membershipDay, year, month));
   const out = new Map<string, string[]>();
   for (const { year, month } of months) {
@@ -284,7 +284,7 @@ function chargeDays(input: VenueInput, months: { year: number; month: number }[]
   return out;
 }
 
-/** The kept days in force at an instant (the spans cover every time from 0 on). */
+/** The kept days in force at an instant, or undefined before the earliest kept days. */
 function spanAt(spans: readonly VenueDaysSpan[], at: number): VenueDaysSpan | undefined {
   return spans.find((sp) => at >= sp.from && at < sp.until);
 }
@@ -305,15 +305,23 @@ function paidCourtDates(input: VenueInput): string[] {
  * The charges due right now, oldest first, without their amounts: what dueAlerts prices, and where the games to load start (`from` of the first
  * court charge). A charge is due once its day has started (12:00 AM Eastern) at or after the switch went on, and it is not marked paid.
  */
+/** Zip 51 reviewer: where the kept days start (0 = always). A move saved before Zip 51 kept only `changedAt`, so time before it is unknown. */
+function knownFromOf(input: Omit<VenueInput, 'games'>): number {
+  const first = input.history?.length ? input.history[0].from : input.daysFrom && input.daysFrom > 0 ? input.daysFrom : 0;
+  return first > 0 ? first : 0;
+}
+
 export function venuePlan(input: Omit<VenueInput, 'games'>): PlannedCharge[] {
   const { tz } = input;
+  const knownFrom = knownFromOf(input);
   const todayYmd = localYmd(input.nowMs, tz);
   const shown = scanMonths(input.onAtMs, input.nowMs, tz);
   if (shown.length === 0) return [];
   // One month more at the front: the court charge before the first card bounds its period.
   const months = [prevMonthOf(shown[0].year, shown[0].month), ...shown];
   const full = { ...input, games: [] } as VenueInput;
-  const reached = (date: string) => date <= todayYmd && startOfDayMs(date, tz) >= input.onAtMs;
+  // A charge day shows from 12:00 AM on it, once the switch is on, and only where the days are known (before that: no backfill, as before Zip 51).
+  const reached = (date: string) => date <= todayYmd && startOfDayMs(date, tz) >= input.onAtMs && startOfDayMs(date, tz) >= knownFrom;
   const out: PlannedCharge[] = [];
 
   const paidDates = new Set(paidCourtDates(full));
