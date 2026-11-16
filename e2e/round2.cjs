@@ -344,6 +344,12 @@ async function main() {
     // from the tap; the drop itself is sent when the 5 seconds end (waited for below).
     const sent = page.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 15000 });
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+    // Zip 51 (F-16): the organizer confirmed the payment after this page loaded, so the dialog showed old money. The tap sends nothing,
+    // the dialog opens again with the real amount ("This just changed"), and the player taps Drop out again.
+    const changed = page.locator('dialog[open] [data-drop-changed]');
+    await changed.waitFor({ timeout: 8000 });
+    assert(/\$14/.test(await page.locator('dialog[open]').innerText()), 'the fresh dialog should name the $14 that comes back');
+    await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
     const chip = page.locator('header [data-credit-chip]');
     await chip.waitFor();
     const seen = [];
