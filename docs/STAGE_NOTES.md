@@ -5227,3 +5227,12 @@ look change.
 ### Question for Alex
 - Unmark only ever takes off the LATEST cash. Once a Reopen and a new Finalize have turned a Mark paid into cash held on the seat, Unmark can no
   longer take it off (it now says nothing changed). Is that what you want, or should Unmark be able to take that cash off too?
+
+### Deploy: NOT done (Mon Nov 16, 12:40 PM Eastern)
+- Ready at 12:40 PM: full unit suite on the merged code 186 files, 3,347 passed, 2 skipped, 0 failed; typecheck, file name check and the
+  production build clean. Live checked read-only first: newest production deployment `5404528b` (Zip 51b, `6050656`, verified by 🎾51),
+  main `e2aad07` contains it, nothing mid-deploy. Integrity checks 21 of 21 at 0 (12:35 PM). Time Travel bookmark
+  `00001547-00000000-00005125-e56d664540e368f1dfe24b2c90109f13` (12:35 PM). A fresh SQL export was taken and then deleted unsaved (no deploy).
+- Stopped: this session's permission settings refused fast-forwarding main to this branch and pushing it, so nothing was merged or deployed.
+  Live is still Zip 51b. To ship: fast-forward main to this branch, take a new export and bookmark, `npm run deploy`, then the usual checks.
+  Windows: today until 4:30 PM (Alex's brief), otherwise Wed Nov 18, 6 AM to 6 PM.
