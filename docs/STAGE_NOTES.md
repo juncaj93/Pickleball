@@ -5207,3 +5207,23 @@ look change.
   15002's and seed 11036's shapes (Harper stays Paid $6; Indy gets her $3 back, the $8 pays the seat, $1 back). 11 of the 13 fail on the old code.
 - tests/audit-r4.test.ts: the ids the server makes now follow the seed, so a failing seed replays exactly (`FUZZ_FROM=<seed> FUZZ_FIN_SEQS=1`);
   each Finalize step logs who played.
+- Review fix (fresh reviewer): a seat paid only by cash held from an earlier Finalize that covers its price, no credit, no new cash, no trim
+  credit: Unmark now answers "nothing changed" and writes no History line (before this zip it left the seat stuck unpaid; with only the `stays`
+  fix it said "changed" and wrote "marked unpaid" while the seat stayed Paid).
+- Fresh reviewer (independent): nothing blocking. Checked the SQL (numbering, aliases, one read per statement), that the take-backs happen if and
+  only if the seat goes unpaid, a pending cash out (409, nothing moves), the self path, refused Unmarks (ledger unchanged), guest seats, did-not-play
+  seats, games not finalized; ran the 43 test files that touch Unmark or "Didn't pay?" (1,187 passed, 1 skipped). Its SHOULD FIX (an Unmark
+  that cannot take off cash held from an earlier Finalize) is the question for Alex below; its trim note is fixed.
+
+### Proof
+- Fuzz: 30 runs in a row with different seeds (FUZZ_FROM 51000 to 80000, each run 40 finalize-heavy + 60 mixed sequences): 30 of 30 clean,
+  3,000 sequences, about 90,000 book checks. Runs 7 to 30 on the merged code (with Zip 51b); runs 1 to 6 on the same fix just before the merge.
+  An earlier 15 runs (seeds 11000 to 25000, which hold both "credit stuck" seeds) were clean on the fix before the review fix. Old code, same
+  test: 4 failures in 400 finalize-heavy sequences (random ids) and seeds 11036, 15002 with the seeded ids.
+- Audit C probes (guest, late fee, venue; copied in and deleted after): 114 of 127 on both main and this branch, the same 13 (old answers Zips
+  49 and 51 changed on purpose).
+- Browser: e2e/zip49.cjs 33 of 33, e2e/zip51.cjs 16 of 16 (no screen changed in this zip, so one run each).
+
+### Question for Alex
+- Unmark only ever takes off the LATEST cash. Once a Reopen and a new Finalize have turned a Mark paid into cash held on the seat, Unmark can no
+  longer take it off (it now says nothing changed). Is that what you want, or should Unmark be able to take that cash off too?
