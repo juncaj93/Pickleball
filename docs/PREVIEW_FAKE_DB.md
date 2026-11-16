@@ -227,4 +227,6 @@ before noon, else tomorrow: their late windows are open from 7:00 and 8:00 AM un
 Settings > Money now keeps them). `node e2e/zip51.cjs` checks the same scenes locally. Preview-only link (Zip 51, after Alex's first try): open the player page with
 **?holdrefresh=on** and that phone stops refreshing by itself (a dashed note says so at the top), so an open Drop out dialog really goes old while
 Rowan is added from the organizer page in another tab; **?holdrefresh=off** ends it. Two tabs in one browser are the same player, so never pick Rowan
-on "Who are you?" in the second tab.
+on "Who are you?" in the second tab. Zip 51b (Money change note, ON in the preview): **"Note test"** at 7:30 PM the same day (Parker, Quinn, Sage,
+Christopher Vanderberg; Parker already dropped out late and owes $14 when the seed runs after 7:30 AM that day). Add Rowan on the organizer's
+Players sheet and Parker's screen opens on the amber note "Rowan took your spot. Your $14 is cleared." with Got it.

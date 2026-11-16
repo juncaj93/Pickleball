@@ -5081,3 +5081,45 @@ and drops nothing. Two tabs in one browser share the player picked on "Who are y
 
 ### Preview
 `npm run db:seed:preview` now builds the Zip 51 calm profile (scripts/preview-world-small.ts step 26; docs/PREVIEW_FAKE_DB.md).
+
+## Zip 51b: Money change note (Alex, Mon Nov 16, 2026)
+Branch `claude/new-session-uyfl03`, built on main `3dd6468` (Zip 51 live). NOT live yet: planned for the Wednesday Nov 18 quiet window (6 AM to 6 PM)
+after Alex's OK. New Settings > Feature switches row **Money change note** (task_log `money_note_on`), ships OFF; no schema change, no Cloudflare
+variable, no text or Telegram.
+
+### What it does (only while the row is on)
+When what a player owes changes because of someone else, that player's screen opens on one amber alert card (the Venue charge alert's card family,
+`AlertCard tone="amber"`), the sentence and one button, Got it. Alex's words (shared/moneyNote.ts `moneyNoteText`):
+- a sub takes your late-dropped spot: "Rowan took your spot. Your $14 is cleared." (the game's own price: $11 for a 1.5 hour game)
+- a host with a guest, a sub takes one of the 2 spots: "Rowan took one of your 2 spots. $14 is cleared, $14 still owed."
+- the game moved to another day (Zip 49 clears the late drop): "Thu's game moved. Your late drop is cleared." (the day it was on, Eastern)
+- the organizer puts you back In after a late drop that still owed (F-15): "You're back in. Your late drop is cleared."
+Only the person whose money changed, once per event (Got it is kept on the server, so every phone of that player stops showing it), never for
+the player's own action (their own drop, their own I'm in), never for an event before the row went on, nothing for the organizer's own seat.
+A cleared fee that has a note is no longer also told by the blue "Good news" line (the same clear never shows twice); canceled games and the
+organizer's own Clear keep the Good news line as before.
+
+### How it is stored (no schema change)
+All in task_log at group level (session_id NULL, like the switches and the venue Mark paid rows): the row `money_note_on` (its time is the
+no-backfill start; a second "on" keeps it), `money_note_seen:<id>` per Got it, and `money_note_back_in` (detail: game and player) written by
+the organizer's In only while the row is on. Group level on purpose: a move to another day clears that game's own marks (server/tasks.ts), which
+would otherwise bring a Got it note back. The sub and moved notes are read from the History lines the site already writes ("late_fee_cleared");
+while the row is on, the moved line also carries `from` (the old start) for the weekday. Off: the one switch question every switch asks (answered
+from the shared switch read, no extra trip with Fewer trips on), no other read, no write, every answer exactly main's.
+
+### Tests
+- Unit: tests/zip51-money-note.test.ts (12): the four sentences word for word ($14, $11, $13.50; the weekday in Eastern); switch off changes
+  nothing (no note, no row, no `from`, the Good news line as before); sub unpaid and paid (credit $14 as before); host + guest two short, two
+  subs a minute apart; moved (old day) and same-day moves (nothing); back In after an owing late drop (note) and after a free one (none); her own
+  I'm in (none); no backfill, off hides, on again starts over, a second on keeps the start; Got it once, refused for another player, kept across a
+  move to another day; the Settings row and its History line. tests/speed-queries.test.ts lists the new switch read (main never asked it).
+- Browser: e2e/zip51.cjs N0 to N4: the Settings row (on in the preview), Parker's late drop on "Note test", Rowan in from the Players sheet,
+  the amber note first on Parker's screen with one button and no other words (390, 360, 320; light and dark), only Parker sees it, Got it
+  hides it at once and after a reload, no blue line in its place.
+
+### Preview
+`npm run db:seed:preview` turns the row on (BUILDING_ON) and adds "Note test" at 7:30 PM on the Drop test's day (scripts/preview-world-small.ts
+step 27): Parker, Quinn, Sage, Christopher Vanderberg; Parker has already dropped out late when the seed runs after 7:30 AM that day. On Mon
+Nov 16 the scene was built on the running preview with the site's own actions (no re-seed before 7 PM): the row switched on, "Note test" added
+at 7:30 PM and booked, the four joined, Parker dropped out late (owes $14).
+
