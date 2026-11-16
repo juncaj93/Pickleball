@@ -5283,3 +5283,20 @@ Regular. On live (Mon Nov 16, 1:54 PM) Julian saw "Tomorrow needs 2 more" while 
   is beyond 8 days, said No, dropped out, canceled game, no name picked, the preference gone from every answer and write.
 - e2e/zip53.cjs (new): View as four different players who are in neither game: the same card; a player in the game sees the next one; light and dark,
   390 / 360 / 320; X; the Players screen has no days.
+
+### Proof (Mon Nov 16, 2026)
+- Unit: 187 files passed, 1 skipped; 3,358 tests passed, 2 skipped (`npx vitest run`, `npx tsc -b` clean). New: tests/zip53-needs-card.test.ts (13 tests).
+- Browser: full run of 83 scripts. e2e/zip53.cjs 10 of 10 (View as four different players: the same card; light and dark at 390, 360, 320).
+  Older scripts that assumed the per-player card were updated (popup 33 of 33, want-in 4 of 4, zip11 26 of 26, run.cjs, audit-player-flows 93 of 93).
+  Flaky under load, green alone: circles, banner, money-visible, audit-player-flows.
+  Failing on today's main too (not this zip): the "newest switch is the top Settings row" checks in money-rework, zip16, zip23, zip27, zip30, zip32,
+  zip34, zip35, zip38, zip39, zip42 (Zip 51b's Money change note row now sits above them). Same failures, same counts, on a clean checkout of main `442ea4e`.
+- Fresh reviewer (independent search for every other use of the preference): nothing still reads or writes it; no bug in the new picker. Its comment
+  nits are fixed. Notes it raised: the organizer's own player now gets the card like everyone; new self-added names stay Occasional (the days step
+  that used to turn them Regular is gone); a game at the Max players limit no longer gets a card (no "Join waitlist" card any more).
+
+### Deploy: NOT DONE (Mon Nov 16, about 3:55 PM Eastern, quiet window)
+- Stopped at the restore point. The Time Travel bookmark was read (read-only): `00001577-00000000-00005125-83118cfb438e7dbc55b7bd4559ce6557`.
+  The SQL export of live (and the integrity read) was refused by this session's permission check, so no export was taken and nothing was merged
+  or deployed. Branch `claude/new-session-z0wnrg` holds the finished work (main is `442ea4e`, the branch contains it). No schema change, no
+  Cloudflare variable, no switch, nothing about money.
