@@ -1668,6 +1668,9 @@ export async function applyPayment(
     const onSeat = seatCredit((await moneyPictureOf(ctx, group)).ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
     const latestCash = (row.payment_amount_cents ?? 0) - onSeat.usedCents - onSeat.cashCents;
     const before = await creditReturnedAt(ctx.db, session.id, playerId, 'unmarked', ctx.nowIso);
+    // What stays on the seat once this Unmark is done: with latest cash (or the player's own Didn't pay?), the credit and the cash held; a
+    // payment with no latest cash gives its credit back (below), so only the cash held stays.
+    const stays = self || latestCash > 0 ? onSeat.usedCents + onSeat.cashCents : onSeat.cashCents;
     // Everything below was worked out for the game as read: a Finalize or Reopen landing first means look again.
     const finalizeAsRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
     const [, , unpaid] = await ctx.db.batch([
@@ -1703,19 +1706,22 @@ export async function applyPayment(
       // Only the latest cash went: the credit (and cash held) left on the seat may cover its price on its own. Then
       // the seat is paid with it, and on a finalized game that played, what is above the final price comes back as
       // credit, as Finalize does (never left unused on a seat that owes nothing).
-      ...(latestCash > 0 ? repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), ctx.nowIso, await hasGuestColumns(ctx.db)) : []),
-      ...(latestCash > 0 && session.finalized_at && row.played === 1 && session.final_price_cents !== null && session.final_price_cents !== undefined
+      // Zip 52: also when there was no latest cash (a payment that was credit plus cash held from an earlier Finalize): the credit goes back
+      // to the pot above, but the cash held stays on the seat and may cover a low final price on its own. Before, the seat was left unpaid
+      // with its price already covered, and that cash could never come back (the audit fuzz's "credit stuck", seeds 11036 and 15002).
+      ...(stays > 0 ? repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), ctx.nowIso, await hasGuestColumns(ctx.db)) : []),
+      ...(stays > 0 && session.finalized_at && row.played === 1 && session.final_price_cents !== null && session.final_price_cents !== undefined
         ? creditBackStatements(ctx.db, {
             groupId: group.id,
             sessionId: session.id,
             playerId,
-            cents: onSeat.usedCents + onSeat.cashCents - session.final_price_cents,
+            cents: stays - session.final_price_cents,
             reason: 'finalized',
             playedCount: session.final_played_count ?? null,
             nowIso: ctx.nowIso,
             settle: false,
             // Only once the reprice paid the seat with exactly that credit, in the finalize this Unmark read.
-            guard: `EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND payment_status = 'paid' AND self_paid_at IS NULL AND payment_amount_cents = ${onSeat.usedCents + onSeat.cashCents})
+            guard: `EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND payment_status = 'paid' AND self_paid_at IS NULL AND payment_amount_cents = ${stays})
               AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ${sqlText(session.id)}) = '${finalizeAsRead.replace(/'/g, '')}'`,
           })
         : []),

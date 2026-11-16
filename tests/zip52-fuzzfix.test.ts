@@ -139,3 +139,83 @@ describe('Zip 52: Unmark takes back both kinds of money back together, or nothin
     expect(health(w)).toEqual({});
   });
 });
+
+// The second shape the fuzz found once the first was fixed (seeds 11036 and 15002, both on the old code too): Unmark on a payment with no new
+// cash on top (credit plus cash held from an earlier Finalize) gave the credit back and left the seat unpaid, even when the cash still held on it
+// covered the final price: "unpaid" with nothing owed, and that cash could never come back. Now the seat is paid with what stays on it, and
+// anything above the final price comes back as credit, the same as an Unmark with new cash on top always did.
+describe('Zip 52: Unmark never leaves a seat unpaid when the cash still on it covers the price', () => {
+  const TEN = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules', 'Kit'];
+  const seatLedger = (w: W, sid: string, name: string) =>
+    ((w.app.db as any).raw
+      .prepare('SELECT kind, reason, amount_cents AS c FROM credit_ledger WHERE ended_at IS NULL AND session_id = ? AND player_id = ? ORDER BY created_at, rowid')
+      .all(sid, w.byName[name]) as { kind: string; reason: string; c: number }[]).map((x) => `${x.kind}/${x.reason}/${x.c}`);
+  const reopen = async (w: W, sid: string) => expect((await admin(w, 'POST', `/api/admin/sessions/${sid}/reopen`, {})).status).toBe(200);
+  const fin = async (w: W, sid: string, names: string[]) => {
+    later(w, 1);
+    const r = await finalize(w, sid, names);
+    expect(r.status, r.text).toBe(200);
+  };
+
+  it("seed 15002's shape: $6 cash marked after a 9-played Finalize, Reopen, 6 played, Reopen, 9 played, Unmark: Harper stays Paid $6", async () => {
+    const w = await world({ lateFees: false });
+    const g = await game(w);
+    await join(w, g.id, TEN);
+    w.app.now = g.end + HOUR;
+    const nine = TEN.filter((n) => n !== 'Kit');
+    await fin(w, g.id, nine);
+    later(w, 1);
+    await markPaid(w, g.id, 'Harper');
+    expect(await rowOf(w, g.id, 'Harper')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 600 });
+    later(w, 1);
+    await reopen(w, g.id);
+    await fin(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Harper']);
+    // $9 now: her $6 is held on the seat and she owes $3.
+    expect(await rowOf(w, g.id, 'Harper')).toMatchObject({ paymentStatus: 'unpaid', owesCents: 300 });
+    later(w, 1);
+    await reopen(w, g.id);
+    await fin(w, g.id, nine);
+    expect(await rowOf(w, g.id, 'Harper')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 600 });
+    later(w, 1);
+    const u = await unmark(w, g.id, 'Harper');
+    expect(u.status, u.text).toBe(200);
+    // Before Zip 52: unpaid, "owes" $0, $6 held on the seat for good. Now the $6 still on the seat pays it (it is the cash she paid earlier,
+    // which an Unmark never takes off: only the latest cash).
+    expect(await rowOf(w, g.id, 'Harper')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 600 });
+    expect(seatLedger(w, g.id, 'Harper')).toEqual(['kept/cash/600', 'used/cash/600']);
+    expect(await credit(w, 'Harper')).toBe(0);
+    expect(health(w)).toEqual({});
+  });
+
+  it("seed 11036's shape: $3 credit + $8 cash after a 5-played Finalize, Reopen holds the $8, 8 played at $7, Unmark: $3 credit back, the $8 pays the seat, $1 back", async () => {
+    const w = await world({ lateFees: false });
+    const g = await game(w);
+    const raw = (w.app.db as any).raw;
+    // $3 of real credit, as from a canceled game (filed on this game's id; it shows first in this seat's rows below).
+    raw.exec(`INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+      SELECT 'z52-pot', group_id, '${w.byName.Indy}', 'kept', 300, '${g.id}', '2026-10-26T13:00:00.000Z', 'canceled' FROM sessions WHERE id = '${g.id}'`);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Indy', 'Frankie', 'Gale', 'Harper']);
+    expect(await credit(w, 'Indy')).toBe(0);
+    w.app.now = g.end + HOUR;
+    await fin(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Indy']);
+    later(w, 1);
+    await markPaid(w, g.id, 'Indy');
+    expect(await rowOf(w, g.id, 'Indy')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1100 });
+    later(w, 1);
+    await reopen(w, g.id);
+    // Back at the flat $14: the $8 cash is held on the seat with the $3 credit, she owes $3.
+    expect(await rowOf(w, g.id, 'Indy')).toMatchObject({ paymentStatus: 'unpaid', owesCents: 300 });
+    await fin(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Indy', 'Frankie', 'Gale', 'Harper']);
+    expect(await rowOf(w, g.id, 'Indy')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1100 });
+    expect(await credit(w, 'Indy')).toBe(400);
+    later(w, 1);
+    const u = await unmark(w, g.id, 'Indy');
+    expect(u.status, u.text).toBe(200);
+    // Before Zip 52: the $4 and the $3 went back to how they were before, and the seat sat unpaid with $8 held against a $7 price.
+    expect(await rowOf(w, g.id, 'Indy')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 800 });
+    expect(await credit(w, 'Indy')).toBe(400);
+    expect(seatLedger(w, g.id, 'Indy')).toEqual(['kept/canceled/300', 'kept/cash/800', 'used/cash/800', 'kept/finalized/100']);
+    expect(health(w)).toEqual({});
+  });
+});
+
