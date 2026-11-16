@@ -177,7 +177,9 @@ async function main() {
   });
 
   await check('DEMO mode (organizer "View as..."): Yes shows the player as joined at once; the real data is not changed', async () => {
-    const before = (await dash()).sessions.find((s) => s.id === thu.id).confirmedCount;
+    // Zip 53: by now Thursday has 4 in too (Nathan and Ryan joined it above), so nothing needs players and the card is the soonest game with
+    // room: Tuesday Nov 3 (4 in).
+    const before = (await dash()).sessions.find((s) => s.id === tue.id).confirmedCount;
     const page = await adminCtx.newPage();
     await page.goto(`${BASE}/admin`);
     await page.getByRole('button', { name: 'View as…' }).click();
@@ -185,7 +187,7 @@ async function main() {
     await page.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
     const want = page.getByRole('region', { name: /^Want in / });
     await want.waitFor();
-    const card = cardOf(page);
+    const card = page.locator(`#row-${tue.id}`);
     const was = await readCard(card);
     assert(!was.joined, 'Dana should not be in yet');
     await want.getByRole('button', { name: 'Yes' }).click();
@@ -194,7 +196,7 @@ async function main() {
     assert(now.joined && now.balls === was.balls + 1 && /Dana/.test(now.names), `demo card after Yes: ${JSON.stringify(now)}`);
     await page.locator('.pop').waitFor();
     assert(squash(await page.locator('.pop').innerText()) === "You're in", 'demo banner');
-    const after = (await dash()).sessions.find((s) => s.id === thu.id).confirmedCount;
+    const after = (await dash()).sessions.find((s) => s.id === tue.id).confirmedCount;
     assert(after === before, `the demo changed the real game: ${before} to ${after}`);
     await page.close();
   });

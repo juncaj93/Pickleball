@@ -118,10 +118,12 @@ async function main() {
     [5, 'Want in tomorrow?', "5 are in. You'd make it 6.", 10],
     [6, 'Want in tomorrow?', "6 are in. You'd make it 7.", 10],
     [5, 'Want in tomorrow?', "5 are in. You'd make it 6.", 6],
-    [6, "Want in on tomorrow's waitlist?", "6 are in. You'd be on the waitlist.", 6],
+    // Zip 53: a game that is full (6 of 6) is no longer offered on the top card at all (no room for a 5th, so no card for it): the card moves on to
+    // the next game with room, here Thursday (4 in).
+    [6, 'Want in Thursday?', "4 are in. You'd make it 5.", 6, 'next-game'],
   ];
   let maxNow = 10;
-  for (const [n, title, sub, max] of WANT) {
+  for (const [n, title, sub, max, nextGame] of WANT) {
     if (max !== maxNow) {
       await call(api.request, 'PUT', '/api/admin/group', { settings: { maxPlayers: max } });
       maxNow = max;
@@ -136,7 +138,7 @@ async function main() {
       if (sub) assert(squash(await subEl.innerText()) === sub, `second line: ${await subEl.innerText()}`);
       else assert((await subEl.count()) === 0, 'there should be no second line');
       const when = card.locator('.suggest-when');
-      assert(squash(await when.innerText()) === 'Tue, Nov 3 · 8 PM', `line 1: ${await when.innerText()}`);
+      assert(squash(await when.innerText()) === (nextGame ? 'Thu, Nov 5 · 8 PM' : 'Tue, Nov 3 · 8 PM'), `line 1: ${await when.innerText()}`);
       assert((await when.locator('.holiday').count()) === 0 && !/Election Day/.test(await card.innerText()), 'the popup has no holiday pill any more');
       const ys = await when.evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().height)));
       assert(ys.length === 1 && ys[0] <= 24, `date and time are not on one line: ${ys}`);
