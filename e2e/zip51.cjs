@@ -358,7 +358,7 @@ async function main() {
     await page.locator('nav').getByText('Settings', { exact: true }).first().click();
     const sect = page.locator('details[data-section="switches"]');
     await sect.waitFor({ timeout: 15000 });
-    if (!(await sect.evaluate((e) => e.open))) await sect.locator('summary').click();
+    if (!(await sect.evaluate((e) => e.open))) await sect.locator(':scope > summary').click();
     const row = page.locator('[data-row="moneyNoteAll"]');
     assert(flat(await row.innerText()).startsWith('Money change note'), flat(await row.innerText()));
     assert(await page.locator('[data-money-note-all]').isChecked(), 'on');
