@@ -61,8 +61,8 @@ async function main() {
 
   console.log('Building the fake world on a throwaway in-memory copy...');
   // The SMALL world (Alex, Nov 8): the fixed names of docs/PREVIEW_FAKE_DB.md, nothing else (scripts/preview-world-small.ts).
-  // Zip 49: the calm preview opens on Zip 49's three games (scripts/preview-world-small.ts step 25).
-  const { sql, summary } = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip49: true });
+  // Zip 51: the calm preview opens on Zip 51's two late-drop games (scripts/preview-world-small.ts step 26) and the Venue charge alert's cards.
+  const { sql, summary } = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51: true });
   for (const s of summary) console.log('  - ' + s);
 
   if (outFile) writeFileSync(outFile, sql);

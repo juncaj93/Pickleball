@@ -217,3 +217,11 @@ Rowan + Sam, Parker, Christopher Vanderberg; Rowan tapped I paid $28: Drop out s
 $14 back) and **"Text all"** (the next day at 7:00 PM: Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid: Text all asks for $14).
 The two late games' late window is open from the seed until they start; to test later, re-seed. Zip 43's two venue cards stay on Home.
 `node e2e/zip49.cjs` checks the same scenes locally.
+
+Zip 51 (the last money edge cases, Mon Nov 16, 2026): no new names, no migration. `npm run db:seed:preview` now opens CALM on Zip 51's two games
+(Zip 49's three are still built with `--zip49` for its own browser test, and everything with `--full`): **"Drop test"** (7:00 PM: Parker paid $14,
+Quinn, Sage, Christopher Vanderberg; Parker's Drop out says "you still owe $14"; with that dialog open, Rowan taps I'm in on another phone; Parker's
+Drop out then says "This just changed." and "your $14 comes back as credit") and **"Back in test"** (8:00 PM: Rowan,
+Reese, Sage, Christopher Vanderberg; Reese drops out late and owes $14; Alex adds Reese back on the Players sheet). Both are today when the seed runs
+before noon, else tomorrow: their late windows are open from 7:00 and 8:00 AM until they start. Zip 43's two venue cards stay on Home (moving a charge day in
+Settings > Money now keeps them). `node e2e/zip51.cjs` checks the same scenes locally.

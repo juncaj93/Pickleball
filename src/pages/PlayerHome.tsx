@@ -11,6 +11,8 @@ import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wan
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
 import { adjustedPlayerLine, latestAdjustment, signedPrice } from '../../shared/adjustCredit';
 import { feeClearedNotice, lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
+import { DROP_CHANGED, dropQuote } from '../../shared/dropQuote';
+import { failureWords } from '../instant';
 import { guestLine, hostDropText, removeGuestText } from '../../shared/guestSpot';
 import '../guest-spot.css';
 import { MIN_PLAYERS } from '../../shared/spots';
@@ -91,6 +93,9 @@ function limited<T>(p: Promise<T>): Promise<T> {
     );
   });
 }
+/** Zip 51 (F-16): the server's "the Drop out money changed, look again" answer (nothing was dropped). */
+const isDropChanged = (err: unknown) => err instanceof ApiError && err.code === DROP_CHANGED;
+
 async function finishNotes(ok: () => boolean, done: (sessionId: string) => void = () => {}): Promise<number | null> {
   let again: number | null = null;
   const soon = (ms: number) => {
@@ -121,7 +126,8 @@ async function finishNotes(ok: () => boolean, done: (sessionId: string) => void 
     }
     try {
       // If this times out but lands anyway, the next look finds them out and simply forgets the note.
-      await limited(api('POST', `/api/sessions/${due.sessionId}/withdraw`, {}));
+      // Zip 51 (F-16): with the quote the dialog showed; if the money changed since, the server drops nothing and the note ends here.
+      await limited(api('POST', `/api/sessions/${due.sessionId}/withdraw`, note.quote ? { quote: note.quote } : {}));
       removeNote(note);
       done(due.sessionId);
     } catch (err) {
@@ -2629,6 +2635,8 @@ export function ScheduleRow({
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   const [askOut, setAskOut] = useState(false);
+  // Zip 51 (F-16): the server said the Drop out money changed since the dialog was drawn: the dialog opens again with the real words.
+  const [dropChanged, setDropChanged] = useState(false);
   // Zip 42 "Guest spot": the host's "Remove guest" confirm.
   const [askGuest, setAskGuest] = useState(false);
   // Opened from the "time changed" notice's Can't make it: the same drop flow, in that notice's words.
@@ -2646,7 +2654,7 @@ export function ScheduleRow({
   const rowRef = useRef<HTMLElement>(null);
   useStatusMorph(rowRef);
 
-  async function run(path: string, label: (data: any) => string, patch?: (v: GroupView) => GroupView) {
+  async function run(path: string, label: (data: any) => string, patch?: (v: GroupView) => GroupView, body: Record<string, unknown> = {}) {
     if (working.current) return;
     if (instantTaps) {
       // Instant taps (INSTANT_TAPS): leaving the waitlist is certain (drawn at once); a drop sent now is the server's call (late
@@ -2654,27 +2662,79 @@ export function ScheduleRow({
       working.current = true;
       setAskOut(false);
       const release = holdLive();
-      await instantTaps.run({ key: `seat:${s.id}`, patch: patch ?? null, save: () => api<any>('POST', `/api/sessions/${s.id}/${path}`, {}), saved: label, what: path === 'withdraw' ? (waiting ? 'Leave the list' : 'Drop out') : undefined });
+      const what = path === 'withdraw' ? (waiting ? 'Leave the list' : 'Drop out') : undefined;
+      // Zip 51 (F-16): a drop whose money changed is not an error: the dialog comes back with the real words (no toast for it).
+      const res = await instantTaps.run({ key: `seat:${s.id}`, patch: patch ?? null, save: () => api<any>('POST', `/api/sessions/${s.id}/${path}`, body), saved: label, what, quietFail: path === 'withdraw' });
       working.current = false;
       release();
+      if (res.status === 'failed' && path === 'withdraw') {
+        if (isDropChanged(res.error)) await askAgain();
+        else if (isDemo(res.error)) toast((res.error as Error).message);
+        else toast(failureWords(res.error, what), 'error');
+      }
       return;
     }
     working.current = true;
     setBusy(true);
     const release = holdLive();
+    let again = false;
     try {
-      toast(label(await api<any>('POST', `/api/sessions/${s.id}/${path}`, {})));
+      toast(label(await api<any>('POST', `/api/sessions/${s.id}/${path}`, body)));
       await onChanged();
     } catch (err) {
-      if (isDemo(err)) toast(err.message);
+      if (path === 'withdraw' && isDropChanged(err)) again = true;
+      else if (isDemo(err)) toast(err.message);
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
-      await onChanged();
+      if (!again) await onChanged();
     } finally {
       working.current = false;
       setBusy(false);
       setAskOut(false);
       release();
     }
+    if (again) await askAgain();
+  }
+
+  // Zip 51 (F-16): a dialog asked again for a seat that is gone by then (someone else's tap took it out) closes for good.
+  useEffect(() => {
+    if (askOut && !inSession && !waiting) {
+      setAskOut(false);
+      setDropChanged(false);
+    }
+  }, [askOut, inSession, waiting]);
+
+  /**
+   * Zip 51 (F-16): Drop out tapped in the dialog. The screen holds its live updates while a sheet is open, so the dialog can be old: one quick
+   * look at the server first. Different money: the dialog stays open with the real words ("This just changed."), nothing is sent. The same: the
+   * drop goes ahead with its quote, and the server checks once more when it is sent. No signal: it goes ahead (the server still checks).
+   */
+  async function confirmDrop(lead?: string) {
+    if (working.current) return;
+    const shown = dropQuote(mine);
+    let changed = false;
+    if (shown) {
+      working.current = true;
+      setBusy(true);
+      try {
+        const fresh = await api<GroupView>('GET', '/api/group');
+        changed = dropQuote(fresh.sessions.find((x) => x.id === s.id)?.mine ?? null) !== shown;
+      } catch {
+        /* no signal: the server checks the quote when the drop is sent */
+      } finally {
+        working.current = false;
+        setBusy(false);
+      }
+    }
+    if (changed) return askAgain();
+    setFromNotice(false);
+    dropOut(lead);
+  }
+
+  /** Zip 51 (F-16): the server refused a drop because its money changed: load the real numbers, then open the dialog again with them. */
+  async function askAgain() {
+    await onChanged();
+    setDropChanged(true);
+    setAskOut(true);
   }
 
   /** Undo tapped after the drop had already been sent (page hid, or the last instant): say so, never pretend. */
@@ -2729,13 +2789,20 @@ export function ScheduleRow({
    */
   function dropOut(lead?: string) {
     setAskOut(false);
+    setDropChanged(false);
     if (working.current) return;
+    // Zip 51 (F-16): the money this dialog showed. The server drops only at exactly this; anything else comes back as "look again".
+    const quote = dropQuote(mine);
+    const body = quote ? { quote } : {};
     // Too close to the start, or to the late-drop deadline, to wait: send it now, like before, so the 5 seconds never change how it counts.
     const soon = Date.now() + UNDO_MS + 3_000;
     const deadline = Date.parse(s.dropCutoffAt);
     if (Date.parse(s.startsAt) - Date.now() < 10_000 || (deadline > Date.now() - 1_000 && deadline < soon)) {
-      void run('withdraw', (d) =>
-        d?.lateFee ? lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid) : droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You're out."),
+      void run(
+        'withdraw',
+        (d) => (d?.lateFee ? lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid) : droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You're out.")),
+        undefined,
+        body,
       );
       return;
     }
@@ -2746,7 +2813,7 @@ export function ScheduleRow({
     // 5 seconds), there is nothing to send: it must never reach the live site as a real drop.
     const inDemo = demoOn();
     const viewedAt = viewingAs();
-    const myNote: PendingDropNote = { sessionId: id, at: Date.now(), playerId: g.me?.id, signupAt: mine?.signupAt };
+    const myNote: PendingDropNote = { sessionId: id, at: Date.now(), playerId: g.me?.id, signupAt: mine?.signupAt, ...(quote ? { quote } : {}) };
     const forget = () => {
       if (!inDemo) removeNote(myNote);
     };
@@ -2759,11 +2826,17 @@ export function ScheduleRow({
         leavingSend = leaving;
         if (inDemo && (!demoOn() || viewingAs() !== viewedAt)) return;
         // keepalive on every real drop: a second Drop out sends this one at once, and the page may close right after.
-        await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: !inDemo });
+        await api('POST', `/api/sessions/${id}/withdraw`, body, { keepalive: !inDemo });
       },
       settled: async (err) => {
         if (err && leavingSend && err instanceof ApiError && err.code === 'offline') return;
         forget();
+        if (err && isDropChanged(err)) {
+          // Zip 51 (F-16): nothing was dropped; the dialog opens again with the real money.
+          setOverlay(id, null);
+          await askAgain();
+          return;
+        }
         if (err) {
           setOverlay(id, null);
           if (isDemo(err)) toast(err.message);
@@ -3073,11 +3146,18 @@ export function ScheduleRow({
 
       {celebrating && motion && !gameDay && <Burst />}
       <ConfirmDialog
-        open={askOut}
+        open={askOut && (inSession || waiting)}
         title={waiting ? (standbyWord ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
         {...(myGuest && !waiting ? { cancelLabel: 'Stay in' } : {})}
         body={
-          waiting
+          <>
+          {/* Zip 51 (F-16): opened again because the money changed after the dialog was first drawn: the words below are the real ones now. */}
+          {dropChanged && (
+            <strong className="drop-changed" data-drop-changed>
+              This just changed.{' '}
+            </strong>
+          )}
+          {waiting
             ? myGuest
               ? `You lose your place in line. Your guest ${myGuest.name} comes off too.`
               : 'You lose your place in line.'
@@ -3107,7 +3187,8 @@ export function ScheduleRow({
                   formatPrice(mine.lateDrop.feeCents),
                   mine.dropCreditCents + mine.dropCashCents > 0 ? `your ${formatPrice(mine.dropCreditCents + mine.dropCashCents)} comes back as credit` : null,
                 )
-              : 'Your spot opens up for someone else.'
+              : 'Your spot opens up for someone else.'}
+          </>
         }
         confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : myGuest ? 'Drop out both' : 'Drop out'}
         danger
@@ -3115,13 +3196,15 @@ export function ScheduleRow({
         onConfirm={() => {
           // From the notice the banner never says "dropped out": "You're out. $14 credit returned." (same money words).
           const lead = fromNotice ? "You're out." : undefined;
-          setFromNotice(false);
-          if (waiting) void run('withdraw', () => "You're off the list", g.me ? leaveWaitlistPatch(s.id, g.me.name) : undefined);
-          else dropOut(lead);
+          if (waiting) {
+            setFromNotice(false);
+            void run('withdraw', () => "You're off the list", g.me ? leaveWaitlistPatch(s.id, g.me.name) : undefined);
+          } else void confirmDrop(lead);
         }}
         onCancel={() => {
           setFromNotice(false);
           setAskOut(false);
+          setDropChanged(false);
         }}
       />
       {myGuest && (

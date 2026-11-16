@@ -324,7 +324,7 @@ describe('no backfill', () => {
 });
 
 describe('review fixes: moved days, a repeated "on", a $0 amount', () => {
-  it('moving a charge day after the switch is on never brings back a day that already passed (and never re-bills a marked month)', async () => {
+  it('moving a charge day after the switch is on never re-bills a marked month, and (Zip 51, F-9) a card already due stays until Mark paid', async () => {
     const w = await world();
     w.app.now = edt(10, 26, 13);
     await on(w);
@@ -333,20 +333,25 @@ describe('review fixes: moved days, a repeated "on", a $0 amount', () => {
     expect((await mark(w, ['court:2026-10'], 9600)).status).toBe(200);
     await jump(w, est(11, 27, 9));
     expect((await dash(w)).venueAlerts.map((x: any) => x.keys.join('+'))).toEqual(['membership:2026-11']);
-    // Nov 27: the membership day is moved to the 10th and the courts to the 4th. Both already passed: nothing appears for them (not the 4th's courts,
-    // whose new period would re-bill October's games, and not a second membership).
+    // Nov 27: the membership day is moved to the 10th and the courts to the 4th. The Nov 26 membership card was already due: it stays as it was
+    // (Zip 51: it used to vanish). No second membership; the 4th's courts start the day after October's paid Oct 31 charge, so no October
+    // game is billed again (and November has no booked games, so no court card).
+    const nov26 = [{ keys: ['membership:2026-11'], date: '2026-11-26', cents: 3000 }];
     expect((await w.organizer.call('PUT', '/api/admin/group', { venueDays: { membershipDay: 10, courtDay: 4 } })).status).toBe(200);
-    expect((await dash(w)).venueAlerts).toEqual([]);
-    // A later save of anything else keeps that start; so does picking the same day again.
+    expect((await dash(w)).venueAlerts).toMatchObject(nov26);
+    // A later save of anything else changes nothing; neither does picking the same day again.
     await w.organizer.call('PUT', '/api/admin/group', { settings: { pricePerPlayerCents: 1500 } });
     await w.organizer.call('PUT', '/api/admin/group', { venueDays: { membershipDay: 10 } });
-    expect((await dash(w)).venueAlerts).toEqual([]);
+    expect((await dash(w)).venueAlerts).toMatchObject(nov26);
+    expect((await dash(w)).venueAlerts).toHaveLength(1);
     // A day that is still ahead works: move courts to the 28th, and on the 28th the card is there.
     await jump(w, est(11, 27, 10));
     await w.organizer.call('PUT', '/api/admin/group', { venueDays: { membershipDay: 28, courtDay: 28 } });
-    expect((await dash(w)).venueAlerts).toEqual([]);
+    expect((await dash(w)).venueAlerts).toMatchObject(nov26);
     await jump(w, est(11, 28, 0, 1));
     const a = (await dash(w)).venueAlerts;
+    // Still the one November membership card (Nov 26); the 28th makes no second one.
+    expect(a).toMatchObject(nov26);
     expect(a).toHaveLength(1);
     // The courts period for the 28th would start Oct 29 and re-bill the Oct 29 game, which October's paid courts charge (Oct 31) already covered: it
     // starts the day after that charge (Nov 1) instead, so no court card.

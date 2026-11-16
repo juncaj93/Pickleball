@@ -98,6 +98,8 @@ export interface PendingDropNote {
   /** Who tapped Drop out, and the seat they dropped (its sign-up time): the note is only ever sent for that seat. */
   playerId?: string;
   signupAt?: string;
+  /** Zip 51 (F-16): the money the Drop out dialog showed (shared/dropQuote.ts); a late send only drops at exactly that. Older notes have none. */
+  quote?: string;
 }
 
 /** The parts of the player's data a left-over note is checked against. */

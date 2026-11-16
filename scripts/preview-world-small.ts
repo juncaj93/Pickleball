@@ -91,7 +91,8 @@ export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: s
 export async function buildSmallPreview(
   startMs = Date.now(),
   /** `zip49`: add Zip 49's three games and keep only them in the calm profile (the preview seed). Left out: the world exactly as before (the local browser tests). */
-  opts: { calm?: boolean; zip49?: boolean } = {},
+  /** `zip51`: Zip 51's two late-drop games instead (the preview seed from Zip 51 on). */
+  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean } = {},
 ): Promise<Seed> {
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
@@ -609,6 +610,32 @@ export async function buildSmallPreview(
     summary.push('Zip 49 money fixes: "Late, 1 short" and "Late, 2 short" (start about 9 and 9.5 hours after the seed; Rowan + Sam in each, Rowan tapped I paid $28, not confirmed) and "Text all" (the day after, 7:00 PM: Rowan + Sam owe $28, Parker owes $14, Christopher Vanderberg paid)');
   }
 
+  // 26. Zip 51 (the last money edge cases): Alex's taps. Two games at 7:00 and 8:00 PM (today when seeded before noon, else tomorrow), so their
+  //     late window (12 hours before the start) is open from 7:00 and 8:00 AM until they start; a test after that needs a fresh seed.
+  //     "Drop test" (F-16): Parker (paid $14), Quinn, Sage, Christopher Vanderberg (4 in): Parker's Drop out says "you still owe $14". With that
+  //     dialog open, Rowan taps I'm in on another phone (5 in); Parker's Drop out then shows "This just changed." and "$14 comes back as credit".
+  //     "Back in test" (F-15): Rowan, Reese, Sage, Christopher Vanderberg (4 in). Reese drops out late (owes $14); Alex puts Reese back In from
+  //     the Players sheet: Reese's seat reads "$14 due" like any seat and keeps no late-drop mark (after a move to another day, a normal drop
+  //     is not tagged "Late drop").
+  if (opts.zip51) {
+    const base = localParts(N, TZ).hour < 12 ? N : N + DAY;
+    const drop = await makeAt(localAt(base, 19), 120, 'Drop test');
+    const back = await makeAt(localAt(base, 20), 120, 'Back in test');
+    for (const [gg, names] of [
+      [drop, ['Parker', 'Quinn', 'Sage', SMALL_LONG]],
+      [back, ['Rowan', 'Reese', 'Sage', SMALL_LONG]],
+    ] as const) {
+      await setCourt(gg, 'booked');
+      for (const n of names) await join(n, gg);
+    }
+    await orgPays('Parker', drop);
+    keep.length = 0;
+    keep.push(drop.id, back.id);
+    lateMove = undefined;
+    await refresh();
+    summary.push('Zip 51 edge cases: "Drop test" (7:00 PM: Parker paid $14, Quinn, Sage, Christopher Vanderberg) and "Back in test" (8:00 PM: Rowan, Reese, Sage, Christopher Vanderberg), today when seeded before noon, else tomorrow; their late windows open at 7:00 and 8:00 AM');
+  }
+
   await refresh();
   const names = (dash.players as { name: string }[]).map((p) => p.name).sort();
   if (names.join('|') !== [...SMALL_NAMES].sort().join('|')) throw new Error(`the small preview must have exactly the fixed names, has: ${names.join(', ')}`);
@@ -618,7 +645,7 @@ export async function buildSmallPreview(
     // The calm profile keeps the zip's games (Zip 49's three with `zip49`, else Zip 42's guest games and late scenes) and Zip 43's two last-month
     // booked games the Venue charge alert adds up (hidden from the lists). The Zip 38 tonight and tomorrow player games stay in the full world (--full).
     calmSql = calmDown(w.db.raw, keep, N, lateMove, venueKeep);
-    summary.push(`CALM profile (${opts.zip49 ? 'Zip 49' : 'Zip 42'} and 43): that zip's games and last month's two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)`);
+    summary.push(`CALM profile (${opts.zip51 ? 'Zip 51' : opts.zip49 ? 'Zip 49' : 'Zip 42'} and 43): that zip's games and last month's two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)`);
   }
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);

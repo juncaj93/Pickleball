@@ -1,4 +1,5 @@
-import type { CreditEntryView, GroupView } from '../shared/api';
+import type { CreditEntryView, GroupView, PlayerSessionView } from '../shared/api';
+import { DROP_CHANGED, DROP_CHANGED_MESSAGE, dropQuote, quoteOfBody } from '../shared/dropQuote';
 import { claimShares, extendedTimeFor, extRowsOf, followSeat, hasViaShares, myExtShares, playerExtensionPaid, playerExtensionSeen, seatIdOf, undoClaimAt } from './extension';
 import { headCount } from '../shared/guestSpot';
 import { sessionCalendar } from '../shared/calendar';
@@ -16,6 +17,7 @@ import {
   getPlayers,
   getSession,
   type GroupRow,
+  loadRoster,
   organizerIdOf,
   settingsOf,
   usualDaysOf,
@@ -93,9 +95,9 @@ async function lateFeeClearsFor(ctx: Ctx, groupId: string, playerId: string): Pr
   }
   return out;
 }
-import { potBalance, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
+import { NO_SEAT_CREDIT, potBalance, type SeatCredit, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { owedOf, seatOf } from './owed';
-import { cashOutOffer, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead } from './credit';
+import { cashOutOffer, loadLedger, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead } from './credit';
 import { hiddenGameIdsRead } from './hideGame';
 import { directLoadFor, fewerDb, lastScreenFor } from './speed';
 import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
@@ -561,6 +563,21 @@ async function actingOn(ctx: Ctx) {
   return { ...who, playerId: who.playerId, session };
 }
 
+/**
+ * Zip 51 (F-16): this player's own seat on this game as their screen would draw it right now (the same playerSessionView, fed the same way
+ * GET /api/group feeds it), for the Drop out quote. Read only.
+ */
+async function freshDropView(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, lateFees: boolean): Promise<PlayerSessionView['mine']> {
+  const roster = await loadRoster(ctx.db, who.session.id);
+  const row = roster.find((r) => r.player_id === who.playerId);
+  if (!row) return null;
+  const isOrganizer = who.playerId === (await organizerIdOf(ctx.db, who.group));
+  const ledger = await loadLedger(ctx.db, who.group.id);
+  const seat = isOrganizer ? NO_SEAT_CREDIT : seatCredit(ledger, who.session.id, who.playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
+  const settings = settingsOf(who.group);
+  return playerSessionView(who.session, roster, who.playerId, ctx.nowMs, settings, who.group.timezone, isOrganizer, { usableCents: 0, seat }, false, lateFees).mine;
+}
+
 /** Every player tap goes in the History > Activity log under the player's name. */
 async function logAction(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, action: string, result: unknown, extra: Record<string, unknown> = {}) {
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
@@ -582,13 +599,30 @@ export async function playerJoin(ctx: Ctx) {
   return offer ? { ...res, cashOutOffer: { cents: offer.cents, requestCents: offer.requestCents } } : res;
 }
 
-export async function playerWithdraw(ctx: Ctx) {
+export async function playerWithdraw(ctx: Ctx, body: Record<string, unknown> = {}) {
   const who = await actingOn(ctx);
   const watch = await watchTap(ctx, who.group, who.session, who.playerId);
   const lateFees = await lateFeesFor(ctx, who.group.id);
+  // Zip 51 (Audit C F-16): the phone sends the money its Drop out dialog showed (shared/dropQuote.ts). Worked out again now, from the same
+  // view the screen gets: different (the late window opened, someone else dropped or joined, a payment changed) and nothing is dropped, the
+  // phone reloads and asks again with the real words. An older page sends no quote and drops exactly as before.
+  // A seat that is already out (a second tap, another phone) has no quote: it is answered as before ("not_in_session", money finished).
+  const quote = quoteOfBody(body);
+  const fresh = quote !== null ? await freshDropView(ctx, who, lateFees) : null;
+  const freshQuote = dropQuote(fresh);
+  if (quote !== null && freshQuote !== null && freshQuote !== quote) throw new HttpError(409, DROP_CHANGED, DROP_CHANGED_MESSAGE);
+  // The quote matched: the seat change itself also checks, in the same statement, that "the game is left short" is still what was shown
+  // (two drops in the same instant). Not: nothing moves, and the answer is the same "look again".
+  const expect = quote !== null && freshQuote !== null && fresh?.status === 'confirmed' ? { owes: !!fresh.lateDrop?.owes, guestSpots: fresh.lateDrop?.guestSpots } : undefined;
   // Zip 39: a player's phone follows the Settings row only (cheaperFixFor with organizer false: no private link on a player phone).
   const cheaperFix = lateFees && (await cheaperFixFor(ctx, who.group.id, false));
-  const res = await withdraw(ctx.db, who.group, who.session, who.playerId, ctx.nowMs, { lateFees, cheaperFix });
+  let res = await withdraw(ctx.db, who.group, who.session, who.playerId, ctx.nowMs, { lateFees, cheaperFix, ...(expect ? { expect } : {}) });
+  if (res.stale) {
+    // Refused by that check: something changed in between, unless the screen would still say the very same thing (the seat rule and the
+    // dialog's count disagree, which no test has found). Then the drop goes ahead as it always did, so a player can never be stuck in.
+    if (dropQuote(await freshDropView(ctx, who, lateFees)) !== quote) throw new HttpError(409, DROP_CHANGED, DROP_CHANGED_MESSAGE);
+    res = await withdraw(ctx.db, who.group, who.session, who.playerId, ctx.nowMs, { lateFees, cheaperFix });
+  }
   const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group), lateFees) : false;
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   if (res.changed) await logAction(ctx, who, 'withdraw', result, { late, ...(res.lateFee ? { owes: true } : {}) });

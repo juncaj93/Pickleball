@@ -14,7 +14,10 @@ import {
   VENUE_ALERT,
   venueAlertAllowed,
   venueDaysChangedAt,
+  venueDaysHistoryOf,
   venueDaysOf,
+  venuePlan,
+  VENUE_KEY_RE,
   type ChargeKind,
   type VenueAlert,
   type VenueDays,
@@ -27,7 +30,8 @@ import {
 //    (it then sends X-Venue-Alert, plus X-Venue-Alert-Since: when that phone first opened the link; a private test switch for that phone only).
 // "On for everyone" is one row in task_log (kind 'mark', no game): no schema change, the same way the other switches are stored. Its `at` is the moment
 // the switch went on: charge days that began before it never make an alert (no backfill).
-// Which months were marked paid are more task_log rows of the same kind (task `venue_paid:court:2026-11`), also with no game. The two charge days
+// Which months were marked paid are more task_log rows of the same kind (task `venue_paid:court:2026-11`; Zip 51: a second court charge in one
+// month `venue_paid:court:2026-11-30`), also with no game, each with the charge day in its detail. The two charge days
 // are kept in the group's settings_json (`venueDays`), next to the Zelle number. Display only; no price, seat, credit or text reads any of it.
 
 /** The one switch question every feature switch asks, word for word (server/speed.ts answers it from one read when it can). */
@@ -91,6 +95,7 @@ async function paidRows(db: D1Database, groupId: string): Promise<{ keys: Set<st
         courtDates.push(date);
         if (!courtThrough || date > courtThrough) courtThrough = date;
       }
+      // (A row without a readable date counts its month's current court day: shared/venueAlert.ts paidCourtDates.)
     } catch {
       /* a row without a readable date: ignored */
     }
@@ -106,10 +111,15 @@ export async function venueAlertsNow(ctx: Ctx, group: GroupRow, rowOn: boolean):
   const days = venueDaysOf(group.settings_json);
   const settings = settingsOf(group);
   const tz = group.timezone;
-  // No backfill: the later of the switch going on and the charge days last being changed (a moved day never brings back a day that already passed).
-  const onAtMs = Math.max(await onSince(ctx, group.id, rowOn), venueDaysChangedAt(group.settings_json));
-  const first = earliestGameDate(days, onAtMs, ctx.nowMs, tz);
-  if (!first) return { alerts: [], days };
+  // No backfill: only charge days from the moment the switch went on. Zip 51 (F-9): a moved day no longer starts that clock over; the days in
+  // force before each move are kept (venueDays.history), so a charge day that came under the old days stays until Mark paid (shared/venueAlert.ts).
+  const onAtMs = await onSince(ctx, group.id, rowOn);
+  const paid = await paidRows(ctx.db, group.id);
+  const base = { days, membershipCents: settings.monthlyMembershipCents, nowMs: ctx.nowMs, tz, onAtMs, daysFrom: venueDaysChangedAt(group.settings_json), history: venueDaysHistoryOf(group.settings_json), paid: paid.keys, courtPaidThrough: paid.courtThrough, courtPaidDates: paid.courtDates };
+  const plan = venuePlan(base);
+  if (plan.length === 0) return { alerts: [], days };
+  // Membership only: no games to load.
+  const first = earliestGameDate(plan) ?? localYmd(ctx.nowMs, tz);
   // Every game from the first period's first day through today (Eastern calendar days, so a 11:30 PM game on the 30th is November).
   const from = new Date(startOfDayMs(first, tz)).toISOString();
   const to = new Date(startOfDayMs(addDays(localYmd(ctx.nowMs, tz), 1), tz)).toISOString();
@@ -119,13 +129,12 @@ export async function venueAlertsNow(ctx: Ctx, group: GroupRow, rowOn: boolean):
     .all<SessionRow>();
   // The same per-game cost Money > Totals uses (the game's own court cost, else the Typical court cost, priced by its length).
   const games: VenueGame[] = results.map((s) => ({ startsAt: s.starts_at, booked: s.booking_status === 'booked', canceled: s.status === 'canceled', costCents: courtCostOf(s, settings) }));
-  const paid = await paidRows(ctx.db, group.id);
-  const alerts = dueAlerts({ days, membershipCents: settings.monthlyMembershipCents, games, nowMs: ctx.nowMs, tz, onAtMs, paid: paid.keys, courtPaidThrough: paid.courtThrough, courtPaidDates: paid.courtDates });
+  const alerts = dueAlerts({ ...base, games });
   return { alerts, days };
 }
 
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
-const KEY_RE = /^(court|membership):\d{4}-\d{2}$/;
+const KEY_RE = VENUE_KEY_RE;
 
 /**
  * POST /api/admin/venue-alert/paid { keys, cents }: "Mark paid" on one card. Writes the marked-paid rows and ONE History line ("Venue charge marked
@@ -147,7 +156,7 @@ export async function markVenuePaid(ctx: Ctx, group: GroupRow, body: Record<stri
   }
   if (typeof body.cents !== 'number' || body.cents !== card.cents) throw new HttpError(409, 'changed', 'That amount just changed. Look again.');
   const rows = card.keys.map((k) => {
-    const [kind, month] = k.split(':') as [ChargeKind, string];
+    const [kind, month] = k.split(':') as [ChargeKind, string]; // "month" is "2026-11", or "2026-11-30" for a second court charge that month
     return ctx.db
       .prepare(
         `INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at)

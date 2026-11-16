@@ -9,6 +9,13 @@
 //  - No backfill: only charge days at or after the moment the switch was turned on make an alert.
 //  - The math: court costs = the BOOKED, not canceled games in the billing period (the day after the previous court charge day through this one),
 //    each at its own court cost (the game's own cost, else the Typical court cost, the same courtCostOf Money > Totals uses).
+//  - Zip 51 (Audit C F-9), charge days on a timeline: every month has at least one court and one membership charge day. A moved day keeps the
+//    old days on record (`venueDays.history` in settings_json, no schema change), so a charge day that already came under the old days stays
+//    (its card keeps its games and its amount until Mark paid), and the new day starts counting from the move. A month whose day moved past it
+//    (moved from the 30th to the 15th on the 16th) still has one, on the new day. Court periods chain: each one starts the day after the court
+//    charge day before it (paid or not), so every booked game is on exactly one card and Mark paid on one card never changes another. Two court
+//    charges in one month (moved from the 15th to Last day after the 15th was paid) are two cards: the second one is keyed by its date
+//    ("court:2026-11-30"); the usual one keeps the month key ("court:2026-11"), so older rows and links read as before.
 //  - Storage: no schema change. The two days sit in the group's settings_json (like the Zelle number); the switch and the "marked paid" months are
 //    task_log rows (kind 'mark', no game), the same way every feature switch is stored.
 //
@@ -28,6 +35,8 @@ export function venueAlertAllowed(flag: string | undefined | null): boolean {
 export const PAID_PREFIX = 'venue_paid:';
 export type ChargeKind = 'court' | 'membership';
 export const paidTask = (kind: ChargeKind, month: string) => `${PAID_PREFIX}${kind}:${month}`;
+/** A card key the Mark paid request may name: "court:2026-11", "membership:2026-11", or (Zip 51) a second court charge in a month "court:2026-11-30". */
+export const VENUE_KEY_RE = /^(?:court:\d{4}-\d{2}(?:-\d{2})?|membership:\d{4}-\d{2})$/;
 
 /** The day each charge lands. `courtDay` 0 means the last day of the month. */
 export interface VenueDays {
@@ -70,6 +79,32 @@ export function venueDaysChangedAt(settingsJson: string | null | undefined): num
     return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Zip 51 (F-9): the days that were in force before each move, oldest first: `{ membershipDay, courtDay, from, until }` (ms; `from` 0 = since
+ * always). Kept next to the days in settings_json (`venueDays.history`) by the Settings save that moved a day. Junk entries are skipped.
+ */
+export interface VenueDaysSpan extends VenueDays {
+  from: number;
+  until: number;
+}
+export const VENUE_HISTORY_MAX = 24;
+export function venueDaysHistoryOf(settingsJson: string | null | undefined): VenueDaysSpan[] {
+  try {
+    const h = (JSON.parse(settingsJson || '{}') as { venueDays?: { history?: unknown } }).venueDays?.history;
+    if (!Array.isArray(h)) return [];
+    const out: VenueDaysSpan[] = [];
+    for (const e of h) {
+      if (!e || typeof e !== 'object') continue;
+      const { from, until } = e as { from?: unknown; until?: unknown };
+      if (typeof from !== 'number' || typeof until !== 'number' || !Number.isFinite(from) || !Number.isFinite(until) || from < 0 || until <= from) continue;
+      out.push({ ...normalizeVenueDays(e), from, until });
+    }
+    return out.sort((a, b) => a.from - b.from).slice(-VENUE_HISTORY_MAX);
+  } catch {
+    return [];
   }
 }
 
@@ -166,8 +201,15 @@ export interface VenueInput {
   games: VenueGame[];
   nowMs: number;
   tz: string;
-  /** The instant the switch was turned on (or the phone's private link was first opened), or the charge days were last changed, whichever is later. Charge days that start before it never show. */
+  /**
+   * The instant the switch was turned on (or the phone's private link was first opened). Charge days that start before it never show (no backfill).
+   * Before Zip 51 the server passed the later of this and the days' last change; it now passes the change as `daysFrom`.
+   */
   onAtMs: number;
+  /** Zip 51 (F-9): when the current days took effect (`venueDays.changedAt`); 0 or missing = they always were. */
+  daysFrom?: number;
+  /** Zip 51 (F-9): the days in force before each move (venueDaysHistoryOf). Before the first kept days: those first days (as the site always assumed). */
+  history?: readonly VenueDaysSpan[];
   /** "court:2026-11" style keys already marked paid. */
   paid: ReadonlySet<string>;
   /**
@@ -198,51 +240,139 @@ export function scanMonths(onAtMs: number, nowMs: number, tz: string): { year: n
   return out;
 }
 
-/** The earliest date any scanned period starts: the games to load begin here. */
-export function earliestGameDate(days: VenueDays, onAtMs: number, nowMs: number, tz: string): string | null {
-  const months = scanMonths(onAtMs, nowMs, tz);
-  return months.length ? courtPeriod(days, months[0].year, months[0].month).from : null;
+/** The earliest date any due court period starts (venuePlan): the games to load begin here. Null: no court charge is due. */
+export function earliestGameDate(plan: readonly PlannedCharge[]): string | null {
+  const froms = plan.filter((c) => c.kind === 'court' && c.from).map((c) => c.from!).sort();
+  return froms[0] ?? null;
+}
+
+/** One charge in the plan: its day, its month, the card key, and (court) the days its games come from. */
+export interface PlannedCharge {
+  kind: ChargeKind;
+  date: string;
+  month: string;
+  key: string;
+  from?: string;
 }
 
 /**
- * Every card due right now, oldest charge day first. A charge is due when its day has started (12:00 AM Eastern or later), that moment is at or after
- * the switch going on, and its month is not marked paid. Court: nothing when the period has no booked games. When both charges of one month land on
- * the same day and both are due, one combined card.
+ * Zip 51 (F-9): the charge days on a timeline. For each month: the day each set of days in force at that day's 12:00 AM names (a moved day can
+ * give a month two court days, the old one and the new one), plus every court charge already marked paid; a month left with none (its day moved
+ * past it) gets the current days' day, so no month is ever skipped.
  */
-export function dueAlerts(input: VenueInput): VenueAlert[] {
-  const { days, tz } = input;
-  const todayYmd = localYmd(input.nowMs, tz);
-  const due: { date: string; kind: ChargeKind; month: string; cents: number; line: string }[] = [];
-  for (const { year, month } of scanMonths(input.onAtMs, input.nowMs, tz)) {
+function chargeDays(input: VenueInput, months: { year: number; month: number }[], kind: ChargeKind): Map<string, string[]> {
+  const { tz } = input;
+  const current: VenueDaysSpan = { ...input.days, from: input.daysFrom && input.daysFrom > 0 ? input.daysFrom : (input.history?.length ? input.history[input.history.length - 1].until : 0), until: Infinity };
+  // The earliest kept days reach back to the start: a move saved before Zip 51 kept no old days, and the site always assumed the days it had.
+  const kept = [...(input.history ?? []), current];
+  const spans = kept.map((sp, i) => (i === 0 ? { ...sp, from: 0 } : sp));
+  const dayOf = (d: VenueDays, year: number, month: number) => ymd(year, month, dayIn(kind === 'court' ? d.courtDay : d.membershipDay, year, month));
+  const out = new Map<string, string[]>();
+  for (const { year, month } of months) {
     const key = monthKey(year, month);
-    const dates = chargeDatesOf(days, year, month);
-    const reached = (date: string) => date <= todayYmd && startOfDayMs(date, tz) >= input.onAtMs;
-    if (reached(dates.court) && !input.paid.has(`court:${key}`)) {
-      const period = courtPeriod(days, year, month);
-      const before = (input.courtPaidDates ?? (input.courtPaidThrough ? [input.courtPaidThrough] : [])).filter((d) => d < dates.court).sort();
-      const through = before.length ? before[before.length - 1] : null;
-      if (through && addDays(through, 1) > period.from) period.from = addDays(through, 1);
-      const costs = periodGames(input.games, period, tz).map((g) => g.costCents);
-      if (costs.length > 0 && costs.reduce((a, b) => a + b, 0) > 0) due.push({ date: dates.court, kind: 'court', month: key, cents: costs.reduce((a, b) => a + b, 0), line: courtLine(costs) });
+    const got = new Set<string>();
+    // A day counts when the days in force at its 12:00 AM name it. Before the switch went on, the days in force when it went on decide (days
+    // picked while turning it on are a correction, not a move).
+    for (const sp of spans) {
+      const d = dayOf(sp, year, month);
+      if (spanAt(spans, Math.max(startOfDayMs(d, tz), input.onAtMs)) === sp) got.add(d);
     }
-    // (A membership set to $0 charges nothing, so there is nothing to check: no card.)
-    if (input.membershipCents > 0 && reached(dates.membership) && !input.paid.has(`membership:${key}`)) {
-      due.push({ date: dates.membership, kind: 'membership', month: key, cents: input.membershipCents, line: `Monthly membership, ${COURT_NAME}` });
+    if (kind === 'court') for (const d of paidCourtDates(input)) if (d.startsWith(`${key}-`)) got.add(d);
+    if (got.size === 0) got.add(dayOf(input.days, year, month));
+    out.set(key, [...got].sort());
+  }
+  return out;
+}
+
+/** The kept days in force at an instant (the spans cover every time from 0 on). */
+function spanAt(spans: readonly VenueDaysSpan[], at: number): VenueDaysSpan | undefined {
+  return spans.find((sp) => at >= sp.from && at < sp.until);
+}
+
+/** Every court charge day already marked paid: the dates the rows carry; a month marked paid without one counts its current day (older callers). */
+function paidCourtDates(input: VenueInput): string[] {
+  const dates = new Set(input.courtPaidDates ?? (input.courtPaidThrough ? [input.courtPaidThrough] : []));
+  for (const k of input.paid) {
+    const m = /^court:(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(k);
+    if (!m) continue;
+    if (m[3]) dates.add(`${m[1]}-${m[2]}-${m[3]}`);
+    else if (![...dates].some((d) => d.startsWith(`${m[1]}-${m[2]}-`))) dates.add(ymd(Number(m[1]), Number(m[2]), dayIn(input.days.courtDay, Number(m[1]), Number(m[2]))));
+  }
+  return [...dates].sort();
+}
+
+/**
+ * The charges due right now, oldest first, without their amounts: what dueAlerts prices, and where the games to load start (`from` of the first
+ * court charge). A charge is due once its day has started (12:00 AM Eastern) at or after the switch went on, and it is not marked paid.
+ */
+export function venuePlan(input: Omit<VenueInput, 'games'>): PlannedCharge[] {
+  const { tz } = input;
+  const todayYmd = localYmd(input.nowMs, tz);
+  const shown = scanMonths(input.onAtMs, input.nowMs, tz);
+  if (shown.length === 0) return [];
+  // One month more at the front: the court charge before the first card bounds its period.
+  const months = [prevMonthOf(shown[0].year, shown[0].month), ...shown];
+  const full = { ...input, games: [] } as VenueInput;
+  const reached = (date: string) => date <= todayYmd && startOfDayMs(date, tz) >= input.onAtMs;
+  const out: PlannedCharge[] = [];
+
+  const paidDates = new Set(paidCourtDates(full));
+  const court = chargeDays(full, months, 'court');
+  const allCourt = [...new Set([...[...court.values()].flat(), ...paidDates])].sort();
+  for (const [month, dates] of court) {
+    let monthKeyFree = !input.paid.has(`court:${month}`);
+    for (const date of dates) {
+      if (paidDates.has(date) || !reached(date)) continue;
+      // The usual (first unpaid) court charge of a month keeps the month key; a second one in the same month is keyed by its date.
+      const key = monthKeyFree ? `court:${month}` : `court:${date}`;
+      monthKeyFree = false;
+      const before = allCourt.filter((d) => d < date);
+      const [y, m] = month.split('-').map(Number);
+      const from = before.length ? addDays(before[before.length - 1], 1) : courtPeriod(input.days, y, m).from;
+      out.push({ kind: 'court', date, month, key, from });
     }
   }
-  due.sort((a, b) => (a.date === b.date ? (a.kind === 'court' ? -1 : 1) : a.date < b.date ? -1 : 1));
+  // (A membership set to $0 charges nothing, so there is nothing to check: no card.)
+  if (input.membershipCents > 0) {
+    const membership = chargeDays(full, shown, 'membership');
+    for (const [month, dates] of membership) {
+      // One membership a month: on the month's first charge day.
+      const date = dates[0];
+      if (!reached(date) || input.paid.has(`membership:${month}`)) continue;
+      out.push({ kind: 'membership', date, month, key: `membership:${month}` });
+    }
+  }
+  return out.sort((a, b) => (a.date === b.date ? (a.kind === 'court' ? -1 : 1) : a.date < b.date ? -1 : 1));
+}
+
+/**
+ * Every card due right now, oldest charge day first (venuePlan, priced). Court: nothing when the period has no booked games. When both charges of
+ * one month land on the same day and both are due, one combined card.
+ */
+export function dueAlerts(input: VenueInput): VenueAlert[] {
+  const { tz } = input;
+  const due: { date: string; kind: ChargeKind; month: string; key: string; cents: number; line: string }[] = [];
+  for (const c of venuePlan(input)) {
+    if (c.kind === 'court') {
+      const costs = periodGames(input.games, { from: c.from!, to: c.date }, tz).map((g) => g.costCents);
+      const total = costs.reduce((a, b) => a + b, 0);
+      if (costs.length > 0 && total > 0) due.push({ date: c.date, kind: 'court', month: c.month, key: c.key, cents: total, line: courtLine(costs) });
+    } else {
+      due.push({ date: c.date, kind: 'membership', month: c.month, key: c.key, cents: input.membershipCents, line: `Monthly membership, ${COURT_NAME}` });
+    }
+  }
   const out: VenueAlert[] = [];
   for (let i = 0; i < due.length; i++) {
     const c = due[i];
     const m = due[i + 1];
     if (c.kind === 'court' && m && m.kind === 'membership' && m.date === c.date && m.month === c.month) {
       const total = c.cents + m.cents;
-      out.push({ keys: [`court:${c.month}`, `membership:${m.month}`], date: c.date, kinds: ['court', 'membership'], cents: total, title: `${COURT_NAME} should have charged you ${formatPrice(total)}`, line: `${c.line}, plus membership ${formatPrice(m.cents)}` });
+      out.push({ keys: [c.key, m.key], date: c.date, kinds: ['court', 'membership'], cents: total, title: `${COURT_NAME} should have charged you ${formatPrice(total)}`, line: `${c.line}, plus membership ${formatPrice(m.cents)}` });
       i++;
     } else if (c.kind === 'court') {
-      out.push({ keys: [`court:${c.month}`], date: c.date, kinds: ['court'], cents: c.cents, title: `${COURT_NAME} should have charged you ${formatPrice(c.cents)}`, line: c.line });
+      out.push({ keys: [c.key], date: c.date, kinds: ['court'], cents: c.cents, title: `${COURT_NAME} should have charged you ${formatPrice(c.cents)}`, line: c.line });
     } else {
-      out.push({ keys: [`membership:${c.month}`], date: c.date, kinds: ['membership'], cents: c.cents, title: `Membership should have been charged: ${formatPrice(c.cents)}`, line: c.line });
+      out.push({ keys: [c.key], date: c.date, kinds: ['membership'], cents: c.cents, title: `Membership should have been charged: ${formatPrice(c.cents)}`, line: c.line });
     }
   }
   return out;

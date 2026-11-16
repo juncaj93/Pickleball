@@ -477,8 +477,17 @@ export async function withdraw(
   nowMs: number,
   /** LATE_FEES on for this tap (server/lateFees.ts): a player's own drop inside the 12 hours that leaves the game short owes. */
   /** cheaperFix (Zip 39, server/cheaperFix.ts): such a drop on a seat paid ABOVE the fee (the game was made cheaper after they paid) keeps only the fee. */
-  opts: { lateFees?: boolean; cheaperFix?: boolean } = {},
-): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number; debtCents?: number } | null; guest?: string | null }> {
+  opts: {
+    lateFees?: boolean;
+    cheaperFix?: boolean;
+    /**
+     * Zip 51 (F-16): what the player's Drop out dialog showed (the server checked the quote just before): whether this drop leaves the game
+     * short, and for a host with a guest how many spots (0 to 2). The seat only leaves when the same statement still finds exactly that, so two
+     * drops in the same instant can never charge a different amount than the screen said. Not found: nothing moves and `stale` is set.
+     */
+    expect?: { owes: boolean; guestSpots?: number | undefined };
+  } = {},
+): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number; debtCents?: number } | null; guest?: string | null; stale?: boolean }> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
   // Zip 42 "Guest spot": the guest leaves with the host. Read before the seat changes (the alert and History name the guest).
@@ -515,6 +524,14 @@ export async function withdraw(
   // A host still in whose guest was removed late ('late') leaves the same way: that spot is already one of the two.
   const short2 = g ? LEAVES_SHORT('session_players.session_id', 'session_players.id', true, FEE_MIN_PLAYERS - 1) : '0';
   const pairSeat = !!guestRow?.guest_name && existing?.status === 'confirmed' && (guestRow.guest_status === 'confirmed' || guestRow.guest_status === 'late');
+  // Zip 51 (F-16): the shown answer, checked inside the UPDATE below (every right-hand side reads the row as it was before it). Only for a seat
+  // that is in; a host with a guest also checks the second spot (the dialog's 0, 1 or 2 spots short).
+  const exp = opts.expect && existing.status === 'confirmed' ? opts.expect : null;
+  const expectSql = exp
+    ? ` AND (CASE WHEN ${owes} THEN 1 ELSE 0 END) = ${exp.owes ? 1 : 0}${
+        exp.guestSpots !== undefined && g ? ` AND (CASE WHEN ${owes} AND ${short2} THEN 1 ELSE 0 END) = ${exp.guestSpots >= 2 ? 1 : 0}` : ''
+      }`
+    : '';
   const money = seatMoneyBackStatements(db, {
     entryId,
     groupId: group.id,
@@ -546,7 +563,7 @@ export async function withdraw(
                      : ''
                  }
                  updated_at = ?1
-               WHERE id = ?2 AND status = ?3`,
+               WHERE id = ?2 AND status = ?3${expectSql}`,
             )
             .bind(nowIso, existing.id, existing.status, feeDrop ? 1 : 0, isOrg ? 1 : 0),
         ]
@@ -647,7 +664,11 @@ export async function withdraw(
       ? { paid: false }
       : { ...(await lateFeeLeft(db, session.id, playerId, flatOf(session, settingsOf(group)) * units)), debtCents: flatOf(session, settingsOf(group)) * units }
     : null;
-  if (!changed && cash === 0 && credit === 0) return nothing;
+  if (!changed && cash === 0 && credit === 0) {
+    // Zip 51 (F-16): the seat is still in, so the check above refused it (the game changed in the same instant): say so, nothing moved.
+    if (leaving && exp && (await existingRow(db, session.id, playerId))?.status === existing.status) return { ...nothing, stale: true };
+    return nothing;
+  }
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.
     await db

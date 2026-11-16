@@ -92,7 +92,7 @@ import { parseMode } from '../shared/christmasSkin';
 import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { markVenuePaid, setVenueAlertForAll, venueAlertFlags, venueAlertsNow } from './venueAlert';
-import { venueDaysChangedAt, venueDaysOf, normalizeVenueDays, MEMBERSHIP_DAY_MAX, COURT_DAY_MAX, COURT_LAST_DAY } from '../shared/venueAlert';
+import { venueDaysChangedAt, venueDaysHistoryOf, venueDaysOf, normalizeVenueDays, MEMBERSHIP_DAY_MAX, COURT_DAY_MAX, COURT_LAST_DAY, VENUE_HISTORY_MAX, type VenueDaysSpan } from '../shared/venueAlert';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { cheaperFixFlags, cheaperFixFor, setCheaperFixForAll } from './cheaperFix';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
@@ -1288,6 +1288,9 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
     // "Card cleanup" (Zip 10): no cap, only the database's 12; never the word "full".
     if (r.result === 'spot_taken') throw settingsOf(group).noCap === true ? new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE) : new HttpError(409, 'session_full', `The game is full (${settingsOf(group).maxPlayers} in).`);
     result = r.result;
+    // Zip 51 (audit F-15): back in from the organizer's In after a late drop, the same as the player's own I'm in: the late-drop mark goes
+    // (the Players tab count, and a later normal drop never reads as late). The money already followed the player's own path (joinSession).
+    if (r.result === 'confirmed') await clearLateDrop(ctx.db, session.id, playerId);
     // Zip 49 (audit F-6): giving a host back their spot after To waitlist leaves their guest waiting behind them; with room, the guest (and
     // anyone else waiting) moves in now, the same moves a drop makes. Nothing moves while the game is full or nobody waits.
     if (r.result === 'confirmed') await settle(ctx.db, session, ctx.nowIso, settingsOf(group));
@@ -1295,6 +1298,9 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
     // "Card cleanup" (Zip 10): there is no waitlist to move anyone to.
     if (settingsOf(group).noCap === true) throw new HttpError(409, 'no_waitlist', 'There is no waitlist anymore. Use Out instead.');
     await moveToWaitlist(ctx.db, session, playerId, ctx.nowMs);
+    // Zip 51 (F-15): a late dropper (who owes nothing: moveToWaitlist refuses an open debt) put on the waitlist keeps no mark either, like the
+    // player's own I'm in that lands on the waitlist.
+    await clearLateDrop(ctx.db, session.id, playerId);
     result = 'waitlisted';
   } else if (action === 'withdraw') {
     const r = await withdraw(ctx.db, group, session, playerId, ctx.nowMs);
@@ -1977,6 +1983,8 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const venueBefore = venueDaysOf(group.settings_json);
   let venueDays = venueBefore;
   let venueChangedAt = venueDaysChangedAt(group.settings_json);
+  // Zip 51 (F-9): the days in force before each move (shared/venueAlert.ts venueDaysHistoryOf), kept as they are unless a day moves now.
+  let venueHistory: VenueDaysSpan[] = venueDaysHistoryOf(group.settings_json);
   const hadVenueDays = (() => {
     try {
       return (JSON.parse(group.settings_json || '{}') as { venueDays?: unknown }).venueDays !== undefined;
@@ -1996,10 +2004,18 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     };
     venueDays = normalizeVenueDays(venueDays);
     // A day that really moved starts the no-backfill clock over (shared/venueAlert.ts venueDaysChangedAt); picking the same day again changes nothing.
-    if (venueDays.membershipDay !== venueBefore.membershipDay || venueDays.courtDay !== venueBefore.courtDay) venueChangedAt = ctx.nowMs;
+    if (venueDays.membershipDay !== venueBefore.membershipDay || venueDays.courtDay !== venueBefore.courtDay) {
+      // Zip 51 (F-9): the old days are written down with when they were in force, so a charge day that already came under them stays.
+      const since = venueChangedAt > 0 ? venueChangedAt : venueHistory.length ? venueHistory[venueHistory.length - 1].until : 0;
+      if (ctx.nowMs > since) venueHistory = [...venueHistory, { membershipDay: venueBefore.membershipDay, courtDay: venueBefore.courtDay, from: since, until: ctx.nowMs }].slice(-VENUE_HISTORY_MAX);
+      venueChangedAt = ctx.nowMs;
+    }
   }
   const withZelle = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
-  const storedSettings = body.venueDays !== undefined || hadVenueDays ? { ...withZelle, venueDays: { ...venueDays, ...(venueChangedAt > 0 ? { changedAt: venueChangedAt } : {}) } } : withZelle;
+  const storedSettings =
+    body.venueDays !== undefined || hadVenueDays
+      ? { ...withZelle, venueDays: { ...venueDays, ...(venueChangedAt > 0 ? { changedAt: venueChangedAt } : {}), ...(venueHistory.length ? { history: venueHistory } : {}) } }
+      : withZelle;
   // Zip 27 (A-01): a new "Price per player" or "Typical court cost" never re-prices a finalized game. Its rules are written down first,
   // from what it shows right now (a failure here changes nothing). Any other save is untouched.
   {

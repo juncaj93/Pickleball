@@ -4992,3 +4992,64 @@ lasts 400 days and survives sign-out (it only skips the overall cap). Test gaps 
   at 6:00 PM as `2026-11-15-asked-1800` (207,614 characters, 4 pieces). `npm run restore-test -- --weekly 2026-11-15-asked-1800`: PASS,
   all 573 rows in 13 tables (version 2: switches, price locks, alert settings and real sign-ins included), its own saved counts, the
   money and the 21 health checks match. The regular Sunday copies are version 2 from Sun Nov 22.
+
+## Zip 51: the last three money edge cases from Audit C (🎾51.edgecases), Mon Nov 16, 2026
+Branch `claude/new-session-uyfl03` (the session is named "🎾51.edgecases"; the build system pins the branch name). Built on main `552cbd2`
+(Zips 48, 49 and 50 live). MOVES MONEY (F-15, F-16) and changes the organizer's venue cards (F-9). No schema change, no new Cloudflare variable,
+no new switch. The only new words are F-16's "This just changed." in the Drop out dialog.
+
+### 1. F-9: the Venue charge alert never skips or hides a charge day (shared/venueAlert.ts)
+- What was wrong: a moved charge day started the "no backfill" clock over, so every card already due vanished at the move, and a court day
+  moved after a paid month left games on no card (court 15th, Nov 15 paid, moved to Last day: Nov 16 to 30 never billed; moved to the 20th after
+  Oct 15 was paid: Oct 16 to 20 never billed). A membership day moved past itself (28th back to the 26th on the 27th) skipped the month.
+- Now, charge days on a timeline: the Settings save that moves a day writes the old days down with when they were in force
+  (`venueDays.history` in the group's settings_json, at most 24 entries, no schema change). A day counts when the days in force at its
+  12:00 AM name it; before the switch went on, the days in force at that moment decide (days picked while turning the switch on are a correction,
+  not a move). A month left with no day gets the current days' day, so no month is skipped.
+- Court periods chain: each card's games run from the day after the court charge day before it (paid or not) to its own day, so every booked
+  game is on exactly one card, and Mark paid on one card never changes another. A second court charge in one month is its own card, keyed by its
+  date (`court:2026-11-30`, task `venue_paid:court:2026-11-30`); the usual one keeps the month key, so older rows read as before.
+- No-backfill now starts only when the switch went on (a moved day no longer restarts it). A move saved before this release kept no old days:
+  the current days count for that time, as the site always assumed.
+- Tests: tests/zip51-edgecases.test.ts (12 for F-9, exact amounts: the two moves above through the real server, a move to a day already past, an
+  unpaid $192 card unchanged through a move, two unpaid months with Mark paid on the newer one first, the membership cases, the correction case,
+  Last day in Nov, Dec, Feb 2027 and Feb 2028, the 31st, a charge day that is the switch-on day, and a 7-month run with six moves where the cards
+  add up to every booked game exactly once). tests/venue-alert.test.ts "review fixes" now expects the Nov 26 membership card to stay through a move.
+
+### 2. F-15: a late dropper Alex puts back In keeps no late-drop mark (server/admin.ts editRoster)
+- The Players sheet's In (and Add) after a late drop now clears the mark the same way the player's own I'm in does (`clearLateDrop`). The money
+  already followed the player's own path (joinSession: the debt ends, a host who comes back alone gets the guest's $14 back): checked equal for
+  a paid $28 pair (Paid $14, $14 credit) and an unpaid pair (owes $14), both ways. Before, the mark stayed: the late-drop count stayed 1 and, after a
+  move to another day, a normal drop read "Late drop" on the card.
+- Tests: 5 in tests/zip51-edgecases.test.ts (self and organizer the same, the pair money, an open debt still cannot go to the waitlist, Finalize
+  after the In charges the normal $14, the move-then-drop case).
+
+### 3. F-16: the Drop out dialog's money is checked again when the player taps it (shared/dropQuote.ts)
+- Found while building: the player screen holds its live updates while any sheet is open, so the dialog could be old for as long as it stayed
+  open, not just seconds.
+- The phone builds a short "quote" from the money its dialog shows (in or waiting; early or late; owes or not and the amount; "stays" or "owe";
+  a host's spots short; credit back; an unconfirmed I paid; the guest). At the tap it asks the server once (GET /api/group): different, and the
+  dialog stays open with "This just changed." in bold and the real words, nothing is sent. The same: the 5-second Undo starts as before.
+- At the send (POST withdraw with the quote) the server works the quote out again from the same view the screen gets. Different: 409
+  "drop_changed", nothing moves, and the phone reloads and opens the dialog again with the real words. Matching: the seat's own UPDATE also checks,
+  in the same statement, that "the game is left short" (and a pair's second spot) is still what was shown, so two drops in the same instant can
+  never charge a different amount than the screen said. If that check refuses while the screen would still say the same thing (the two counts
+  disagree, which no test has found), the drop goes ahead as before so nobody is stuck in.
+- A note left by a page that closed during the Undo carries the quote too: a changed amount drops nothing later. An older page sends no quote and
+  drops as before; a seat already out answers as before ("not_in_session").
+- Tests: 8 in tests/zip51-edgecases.test.ts (the cancel-by second: shown "$14 back", real $14 kept; shown $14 owed, Gale joins, real $0; shown $0,
+  Casey drops, real $14; a pair shown $14 then $28; a matching quote; no quote; a seat already out; the race inside withdraw).
+
+### Re-run
+- Audit C probes (docs/audits/zip47-probes, guest, late fee and venue: 127): 114 pass; the 13 that fail all pinned an old answer that Zip 49 or
+  this zip fixed on purpose (Zip 49's 10, plus E1, P-S05 court and P-S05 "move back after the day passed").
+- tests/zip49-money.test.ts and the Zip 49 browser test e2e/zip49.cjs: see Tests below.
+
+### Tests
+- Unit: see the deploy notes (full run on the final code).
+- Browser: e2e/zip51.cjs (in the suite): D1 at 390, 360, 320, light and dark (the dialog says "This just changed." with the real words, nothing
+  dropped); D2 (the money changed during the Undo: the server refuses, the dialog comes back, then the drop: $14 back as credit); B1 (Reese back In
+  from the sheet, the game moved, a normal drop: no "Late drop" tag, light and dark); V1 (the two venue cards through a moved court day).
+
+### Preview
+`npm run db:seed:preview` now builds the Zip 51 calm profile (scripts/preview-world-small.ts step 26; docs/PREVIEW_FAKE_DB.md).
