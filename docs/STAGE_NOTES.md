@@ -5081,3 +5081,47 @@ and drops nothing. Two tabs in one browser share the player picked on "Who are y
 
 ### Preview
 `npm run db:seed:preview` now builds the Zip 51 calm profile (scripts/preview-world-small.ts step 26; docs/PREVIEW_FAKE_DB.md).
+
+## Zip 52: the audit fuzz's "$5 short" (🎾52.fuzz), Mon Nov 16, 2026
+Branch `claude/new-session-j2knq5` (the session is named "🎾52.fuzz"; the build system pins the branch name). Built on main `3dd6468` (Zips 48 to 51
+live). MOVES MONEY (Unmark and the player's own "Didn't pay?" on a paid seat). No schema change, no Cloudflare variable, no switch, no wording or
+look change.
+
+### What the fuzz saw
+- The fuzz is tests/audit-r4.test.ts "random sequences" (a unit test against the real server code, not a browser test). On the old code its
+  finalize-heavy half failed about 1 sequence in 100 (seeds 1020, 3073, 4020, 4061 in 400 tried; the default run has 40, so about 1 run in 3).
+  Every failure: "more credit than price" on a played seat, after an Unmark that answered 409.
+- The steps (seed 4020, as plain steps): Emery's $14 is marked paid. She drops out: her $14 becomes credit. She comes back in (her own I'm in, or
+  Alex's Add): the $14 credit goes on the seat, which reads Paid. 6 play, final price $9: Finalize gives her $5 back as credit. Alex taps Unmark
+  on her payment: refused ("already used the credit from this game"), and yet her credit went from $5 to $0 while the seat still kept all $14.
+  So the screens said: Players tab and her phone: credit $0; the game: Emery Paid $14; it should have been credit $5, Paid $9.
+  (At 5, 8 or 10 played the loss is $3, $7 or $9: always the money back from Finalize.)
+
+### Cause
+- Unmark takes back, in one batch, the credit that came back from the payment, then marks the seat unpaid. Since Zip 49 (Nov 15) there are two
+  kinds: the money back from Finalize, and a "trim" (a guest's share given back from a seat that stays paid: Remove guest, a late pair, a host
+  back alone). Each take-back checked on its own that the player's credit still covered it. When the credit covered the Finalize money but not
+  both, the Finalize money was taken back, the trim was not, and so the "unpaid" step (which needs both gone) was refused: the tap said no, the
+  seat stayed paid, and the money already taken was gone. The opposite order, or a Finalize or Reopen landing in the same instant, did the same.
+- Why the fuzz hit it: its clock does not move between taps, so the drop and the rejoin happen in the same millisecond, and the $14 from the
+  drop reads as a "trim" of the new payment. On the live site that needs two taps in the same millisecond (not a real case), BUT a real trim
+  does the same: Guest spot is on live, so: Blair pays $28 for herself and a guest, Remove guest ($14 back), 6 play ($5 back, $19 credit), she
+  spends $14 of it on the next game, then Alex taps Unmark on the first game: $5 gone. Proven on the old code (tests/zip52-fuzzfix.test.ts,
+  first test, real clock).
+- Live (read only, `wrangler d1 execute` SELECT, no names): not one credit entry has ever been taken back by an Unmark or a Reopen
+  (no "undone" entries at all), so no live game shows the problem.
+
+### Fix (server/credit.ts undoSeatBackStatements, used by server/admin.ts applyPayment's Unmark)
+- One function makes both take-backs, each with the same check: the credit covers BOTH together (beyond a pending cash out), the seat is still
+  paid and not settled, and the game is still the finalize the screen read. That is exactly what the "unpaid" step needs, so all three go in
+  together or nothing moves. A refused Unmark now moves nothing (the 409 message is the same as before).
+- Left as it is (a note): with the fake clock, a drop and a rejoin in the same millisecond still make the drop's credit read as a trim, so that
+  Unmark is refused ("already used the credit") with nothing moved. On live it would need both taps in the same millisecond.
+
+### Tests
+- tests/zip52-fuzzfix.test.ts (11): the real-clock Guest spot case (Unmark refused, Blair keeps her $5, nothing moved); the same with the credit
+  back in the pot (one Unmark takes back $5 and $14, seat owes again); the fuzz shape at 5, 6, 8 and 10 played, back in by her own I'm in and by
+  Alex's Add (nothing lost, then Reopen and Finalize again give the same money back once); a plain Unmark after Finalize unchanged. 9 of the 11
+  fail on the old code.
+- tests/audit-r4.test.ts: the ids the server makes now follow the seed, so a failing seed replays exactly (`FUZZ_FROM=<seed> FUZZ_FIN_SEQS=1`);
+  each Finalize step logs who played.

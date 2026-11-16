@@ -638,47 +638,46 @@ export function creditBackStatements(
 }
 
 /**
- * Take back the credit that came back from a seat's payment because it was
- * above the final price (the organizer unmarking that payment). All or
- * nothing: only while the pot, beyond a pending cash out, still holds all of
- * it. Statements only, for the caller's batch: check afterwards with
- * `creditBackLeft` whether it was blocked.
- */
-export function undoFinalizedBackStatements(db: D1Database, sessionId: string, playerId: string, nowIso: string, finalizeAsRead?: string): D1PreparedStatement[] {
-  const back = `(SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')`;
-  // `finalizeAsRead` ("finalized_at:final price" the caller read): only while the game is still that finalize.
-  const asRead = finalizeAsRead !== undefined ? ` AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?2) = ?4` : '';
-  return [
-    db
-      .prepare(
-        `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone'
-         WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized'
-           AND ${POT('?3')} - ${RESERVED('?3')} - ${back} >= 0${asRead}`,
-      )
-      .bind(nowIso, sessionId, playerId, ...(finalizeAsRead !== undefined ? [finalizeAsRead] : [])),
-  ];
-}
-
-/**
  * Zip 49 (review): credit that came back from a seat that is STILL paid, after its payment (a trim: the guest's $14 of a $28 I paid confirmed
  * after a late drop, a host who rejoined alone, Remove guest, "Made cheaper after paying"): live 'kept' entries, reason 'dropped', made at or
  * after the seat's paid_at, while the seat is paid and not refunded. A normal drop settles the seat (refunded_at), so its entries never count.
- * Unmark takes these back with the payment (only while the pot still has them), like the 'finalized' credit above.
+ * Unmark takes these back with the payment (only while the pot still has them), like the 'finalized' credit below.
  */
 const TRIM_BACK = (sp: string) =>
   `kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'dropped'
    AND created_at >= (SELECT ${sp}.paid_at FROM session_players ${sp} WHERE ${sp}.session_id = ?2 AND ${sp}.player_id = ?3 AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL)`;
 
-export function undoTrimBackStatements(db: D1Database, sessionId: string, playerId: string, nowIso: string): D1PreparedStatement[] {
-  const back = `(SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE ${TRIM_BACK('tb')})`;
+/**
+ * Unmark (the organizer's, or the player's own "Didn't pay?") on a paid seat: take back the credit that came back from this payment, both
+ * kinds together: 'finalized' (paid above the final price) and the trim credit above. Statements only, for the caller's batch, which then
+ * marks the seat unpaid only once none of it is left; check afterwards with `creditBackLeft` and `trimBackLeft` whether it was blocked.
+ *
+ * Zip 52: ALL OR NOTHING across both kinds. Each statement runs only while the pot (beyond a pending cash out) holds both amounts together,
+ * the seat is still paid and not settled, and the game is still the finalize the caller read: exactly what the caller's "unpaid" step needs.
+ * Before, each kind checked the pot on its own, so one could be taken back while the other (and so the Unmark) was refused: the seat stayed
+ * paid and the credit taken was simply gone (the audit fuzz's "$5 short"). After the first statement ends its rows, the second reads
+ * pot - finalized back as the pot and 0 as the finalized back, so it sees the same answer.
+ */
+export function undoSeatBackStatements(db: D1Database, sessionId: string, playerId: string, nowIso: string, finalizeAsRead?: string): D1PreparedStatement[] {
+  const finBack = `(SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')`;
+  const trimBack = `(SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE ${TRIM_BACK('tb')})`;
+  // `finalizeAsRead` ("finalized_at:final price" the caller read): only while the game is still that finalize.
+  const asRead = finalizeAsRead !== undefined ? ` AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?2) = ?4` : '';
+  const all = `${POT('?3')} - ${RESERVED('?3')} - ${finBack} - ${trimBack} >= 0
+    AND EXISTS (SELECT 1 FROM session_players ps WHERE ps.session_id = ?2 AND ps.player_id = ?3 AND ps.payment_status = 'paid' AND ps.refunded_at IS NULL)${asRead}`;
+  const values = [nowIso, sessionId, playerId, ...(finalizeAsRead !== undefined ? [finalizeAsRead] : [])];
   return [
     db
-      .prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${TRIM_BACK('tb')} AND ${POT('?3')} - ${RESERVED('?3')} - ${back} >= 0`)
-      .bind(nowIso, sessionId, playerId),
+      .prepare(
+        `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone'
+         WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized' AND ${all}`,
+      )
+      .bind(...values),
+    db.prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${TRIM_BACK('tb')} AND ${all}`).bind(...values),
   ];
 }
 
-/** SQL: this seat still has trim credit live (see undoTrimBackStatements); ?2 session, ?3 player. */
+/** SQL: this seat still has trim credit live (see undoSeatBackStatements); ?2 session, ?3 player. */
 export const TRIM_BACK_LIVE = `EXISTS (SELECT 1 FROM credit_ledger WHERE ${TRIM_BACK('tb')})`;
 
 export async function trimBackLeft(db: D1Database, sessionId: string, playerId: string): Promise<number> {

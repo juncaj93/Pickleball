@@ -388,7 +388,17 @@ function prng(seed: number) {
 
 type Step = { act?: string; label: string; kind: 'neutral' | 'pay' | 'clear' | 'confirm' | 'mixed'; seat?: [string, string]; run: () => Promise<any> };
 
+// Zip 52: the ids the server makes (seats, games, credit entries made in code) follow the seed too, so a failing seed replays exactly
+// (FUZZ_FROM=<seed> FUZZ_FIN_SEQS=1 or FUZZ_SEQS=1). Before, they were random, and the picks below (ORDER BY sp.id) changed from run to run.
+let idRng = prng(1);
+vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(() => {
+  const h = () => Math.floor(idRng.next() * 2 ** 32).toString(16).padStart(8, '0');
+  const a = h() + h() + h() + h();
+  return `${a.slice(0, 8)}-${a.slice(8, 12)}-4${a.slice(13, 16)}-8${a.slice(17, 20)}-${a.slice(20, 32)}` as `${string}-${string}-${string}-${string}-${string}`;
+});
+
 async function runSeq(seed: number, stats: { steps: number; seqs: number }, mode: 'mixed' | 'finalize' = 'mixed') {
+  idRng = prng(seed * 7919 + 13);
   const r = prng(seed);
   const w = await world({ book: false });
   const games = mode === 'finalize' ? [await on(w, '2026-11-03')] : [await on(w, '2026-11-03'), await on(w, '2026-11-05'), await on(w, '2026-11-10')];
@@ -581,6 +591,7 @@ async function runSeq(seed: number, stats: { steps: number; seqs: number }, mode
         run: async () => {
           const s2 = raw(w).prepare("SELECT player_id FROM session_players WHERE session_id = ? AND status = 'confirmed' ORDER BY id").all(g.id) as any[];
           const played = s2.map((x) => x.player_id).filter((x) => x === w.ids[ORG] ? orgPlays : r.next() < keep);
+          log.push(`  (played: ${played.map(nameOf).join(', ')})`);
           return org.call('POST', `/api/admin/sessions/${g.id}/finalize`, { played });
         },
       };

@@ -65,7 +65,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, undoTrimBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead } from './credit';
+import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
@@ -1671,9 +1671,9 @@ export async function applyPayment(
     // Everything below was worked out for the game as read: a Finalize or Reopen landing first means look again.
     const finalizeAsRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
     const [, , unpaid] = await ctx.db.batch([
-      ...undoFinalizedBackStatements(ctx.db, session.id, playerId, ctx.nowIso, finalizeAsRead),
-      // Zip 49 (review): credit a trim gave back from this still-paid seat goes back too (or the Unmark is refused below, if it was spent).
-      ...undoTrimBackStatements(ctx.db, session.id, playerId, ctx.nowIso),
+      // The money back from this payment (paid above the final price), and (Zip 49 review) credit a trim gave back from this still-paid seat,
+      // go back together: Zip 52, all or nothing with the "unpaid" step below (or the Unmark is refused below and nothing moves).
+      ...undoSeatBackStatements(ctx.db, session.id, playerId, ctx.nowIso, finalizeAsRead),
       ctx.db
         .prepare(
           `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed'${fee ? ` OR ${OPEN_FEE('session_players')}` : ''} THEN 'unpaid' ELSE 'not_applicable' END,
