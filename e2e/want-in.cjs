@@ -95,7 +95,12 @@ async function main() {
   }
   // Mitchel and Brandon are already in the Thursday game (so it reads "2 of 4 in").
   for (const n of ['Mitchel', 'Brandon']) await post(who[n], `/api/sessions/${thu.id}/join`, {});
-  // Zip 53: no day preference any more. Everyone not in a game gets the same card (Nathan, Ryan and Dana included).
+  // Zip 53: no day preference any more. Everyone not in a game gets the same card (Nathan, Ryan and Dana included): the soonest game that
+  // needs players. So that this test's card is still the Thursday one, Tuesday Nov 3 is made "full enough" (4 in: Alex, Mitchel, Brandon,
+  // Julian) and only Thursday (2 in) needs players.
+  const tue = games.find((s) => s.startsAt.startsWith('2026-11-04T01:00')); // Tue Nov 3, 8 PM Eastern
+  assert(tue, 'no Tue Nov 3 game');
+  for (const n of ['Alex', 'Mitchel', 'Brandon', 'Julian']) await post(who[n], `/api/sessions/${tue.id}/join`, {});
 
   const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA };
   async function open(name) {

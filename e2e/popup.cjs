@@ -85,6 +85,10 @@ async function main() {
     // Make exactly n people in, through the organizer's roster control.
     for (const [i, name] of OTHERS.entries()) await call(api.request, 'POST', `/api/admin/sessions/${tue.id}/roster`, { playerId: id[name], action: i < n ? 'confirm' : 'withdraw' });
   };
+  // Zip 53: the card is the same for every player (the soonest game that needs players, else the soonest with room), so every OTHER game
+  // is made "full enough" (4 in): only the Election Day game changes from one check to the next.
+  for (const other of d0.sessions.filter((s) => s.id !== tue.id && Date.parse(s.startsAt) > Date.parse('2026-11-02T09:00:00-05:00')))
+    for (const name of OTHERS.slice(0, 4)) await call(api.request, 'POST', `/api/admin/sessions/${other.id}/roster`, { playerId: id[name], action: 'confirm' });
   const player = async (scheme, width) => {
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, isMobile: true, hasTouch: true, colorScheme: scheme });
     await call(ctx.request, 'POST', '/api/me', { playerId: id.Frankie });
