@@ -5228,11 +5228,18 @@ look change.
 - Unmark only ever takes off the LATEST cash. Once a Reopen and a new Finalize have turned a Mark paid into cash held on the seat, Unmark can no
   longer take it off (it now says nothing changed). Is that what you want, or should Unmark be able to take that cash off too?
 
-### Deploy: NOT done (Mon Nov 16, 12:40 PM Eastern)
-- Ready at 12:40 PM: full unit suite on the merged code 186 files, 3,347 passed, 2 skipped, 0 failed; typecheck, file name check and the
-  production build clean. Live checked read-only first: newest production deployment `5404528b` (Zip 51b, `6050656`, verified by 🎾51),
-  main `e2aad07` contains it, nothing mid-deploy. Integrity checks 21 of 21 at 0 (12:35 PM). Time Travel bookmark
-  `00001547-00000000-00005125-e56d664540e368f1dfe24b2c90109f13` (12:35 PM). A fresh SQL export was taken and then deleted unsaved (no deploy).
-- Stopped: this session's permission settings refused fast-forwarding main to this branch and pushing it, so nothing was merged or deployed.
-  Live is still Zip 51b. To ship: fast-forward main to this branch, take a new export and bookmark, `npm run deploy`, then the usual checks.
-  Windows: today until 4:30 PM (Alex's brief), otherwise Wed Nov 18, 6 AM to 6 PM.
+### Deploy (Mon Nov 16, 2026, 1:22 PM Eastern, quiet window)
+- 12:40 PM: ready, but this session's permissions refused fast-forwarding main; Alex then allowed it, saving the export and the deploy.
+- No group text in the hour before (Alex); nothing else deploying (the newest production deployment was Zip 51b's `5404528b`, `6050656`, and
+  main `e2aad07` contained it, already merged into this branch). Re-run on the final code: tests/zip52-fuzzfix, zip49-money, zip51-edgecases,
+  zip51-money-note and audit-r4 (default fuzz) 232 of 232.
+- Restore point: Time Travel bookmark `00001550-00000000-00005125-daa990e774fd9be72a0b9fb5da30c35d` (1:21 PM); SQL export of live
+  (248 KB, 621 rows, 1:21 PM) saved in `pickleball-backups` as `export-20261116182135` and checked, local copy deleted (phone numbers inside).
+  Integrity checks 21 of 21 at 0 before and after. No schema change, no new Cloudflare variable, no switch.
+- Main fast-forwarded from `e2aad07` to `3c067be` (a plain push, no force), then `npm run deploy` from main (the guard's five rules passed).
+  Production deployment `53faae1b-75ed-4bd9-aeca-e5a9c3552563`. Rollback: Pages deployment `5404528b-3125-4a67-9033-2391ebf10be7`
+  (Zip 51b, `6050656`). The clock Worker did not change.
+- Live check (public files only, no PIN, the backup address `pickleball-club-9h0.pages.dev`): the page loads (200) with the new bundle
+  (`index-CALBrRFS.js`, the same as the build); a fresh phone sees "Who are you?" with no page errors and never fetches the organizer files;
+  /admin asks for the PIN with no page errors; organizer data (dashboard, money, activity, backup, demo-extras) answers 401 without it.
+- Alex's answer to the question above (Mon Nov 16): keep Unmark as it is (it only takes off the newest cash, and says "nothing changed" otherwise).
