@@ -338,25 +338,20 @@ describe('add my name', () => {
     return c;
   }
 
-  it('adds a new person, remembers them, and saves their preferred days', async () => {
+  it('adds a new person and remembers them; they start occasional, with no preference to set', async () => {
     const ctx = await setupGroup();
     const phone = await stranger(ctx);
     const res = await phone.call('POST', '/api/players/self', { name: 'Morgan' });
     expect(res.data).toMatchObject({ result: 'added', me: { name: 'Morgan' } });
     expect((await phone.call('GET', '/api/group')).data.me).toMatchObject({ name: 'Morgan' });
-    expect((await phone.call('PUT', '/api/me/days', { days: [2, 4] })).data).toEqual({ ok: true, usualDays: '2,4' });
+    // Zip 53: the "Any preferred days?" step and its route are gone.
+    expect((await phone.call('PUT', '/api/me/days', { days: [2, 4] })).status).toBe(404);
     const p = (await dash(ctx)).players.find((x: any) => x.name === 'Morgan');
-    expect(p).toMatchObject({ isNew: true, usualDays: [2, 4], isRegular: true });
+    expect(p).toMatchObject({ isNew: true, isRegular: false });
+    expect(p).not.toHaveProperty('usualDays');
     // The organizer reviews them: the New tag goes away.
-    await ctx.organizer.call('PUT', `/api/admin/players/${p.id}`, { name: 'Morgan', isRegular: false });
-    expect((await dash(ctx)).players.find((x: any) => x.name === 'Morgan')).toMatchObject({ isNew: false, isRegular: false });
-  });
-
-  it('Skip leaves them occasional with no usual days', async () => {
-    const ctx = await setupGroup();
-    const phone = await stranger(ctx);
-    await phone.call('POST', '/api/players/self', { name: 'Quinn' });
-    expect((await dash(ctx)).players.find((x: any) => x.name === 'Quinn')).toMatchObject({ isNew: true, usualDays: [], isRegular: false });
+    await ctx.organizer.call('PUT', `/api/admin/players/${p.id}`, { name: 'Morgan', isRegular: true });
+    expect((await dash(ctx)).players.find((x: any) => x.name === 'Morgan')).toMatchObject({ isNew: false, isRegular: true });
   });
 
   it('asks "Is this you?" for a name that looks like someone already on the list', async () => {

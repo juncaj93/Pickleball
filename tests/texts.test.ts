@@ -91,7 +91,7 @@ describe('texting several people at once', () => {
     // Remove two numbers.
     for (const n of ['Blair', 'Devon']) {
       const p = d0.players.find((q: any) => q.name === n);
-      await ctx.organizer.call('PUT', `/api/admin/players/${p.id}`, { name: n, phone: null, isRegular: p.isRegular, usualDays: p.usualDays, isActive: true });
+      await ctx.organizer.call('PUT', `/api/admin/players/${p.id}`, { name: n, phone: null, isRegular: p.isRegular, isActive: true });
     }
     x = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((v: any) => v.id === sid);
     expect(playersIn(x).phones).toHaveLength(2);

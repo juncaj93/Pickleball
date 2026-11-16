@@ -173,7 +173,7 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
   let dash = await w.org.ok('GET', '/api/admin/dashboard');
   for (const name of WITH_VENMO) {
     const p = (dash.players as any[]).find((x) => x.name === name);
-    await w.org.ok('PUT', `/api/admin/players/${p.id}`, { name, phone: p.phone, isRegular: p.isRegular, isActive: p.isActive, canReceiveSubstituteInvites: p.canReceiveSubstituteInvites, usualDays: p.usualDays, venmo: `@${name.toLowerCase()}-fake` });
+    await w.org.ok('PUT', `/api/admin/players/${p.id}`, { name, phone: p.phone, isRegular: p.isRegular, isActive: p.isActive, canReceiveSubstituteInvites: p.canReceiveSubstituteInvites, venmo: `@${name.toLowerCase()}-fake` });
   }
   w.groupKey = String(dash.group.privateLink).split('/g/')[1];
   for (const p of dash.players as { id: string; name: string }[]) w.ids[p.name] = p.id;
@@ -644,14 +644,10 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
   const caseyPot = (await (await w.pick('Casey')).ok('GET', '/api/group')).credit.balanceCents as number;
   await w.org.ok('POST', `/api/admin/players/${casey.id}/credit-adjust`, { direction: 'add', cents: 500, seen: caseyPot, reason: 'Thanks for bringing balls' });
   summary.push(`credit adjusted: Casey +$5 ("Thanks for bringing balls"), credit now ${(caseyPot + 500) / 100} dollars`);
-  // A regular with usual days (Tue and Thu) who has not answered the next one: Casey gets the "Want in" card ("Tuesday has 5 in",
-  // I'm in, X), stacked with the Credit adjusted card above it.
-  w.db.raw.prepare("UPDATE players SET usual_days = '2,4', is_regular = 1 WHERE id = ?").run(casey.id);
-  summary.push('Casey is a regular for Tue and Thu and has not answered the next one: Casey sees the Want in card');
-  // A Thursday-only regular (Harper): the next Thursday game, when it has fewer than 4 in, shows "Thursday needs 1 more" with the balls.
-  const harper = (dash.players as { id: string; name: string }[]).find((p) => p.name === 'Harper')!;
-  w.db.raw.prepare("UPDATE players SET usual_days = '4', is_regular = 1 WHERE id = ?").run(harper.id);
-  summary.push('Harper is a regular for Thursday: Harper sees the Want in card for the next Thursday game');
+  // Zip 53: the "needs people" card is the same for every player who is not in the game (no day preference any more): the soonest game
+  // with fewer than 4 in, else the soonest game with room for one more. Casey and Harper (not in those games) see it, under the Credit
+  // adjusted card for Casey.
+  summary.push('Every player who is not in the game sees the same "needs people" card (the soonest game under 4 in, else the soonest with room); Casey and Harper are two of them');
   let takenGame: any = null;
   for (const hoursAhead of [9, 9.5, 8.5, 8]) {
     try {

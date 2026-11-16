@@ -48,7 +48,6 @@ export interface PlayerRow {
   is_active: number;
   can_receive_substitute_invites: number;
   sort_order: number;
-  usual_days: string;
   self_added_at: string | null;
   is_new: number;
   calendar_token: string | null;
@@ -537,14 +536,6 @@ export function courtCostOf(session: PricedGame & Pick<SessionRow, 'court_cost_c
 
 export function sharesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, number> {
   return new Map([...pricesFor(session, roster, settings)].map(([id, p]) => [id, p.cents]));
-}
-
-/** Weekday numbers stored as '2,4'. */
-export function usualDaysOf(p: Pick<PlayerRow, 'usual_days'>): number[] {
-  return (p.usual_days ?? '')
-    .split(',')
-    .map(Number)
-    .filter((d) => d === 2 || d === 4);
 }
 
 export function statusInput(session: SessionRow, roster: RosterRow[]): StatusInput {

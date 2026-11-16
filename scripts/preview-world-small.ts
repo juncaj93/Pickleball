@@ -120,7 +120,7 @@ export async function buildSmallPreview(
   let dash = await w.org.ok('GET', '/api/admin/dashboard');
   for (const name of SMALL_WITH_VENMO) {
     const p = (dash.players as any[]).find((x) => x.name === name);
-    await w.org.ok('PUT', `/api/admin/players/${p.id}`, { name, phone: p.phone, isRegular: p.isRegular, isActive: p.isActive, canReceiveSubstituteInvites: p.canReceiveSubstituteInvites, usualDays: p.usualDays, venmo: `@${name.split(' ')[0].toLowerCase()}-fake` });
+    await w.org.ok('PUT', `/api/admin/players/${p.id}`, { name, phone: p.phone, isRegular: p.isRegular, isActive: p.isActive, canReceiveSubstituteInvites: p.canReceiveSubstituteInvites, venmo: `@${name.split(' ')[0].toLowerCase()}-fake` });
   }
   w.groupKey = String(dash.group.privateLink).split('/g/')[1];
   for (const p of dash.players as { id: string; name: string }[]) w.ids[p.name] = p.id;
@@ -524,14 +524,12 @@ export async function buildSmallPreview(
   await w.org.ok('POST', `/api/admin/sessions/${ag3.id}/finalize`, { played: [w.ids[SMALL_ORGANIZER], w.ids.Quinn, w.ids.Sage, w.ids[SMALL_LONG]] });
   summary.push('After-game cards: Parker $5 back; Rowan and Sage $8 back from two games; Quinn owes $3 more after a redo');
 
-  // 23. Last, so nothing above spends it: Sage gets a +$5 hand credit adjustment and is a regular for Tue and Thu (Want in card); Rowan is
-  //     a Thursday regular (Want in card for Thursday).
+  // 23. Last, so nothing above spends it: Sage gets a +$5 hand credit adjustment. (Zip 53: the "needs people" card is the same for every
+  //     player who is not in the game, so there is no per-player card setup here any more.)
   await w.org.ok('PUT', '/api/admin/adjust-credit-switch', { on: true });
   const sagePot = (await (await w.pick('Sage')).ok('GET', '/api/group')).credit.balanceCents as number;
   await w.org.ok('POST', `/api/admin/players/${w.ids.Sage}/credit-adjust`, { direction: 'add', cents: 500, seen: sagePot, reason: 'Thanks for bringing balls' });
-  w.db.raw.prepare("UPDATE players SET usual_days = '2,4', is_regular = 1 WHERE id = ?").run(w.ids.Sage);
-  w.db.raw.prepare("UPDATE players SET usual_days = '4', is_regular = 1 WHERE id = ?").run(w.ids.Rowan);
-  summary.push(`Sage: credit adjusted +$5 ("Thanks for bringing balls", ${(sagePot + 500) / 100} dollars now) and a Tue/Thu regular (Want in card); Rowan: a Thursday regular`);
+  summary.push(`Sage: credit adjusted +$5 ("Thanks for bringing balls", ${(sagePot + 500) / 100} dollars now)`);
 
   // 24. Zip 42 "Guest spot": Rowan brings a guest, Sam (a guest is no player record: only a first name on Rowan's own seat). Two games, the
   //     same four people (Rowan + Sam, Parker, Christopher Vanderberg), booked:

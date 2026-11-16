@@ -13,8 +13,11 @@ but **it never sends a text by itself**.
 tap their name once ("Who are you?"), and the phone remembers it. After that every visit opens on
 "Welcome, Ryan" with a small "Not you?" button. One screen shows:
 
-- a "Want in on Tuesday? Yes / No" card for a usual day they haven't
-  answered yet (regulars only)
+- one "needs people" card at the top, the same for every player (Zip 53; there is no
+  day preference any more): the soonest game inside 8 days with fewer than 4 in
+  ("Tomorrow needs 2 more"), or if none needs people, the soonest game with room
+  for one more ("Thursday has 4 in, You'd make it 5"). A game the player is already
+  in (or said No to) is skipped, so the card moves on to the next one
 - on game day, from 8:00 AM, a card at the very top: "Tonight: you owe $14"
   with a big **Pay with Venmo** button (amount and a note like "Pickleball Tue
   Nov 3 - Ryan" filled in). Several unpaid sessions combine into one total.
@@ -520,7 +523,7 @@ open, showing a hidden session), the player schedule, the day-before and
 last-call card windows and wording, holiday hours, no text ever saying
 "sent",
 the unpaid reminder only after 24 hours, the 24-hour check-in and 12-hour
-deadline, rescheduling, the remembered name, usual-day suggestions, View as,
+deadline, rescheduling, the remembered name, the same needs-people card for every player, View as,
 the calendar file, expired and reused links, admin lockout, input validation,
 and phone layouts at 360 to 430 px wide in light and dark mode.
 

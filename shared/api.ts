@@ -296,7 +296,7 @@ export interface GroupView {
   payDue: GroupView['owed'];
   /** Their credit. Only their own. */
   credit: CreditView;
-  /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
+  /** The "needs people" card: the same game for every player (server/needsCard.ts), or null. */
   suggestion: {
     sessionId: string;
     startsAt: string;
@@ -493,8 +493,6 @@ export interface AdminPlayer {
   isActive: boolean;
   canReceiveSubstituteInvites: boolean;
   sortOrder: number;
-  /** 2 = Tuesday, 4 = Thursday. */
-  usualDays: number[];
   /** Added their own name and the organizer hasn't reviewed them yet. */
   isNew: boolean;
   /** Organizer only: saved Venmo username (or "id:123") for refunds. Never sent to players. */

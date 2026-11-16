@@ -68,7 +68,6 @@ route('POST', '/api/christmas-skin-me', player.christmasSkinMe);
 route('POST', '/api/money-note/seen', player.moneyNoteSeen);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
-route('PUT', '/api/me/days', player.setMyDays);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
 route('POST', '/api/sessions/:id/withdraw', (ctx, body) => player.playerWithdraw(ctx, body));
 route('POST', '/api/sessions/:id/confirm', (ctx) => player.playerConfirm(ctx));

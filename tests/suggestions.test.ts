@@ -148,7 +148,7 @@ describe('Check-in: 4 or more in, from the night-before last call (25 hours befo
     // A number removed shows up as missing.
     const d = await dash(ctx);
     const blair = d.players.find((p: any) => p.name === 'Blair');
-    await ctx.organizer.call('PUT', `/api/admin/players/${blair.id}`, { name: 'Blair', phone: null, isRegular: true, isActive: true, canReceiveSubstituteInvites: true, usualDays: [] });
+    await ctx.organizer.call('PUT', `/api/admin/players/${blair.id}`, { name: 'Blair', phone: null, isRegular: true, isActive: true, canReceiveSubstituteInvites: true });
     const c2 = (await now(ctx)).all.find((x) => x.kind === 'checkin')!;
     expect(c2.missing).toEqual(['Blair']);
     expect(c2.phones).toHaveLength(5);

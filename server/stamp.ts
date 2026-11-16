@@ -65,7 +65,7 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     { sql: 'SELECT id, kind, amount_cents, ended_at FROM credit_ledger WHERE group_id = ? AND player_id = ? ORDER BY created_at, id', values: [group.id, me] },
     { sql: 'SELECT id, status, amount_cents, resolved_at FROM refund_requests WHERE group_id = ? AND player_id = ? ORDER BY created_at, id', values: [group.id, me] },
     { sql: 'SELECT id, display_name, is_active FROM players WHERE group_id = ? ORDER BY id', values: [group.id] },
-    { sql: 'SELECT is_regular, usual_days, is_active FROM players WHERE id = ? AND group_id = ?', values: [me, group.id] },
+    { sql: 'SELECT is_regular, is_active FROM players WHERE id = ? AND group_id = ?', values: [me, group.id] },
   ];
   const queries = (withTime: boolean) => reads(withTime).map((r) => ctx.db.prepare(r.sql).bind(...r.values));
   // SPEED_FEWER_QUERIES (server/speed.ts): the two switch reads further down (player motion, hidden games) ride in the same trip.
@@ -159,7 +159,7 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
       .bind(group.id, pastFrom),
     ctx.db.prepare('SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(ended_at) AS e, MAX(ended_at) AS m FROM credit_ledger WHERE group_id = ?').bind(group.id),
     ctx.db.prepare('SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(resolved_at) AS r, MAX(resolved_at) AS m FROM refund_requests WHERE group_id = ?').bind(group.id),
-    ctx.db.prepare('SELECT id, display_name, is_active, is_regular, usual_days FROM players WHERE group_id = ? ORDER BY id').bind(group.id),
+    ctx.db.prepare('SELECT id, display_name, is_active, is_regular FROM players WHERE group_id = ? ORDER BY id').bind(group.id),
     ctx.db.prepare('SELECT MAX(created_at) AS last FROM admin_audit_log WHERE group_id = ?').bind(group.id),
     // The "Do this now" taps. Everything else still works if that table is missing.
     ...(withMarks ? [ctx.db.prepare("SELECT session_id, task FROM task_log WHERE group_id = ? AND kind = 'mark' ORDER BY session_id, task").bind(group.id)] : []),

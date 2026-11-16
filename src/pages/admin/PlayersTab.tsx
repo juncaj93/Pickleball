@@ -26,11 +26,6 @@ const ENDED_TEXT: Record<NonNullable<CreditEntryView['endedReason']>, string> = 
 };
 const CREDIT_NOTE = 'Pickleball credit refund';
 
-const DAYS = [
-  { day: 2, label: 'Tue' },
-  { day: 4, label: 'Thu' },
-];
-
 export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const [editing, setEditing] = useState<AdminPlayer | 'new' | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -84,9 +79,8 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
               // You pay the venue, so there is no player balance on your own row.
               const isMe = ctx.d.me?.id === p.id;
               const pot = ctx.d.creditLedger.find((l) => l.playerId === p.id)?.balanceCents ?? 0;
-              const days = p.usualDays.length ? p.usualDays.map((d) => (d === 2 ? 'Tue' : 'Thu')).join(' ') : null;
               const late = p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null;
-              const second = r2 ? (late ?? '') : [p.phone ? formatPhone(p.phone) : 'No phone', days, late].filter(Boolean).join(' · ');
+              const second = r2 ? (late ?? '') : [p.phone ? formatPhone(p.phone) : 'No phone', late].filter(Boolean).join(' · ');
               return (
                 <li key={p.id} className="player-row" data-player={p.name}>
                   <button className="player-open" onClick={() => setViewing(p.id)} aria-label={`${p.name}: money and sessions`}>
@@ -406,7 +400,6 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
   const [phone, setPhone] = useState(player?.phone ? formatPhone(player.phone) : '');
   const [venmo, setVenmo] = useState(venmoHandleText(player?.venmo ?? null));
   const [isRegular, setRegular] = useState(player?.isRegular ?? true);
-  const [days, setDays] = useState<number[]>(player?.usualDays ?? []);
   const [isActive, setActive] = useState(player?.isActive ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -462,7 +455,6 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
       isRegular,
       isActive,
       canReceiveSubstituteInvites: player?.canReceiveSubstituteInvites ?? true,
-      usualDays: days,
       venmo,
     };
     try {
@@ -503,7 +495,7 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
         />
         <span className="small muted">{ctx.d.secondChance ? 'For refunds and requests. Only you see this.' : 'For refunds. Only you see this.'}</span>
       </label>
-      {/* The Players redo (Zip 13) has no Plays or Usual days here: both keep what was saved (sent back unchanged). */}
+      {/* The Players redo (Zip 13) has no Plays here: it keeps what was saved (sent back unchanged). */}
       {!noPlays && <><div className="stack" style={{ gap: 6 }}>
         <span className="small" style={{ fontWeight: 600 }}>
           Plays
@@ -517,23 +509,7 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
           </button>
         </div>
       </div>
-      <div className="stack" style={{ gap: 6 }}>
-        <span className="small" style={{ fontWeight: 600 }}>
-          Usual days
-        </span>
-        <div className="segmented" role="group" aria-label="Usual days">
-          {DAYS.map(({ day, label }) => (
-            <button
-              type="button"
-              key={day}
-              aria-pressed={days.includes(day)}
-              onClick={() => setDays((cur) => (cur.includes(day) ? cur.filter((d) => d !== day) : [...cur, day].sort()))}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div></>}
+      </>}
       <label className="check">
         <input type="checkbox" checked={!isActive} onChange={(e) => setActive(!e.target.checked)} />
         Hide from the name list

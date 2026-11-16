@@ -317,18 +317,17 @@ async function main() {
       await page.getByRole('button', { name: 'Continue' }).click();
       return { ctx, page };
     };
-    await check('Add my name "Ryann": "Is this you?" offers Ryan; "No, I\'m new" -> days -> Both -> home as Ryann (Tue and Thu saved)', async () => {
+    await check('Add my name "Ryann": "Is this you?" offers Ryan; "No, I\'m new" -> straight home as Ryann (no days step)', async () => {
       const { ctx, page } = await addFlow('Ryann');
       await page.getByRole('heading', { name: 'Is this you?' }).waitFor();
       const offered = await page.locator('section[aria-label="Is this you?"] .name-grid button').allInnerTexts();
       assert(offered.includes('Ryan'), `offered ${offered}`);
       await page.getByRole('button', { name: "No, I'm new" }).click();
-      await page.getByRole('heading', { name: 'Any preferred days?' }).waitFor();
-      await page.getByRole('button', { name: 'Both' }).click();
       await page.getByRole('heading', { level: 1, name: 'Ryann' }).waitFor();
+      assert((await page.getByRole('heading', { name: 'Any preferred days?' }).count()) === 0, 'the preferred days step is gone');
       const p = (await dash()).players.find((x) => x.name === 'Ryann');
       assert(p && p.isActive !== false, 'Ryann not on the list');
-      assert(String(p.usualDays ?? '').includes('2') && String(p.usualDays ?? '').includes('4'), `days ${JSON.stringify(p.usualDays)}`);
+      assert(p.usualDays === undefined, `the answer still carries days ${JSON.stringify(p.usualDays)}`);
       await ctx.close();
     });
     await check('Add my name "sam": "Is this you?" offers "🏓 Sam"; tapping it picks that name and adds nobody', async () => {
@@ -353,7 +352,7 @@ async function main() {
       const { ctx, page } = await addFlow('Jose');
       const got = await Promise.race([
         page.getByRole('heading', { name: 'Is this you?' }).waitFor().then(() => 'asked'),
-        page.getByRole('heading', { name: 'Any preferred days?' }).waitFor().then(() => 'added'),
+        page.getByRole('heading', { level: 1, name: 'Jose' }).waitFor().then(() => 'added'),
       ]);
       // Keep the list tidy for the rest of the run.
       const extra = (await dash()).players.find((p) => p.name === 'Jose');

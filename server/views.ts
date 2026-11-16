@@ -23,7 +23,6 @@ import {
   pricesFor,
   type SessionRow,
   statusInput,
-  usualDaysOf,
   waitlistOf,
   waitQueue,
 } from './repo';
@@ -219,7 +218,6 @@ export function adminPlayerView(p: PlayerRow): AdminPlayer {
     isActive: !!p.is_active,
     canReceiveSubstituteInvites: !!p.can_receive_substitute_invites,
     sortOrder: p.sort_order,
-    usualDays: usualDaysOf(p),
     isNew: !!p.is_new,
     venmo: p.venmo_handle,
     lateDrops: 0,

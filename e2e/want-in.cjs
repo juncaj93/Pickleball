@@ -95,10 +95,7 @@ async function main() {
   }
   // Mitchel and Brandon are already in the Thursday game (so it reads "2 of 4 in").
   for (const n of ['Mitchel', 'Brandon']) await post(who[n], `/api/sessions/${thu.id}/join`, {});
-  // Nathan, Ryan and Dana only play Thursdays: they get the "Want in Thursday?" card for Nov 5 (Tuesday Nov 3 is answered below).
-  for (const n of ['Nathan', 'Ryan', 'Dana']) {
-    await who[n].put(BASE + '/api/me/days', { data: { days: [4] }, headers: { Origin: BASE } });
-  }
+  // Zip 53: no day preference any more. Everyone not in a game gets the same card (Nathan, Ryan and Dana included).
 
   const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA };
   async function open(name) {

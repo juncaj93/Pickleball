@@ -5243,3 +5243,43 @@ look change.
   (`index-CALBrRFS.js`, the same as the build); a fresh phone sees "Who are you?" with no page errors and never fetches the organizer files;
   /admin asks for the PIN with no page errors; organizer data (dashboard, money, activity, backup, demo-extras) answers 401 without it.
 - Alex's answer to the question above (Mon Nov 16): keep Unmark as it is (it only takes off the newest cash, and says "nothing changed" otherwise).
+
+## Zip 53: remove the leftover Tuesday/Thursday preference (🎾53.nopref), Mon Nov 16, 2026
+
+### What was wrong
+The player edit card lost its Tuesday/Thursday choice in an earlier zip, but the back end kept using it. The top "needs people" card on the player
+Home (the `suggestion` in the group answer) was chosen per player from the hidden stored days (`players.usual_days`) and only for players marked
+Regular. On live (Mon Nov 16, 1:54 PM) Julian saw "Tomorrow needs 2 more" while Peter, Brandon and Alec saw "Thursday has 4 in, You'd make it 5".
+
+### The new rule (one rule for everyone, server/needsCard.ts)
+1. The soonest upcoming game (not canceled, starting inside the next 8 days, as before) with fewer than 4 in.
+2. If no game needs players, the soonest game with room for one more (4 or more in, under the Max players setting).
+3. A game the player already has a row in (in, waiting, dropped, or said No) is skipped, so the card moves on to the next game that qualifies.
+   Nothing about Regular/Occasional, days, money or credit is read. The card's look, words and X are unchanged.
+
+### Where the preference was used (FOUND) and what each does now
+- server/player.ts (the group answer): picked the card from the player's days, Regular players only. Now the one rule above.
+- server/player.ts `setMyDays` + route `PUT /api/me/days` (the "Any preferred days?" step after adding a name): removed (the route answers 404).
+  A new name now goes straight to Welcome and starts Occasional, as "Skip" did; the organizer can still mark them Regular.
+- src/pages/PlayerHome.tsx (`AddMyName`): the "Any preferred days?" step is gone.
+- server/admin.ts (create and update player): no longer reads or writes `usualDays`; an old screen that still sends it is ignored (no error).
+- server/validate.ts `usualDays`, server/repo.ts `usualDaysOf` and the `usual_days` row field, server/views.ts and shared/api.ts (`usualDays` on
+  the organizer's player list): removed.
+- server/stamp.ts (the "did anything change?" code): no longer selects `usual_days`.
+- src/pages/admin/PlayersTab.tsx: the "Usual days" buttons in the old edit form and the "Tue Thu" line on the old player list are gone.
+- scripts/seed-preview-world.ts and scripts/preview-world-small.ts: stop setting `usual_days` (the fake players' Want in cards now come from the rule).
+- Tests, browser tests and docs updated to the new rule.
+- Checked and clean (never read the preference): Second Chance, game-day texts, Telegram alerts and nudges, "needs N more" texts, Unpaid nudge,
+  View as and the demo copy (they call the same group answer), the backup Worker (copies whole tables), ordering of players.
+  `is_regular` (Regular/Occasional) stays: it only orders who is offered a spot when someone is needed and shows as a chip on the old player list.
+
+### Left alone
+- The `usual_days` column stays in the database (no migration, nothing deleted) and is unused. Old values are ignored; saves no longer touch it.
+- No Cloudflare variable, no switch, nothing about money.
+
+### Tests
+- tests/zip53-needs-card.test.ts (new): Alex's example (Tuesday 2 in, Thursday 4 in: everyone in neither game sees Tuesday; a player in Tuesday sees
+  Thursday), View as shows the same cards, old stored days and Regular marks change nothing, nobody needs players, full games, a game that started or
+  is beyond 8 days, said No, dropped out, canceled game, no name picked, the preference gone from every answer and write.
+- e2e/zip53.cjs (new): View as four different players who are in neither game: the same card; a player in the game sees the next one; light and dark,
+  390 / 360 / 320; X; the Players screen has no days.

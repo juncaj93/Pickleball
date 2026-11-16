@@ -50,7 +50,7 @@ async function main() {
   if (seeded.status !== 0) throw new Error(`could not build the fake world: ${seeded.stderr || seeded.stdout}`);
   // Zoe is also a regular for Tue and Thu who has not answered the next one, so Zoe gets the Want in card (another sign-up path).
   const db = new DatabaseSync(dbFile);
-  db.exec("UPDATE players SET usual_days = '2,4', is_regular = 1 WHERE display_name = 'Zoe'");
+  db.exec("UPDATE players SET is_regular = 1 WHERE display_name = 'Zoe'");
   // As on live and on the preview database (read Nov 8): the six rows the older local world leaves off are on (Alert cards among them).
   for (const t of ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'])
     db.exec(`INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'live-${t}', id, NULL, '${t}', 'mark', '${SEED_ISO}' FROM groups WHERE NOT EXISTS (SELECT 1 FROM task_log WHERE task = '${t}' AND session_id IS NULL)`);

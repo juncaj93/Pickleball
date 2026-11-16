@@ -1527,16 +1527,14 @@ async function main() {
       assert(ics.includes('BEGIN:VTIMEZONE') && !/DTSTART:[^\r]*Z/.test(ics), 'calendar file should not be in universal time');
     });
 
-    console.log('Usual days & suggestions');
-    await check('organizer sets usual days and Regular / Occasional on the Players screen', async () => {
+    console.log('Regular / Occasional & suggestions');
+    await check('organizer sets Regular / Occasional on the Players screen (no Usual days any more)', async () => {
       await tab(admin, 'Players').click();
       await admin.getByRole('button', { name: 'Edit Devon' }).click();
       const sheet = admin.locator('dialog[open]');
-      await sheet.getByRole('group', { name: 'Usual days' }).getByRole('button', { name: 'Tue' }).click();
-      await sheet.getByRole('group', { name: 'Usual days' }).getByRole('button', { name: 'Thu' }).click();
+      assert((await sheet.getByRole('group', { name: 'Usual days' }).count()) === 0, 'Usual days still on the edit sheet');
       await sheet.getByRole('button', { name: 'Save' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await admin.locator('li', { hasText: 'Devon' }).locator('.p-line2', { hasText: /Tue Thu$/ }).waitFor();
       await admin.getByRole('button', { name: 'Add a person' }).click();
       const add = admin.locator('dialog[open]');
       await add.getByLabel('Name', { exact: true }).fill('Ryan');
@@ -1546,7 +1544,7 @@ async function main() {
       await tab(admin, 'Home').click();
     });
 
-    await check('a regular gets "Want in on ...? Yes / No"; Yes shows "You\'re in" with no payment', async () => {
+    await check('a player not in the game gets "Want in on ...? Yes / No"; Yes shows "You\'re in" with no payment', async () => {
       const p = players.Devon;
       await p.reload();
       const card = p.getByRole('region', { name: /^Want in (tonight|tomorrow|(Tuesday|Thursday)|next (Tuesday|Thursday)|on (the )?[A-Za-z0-9, ']+)\?/ });
@@ -1573,10 +1571,10 @@ async function main() {
       }, before);
     });
 
-    await check('occasional people get no suggestions', async () => {
+    await check('Zip 53: an occasional player gets the same card as everyone else (no preference, no Regular needed)', async () => {
       const p = await openAs('Ryan');
       await p.locator('article').first().waitFor();
-      assert((await p.getByRole('region', { name: /^Want in / }).count()) === 0, 'occasional player got a suggestion');
+      assert((await p.getByRole('region', { name: /^Want in / }).count()) === 1, 'the occasional player should see the same needs-people card');
     });
 
     console.log('Open address');
@@ -1837,7 +1835,7 @@ async function main() {
       await tab(admin, 'Home').click();
     });
 
-    await check('"Add my name": duplicate check, then preferred days, then Welcome', async () => {
+    await check('"Add my name": duplicate check, then straight to Welcome (no preferred days step)', async () => {
       const p = await newPage();
       await p.goto(playerLink);
       await p.getByRole('button', { name: 'Add my name' }).click();
@@ -1849,10 +1847,8 @@ async function main() {
       await p.getByText(/Someone already uses "ryan"/).waitFor();
       await p.getByLabel('Your name').fill('Morgan');
       await p.getByRole('button', { name: 'Continue' }).click();
-      await p.getByRole('heading', { name: 'Any preferred days?' }).waitFor();
-      for (const b of ['Tuesday', 'Thursday', 'Both', 'Skip']) await p.getByRole('button', { name: b, exact: true }).waitFor();
-      await p.getByRole('button', { name: 'Both', exact: true }).click();
       await p.getByRole('heading', { name: 'Morgan', exact: true, level: 1 }).waitFor();
+      assert((await p.getByRole('heading', { name: 'Any preferred days?' }).count()) === 0, 'the preferred days step is gone');
       await p.getByRole('button', { name: 'Not you?' }).waitFor();
       await p.screenshot({ path: path.join(SHOTS, 'player-added-name.png'), fullPage: true });
       await tab(admin, 'Players').click();
@@ -1860,7 +1856,7 @@ async function main() {
       await tab(admin, 'Players').click();
       const row = admin.locator('li', { hasText: 'Morgan' });
       await row.locator('.new-tag', { hasText: 'New' }).waitFor();
-      await row.locator('.p-line2', { hasText: /Tue Thu$/ }).waitFor();
+      assert((await row.locator('.p-line2', { hasText: /Tue|Thu/ }).count()) === 0, 'no days on the Players row');
     });
 
     await check('removing a name: deleted if no history, hidden if they have some', async () => {

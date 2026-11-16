@@ -1050,9 +1050,9 @@ function NamePicker({
   );
 }
 
-type AddStep = { step: 'name' } | { step: 'is_this_you'; matches: { id: string; name: string }[] } | { step: 'days' };
+type AddStep = { step: 'name' } | { step: 'is_this_you'; matches: { id: string; name: string }[] };
 
-/** Not on the list: type a name, check it isn't a duplicate, then pick preferred days. */
+/** Not on the list: type a name, check it isn't a duplicate, then on to the Welcome. */
 function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise<void>; onDone: () => void; onBack: () => void }) {
   const [name, setName] = useState('');
   const [state, setState] = useState<AddStep>({ step: 'name' });
@@ -1069,24 +1069,13 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
         name,
         confirmNew,
       });
-      setState(res.result === 'looks_like' ? { step: 'is_this_you', matches: res.matches ?? [] } : { step: 'days' });
+      if (res.result === 'looks_like') setState({ step: 'is_this_you', matches: res.matches ?? [] });
+      else onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add your name.');
       setState({ step: 'name' });
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function days(d: number[]) {
-    setBusy(true);
-    try {
-      if (d.length) await api('PUT', '/api/me/days', { days: d });
-    } catch {
-      /* the name is saved either way; days can be set later by the organizer */
-    } finally {
-      setBusy(false);
-      onDone();
     }
   }
 
@@ -1104,28 +1093,6 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
         <button className="btn block" disabled={busy} onClick={() => submit(true)}>
           No, I'm new
         </button>
-      </section>
-    );
-  }
-
-  if (state.step === 'days') {
-    return (
-      <section className="stack" aria-label="Preferred days">
-        <h2>Any preferred days?</h2>
-        <div className="name-grid">
-          <button className="btn secondary" disabled={busy} onClick={() => days([2])}>
-            Tuesday
-          </button>
-          <button className="btn secondary" disabled={busy} onClick={() => days([4])}>
-            Thursday
-          </button>
-          <button className="btn secondary" disabled={busy} onClick={() => days([2, 4])}>
-            Both
-          </button>
-          <button className="btn ghost" disabled={busy} onClick={() => days([])}>
-            Skip
-          </button>
-        </div>
       </section>
     );
   }

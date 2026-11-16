@@ -242,7 +242,7 @@ describe('flat price', () => {
   });
 });
 
-describe('players: remembered name, usual days, suggestions', () => {
+describe('players: remembered name, suggestions', () => {
   it('remembers the picked name on that phone, and "Not you?" forgets it', async () => {
     const ctx = await setupGroup();
     const phone = ctx.app.client();
@@ -260,49 +260,61 @@ describe('players: remembered name, usual days, suggestions', () => {
     expect((await phone.call('GET', '/api/group')).data.me).toBeNull();
   });
 
-  it('saves usual days and Regular / Occasional, and can add people', async () => {
+  it('saves Regular / Occasional, and can add people (an old screen sending usual days changes nothing)', async () => {
     const ctx = await setupGroup();
     await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Blair}`, { name: 'Blair', usualDays: [4, 2], isRegular: true });
     const add = await ctx.organizer.call('POST', '/api/admin/players', { name: 'Ryan', usualDays: [2], isRegular: false });
     expect(add.status).toBe(200);
     const players = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.players;
-    expect(players.find((p: any) => p.name === 'Blair')).toMatchObject({ usualDays: [2, 4], isRegular: true });
-    expect(players.find((p: any) => p.name === 'Ryan')).toMatchObject({ usualDays: [2], isRegular: false });
-    expect((await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Blair}`, { name: 'Blair', usualDays: [3] })).status).toBe(400);
+    expect(players.find((p: any) => p.name === 'Blair')).toMatchObject({ isRegular: true });
+    expect(players.find((p: any) => p.name === 'Ryan')).toMatchObject({ isRegular: false });
+    // Zip 53: the Tuesday/Thursday preference is gone from the answer, and from what the site reads or writes (the stored column stays, unused).
+    for (const p of players) expect(p).not.toHaveProperty('usualDays');
+    const stored = (await ctx.app.db.prepare("SELECT display_name, usual_days FROM players WHERE display_name IN ('Blair', 'Ryan') ORDER BY display_name").all()).results as any[];
+    expect(stored.map((r) => r.usual_days)).toEqual(['', '']);
   });
 
-  it('suggests the next usual day to a regular who has not answered; No hides it', async () => {
+  it('the "needs people" card goes to every player alike (the old per-player day preference is gone)', async () => {
     const ctx = await setupGroup();
-    await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Blair}`, { name: 'Blair', usualDays: [4] });
+    // Legacy values still sitting in the stored column must change nothing.
+    await ctx.app.db.prepare("UPDATE players SET usual_days = '4', is_regular = 1 WHERE display_name = 'Blair'").run();
+    await ctx.app.db.prepare("UPDATE players SET usual_days = '', is_regular = 0 WHERE display_name = 'Casey'").run();
+    const blair = (await (await playerPhone(ctx, 'Blair')).call('GET', '/api/group')).data.suggestion;
+    const casey = (await (await playerPhone(ctx, 'Casey')).call('GET', '/api/group')).data.suggestion;
+    const devon = (await (await playerPhone(ctx, 'Devon')).call('GET', '/api/group')).data.suggestion;
+    // Monday Oct 26 now: the soonest game is Tue Oct 27, 8 PM, with nobody in (it needs players).
+    expect(blair).toMatchObject({ startsAt: '2026-10-28T00:00:00.000Z', joinAs: 'in', confirmedCount: 0 });
+    expect(casey).toEqual(blair);
+    expect(devon).toEqual(blair);
+  });
+
+  it('No hides the card for that player only, and moves to the next game that qualifies', async () => {
+    const ctx = await setupGroup();
     const blair = await playerPhone(ctx, 'Blair');
     const g = (await blair.call('GET', '/api/group')).data;
-    // Monday Oct 26 now: the next Thursday is Oct 29.
-    expect(g.suggestion).toMatchObject({ startsAt: '2026-10-30T00:00:00.000Z', joinAs: 'in' });
+    expect(g.suggestion.startsAt).toBe('2026-10-28T00:00:00.000Z');
     expect((await blair.call('POST', `/api/sessions/${g.suggestion.sessionId}/decline`, {})).data).toEqual({ result: 'declined' });
     const after = (await blair.call('GET', '/api/group')).data;
     expect(after.suggestion?.sessionId).not.toBe(g.suggestion.sessionId);
+    expect(after.suggestion?.startsAt).toBe('2026-10-30T00:00:00.000Z'); // Thu Oct 29 is the next one that needs players
     // Saying no doesn't take a spot or join the waitlist.
     const s = await adminSession(ctx, g.suggestion.sessionId);
     expect(s.confirmedCount + s.waitlistCount).toBe(0);
+    // Someone else still sees the first game.
+    expect((await (await playerPhone(ctx, 'Casey')).call('GET', '/api/group')).data.suggestion.sessionId).toBe(g.suggestion.sessionId);
   });
 
-  it('suggests nothing to occasional players or people with no usual day', async () => {
+  it('stops suggesting a game once the player answered Yes, then offers the next', async () => {
     const ctx = await setupGroup();
-    await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Casey}`, { name: 'Casey', usualDays: [2, 4], isRegular: false });
-    expect((await (await playerPhone(ctx, 'Casey')).call('GET', '/api/group')).data.suggestion).toBeNull();
-    expect((await (await playerPhone(ctx, 'Devon')).call('GET', '/api/group')).data.suggestion).toBeNull();
-  });
-
-  it('stops suggesting a day once the player answered Yes', async () => {
-    const ctx = await setupGroup();
-    await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Alex}`, { name: 'Alex', usualDays: [2] });
     const alex = await playerPhone(ctx, 'Alex');
     const first = (await alex.call('GET', '/api/group')).data.suggestion;
     expect(first.startsAt).toBe('2026-10-28T00:00:00.000Z'); // Tue Oct 27, 8 PM
     expect((await alex.call('POST', `/api/sessions/${first.sessionId}/join`, {})).data).toEqual({ result: 'confirmed' });
-    // Next Tuesday is more than 8 days out, so nothing yet...
+    const second = (await alex.call('GET', '/api/group')).data.suggestion;
+    expect(second.startsAt).toBe('2026-10-30T00:00:00.000Z'); // Thu Oct 29 (more than 8 days out: nothing past it yet)
+    expect((await alex.call('POST', `/api/sessions/${second.sessionId}/join`, {})).data).toEqual({ result: 'confirmed' });
     expect((await alex.call('GET', '/api/group')).data.suggestion).toBeNull();
-    // ...until it comes into range.
+    // ...until the next Tuesday comes into range.
     ctx.app.advance(DAY);
     const next = (await alex.call('GET', '/api/group')).data.suggestion;
     expect(next.startsAt).toBe('2026-11-04T01:00:00.000Z'); // Tue Nov 3, 8 PM EST
@@ -335,7 +347,6 @@ describe('View as', () => {
       ['POST', `/api/sessions/${s.id}/paid`, { paid: true }],
       ['POST', `/api/sessions/${s.id}/confirm`, {}],
       ['POST', `/api/sessions/${s.id}/decline`, {}],
-      ['PUT', '/api/me/days', { days: [2] }],
     ];
     for (const [m, p, b] of taps) {
       const r = await ctx.organizer.call(m, p, b, as);
@@ -345,7 +356,7 @@ describe('View as', () => {
     const after = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     expect(confirmedNames(after.sessions.find((x: any) => x.id === s.id))).toEqual([]);
     expect(after.audit).toEqual(before.audit);
-    expect(after.players.find((p: any) => p.name === 'Devon').usualDays).toEqual(before.players.find((p: any) => p.name === 'Devon').usualDays);
+    expect(after.players).toEqual(before.players);
     // Looking still works.
     expect((await ctx.organizer.call('GET', '/api/group', undefined, as)).data.me.name).toBe('Devon');
   });

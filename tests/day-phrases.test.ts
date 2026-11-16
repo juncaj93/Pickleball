@@ -139,7 +139,11 @@ describe('what the server sends the popup', () => {
     const dash = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     const s = dash.sessions.find((x: any) => new Date(x.startsAt).toLocaleDateString('en-CA', { timeZone: TZ }) === '2026-11-03'); // Election Day
     const tester = dash.players.find((p: any) => p.name === 'Frankie');
-    await ctx.organizer.call('PUT', `/api/admin/players/${tester.id}`, { name: 'Frankie', isRegular: true, isActive: true, canReceiveSubstituteInvites: true, usualDays: [2] });
+    await ctx.organizer.call('PUT', `/api/admin/players/${tester.id}`, { name: 'Frankie', isRegular: true, isActive: true, canReceiveSubstituteInvites: true });
+    // Zip 53: the card is the same for every player, so the other games are made "full enough" (4 in) and only the Election Day game differs.
+    for (const other of dash.sessions.filter((x: any) => x.id !== s.id && Date.parse(x.startsAt) > Date.parse('2026-11-02T09:00:00-05:00'))) {
+      for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${other.id}/join`, {});
+    }
     for (const n of inNames) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
     if (standby) await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' });
     ctx.app.now = Date.parse('2026-11-02T09:00:00-05:00');

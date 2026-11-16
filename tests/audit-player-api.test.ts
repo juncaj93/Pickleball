@@ -1581,7 +1581,6 @@ describe('8. Error responses are plain words', () => {
     }, 404],
     ['calendar for an unknown game', (w) => w.app.client().call('GET', `/api/sessions/${FAKE}/calendar.ics`), 404],
     ['request too large', (w, sid) => call(w, 'Casey', 'POST', `/api/sessions/${sid}/paid`, { paid: true, junk: 'x'.repeat(30_000) }), 413],
-    ['preferred days junk', (w) => call(w, 'Casey', 'PUT', '/api/me/days', { days: 'every day!!' }), 400],
     ['add a name that is taken', async (w) => {
       const c = w.app.client();
       c.groupKey = w.groupKey;

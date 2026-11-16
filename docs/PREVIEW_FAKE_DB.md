@@ -44,10 +44,10 @@ only for the local browser tests now (`scripts/seed-preview-world.ts`); it never
 | **Wren** | Unpaid nudge: owes $28 for 2 past games. No Venmo saved. The Second Chance card's no-Venmo player. |
 | **Zoe** | Unpaid nudge: owes $42 for 3 past games: I'm in is blocked while Unpaid nudge is on. |
 | **Quinn** | After-game cards: "You owe $3 more" after a redo (kept to that one debt, so the card shows). Tapped I paid on the next game, then dropped (the claim card on Home). |
-| **Rowan** | After-game cards: $8 back from two games. Owes $11 on "Fee split $11" (canceled late). Tonight's game day games. Thursday regular (Want in card). Venmo saved. |
+| **Rowan** | After-game cards: $8 back from two games. Owes $11 on "Fee split $11" (canceled late). Tonight's game day games. Venmo saved. |
 | **Parker** | After-game cards: $5 back. The reliable payer: paid cash on most games, paid then got credit on the Second Chance game. Venmo saved. |
 | **Reese** | Zip 32: said no to game 1 ("Reese declined" on its Players sheet; a chip there gives the spot back). No phone number and no Venmo (Text all skips Reese). $14 cash-out pending (Home card). Late drop that Christopher took ("You no longer owe $14"). |
-| **Sage** | After-game cards: $8 back. Credit adjusted +$5 ("Thanks for bringing balls"). Tue and Thu regular (Want in card). |
+| **Sage** | After-game cards: $8 back. Credit adjusted +$5 ("Thanks for bringing balls"). |
 | **Christopher Vanderberg** | The long name (Money rows, toasts). Venmo saved. Took Reese's late-dropped spot. Owes $11 on "Fee split $11". |
 
 Never give Vic, Wren or Zoe a fee or a game that ends before the next re-seed: their counts must stay 1, 2 and 3. The "Late-fee test" and "Fee split test" games use Quinn, Rowan, Sage and Christopher Vanderberg for that reason.
@@ -105,8 +105,8 @@ Not on the small preview: games with 11 or 12 in (there are only 10 names; the l
 The three old extra games only exist when the two latest played games are about 5 days apart (a Wednesday or Thursday seed); a Sunday seed leaves them out.
 
 - Venmo usernames are saved for Avery, Harper, Indy, Kai, Lane and Christopher Vanderberg; Jordan, Gray, Morgan and Reese have none (they show "no Venmo saved").
-- Zip 11 alert states: **Casey** has a +$5 hand credit adjustment ("Thanks for bringing balls") and is a regular for Tue and Thu who has not
-  answered the next one, so Casey sees the Credit adjusted card and the Want in card stacked. **Gray** taps I'm in on a booked game to see the
+- Zip 11 alert states: **Casey** has a +$5 hand credit adjustment ("Thanks for bringing balls") and is in none of the games that need people, so Casey sees
+  the Credit adjusted card and the Want in card stacked (Zip 53: every player who is not in the game sees the same Want in card; no day preference). **Gray** taps I'm in on a booked game to see the
   cash-out question. **Jordan** and **Kai** owe for several games ("You owe $N total"); **Gray** owes for one ("You owe $14 for ...").
 - Money states: credit left over for **Casey ($8: $3 plus the Zip 11 +$5)**, **Lane ($3)**, **Morgan ($3)** and **Harper ($14)** (Lane's and Morgan's $3 come back from the
   canceled "Fee split $11" game); Casey and Harper are in no upcoming game so you can tap I'm in and watch credit apply; **Gray** has a

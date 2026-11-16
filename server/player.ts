@@ -5,6 +5,7 @@ import { headCount } from '../shared/guestSpot';
 import { sessionCalendar } from '../shared/calendar';
 import { DEFAULT_VENUE_NAME, zelleNumberOf } from '../shared/settings';
 import { joinOutcome } from '../shared/spots';
+import { pickNeedsCardSession } from './needsCard';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { PAY_FROM_HOUR } from '../shared/money';
 import { clearCookie, type Ctx, PLAYER_COOKIE } from './context';
@@ -20,7 +21,6 @@ import {
   loadRoster,
   organizerIdOf,
   settingsOf,
-  usualDaysOf,
 } from './repo';
 import { holidayFor } from '../shared/holidays';
 import { newId } from './crypto';
@@ -141,8 +141,6 @@ import { UNPAID_LIMIT } from '../shared/unpaidNudge';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
-/** Suggestions only look at sessions this far ahead. */
-const SUGGEST_AHEAD_MS = 8 * DAY_MS;
 
 interface Viewer {
   group: GroupRow;
@@ -268,26 +266,20 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
         )
         .reverse();
     }
-    // Regulars get a nudge for the next usual day they haven't answered.
-    const days = usualDaysOf(me);
-    if (me.is_regular && days.length > 0) {
-      for (const s of sessions) {
-        const start = Date.parse(s.starts_at);
-        if (s.status === 'canceled' || start <= ctx.nowMs || start > ctx.nowMs + SUGGEST_AHEAD_MS) continue;
-        if (!days.includes(localParts(start, group.timezone).weekday)) continue;
-        const roster = rosters.get(s.id) ?? [];
-        if (roster.some((r) => r.player_id === me.id)) continue;
-        suggestion = {
-          sessionId: s.id,
-          startsAt: s.starts_at,
-          endsAt: s.ends_at,
-          joinAs: joinOutcome(headCount(confirmedOf(roster)), capOf(settings)),
-          holiday: holidayFor(s.starts_at, tz),
-          confirmedCount: headCount(confirmedOf(roster)),
-          courtState: s.court_state,
-        };
-        break;
-      }
+    // The "needs people" card at the top of Home: the same rule for every player (server/needsCard.ts). Zip 53: it no longer
+    // depends on any Tuesday/Thursday preference.
+    const pick = pickNeedsCardSession(sessions, rosters, me.id, ctx.nowMs, capOf(settings), hiddenIds);
+    if (pick) {
+      const roster = rosters.get(pick.id) ?? [];
+      suggestion = {
+        sessionId: pick.id,
+        startsAt: pick.starts_at,
+        endsAt: pick.ends_at,
+        joinAs: joinOutcome(headCount(confirmedOf(roster)), capOf(settings)),
+        holiday: holidayFor(pick.starts_at, tz),
+        confirmedCount: headCount(confirmedOf(roster)),
+        courtState: pick.court_state,
+      };
     }
   }
 
@@ -538,24 +530,6 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
   await rememberPlayer(ctx, group, id);
   await audit(ctx.db, group.id, null, 'player_self_added', { name }, ctx.nowIso, 'player');
   return { result: 'added', me: { id, name } };
-}
-
-/** "Any preferred days?" right after adding a name. Only touches the player on this phone. */
-export async function setMyDays(ctx: Ctx, body: Record<string, unknown>) {
-  const who = await viewer(ctx);
-  refuseDemo(ctx, who);
-  const { group, playerId } = who;
-  if (!playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
-  const days = v.usualDays(body.days) ?? '';
-  await ctx.db
-    .prepare(
-      `UPDATE players SET usual_days = ?,
-         is_regular = CASE WHEN is_new = 1 THEN (CASE WHEN ? <> '' THEN 1 ELSE 0 END) ELSE is_regular END
-       WHERE id = ? AND group_id = ?`,
-    )
-    .bind(days, days, playerId, group.id)
-    .run();
-  return { ok: true, usualDays: days };
 }
 
 export async function forgetName(ctx: Ctx) {

@@ -78,7 +78,7 @@ async function main() {
   await call(api.request, 'PUT', '/api/admin/group', { organizerName: 'Alex' });
   const d0 = await call(api.request, 'GET', '/api/admin/dashboard');
   const id = Object.fromEntries(d0.players.map((p) => [p.name, p.id]));
-  await call(api.request, 'PUT', `/api/admin/players/${id.Frankie}`, { name: 'Frankie', isRegular: true, isActive: true, canReceiveSubstituteInvites: true, usualDays: [2] });
+  await call(api.request, 'PUT', `/api/admin/players/${id.Frankie}`, { name: 'Frankie', isRegular: true, isActive: true, canReceiveSubstituteInvites: true });
   const tue = d0.sessions.find((s) => new Date(s.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }) === '2026-11-03'); // Election Day
   const OTHERS = ['Ryan', 'Mitchel', 'Brandon', 'Julian', 'Nathan', 'Alex'];
   const setIn = async (n) => {

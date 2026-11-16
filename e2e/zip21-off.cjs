@@ -78,7 +78,7 @@ async function main() {
   for (const t of ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'])
     db.exec(`INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'live-${t}', id, NULL, '${t}', 'mark', '${SEED_ISO}' FROM groups WHERE NOT EXISTS (SELECT 1 FROM task_log WHERE task = '${t}' AND session_id IS NULL)`);
   // Zoe is a regular (the Want in card, another sign-up path).
-  db.exec("UPDATE players SET usual_days = '2,4', is_regular = 1 WHERE display_name = 'Zoe'");
+  db.exec("UPDATE players SET is_regular = 1 WHERE display_name = 'Zoe'");
   db.close();
   copyFileSync(a, b);
   const [A, B] = await Promise.all([site(MAIN, 5393, a), site(ROOT, 5394, b)]);

@@ -249,15 +249,15 @@ async function main() {
     assert(!/Plays|Usual days|Regular|Occasional/.test(m.text), 'no Plays or Usual days');
     assert(m.order.join(',') === 'save,adjust,hide,remove', m.order.join(','));
     await shot(page, 'edit');
-    // Save keeps the old Plays and Usual days as they were.
+    // Save keeps the old Plays as it was.
     const before = (await dash()).players.find((p) => p.name === 'Avery');
     await dlg.locator('input[type="tel"]').fill('(313) 555-0177');
     await dlg.locator('button[type="submit"]').click();
     await page.waitForTimeout(1200);
     const after = (await dash()).players.find((p) => p.name === 'Avery');
-    assert(after.phone !== before.phone && after.isRegular === before.isRegular && JSON.stringify(after.usualDays) === JSON.stringify(before.usualDays), 'phone saved, Plays and days unchanged');
+    assert(after.phone !== before.phone && after.isRegular === before.isRegular && after.usualDays === undefined, 'phone saved, Plays unchanged, no days in the answer');
     await post(real, '/api/admin/players/' + after.id, {}, {}).catch(() => {});
-    await real.put(`${BASE}/api/admin/players/${after.id}`, { data: { name: before.name, phone: before.phone, isRegular: before.isRegular, isActive: before.isActive, canReceiveSubstituteInvites: before.canReceiveSubstituteInvites, usualDays: before.usualDays, venmo: before.venmo }, headers: { Origin: BASE } });
+    await real.put(`${BASE}/api/admin/players/${after.id}`, { data: { name: before.name, phone: before.phone, isRegular: before.isRegular, isActive: before.isActive, canReceiveSubstituteInvites: before.canReceiveSubstituteInvites, venmo: before.venmo }, headers: { Origin: BASE } });
     await ctx.close();
   });
 
