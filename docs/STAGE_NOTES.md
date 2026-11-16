@@ -5339,3 +5339,9 @@ Regular. On live (Mon Nov 16, 1:54 PM) Julian saw "Tomorrow needs 2 more" while 
   month twice for a moment). Fixed (the card is handed the month its answer belongs to) and covered by a browser test that fails without the fix. Also
   fixed: an old error no longer lingers while a retry loads.
 - Failing on today's main too (not this zip): the "newest switch is the top Settings row" check in zip23 (and the older scripts that carry it).
+
+### Proof (Mon Nov 16, 2026)
+- Unit: 188 files passed, 1 skipped; 3,374 tests passed, 2 skipped (`npx vitest run`); `npx tsc -b` clean. New: tests/zip54-running-total.test.ts (16).
+- Browser: full run of 84 scripts, 4 at a time, then the failures again alone. e2e/zip54.cjs 17 of 17. Zip 23's order and 9 px gap checks updated for the new card (39 of 40 alone).
+  Failing on today's main too, same counts on a clean checkout of main `4aee6d4` (not this zip): the "newest switch is the top Settings row" checks (money-rework, zip16, zip23, zip27, zip30, zip32,
+  zip34, zip35, zip38, zip39, zip42, and zip30's three Casey/Harper checks), late-fees (18 of 19), zip30 (22 of 32), zip43 (12 of 13).

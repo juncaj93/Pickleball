@@ -419,7 +419,8 @@ async function main() {
           top: mm.getBoundingClientRect().top,
           padL: cs(head, 'paddingLeft'),
         };
-        out.gaps = [document.querySelector('[data-card="projected"]').getBoundingClientRect().top - document.querySelector('[data-card="so-far"]').getBoundingClientRect().bottom, mm.getBoundingClientRect().top - document.querySelector('[data-card="projected"]').getBoundingClientRect().bottom];
+        const box = (sel) => document.querySelector(sel).getBoundingClientRect();
+        out.gaps = [box('[data-card="projected"]').top - box('[data-card="so-far"]').bottom, box('[data-fold="running-total"]').top - box('[data-card="projected"]').bottom, mm.getBoundingClientRect().top - box('[data-fold="running-total"]').bottom];
         out.order = [...document.querySelector('.tr').children].map((c) => c.getAttribute('data-card') || c.getAttribute('data-fold'));
         return out;
       });
