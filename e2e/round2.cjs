@@ -44,6 +44,12 @@ function assert(cond, msg) {
 async function confirmDrop(p) {
   const sent = p.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 15000 });
   await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+  // Zip 51 (F-16): when the money changed after the page loaded (an organizer confirmed a payment from another phone), the tap sends
+  // nothing and the dialog opens again saying "This just changed."; the player taps Drop out again on the real words.
+  const changed = p.locator('dialog[open] [data-drop-changed]');
+  if (await changed.waitFor({ timeout: 2500 }).then(() => true, () => false)) {
+    await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+  }
   // In the organizer's demo (View as...) nothing goes over the network, so just wait out the hold.
   await Promise.race([sent, p.waitForTimeout(6000)]);
   sent.catch(() => {});
@@ -345,10 +351,12 @@ async function main() {
     const sent = page.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 15000 });
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
     // Zip 51 (F-16): the organizer confirmed the payment after this page loaded, so the dialog showed old money. The tap sends nothing,
-    // the dialog opens again with the real amount ("This just changed"), and the player taps Drop out again.
+    // the dialog opens again ("This just changed."), and the player taps Drop out again.
     const changed = page.locator('dialog[open] [data-drop-changed]');
     await changed.waitFor({ timeout: 8000 });
-    assert(/\$14/.test(await page.locator('dialog[open]').innerText()), 'the fresh dialog should name the $14 that comes back');
+    const fresh = squash(await page.locator('dialog[open]').innerText());
+    // An early drop's words name no amount (unchanged since before Zip 51); the $14 credit shows in the toast and chip below.
+    assert(/This just changed\. Your spot opens up for someone else\./.test(fresh), `the fresh dialog words: ${fresh}`);
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
     const chip = page.locator('header [data-credit-chip]');
     await chip.waitFor();
