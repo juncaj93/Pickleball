@@ -328,8 +328,9 @@ function TotalsRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
   if (load.error) return <ErrorState error={load.error} onRetry={load.reload} />;
   const t = m?.rework;
   if (!m || !t) return null;
-  // Zip 23 "Totals refresh" (TOTALS_REFRESH): the new cards. Off: everything below, exactly as before.
-  if (ctx.d.totalsRefresh === true) return <TotalsRefresh ctx={ctx} t={t} />;
+  // Zip 23 "Totals refresh" (TOTALS_REFRESH): the new cards. The month passed is the one the answer itself belongs to (while a newly picked month loads,
+  // the screen still holds the last answer, and the Running total must never take that for another month). Off: everything below, exactly as before.
+  if (ctx.d.totalsRefresh === true) return <TotalsRefresh ctx={ctx} t={t} month={m.month} />;
   const p = t.projected;
   const eq = (membership: number, court: number, courts: number) => `${formatPrice(membership)} + ${formatPrice(court)} (${plural(courts, 'court', 'courts')})`;
   return (

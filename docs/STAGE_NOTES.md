@@ -5307,3 +5307,35 @@ Regular. On live (Mon Nov 16, 1:54 PM) Julian saw "Tomorrow needs 2 more" while 
   backup) answers 401 without the PIN. The top card read for each name from the live server (no taps, nothing saved): every player who is not in
   a game gets the same card (the Tuesday game, 3 in); players in it get the next qualifying game; players who said No to it skip it.
 - View as on live needs the organizer PIN, which this session does not have, so Alex can tap View as for four players to see the same card.
+
+## Zip 54: Running total card (🎾54.runtotal), Mon Nov 16, 2026
+
+### What changed (organizer only, display only)
+- Money > Totals gets a collapsed "Running total" card between Projected and Month by month (label left, chevron right, same box as Month by month).
+  It sits inside the Totals refresh look, so it shows wherever that look shows. No new switch (it changes no money, no schema, no player screen).
+- Open it and it shows: Membership ("N months"), Court costs after players ("N games", court costs minus what players paid), Out of pocket (bold amber
+  like Owed to venue), Average per month (whole dollars), and a green bottom row "SINCE OCT" with "per game" and the big number (whole dollars).
+- Numbers: every month is added from figures the screen already has. A past month is that month's finished answer (the same `rework` answer and
+  `soFarCard` Month by month uses); the current month is the So far card (never Projected). Nothing new is worked out except the sums, the average
+  and per game (shared/totalsRefresh.ts `runningTotalOf`, same whole-dollar rounding as $/court: halves away from zero).
+- Months counted: from the first month with any record (a game, or the membership, which is charged every month from Oct 2026) up to and including the
+  current month. October 2026 ($30, no games) counts; a future month does not.
+- No games at all: the "per game" part is hidden. One month: "1 month". A credit total shows green with the word "credit" and no minus sign (also on
+  the average, per game and the court line). When the first month is in an earlier year the footer reads "SINCE OCT 2026" so it never points at the wrong October.
+- Closed, it loads nothing. Open, it asks for each counted past month once (the same `/api/admin/money?month=` call as Month by month). Opening Month
+  by month too reuses what is loaded. If the Totals screen is showing another month in the month box, the Running total still ends at the CURRENT
+  month (it asks for that one extra answer). No new database column, migration, server call, Cloudflare variable or switch.
+- Also changed: Month by month now lists every counted month too, so October 2026 ("No games", $30) appears there (before, it said "No earlier months
+  yet" because only months with games were listed). Without this the two cards would disagree about what counts.
+
+### Tests
+- tests/zip54-running-total.test.ts (16): Alex's example (84 / 42 / 21), current month is So far not Projected, no games, one month, a month with
+  membership and no games in the middle, a credit, rounding, month ranges, the footer words.
+- e2e/zip54.cjs (17, in the suite): collapsed and loads nothing while closed; opens and closes; Alex's numbers on the built screen; equals the So far
+  card + the Month by month rows; both cards together share loaded months; no games; one month; credit; a year of fake months equal the server's own
+  answers month by month; another month picked; picking the current month never shows the old month's numbers; 360, 390, 420 wide, light and dark,
+  nothing wraps or clips. e2e/zip23.cjs updated for the new card in the card order.
+- Fresh reviewer: found one real bug (picking the current month in the month box while an older month was still on screen could count that older
+  month twice for a moment). Fixed (the card is handed the month its answer belongs to) and covered by a browser test that fails without the fix. Also
+  fixed: an old error no longer lingers while a retry loads.
+- Failing on today's main too (not this zip): the "newest switch is the top Settings row" check in zip23 (and the older scripts that carry it).

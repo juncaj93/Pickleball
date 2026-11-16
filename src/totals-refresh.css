@@ -5,6 +5,7 @@
 .tr {
   --tr-sf: #8a6a00;
   --tr-pj: #4a5f8f;
+  --tr-rt: var(--tok-paid-fg);
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -239,4 +240,20 @@
   border-top: 1px solid var(--line);
   color: var(--ink-2);
   font-size: 0.8125rem;
+}
+
+/* Running total (Zip 54): the same collapsed card as Month by month; open it shows the rows and a green bottom row like So far / Projected. */
+.tr-mm.rt {
+  --acc: var(--tr-rt);
+}
+.tr-mm.rt .tr-rows {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+.tr-mm.rt .tr-dot {
+  background: var(--acc);
+}
+.tr-ln dd small {
+  font-size: 0.71875rem;
+  font-weight: 700;
 }

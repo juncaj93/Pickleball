@@ -9,6 +9,7 @@
 //    private per-phone link (/admin?totalsrefresh=on) that sends the header below. No database change, no new cost.
 
 import type { MonthlyMoney } from './api';
+import { MEMBERSHIP_FROM } from './moneyRework';
 
 export const TOTALS_REFRESH = { task: 'totals_refresh_on', header: 'X-Totals-Refresh', link: 'totalsrefresh', env: 'TOTALS_REFRESH', name: 'Totals refresh' } as const;
 
@@ -78,4 +79,67 @@ export function monthRowOf(month: string, t: Rework): MonthRow {
 /** The past months to list, newest first: every month in the list that is before the current one. */
 export function pastMonths(choices: { month: string }[], currentMonth: string): string[] {
   return choices.map((c) => c.month).filter((m) => m < currentMonth);
+}
+
+// ---------- Running total (Zip 54) ----------
+// A third card between Projected and Month by month: what the group has cost the organizer in total across months. No new money math: every
+// month is added up from the same "So far" figures the screen already has (a past month's finished answer, the current month's So far card;
+// never Projected).
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2026-10" shifted by whole months. */
+export function stepMonth(month: string, by: number): string {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + by, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/** The first month the membership is charged ("2026-10"). */
+export const MEMBERSHIP_FIRST_MONTH = `${MEMBERSHIP_FROM.year}-${String(MEMBERSHIP_FROM.month).padStart(2, '0')}`;
+
+/**
+ * Every month the totals cover before the current one, newest first. A month counts from the first month with any record: the first month
+ * with a game (the earliest in `choices`) or the first month the membership is charged, whichever is earlier, but never later than the
+ * current month. A past month with a membership and no games counts; a future month does not.
+ */
+export function countedPastMonths(choices: { month: string }[], currentMonth: string): string[] {
+  const firstGame = choices.map((c) => c.month).sort()[0];
+  let first = firstGame && firstGame < currentMonth ? firstGame : currentMonth;
+  if (MEMBERSHIP_FIRST_MONTH < first) first = MEMBERSHIP_FIRST_MONTH;
+  const out: string[] = [];
+  for (let m = stepMonth(currentMonth, -1), guard = 0; m >= first && guard < 600; m = stepMonth(m, -1), guard++) out.push(m);
+  return out;
+}
+
+/** "Oct" for the footer; with another year than now "Oct 2026", so "since Oct" never points at the wrong October. */
+export function sinceLabel(firstMonth: string, currentMonth: string): string {
+  const [y, m] = firstMonth.split('-').map(Number);
+  const name = MONTH_NAMES[m - 1] ?? '';
+  return y === Number(currentMonth.split('-')[0]) ? name : `${name} ${y}`;
+}
+
+export interface RunningTotal {
+  /** Months counted, the first month through the current one. */
+  months: number;
+  membershipCents: number;
+  /** Court costs minus what the players paid, added up (can be below 0). */
+  courtAfterPlayersCents: number;
+  /** Games played (courts used) in those months. */
+  games: number;
+  /** Membership + court costs after players. Below 0 = a credit. */
+  outOfPocketCents: number;
+  /** Out of pocket / months, whole dollars (negative = credit). */
+  averagePerMonth: number | null;
+  /** Out of pocket / games, whole dollars (negative = credit); null with no games. */
+  perGame: number | null;
+}
+
+/** Adds the "So far" cards of every counted month (oldest to current). The average uses the same whole-dollar rounding as per court. */
+export function runningTotalOf(cards: TotalsCard[]): RunningTotal {
+  const membershipCents = cards.reduce((a, c) => a + c.membershipCents, 0);
+  const courtAfterPlayersCents = cards.reduce((a, c) => a + (c.courtCents - c.playersCents), 0);
+  const games = cards.reduce((a, c) => a + c.games, 0);
+  const outOfPocketCents = membershipCents + courtAfterPlayersCents;
+  return { months: cards.length, membershipCents, courtAfterPlayersCents, games, outOfPocketCents, averagePerMonth: perCourtDollars(outOfPocketCents, cards.length), perGame: perCourtDollars(outOfPocketCents, games) };
 }

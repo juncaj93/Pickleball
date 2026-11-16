@@ -426,7 +426,7 @@ async function main() {
       const eqc = (a, b, tol = 2) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
       const acc = scheme === 'light' ? { sf: [0x8a, 0x6a, 0x00], pj: [0x4a, 0x5f, 0x8f] } : { sf: [0xf0, 0xcf, 0x55], pj: [0x9d, 0xb3, 0xe6] };
       const mix = (a, b, pct) => a.map((v, i) => Math.round((v * pct + b[i] * (100 - pct)) / 100));
-      assert(m.order.join() === 'so-far,projected,month-by-month', `order ${m.order}`);
+      assert(m.order.join() === 'so-far,projected,running-total,month-by-month', `order ${m.order} (Zip 54 put Running total between Projected and Month by month)`);
       assert(m.gaps.every((g) => Math.abs(g - 9) < 1), `9 px between the cards: ${m.gaps}`);
       for (const k of ['sf', 'pj']) {
         const x = m[k];
