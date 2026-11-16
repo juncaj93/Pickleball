@@ -146,7 +146,7 @@ async function main() {
     });
   };
   const PLAYERS = ['Jordan', 'Blake', 'Casey', 'Indy', 'Gray', 'Kai', 'Harper'];
-  // Harper (a Thursday regular in the fake world) has the Want in card with empty seats.
+  // Harper (in none of the games that need people in the fake world) has the Want in card with empty seats.
   PLAYERS.push('Lane');
   for (const scheme of ['light', 'dark']) {
     for (const who of PLAYERS) await same(`player home, ${who}, ${scheme}: identical`, { who, url: '/', scheme });

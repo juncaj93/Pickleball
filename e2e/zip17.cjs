@@ -48,7 +48,7 @@ async function main() {
   rmSync(dbFile, { force: true });
   const seeded = spawnSync('npx', ['vite-node', 'scripts/load-seed-local.ts', '--', dbFile, SEED_ISO], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, SEED_ZIP13: '1', SEED_ZIP14: '1', SEED_ZIP15: '1', SEED_ZIP17: '1' } });
   if (seeded.status !== 0) throw new Error(`could not build the fake world: ${seeded.stderr || seeded.stdout}`);
-  // Zoe is also a regular for Tue and Thu who has not answered the next one, so Zoe gets the Want in card (another sign-up path).
+  // Zoe is in none of the games that need people, so Zoe gets the Want in card (another sign-up path).
   const db = new DatabaseSync(dbFile);
   db.exec("UPDATE players SET is_regular = 1 WHERE display_name = 'Zoe'");
   // As on live and on the preview database (read Nov 8): the six rows the older local world leaves off are on (Alert cards among them).
@@ -292,7 +292,7 @@ async function main() {
     await ctx.close();
   });
 
-  await check('Zoe: the Want in card (a regular\'s "needs N more" / "has N in") is dimmed too and opens the same sheet', async () => {
+  await check('Zoe: the Want in card (the "needs N more" / "has N in") is dimmed too and opens the same sheet', async () => {
     const { ctx, page } = await openPlayer('Zoe', 390, 'light', { url: '/?alerts=all' });
     const btn = page.locator('[data-suggest-card] .ac-btn');
     await btn.waitFor({ timeout: 4000 });

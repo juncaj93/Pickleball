@@ -2115,7 +2115,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   );
 }
 
-/** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
+/** The "needs people" card (Zip 53: the same game for every player, chosen by the server): "Want in on Tuesday?" for a game they haven't answered. */
 function SuggestionCard({
   g,
   onChanged,
