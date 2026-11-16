@@ -224,4 +224,7 @@ Quinn, Sage, Christopher Vanderberg; Parker's Drop out says "you still owe $14";
 Drop out then says "This just changed." and "your $14 comes back as credit") and **"Back in test"** (8:00 PM: Rowan,
 Reese, Sage, Christopher Vanderberg; Reese drops out late and owes $14; Alex adds Reese back on the Players sheet). Both are today when the seed runs
 before noon, else tomorrow: their late windows are open from 7:00 and 8:00 AM until they start. Zip 43's two venue cards stay on Home (moving a charge day in
-Settings > Money now keeps them). `node e2e/zip51.cjs` checks the same scenes locally.
+Settings > Money now keeps them). `node e2e/zip51.cjs` checks the same scenes locally. Preview-only link (Zip 51, after Alex's first try): open the player page with
+**?holdrefresh=on** and that phone stops refreshing by itself (a dashed note says so at the top), so an open Drop out dialog really goes old while
+Rowan is added from the organizer page in another tab; **?holdrefresh=off** ends it. Two tabs in one browser are the same player, so never pick Rowan
+on "Who are you?" in the second tab.

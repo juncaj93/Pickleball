@@ -18,7 +18,7 @@ import '../guest-spot.css';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
-import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, venmoHandsOffToApp, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
+import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, holdRefreshLink, venmoHandsOffToApp, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
 import { flushHold, holdPending, noteStillApplies, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
@@ -273,7 +273,12 @@ export function PlayerHome({
     tracker,
   );
   const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker, load.data?.tapGuardFix === true);
-  useRefreshOnReturn(load.refresh);
+  // Zip 51, preview only (?holdrefresh=on, src/lib.ts): no reload when the page comes back either, so the open dialog really stays old.
+  const holdRefreshRef = useRef(false);
+  const refreshOnReturn = useCallback(async () => {
+    if (!holdRefreshRef.current) await load.refresh();
+  }, [load.refresh]);
+  useRefreshOnReturn(refreshOnReturn);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
   // "Home collapse" (HOME_COLLAPSE): the later games' one button. Closed on every page load, never remembered.
@@ -438,7 +443,10 @@ export function PlayerHome({
   };
 
   // The page keeps itself fresh: a tiny "did anything change?" check, the full list only when it did.
-  useLiveUpdates({ enabled: !!g && !!g.me && !switching && !viewAs && !pretend, version: g?.version ?? null, reload: load.quiet });
+  // Zip 51, preview only: ?holdrefresh=on pauses it on this phone (g.preview is never sent on live, so live is unchanged).
+  const holdRefresh = g?.preview === true && holdRefreshLink();
+  holdRefreshRef.current = holdRefresh;
+  useLiveUpdates({ enabled: !!g && !!g.me && !switching && !viewAs && !pretend && !holdRefresh, version: g?.version ?? null, reload: load.quiet });
 
   // One-time moments: a game I'm in reached 4, and a cash out the organizer sent.
   const celebrated = useRef<Set<string> | null>(null);
@@ -737,6 +745,11 @@ export function PlayerHome({
           </div>
         )}
         {showSaved && <SavedScreenView saved={saved!} />}
+        {holdRefresh && (
+          <p className="preview-hold-tag" role="note" data-hold-refresh>
+            Preview: live refresh paused on this phone. <span className="nowrap">?holdrefresh=off</span> ends it.
+          </p>
+        )}
         {/* Zip 37 "Home Screen tip" (only while on for this phone; iPhone Safari, second visit): the card above everything, THIS WEEK included. Always mounted so it sees whether a name was already picked when the page opened. */}
         <HomeScreenTip g={g} blocked={!ownPhone || pickName} />
         {load.loading && !g && !load.error && !showSaved && <ScheduleSkeleton />}

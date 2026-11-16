@@ -4754,3 +4754,18 @@ dialog.sheet[open]::backdrop {
     width: 2rem;
   }
 }
+
+/* Zip 51, PREVIEW ONLY (?holdrefresh=on): a plain note that this phone's live refresh is paused. Never drawn on live (g.preview is not sent there). */
+.preview-hold-tag {
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px dashed var(--info-edge);
+  border-radius: 10px;
+  background: var(--info-bg);
+  color: var(--info-fg);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+.preview-hold-tag .nowrap {
+  white-space: nowrap;
+}

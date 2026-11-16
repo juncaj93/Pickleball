@@ -5051,5 +5051,16 @@ no new switch. The only new words are F-16's "This just changed." in the Drop ou
   dropped); D2 (the money changed during the Undo: the server refuses, the dialog comes back, then the drop: $14 back as credit); B1 (Reese back In
   from the sheet, the game moved, a normal drop: no "Late drop" tag, light and dark); V1 (the two venue cards through a moved court day).
 
+### Alex's tap 1 (Mon Nov 16, 8:02 AM) and the preview-only ?holdrefresh=on
+Alex saw no "This just changed." The preview History shows why: Parker's drop reached the site at 8:02:33 AM with 4 in, so "you still owe $14"
+was right at the tap. Rowan joined at 8:03:04 (from the same browser), took the spot, and the sub rule cleared Parker's $14 back to credit: the
+money changed AFTER the drop, so the re-check had nothing to catch (that moment is what the planned money-change note is for). A second way the
+re-check stays quiet, proven in e2e/zip51.cjs D0: coming back to a tab after 30 seconds or more reloads the page (src/lib.ts useRefreshOnReturn),
+so the open dialog is redrawn with the real money before the tap. To make the stale case easy with one phone: **?holdrefresh=on** (src/lib.ts
+HOLD_REFRESH_LINK, src/pages/PlayerHome.tsx) pauses the live change check and that 30-second reload on that phone only, with a dashed note at the
+top; ?holdrefresh=off ends it. The page obeys it only when the server says preview (g.preview, sent only where PREVIEW_CALM is set), so live is
+unchanged. e2e/zip51.cjs D3 (light and dark): with the link on, the dialog stays at "you still owe $14", the red Drop out shows "This just changed."
+and drops nothing. Two tabs in one browser share the player picked on "Who are you?", so in the steps Rowan is added from the organizer page.
+
 ### Preview
 `npm run db:seed:preview` now builds the Zip 51 calm profile (scripts/preview-world-small.ts step 26; docs/PREVIEW_FAKE_DB.md).

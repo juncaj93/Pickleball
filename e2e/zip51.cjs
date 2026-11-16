@@ -170,6 +170,79 @@ async function main() {
         await rowan('withdraw');
       });
 
+  // ---------------------------------------------------------------- D0 and D3: Alex's tap 1 (Mon Nov 16) with two tabs
+  // Alex had Parker's dialog open, took the spot as Rowan in another tab, came back: the $14 was gone and no "This just changed." showed.
+  // D0 proves why: coming back to a tab after 30 seconds or more reloads the page (src/lib.ts useRefreshOnReturn), so the open dialog was
+  // already redrawn with the real money when the red Drop out was tapped. Nothing was stale, so nothing needed asking again.
+  // D3: the preview-only link ?holdrefresh=on stops that reload (and the live change check) on that phone, so the dialog really goes stale
+  // and the tap shows "This just changed.". Quinn (not paid) is used so Parker stays ready for D2.
+  const quinn = (action) => post(`/api/admin/sessions/${gd.id}/roster`, { playerId: ids.Quinn, action });
+  const awayAndBack = async (page, ms, during) => {
+    const setVis = (v) =>
+      page.evaluate((state) => {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => state === 'hidden' });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, v);
+    await setVis('hidden');
+    await during();
+    await page.waitForTimeout(ms);
+    await setVis('visible');
+  };
+  await check('D0 two tabs, away 31 seconds: the open dialog redraws with the real money before the tap; the red Drop out drops at that amount, no prompt', async () => {
+    const { ctx, page } = await playerPage('Quinn');
+    const dlg = await openDrop(page);
+    assert(flat(await dlg.innerText()).includes(OWES), `starts at "you still owe $14": ${flat(await dlg.innerText())}`);
+    await awayAndBack(page, 31000, () => rowan('confirm')); // the other tab: Rowan takes a spot (5 in)
+    // The page reloads on its own when it comes back: the dialog's words change with no tap.
+    const deadline = Date.now() + 8000;
+    let now = '';
+    while (Date.now() < deadline) {
+      now = flat(await page.locator('dialog.sheet[open]').first().innerText());
+      if (!now.includes(OWES)) break;
+      await page.waitForTimeout(200);
+    }
+    assert(!now.includes(OWES) && !now.includes('This just changed'), `the dialog redrew itself with the real money: ${now}`);
+    await page.screenshot({ path: path.join(SHOTS, 'D0-redrawn.png') });
+    await page.locator('dialog.sheet[open] .btn-row button', { hasText: 'Drop out' }).click();
+    await page.waitForTimeout(2500);
+    assert((await page.locator('dialog.sheet[open] [data-drop-changed]').count()) === 0, 'no "This just changed." (the screen was already right)');
+    await page.waitForTimeout(4500);
+    const r = await seat(gd, 'Quinn');
+    assert(r.status === 'withdrawn', `Quinn is out: ${r.status}`);
+    assert(!r.lateFee || r.lateFee.oweCents === 0, `Quinn owes nothing: ${JSON.stringify(r.lateFee)}`);
+    await ctx.close();
+    await rowan('withdraw');
+    await quinn('confirm');
+    assert((await seat(gd, 'Quinn')).status === 'confirmed', 'Quinn back in for D3');
+  });
+  for (const scheme of ['light', 'dark'])
+    await check(`D3 ?holdrefresh=on (preview only): the same two tabs, the dialog stays old, the red Drop out shows "This just changed." and drops nothing (${scheme})`, async () => {
+      const { ctx, page } = await playerPage('Quinn', { scheme });
+      await page.goto(`${BASE}/?holdrefresh=on`);
+      await page.locator('[data-hold-refresh]').waitFor({ timeout: 15000 });
+      const dlg = await openDrop(page);
+      assert(flat(await dlg.innerText()).includes(OWES), 'starts at "you still owe $14"');
+      await awayAndBack(page, 31000, () => rowan('confirm'));
+      await page.waitForTimeout(3000);
+      assert(flat(await page.locator('dialog.sheet[open]').first().innerText()).includes(OWES), 'the dialog still shows the old $14 (refresh paused)');
+      await page.locator('dialog.sheet[open] .btn-row button', { hasText: 'Drop out' }).click();
+      await page.locator('dialog.sheet[open] [data-drop-changed]').waitFor({ timeout: 8000 });
+      await page.waitForTimeout(400);
+      const t = flat(await page.locator('dialog.sheet[open]').first().innerText());
+      assert(t.includes('This just changed.') && !t.includes(OWES), `the fresh words: ${t}`);
+      assert((await seat(gd, 'Quinn')).status === 'confirmed', 'nothing was dropped');
+      await noSideScroll(page, 'the hold-refresh page');
+      await page.screenshot({ path: path.join(SHOTS, `D3-${scheme}.png`) });
+      await page.locator('dialog.sheet[open] .btn-row button', { hasText: 'Go back' }).click();
+      await page.goto(`${BASE}/?holdrefresh=off`);
+      await page.locator('.schedule article.sched').first().waitFor({ timeout: 15000 });
+      await page.waitForTimeout(800);
+      assert((await page.locator('[data-hold-refresh]').count()) === 0, '?holdrefresh=off ends it');
+      await ctx.close();
+      await rowan('withdraw');
+    });
+
   // ---------------------------------------------------------------- D2: the server checks at the send
   await check('D2 the money changed during the 5-second Undo: the server drops nothing, the dialog comes back with the real words; then the drop', async () => {
     const { ctx, page } = await playerPage('Parker');

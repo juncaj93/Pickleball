@@ -810,6 +810,21 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Zip 51, PREVIEW ONLY: ?holdrefresh=on pauses this phone's live refresh (the change check and the reload when the page comes back after
+ * 30 seconds), so a tester with one phone can leave the Drop out dialog open while the money changes and see it go stale. ?holdrefresh=off
+ * ends it. The page only obeys it when the server says the site is a preview (g.preview, never sent on live), so on live it does nothing.
+ */
+export const HOLD_REFRESH_LINK = 'holdrefresh';
+export function holdRefreshLink(): boolean {
+  return storageGet(`pb_${HOLD_REFRESH_LINK}`) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get(HOLD_REFRESH_LINK);
+  if (want === 'on') storageSet(`pb_${HOLD_REFRESH_LINK}`, 'on');
+  else if (want === 'off') storageRemove(`pb_${HOLD_REFRESH_LINK}`);
+}
+
+/**
  * Zip 14 on this phone only: ?gameday=on (the Game day card before it is on for everyone; works on /admin too, where it also shows the
  * Court row) and ?gamedaytest=on (preview only: the next game's date shown as today). The same word with =off ends it. Remembered here.
  */
