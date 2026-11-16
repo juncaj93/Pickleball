@@ -5118,10 +5118,21 @@ look change.
 - Left as it is (a note): with the fake clock, a drop and a rejoin in the same millisecond still make the drop's credit read as a trim, so that
   Unmark is refused ("already used the credit") with nothing moved. On live it would need both taps in the same millisecond.
 
+### A second, older gap the fuzz found once the first was fixed (seeds 11036 and 15002; both fail the same way on the old code)
+- Seed 15002 as plain steps: 10 in. Finalize with 9 played ($6) before Harper paid; Alex marks her paid: $6 cash. Reopen. Finalize with 6
+  played ($9): her $6 is held on the seat, she owes $3. Reopen. Finalize with 9 played ($6): the $6 held pays the seat. Alex taps Unmark: the
+  seat read "unpaid" while the $6 on it already covered the $6 price, so it owed nothing, read unpaid, and that $6 could never come back.
+  Seed 11036 is the same with $3 credit + $8 cash at $7 (the $3 went back, the $8 sat on an unpaid seat).
+- Cause: Unmark with no new cash on top of what the seat already held gives the credit back and marks the seat unpaid, but only an Unmark WITH
+  new cash on top then checked whether what stays on the seat still covers the price. Fix (server/admin.ts applyPayment, `stays`): the same
+  check runs whenever anything stays on the seat: it is paid with it, and anything above the final price comes back as credit.
+- On live this needs Mark paid, then Reopen and Finalize twice with different counts, then Unmark: rare, no stuck seat seen (the integrity
+  checks do not look for this one; see the report).
+
 ### Tests
-- tests/zip52-fuzzfix.test.ts (11): the real-clock Guest spot case (Unmark refused, Blair keeps her $5, nothing moved); the same with the credit
+- tests/zip52-fuzzfix.test.ts (13; the last 2 are the second gap, both fail on the old code): the real-clock Guest spot case (Unmark refused, Blair keeps her $5, nothing moved); the same with the credit
   back in the pot (one Unmark takes back $5 and $14, seat owes again); the fuzz shape at 5, 6, 8 and 10 played, back in by her own I'm in and by
-  Alex's Add (nothing lost, then Reopen and Finalize again give the same money back once); a plain Unmark after Finalize unchanged. 9 of the 11
-  fail on the old code.
+  Alex's Add (nothing lost, then Reopen and Finalize again give the same money back once); a plain Unmark after Finalize unchanged; seed
+  15002's and seed 11036's shapes (Harper stays Paid $6; Indy gets her $3 back, the $8 pays the seat, $1 back). 11 of the 13 fail on the old code.
 - tests/audit-r4.test.ts: the ids the server makes now follow the seed, so a failing seed replays exactly (`FUZZ_FROM=<seed> FUZZ_FIN_SEQS=1`);
   each Finalize step logs who played.
