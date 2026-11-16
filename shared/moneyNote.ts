@@ -36,7 +36,7 @@ export interface MoneyNoteFacts {
   sub?: string;
   /** What was cleared, in cents (sub, sub_one). */
   clearedCents?: number;
-  /** What is still owed after it, in cents (sub_one). */
+  /** What is still owed on that game, in cents (sub_one). 0 or missing: nothing more is owed, and the sentence says only what was cleared. */
   stillCents?: number;
   /** The game's day before the move ("Thu"), for moved. */
   day?: string;
@@ -49,7 +49,10 @@ export function moneyNoteText(f: MoneyNoteFacts): string {
     case 'sub':
       return `${f.sub || 'Someone'} took your spot. Your ${dollars(f.clearedCents ?? 0)} is cleared.`;
     case 'sub_one':
-      return `${f.sub || 'Someone'} took one of your 2 spots. ${dollars(f.clearedCents ?? 0)} is cleared, ${dollars(f.stillCents ?? 0)} still owed.`;
+      // "still owed" only while something is owed on that game (a seat that had paid owes nothing more: the sentence stops at "cleared").
+      return f.stillCents && f.stillCents > 0
+        ? `${f.sub || 'Someone'} took one of your 2 spots. ${dollars(f.clearedCents ?? 0)} is cleared, ${dollars(f.stillCents)} still owed.`
+        : `${f.sub || 'Someone'} took one of your 2 spots. ${dollars(f.clearedCents ?? 0)} is cleared.`;
     case 'moved':
       return `${f.day ?? 'The'}${f.day ? "'s" : ''} game moved. Your late drop is cleared.`;
     case 'back_in':
@@ -70,19 +73,22 @@ export interface ClearedLine {
   guest?: unknown;
   debtCents?: unknown;
   from?: unknown;
+  kind?: unknown;
 }
 
 /**
- * The note for one History line about THIS player, or null when it is not one of Alex's four (canceled games, the organizer's own Clear: the
- * player saw those happen through the organizer, and the Good news line already covers them). `flatCents` is the game's one-seat price.
+ * The note for one History line about THIS player, or null when it is not one of Alex's four (canceled games, and the organizer's own Clear,
+ * even its "Sub found" choice: that line also says why 'sub' but has a `kind` and no sub's name; the Good news line keeps covering those).
+ * `flatCents` is the game's one-seat price; `stillOwedCents` what the player still owes on that game right now.
  */
-export function noteFromLine(d: ClearedLine, flatCents: number, startsAt: string, tz: string): MoneyNoteFacts | null {
+export function noteFromLine(d: ClearedLine, flatCents: number, startsAt: string, tz: string, stillOwedCents = 0): MoneyNoteFacts | null {
   const debt = typeof d.debtCents === 'number' && d.debtCents > 0 ? d.debtCents : flatCents;
-  const sub = typeof d.sub === 'string' && d.sub ? d.sub : undefined;
   if (d.why === 'sub') {
-    // Zip 42: a sub took the guest's half of a pair's debt; the seat still owes the other share (the same price).
-    if (typeof d.guest === 'string' && d.guest) return { kind: 'sub_one', sub, clearedCents: debt, stillCents: debt };
-    return { kind: 'sub', sub, clearedCents: debt };
+    // Only the site's own sub lines (server/roster.ts auditSubClears): they always name the sub and never carry a `kind`.
+    if (typeof d.sub !== 'string' || !d.sub || d.kind !== undefined) return null;
+    // Zip 42: a sub took the guest's half of a pair's debt.
+    if (typeof d.guest === 'string' && d.guest) return { kind: 'sub_one', sub: d.sub, clearedCents: debt, stillCents: stillOwedCents };
+    return { kind: 'sub', sub: d.sub, clearedCents: debt };
   }
   if (d.why === 'moved') return { kind: 'moved', day: weekdayOf(typeof d.from === 'string' && d.from ? d.from : startsAt, tz) };
   return null;

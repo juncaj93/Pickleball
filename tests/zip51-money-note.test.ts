@@ -21,6 +21,8 @@ describe('the words, exactly as Alex wrote them', () => {
   it('four sentences, whole dollars and cents', () => {
     expect(moneyNoteText({ kind: 'sub', sub: 'Rowan', clearedCents: 1400 })).toBe('Rowan took your spot. Your $14 is cleared.');
     expect(moneyNoteText({ kind: 'sub_one', sub: 'Rowan', clearedCents: 1400, stillCents: 1400 })).toBe('Rowan took one of your 2 spots. $14 is cleared, $14 still owed.');
+    // Nothing more owed on that game (the seat had paid): the sentence stops at "cleared" (reviewer, Zip 51b).
+    expect(moneyNoteText({ kind: 'sub_one', sub: 'Rowan', clearedCents: 1400, stillCents: 0 })).toBe('Rowan took one of your 2 spots. $14 is cleared.');
     expect(moneyNoteText({ kind: 'moved', day: 'Thu' })).toBe("Thu's game moved. Your late drop is cleared.");
     expect(moneyNoteText({ kind: 'back_in' })).toBe("You're back in. Your late drop is cleared.");
     expect(moneyNoteText({ kind: 'sub', sub: 'Rowan', clearedCents: 1100 })).toBe('Rowan took your spot. Your $11 is cleared.');
@@ -110,8 +112,50 @@ describe('a sub takes your late-dropped spot', () => {
     expect((await owedOf(w, 'Blair', g.id))?.amountCents).toBe(PRICE);
     w.app.now += 60_000; // a later moment (one clear per game per moment, server/roster.ts)
     await join(w, g.id, ['Harper']);
-    expect(await texts(w, 'Blair')).toEqual(['Gale took one of your 2 spots. $14 is cleared, $14 still owed.', 'Harper took your spot. Your $14 is cleared.']);
+    // "still owed" is what is owed right now: after Harper nothing is, so the first note (not tapped yet) stops at "cleared".
+    expect(await texts(w, 'Blair')).toEqual(['Gale took one of your 2 spots. $14 is cleared.', 'Harper took your spot. Your $14 is cleared.']);
     expect(await owedOf(w, 'Blair', g.id)).toBeNull();
+    expect(health(w)).toEqual({});
+  });
+});
+
+describe('reviewer, Zip 51b: the organizer\'s own Clear, and a paid pair', () => {
+  const clearSub = (w: W, sid: string, name: string) => admin(w, 'POST', `/api/admin/sessions/${sid}/late-fee`, { playerId: w.byName[name], why: 'sub' });
+  it('Clear > Sub found on a late drop: no note (the organizer did it; the Good news line stays)', async () => {
+    const w = await world();
+    await on(w);
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w, g.start, 5);
+    await drop(w, g.id, 'Blair');
+    expect((await clearSub(w, g.id, 'Blair')).status).toBe(200);
+    expect(await notes(w, 'Blair')).toEqual([]);
+    expect((await view(w, 'Blair')).feeNotices).toHaveLength(1);
+    expect(await owedOf(w, 'Blair', g.id)).toBeNull();
+  });
+  it('Clear > Sub found on a no-show after Finalize: no note', async () => {
+    const w = await world();
+    await on(w);
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    w.app.now = g.end + HOUR;
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { played: [w.byName.Casey, w.byName.Devon, w.byName.Emery] })).status).toBe(200);
+    expect((await clearSub(w, g.id, 'Blair')).status).toBe(200);
+    expect(await notes(w, 'Blair')).toEqual([]);
+  });
+  it('a host + guest who paid $28, 2 short: "Gale took one of your 2 spots. $14 is cleared." (nothing more owed), $14 back as credit', async () => {
+    const w = await guests();
+    await on(w);
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    expect((await addGuest(w, g.id, 'Blair')).status).toBe(200);
+    await markPaid(w, g.id, 'Blair');
+    at(w, g.start, 5);
+    expect((await drop(w, g.id, 'Blair')).lateFee).toEqual({ cents: 2 * PRICE, paid: true });
+    await join(w, g.id, ['Gale']);
+    expect(await texts(w, 'Blair')).toEqual(['Gale took one of your 2 spots. $14 is cleared.']);
+    expect(await owedOf(w, 'Blair', g.id)).toBeNull();
+    expect(await credit(w, 'Blair')).toBe(PRICE);
     expect(health(w)).toEqual({});
   });
 });
@@ -183,7 +227,7 @@ describe('the organizer puts you back In after a late drop (F-15)', () => {
 });
 
 describe('no backfill, off hides, once is once', () => {
-  it('a sub before the switch went on: no note; after: yes; off hides it, on again shows it (not tapped), a second on keeps the start', async () => {
+  it('a sub before the switch went on: no note; after: yes; off hides it and removes the notes\' rows, on again starts fresh (no backfill), a second on keeps the start', async () => {
     const w = await world();
     const g = await game(w);
     await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Harper']);
@@ -199,8 +243,12 @@ describe('no backfill, off hides, once is once', () => {
     w.app.now += 60_000;
     await join(w, g.id, ['Indy']);
     expect(await texts(w, 'Casey')).toEqual(['Indy took your spot. Your $14 is cleared.']);
+    const [cn] = await notes(w, 'Casey');
+    expect((await gotIt(w, 'Casey', cn.id)).status).toBe(200);
+    expect(noteRows(w)).toHaveLength(2);
     await off(w);
     expect('moneyNotes' in (await view(w, 'Casey'))).toBe(false);
+    expect(noteRows(w)).toEqual([]); // the row and its Got it are gone: the shared switch read is as small as before
     w.app.now += 60_000;
     await on(w); // a new start: the earlier note is before it now
     expect(await notes(w, 'Casey')).toEqual([]);

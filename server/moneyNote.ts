@@ -31,11 +31,18 @@ async function moneyNoteOnAt(db: D1Database, groupId: string): Promise<number | 
 
 /**
  * Turns the row on or off. On while it is already on changes nothing: its time is the no-backfill start, so a second "on" must never move it
- * and hide a note that is still due. Off removes only the row (the notes' own rows stay; they show again only if it comes back on).
+ * and hide a note that is still due. Off removes the row and the notes' own rows (Got it, back In): turning it on again starts fresh, from that
+ * moment (no backfill), so nothing from before can show, and the shared switch read stays as small as before.
  */
 export async function setMoneyNoteForAll(db: D1Database, groupId: string, on: boolean, nowIso: string): Promise<boolean> {
   if (on && (await moneyNoteForAll(db, groupId))) return false;
   await db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark'").bind(groupId, MONEY_NOTE.task).run();
+  if (!on) {
+    await db
+      .prepare("DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND (task = ? OR substr(task, 1, ?) = ?)")
+      .bind(groupId, MONEY_NOTE.backInTask, MONEY_NOTE.seenPrefix.length, MONEY_NOTE.seenPrefix)
+      .run();
+  }
   if (on) {
     await db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)").bind(newId(), groupId, MONEY_NOTE.task, nowIso).run();
   }
@@ -54,9 +61,16 @@ type Game = Pick<SessionRow, 'starts_at' | 'ends_at'> & { price_lock?: string | 
  * This player's notes still to show, oldest first. Empty while the row is off, for the organizer's own seat, and for anything before the row
  * went on. Read from: the History lines the site already writes for a sub and a moved game ("late_fee_cleared", that player's id only), and
  * the back-In rows written while the row is on. A note tapped "Got it" never shows again. `covered`: every History line that has a note,
- * tapped or not (the Good news line leaves those out, so the same clear is never told twice).
+ * tapped or not (the Good news line leaves those out, so the same clear is never told twice). `owedOn`: what this player still owes per game
+ * right now (the same `owed` list their screen shows), for "$14 still owed" (left out when they owe nothing more there, e.g. they had paid).
  */
-export async function moneyNotesFor(db: D1Database, group: GroupRow, playerId: string, nowMs: number): Promise<{ notes: MoneyNote[]; covered: string[] }> {
+export async function moneyNotesFor(
+  db: D1Database,
+  group: GroupRow,
+  playerId: string,
+  nowMs: number,
+  owedOn: ReadonlyMap<string, number> = new Map(),
+): Promise<{ notes: MoneyNote[]; covered: string[] }> {
   const onAt = await moneyNoteOnAt(db, group.id);
   if (onAt === null) return { notes: [], covered: [] };
   const since = new Date(Math.max(onAt, nowMs - MONEY_NOTE_DAYS * DAY_MS)).toISOString();
@@ -64,14 +78,17 @@ export async function moneyNotesFor(db: D1Database, group: GroupRow, playerId: s
   const [lines, backIns, seen] = await db.batch([
     db
       .prepare(
-        `SELECT a.id, a.details_json, a.created_at, s.starts_at, s.ends_at, ${priceLockCol('s')} FROM admin_audit_log a JOIN sessions s ON s.id = a.session_id
+        `SELECT a.id, a.session_id, a.details_json, a.created_at, s.starts_at, s.ends_at, ${priceLockCol('s')} FROM admin_audit_log a JOIN sessions s ON s.id = a.session_id
          WHERE a.group_id = ? AND a.action = 'late_fee_cleared' AND a.created_at >= ? ORDER BY a.created_at, a.rowid`,
       )
       .bind(group.id, since),
     db
       .prepare("SELECT id, detail, at FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark' AND at >= ? ORDER BY at, id")
       .bind(group.id, MONEY_NOTE.backInTask, since),
-    db.prepare("SELECT task FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?").bind(group.id, `${MONEY_NOTE.seenPrefix}%`),
+    // A Got it is always written after its note's own moment, so the same window holds every one that matters.
+    db
+      .prepare("SELECT task FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND substr(task, 1, ?) = ? AND at >= ?")
+      .bind(group.id, MONEY_NOTE.seenPrefix.length, MONEY_NOTE.seenPrefix, since),
   ]);
   const seenIds = new Set((seen.results as { task: string }[]).map((r) => r.task.slice(MONEY_NOTE.seenPrefix.length)));
   const out: { at: string; note: MoneyNote }[] = [];
@@ -80,7 +97,7 @@ export async function moneyNotesFor(db: D1Database, group: GroupRow, playerId: s
     covered.push(id);
     if (!seenIds.has(id)) out.push({ at, note: { id, kind: f.kind, text: moneyNoteText(f) } });
   };
-  for (const r of lines.results as ({ id: string; details_json: string; created_at: string } & Game)[]) {
+  for (const r of lines.results as ({ id: string; session_id: string; details_json: string; created_at: string } & Game)[]) {
     let d: Record<string, unknown>;
     try {
       d = JSON.parse(r.details_json) as Record<string, unknown>;
@@ -88,7 +105,7 @@ export async function moneyNotesFor(db: D1Database, group: GroupRow, playerId: s
       continue; // an unreadable line shows nothing
     }
     if (d.playerId !== playerId) continue;
-    const f = noteFromLine(d, priceOf(r, settings).flatCents, r.starts_at, group.timezone);
+    const f = noteFromLine(d, priceOf(r, settings).flatCents, r.starts_at, group.timezone, owedOn.get(r.session_id) ?? 0);
     if (f) push(r.id, r.created_at, f);
   }
   for (const r of backIns.results as { id: string; detail: string | null; at: string }[]) {

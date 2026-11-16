@@ -235,7 +235,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       feeNotices.push(...(await feeNoticesFor(ctx, group.id, me.id, settings)));
       // Zip 51b "Money change note" (server/moneyNote.ts), only while its Settings row is on (off: no read, this answer is exactly main's).
       // A cleared fee that has a note shows as the note only, never twice (the Good news line keeps the rest: a canceled game, a Clear).
-      const mn = await moneyNotesFor(ctx.db, group, me.id, ctx.nowMs);
+      const mn = await moneyNotesFor(ctx.db, group, me.id, ctx.nowMs, new Map(owed.map((o) => [o.sessionId, o.amountCents])));
       moneyNotes.push(...mn.notes);
       if (mn.covered.length) {
         const noted = new Set(mn.covered);

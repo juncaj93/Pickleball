@@ -5108,7 +5108,7 @@ while the row is on, the moved line also carries `from` (the old start) for the 
 from the shared switch read, no extra trip with Fewer trips on), no other read, no write, every answer exactly main's.
 
 ### Tests
-- Unit: tests/zip51-money-note.test.ts (12): the four sentences word for word ($14, $11, $13.50; the weekday in Eastern); switch off changes
+- Unit: tests/zip51-money-note.test.ts (15, with the reviewer's three): the four sentences word for word ($14, $11, $13.50; the weekday in Eastern); switch off changes
   nothing (no note, no row, no `from`, the Good news line as before); sub unpaid and paid (credit $14 as before); host + guest two short, two
   subs a minute apart; moved (old day) and same-day moves (nothing); back In after an owing late drop (note) and after a free one (none); her own
   I'm in (none); no backfill, off hides, on again starts over, a second on keeps the start; Got it once, refused for another player, kept across a
@@ -5116,6 +5116,17 @@ from the shared switch read, no extra trip with Fewer trips on), no other read, 
 - Browser: e2e/zip51.cjs N0 to N4: the Settings row (on in the preview), Parker's late drop on "Note test", Rowan in from the Players sheet,
   the amber note first on Parker's screen with one button and no other words (390, 360, 320; light and dark), only Parker sees it, Got it
   hides it at once and after a reload, no blue line in its place.
+
+### Fresh reviewer (Mon Nov 16)
+- HIGH, fixed: the organizer's own Clear with "Sub found" writes a History line with why 'sub' too; it made a "Someone took your spot" note,
+  even for a no-show. Only the site's own sub lines count now (they name the sub and carry no `kind`). Tests: Clear > Sub found on a late drop
+  and on a no-show give no note, and the Good news line stays.
+- MEDIUM, fixed: "$14 still owed" was fixed text. It is now what the player still owes on that game when the note is read (their `owed`
+  list); nothing owed (a pair that had paid $28) and the sentence stops at "cleared": "Gale took one of your 2 spots. $14 is cleared."
+- LOW, fixed: the Got it read is limited to the note window; turning the row off removes the notes' rows (and on again starts fresh, no
+  backfill: comment and test title now say so).
+- LOW, accepted (told Alex): the organizer's View as I'm in for a late dropper makes no back-In note; when a guest is the sub, the note names
+  the host who added the guest; a move that clears an owed guest spot (not a late drop) makes no note. One extra read per /api/group while on.
 
 ### Preview
 `npm run db:seed:preview` turns the row on (BUILDING_ON) and adds "Note test" at 7:30 PM on the Drop test's day (scripts/preview-world-small.ts
