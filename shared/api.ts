@@ -264,6 +264,8 @@ export interface GroupView {
     /** Zip 49: a sub took only this guest's spot (the host's own share may still be owed). */
     guest?: string;
   }[];
+  /** Zip 51b "Money change note" (shared/moneyNote.ts): this player's notes still to show, oldest first. Only while on and only when there is one. */
+  moneyNotes?: { id: string; kind: 'sub' | 'sub_one' | 'moved' | 'back_in'; text: string }[];
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -616,6 +618,8 @@ export interface AdminDashboard {
   tapGuardFix?: boolean;
   /** The Settings > Feature switches row for the Tap guard fix: on for every phone, player and organizer. */
   tapGuardFixForAll?: boolean;
+  /** Zip 51b "Money change note" Settings row (server/moneyNote.ts). Missing: off. */
+  moneyNoteForAll?: boolean;
   /** Zip 42 "Guest spot" is on for this screen (server/guestSpot.ts): "Add a guest" on the Players sheet. Missing: no guest buttons. */
   guestSpot?: boolean;
   /** The Settings > Feature switches row for Guest spot: on for every phone. */

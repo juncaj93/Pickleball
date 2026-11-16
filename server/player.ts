@@ -28,6 +28,7 @@ import { claimSlot, releaseSlot } from './rate';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { lateFeesFor } from './lateFees';
 import { cheaperFixFor } from './cheaperFix';
+import { markMoneyNoteSeen, moneyNotesFor, type MoneyNote } from './moneyNote';
 
 /**
  * "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." The cleared late fees of THIS player only
@@ -216,6 +217,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
 
   const owed: GroupView['owed'] = [];
   const feeNotices: NonNullable<GroupView['feeNotices']> = [];
+  const moneyNotes: MoneyNote[] = [];
   let suggestion: GroupView['suggestion'] = null;
   const credit: GroupView['credit'] = { balanceCents: 0, usableCents: 0, pending: null, history: [] };
   // Their own seats' part of the pot: credit used on it, cash paid toward it earlier, and money that came back from it.
@@ -231,6 +233,14 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       // Money that came back because a late fee was cleared: "someone took your spot" (a sub) or cleared by the organizer.
       const feeClears = await lateFeeClearsFor(ctx, group.id, me.id);
       feeNotices.push(...(await feeNoticesFor(ctx, group.id, me.id, settings)));
+      // Zip 51b "Money change note" (server/moneyNote.ts), only while its Settings row is on (off: no read, this answer is exactly main's).
+      // A cleared fee that has a note shows as the note only, never twice (the Good news line keeps the rest: a canceled game, a Clear).
+      const mn = await moneyNotesFor(ctx.db, group, me.id, ctx.nowMs, new Map(owed.map((o) => [o.sessionId, o.amountCents])));
+      moneyNotes.push(...mn.notes);
+      if (mn.covered.length) {
+        const noted = new Set(mn.covered);
+        feeNotices.splice(0, feeNotices.length, ...feeNotices.filter((n) => !noted.has(n.id)));
+      }
       const starts = sessionStartsRead(group.id);
       const startsOf = new Map(
         (await ctx.db.prepare(starts.sql).bind(...starts.values).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
@@ -370,6 +380,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,
     feeNotices,
+    ...(moneyNotes.length ? { moneyNotes } : {}),
     sessions: upcoming,
     owed,
     payDue,
@@ -440,6 +451,13 @@ export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
  * Only the organizer's own player can save it, never in View as, only while the switch is Just me and the kill switch allows it; anyone else gets
  * a quiet "applied: false" and nothing is saved. Look only: it changes how the organizer's own player sees the player screens, nobody else's.
  */
+/** POST /api/money-note/seen { id }: "Got it" on a Money change note (server/moneyNote.ts). The organizer's View as never writes it. */
+export async function moneyNoteSeen(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, playerId, viewAsName } = await viewer(ctx);
+  if (!playerId || viewAsName) return { ok: true, applied: false };
+  return markMoneyNoteSeen(ctx, group, playerId, body);
+}
+
 export async function christmasSkinMe(ctx: Ctx, body: Record<string, unknown>) {
   const { group, playerId, viewAsName } = await viewer(ctx);
   const on = v.bool(body.on, 'on');

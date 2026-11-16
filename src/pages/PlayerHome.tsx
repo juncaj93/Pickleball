@@ -780,6 +780,8 @@ export function PlayerHome({
 
         {g && !pickName && (
           <>
+            {/* Zip 51b "Money change note" (server/moneyNote.ts): first on the screen, and shown on a calm preview too (it is that zip's card). */}
+            {view!.moneyNotes && view!.moneyNotes.length > 0 && <MoneyNotes notes={view!.moneyNotes} />}
             {/* Preview only (shared/previewCalm.ts): the alert cards stay hidden unless the phone opened ?alerts=all. */}
             {g.previewCalm !== true && (
             <>
@@ -1257,6 +1259,39 @@ function readFeeSeen(): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Zip 51b "Money change note": one amber card per note ("Rowan took your spot. Your $14 is cleared."), the sentence and one button, until
+ * Got it. The card leaves at once; if the save fails it comes back (and shows again next time anyway: the server remembers, not the phone).
+ */
+function MoneyNotes({ notes }: { notes: NonNullable<GroupView['moneyNotes']> }) {
+  const [gone, setGone] = useState<string[]>([]);
+  const list = notes.filter((n) => !gone.includes(n.id));
+  if (list.length === 0) return null;
+  const gotIt = (id: string) => {
+    setGone((g) => [...g, id]);
+    api('POST', '/api/money-note/seen', { id }).catch(() => setGone((g) => g.filter((x) => x !== id)));
+  };
+  return (
+    <>
+      {list.map((n) => (
+        <AlertCard
+          key={n.id}
+          tone="amber"
+          icon="owe"
+          title={n.text}
+          label={n.text}
+          data={{ 'data-money-note': n.kind }}
+          actions={
+            <button type="button" className="ac-btn" data-money-note-ok onClick={() => gotIt(n.id)}>
+              Got it
+            </button>
+          }
+        />
+      ))}
+    </>
+  );
 }
 
 /**

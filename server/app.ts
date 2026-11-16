@@ -64,6 +64,8 @@ route('GET', '/api/group/version', (ctx) => player.groupVersion(ctx));
 route('POST', '/api/me', player.pickName);
 // Zip 38: Just me: the organizer's own player saves their Christmas theme choice (see server/player.ts).
 route('POST', '/api/christmas-skin-me', player.christmasSkinMe);
+// Zip 51b (server/moneyNote.ts): "Got it" on a Money change note.
+route('POST', '/api/money-note/seen', player.moneyNoteSeen);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('PUT', '/api/me/days', player.setMyDays);
@@ -174,6 +176,8 @@ route('PUT', '/api/admin/cheaper-fix-switch', admin.setCheaperFixSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
 // Zip 35 (server/tapGuardFix.ts): Tap guard fix.
 route('PUT', '/api/admin/tap-guard-switch', admin.setTapGuardFixSwitch);
+// Zip 51b (server/moneyNote.ts): Money change note.
+route('PUT', '/api/admin/money-note-switch', admin.setMoneyNoteSwitch);
 // Zip 42 (server/guestActions.ts): Guest spot. The switch row, Add a guest, and the organizer's Remove guest.
 route('PUT', '/api/admin/guest-spot-switch', guest.setGuestSpotSwitch);
 route('POST', '/api/admin/sessions/:id/guest', guest.addGuest);

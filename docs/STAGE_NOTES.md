@@ -5082,8 +5082,79 @@ and drops nothing. Two tabs in one browser share the player picked on "Who are y
 ### Preview
 `npm run db:seed:preview` now builds the Zip 51 calm profile (scripts/preview-world-small.ts step 26; docs/PREVIEW_FAKE_DB.md).
 
+## Zip 51b: Money change note (Alex, Mon Nov 16, 2026)
+Branch `claude/new-session-uyfl03`, built on main `3dd6468` (Zip 51 live). LIVE since Mon Nov 16, 11:29 AM Eastern with the row OFF (Alex tested
+it on the preview and asked for it the same day, ahead of the Wednesday window; see Deploy below). New Settings > Feature switches row **Money change note** (task_log `money_note_on`), ships OFF; no schema change, no Cloudflare
+variable, no text or Telegram.
+
+### What it does (only while the row is on)
+When what a player owes changes because of someone else, that player's screen opens on one amber alert card (the Venue charge alert's card family,
+`AlertCard tone="amber"`), the sentence and one button, Got it. Alex's words (shared/moneyNote.ts `moneyNoteText`):
+- a sub takes your late-dropped spot: "Rowan took your spot. Your $14 is cleared." (the game's own price: $11 for a 1.5 hour game)
+- a host with a guest, a sub takes one of the 2 spots: "Rowan took one of your 2 spots. $14 is cleared, $14 still owed."
+- the game moved to another day (Zip 49 clears the late drop): "Thu's game moved. Your late drop is cleared." (the day it was on, Eastern)
+- the organizer puts you back In after a late drop that still owed (F-15): "You're back in. Your late drop is cleared."
+Only the person whose money changed, once per event (Got it is kept on the server, so every phone of that player stops showing it), never for
+the player's own action (their own drop, their own I'm in), never for an event before the row went on, nothing for the organizer's own seat.
+A cleared fee that has a note is no longer also told by the blue "Good news" line (the same clear never shows twice); canceled games and the
+organizer's own Clear keep the Good news line as before.
+
+### How it is stored (no schema change)
+All in task_log at group level (session_id NULL, like the switches and the venue Mark paid rows): the row `money_note_on` (its time is the
+no-backfill start; a second "on" keeps it), `money_note_seen:<id>` per Got it, and `money_note_back_in` (detail: game and player) written by
+the organizer's In only while the row is on. Group level on purpose: a move to another day clears that game's own marks (server/tasks.ts), which
+would otherwise bring a Got it note back. The sub and moved notes are read from the History lines the site already writes ("late_fee_cleared");
+while the row is on, the moved line also carries `from` (the old start) for the weekday. Off: the one switch question every switch asks (answered
+from the shared switch read, no extra trip with Fewer trips on), no other read, no write, every answer exactly main's.
+
+### Tests
+- Unit: tests/zip51-money-note.test.ts (15, with the reviewer's three): the four sentences word for word ($14, $11, $13.50; the weekday in Eastern); switch off changes
+  nothing (no note, no row, no `from`, the Good news line as before); sub unpaid and paid (credit $14 as before); host + guest two short, two
+  subs a minute apart; moved (old day) and same-day moves (nothing); back In after an owing late drop (note) and after a free one (none); her own
+  I'm in (none); no backfill, off hides, on again starts over, a second on keeps the start; Got it once, refused for another player, kept across a
+  move to another day; the Settings row and its History line. tests/speed-queries.test.ts lists the new switch read (main never asked it).
+- Browser: e2e/zip51.cjs N0 to N4: the Settings row (on in the preview), Parker's late drop on "Note test", Rowan in from the Players sheet,
+  the amber note first on Parker's screen with one button and no other words (390, 360, 320; light and dark), only Parker sees it, Got it
+  hides it at once and after a reload, no blue line in its place.
+
+### Fresh reviewer (Mon Nov 16)
+- HIGH, fixed: the organizer's own Clear with "Sub found" writes a History line with why 'sub' too; it made a "Someone took your spot" note,
+  even for a no-show. Only the site's own sub lines count now (they name the sub and carry no `kind`). Tests: Clear > Sub found on a late drop
+  and on a no-show give no note, and the Good news line stays.
+- MEDIUM, fixed: "$14 still owed" was fixed text. It is now what the player still owes on that game when the note is read (their `owed`
+  list); nothing owed (a pair that had paid $28) and the sentence stops at "cleared": "Gale took one of your 2 spots. $14 is cleared."
+- LOW, fixed: the Got it read is limited to the note window; turning the row off removes the notes' rows (and on again starts fresh, no
+  backfill: comment and test title now say so).
+- LOW, accepted (told Alex): the organizer's View as I'm in for a late dropper makes no back-In note; when a guest is the sub, the note names
+  the host who added the guest; a move that clears an owed guest spot (not a late drop) makes no note. One extra read per /api/group while on.
+
+### Preview
+`npm run db:seed:preview` turns the row on (BUILDING_ON) and adds "Note test" at 7:30 PM on the Drop test's day (scripts/preview-world-small.ts
+step 27): Parker, Quinn, Sage, Christopher Vanderberg; Parker has already dropped out late when the seed runs after 7:30 AM that day. On Mon
+Nov 16 the scene was built on the running preview with the site's own actions (no re-seed before 7 PM): the row switched on, "Note test" added
+at 7:30 PM and booked, the four joined, Parker dropped out late (owes $14).
+
+### Deploy (Mon Nov 16, 2026, 11:29 AM Eastern, quiet window)
+- Alex tested on the preview (sub, Got it, back In, light and dark) and said OK to both questions (a paid host with a guest reads "$14 is
+  cleared" with no "still owed"; the blue Good news line no longer repeats a clear that has the note). No group text; nothing else deploying
+  (the newest production deployment was Zip 51's `36eaa76b`, and main contained it; 🎾52 deploys after this one). Main had not moved.
+- Tests on the final code (`6050656`): unit 185 files, 3,334 passed, 2 skipped, 0 failed; typecheck and file name check clean; browser zip51,
+  run, held, round2, audit-player-flows, audit-player-look, zip49, admin-r3: 8 of 8 green, 647 checks (round2 green on its rerun alone).
+- Known, not from this zip (told Alex): tests/audit-r4.test.ts finalize-heavy fuzz now and then ends with "more credit than price" (a paid
+  player drops, Alex adds them back, then Finalize, Reopen, Finalize: e.g. $14 of credit on a $9 seat). Zip 50's code fails it too (2 of 6
+  runs; Zip 51's 1 of 6); the outcome depends on random ids, so a fixed seed does not always hit it. Needs its own fix.
+- Restore point: SQL export of live (247 KB, 11:28 AM) saved in `pickleball-backups` as `export-20261116163007` and checked, local copy deleted.
+  Time Travel bookmark `0000153a-00000000-00005125-249dd36b06717264aefbeaca8e969277` (11:28 AM). Integrity checks 21 of 21 at 0 before and
+  after. No `money_note` rows on live before or after (the row ships OFF). No schema change, no Cloudflare variable.
+- Main fast-forwarded to `6050656`, then `npm run deploy` from main. Production deployment `5404528b-3125-4a67-9033-2391ebf10be7`.
+  Rollback: Pages deployment `36eaa76b-2f82-437b-a7f5-89693ddc67bc` (Zip 51, `0bc1d4b`). The clock Worker did not change.
+- Live check (public files only, no PIN, `pickleball-club-9h0.pages.dev`): the page loads (200) with the new bundle; "Who are you?" with no page
+  errors and no organizer file fetched; /admin asks for the PIN; organizer data (dashboard, money, activity, backup, demo-extras) and the new
+  switch answer 401 without it; the organizer's file has the "Money change note" row; Got it without a player answers "not applied" and writes nothing.
+- To turn it on: Settings > Feature switches > Money change note (top row). Only clears from that moment on make a note (no backfill).
+
 ## Zip 52: the audit fuzz's "$5 short" (🎾52.fuzz), Mon Nov 16, 2026
-Branch `claude/new-session-j2knq5` (the session is named "🎾52.fuzz"; the build system pins the branch name). Built on main `3dd6468` (Zips 48 to 51
+Branch `claude/new-session-j2knq5` (the session is named "🎾52.fuzz"; the build system pins the branch name). Built on main `3dd6468`, then main `e2aad07` (Zip 51b, the Money change note, deployed at 11:29 AM) merged in. Zips 48 to 51b
 live). MOVES MONEY (Unmark and the player's own "Didn't pay?" on a paid seat). No schema change, no Cloudflare variable, no switch, no wording or
 look change.
 
