@@ -38,7 +38,7 @@ export const SMALL_NO_NUMBER = 'Reese';
 // since Sun Nov 8 evening (Alex, Zip 18 round 2).
 export const LATER_ON_LIVE: readonly string[] = ['game_day_card_on', 'second_chance_on', 'after_game_card_on', 'unpaid_nudge_on'];
 /** Being built: Guest spot (Zip 42). Venue charge alert (Zip 43), its row back-dated (smallSwitchRows). Tap guard fix (Zip 35). Extended time (Zip 31) is still being tried too. Check-in pay line (Zip 34) is still being tried too. Players sheet redo (Zip 32) is still being tried too. Acting for others (Zip 30) is still being tried too. Spent matches Totals (Zip 27), Booking hours (Zip 24) and Totals refresh (Zip 23) shipped OFF and are still being tried, so they stay on here too. */
-export const BUILDING_ON: readonly string[] = ['venue_alert_on', 'totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on', 'guest_spot_on'];
+export const BUILDING_ON: readonly string[] = ['venue_alert_on', 'totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on', 'guest_spot_on', 'money_note_on'];
 
 export function smallSwitchRows(nowMs: number): string {
   const at = new Date(nowMs).toISOString();
@@ -629,10 +629,19 @@ export async function buildSmallPreview(
       for (const n of names) await join(n, gg);
     }
     await orgPays('Parker', drop);
+    // 27. Zip 51b, Money change note (ON in the preview: BUILDING_ON): "Note test" at 7:30 PM the same day as the two above (its late window opens
+    //     at 7:30 AM). Parker, Quinn, Sage, Christopher Vanderberg in. When the seed runs inside that window, Parker has already dropped out late
+    //     (owes $14); otherwise Parker taps Drop out first. When Rowan then takes the spot (I'm in, or Add on the organizer's Players sheet),
+    //     Parker's screen opens on the amber note "Rowan took your spot. Your $14 is cleared." with Got it.
+    const note = await makeAt(localAt(base, 19, 30), 120, 'Note test');
+    await setCourt(note, 'booked');
+    for (const n of ['Parker', 'Quinn', 'Sage', SMALL_LONG]) await join(n, note);
+    if (N >= Date.parse(note.startsAt) - 12 * HOUR) await (await w.pick('Parker')).ok('POST', `/api/sessions/${note.id}/withdraw`, {});
     keep.length = 0;
-    keep.push(drop.id, back.id);
+    keep.push(drop.id, back.id, note.id);
     lateMove = undefined;
     await refresh();
+    summary.push('Zip 51b Money change note (on): "Note test" (7:30 PM, the same day): Parker, Quinn, Sage, Christopher Vanderberg in (Parker already dropped out late, owing $14, when the seed ran after 7:30 AM that day); Rowan taking the spot shows Parker the amber note');
     summary.push('Zip 51 edge cases: "Drop test" (7:00 PM: Parker paid $14, Quinn, Sage, Christopher Vanderberg) and "Back in test" (8:00 PM: Rowan, Reese, Sage, Christopher Vanderberg), today when seeded before noon, else tomorrow; their late windows open at 7:00 and 8:00 AM');
   }
 

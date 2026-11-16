@@ -99,6 +99,7 @@ import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from '.
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
 import { setTapGuardFixForAll, tapGuardFixFlags } from './tapGuardFix';
+import { moneyNoteForAll, recordBackIn, setMoneyNoteForAll } from './moneyNote';
 import { guestSpotFlags, hasGuestColumns, trimGuestShares } from './guestSpot';
 import { removeGuestCore } from './guestActions';
 import { guestIn, guestOwed, headCount, seatUnits } from '../shared/guestSpot';
@@ -272,6 +273,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const checkInPay = await checkInPayFlags(ctx, group.id);
   // Zip 35 "Tap guard fix" (server/tapGuardFix.ts): which fast tap the page ignores, only while on (off: this answer is exactly main's).
   const tapGuard = await tapGuardFixFlags(ctx, group.id);
+  // Zip 51b "Money change note" (server/moneyNote.ts): the Settings row only (off: this answer is exactly main's).
+  const moneyNoteRow = await moneyNoteForAll(ctx.db, group.id);
   // Zip 42 "Guest spot" (server/guestSpot.ts): Add a guest on the Players sheet, only while on (off: this answer is exactly main's).
   const guestSpot = await guestSpotFlags(ctx, group.id);
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
@@ -430,6 +433,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(checkInPay.forAll ? { checkInPayForAll: true as const } : {}),
     ...(tapGuard.on ? { tapGuardFix: true as const } : {}),
     ...(tapGuard.forAll ? { tapGuardFixForAll: true as const } : {}),
+    ...(moneyNoteRow ? { moneyNoteForAll: true as const } : {}),
     ...(guestSpot.on ? { guestSpot: true as const } : {}),
     ...(guestSpot.forAll ? { guestSpotForAll: true as const } : {}),
     ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),
@@ -1224,19 +1228,28 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileC
     // Zip 49 (Alex): a game moved to another day: late drops on the old day no longer apply. Every open late-drop debt is cleared (its money
     // back as credit, like Clear) and an owed guest spot (removed late) comes off, each with a History line. Moves on the same day: as before.
     const fresh = await getSession(ctx.db, group.id, session.id);
-    if (fresh) await clearLateDebtsOnMove(ctx, group, fresh);
+    if (fresh) await clearLateDebtsOnMove(ctx, group, fresh, session.starts_at);
   }
   return { ok: true, changed: true };
 }
 
+/** Zip 51b: this seat's late drop still owes (the same rule the move and the Players tab use). The organizer's own seat never does. */
+async function lateDropStillOwed(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string): Promise<boolean> {
+  const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
+  if (!row) return false;
+  return lateFeeKind(row, session, playerId === (await organizerIdOf(ctx.db, group))) === 'late_drop';
+}
+
 /** Zip 49: see reschedule. Only open late-drop debts and owed guest spots of this game; a second run finds nothing open and does nothing. */
-async function clearLateDebtsOnMove(ctx: Ctx, group: GroupRow, session: SessionRow) {
+async function clearLateDebtsOnMove(ctx: Ctx, group: GroupRow, session: SessionRow, fromStartsAt: string) {
   const roster = await loadRoster(ctx.db, session.id);
   const organizerId = await organizerIdOf(ctx.db, group);
   const prices = sharesFor(session, roster, settingsOf(group));
   const open = roster.filter((r) => lateFeeKind(r, session, r.player_id === organizerId) === 'late_drop');
   const now = ctx.nowIso;
   if (open.length) {
+    // Zip 51b "Money change note": the old start goes in the History line, so the note can say "Thu's game moved" (only while it is on).
+    const from = (await moneyNoteForAll(ctx.db, group.id)) ? { from: fromStartsAt } : {};
     await ctx.db.batch([
       ctx.db.prepare(`UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1 WHERE session_id = ?2 AND ${OPEN_LATE_DROP('session_players')}`).bind(now, session.id),
       ...seatMoneyBackStatements(ctx.db, {
@@ -1255,7 +1268,7 @@ async function clearLateDebtsOnMove(ctx: Ctx, group: GroupRow, session: SessionR
       if (tagged?.late_drop_done_at !== now) continue;
       const back = (await moneyBackAt(ctx.db, session.id, r.player_id, 'dropped', now))[0];
       const amountCents = (back?.cashCents ?? 0) + (back?.creditCents ?? 0);
-      await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: r.display_name, playerId: r.player_id, why: 'moved', kind: 'late_drop', amountCents, debtCents: prices.get(r.player_id) ?? flatOf(session, settingsOf(group)) }, now);
+      await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: r.display_name, playerId: r.player_id, why: 'moved', kind: 'late_drop', amountCents, debtCents: prices.get(r.player_id) ?? flatOf(session, settingsOf(group)), ...from }, now);
       if (back && back.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: r.display_name, playerId: r.player_id, amountCents: back.cashCents, reason: 'dropped' }, now);
     }
   }
@@ -1284,6 +1297,8 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   if (!player) throw new HttpError(404, 'player_not_found', 'Player not found.');
   let result: string;
   if (action === 'confirm') {
+    // Zip 51b "Money change note": was this seat's late drop still owed before the organizer's In? (Read only while the switch is on.)
+    const owedLate = (await moneyNoteForAll(ctx.db, group.id)) && (await lateDropStillOwed(ctx, group, session, playerId));
     const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'organizer', settingsOf(group));
     // "Card cleanup" (Zip 10): no cap, only the database's 12; never the word "full".
     if (r.result === 'spot_taken') throw settingsOf(group).noCap === true ? new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE) : new HttpError(409, 'session_full', `The game is full (${settingsOf(group).maxPlayers} in).`);
@@ -1291,6 +1306,8 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
     // Zip 51 (audit F-15): back in from the organizer's In after a late drop, the same as the player's own I'm in: the late-drop mark goes
     // (the Players tab count, and a later normal drop never reads as late). The money already followed the player's own path (joinSession).
     if (r.result === 'confirmed') await clearLateDrop(ctx.db, session.id, playerId);
+    // Zip 51b: "You're back in. Your late drop is cleared." on that player's screen (only while the switch is on).
+    if (r.result === 'confirmed' && owedLate) await recordBackIn(ctx.db, group.id, session.id, playerId, ctx.nowIso);
     // Zip 49 (audit F-6): giving a host back their spot after To waitlist leaves their guest waiting behind them; with room, the guest (and
     // anyone else waiting) moves in now, the same moves a drop makes. Nothing moves while the game is full or nobody waits.
     if (r.result === 'confirmed') await settle(ctx.db, session, ctx.nowIso, settingsOf(group));
@@ -2797,6 +2814,14 @@ export async function setTapGuardFixSwitch(ctx: Ctx, body: Record<string, unknow
   const on = v.bool(body.on, 'on');
   await setTapGuardFixForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'tap_guard_fix_on' : 'tap_guard_fix_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/money-note-switch { on }: Zip 51b "Money change note" for every player phone. A note only; nothing about money changes. */
+export async function setMoneyNoteSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  if (await setMoneyNoteForAll(ctx.db, group.id, on, ctx.nowIso)) await audit(ctx.db, group.id, null, on ? 'money_note_on' : 'money_note_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

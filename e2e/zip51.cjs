@@ -11,6 +11,8 @@
  *   B1  F-15: Reese drops out late on "Back in test" (owes $14), the Players tab says "1 late drop"; Alex adds Reese back from the Players sheet:
  *       the Players tab no longer says it (light and dark).
  *   V1  F-9: Home opens on last month's two venue cards ($30, $96); moving "Court costs charged on" to the 15th keeps both as they were.
+ *   N   Zip 51b Money change note: the Settings row (on), Parker's late drop on "Note test", Rowan in from the Players sheet, the amber note at
+ *       the top of Parker's screen only (390, 360, 320; light and dark), Got it.
  * Screenshots: .data/zip51-shots (not in git).
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -96,6 +98,9 @@ async function main() {
   const gd = d.sessions.find((s) => s.note === 'Drop test');
   const gb = d.sessions.find((s) => s.note === 'Back in test');
   assert(gd && gb, 'the two Zip 51 games are in the calm world');
+  const gn = d.sessions.find((s) => s.note === 'Note test');
+  assert(gn, 'Zip 51b: "Note test" is in the calm world');
+  assert(d.moneyNoteForAll === true, 'Zip 51b: the Money change note row is ON in the preview seed');
   assert(d.lateFees === true, 'Late fees are on, as on live');
   const ids = Object.fromEntries(d.players.map((p) => [p.name, p.id]));
   const seat = async (g, name) => (await dash()).sessions.find((s) => s.id === g.id).roster.find((x) => x.name === name);
@@ -343,6 +348,83 @@ async function main() {
       await noSideScroll(page, 'Home');
       await ctx.close();
     });
+
+  // ---------------------------------------------------------------- N: Zip 51b, the Money change note
+  // "Note test" (7:30 PM): Parker, Quinn, Sage, Christopher Vanderberg. The seed ran before 7:30 AM, so Parker drops out late here (owes $14);
+  // Alex puts Rowan in from the Players sheet (a sub); Parker's screen opens on the amber note at the very top, until Got it.
+  const NOTE = 'Rowan took your spot. Your $14 is cleared.';
+  await check('N0 Settings > Feature switches has "Money change note", ON in the preview', async () => {
+    const { ctx, page } = await adminPage();
+    await page.locator('nav').getByText('Settings', { exact: true }).first().click();
+    const sect = page.locator('details[data-section="switches"]');
+    await sect.waitFor({ timeout: 15000 });
+    if (!(await sect.evaluate((e) => e.open))) await sect.locator('summary').click();
+    const row = page.locator('[data-row="moneyNoteAll"]');
+    assert(flat(await row.innerText()).startsWith('Money change note'), flat(await row.innerText()));
+    assert(await page.locator('[data-money-note-all]').isChecked(), 'on');
+    await ctx.close();
+  });
+  await check('N1 setup: Parker drops out of "Note test" late (owes $14): no note for Parker (her own drop); Rowan comes in from the Players sheet', async () => {
+    const { ctx, page } = await playerPage('Parker');
+    const c = card(page, gn.id);
+    await c.scrollIntoViewIfNeeded();
+    await c.locator('.drop-link').click();
+    const dlg = page.locator('dialog.sheet[open]').first();
+    await dlg.waitFor();
+    await page.waitForTimeout(300);
+    assert(flat(await dlg.innerText()).includes(OWES), flat(await dlg.innerText()));
+    await dlg.locator('.btn-row button', { hasText: 'Drop out' }).click();
+    await page.waitForTimeout(6800);
+    assert((await page.locator('[data-money-note]').count()) === 0, 'no note for her own drop');
+    await ctx.close();
+    await post(`/api/admin/sessions/${gn.id}/roster`, { playerId: ids.Rowan, action: 'confirm' });
+    assert((await seat(gn, 'Rowan')).status === 'confirmed', 'Rowan in');
+  });
+  for (const scheme of ['light', 'dark'])
+    for (const width of [390, 360, 320])
+      await check(`N2 Parker's screen opens on the amber note, first on the page, one button (${width} ${scheme})`, async () => {
+        const { ctx, page } = await playerPage('Parker', { width, scheme });
+        const n = page.locator('[data-money-note]');
+        await n.first().waitFor({ timeout: 15000 });
+        assert((await n.count()) === 1, `one note: ${await n.count()}`);
+        assert(flat(await n.innerText()).startsWith(NOTE), `words: ${flat(await n.innerText())}`);
+        assert((await n.getAttribute('data-money-note')) === 'sub' && (await n.getAttribute('data-alert-card')) === 'amber', 'an amber alert card');
+        const buttons = await n.locator('button').allInnerTexts();
+        assert(buttons.length === 1 && flat(buttons[0]) === 'Got it', `buttons: ${buttons}`);
+        assert(flat(await n.innerText()) === `${NOTE} Got it`, `no other text: ${flat(await n.innerText())}`);
+        const noteY = (await n.boundingBox()).y;
+        const firstGame = (await page.locator('.schedule article.sched').first().boundingBox()).y;
+        assert(noteY < firstGame, `above the games (${noteY} < ${firstGame})`);
+        // Same look as the Venue charge alert: the amber card family.
+        const bg = await n.evaluate((el) => getComputedStyle(el).backgroundColor);
+        assert(bg !== 'rgba(0, 0, 0, 0)', 'has its card color');
+        assert((await page.locator('[data-fee-notice]').count()) === 0, 'not told twice (no blue Good news line)');
+        await noSideScroll(page, 'the note');
+        await page.screenshot({ path: path.join(SHOTS, `N2-${width}-${scheme}.png`) });
+        await ctx.close();
+      });
+  await check('N3 only Parker: Rowan, Quinn and Sage see no note', async () => {
+    for (const who of ['Rowan', 'Quinn', 'Sage']) {
+      const { ctx, page } = await playerPage(who);
+      assert((await page.locator('[data-money-note]').count()) === 0, `${who} sees a note`);
+      await ctx.close();
+    }
+  });
+  await check('N4 Got it: the note goes at once and stays gone after a reload; the blue Good news line does not take its place', async () => {
+    const { ctx, page } = await playerPage('Parker');
+    const n = page.locator('[data-money-note]');
+    await n.first().waitFor({ timeout: 15000 });
+    await n.locator('button', { hasText: 'Got it' }).click();
+    await page.waitForTimeout(200);
+    assert((await n.count()) === 0, 'gone at once');
+    await page.waitForTimeout(1200);
+    await page.reload();
+    await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await page.waitForTimeout(800);
+    assert((await page.locator('[data-money-note]').count()) === 0, 'still gone after a reload');
+    assert((await page.locator('[data-fee-notice]').count()) === 0, 'no Good news line instead');
+    await ctx.close();
+  });
 
   await browser.close();
   console.log(`\nzip51: ${passed} passed, ${failed} failed`);
