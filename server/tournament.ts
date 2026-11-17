@@ -419,6 +419,9 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   const t = await openById(ctx, group);
   const offered = storedDays(t.offered_dates);
   const s = readSettings(body, group, ctx.nowMs, offered, { courts: t.courts, minutes: t.minutes, start: t.start_minutes });
+  // A save that leaves the format or the 2nd place credit out keeps what the tournament has (only Create starts them at their defaults).
+  if (body.format === undefined) s.format = formatOf(t);
+  if (body.secondCreditCents === undefined) s.secondCreditCents = t.second_credit_cents ?? 0;
   // The format is locked once tickets open (piece 2): a save that tries to change it then is refused.
   if (s.format !== formatOf(t) && formatLocked(t.status)) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
   if (t.final_date && statusOf(t) === 'date_picked' && !s.dates.includes(t.final_date)) {

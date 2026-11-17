@@ -243,9 +243,10 @@ describe('sign up, Edit sign-up, back out', () => {
     const devon = (await group(ctx, 'Devon')).tournament;
     expect(devon.me).toBeNull();
     expect(devon.names).toEqual(['Blair', 'Casey']);
-    // Never anyone's level to another player.
-    expect(JSON.stringify(devon)).not.toContain('340');
-    expect(JSON.stringify(devon)).not.toContain('275');
+    // Never anyone's level to another player. (The random id is left out of the look: it can hold those digits by chance.)
+    const seen = JSON.stringify({ ...devon, id: undefined });
+    expect(seen).not.toContain('340');
+    expect(seen).not.toContain('275');
     const t = (await dash(ctx)).tournament;
     expect(t.signups.map((s: any) => [s.name, s.pickedLevel, s.level, s.reviewed])).toEqual([
       ['Blair', 340, 340, false],
@@ -779,6 +780,13 @@ describe('format: Doubles or Americano (Alex, before shipping)', () => {
     await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[2] });
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'doubles' })).status).toBe(200);
     expect((await dash(ctx)).tournament.format).toBe('doubles');
+  });
+
+  it('an Edit that leaves out the format and the 2nd place credit keeps them (it never turns an Americano back into Locked doubles)', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { format: 'americano', secondCreditCents: 700 });
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, name: 'Renamed' })).status).toBe(200);
+    expect((await dash(ctx)).tournament).toMatchObject({ name: 'Renamed', format: 'americano', secondCreditCents: 700 });
   });
 
   it('Create an Americano; a bad format or a negative 2nd place credit is refused', async () => {
