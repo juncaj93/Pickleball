@@ -5524,7 +5524,7 @@ page, both Home cards, the Tournament test page; stored as 'doubles' and 'americ
 name come the format (subtitle style) and its one rule in smaller text, "Same partner all night" or "New partner every round", then where
 the player stands. The Create choice shows the same rule under each name; the two choices are stacked full width so neither wraps at 320.
 
-### Deploy (Tue Nov 17, 2026, about 4:40 PM Eastern; loud hours waived by Alex for this one, `--override-loud-hours`)
+### Deploy (Tue Nov 17, 2026, about 3:45 PM Eastern; loud hours waived by Alex for this one, `--override-loud-hours`)
 - Alex said "ship it" for piece 1 with the TOURNAMENTS switch staying OFF. No other deploy was running.
 - Restore point: Time Travel bookmark `000016a0-00000000-00005126-5737654412065639167a97dd98e88e16` (taken before the migration). SQL export of
   live (258 KB) saved to `pickleball-backups` as `export-20261117205113`, checked, then the local copy deleted (phone numbers inside).
