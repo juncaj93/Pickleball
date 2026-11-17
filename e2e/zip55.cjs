@@ -391,12 +391,11 @@ async function main() {
     finalDay = d.tournament.finalDate;
     assert(d.tournament.status === 'date_picked' && finalDay === best, JSON.stringify([d.tournament.status, finalDay, best]));
   });
-  await check('G after the date is picked the admin card says Edit; it opens the whole tournament page at the top and stays where you scroll', async () => {
+  await check('G after the date is picked the admin card is picture 29 (Zip 56): Open tickets; the name opens the whole tournament page at the top and stays where you scroll', async () => {
     const a = await adminPage();
-    // Pass 2: once the date is picked the card has one button, Edit.
-    const btns = await a.page.locator('.tm-home-actions .btn').allInnerTexts();
-    assert(btns.map(flat).join('|') === 'Edit', btns.join('|'));
-    await a.page.locator('[data-tm-open-edit]').click();
+    // Zip 56 (picture 29): once the date is picked the card's button is Open tickets, and the tournament's name opens its page (no Edit button).
+    assert((await a.page.locator('[data-tm-open-tickets]').count()) === 1 && (await a.page.locator('[data-tm-open-edit]').count()) === 0, 'Open tickets, no Edit');
+    await a.page.locator('[data-tm-open-page]').click();
     await a.page.locator('[data-tm-page]').waitFor();
     await a.page.waitForTimeout(600);
     const top = await a.page.evaluate(() => document.querySelector('dialog[open] .sheet-body')?.scrollTop ?? document.querySelector('dialog[open]').scrollTop);
@@ -618,14 +617,20 @@ async function main() {
           await v.ctx.close();
           const a = await adminPage({ width, scheme });
           await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
-          assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Americano' && flat(await a.page.locator('.tm-home-rule').innerText()) === 'New partner every round', 'admin format and rule');
+          if (st === 'signup') {
+            assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Americano' && flat(await a.page.locator('.tm-home-rule').innerText()) === 'New partner every round', 'admin format and rule');
+          } else {
+            // Zip 56: once the date is picked the organizer's card is picture 29's (no format line, as drawn; a question for Alex).
+            assert((await a.page.locator('[data-tm-home="date_picked"] [data-tm-open-tickets]').count()) === 1, 'picture 29\'s card');
+          }
           await fits(a.page, '[data-tm-home]');
           await a.ctx.close();
         });
   }
   await check('N Edit an Americano: Format shows Americano (can change), two prize rows 1st and 2nd; switch to Locked doubles and back in the form', async () => {
     const a = await adminPage();
-    await a.page.locator('[data-tm-open-edit]').click();
+    // The date is picked here: picture 29's card, whose name opens the page (Zip 56).
+    await a.page.locator('[data-tm-open-page]').click();
     assert(flat(await a.page.locator('[data-tm-format-row]').innerText()) === 'Americano', 'the Settings row');
     await a.page.locator('[data-tm-edit-settings]').click();
     await a.page.locator('[data-tm-form="edit"]').waitFor();
