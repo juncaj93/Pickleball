@@ -89,7 +89,7 @@ describe('Zip 55: the deploy script sets the preview flag', () => {
     expect(deployMain(['preview'], { git, run, out: () => {}, err: () => {} })).toBe(0);
     expect(seen[0].PB_PREVIEW_BUILD).toBe('1');
     const HEAD = 'a'.repeat(40);
-    const good = { head: HEAD, remoteMain: HEAD, live: { relation: 'same', sha: HEAD } };
+    const good = { head: HEAD, remoteMain: HEAD, live: { relation: 'same' as const, sha: HEAD } };
     // Sat Nov 14, 10:00 AM Eastern: a quiet hour.
     const prod = deployMain(['production'], { git: () => ({ branch: 'main', dirty: false }), network: () => good, now: () => Date.parse('2026-11-14T15:00:00Z'), run, out: () => {}, err: () => {} });
     expect(prod).toBe(0);
