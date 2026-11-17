@@ -134,6 +134,7 @@ import { homeScreenTipFor } from './homeScreenTip';
 import { christmasSkinFor, christmasSkinModeFor, setChristmasSkinMeOn } from './christmasSkin';
 import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
+import { playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup } from './tournament';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
 import { refuseOverLimit, unpaidNudgeFor } from './unpaidNudge';
@@ -206,6 +207,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
   // Zip 38 "Christmas skin": one read for the organizer's own player only (the test mark); every other player's answer is as it was.
   const skin = await christmasSkinFor(ctx, group.id, meIsOrganizer && !viewAsName, !!viewAsName);
+  // Zip 55 "Tournaments" (server/tournament.ts): the pinned card's data, only while the switch is on AND the tournament is visible to this
+  // player (Everyone, or Only me on the organizer's own signed-in phone). Otherwise nothing: this answer has no `tournament` key at all.
+  const tournament = await playerTournamentFor(ctx, group, me?.id ?? null, !!viewAsName);
   const timeShift = await timeShiftFor(ctx, group.id);
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
@@ -373,6 +377,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     lateFees,
     feeNotices,
     ...(moneyNotes.length ? { moneyNotes } : {}),
+    ...(tournament ? { tournament } : {}),
     sessions: upcoming,
     owed,
     payDue,
@@ -448,6 +453,21 @@ export async function moneyNoteSeen(ctx: Ctx, body: Record<string, unknown>) {
   const { group, playerId, viewAsName } = await viewer(ctx);
   if (!playerId || viewAsName) return { ok: true, applied: false };
   return markMoneyNoteSeen(ctx, group, playerId, body);
+}
+
+/** Zip 55 (server/tournament.ts): POST /api/tournament/signup { tournamentId, level, dates }. */
+export async function tournamentSignup(ctx: Ctx, body: Record<string, unknown>) {
+  return playerTournamentSignup(ctx, await viewer(ctx), body);
+}
+
+/** Zip 55: PUT /api/tournament/signup { tournamentId, level?, dates? } (Edit sign-up). */
+export async function tournamentEdit(ctx: Ctx, body: Record<string, unknown>) {
+  return playerTournamentEdit(ctx, await viewer(ctx), body);
+}
+
+/** Zip 55: POST /api/tournament/back-out { tournamentId }. */
+export async function tournamentBackOut(ctx: Ctx, body: Record<string, unknown>) {
+  return playerTournamentBackOut(ctx, await viewer(ctx), body);
 }
 
 export async function christmasSkinMe(ctx: Ctx, body: Record<string, unknown>) {

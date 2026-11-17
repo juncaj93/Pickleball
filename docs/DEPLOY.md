@@ -20,7 +20,8 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 - Database change first (only when this deploy adds a file under `migrations/`; Audit A, A-07). Check what is pending, then apply it BEFORE the
   site, so the new code never runs against a column that is not there yet:
   `npx wrangler d1 migrations list pickleball --remote` (must show only the new file; if anything else is listed, stop: it would be applied too),
-  then `npm run db:migrate:remote`. The newest migration is `0022_guest_spot_people` (Zip 42, after `0021_guest_spot`; both applied to live Sat Nov 14, see STAGE_NOTES). Before them `0020_games_index` (Zip 33: three indexes, no data, rollback statements inside the file; applied to live Wed Nov 11), before it `0019_extended_time` (Zip 31; it goes AFTER `0018_phone_tag` from Zip 30, 0018 is live since Wed Nov 11). A deploy with no new migration file skips this step. After 0019, also run the extension checks
+  then `npm run db:migrate:remote`. The newest migration is `0023_tournaments` (Zip 55: three NEW tables, nothing existing changed; applied to the preview
+  database first; NOT on live until Alex says "ship it" for it, see STAGE_NOTES). Before it `0022_guest_spot_people` (Zip 42, after `0021_guest_spot`; both applied to live Sat Nov 14, see STAGE_NOTES). Before them `0020_games_index` (Zip 33: three indexes, no data, rollback statements inside the file; applied to live Wed Nov 11), before it `0019_extended_time` (Zip 31; it goes AFTER `0018_phone_tag` from Zip 30, 0018 is live since Wed Nov 11). A deploy with no new migration file skips this step. After 0019, also run the extension checks
   (read-only, every column 0): `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks-extension.sql)"`.
 - Site (Pages): `npm run deploy` (from main). It is GUARDED (Zip 28, Audit A, A-06; the last two rules added in Zip 35). `scripts/deploy.mjs` checks five
   rules in this order, stops at the first one that fails, and prints `Stopped by the "<rule>" rule`. Nothing is built or sent when it stops.
@@ -42,7 +43,8 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
   (`decide()` in `scripts/deploy.mjs`); `tests/zip35-deploy-guard.test.ts` feeds it fake clocks (every loud-hours edge, both sides of daylight saving) and
   fake git and Cloudflare facts. The build also runs `npm run check:names` first (fails if two files differ only by capital letters, which breaks the
   build on a Mac). Rollback: the previous production deployment in Cloudflare (Workers & Pages > pickleball-club > Deployments > ... > Rollback).
-- Preview (fake data, never live): `npm run deploy:preview` (Zip 28). It refuses a detached checkout (the preview would be called "HEAD") and
+- Preview (fake data, never live): `npm run deploy:preview` (Zip 28). Since Zip 55 it builds with `PB_PREVIEW_BUILD=1` (preview-only screens such as the
+  Tournament test page); `npm run deploy` always builds with it empty, so those screens are never in a live build. It refuses a detached checkout (the preview would be called "HEAD") and
   refuses `main` (a main deploy is the live site), builds, and ships with `--branch <your branch name>`, so the preview has a clear name. None of the
   Zip 35 rules (loud hours, GitHub, live) apply to a preview, and it reads no network before building.
   An unsaved-changes folder is allowed for a preview (it warns). Same `-- --dry-run` option. A preview needs no rollback (just deploy again).

@@ -33,7 +33,7 @@ script_name = "pickleball-error-box"
 #   PLAYERS_REDO, SWAP_BUTTON, ADMIN_UNDO, GAME_DAY_CARD, SECOND_CHANCE, UNPAID_NUDGE, ERROR_ALERTS, AFTER_GAME_CARD, TOTALS_REFRESH, SPENT_TOTALS,
 #   CHEAPER_FIX, ACTING_FOR_OTHERS, CHECKIN_PAY_LINE, PLAYERS_SHEET_REDO, BOOKING_HOURS, EXTENDED_TIME, HOME_SCREEN_TIP, CHRISTMAS_SKIN,
 #   GAME_DAY_TEXT, TAP_GUARD_FIX.
-#   Also no line, since they shipped: GUEST_SPOT (Zip 42), VENUE_ALERT (Zip 43).
+#   Also no line, since they shipped: GUEST_SPOT (Zip 42), VENUE_ALERT (Zip 43), TOURNAMENTS (Zip 55).
 # The lines below are the ones where a missing value reads DIFFERENTLY: SITE_URL (links would use whatever address was opened), GO_LINKS,
 # MOTION and MOTION_ADMIN (missing = off), and on previews the preview-only switches (missing = off). What each switch does:
 # docs/FEATURE_SWITCHES.md.

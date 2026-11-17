@@ -37,6 +37,23 @@ const asset = (dir: string, re: RegExp) => {
 const read = (dir: string, f: string) => readFileSync(join(dir, f), 'utf8');
 const gzKB = (text: string) => gzipSync(Buffer.from(text), { level: 9 }).length / 1024;
 
+/**
+ * Zip 55: a rule that only names the tournament's own classes (.tc-..., .tm-..., the .tc card itself, the tm- sheets), or an @media block made
+ * only of such rules. Such a rule can only style the tournament's own elements, so its place in the file order changes nothing else.
+ */
+export function isTournamentRule(rule: string): boolean {
+  const m = /^@media[^{]*\{([\s\S]*)\}$/.exec(rule);
+  if (m) {
+    const inner = cssRules(m[1]);
+    return inner.length > 0 && inner.every(isTournamentRule);
+  }
+  const brace = rule.indexOf('{');
+  if (brace < 0) return false;
+  const selectors = rule.slice(0, brace).split(',');
+  // Every selector must name a tournament class (it may also sit under :root, html or a theme attribute, which only narrows it).
+  return selectors.every((sel) => /\.(tc|tm)(-[a-z0-9-]+)?\b/.test(sel));
+}
+
 /** Top-level CSS rules of a minified file, in order (an @media block counts as one). */
 export function cssRules(css: string): string[] {
   const out: string[] = [];
@@ -132,6 +149,9 @@ describe('Zip 48: /admin', () => {
       '<!-- Zip 48: /admin only. The organizer files, started at once (vite.config.ts, adminPage). -->',
       `<link rel="modulepreload" crossorigin href="/assets/${js}">`,
       `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^zip11-.*\.js$/)}">`,
+      // Zip 55: the tournament calendar and level list, shared with the player's tournament file (src/tournament/parts.tsx), and its style.
+      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^parts-.*\.js$/)}">`,
+      `<link rel="stylesheet" crossorigin href="/assets/${asset(split, /^parts-.*\.css$/)}">`,
       `<link rel="stylesheet" crossorigin href="/assets/${css}">`,
     ]);
     // Nothing of the page was lost.
@@ -142,9 +162,16 @@ describe('Zip 48: /admin', () => {
   });
 
   it('gets exactly the old style order, rule for rule', () => {
-    const mainRules = cssRules(read(split, `assets/${asset(split, /^index-.*\.css$/)}`));
-    const adminRules = cssRules(read(split, `assets/${asset(split, /^AdminEntry-.*\.css$/)}`));
-    const oldRules = cssRules(read(one, `assets/${asset(one, /^index-.*\.css$/)}`));
+    // Zip 55: the tournament's own rules (src/tournament/tournament.css, now in the shared parts-*.css, and src/pages/admin/tournament-admin.css)
+    // only ever name the tournament's own classes (tc-, tm-), so where they sit in the order cannot change any other screen: they are checked
+    // for that below and left out of the order comparison. Every other rule keeps exactly the old order.
+    const tour = (r: string) => isTournamentRule(r);
+    const partsRules = cssRules(read(split, `assets/${asset(split, /^parts-.*\.css$/)}`));
+    expect(partsRules.length).toBeGreaterThan(20);
+    expect(partsRules.filter((r) => !tour(r))).toEqual([]);
+    const mainRules = cssRules(read(split, `assets/${asset(split, /^index-.*\.css$/)}`)).filter((r) => !tour(r));
+    const adminRules = cssRules(read(split, `assets/${asset(split, /^AdminEntry-.*\.css$/)}`)).filter((r) => !tour(r));
+    const oldRules = cssRules(read(one, `assets/${asset(one, /^index-.*\.css$/)}`)).filter((r) => !tour(r));
     expect(oldRules.length).toBeGreaterThan(2000);
     const now = effective([...mainRules, ...adminRules]);
     const before = effective(oldRules);

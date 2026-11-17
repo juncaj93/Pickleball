@@ -1,5 +1,6 @@
 import type { Ctx } from './context';
 import { requireAdmin } from './auth';
+import { type TournamentTables, tournamentsFlags, tournamentTablesFor } from './tournament';
 
 // Zip 18: "View as" shows what that player really sees.
 //
@@ -18,6 +19,8 @@ import { requireAdmin } from './auth';
 export interface DemoExtras {
   taskLog: { id: string; group_id: string; session_id: string | null; task: string; kind: string; detail: string | null; at: string }[];
   env: Record<string, string>;
+  /** Zip 55 "Tournaments": the tournament rows (the backup file leaves them out), only while the switch is on for this phone. Missing: off. */
+  tournaments?: TournamentTables;
 }
 
 const NAME = /^[A-Z][A-Z0-9_]*$/;
@@ -40,5 +43,8 @@ export async function demoExtras(ctx: Ctx): Promise<DemoExtras> {
     .prepare('SELECT id, group_id, session_id, task, kind, detail, at FROM task_log WHERE group_id = ? ORDER BY at, id')
     .bind(group.id)
     .all<DemoExtras['taskLog'][number]>();
-  return { taskLog: results, env: switchEnvOf(ctx.env) };
+  // Zip 55: View as shows a player the tournament card they would see, so the copy needs the tournament rows too (only while the switch is on;
+  // off: this answer is exactly main's). The private test link (X-Tournaments) counts like on every other screen.
+  const tour = (await tournamentsFlags(ctx, group.id)).on ? await tournamentTablesFor(ctx.db, group.id) : null;
+  return { taskLog: results, env: switchEnvOf(ctx.env), ...(tour ? { tournaments: tour } : {}) };
 }

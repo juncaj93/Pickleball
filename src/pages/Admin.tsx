@@ -1,7 +1,7 @@
 import { ActingOthersCard } from './admin/ActingOthers';
 import { InstantContext, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
 import { type ActOptions, opTap, useAction } from './admin/action';
-import { type CSSProperties, Fragment, type FormEvent, type ReactElement, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, Fragment, type FormEvent, lazy, type ReactElement, type ReactNode, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { SuggestionCards } from './admin/SuggestionCards';
 import { courtCards } from './admin/doNow';
@@ -31,6 +31,10 @@ import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
 import { VenueAlertCards } from './admin/VenueAlert';
+import { TournamentHomeCard } from './admin/Tournament';
+
+/** Zip 55, PREVIEW BUILDS ONLY: the Tournament test row on a calm preview's Home. Null in every live build (vite.config.ts `__PREVIEW_BUILD__`). */
+const TournamentTestRow = __PREVIEW_BUILD__ ? lazy(() => import('./admin/TournamentTest')) : null;
 import { DoNowCard, useServerNow } from './admin/DoNowCard';
 import { OwedVenmoCards } from './admin/VenmoRequest';
 import { ExtensionOwedCard } from './admin/ExtendedTime';
@@ -438,6 +442,14 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   if (ctx.d.previewCalm === true) {
     return (
       <>
+        {/* Zip 55, preview builds only: the Tournament test page, one tap from the preview link. */}
+        {TournamentTestRow && ctx.d.tournamentTest === true && (
+          <Suspense fallback={null}>
+            <TournamentTestRow ctx={ctx} home />
+          </Suspense>
+        )}
+        {/* Zip 55 "Tournaments" (only while on): the open tournament, first on Home (it is that zip's card). */}
+        <TournamentHomeCard ctx={ctx} />
         <VenueAlertCards ctx={ctx} />
         <ActingOthersCard ctx={ctx} onHistory={onHistory} />
         <SecondChanceHome ctx={ctx} />
@@ -448,6 +460,8 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   }
   return (
     <>
+      {/* Zip 55 "Tournaments" (only while on, and a tournament open): the level list and picking the date, two taps from Home. */}
+      <TournamentHomeCard ctx={ctx} />
       {/* Zip 43, Venue charge alert (only while on): "Northville Pickleball should have charged you $192", at the very top of Home. */}
       <VenueAlertCards ctx={ctx} />
       {/* Zip 30, Acting for others (only while on): taps made for someone else, at the very top of Home. */}

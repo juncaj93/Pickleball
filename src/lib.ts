@@ -14,6 +14,7 @@ import { BACK_KEY, CHRISTMAS_SKIN, HINT_KEY, THEME_KEY, parseMode, parsePretendD
 import { CHECKIN_PAY_LINE } from '../shared/checkInPay';
 import { TAP_GUARD_FIX } from '../shared/tapGuard';
 import { GUEST_SPOT } from '../shared/guestSpot';
+import { TOURNAMENTS } from '../shared/tournament';
 import { phoneTag } from './phoneTag';
 import { BOOKING_HOURS } from '../shared/bookingHours';
 import { EXTENDED_TIME } from '../shared/extension';
@@ -244,6 +245,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(TAP_GUARD_FIX.link)) headers[TAP_GUARD_FIX.header] = 'on';
   // Zip 42 "Guest spot" private test switch for this phone (/admin?guestspot=on, =off ends it). See server/guestSpot.ts.
   if (gameDayTest(GUEST_SPOT.link)) headers[GUEST_SPOT.header] = 'on';
+  // Zip 55 "Tournaments" private test switch for this phone (?tournaments=on on any page, =off ends it). See server/tournament.ts.
+  if (gameDayTest(TOURNAMENTS.link)) headers[TOURNAMENTS.header] = 'on';
   // Zip 34 "Check-in pay line" private test switch for this phone (/admin?checkinpay=on, =off ends it). See server/checkInPay.ts.
   if (gameDayTest(CHECKIN_PAY_LINE.link)) headers[CHECKIN_PAY_LINE.header] = 'on';
   // Zip 32 "Players sheet redo" private test switch for this phone (/admin?playerssheet=on, =off ends it). See server/playersSheetRedo.ts.
@@ -834,7 +837,7 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, VENUE_ALERT.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link, HOME_SCREEN_TIP.link, TAP_GUARD_FIX.link, GUEST_SPOT.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, VENUE_ALERT.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link, HOME_SCREEN_TIP.link, TAP_GUARD_FIX.link, GUEST_SPOT.link, TOURNAMENTS.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') {
       storageSet(`pb_${link}`, 'on');

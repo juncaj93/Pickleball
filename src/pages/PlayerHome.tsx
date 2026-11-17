@@ -46,6 +46,7 @@ import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtF
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
 import { HomeScreenTip } from '../homeScreenTip';
+import { TournamentSlot } from '../TournamentSlot';
 import { SkinLogo } from '../skin/SkinLogo';
 import { useSkin, useSkinOn } from '../skin/store';
 import { THEME } from '../skin/theme';
@@ -782,6 +783,8 @@ export function PlayerHome({
           <>
             {/* Zip 51b "Money change note" (server/moneyNote.ts): first on the screen, and shown on a calm preview too (it is that zip's card). */}
             {view!.moneyNotes && view!.moneyNotes.length > 0 && <MoneyNotes notes={view!.moneyNotes} />}
+            {/* Zip 55 "Tournaments": the pinned ticket card (and the Only me strip), only when the server sent one for this phone. Shown on a calm preview too (it is that zip's card). */}
+            {view!.tournament && <TournamentSlot t={view!.tournament} onChanged={load.reload} />}
             {/* Preview only (shared/previewCalm.ts): the alert cards stay hidden unless the phone opened ?alerts=all. */}
             {g.previewCalm !== true && (
             <>

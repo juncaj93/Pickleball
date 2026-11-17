@@ -244,6 +244,31 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} confirmed extra time paid with the next game`;
     case 'extension_unmarked_with_seat':
       return `${who} unmarked extra time paid with the next game`;
+    // Zip 55 "Tournaments" (server/tournament.ts): the switch, the organizer's taps and each player's own sign-up. Names and levels only, no money.
+    case 'tournaments_on':
+      return `${who} switched "Tournaments" on`;
+    case 'tournaments_off':
+      return `${who} switched "Tournaments" off`;
+    case 'tournament_created':
+      return `${who} opened sign-up for the ${tourName(d)}${d.visibility === 'all' ? '' : ' (only you can see it)'}`;
+    case 'tournament_edited':
+      return `${who} changed the ${tourName(d)}`;
+    case 'tournament_shown':
+      return `${who} showed the ${tourName(d)} to everyone`;
+    case 'tournament_hidden':
+      return `${who} set the ${tourName(d)} to Only me`;
+    case 'tournament_level':
+      return `${who} set ${player}'s level to ${typeof d.level === 'string' ? d.level : '?'} for the ${tourName(d)}`;
+    case 'tournament_date':
+      return typeof d.date === 'string' ? `${who} picked ${d.date} for the ${tourName(d)}` : `${who} took back the date for the ${tourName(d)}`;
+    case 'tournament_canceled':
+      return `${who} canceled the ${tourName(d)}`;
+    case 'tournament_signup':
+      return `${player} signed up for the ${tourName(d)}${typeof d.level === 'string' ? ` (${d.level})` : ''}`;
+    case 'tournament_signup_edited':
+      return `${player} changed their sign-up for the ${tourName(d)}`;
+    case 'tournament_back_out':
+      return `${player} backed out of the ${tourName(d)}`;
     case 'guest_spot_on':
       return `${who} switched "Guest spot" on`;
     case 'guest_spot_off':
@@ -459,6 +484,11 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     default:
       return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
   }
+}
+
+/** Zip 55: the tournament's name as the line was written ("Winter Classic"), or a plain word for an old line without one. */
+function tourName(d: Record<string, unknown>): string {
+  return typeof d.tournament === 'string' && d.tournament ? d.tournament : 'tournament';
 }
 
 /** The split on a "session_canceled" line (LATE_FEE_SPLIT): { count, priceCents }, or null. */

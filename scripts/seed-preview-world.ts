@@ -794,7 +794,8 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
 
 /** Rows the backup format does not carry, cleared first so a re-seed starts clean (and no PIN lockout carries over). */
 export function wipeExtras(): string {
-  return ['organizer_alerts', 'login_attempts', 'rate_events', 'task_log', 'admin_sessions'].map((t) => `DELETE FROM ${t};`).join('\n') + '\n';
+  // Zip 55: the tournament tables first (children first). Their rows would go with the group anyway (ON DELETE CASCADE); said out loud here.
+  return ['tournament_level_history', 'tournament_signups', 'tournaments', 'organizer_alerts', 'login_attempts', 'rate_events', 'task_log', 'admin_sessions'].map((t) => `DELETE FROM ${t};`).join('\n') + '\n';
 }
 
 /**

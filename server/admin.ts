@@ -104,9 +104,10 @@ import { guestSpotFlags, hasGuestColumns, trimGuestShares } from './guestSpot';
 import { removeGuestCore } from './guestActions';
 import { guestIn, guestOwed, headCount, seatUnits } from '../shared/guestSpot';
 import { phoneTagOf } from './phoneTag';
+import { adminTournamentFor, setTournamentsForAll, tournamentsFlags } from './tournament';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
-import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
+import { previewCalmFor, previewSiteFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
 import { monthPlayedCounts } from './playersRedo';
@@ -277,6 +278,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const moneyNoteRow = await moneyNoteForAll(ctx.db, group.id);
   // Zip 42 "Guest spot" (server/guestSpot.ts): Add a guest on the Players sheet, only while on (off: this answer is exactly main's).
   const guestSpot = await guestSpotFlags(ctx, group.id);
+  // Zip 55 "Tournaments" (server/tournament.ts): Create tournament, the Home card and the level list, only while on (off: this answer is exactly main's
+  // and the tournament tables are never read).
+  const tour = await tournamentsFlags(ctx, group.id);
+  const tourView = tour.on ? await adminTournamentFor(ctx, group) : null;
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -436,6 +441,11 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(moneyNoteRow ? { moneyNoteForAll: true as const } : {}),
     ...(guestSpot.on ? { guestSpot: true as const } : {}),
     ...(guestSpot.forAll ? { guestSpotForAll: true as const } : {}),
+    ...(tour.on ? { tournaments: true as const } : {}),
+    ...(tourView ? { tournament: tourView } : {}),
+    ...(tour.forAll ? { tournamentsForAll: true as const } : {}),
+    // Preview only (PREVIEW_CALM exists only in [env.preview.vars]): the Tournament test page, while the switch is on. Never on live.
+    ...(tour.on && previewSiteFor(ctx) ? { tournamentTest: true as const } : {}),
     ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),
     ...(playersSheet.forAll ? { playersSheetRedoForAll: true as const } : {}),
     ...(actingRows ? { actingOthers: actingRows } : {}),
@@ -2834,6 +2844,15 @@ export async function setMoneyNoteSwitch(ctx: Ctx, body: Record<string, unknown>
   const group = await requireAdmin(ctx);
   const on = v.bool(body.on, 'on');
   if (await setMoneyNoteForAll(ctx.db, group.id, on, ctx.nowIso)) await audit(ctx.db, group.id, null, on ? 'money_note_on' : 'money_note_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/tournaments-switch { on }: Zip 55 "Tournaments" for every phone. Each tournament still has its own Who can see it (Only me first). */
+export async function setTournamentsSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setTournamentsForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'tournaments_on' : 'tournaments_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

@@ -1,0 +1,538 @@
+/* Zip 55 "Tournaments": the organizer's screens (src/pages/admin/Tournament.tsx). Create tournament (mocks 03, 01, 02, 24), the tournament's page
+   with the level list (mock 14) and the dates, the Home card, the Settings > Schedule row. Built on the site's own tokens, so light and dark follow
+   every other organizer screen. Everything is prefixed tm-. */
+
+/* The full-height sheets (Create, the tournament's page): they read like a page, the cards inside as in the mocks. */
+dialog.sheet.tm-page {
+  height: 92dvh;
+}
+@media (max-width: 699px) {
+  body:has(.tabbar) dialog.sheet.tm-page {
+    height: calc(92dvh - 68px);
+  }
+}
+.tm-form {
+  --tm-gap: 10px;
+  gap: var(--tm-gap);
+  padding-bottom: 8px;
+}
+
+/* A card: white, thin line, rounded like the mocks; the label in small spaced capitals. */
+.tm-card {
+  scroll-margin-top: 84px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.tm-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 24px;
+  margin-bottom: 12px;
+}
+.tm-sub-head {
+  margin: 16px 0 10px;
+}
+.tm-label {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+/* The head with a full-width line under it (mocks 14, 24). */
+.tm-head-line {
+  margin: -2px -16px 0;
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.tm-card-note {
+  margin: 12px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+/* The name box (mock 03). */
+.tm-name {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--sheet-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.12rem;
+  box-sizing: border-box;
+}
+.tm-name:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* The Create calendar: unlit days are plain numbers you can tap; lit ones solid green with the ball dot. */
+.tm-cal-offer .tm-day {
+  height: 37px;
+  color: var(--ink-2);
+}
+.tm-cal-offer .tm-day.tm-on {
+  color: #ffffff;
+}
+.tm-cal-offer .tm-day.tm-past {
+  color: var(--line-strong);
+}
+.tm-form .tm-cal-box {
+  margin: 0 -2px;
+  padding: 0 2px 26px;
+}
+
+/* Start time / Ends under the calendar: a full-width line above, a dashed line between. */
+.tm-facts {
+  margin: 4px -16px -16px;
+  padding: 0 16px;
+  border-top: 1px solid var(--line);
+}
+.tm-fact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 39px;
+  font-size: 1.02rem;
+}
+.tm-fact + .tm-fact {
+  border-top: 1px dashed var(--line);
+}
+.tm-fact span {
+  color: var(--ink);
+  white-space: nowrap;
+}
+@media (max-width: 359px) {
+  .tm-fact {
+    font-size: 0.86rem;
+  }
+}
+.tm-fact b {
+  font-weight: 750;
+  text-align: right;
+}
+
+/* Players expected: the big 6 | 8 | 10 | 12 switch, then the plans, edge to edge (mocks 01, 02, 03). */
+.segmented.tm-seg {
+  border-radius: 13px;
+  padding: 3px;
+}
+.segmented.tm-seg button {
+  min-height: 44px;
+  font-size: 1.13rem;
+  font-weight: 650;
+  border-radius: 10px;
+  color: var(--ink-2);
+}
+.segmented.tm-seg button[aria-pressed='true'] {
+  color: var(--ink);
+  font-weight: 750;
+}
+.segmented.tm-seg-who button {
+  min-height: 52px;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+.tm-plans {
+  display: flex;
+  flex-direction: column;
+  margin: 10px -16px -16px;
+}
+.tm-plan {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 16px 12px 17px;
+  border: 0;
+  border-top: 1px dashed var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tm-plan:first-child {
+  border-top: 0;
+}
+.tm-plan-on {
+  background: var(--accent-soft);
+}
+.tm-plan-on + .tm-plan {
+  border-top-color: transparent;
+}
+.tm-plan:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.tm-plan:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+.tm-plan-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tm-plan-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-family: var(--display);
+  font-size: 1.16rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+.tm-best {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--court);
+  color: #ffffff;
+  font-family: var(--body);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.tm-plan-line {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.92rem;
+  line-height: 1.38;
+  color: var(--ink-2);
+}
+.tm-plan-price {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.tm-plan-price b {
+  font-family: var(--display);
+  font-size: 1.62rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.tm-plan-price small {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.tm-foot {
+  margin: 8px 2px 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* Label | value rows with dashed lines between (mock 24), the head's line above them. */
+.tm-rows {
+  display: flex;
+  flex-direction: column;
+}
+.tm-rows .tm-row + .tm-row {
+  border-top: 1px dashed var(--line);
+}
+.tm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 1.02rem;
+}
+.tm-head-line + .tm-rows {
+  margin-top: 2px;
+}
+.tm-row > span {
+  min-width: 0;
+}
+.tm-row b {
+  flex: 0 0 auto;
+  font-weight: 750;
+  text-align: right;
+}
+.tm-money {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill);
+  font-weight: 750;
+}
+.tm-money input {
+  width: 3em;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+  text-align: right;
+}
+.tm-money input:focus {
+  outline: none;
+}
+.tm-money:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+.tm-says {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.45;
+}
+.tm-who-note {
+  margin-top: 12px;
+}
+.tm-go {
+  min-height: 54px;
+  border-radius: 16px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+/* The level list (mock 14). */
+.tm-levels-card {
+  padding-bottom: 6px;
+}
+.tm-lrows {
+  margin: 0 -16px;
+  padding: 0;
+  list-style: none;
+}
+.tm-lrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 6px 16px;
+}
+.tm-lrow + .tm-lrow {
+  border-top: 1px dashed var(--line);
+}
+.tm-lrow-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tm-lrow-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--display);
+  font-size: 1.08rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+.tm-lrow-picked {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.84rem;
+  color: var(--ink-2);
+}
+.tm-lrow-level {
+  flex: 0 0 auto;
+  font-family: var(--display);
+  font-size: 1.22rem;
+  font-weight: 800;
+}
+.tm-pencil {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink);
+  cursor: pointer;
+}
+.tm-pencil svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tm-pencil:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.tm-empty {
+  margin: 4px 0 10px;
+  color: var(--ink-2);
+}
+.tm-backed {
+  margin: 0 4px;
+}
+
+/* The dates with their counts: the count under the number; the most-picked count is bold green. */
+.tm-dates-note {
+  margin: -4px 0 12px;
+}
+.tm-cal-counts .tm-badge {
+  color: var(--ink-2);
+}
+.tm-cal-counts .tm-day.tm-on .tm-badge {
+  color: #ffffff;
+}
+.tm-best-count {
+  color: var(--accent-text);
+  font-weight: 800;
+}
+.tm-cal-counts .tm-day.tm-on .tm-best-count {
+  color: #ffffff;
+}
+.tm-edit {
+  margin-top: 12px;
+}
+.tm-cancel-link {
+  align-self: center;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--danger-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* The date sheet. */
+.tm-date-count {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.tm-date-count b {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+.tm-date-names {
+  margin: 0;
+  line-height: 1.5;
+}
+.tm-date-names span {
+  font-weight: 700;
+}
+.tm-cant {
+  color: var(--ink-2);
+}
+
+/* The level sheet (mock 14): the flat list. */
+.tm-level-sheet .sheet-body {
+  padding-top: 10px;
+}
+
+/* Settings > Schedule row. */
+.tm-set-row {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+.tm-chevron {
+  flex: 0 0 auto;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--ink-2);
+}
+
+/* The Home card. */
+.tm-home {
+  padding: 14px 16px 16px;
+}
+.tm-home-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.tm-home-ball {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ecff7a, #d8f03b 55%, #b9d12a);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%);
+}
+.tm-home-text {
+  min-width: 0;
+}
+.tm-home-kicker {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.tm-home-title {
+  margin: 2px 0 0;
+  font-family: var(--display);
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.tm-home-sub {
+  margin: 3px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.tm-home-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.tm-home-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 46px;
+}
+
+/* Preview builds only: the Tournament test row on Home (one tap from the preview link). */
+.tm-test-home {
+  padding: 0 16px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 16px;
+  background: var(--surface);
+}

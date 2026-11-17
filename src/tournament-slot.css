@@ -1,0 +1,10 @@
+/* Zip 55: the place the ticket card holds while its own file arrives (src/TournamentSlot.tsx). The card's real styles come with that file. */
+.tc-shell {
+  min-height: 246px;
+  border: 1px solid #24503a;
+  border-radius: 22px;
+  background: #0d2118;
+}
+.tc-shell-strip {
+  margin-top: 116px;
+}

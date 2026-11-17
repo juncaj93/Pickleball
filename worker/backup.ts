@@ -134,6 +134,11 @@ export function splitParts(text: string, size = PART_CHARS): string[] {
 export const BACKUP_LEFT_OUT: Record<string, string> = {
   login_attempts: 'wrong-PIN counts: short-lived',
   rate_events: 'spam counters: short-lived',
+  // Zip 55, piece 1 (Alex decides when they join the file): sign-ups hold no money yet. Time Travel keeps them; a restore from a FILE empties them
+  // (their foreign keys cascade, so a restore never fails because of them). The question is in the Zip 55 report.
+  tournaments: 'tournament settings (Zip 55 piece 1): no money yet; Time Travel keeps them',
+  tournament_signups: 'tournament sign-ups and picked dates (Zip 55 piece 1): no money yet; Time Travel keeps them',
+  tournament_level_history: 'tournament level history (Zip 55 piece 1): no money yet; Time Travel keeps it',
 };
 
 const NAME = /^[a-z_][a-z0-9_]*$/;

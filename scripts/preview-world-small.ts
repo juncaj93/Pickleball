@@ -12,6 +12,8 @@ import { backupToSql } from './backup-sql.mjs';
 import { extraRows, FAKE_GROUP_NAME, OFF_ON_LIVE, PREVIEW_SWITCHES_ON, previewPin, SETUP_TOKEN, wipeExtras, World, ZIP13_SWITCHES_ON, type Seed } from './seed-preview-world';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { holidayFor } from '../shared/holidays';
+import { testDates } from '../server/tournamentTest';
+import { todayKey } from '../server/tournament';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -38,14 +40,18 @@ export const SMALL_NO_NUMBER = 'Reese';
 // since Sun Nov 8 evening (Alex, Zip 18 round 2).
 export const LATER_ON_LIVE: readonly string[] = ['game_day_card_on', 'second_chance_on', 'after_game_card_on', 'unpaid_nudge_on'];
 /** Being built: Guest spot (Zip 42). Venue charge alert (Zip 43), its row back-dated (smallSwitchRows). Tap guard fix (Zip 35). Extended time (Zip 31) is still being tried too. Check-in pay line (Zip 34) is still being tried too. Players sheet redo (Zip 32) is still being tried too. Acting for others (Zip 30) is still being tried too. Spent matches Totals (Zip 27), Booking hours (Zip 24) and Totals refresh (Zip 23) shipped OFF and are still being tried, so they stay on here too. */
-export const BUILDING_ON: readonly string[] = ['venue_alert_on', 'totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on', 'guest_spot_on', 'money_note_on'];
+export const BUILDING_ON: readonly string[] = ['venue_alert_on', 'totals_refresh_on', 'booking_hours_on', 'spent_totals_on', 'acting_others_on', 'players_sheet_redo_on', 'checkin_pay_line_on', 'extended_time_on', 'tap_guard_fix_on', 'guest_spot_on', 'money_note_on', 'tournaments_on'];
 
-export function smallSwitchRows(nowMs: number): string {
+/**
+ * `venueNow` (Zip 55's calm profile): the Venue charge alert row is ON (live has it on) but dated NOW, so no past charge day raises a card and
+ * organizer Home opens on the tournament alone. Left out: back-dated to the 1st of last month, as Zip 43 needs.
+ */
+export function smallSwitchRows(nowMs: number, venueNow = false): string {
   const at = new Date(nowMs).toISOString();
   // Zip 43 (Venue charge alert): the preview's row says the switch was turned on at 12:00 AM on the 1st of LAST month (Eastern), so last month's two charge
   // days (the 26th and the last day) are charge days "after the switch was turned on" and there is a card to tap today. Live's row will carry the real moment.
   const q = localParts(nowMs, TZ);
-  const venueAt = new Date(zonedTimeToUtc(q.month === 1 ? q.year - 1 : q.year, q.month === 1 ? 12 : q.month - 1, 1, 0, 0, TZ)).toISOString();
+  const venueAt = venueNow ? at : new Date(zonedTimeToUtc(q.month === 1 ? q.year - 1 : q.year, q.month === 1 ? 12 : q.month - 1, 1, 0, 0, TZ)).toISOString();
   const rows = [...PREVIEW_SWITCHES_ON.filter((t) => !OFF_ON_LIVE.includes(t)), ...ZIP13_SWITCHES_ON, ...LATER_ON_LIVE, ...BUILDING_ON];
   return [...new Set(rows)].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${task === 'venue_alert_on' ? venueAt : at}' FROM groups;`).join('\n') + '\n';
 }
@@ -92,7 +98,8 @@ export async function buildSmallPreview(
   startMs = Date.now(),
   /** `zip49`: add Zip 49's three games and keep only them in the calm profile (the preview seed). Left out: the world exactly as before (the local browser tests). */
   /** `zip51`: Zip 51's two late-drop games instead (the preview seed from Zip 51 on). */
-  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean } = {},
+  /** `zip55`: the calm profile of Zip 55 (Tournaments): no zip's games, no Venue cards, and a fresh "Winter Classic" on Only me (the preview seed). */
+  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean } = {},
 ): Promise<Seed> {
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
@@ -643,6 +650,19 @@ export async function buildSmallPreview(
     summary.push('Zip 51 edge cases: "Drop test" (7:00 PM: Parker paid $14, Quinn, Sage, Christopher Vanderberg) and "Back in test" (8:00 PM: Rowan, Reese, Sage, Christopher Vanderberg), today when seeded before noon, else tomorrow; their late windows open at 7:00 and 8:00 AM');
   }
 
+  // 28. Zip 55, Tournaments piece 1 (ON in the preview: BUILDING_ON). The calm profile keeps no zip's games: Home opens on the tournament alone.
+  //     A fresh "Winter Classic" right after Create: Only me, nobody on the list yet, Tue to Fri of next month and two weeks after offered,
+  //     8 players, 2 courts, 2 hours, 7:30 PM, $16 ticket, $14 credit. Alex's own phone (signed in) shows the "Only you can see this" strip and
+  //     the card; players see nothing. The Tournament test page (preview builds only) moves it to "Sign-up open" or "Date picked".
+  if (opts.zip55) {
+    await w.org.ok('PUT', '/api/admin/tournaments-switch', { on: true });
+    await w.org.ok('POST', '/api/admin/tournament', { name: 'Winter Classic', dates: testDates(todayKey(N)), size: 8, courts: 2, minutes: 120, start: 1170, ticketCents: 1600, creditCents: 1400, visibility: 'me' });
+    keep.length = 0;
+    venueKeep.length = 0;
+    lateMove = undefined;
+    summary.push('Zip 55 Tournaments (on): "Winter Classic" just created, Only me, nobody on the list; no other zip\'s games or cards (the Tournament test page sets the stages)');
+  }
+
   await refresh();
   const names = (dash.players as { name: string }[]).map((p) => p.name).sort();
   if (names.join('|') !== [...SMALL_NAMES].sort().join('|')) throw new Error(`the small preview must have exactly the fixed names, has: ${names.join(', ')}`);
@@ -652,12 +672,32 @@ export async function buildSmallPreview(
     // The calm profile keeps the zip's games (Zip 49's three with `zip49`, else Zip 42's guest games and late scenes) and Zip 43's two last-month
     // booked games the Venue charge alert adds up (hidden from the lists). The Zip 38 tonight and tomorrow player games stay in the full world (--full).
     calmSql = calmDown(w.db.raw, keep, N, lateMove, venueKeep);
-    summary.push(`CALM profile (${opts.zip51 ? 'Zip 51' : opts.zip49 ? 'Zip 49' : 'Zip 42'} and 43): that zip's games and last month's two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)`);
+    summary.push(
+      opts.zip55
+        ? 'CALM profile (Zip 55): no game of any zip is kept (only the empty regular games, hidden from the organizer lists), no payment, credit entry or cash-out request, and the Venue charge alert row is dated now (no card); npm run db:seed:preview -- --full builds the whole world'
+        : `CALM profile (${opts.zip51 ? 'Zip 51' : opts.zip49 ? 'Zip 49' : 'Zip 42'} and 43): that zip's games and last month's two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)`,
+    );
   }
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
   backup.tables.player_devices = [];
   await w.settle();
-  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + smallSwitchRows(N) + calmSql;
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + smallSwitchRows(N, !!opts.zip55) + calmSql + tournamentRows(w);
   return { sql, summary };
+}
+
+/**
+ * Zip 55: the tournament tables, which the backup file leaves out (worker/backup.ts BACKUP_LEFT_OUT), as SQL added to the end of the seed: parents
+ * first. Empty when the world made no tournament.
+ */
+export function tournamentRows(w: World): string {
+  const lit = (v: unknown) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+  const out: string[] = [];
+  for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history']) {
+    for (const row of w.db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all() as Record<string, unknown>[]) {
+      const cols = Object.keys(row);
+      out.push(`INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map((c) => lit(row[c])).join(', ')});`);
+    }
+  }
+  return out.length ? out.join('\n') + '\n' : '';
 }

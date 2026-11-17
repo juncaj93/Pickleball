@@ -24,6 +24,11 @@ Christmas choice, hidden canceled games, "Do this now" taps, the "already sent" 
 
 Not in it, on purpose: the wrong-PIN counters and the spam counters (short-lived; a restore leaves them as they are).
 
+Not in it YET (Zip 55, Tournaments piece 1, no money in them): the tournament, its sign-up list with each player's level and dates, and the
+level history (tables `tournaments`, `tournament_signups`, `tournament_level_history`). Time Travel (Plan A) keeps them. A restore from a FILE
+(Plan B) empties them (their rows go with the group they belong to, so the restore never fails because of them): players would sign up again.
+Whether they join the file (piece 2, when tickets carry money) is Alex's call.
+
 **Older files (version 1, made before Sun Nov 15, 2026's Zip 50 deploy, and every weekly copy until the first Sunday after it,
 Nov 22) still restore**, but WITHOUT the switches, price locks, alert settings and sign-ins: after such a restore every feature switch
 is off, Settings > Alerts is all On, the venue months marked paid are forgotten, and finalized games are priced again at today's

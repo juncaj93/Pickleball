@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, lazy, type ReactNode, Suspense, useRef, useState } from 'react';
 import { flushHolds } from '../../undoHold';
 import { clearLastAdmin, signedOutLastAdmin } from '../../lastAdmin';
 import { parseDollars } from '../../../shared/money';
@@ -15,7 +15,15 @@ import { formatDateTime, formatShortDate, formatTime, localParts } from '../../.
 import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import type { AdminCtx } from '../Admin';
 import { useInstant } from '../../InstantTaps';
+import { TournamentScheduleRow } from './Tournament';
 import '../../money-rework.css';
+
+/**
+ * Zip 55, PREVIEW BUILDS ONLY: the "Tournament test" row and page (src/pages/admin/TournamentTest.tsx). `__PREVIEW_BUILD__` is false in every
+ * live build (vite.config.ts; only `npm run deploy:preview` sets PB_PREVIEW_BUILD=1), so this is null there and the page's file is never built
+ * into the live site at all (tests/zip55-build.test.ts checks the built files).
+ */
+const TournamentTestRow = __PREVIEW_BUILD__ ? lazy(() => import('./TournamentTest')) : null;
 
 type MoneyKey = 'pricePerPlayerCents' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
 type WholeKey = Exclude<keyof GroupSettings, MoneyKey | 'defaultStartMinutes' | 'defaultEndMinutes' | 'shortGames' | 'longGames' | 'noCap'>;
@@ -434,6 +442,14 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {whole('checkInHours', 'Day-before check-in (hours before play)')}
           {whole('lastCallHours', 'Last call (hours before play)')}
           {!r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
+          {/* Zip 55 "Tournaments" (only while on for this phone): Create tournament, or the open tournament's page. */}
+          <TournamentScheduleRow ctx={ctx} />
+          {/* Zip 55, PREVIEW BUILDS ONLY: the Tournament test page (its code is not in a live build at all). */}
+          {TournamentTestRow && ctx.d.tournamentTest === true && (
+            <Suspense fallback={null}>
+              <TournamentTestRow ctx={ctx} />
+            </Suspense>
+          )}
         </Section>
 
         {!r3 && (
@@ -474,7 +490,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.moneyNoteForAll ? 'Money change note on' : '', ctx.d.guestSpotForAll ? 'Guest spot on' : '', ctx.d.venueAlertForAll ? 'Venue charge alert on' : '', ctx.d.christmasSkinMode ? `Christmas skin ${ctx.d.christmasSkinMode === 'me' ? 'just me' : 'everyone'}` : '', ctx.d.cheaperFixForAll ? 'Made cheaper after paying on' : '', ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.tapGuardFixForAll ? 'Tap guard fix on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.tournamentsForAll ? 'Tournaments on' : '', ctx.d.moneyNoteForAll ? 'Money change note on' : '', ctx.d.guestSpotForAll ? 'Guest spot on' : '', ctx.d.venueAlertForAll ? 'Venue charge alert on' : '', ctx.d.christmasSkinMode ? `Christmas skin ${ctx.d.christmasSkinMode === 'me' ? 'just me' : 'everyone'}` : '', ctx.d.cheaperFixForAll ? 'Made cheaper after paying on' : '', ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.tapGuardFixForAll ? 'Tap guard fix on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -482,6 +498,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <TournamentsRow ctx={ctx} auto={auto} />
               <MoneyNoteRow ctx={ctx} auto={auto} />
               <GuestSpotRow ctx={ctx} auto={auto} />
               <VenueAlertRow ctx={ctx} auto={auto} />
@@ -1468,6 +1485,11 @@ function GuestSpotRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="guestSpotAll" path="/api/admin/guest-spot-switch" name="Guest spot" hint="Players sheet: Add a guest to a player. The guest takes a spot and their $14 goes on that player's tab" flag={!!ctx.d.guestSpotForAll} dataAttr="data-guest-spot-all" />;
 }
 
+/** Zip 55, "Tournaments" (TOURNAMENTS, server/tournament.ts): Create tournament in Settings > Schedule and the players' sign-up card. Each tournament also has its own Who can see it (Only me first). No money moves in piece 1. Off: only ?tournaments=on. */
+function TournamentsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="tournamentsAll" path="/api/admin/tournaments-switch" name="Tournaments" hint="Settings > Schedule: Create tournament. Players sign up from a card on Home. Each tournament starts as Only me" flag={!!ctx.d.tournamentsForAll} dataAttr="data-tournaments-all" />;
+}
+
 /** Zip 51b, "Money change note" (server/moneyNote.ts): an amber card at the top of a player's screen when someone else changed what they owe. Every player phone. Ships off. */
 function MoneyNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="moneyNoteAll" path="/api/admin/money-note-switch" name="Money change note" hint="A player sees a short note at the top when someone else changes what they owe (a sub, a moved game, back in)" flag={!!ctx.d.moneyNoteForAll} dataAttr="data-money-note-all" />;
@@ -1782,6 +1804,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <TournamentsRow ctx={ctx} auto={auto} />
       <MoneyNoteRow ctx={ctx} auto={auto} />
       <GuestSpotRow ctx={ctx} auto={auto} />
       <VenueAlertRow ctx={ctx} auto={auto} />

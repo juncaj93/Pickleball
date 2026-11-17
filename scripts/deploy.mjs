@@ -207,8 +207,10 @@ export function main(argv, deps = {}) {
   for (const n of result.notes ?? []) out(n);
   out(`${mode === 'production' ? 'LIVE deploy' : 'Preview deploy'} from branch ${result.branch}: npx ${args.join(' ')}`);
   if (dry) return 0;
-  const run = deps.run ?? ((cmd, a) => spawnSync(cmd, a, { stdio: 'inherit', shell: process.platform === 'win32' }).status ?? 1);
-  const built = run('npm', ['run', 'build']);
+  const run = deps.run ?? ((cmd, a, env) => spawnSync(cmd, a, { stdio: 'inherit', shell: process.platform === 'win32', env: env ? { ...process.env, ...env } : process.env }).status ?? 1);
+  // Zip 55: preview-only code (the Tournament test page) is built into a preview and never into the live site: PB_PREVIEW_BUILD is set to "1"
+  // for a preview and to "" for production, whatever the shell had (vite.config.ts reads it).
+  const built = run('npm', ['run', 'build'], { PB_PREVIEW_BUILD: mode === 'preview' ? '1' : '' });
   if (built !== 0) return built;
   return run('npx', args);
 }

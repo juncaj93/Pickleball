@@ -1,5 +1,6 @@
 import type { LateFeeKind } from './lateFees';
 import type { ActingRow } from './actingForOthers';
+import type { AdminTournamentView, PlayerTournamentView } from './tournament';
 // Shapes of the JSON the API returns. Shared by server and browser.
 import type { CreditReason } from './credit';
 import type { GroupSettings } from './settings';
@@ -266,6 +267,9 @@ export interface GroupView {
   }[];
   /** Zip 51b "Money change note" (shared/moneyNote.ts): this player's notes still to show, oldest first. Only while on and only when there is one. */
   moneyNotes?: { id: string; kind: 'sub' | 'sub_one' | 'moved' | 'back_in'; text: string }[];
+  /** Zip 55 "Tournaments" (server/tournament.ts): the pinned ticket card. Only while the switch is on and the tournament is visible to this player
+   *  (Everyone, or Only me on the organizer's own signed-in phone). Missing otherwise: a player gets nothing about an Only me tournament. */
+  tournament?: PlayerTournamentView;
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -681,6 +685,14 @@ export interface AdminDashboard {
   afterGameCardForAll?: true;
   /** Zip 38 "Christmas skin" (shared/christmasSkin.ts): its Settings row (Just me or Everyone), only while not off. */
   christmasSkinMode?: 'me' | 'all';
+  /** Zip 55 "Tournaments": the switch is on for this phone (Create tournament in Settings > Schedule, the Home card). Missing: off. */
+  tournaments?: true;
+  /** Zip 55: the open tournament (signing up, or the date picked), only while the switch is on. Missing: none open, or off. */
+  tournament?: AdminTournamentView;
+  /** Zip 55: the Settings > Feature switches row is on (for everyone). Missing: off. */
+  tournamentsForAll?: true;
+  /** Zip 55, PREVIEW ONLY: this is a preview where the Tournament test page works (PREVIEW_CALM is set). Never on live. */
+  tournamentTest?: true;
   /** Zip 37 "Home Screen tip" and "Game day text" (shared/homeScreenTip.ts, shared/gameDayText.ts): their Settings rows, only while on. */
   homeScreenTipForAll?: true;
   gameDayTextForAll?: true;

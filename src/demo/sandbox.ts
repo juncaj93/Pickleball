@@ -102,6 +102,8 @@ export async function createSandbox(SQL: SqlJsStatic, backup: unknown, migration
   for (const t of TABLES) columns[t] = new Set((db.exec(`PRAGMA table_info(${t})`)[0]?.values ?? []).map((r) => String(r[1])));
   db.exec(backupToSql(backup, columns));
   if (extras) copyTaskLog(db, extras.taskLog);
+  // Zip 55: the tournament rows (only sent while the switch is on), parents first.
+  if (extras?.tournaments) for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history'] as const) copyRows(db, t, extras.tournaments[t]);
   const group = db.exec('SELECT id FROM groups LIMIT 1')[0]?.values[0]?.[0];
   const token = randomToken();
   db.run('INSERT INTO admin_sessions (id, group_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)', [
@@ -126,6 +128,20 @@ export async function createSandbox(SQL: SqlJsStatic, backup: unknown, migration
       return handleApi(req, env, nowMs);
     },
   };
+}
+
+/** Zip 55: rows of one table into the copy, column by column the copy's table has. A row that no longer fits is skipped. */
+function copyRows(db: Database, table: string, rows: Record<string, unknown>[]) {
+  const have = new Set((db.exec(`PRAGMA table_info(${table})`)[0]?.values ?? []).map((r) => String(r[1])));
+  for (const row of rows) {
+    const cols = Object.keys(row).filter((c) => have.has(c));
+    if (cols.length === 0) continue;
+    try {
+      db.run(`INSERT OR IGNORE INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, cols.map((c) => (row[c] ?? null) as Value));
+    } catch {
+      // Skipped: see above.
+    }
+  }
 }
 
 /**

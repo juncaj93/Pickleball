@@ -87,7 +87,15 @@ function adminPage(): Plugin {
       const mainName = main?.type === 'chunk' ? main.fileName : '';
       // The organizer file's own imports that the player page does not already have (the shared main file is already loading).
       const js = [entry.fileName, ...entry.imports.filter((f) => f !== mainName)];
-      const css = [...(entry.viteMetadata?.importedCss ?? [])];
+      // Zip 55: a piece the organizer file shares with a player-side file (src/tournament/parts.tsx: the tournament calendar and level list)
+      // is its own small file with its own style; that style starts at once too, before the organizer style (its rules are all tc- or tm-).
+      const shared = entry.imports
+        .filter((f) => f !== mainName)
+        .flatMap((f) => {
+          const c = bundle[f];
+          return c && c.type === 'chunk' ? [...(c.viteMetadata?.importedCss ?? [])] : [];
+        });
+      const css = [...shared, ...(entry.viteMetadata?.importedCss ?? [])];
       const lines = [
         '    <!-- Zip 48: /admin only. The organizer files, started at once (vite.config.ts, adminPage). -->',
         ...js.map((f) => `    <link rel="modulepreload" crossorigin href="/${f}">`),
@@ -128,7 +136,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), localApi(env.SETUP_TOKEN || 'local-dev-setup-token'), adminPage(), ...(process.env.PB_ONE_FILE === '1' ? [oneFile()] : [])],
     // Zip 12: the app version a saved copy of the player screen belongs to (src/lastScreen.ts throws away any other).
-    define: { __APP_BUILD__: JSON.stringify(process.env.APP_BUILD || String(Date.now())) },
+    // Zip 55: preview-only code (the Tournament test page) is built only when PB_PREVIEW_BUILD=1 (npm run deploy:preview sets it; a live deploy
+    // clears it). False: the page is not in the built files at all.
+    define: { __APP_BUILD__: JSON.stringify(process.env.APP_BUILD || String(Date.now())), __PREVIEW_BUILD__: JSON.stringify(process.env.PB_PREVIEW_BUILD === '1') },
     test: {
       include: ['tests/**/*.test.ts'],
       environment: 'node',

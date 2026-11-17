@@ -20,6 +20,7 @@ import { alertCardsForAll } from './zip11';
 import { seatDotsForAll } from './seatDots';
 import { gameDayCardForAll } from './gameDay';
 import { afterGameCardForAll } from './afterGame';
+import { adminTournamentStamp, playerTournamentStamp } from './tournament';
 
 /** A new fingerprint at least this often, so clock-driven changes (tonight, game day 8:00 AM, started) show up. */
 const TIME_BUCKET_MS = 10 * 60_000;
@@ -127,6 +128,12 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     (await motionSetting(ctx.db, group.id, 'player')) ?? '',
     // The organizer removing a canceled game from the player screen (or putting it back).
     [...(await hiddenGameIds(ctx.db, group.id))].sort().join(','),
+    // Zip 55 "Tournaments": a segment only while this player may see a tournament (switch on, and Everyone or the organizer's own Only me
+    // phone), so with the switch off, or a tournament on Only me, the stamp is exactly what it was.
+    ...(await (async () => {
+      const part = await playerTournamentStamp(ctx, group, playerId);
+      return part ? [part] : [];
+    })()),
   ].join('|');
   return (await sha256(raw)).slice(0, 16);
 }
@@ -181,6 +188,11 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
     part(audit),
     JSON.stringify([group.name, group.timezone, group.venmo_url, group.organizer_name, group.settings_json, group.first_session_date, group.venue_name, group.venue_address]),
     Math.floor(ctx.nowMs / TIME_BUCKET_MS),
+    // Zip 55 "Tournaments": a segment only while the switch is on (off: the stamp is exactly what it was).
+    ...(await (async () => {
+      const part = await adminTournamentStamp(ctx, group);
+      return part ? [part] : [];
+    })()),
   ].join('|');
   return (await sha256(raw)).slice(0, 16);
 }

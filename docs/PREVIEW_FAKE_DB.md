@@ -1,6 +1,6 @@
 # Preview with a FAKE database
 
-**PREVIEW CALM RULE (Alex, Nov 11): a preview opens CALM** (docs/SITE_RULES.md). `npm run db:seed:preview` builds the CALM profile: only what the zip being tested needs (Zip 42: the two Guest spot games); `npm run db:seed:preview -- --full` builds the whole world described below. Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm`.
+**PREVIEW CALM RULE (Alex, Nov 11): a preview opens CALM** (docs/SITE_RULES.md). `npm run db:seed:preview` builds the CALM profile: only what the zip being tested needs (since Zip 55: the tournament alone, see the end of this file; `-- --zip51` builds Zip 51's); `npm run db:seed:preview -- --full` builds the whole world described below. Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm`.
 
 **Previews use the fake database `pickleball-preview`. NEVER delete it, reset it any way except the seed command below, or reuse it for anything else.**
 
@@ -230,3 +230,18 @@ Rowan is added from the organizer page in another tab; **?holdrefresh=off** ends
 on "Who are you?" in the second tab. Zip 51b (Money change note, ON in the preview): **"Note test"** at 7:30 PM the same day (Parker, Quinn, Sage,
 Christopher Vanderberg; Parker already dropped out late and owes $14 when the seed runs after 7:30 AM that day). Add Rowan on the organizer's
 Players sheet and Parker's screen opens on the amber note "Rowan took your spot. Your $14 is cleared." with Got it.
+
+Zip 55 (Tournaments, piece 1, Tue Nov 17, 2026): no new names, migration `0023_tournaments` (three new tables, applied to `pickleball-preview`
+first). `npm run db:seed:preview` now opens CALM on Zip 55 alone: no zip's games (only the empty regular games, hidden from the organizer's lists),
+no payment, credit or cash-out piles, and the Venue charge alert row dated at the seed (so no charge-day card), with the **Tournaments** row on
+(`BUILDING_ON`) and a fresh **"Winter Classic"** as right after Create: **Only me**, nobody on the list, every Tuesday to Friday of next month and
+the first two weeks after offered (no Dec 24, 25, 31 or Jan 1), 8 players, 2 courts, 2 hours, 7:30 PM, $16 ticket, $14 credit.
+- Organizer Home (PIN above): the dashed **Tournament test** row (preview builds only), then the tournament card (Levels, Pick the date).
+- **Tournament test** (also Settings > Schedule): **Sign-up open** (Everyone; Parker 3.6+, Rowan 3.5, Sage 3.0, Christopher Vanderberg 3.0, Wren 3.2,
+  Quinn 2.5 on the list; Vic, Zoe, Reese and Alex are not), **Date picked** (the same plus Zoe 2.75 and Reese 3.4, Sage set to 3.4 by the organizer,
+  the third Thursday of next month picked: everyone on the list can make it; Vic is still not on the list), **No tournament** (to try Create).
+  Each button also turns the Tournaments row back on (another branch's re-seed drops it). **View as**: each fixed name opens `/?as=Name` on this
+  phone (real taps on the fake database), **Admin** goes back. Kai is not one of the fixed names, so the test page does not use him.
+- Alex's own player page (`/?as=Alex` on a phone signed in as the organizer) shows the "Only you can see this" strip while Only me; any other
+  name sees nothing until Everyone.
+- Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm --zip55`; `node e2e/zip55.cjs` checks the screens.

@@ -1,0 +1,838 @@
+/* Zip 55 "Tournaments" (TOURNAMENTS, shared/tournament.ts): the pinned ticket card, the "Only you can see this" strip, the sign-up and edit sheets,
+   the month calendar and the level list. Built from Alex's mocks (zip55/mocks/BUILD_NOW), measured at 420 px wide: same sizes, colors and spacing.
+   The ticket card is the same deep green in light and dark (as the mocks). Everything is prefixed tc- (the card) or tm- (the rest), so nothing
+   here can touch another screen. Loaded only with the tournament's own files (players: only when a tournament is on their Home). */
+
+/* ---------- The "Only you can see this" strip (mock 04) ---------- */
+.tc-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 86px;
+  margin-bottom: 18px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid #ecd27a;
+  border-radius: 16px;
+  background: #fff3c9;
+  color: #4d3b00;
+}
+.tc-strip-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tc-strip-title {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.tc-strip-sub {
+  margin: 1px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.38;
+}
+.tc-strip .btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+:root[data-theme='dark'] .tc-strip {
+  border-color: #6b5520;
+  background: #2c2410;
+  color: #f6e3a3;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tc-strip {
+    border-color: #6b5520;
+    background: #2c2410;
+    color: #f6e3a3;
+  }
+}
+/* A narrow phone: the button goes under the words (never squeezed). */
+@media (max-width: 359px) {
+  .tc-strip {
+    flex-wrap: wrap;
+  }
+  .tc-strip .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- The pinned ticket card (mocks 04, 07, 08) ---------- */
+.tc {
+  --tc-lime: #d8f03b;
+  --tc-lime-ink: #1a2410;
+  --tc-mint: #6ef0b0;
+  --tc-line: #24503a;
+  --tc-sub: #c3d1c9;
+  --tc-dim: #7c9688;
+  --tc-stub-w: 77px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid var(--tc-line);
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 90% at 18% 0%, #112a1f 0%, rgb(17 42 31 / 0%) 60%),
+    linear-gradient(180deg, #0e241a 0%, #0c1f16 62%, #0b1b14 100%);
+  color: #ffffff;
+  box-shadow: 0 14px 30px rgb(10 24 17 / 24%), 0 2px 6px rgb(10 24 17 / 18%);
+}
+:root[data-theme='dark'] .tc {
+  --tc-line: #2a5a42;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tc {
+    --tc-line: #2a5a42;
+    box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
+  }
+}
+/* The ticket's notch at the top of the stub line: the page color shows through. */
+.tc::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: -8px;
+  left: calc(var(--tc-stub-w) - 7px);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+/* The faint court in the top right corner. */
+.tc-court {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  width: 224px;
+  height: 176px;
+  pointer-events: none;
+}
+.tc-court line {
+  stroke: rgb(110 240 176 / 13%);
+  stroke-width: 1.5;
+}
+.tc-top {
+  display: flex;
+  min-height: 118px;
+}
+.tc-stub {
+  position: relative;
+  flex: 0 0 var(--tc-stub-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0 6px;
+  text-align: center;
+}
+/* The dashed tear line: 6 px dashes, 4 px gaps (the mock), from under the notch to above the button. */
+.tc-stub::after {
+  content: '';
+  position: absolute;
+  top: 11px;
+  bottom: 0;
+  right: -1px;
+  width: 2px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 22%) 6px, transparent 6px) 0 0 / 2px 10px repeat-y;
+}
+.tc-wd,
+.tc-mon {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--tc-lime);
+  white-space: nowrap;
+}
+.tc-day {
+  margin: 5px 0 3px;
+  font-family: var(--display);
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.tc-time {
+  margin-top: 11px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.tc-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 17px 12px 8px 18px;
+}
+.tc-kicker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--tc-lime);
+}
+.tc-kdot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tc-lime);
+  box-shadow: 0 0 9px 1px rgb(216 240 59 / 55%);
+}
+.tc-title {
+  margin: 8px 0 0;
+  font-family: var(--display);
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  overflow-wrap: break-word;
+}
+/* A long name (17 letters or more): a smaller title, so a long word never breaks in the middle. */
+.tc-title.tc-title-long {
+  font-size: 1.42rem;
+}
+.tc-sub {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.36;
+  color: var(--tc-sub);
+}
+.tc-actions {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px 0;
+}
+.tc-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 50px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 15px;
+  font: inherit;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    transform var(--fast) var(--ease),
+    filter var(--fast);
+}
+.tc-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(0.94);
+}
+.tc-btn:disabled {
+  opacity: 0.6;
+}
+.tc-btn:focus-visible,
+.tc-link:focus-visible,
+.tc-strip .btn:focus-visible {
+  outline: 3px solid var(--tc-lime, #d8f03b);
+  outline-offset: 2px;
+}
+.tc-lime {
+  background: var(--tc-lime);
+  color: var(--tc-lime-ink);
+  box-shadow: 0 0 22px rgb(216 240 59 / 26%), 0 6px 16px rgb(0 0 0 / 22%);
+}
+.tc-gray {
+  min-height: 46px;
+  background: rgb(255 255 255 / 12%);
+  color: #ffffff;
+}
+.tc-links {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 3px 16px 0;
+}
+.tc-link {
+  min-height: 30px;
+  padding: 2px 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--tc-sub);
+  text-decoration: underline;
+  text-decoration-color: rgb(195 209 201 / 60%);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+/* The five steps. */
+.tc-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 10px 16px 0;
+}
+.tc-links + .tc-track {
+  margin-top: 6px;
+}
+.tc-track {
+  padding: 11px 0 15px;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  list-style: none;
+}
+.tc-track::before {
+  /* The thin line through the dots: from the first dot's middle to the last's. */
+  content: '';
+  position: absolute;
+  top: 17px;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: rgb(110 240 176 / 34%);
+}
+.tc-track li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tc-step-dot {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid #4b6757;
+  background: #0c1e16;
+}
+.tc-step-label {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+  color: var(--tc-dim);
+  white-space: nowrap;
+}
+.tc-step-done .tc-step-dot {
+  border: 0;
+  background: var(--tc-mint);
+}
+/* The line from a done step to the next one is mint. */
+.tc-step-done::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 5.5px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--tc-mint);
+}
+.tc-step-now .tc-step-dot {
+  width: 15px;
+  height: 15px;
+  margin-top: -1px;
+  margin-bottom: -1px;
+  border: 0;
+  background: var(--tc-lime);
+  box-shadow: 0 0 0 4px rgb(216 240 59 / 28%), 0 0 12px 2px rgb(216 240 59 / 45%);
+}
+.tc-step-now .tc-step-label {
+  color: var(--tc-lime);
+}
+/* Small phones: the step words get a little smaller so FINAL never clips. */
+@media (max-width: 359px) {
+  .tc-step-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+  }
+  .tc-title {
+    font-size: 1.7rem;
+  }
+  .tc-title.tc-title-long {
+    font-size: 1.22rem;
+  }
+  .tc-main {
+    padding-left: 16px;
+  }
+  .tc-kicker {
+    font-size: 0.64rem;
+    letter-spacing: 0.1em;
+  }
+}
+
+/* ---------- Sheets (dialog.sheet, the site's own) ---------- */
+.tm-steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 2px 0 14px;
+}
+.tm-steps span {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--fill);
+}
+.tm-steps span.on {
+  background: var(--court);
+}
+.tm-eyebrow {
+  margin: 0 0 13px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.tm-help {
+  margin: -5px 0 12px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.tm-note {
+  margin: 12px 2px 0;
+  font-size: 0.875rem;
+  line-height: 1.42;
+  color: var(--ink-2);
+}
+.tm-prize {
+  margin: 8px 2px 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--ink);
+}
+/* The picked-dates summary (mock 06): "4 picked  Dec 15 · Dec 17 · ...". */
+.tm-picked {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  margin: 0 0 14px;
+  padding: 8px 18px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+}
+.tm-picked b {
+  flex: 0 0 auto;
+  font-size: 1.08rem;
+  font-weight: 750;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+.tm-picked span {
+  min-width: 0;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+/* The pinned bottom row (Back | Sign up, Save changes): solid, so the calendar scrolls under it, with a fade above. */
+.tm-bottom {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: 16px;
+  margin: 0 calc(-1 * var(--gutter));
+  padding: 14px var(--gutter) calc(env(safe-area-inset-bottom, 0px) + 12px);
+  background: var(--sheet-bg);
+}
+.tm-bottom::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 34px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--sheet-bg) 0%, transparent), var(--sheet-bg));
+  pointer-events: none;
+}
+.tm-bottom .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 52px;
+  border-radius: 15px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.tm-bottom .btn.secondary {
+  background: var(--fill);
+  color: var(--ink);
+}
+.tm-bottom-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.tm-quiet-link {
+  align-self: center;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+:root[data-theme='dark'] .tm-bottom .btn.secondary {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tm-bottom .btn.secondary {
+    background: transparent;
+    border: 1px solid var(--line-strong);
+  }
+}
+
+/* YOUR LEVEL box in Edit my sign-up (mock 13). */
+.tm-mylevel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+  margin-bottom: 18px;
+  padding: 8px 8px 8px 18px;
+  border-radius: 16px;
+  background: var(--accent-soft);
+}
+.tm-mylevel small {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+}
+.tm-mylevel b {
+  display: block;
+  margin-top: 3px;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: var(--accent-text);
+}
+.tm-mylevel .btn {
+  min-height: 46px;
+  padding: 8px 20px;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+/* ---------- The level list ---------- */
+.tm-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tm-level {
+  display: grid;
+  grid-template-columns: 47px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 50px;
+  padding: 6px 16px 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tm-level-num {
+  font-family: var(--display);
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.tm-level-text {
+  font-size: 0.94rem;
+  line-height: 1.3;
+}
+.tm-radio {
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+}
+.tm-level-on {
+  border-color: var(--court);
+  background: var(--accent-soft);
+}
+.tm-level-on .tm-level-num {
+  color: var(--accent-text);
+}
+.tm-level-on .tm-radio {
+  border: 0;
+  background: radial-gradient(circle, var(--court) 0 4px, #ffffff 4.5px 6.5px, transparent 7px), var(--court);
+}
+.tm-level:focus-visible,
+.tm-day:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+/* The organizer's flat list (mock 14). */
+.tm-levels-flat {
+  gap: 0;
+}
+.tm-levels-flat .tm-level {
+  grid-template-columns: 3.7em minmax(0, 1fr) auto;
+  min-height: 62px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.tm-levels-flat .tm-level + .tm-level {
+  border-top: 1px dashed var(--line);
+}
+.tm-levels-flat .tm-level-text {
+  font-size: 0.875rem;
+}
+.tm-levels-flat .tm-level-num {
+  font-size: 1.1rem;
+}
+.tm-levels-flat .tm-level-tag {
+  font-size: 0.74rem;
+}
+.tm-levels-flat .tm-level-theirs {
+  background: var(--accent-soft);
+}
+.tm-levels-flat .tm-level-on {
+  position: relative;
+  z-index: 1;
+  border: 2px solid var(--court);
+  border-radius: 16px;
+  background: var(--accent-soft);
+}
+.tm-levels-flat .tm-level-on + .tm-level,
+.tm-levels-flat .tm-level-on {
+  border-top-color: transparent;
+}
+.tm-level-tag {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tm-tag-mine {
+  color: var(--accent-text);
+}
+
+/* ---------- The month calendar ---------- */
+.tm-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tm-cal-box {
+  max-height: 346px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent);
+  padding-bottom: 24px;
+}
+.tm-month-title {
+  margin: 0 0 8px 2px;
+  font-family: var(--display);
+  font-size: 1.06rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tm-week,
+.tm-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px 6px;
+}
+.tm-week {
+  margin-bottom: 8px;
+}
+.tm-week span {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.tm-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted-fg);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+button.tm-day {
+  cursor: pointer;
+}
+.tm-day.tm-off {
+  color: #9da39e;
+}
+.tm-day.tm-past {
+  color: var(--line-strong);
+}
+.tm-day.tm-on {
+  background: var(--court);
+  border-color: var(--court);
+  color: #ffffff;
+  font-weight: 750;
+}
+.tm-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ball);
+}
+/* The player's calendar (mocks 06, 13): open days are soft green tiles. */
+.tm-cal-pick .tm-day.tm-open,
+.tm-cal-counts .tm-day.tm-open {
+  border-color: var(--court);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 750;
+}
+:root[data-theme='dark'] .tm-cal-pick .tm-day.tm-open,
+:root[data-theme='dark'] .tm-cal-counts .tm-day.tm-open {
+  border-color: #2f8f5d;
+  background: #13261b;
+}
+:root[data-theme='dark'] .tm-day.tm-on {
+  background: #23845a;
+  border-color: #23845a;
+}
+:root[data-theme='dark'] .tm-day.tm-off {
+  color: #6c746f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tm-cal-pick .tm-day.tm-open,
+  :root:not([data-theme='light']) .tm-cal-counts .tm-day.tm-open {
+    border-color: #2f8f5d;
+    background: #13261b;
+  }
+  :root:not([data-theme='light']) .tm-day.tm-on {
+    background: #23845a;
+    border-color: #23845a;
+  }
+  :root:not([data-theme='light']) .tm-day.tm-off {
+    color: #6c746f;
+  }
+}
+/* The organizer's date list: the count under each day. */
+.tm-badge {
+  margin-top: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.tm-cal-counts .tm-day {
+  height: 46px;
+}
+
+/* ---------- Who's signed up (names only) ---------- */
+.tm-who {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.tm-who-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 14px 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.tm-who li {
+  display: grid;
+  grid-template-columns: 1.6em 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 16px;
+}
+.tm-who li + li {
+  border-top: 1px dashed var(--line);
+}
+.tm-who-n {
+  font-weight: 700;
+  color: var(--ink-2);
+  text-align: right;
+}
+.tm-who-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.05rem;
+}
+.tm-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: var(--fill);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tm-head-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+/* The sign-up and edit sheets leave the ticket card in sight above them (mocks 05, 06, 13): at most about three quarters of the screen. */
+dialog.sheet.tm-sheet {
+  max-height: min(76dvh, 92dvh);
+}

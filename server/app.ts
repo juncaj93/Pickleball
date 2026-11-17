@@ -6,6 +6,8 @@ import { HttpError, json, readJson } from './http';
 import * as player from './player';
 import * as guest from './guestActions';
 import * as playersRedo from './playersRedo';
+import * as tournament from './tournament';
+import { tournamentTestStage } from './tournamentTest';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
@@ -66,6 +68,10 @@ route('POST', '/api/me', player.pickName);
 route('POST', '/api/christmas-skin-me', player.christmasSkinMe);
 // Zip 51b (server/moneyNote.ts): "Got it" on a Money change note.
 route('POST', '/api/money-note/seen', player.moneyNoteSeen);
+// Zip 55 (server/tournament.ts): Tournaments, piece 1. A player's own sign-up, Edit sign-up and back out (only on a tournament they may see).
+route('POST', '/api/tournament/signup', player.tournamentSignup);
+route('PUT', '/api/tournament/signup', player.tournamentEdit);
+route('POST', '/api/tournament/back-out', player.tournamentBackOut);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
@@ -194,6 +200,16 @@ route('PUT', '/api/admin/home-screen-tip-switch', admin.setHomeScreenTipSwitch);
 route('PUT', '/api/admin/game-day-text-switch', admin.setGameDayTextSwitch);
 // Zip 38: Christmas skin.
 route('PUT', '/api/admin/christmas-skin-switch', admin.setChristmasSkinSwitch);
+// Zip 55 (server/tournament.ts): Tournaments, piece 1. The switch row, Create, Edit, Who can see it, a player's level, pick the date, cancel.
+route('PUT', '/api/admin/tournaments-switch', admin.setTournamentsSwitch);
+route('POST', '/api/admin/tournament', tournament.createTournament);
+route('PUT', '/api/admin/tournament/:id', tournament.updateTournament);
+route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVisibility);
+route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
+route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
+route('POST', '/api/admin/tournament/:id/cancel', (ctx) => tournament.cancelTournament(ctx));
+// Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever TOURNAMENTS_PREVIEW is not on (live).
+route('POST', '/api/admin/tournament-test', tournamentTestStage);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));
