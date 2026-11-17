@@ -88,7 +88,7 @@ export default function TournamentHome({ t, onChanged }: { t: PlayerTournamentVi
             setAskOut(true);
           }}
           onSubmit={async (level, dates) => {
-            const ok = await run(() => api('PUT', '/api/tournament/signup', { tournamentId: t.id, level, dates }), 'Saved');
+            const ok = await run(() => api('PUT', '/api/tournament/signup', { tournamentId: t.id, level, ...(dates ? { dates } : {}) }), 'Saved');
             if (ok) setSheet(null);
           }}
         />
@@ -326,13 +326,20 @@ function EditSheet({
   busy: boolean;
   onClose: () => void;
   onBackOut: () => void;
-  onSubmit: (level: number, dates: string[]) => void;
+  /** `dates` null: the dates were not touched (only the level is sent). */
+  onSubmit: (level: number, dates: string[] | null) => void;
 }) {
   const me = t.me!;
   const [level, setLevel] = useState<number>(me.level);
   const [changing, setChanging] = useState(false);
-  // Only the dates still open count (once the date is picked, that one date).
-  const [picked, setPicked] = useState<string[]>(me.dates.filter((d) => t.openDates.includes(d)));
+  // Only the dates still open count (once the date is picked, that one date). Untouched dates are not sent: a level-only change never makes
+  // anyone tick a date they cannot make (the server keeps their dates as they are).
+  const [picked, setPickedRaw] = useState<string[]>(me.dates.filter((d) => t.openDates.includes(d)));
+  const [touched, setTouched] = useState(false);
+  const setPicked = (d: string[]) => {
+    setTouched(true);
+    setPickedRaw(d);
+  };
   return (
     <Sheet open={open} title="Edit my sign-up" onClose={onClose} className="tm-sheet">
       {changing ? (
@@ -361,7 +368,7 @@ function EditSheet({
       <p className="tm-eyebrow">Dates that work</p>
       <DatesPicker t={t} picked={picked} setPicked={setPicked} summary={false} />
       <div className="tm-bottom tm-bottom-stack">
-        <button type="button" className="btn" disabled={busy || picked.length === 0} onClick={() => onSubmit(level, picked)} data-tm-save>
+        <button type="button" className="btn" disabled={busy || (touched && picked.length === 0)} onClick={() => onSubmit(level, touched ? picked : null)} data-tm-save>
           {busy ? 'Saving…' : 'Save changes'}
         </button>
         <button type="button" className="tm-quiet-link" onClick={onBackOut} data-tm-backout>

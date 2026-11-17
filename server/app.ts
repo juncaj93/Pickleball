@@ -208,7 +208,8 @@ route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVis
 route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
 route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
 route('POST', '/api/admin/tournament/:id/cancel', (ctx) => tournament.cancelTournament(ctx));
-// Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever TOURNAMENTS_PREVIEW is not on (live).
+// Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever PREVIEW_CALM is not on (live),
+// after the usual organizer sign-in check.
 route('POST', '/api/admin/tournament-test', tournamentTestStage);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.

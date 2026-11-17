@@ -18,8 +18,6 @@ export const TOURNAMENTS = {
   header: 'X-Tournaments',
   link: 'tournaments',
   env: 'TOURNAMENTS',
-  /** Preview only (never in production): the preview shows the feature whatever the shared fake database's row says. */
-  previewEnv: 'TOURNAMENTS_PREVIEW',
   name: 'Tournaments',
 } as const;
 

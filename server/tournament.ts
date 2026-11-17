@@ -39,8 +39,9 @@ import {
 // Who sees a tournament (each tournament's own "Who can see it"):
 //   Everyone   every player with a name picked;
 //   Only me    ONLY the organizer's own player, on a phone signed in as the organizer (the real PIN), or the organizer's View as of their own
-//              player. Anyone else (a player, a phone that merely picked the organizer's name, a read-only PIN helper) gets nothing: the answer
-//              has no `tournament` key at all, and every player route answers "not open".
+//              player. Anyone else (a player, a phone that merely picked the organizer's name, a read-only PIN helper on the player page) gets
+//              nothing: the answer has no `tournament` key at all, and every player route answers "not open". (A read-only helper sees it where
+//              they already see every organizer screen: the dashboard, and View as of the organizer's own player.)
 // The organizer screens always see it while the switch is on.
 //
 // No money moves in piece 1: the ticket price and the champion credit are stored, nothing is charged, paid or credited.
@@ -122,6 +123,24 @@ export async function activeTournament(db: D1Database, groupId: string): Promise
     .catch(() => null);
 }
 
+/**
+ * The same read for a player's phone, in the SAME single trip: on an Only me tournament it also brings the two facts that decide whether this
+ * player is the organizer's own (the organizer's saved player still exists; this player's name). So Only me costs any player exactly the trips
+ * of "none open" (nothing to time), whether the organizer's player is saved by id or matched by name.
+ */
+async function activeTournamentForPlayer(db: D1Database, group: GroupRow, playerId: string): Promise<(TournamentRow & { org_saved: string | null; viewer_name: string | null }) | null> {
+  return db
+    .prepare(
+      `SELECT t.*,
+         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ? AND group_id = t.group_id) END AS org_saved,
+         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ? AND group_id = t.group_id) END AS viewer_name
+       FROM tournaments t WHERE t.group_id = ? AND t.status IN ${OPEN} ORDER BY t.created_at DESC LIMIT 1`,
+    )
+    .bind(group.organizer_player_id ?? '', playerId, group.id)
+    .first<TournamentRow & { org_saved: string | null; viewer_name: string | null }>()
+    .catch(() => null);
+}
+
 async function signupRows(db: D1Database, tournamentId: string): Promise<SignupRow[]> {
   const { results } = await db
     .prepare(
@@ -144,9 +163,12 @@ export function storedDays(json: string | null | undefined): string[] {
 
 const statusOf = (t: TournamentRow): TournamentStatus => (t.status === 'date_picked' ? 'date_picked' : 'signup');
 
-/** The dates a player can pick now: every offered date while sign-up is open; only the picked one once it is picked. */
-export function openDatesOf(t: TournamentRow): string[] {
-  return statusOf(t) === 'date_picked' && t.final_date ? [t.final_date] : storedDays(t.offered_dates);
+/**
+ * The dates a player can pick now: every offered date from today on while sign-up is open (a day that has passed is no longer a choice); only
+ * the picked one once it is picked. `today`: the Eastern calendar day ('YYYY-MM-DD').
+ */
+export function openDatesOf(t: TournamentRow, today: string): string[] {
+  return statusOf(t) === 'date_picked' && t.final_date ? [t.final_date] : storedDays(t.offered_dates).filter((d) => d >= today);
 }
 
 /** Eastern calendar day of a moment, 'YYYY-MM-DD'. */
@@ -165,11 +187,17 @@ export function todayKey(nowMs: number, tz = 'America/Detroit'): string {
  */
 async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: boolean): Promise<{ t: TournamentRow; onlyMe: boolean } | null> {
   if (!(await tournamentsFlags(ctx, group.id)).on) return null;
-  const t = await activeTournament(ctx.db, group.id);
-  if (!t) return null;
+  const row = await activeTournamentForPlayer(ctx.db, group, playerId);
+  if (!row) return null;
+  const { org_saved: orgSaved, viewer_name: viewerName, ...t } = row;
   if (t.visibility === 'all') return { t, onlyMe: false };
-  // Only me: the organizer's own player, on the organizer's own signed-in phone (or the organizer's View as of their own player).
-  if (playerId !== (await organizerIdOf(ctx.db, group))) return null;
+  // Only me: the organizer's own player, on the organizer's own signed-in phone (or the organizer's View as of their own player). Any other
+  // player is answered from the one read above (organizerIdOf's own rule: the saved player if it still exists, else the name in Settings), so
+  // the Only me path costs exactly the trips of "no tournament open". Only a phone that passes this is checked further.
+  const orgName = (group.organizer_name ?? '').trim().toLowerCase();
+  const maybeOrganizer = orgSaved ? playerId === orgSaved : !!orgName && (viewerName ?? '').trim().toLowerCase() === orgName;
+  if (!maybeOrganizer) return null;
+  if (!orgSaved && playerId !== (await organizerIdOf(ctx.db, group))) return null; // two players with the organizer's name: only the first
   if (!viewAs && !(await organizerSignedIn(ctx, group.id))) return null;
   return { t, onlyMe: true };
 }
@@ -188,7 +216,7 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
     status: statusOf(t),
     start: t.start_minutes,
     minutes: t.minutes,
-    openDates: openDatesOf(t),
+    openDates: openDatesOf(t, todayKey(ctx.nowMs, group.timezone)),
     finalDate: statusOf(t) === 'date_picked' ? t.final_date : null,
     names: rows.map((r) => r.display_name),
     prize: prizeLine(t.champion_credit_cents),
@@ -270,6 +298,12 @@ async function openById(ctx: Ctx, group: GroupRow): Promise<TournamentRow> {
   return t;
 }
 
+/** Only an open tournament (piece 1's two stages) is ever changed: a save racing a Cancel changes nothing and says "look again". */
+const OPEN_GUARD = "AND status IN ('signup', 'date_picked')";
+const changedOrLookAgain = (res: { meta?: { changes?: number } }) => {
+  if ((res.meta?.changes ?? 0) === 0) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
+};
+
 const bad = (code: string, message: string): never => {
   throw new HttpError(400, code, message);
 };
@@ -291,8 +325,11 @@ interface Settings {
   visibility: Visibility;
 }
 
-/** The Create (and Edit) screen's fields, checked. `keep`: dates already offered, which may stay even once they are in the past. */
-function readSettings(body: Record<string, unknown>, group: GroupRow, nowMs: number, keep: readonly string[] = []): Settings {
+/**
+ * The Create (and Edit) screen's fields, checked. `keep`: dates already offered, which may stay even once they are in the past. `keepPlan`: the
+ * plan the tournament already has, which may stay even if Booking hours was turned off since (only a NEW 2.5 or 3 hour plan needs it on).
+ */
+function readSettings(body: Record<string, unknown>, group: GroupRow, nowMs: number, keep: readonly string[] = [], keepPlan?: { courts: number; minutes: number; start: number }): Settings {
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!name) bad('invalid_name', 'Type a name.');
   if (Array.from(name).length > NAME_MAX) bad('invalid_name', `Keep the name to ${NAME_MAX} letters.`);
@@ -307,7 +344,8 @@ function readSettings(body: Record<string, unknown>, group: GroupRow, nowMs: num
   const plan = findPlan(size as 6, Number(body.courts), Number(body.minutes), Number(body.start));
   if (!plan) bad('invalid_plan', 'Pick a court plan.');
   // 2.5 and 3 hour plans only while Booking hours is on for everyone (the same gate as the 2.5 and 3 hour prices).
-  if (!planAllowed(plan!, group.long_games === true)) bad('invalid_plan', '2.5 and 3 hour games need Booking hours turned on.');
+  const samePlan = !!keepPlan && keepPlan.courts === plan!.courts && keepPlan.minutes === plan!.minutes && keepPlan.start === plan!.start;
+  if (!samePlan && !planAllowed(plan!, group.long_games === true)) bad('invalid_plan', '2.5 and 3 hour games need Booking hours turned on.');
   return {
     name,
     dates: dates!,
@@ -357,7 +395,7 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
   const offered = storedDays(t.offered_dates);
-  const s = readSettings(body, group, ctx.nowMs, offered);
+  const s = readSettings(body, group, ctx.nowMs, offered, { courts: t.courts, minutes: t.minutes, start: t.start_minutes });
   if (t.final_date && statusOf(t) === 'date_picked' && !s.dates.includes(t.final_date)) {
     throw new HttpError(409, 'final_date_kept', 'That date is the one you picked. Pick another date first.');
   }
@@ -365,17 +403,25 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   const trims = rows
     .map((r) => ({ r, kept: storedDays(r.dates).filter((d) => s.dates.includes(d)) }))
     .filter((x) => x.kept.length !== storedDays(x.r.dates).length);
-  await ctx.db.batch([
+  const [res] = await ctx.db.batch([
     ctx.db
       .prepare(
         `UPDATE tournaments SET name = ?, size = ?, courts = ?, minutes = ?, start_minutes = ?, ticket_cents = ?, champion_credit_cents = ?, offered_dates = ?,
            visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?
-         WHERE id = ? AND group_id = ?`,
+         WHERE id = ? AND group_id = ? ${OPEN_GUARD}`,
       )
       .bind(s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, JSON.stringify(s.dates), s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, t.id, group.id),
-    ...trims.map((x) => ctx.db.prepare('UPDATE tournament_signups SET dates = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(x.kept), ctx.nowIso, x.r.id)),
+    // A player's dates lose only the days taken off the offer (and only while this tournament is still open).
+    ...trims.map((x) =>
+      ctx.db
+        .prepare(`UPDATE tournament_signups SET dates = ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM tournaments WHERE id = ? ${OPEN_GUARD})`)
+        .bind(JSON.stringify(x.kept), ctx.nowIso, x.r.id, t.id),
+    ),
   ]);
-  await audit(ctx.db, group.id, null, 'tournament_edited', { tournament: s.name }, ctx.nowIso);
+  changedOrLookAgain(res);
+  // History says how many players lost a date they had picked (their names are on the level list; they can pick again).
+  const trimmed = trims.filter((x) => x.r.status === 'in').length;
+  await audit(ctx.db, group.id, null, 'tournament_edited', { tournament: s.name, ...(trimmed ? { trimmed } : {}) }, ctx.nowIso);
   if (s.visibility !== (t.visibility === 'all' ? 'all' : 'me')) await audit(ctx.db, group.id, null, s.visibility === 'all' ? 'tournament_shown' : 'tournament_hidden', { tournament: s.name }, ctx.nowIso);
   return { ok: true };
 }
@@ -385,10 +431,12 @@ export async function setTournamentVisibility(ctx: Ctx, body: Record<string, unk
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
   const visibility = v.oneOf(body.visibility, 'visibility', ['me', 'all'] as const);
-  await ctx.db
-    .prepare("UPDATE tournaments SET visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ? WHERE id = ?")
-    .bind(visibility, visibility, ctx.nowIso, ctx.nowIso, t.id)
-    .run();
+  changedOrLookAgain(
+    await ctx.db
+      .prepare(`UPDATE tournaments SET visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ? WHERE id = ? ${OPEN_GUARD}`)
+      .bind(visibility, visibility, ctx.nowIso, ctx.nowIso, t.id)
+      .run(),
+  );
   if (visibility !== (t.visibility === 'all' ? 'all' : 'me')) await audit(ctx.db, group.id, null, visibility === 'all' ? 'tournament_shown' : 'tournament_hidden', { tournament: t.name }, ctx.nowIso);
   return { ok: true, visibility };
 }
@@ -405,13 +453,19 @@ export async function setTournamentLevel(ctx: Ctx, body: Record<string, unknown>
     .bind(t.id, playerId)
     .first<{ id: string; display_name: string }>();
   if (!row) throw new HttpError(409, 'not_signed_up', 'They are not on the list any more.');
-  await ctx.db.batch([
-    ctx.db.prepare('UPDATE tournament_signups SET approved_level = ?, updated_at = ? WHERE id = ?').bind(level, ctx.nowIso, row.id),
+  const [res] = await ctx.db.batch([
+    ctx.db.prepare(`UPDATE tournaments SET updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, t.id),
     ctx.db
-      .prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, ?, 'organizer', ?)")
-      .bind(newId(), t.id, playerId, level, ctx.nowIso),
-    ctx.db.prepare('UPDATE tournaments SET updated_at = ? WHERE id = ?').bind(ctx.nowIso, t.id),
+      .prepare(`UPDATE tournament_signups SET approved_level = ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM tournaments WHERE id = ? ${OPEN_GUARD})`)
+      .bind(level, ctx.nowIso, row.id, t.id),
+    ctx.db
+      .prepare(
+        `INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at)
+         SELECT ?, ?, ?, ?, 'organizer', ? WHERE EXISTS (SELECT 1 FROM tournaments WHERE id = ? ${OPEN_GUARD})`,
+      )
+      .bind(newId(), t.id, playerId, level, ctx.nowIso, t.id),
   ]);
+  changedOrLookAgain(res);
   await audit(ctx.db, group.id, null, 'tournament_level', { tournament: t.name, player: row.display_name, playerId, level: levelShort(level) }, ctx.nowIso);
   return { ok: true, level };
 }
@@ -421,16 +475,21 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
   if (body.date === null) {
-    await ctx.db.prepare("UPDATE tournaments SET status = 'signup', final_date = NULL, date_picked_at = NULL, updated_at = ? WHERE id = ?").bind(ctx.nowIso, t.id).run();
+    changedOrLookAgain(
+      await ctx.db.prepare(`UPDATE tournaments SET status = 'signup', final_date = NULL, date_picked_at = NULL, updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, t.id).run(),
+    );
     if (t.final_date) await audit(ctx.db, group.id, null, 'tournament_date', { tournament: t.name, date: null }, ctx.nowIso);
     return { ok: true, date: null };
   }
   const date = body.date;
   if (typeof date !== 'string' || !storedDays(t.offered_dates).includes(date)) bad('invalid_date', 'Pick one of the dates you offered.');
-  await ctx.db
-    .prepare("UPDATE tournaments SET status = 'date_picked', final_date = ?, date_picked_at = ?, updated_at = ? WHERE id = ?")
-    .bind(date, ctx.nowIso, ctx.nowIso, t.id)
-    .run();
+  if ((date as string) < todayKey(ctx.nowMs, group.timezone)) bad('invalid_date', 'That date has passed. Pick another one.');
+  changedOrLookAgain(
+    await ctx.db
+      .prepare(`UPDATE tournaments SET status = 'date_picked', final_date = ?, date_picked_at = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD}`)
+      .bind(date, ctx.nowIso, ctx.nowIso, t.id)
+      .run(),
+  );
   await audit(ctx.db, group.id, null, 'tournament_date', { tournament: t.name, date: dayLong(date as string), day: date }, ctx.nowIso);
   return { ok: true, date };
 }
@@ -439,7 +498,7 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
 export async function cancelTournament(ctx: Ctx) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
-  await ctx.db.prepare("UPDATE tournaments SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ?").bind(ctx.nowIso, ctx.nowIso, t.id).run();
+  changedOrLookAgain(await ctx.db.prepare(`UPDATE tournaments SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, ctx.nowIso, t.id).run());
   await audit(ctx.db, group.id, null, 'tournament_canceled', { tournament: t.name }, ctx.nowIso);
   return { ok: true };
 }
@@ -493,8 +552,10 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
   const { t, playerId } = await playerTarget(ctx, who, body);
   if (!isLevel(body.level)) bad('invalid_level', 'Pick your level.');
   const level = body.level as number;
-  const dates = readDates(body, openDatesOf(t));
+  const dates = readDates(body, openDatesOf(t, todayKey(ctx.nowMs, who.group.timezone)));
   const before = await mySignup(ctx.db, t.id, playerId);
+  // A second tap of Sign up (or another phone) with exactly the same answers: nothing to save, nothing to write in History.
+  if (before && before.status === 'in' && before.picked_level === level && JSON.stringify(storedDays(before.dates)) === JSON.stringify(dates)) return { ok: true, result: 'signed_up' };
   const levelChanged = !before || before.picked_level !== level || before.status !== 'in';
   await ctx.db.batch([
     ctx.db
@@ -503,6 +564,8 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
          VALUES (?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?, NULL)
          ON CONFLICT (tournament_id, player_id) DO UPDATE SET
            joined_at = CASE WHEN tournament_signups.status = 'in' THEN tournament_signups.joined_at ELSE excluded.joined_at END,
+           -- The organizer's level stands only while the player's own pick is the one it was set for: a new pick goes back to be reviewed.
+           approved_level = CASE WHEN tournament_signups.picked_level = excluded.picked_level THEN tournament_signups.approved_level ELSE NULL END,
            status = 'in', picked_level = excluded.picked_level, dates = excluded.dates, updated_at = excluded.updated_at, backed_out_at = NULL`,
       )
       .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ctx.nowIso, ctx.nowIso),
@@ -526,9 +589,13 @@ export async function playerTournamentEdit(ctx: Ctx, who: TournamentActor, body:
   if (!before || before.status !== 'in') throw new HttpError(409, 'not_signed_up', 'You are not on the list. Sign up first.');
   if (body.level !== undefined && !isLevel(body.level)) bad('invalid_level', 'Pick your level.');
   const level = body.level === undefined ? before.picked_level : (body.level as number);
-  const dates = body.dates === undefined ? storedDays(before.dates) : readDates(body, openDatesOf(t));
+  const dates = body.dates === undefined ? storedDays(before.dates) : readDates(body, openDatesOf(t, todayKey(ctx.nowMs, who.group.timezone)));
+  if (level === before.picked_level && JSON.stringify(dates) === JSON.stringify(storedDays(before.dates))) return { ok: true, result: 'saved' };
   await ctx.db.batch([
-    ctx.db.prepare('UPDATE tournament_signups SET picked_level = ?, dates = ?, updated_at = ? WHERE id = ?').bind(level, JSON.stringify(dates), ctx.nowIso, before.id),
+    // A new pick of their own level goes back to be reviewed (the organizer's earlier level stays in the level history).
+    ctx.db
+      .prepare('UPDATE tournament_signups SET picked_level = ?, approved_level = CASE WHEN picked_level = ? THEN approved_level ELSE NULL END, dates = ?, updated_at = ? WHERE id = ?')
+      .bind(level, level, JSON.stringify(dates), ctx.nowIso, before.id),
     ...(level !== before.picked_level
       ? [
           ctx.db

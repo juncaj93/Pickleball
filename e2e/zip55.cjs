@@ -400,6 +400,7 @@ async function main() {
     await z.page.locator('[data-tm-submit]').click();
     await z.page.locator('.tc[data-tc="date"] [data-tc-who]').waitFor({ timeout: 10000 });
     await z.ctx.close();
+    const parkerDates = (await dash()).tournament.signups.find((s) => s.name === 'Parker').dates.join();
     const p = await playerPage('Parker');
     await p.page.locator('[data-tc-edit]').click();
     await p.page.locator('[data-tm-change]').click();
@@ -416,6 +417,8 @@ async function main() {
     const names = d.tournament.signups.map((s) => s.name);
     assert(names.includes('Zoe') && !names.includes('Quinn'), names.join(', '));
     assert(d.tournament.signups.find((s) => s.name === 'Parker').pickedLevel === 350, 'Parker 3.5');
+    // A level-only edit sends no dates: his dates stay as they were (nobody has to tick the picked date to change a level).
+    assert(d.tournament.signups.find((s) => s.name === 'Parker').dates.join() === parkerDates, 'Parker kept his dates');
     assert(d.tournament.signups.find((s) => s.name === 'Zoe').dates.join() === finalDay, 'Zoe can make the date');
     assert(d.tournament.status === 'date_picked' && d.tournament.finalDate === finalDay, 'still the same date');
   });

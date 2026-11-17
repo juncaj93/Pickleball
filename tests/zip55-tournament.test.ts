@@ -438,3 +438,154 @@ describe('a later day', () => {
     expect(added.status).toBe(400);
   });
 });
+
+describe('review fixes (fresh reviewer, Zip 55)', () => {
+  it('a day that has passed is no longer a choice: players cannot pick it, the organizer cannot make it the date', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    ctx.app.advance(9 * DAY + 4 * 3_600_000); // Thu Nov 5, 4 PM Eastern: Nov 3 has passed, Nov 5 is today
+    const blair = await playerPhone(ctx, 'Blair');
+    const t = (await blair.call('GET', '/api/group')).data.tournament;
+    expect(t.openDates).toEqual(DATES.slice(1));
+    expect((await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] })).status).toBe(409);
+    const past = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[0] });
+    expect(past.status).toBe(400);
+    expect(past.data.message).toBe('That date has passed. Pick another one.');
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[1] })).status).toBe(200);
+  });
+
+  it("a new pick of the player's own level goes back to be reviewed; the same pick keeps the organizer's level", async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    const blair = await playerPhone(ctx, 'Blair');
+    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] });
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/level`, { playerId: ctx.byName.Blair, level: 340 });
+    const row = async () => (await dash(ctx)).tournament.signups.find((s: any) => s.name === 'Blair');
+    expect(await row()).toMatchObject({ pickedLevel: 300, level: 340, reviewed: true });
+    // Dates only: the organizer's level stays.
+    await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, dates: [DATES[0], DATES[1]] });
+    expect(await row()).toMatchObject({ pickedLevel: 300, level: 340, reviewed: true });
+    // A new pick: back to be reviewed.
+    await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 320 });
+    expect(await row()).toMatchObject({ pickedLevel: 320, level: 320, reviewed: false });
+    // Back out and sign up again with the same pick after a review: the review stands; a different pick: reviewed again.
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/level`, { playerId: ctx.byName.Blair, level: 350 });
+    await blair.call('POST', '/api/tournament/back-out', { tournamentId: id });
+    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 320, dates: [DATES[0]] });
+    expect(await row()).toMatchObject({ pickedLevel: 320, level: 350, reviewed: true });
+    await blair.call('POST', '/api/tournament/back-out', { tournamentId: id });
+    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 250, dates: [DATES[0]] });
+    expect(await row()).toMatchObject({ pickedLevel: 250, level: 250, reviewed: false });
+    // The level history kept every step.
+    const h = ctx.app.db.raw.prepare('SELECT level, set_by FROM tournament_level_history WHERE player_id = ? ORDER BY rowid').all(ctx.byName.Blair);
+    expect(h).toEqual([
+      { level: 300, set_by: 'player' },
+      { level: 340, set_by: 'organizer' },
+      { level: 320, set_by: 'player' },
+      { level: 350, set_by: 'organizer' },
+      { level: 320, set_by: 'player' },
+      { level: 250, set_by: 'player' },
+    ]);
+  });
+
+  it('after the date is picked, a level-only edit keeps dates that do not include it (nobody has to tick a date they cannot make)', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    const blair = await playerPhone(ctx, 'Blair');
+    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0], DATES[1]] });
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[3] });
+    expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 320 })).status).toBe(200);
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[0], DATES[1]] });
+  });
+
+  it('a second Sign up tap with the same answers writes nothing and one History line in all', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    const blair = await playerPhone(ctx, 'Blair');
+    for (let i = 0; i < 2; i++) expect((await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] })).status).toBe(200);
+    const lines = (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries.filter((e: any) => e.action.startsWith('tournament_sign'));
+    expect(lines.map((e: any) => e.action)).toEqual(['tournament_signup']);
+    expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_level_history').get()).toEqual({ n: 1 });
+  });
+
+  it('Edit settings keeps a 2.5 hour plan after Booking hours is turned off (only a NEW long plan needs it); a new one is still refused', async () => {
+    const ctx = await world();
+    await ctx.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: true });
+    const id = await create(ctx, { size: 6, courts: 1, minutes: 150, start: 1170 });
+    await ctx.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: false });
+    const renamed = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, size: 6, courts: 1, minutes: 150, start: 1170, name: 'Renamed Cup' });
+    expect(renamed.status, renamed.text).toBe(200);
+    const other = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, size: 8, courts: 2, minutes: 150, start: 1170 });
+    expect(other.status).toBe(400);
+  });
+
+  it('a save that lands just after a Cancel changes nothing (the canceled tournament never comes back)', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    // Every write from here: the Cancel lands right before the date pick's own statement runs (the race the reviewer described).
+    const inner = ctx.app.env.DB;
+    ctx.app.env.DB = {
+      ...inner,
+      prepare(sql: string) {
+        if (/SET status = 'date_picked'/.test(sql)) ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'canceled' WHERE id = ?").run(id);
+        return inner.prepare(sql);
+      },
+      batch: (st: any) => inner.batch(st),
+    } as any;
+    const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[1] });
+    ctx.app.env.DB = inner;
+    expect(r.status).toBe(409);
+    expect(ctx.app.db.raw.prepare('SELECT status, final_date FROM tournaments WHERE id = ?').get(id)).toEqual({ status: 'canceled', final_date: null });
+  });
+
+  it('Edit settings that takes a date off says in History how many players lost a picked date', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] });
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: DATES.slice(1) });
+    const line = (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: any) => e.action === 'tournament_edited');
+    expect(line.details).toMatchObject({ tournament: 'Winter Classic', trimmed: 1 });
+  });
+
+  it('ONLY ME costs a player exactly the database trips of "no tournament" (nothing to time)', async () => {
+    const { countingDb } = await import('../dev/countingDb');
+    const ctx = await world();
+    const blair = await playerPhone(ctx, 'Blair');
+    const inner = ctx.app.env.DB;
+    const trips = async (method: string, path: string, body?: unknown) => {
+      const c = { trips: 0, statements: 0, sql: [] as string[] };
+      ctx.app.env.DB = countingDb(inner, c);
+      await blair.call(method, path, body);
+      ctx.app.env.DB = inner;
+      return c.trips;
+    };
+    const measure = async () => [await trips('GET', '/api/group'), await trips('GET', '/api/group/version'), await trips('POST', '/api/tournament/back-out', {})];
+    await trips('GET', '/api/group'); // warm: upkeep once
+    const none = await measure();
+    await create(ctx, { visibility: 'me' });
+    const onlyMe = await measure();
+    expect(onlyMe).toEqual(none);
+  });
+
+  it('the same with the organizer saved by id (not by name), and the organizer still sees it on their own signed-in phone', async () => {
+    const { countingDb } = await import('../dev/countingDb');
+    const ctx = await world();
+    ctx.app.db.raw.prepare('UPDATE groups SET organizer_player_id = ?').run(ctx.byName.Alex);
+    const blair = await playerPhone(ctx, 'Blair');
+    const inner = ctx.app.env.DB;
+    const trips = async (method: string, path: string, body?: unknown) => {
+      const c = { trips: 0, statements: 0, sql: [] as string[] };
+      ctx.app.env.DB = countingDb(inner, c);
+      await blair.call(method, path, body);
+      ctx.app.env.DB = inner;
+      return c.trips;
+    };
+    const measure = async () => [await trips('GET', '/api/group'), await trips('GET', '/api/group/version'), await trips('POST', '/api/tournament/back-out', {})];
+    await trips('GET', '/api/group');
+    const none = await measure();
+    await create(ctx, { visibility: 'me' });
+    expect(await measure()).toEqual(none);
+    expect((await blair.call('GET', '/api/group')).data.tournament).toBeUndefined();
+    expect((await (await organizerPhone(ctx)).call('GET', '/api/group')).data.tournament).toMatchObject({ name: 'Winter Classic', onlyMe: true });
+  });
+});

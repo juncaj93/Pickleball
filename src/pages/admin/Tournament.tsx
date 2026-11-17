@@ -412,7 +412,9 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
   const best = Math.max(0, ...[...counts.values()].map((n) => n.length));
   const months = useMemo(() => (t.offeredDates.length ? monthsBetween(t.offeredDates[0], t.offeredDates[t.offeredDates.length - 1]) : []), [t.offeredDates]);
   const offered = new Set(t.offeredDates);
-  const look = (d: string): DayLook => (d === t.finalDate ? 'on' : offered.has(d) ? 'open' : 'off');
+  const today = todayKeyOf(ctx.d.now, ctx.d.group.timezone);
+  // A day that has passed can no longer be picked (its count still shows).
+  const look = (d: string): DayLook => (d === t.finalDate ? 'on' : offered.has(d) ? (d < today ? 'past' : 'open') : 'off');
   const who = t.signups.find((s) => s.playerId === levelFor) ?? null;
   // Open on the part the Home card asked for.
   const scrollRef = (el: HTMLElement | null) => {
@@ -482,7 +484,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
           boxed={false}
           label="Offered dates, with how many can play"
           look={look}
-          onTap={(d) => offered.has(d) && setDay(d)}
+          onTap={(d) => offered.has(d) && (d >= today || d === t.finalDate) && setDay(d)}
           badge={(d) => (offered.has(d) ? <span className={(counts.get(d)?.length ?? 0) === best && best > 0 ? 'tm-best-count' : undefined}>{counts.get(d)?.length ?? 0}</span> : null)}
         />
       </section>

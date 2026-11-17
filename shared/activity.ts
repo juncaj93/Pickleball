@@ -252,7 +252,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_created':
       return `${who} opened sign-up for the ${tourName(d)}${d.visibility === 'all' ? '' : ' (only you can see it)'}`;
     case 'tournament_edited':
-      return `${who} changed the ${tourName(d)}`;
+      return `${who} changed the ${tourName(d)}${typeof d.trimmed === 'number' && d.trimmed > 0 ? ` (${d.trimmed} ${d.trimmed === 1 ? 'player' : 'players'} lost a picked date)` : ''}`;
     case 'tournament_shown':
       return `${who} showed the ${tourName(d)} to everyone`;
     case 'tournament_hidden':

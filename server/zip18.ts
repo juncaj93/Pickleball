@@ -44,7 +44,8 @@ export async function demoExtras(ctx: Ctx): Promise<DemoExtras> {
     .bind(group.id)
     .all<DemoExtras['taskLog'][number]>();
   // Zip 55: View as shows a player the tournament card they would see, so the copy needs the tournament rows too (only while the switch is on;
-  // off: this answer is exactly main's). The private test link (X-Tournaments) counts like on every other screen.
+  // off: this answer is exactly main's). The copy answers with the live switches only (Zip 18), so while only this phone's private link is on,
+  // View as shows no card even though the rows came along.
   const tour = (await tournamentsFlags(ctx, group.id)).on ? await tournamentTablesFor(ctx.db, group.id) : null;
   return { taskLog: results, env: switchEnvOf(ctx.env), ...(tour ? { tournaments: tour } : {}) };
 }
