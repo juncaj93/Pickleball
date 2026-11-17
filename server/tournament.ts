@@ -8,6 +8,10 @@ import { organizerSignedIn } from './zip13';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { localParts } from '../shared/time';
 import {
+  DEFAULT_FORMAT,
+  FORMATS,
+  formatLocked,
+  type TournamentFormat,
   type AdminTournamentView,
   cleanDays,
   dayKey,
@@ -92,6 +96,8 @@ export interface TournamentRow {
   date_picked_at: string | null;
   shown_at: string | null;
   canceled_at: string | null;
+  format: string;
+  second_credit_cents: number;
 }
 
 interface SignupRow {
@@ -160,6 +166,9 @@ export function storedDays(json: string | null | undefined): string[] {
   }
 }
 
+/** The stored format, read safely (anything odd reads as Doubles). */
+const formatOf = (t: TournamentRow): TournamentFormat => (t.format === 'americano' ? 'americano' : 'doubles');
+
 const statusOf = (t: TournamentRow): TournamentStatus => (t.status === 'date_picked' ? 'date_picked' : 'signup');
 
 /**
@@ -219,6 +228,7 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
   return {
     id: t.id,
     name: t.name,
+    format: formatOf(t),
     status: statusOf(t),
     start: t.start_minutes,
     minutes: t.minutes,
@@ -239,6 +249,8 @@ export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<Adm
   return {
     id: t.id,
     name: t.name,
+    format: formatOf(t),
+    formatLocked: formatLocked(t.status),
     status: statusOf(t),
     visibility: t.visibility === 'all' ? 'all' : 'me',
     size: t.size,
@@ -247,6 +259,7 @@ export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<Adm
     start: t.start_minutes,
     ticketCents: t.ticket_cents,
     championCreditCents: t.champion_credit_cents,
+    secondCreditCents: t.second_credit_cents ?? 0,
     offeredDates: storedDays(t.offered_dates),
     finalDate: statusOf(t) === 'date_picked' ? t.final_date : null,
     createdAt: t.created_at,
@@ -327,6 +340,8 @@ interface Settings {
   start: number;
   ticketCents: number;
   creditCents: number;
+  secondCreditCents: number;
+  format: TournamentFormat;
   visibility: Visibility;
 }
 
@@ -360,6 +375,9 @@ function readSettings(body: Record<string, unknown>, group: GroupRow, nowMs: num
     start: plan!.start,
     ticketCents: wholeCents(body.ticketCents, 'ticket', 'The ticket price'),
     creditCents: wholeCents(body.creditCents, 'credit', 'The credit'),
+    // Americano's 2nd place credit (left out, e.g. by Doubles: $0, nothing to pay).
+    secondCreditCents: body.secondCreditCents === undefined ? 0 : wholeCents(body.secondCreditCents, 'second_credit', 'The 2nd place credit'),
+    format: body.format === undefined ? DEFAULT_FORMAT : v.oneOf(body.format, 'format', FORMATS),
     visibility: v.oneOf(body.visibility, 'visibility', ['me', 'all'] as const),
   };
 }
@@ -377,10 +395,10 @@ export async function createTournament(ctx: Ctx, body: Record<string, unknown>) 
     await ctx.db
       .prepare(
         `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
-           status, visibility, created_at, updated_at, shown_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'signup', ?, ?, ?, ?)`,
+           status, visibility, created_at, updated_at, shown_at, format, second_credit_cents)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'signup', ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, group.id, s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, JSON.stringify(s.dates), s.visibility, ctx.nowIso, ctx.nowIso, s.visibility === 'all' ? ctx.nowIso : null)
+      .bind(id, group.id, s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, JSON.stringify(s.dates), s.visibility, ctx.nowIso, ctx.nowIso, s.visibility === 'all' ? ctx.nowIso : null, s.format, s.secondCreditCents)
       .run();
   } catch (err) {
     if (tablesMissing(err)) throw notReady();
@@ -388,7 +406,7 @@ export async function createTournament(ctx: Ctx, body: Record<string, unknown>) 
     if (err instanceof Error && /unique/i.test(err.message)) throw new HttpError(409, 'tournament_open', 'A tournament is already open.');
     throw err;
   }
-  await audit(ctx.db, group.id, null, 'tournament_created', { tournament: s.name, visibility: s.visibility }, ctx.nowIso);
+  await audit(ctx.db, group.id, null, 'tournament_created', { tournament: s.name, visibility: s.visibility, format: s.format }, ctx.nowIso);
   return { ok: true, id };
 }
 
@@ -401,6 +419,8 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   const t = await openById(ctx, group);
   const offered = storedDays(t.offered_dates);
   const s = readSettings(body, group, ctx.nowMs, offered, { courts: t.courts, minutes: t.minutes, start: t.start_minutes });
+  // The format is locked once tickets open (piece 2): a save that tries to change it then is refused.
+  if (s.format !== formatOf(t) && formatLocked(t.status)) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
   if (t.final_date && statusOf(t) === 'date_picked' && !s.dates.includes(t.final_date)) {
     throw new HttpError(409, 'final_date_kept', 'That date is the one you picked. Pick another date first.');
   }
@@ -414,10 +434,10 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
     ctx.db
       .prepare(
         `UPDATE tournaments SET name = ?, size = ?, courts = ?, minutes = ?, start_minutes = ?, ticket_cents = ?, champion_credit_cents = ?, offered_dates = ?,
-           visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?
+           visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?
          WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))`,
       )
-      .bind(s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, t.id, group.id, offer),
+      .bind(s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, s.format, s.secondCreditCents, t.id, group.id, offer),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
     // tournament holds exactly the new offer and is still open).
     ctx.db

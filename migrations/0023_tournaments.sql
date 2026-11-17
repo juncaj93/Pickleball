@@ -23,6 +23,11 @@
 --   status          'signup' (open, players pick their level and dates), 'date_picked' (the date is set; tickets open in piece 2),
 --                   'canceled'. Later pieces add 'tickets', 'teams', 'games', 'final' and 'ended' (no check, so they need no table rebuild).
 --   visibility      'me' (Only me: only the organizer sees it) or 'all' (Everyone)
+--   format          'doubles' (fixed teams for the night) or 'americano' (a new partner every round, everyone plays for themselves). It can
+--                   change until tickets open (piece 2), then it is locked.
+--   second_credit_cents
+--                   Americano only: the game credit for 2nd place ($7 to start, $0 allowed; no medal). 1st place is champion_credit_cents
+--                   (plus a medal). Doubles ignores it (champion_credit_cents goes to each of the 2 winners). Stored only in piece 1.
 CREATE TABLE tournaments (
   id TEXT PRIMARY KEY,
   group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -41,7 +46,9 @@ CREATE TABLE tournaments (
   updated_at TEXT NOT NULL,
   date_picked_at TEXT,
   shown_at TEXT,
-  canceled_at TEXT
+  canceled_at TEXT,
+  format TEXT NOT NULL DEFAULT 'doubles' CHECK (format IN ('doubles', 'americano')),
+  second_credit_cents INTEGER NOT NULL DEFAULT 0 CHECK (second_credit_cents >= 0)
 );
 
 -- At most ONE tournament that is not over per group (two quick Create taps can never make two).

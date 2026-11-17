@@ -28,6 +28,10 @@ import {
   SIZES,
   type Visibility,
   WINNERS,
+  formatKicker,
+  DEFAULT_FORMAT,
+  DEFAULT_SECOND_CREDIT_CENTS,
+  type TournamentFormat,
 } from '../../../shared/tournament';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { localParts } from '../../../shared/time';
@@ -122,11 +126,13 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
   const today = todayKeyOf(ctx.d.now, ctx.d.group.timezone);
   const datesPassed = !t.finalDate && !t.offeredDates.some((d) => d >= today);
   return (
-    <section className="tm-home card" aria-label={`${t.name}, doubles tournament`} data-tm-home>
+    <section className="tm-home card" aria-label={`${t.name}, ${formatKicker(t.format).toLowerCase()}`} data-tm-home>
       <div className="tm-home-top">
         <span className="tm-home-ball" aria-hidden="true" />
         <div className="tm-home-text">
-          <p className="tm-home-kicker">Doubles tournament</p>
+          <p className="tm-home-kicker" data-tm-home-format={t.format}>
+            {formatKicker(t.format)}
+          </p>
           <h2 className="tm-home-title">{t.name}</h2>
           <p className="tm-home-sub">
             {statusLine(t)} · {who}
@@ -259,6 +265,11 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   });
   const [ticket, setTicket] = useState<number | null>(editing?.ticketCents ?? DEFAULT_TICKET_CENTS);
   const [credit, setCredit] = useState<number | null>(editing?.championCreditCents ?? DEFAULT_CREDIT_CENTS);
+  const [format, setFormat] = useState<TournamentFormat>(editing?.format ?? DEFAULT_FORMAT);
+  // Americano's 2nd place: what an Americano tournament has, else the $7 start (a Doubles one switched to Americano starts there too).
+  const [second, setSecond] = useState<number | null>(editing?.format === 'americano' ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
+  const formatLocked = editing?.formatLocked === true;
+  const americano = format === 'americano';
   const [visibility, setVisibility] = useState<Visibility>(editing?.visibility ?? 'me');
   const [error, setError] = useState<string | null>(null);
   const { busy, save } = useSave(ctx);
@@ -288,10 +299,12 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
               ? 'Type a ticket price.'
               : credit === null
                 ? 'Type a credit amount ($0 to skip it).'
-                : null;
+                : americano && second === null
+                  ? 'Type a 2nd place credit ($0 to skip it).'
+                  : null;
     setError(problem);
     if (problem) return;
-    const body = { name: n, dates, size, courts: plan.courts, minutes: plan.minutes, start: plan.start, ticketCents: ticket, creditCents: credit, visibility };
+    const body = { name: n, dates, size, courts: plan.courts, minutes: plan.minutes, start: plan.start, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: americano ? second : 0 };
     const ok = editing
       ? await save(() => api('PUT', `/api/admin/tournament/${editing.id}`, body), 'Saved')
       : await save(() => api('POST', '/api/admin/tournament', body), visibility === 'me' ? 'Sign-up is open. Only you can see it.' : 'Sign-up is open for everyone');
@@ -339,6 +352,17 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         </div>
       </Card>
 
+      {/* The format: two big choices. Locked once tickets open (piece 2); in piece 1 it can always change. */}
+      <Card label="Format" data="format" chip={formatLocked ? <span className="tm-chip">Locked</span> : undefined}>
+        <div className="segmented tm-seg tm-seg-format" role="group" aria-label="Format">
+          {(['doubles', 'americano'] as const).map((f) => (
+            <button key={f} type="button" aria-pressed={format === f} disabled={formatLocked} onClick={() => setFormat(f)} data-format={f}>
+              {f === 'americano' ? 'Americano' : 'Doubles'}
+            </button>
+          ))}
+        </div>
+      </Card>
+
       <Card label="Players expected" data="size">
         <div className="segmented tm-seg" role="group" aria-label="Players expected">
           {SIZES.map((s) => (
@@ -350,22 +374,37 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         <PlanRows size={size} plan={plan} onPick={setPlan} ticketCents={ticket} longGames={longGames} />
       </Card>
 
-      <Card label="Champion prize" data="prize" line>
-        <div className="tm-rows">
-          <label className="tm-row" htmlFor="tm-credit">
-            <span>Game credit for each winner</span>
-            <MoneyBox id="tm-credit" cents={credit} onChange={setCredit} label="Game credit for each winner" />
-          </label>
-          <div className="tm-row">
-            <span>Winners</span>
-            <b>{WINNERS} players</b>
+      <Card label={americano ? 'Prizes' : 'Champion prize'} data="prize" line>
+        {americano ? (
+          <div className="tm-rows">
+            <label className="tm-row" htmlFor="tm-credit">
+              <span>1st place credit</span>
+              <MoneyBox id="tm-credit" cents={credit} onChange={setCredit} label="1st place credit" />
+            </label>
+            <label className="tm-row" htmlFor="tm-credit2">
+              <span>2nd place credit</span>
+              <MoneyBox id="tm-credit2" cents={second} onChange={setSecond} label="2nd place credit" />
+            </label>
           </div>
-          <div className="tm-row">
-            <span>Total credit</span>
-            <b data-tm-total>{credit === null ? '$?' : formatPrice(credit * WINNERS)}</b>
+        ) : (
+          <div className="tm-rows">
+            <label className="tm-row" htmlFor="tm-credit">
+              <span>Game credit for each winner</span>
+              <MoneyBox id="tm-credit" cents={credit} onChange={setCredit} label="Game credit for each winner" />
+            </label>
+            <div className="tm-row">
+              <span>Winners</span>
+              <b>{WINNERS} players</b>
+            </div>
+            <div className="tm-row">
+              <span>Total credit</span>
+              <b data-tm-total>{credit === null ? '$?' : formatPrice(credit * WINNERS)}</b>
+            </div>
           </div>
-        </div>
-        <p className="tm-card-note">Medal and banner are automatic. Set the credit to $0 to skip it.</p>
+        )}
+        <p className="tm-card-note">
+          {americano ? '1st place also gets a medal. Set either credit to $0 to skip it.' : 'Medal and banner are automatic. Set the credit to $0 to skip it.'}
+        </p>
       </Card>
 
       <Card label="Ticket price" data="ticket" line>
@@ -517,6 +556,10 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
       <Card label="Settings" data="settings" line>
         <div className="tm-rows">
           <div className="tm-row">
+            <span>Format</span>
+            <b data-tm-format-row>{t.format === 'americano' ? 'Americano' : 'Doubles'}</b>
+          </div>
+          <div className="tm-row">
             <span>Players expected</span>
             <b>{t.size}</b>
           </div>
@@ -528,10 +571,23 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
             <span>Ticket price</span>
             <b>{formatPrice(t.ticketCents)}</b>
           </div>
-          <div className="tm-row">
-            <span>Champion credit</span>
-            <b>{formatPrice(t.championCreditCents)}</b>
-          </div>
+          {t.format === 'americano' ? (
+            <>
+              <div className="tm-row">
+                <span>1st place credit</span>
+                <b>{formatPrice(t.championCreditCents)}</b>
+              </div>
+              <div className="tm-row">
+                <span>2nd place credit</span>
+                <b>{formatPrice(t.secondCreditCents)}</b>
+              </div>
+            </>
+          ) : (
+            <div className="tm-row">
+              <span>Champion credit</span>
+              <b>{formatPrice(t.championCreditCents)}</b>
+            </div>
+          )}
         </div>
         <button type="button" className="btn secondary block tm-edit" onClick={() => setEditing(true)} data-tm-edit-settings>
           Edit

@@ -410,6 +410,13 @@ describe('preview test page server half', () => {
     expect(t.signups.every((s: any) => s.dates.includes(t.finalDate))).toBe(true);
     expect(t.signups.find((s: any) => s.name === 'Sage')).toMatchObject({ pickedLevel: 300, level: 340, reviewed: true });
     expect((await group(ctx, 'Vic')).tournament).toMatchObject({ status: 'date_picked', me: null });
+    // Americano at each stage (pass 3): its own name, the format, the 2nd place credit.
+    for (const stage of ['signup', 'date_picked']) {
+      expect((await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage, format: 'americano' })).status).toBe(200);
+      expect((await dash(ctx)).tournament).toMatchObject({ name: 'Winter Americano', format: 'americano', status: stage, championCreditCents: 1400, secondCreditCents: 700 });
+      expect((await group(ctx, 'Vic')).tournament).toMatchObject({ format: 'americano', status: stage });
+    }
+    expect((await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'signup', format: 'singles' })).status).toBe(400);
     await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'none' });
     expect((await dash(ctx)).tournament).toBeUndefined();
     expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_signups').get()).toEqual({ n: 0 });
@@ -752,5 +759,51 @@ describe('second review fixes (Zip 55)', () => {
     expect(r.status).toBe(409);
     expect(ctx.app.db.raw.prepare('SELECT picked_level FROM tournament_signups').get()).toEqual({ picked_level: 300 });
     expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_level_history').get()).toEqual({ n: 1 });
+  });
+});
+
+describe('format: Doubles or Americano (Alex, before shipping)', () => {
+  it('Create defaults to Doubles; the format and the 2nd place credit are stored, sent to both screens, and editable', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    expect((await dash(ctx)).tournament).toMatchObject({ format: 'doubles', formatLocked: false, secondCreditCents: 0 });
+    expect((await group(ctx, 'Blair')).tournament.format).toBe('doubles');
+    const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'americano', creditCents: 1400, secondCreditCents: 700 });
+    expect(r.status, r.text).toBe(200);
+    expect((await dash(ctx)).tournament).toMatchObject({ format: 'americano', championCreditCents: 1400, secondCreditCents: 700 });
+    expect((await group(ctx, 'Blair')).tournament.format).toBe('americano');
+    // Both credits can be $0.
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'americano', creditCents: 0, secondCreditCents: 0 })).status).toBe(200);
+    expect((await dash(ctx)).tournament).toMatchObject({ championCreditCents: 0, secondCreditCents: 0 });
+    // Back to Doubles after the date is picked (tickets are not open in piece 1, so it can still change).
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[2] });
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'doubles' })).status).toBe(200);
+    expect((await dash(ctx)).tournament.format).toBe('doubles');
+  });
+
+  it('Create an Americano; a bad format or a negative 2nd place credit is refused', async () => {
+    const ctx = await world();
+    expect((await ctx.organizer.call('POST', '/api/admin/tournament', { ...BASE, format: 'singles' })).status).toBe(400);
+    expect((await ctx.organizer.call('POST', '/api/admin/tournament', { ...BASE, format: 'americano', secondCreditCents: -100 })).status).toBe(400);
+    await create(ctx, { format: 'americano', secondCreditCents: 700 });
+    expect((await dash(ctx)).tournament).toMatchObject({ format: 'americano', secondCreditCents: 700, visibility: 'me' });
+    expect(ctx.app.db.raw.prepare('SELECT format, second_credit_cents FROM tournaments').get()).toEqual({ format: 'americano', second_credit_cents: 700 });
+  });
+
+  it('the database refuses any other format, and an old row reads as Doubles with no 2nd place credit', async () => {
+    const ctx = await world();
+    const id = await create(ctx);
+    expect(() => ctx.app.db.raw.prepare("UPDATE tournaments SET format = 'singles' WHERE id = ?").run(id)).toThrow();
+    expect(ctx.app.db.raw.prepare('SELECT format, second_credit_cents FROM tournaments WHERE id = ?').get(id)).toEqual({ format: 'doubles', second_credit_cents: 0 });
+  });
+
+  it('the format locks once tickets open (piece 2); piece 1 stages never lock it; the steps follow the format', async () => {
+    const { formatLocked, stepsFor, formatKicker } = await import('../shared/tournament');
+    expect(formatLocked('signup')).toBe(false);
+    expect(formatLocked('date_picked')).toBe(false);
+    expect(formatLocked('tickets')).toBe(true);
+    expect(stepsFor('doubles')).toEqual(['Vote', 'Tickets', 'Teams', 'Games', 'Final']);
+    expect(stepsFor('americano')).toEqual(['Vote', 'Tickets', 'Games', 'Winners']);
+    expect([formatKicker('doubles'), formatKicker('americano')]).toEqual(['Doubles tournament', 'Americano']);
   });
 });

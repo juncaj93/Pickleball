@@ -15,6 +15,7 @@
  *   J  Every screen at 390, 360 and 320 wide, light and dark: nothing wider than the screen, no clipped button, the level rows on one line.
  *   L  The date is picked while a player's Edit sheet is open: look again, the stale date drops out.
  *   M  Pass 2: the admin card's stage buttons, every month pair fits the stub, room above Dates that work.
+ *   N  Americano (pass 3): the label, the four steps, the admin card, Edit's Format and two prize rows.
  *   K  Every offered date has passed (clock moved to Jan 20): players get no card at all; the admin card says "Dates have passed. Add dates."
  * Screenshots: .data/zip55-shots (not in git).
  */
@@ -187,7 +188,7 @@ async function main() {
         const strip = flat(await a.page.locator('.tc-strip').innerText());
         assert(strip.includes('Only you can see this') && strip.includes("Players don't see the Winter Classic yet.") && strip.includes('Show to everyone'), strip);
         const card = flat(await a.page.locator('.tc').innerText());
-        assert(card.includes('DOUBLES TOURNAMENT') && card.includes('Winter Classic'.toUpperCase()) === false ? true : true, card);
+        assert(card.includes('DOUBLES TOURNAMENT'), card);
         assert(/Pick the dates you can play/.test(card) && /Sign up/.test(card) && /VOTE/.test(card) && /FINAL/.test(card), card);
         // Feedback pass 1: the stub says TBD (not ?), and the card has no border line running over the notch (its edge is drawn inside).
         assert(flat(await a.page.locator('.tc-day').innerText()) === 'TBD', 'the stub says TBD');
@@ -262,7 +263,7 @@ async function main() {
     await v.page.locator('[data-tm-submit]').click();
     await v.page.locator('.tc[data-tc="listed"]').waitFor({ timeout: 10000 });
     const card = flat(await v.page.locator('.tc').innerText());
-    assert(card.includes('YOU’RE ON THE LIST') && card.includes('We’re picking the date. Tickets open after that.') && card.includes('Edit sign-up') && card.includes('Drop out'), card);
+    assert(card.includes('DOUBLES TOURNAMENT') && card.includes('You’re on the list. We’re picking the date.') && card.includes('Edit sign-up') && card.includes('Drop out'), card);
     await v.page.locator('[data-tc-who]').click();
     const names = await v.page.locator('[data-tm-who-row] .tm-who-name').allInnerTexts();
     assert(names.length === 7 && names.includes('Vic') && names.includes('Christopher Vanderberg'), names.join(', '));
@@ -372,7 +373,7 @@ async function main() {
 
   // ---------------------------------------------------------------- G  pick the date
   let finalDay = null;
-  await check('G Pick the date: the counts, the best date, Pick; the card says DATE PICKED with the date and "Tickets open soon"', async () => {
+  await check('G Pick the date: the counts, the best date, Pick; the card shows the date and "Tickets open soon"', async () => {
     const a = await adminPage();
     await a.page.locator('[data-tm-open-dates]').click();
     await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').first().waitFor();
@@ -418,7 +419,7 @@ async function main() {
           const v = await playerPage(who, { width, scheme });
           await v.page.locator('.tc[data-tc="date"]').waitFor({ timeout: 15000 });
           const card = flat(await v.page.locator('.tc').innerText());
-          assert(card.includes('DATE PICKED') && card.includes('Tickets open soon'), card);
+          assert(card.includes('DOUBLES TOURNAMENT') && card.includes(who === 'Parker' ? 'You’re on the list. Tickets open soon.' : 'Tickets open soon'), card);
           const [y, m, dd] = finalDay.split('-').map(Number);
           const wd = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(Date.UTC(y, m - 1, dd)).getUTCDay()];
           assert(card.includes(wd) && card.includes(String(dd)), `${card} (${finalDay})`);
@@ -499,6 +500,11 @@ async function main() {
     assert(flat(await a.page.locator('[data-tm-lit]').innerText()).toUpperCase() === '3 LIT', 'three lit');
     await a.page.locator('[data-size="10"]').click();
     assert((await a.page.locator('.tm-plan-on').getAttribute('data-plan')) === '2c-150', 'the 10-player best plan (Booking hours is on in the preview)');
+    // Pass 3: the format starts on Doubles, two big choices with no extra text.
+    assert((await a.page.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true', 'Doubles by default');
+    assert(flat(await a.page.locator('[data-tm-card="format"]').innerText()).toUpperCase() === 'FORMAT DOUBLES AMERICANO', await a.page.locator('[data-tm-card="format"]').innerText());
+    const big = await a.page.locator('[data-format]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    assert(big.every((h) => h >= 56), `heights ${big}`);
     await a.page.locator('#tm-credit').fill('0');
     assert((await a.page.locator('.tm-says, [data-tm-card="players-see"]').count()) === 0, 'no "What players see" card (Alex took the prize line off the sign-up)');
     assert(flat(await a.page.locator('[data-tm-total]').innerText()) === '$0', 'total $0');
@@ -579,6 +585,54 @@ async function main() {
         await shot(p.page, `M-edit-${width}-${scheme}`);
         await p.ctx.close();
       });
+
+  // ---------------------------------------------------------------- N  Americano (pass 3): the format at each stage
+  for (const st of ['signup', 'date_picked']) {
+    await call('POST', '/api/admin/tournament-test', { stage: st, format: 'americano' });
+    for (const scheme of SCHEMES)
+      for (const width of SIZES)
+        await check(`N Americano, ${st === 'signup' ? 'sign-up open' : 'date picked'}: AMERICANO above the name, steps Vote, Tickets, Games, Winners; the admin card says Americano (${width} ${scheme})`, async () => {
+          const v = await playerPage('Parker', { width, scheme });
+          await v.page.locator('.tc[data-tc-format="americano"]').waitFor({ timeout: 15000 });
+          assert(flat(await v.page.locator('.tc-kicker').innerText()) === 'AMERICANO', await v.page.locator('.tc-kicker').innerText());
+          const steps = (await v.page.locator('.tc-step-label').allInnerTexts()).map(flat);
+          assert(steps.join('|') === 'VOTE|TICKETS|GAMES|WINNERS', steps.join('|'));
+          // The line through the dots runs from the first dot to the last.
+          const line = await v.page.evaluate(() => {
+            const dots = [...document.querySelectorAll('.tc-step-dot')].map((d) => d.getBoundingClientRect());
+            const track = document.querySelector('.tc-track');
+            const b = getComputedStyle(track, '::before');
+            const r = track.getBoundingClientRect();
+            return { first: dots[0].left + dots[0].width / 2 - r.left, last: dots[dots.length - 1].left + dots[dots.length - 1].width / 2 - r.left, left: parseFloat(b.left), right: r.width - parseFloat(b.right) };
+          });
+          assert(Math.abs(line.first - line.left) < 3 && Math.abs(line.last - line.right) < 3, JSON.stringify(line));
+          await fits(v.page, '.tc');
+          await shot(v.page, `N-americano-${st}-${width}-${scheme}`);
+          await v.ctx.close();
+          const a = await adminPage({ width, scheme });
+          await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+          assert(flat(await a.page.locator('.tm-home-kicker').innerText()).toUpperCase() === 'AMERICANO', 'admin label');
+          await fits(a.page, '[data-tm-home]');
+          await a.ctx.close();
+        });
+  }
+  await check('N Edit an Americano: Format shows Americano (can change), two prize rows 1st and 2nd; switch to Doubles and back in the form', async () => {
+    const a = await adminPage();
+    await a.page.locator('[data-tm-open-edit]').click();
+    assert(flat(await a.page.locator('[data-tm-format-row]').innerText()) === 'Americano', 'the Settings row');
+    await a.page.locator('[data-tm-edit-settings]').click();
+    await a.page.locator('[data-tm-form="edit"]').waitFor();
+    assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
+    assert(!(await a.page.locator('[data-format="doubles"]').isDisabled()), 'not locked before tickets open');
+    assert((await a.page.locator('#tm-credit2').inputValue()) === '7', 'the 2nd place credit');
+    const prize = flat(await a.page.locator('[data-tm-card="prize"]').innerText());
+    assert(prize.includes('1st place credit') && prize.includes('2nd place credit') && !prize.includes('Winners'), prize);
+    await a.page.locator('[data-format="doubles"]').click();
+    assert((await a.page.locator('#tm-credit2').count()) === 0 && flat(await a.page.locator('[data-tm-card="prize"]').innerText()).includes('Game credit for each winner'), 'Doubles rows');
+    await a.page.locator('[data-format="americano"]').click();
+    await shot(a.page, 'N-edit-americano');
+    await a.ctx.close();
+  });
 
   // ---------------------------------------------------------------- J  organizer Home at every size
   for (const scheme of SCHEMES)

@@ -5,14 +5,13 @@
 //
 // This file is its own download (src/TournamentSlot.tsx loads it): a phone fetches it only when the server sends a tournament for it, so with
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
-import { useMemo, useState } from 'react';
+import { type CSSProperties, useMemo, useState } from 'react';
 import type { PlayerTournamentView } from '../../shared/tournament';
-import { dayShort, levelLabel, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
+import { dayShort, formatKicker, levelLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../lib';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { type DayLook, LevelList, MonthCalendar } from './parts';
 
-const STEPS = ['Vote', 'Tickets', 'Teams', 'Games', 'Final'];
 
 function errorText(err: unknown): string {
   if (err instanceof ApiError) return err.status === 403 && /view only/i.test(err.message) ? VIEW_ONLY_MESSAGE : err.message;
@@ -161,13 +160,16 @@ export function TicketCard({
   // The picked date has passed: nothing to pick, so no Sign up (the list, Edit and Drop out stay for those on it). (Every offered date passed
   // with none picked: the server sends no card at all.)
   const noDates = t.openDates.length === 0;
-  const kicker = picked ? 'Date picked' : signed ? 'You’re on the list' : 'Doubles tournament';
+  // The small label above the name is the format ("DOUBLES TOURNAMENT" or "AMERICANO"); where they stand goes in the line under the name.
+  const kicker = formatKicker(t.format);
   const sub = noDates
     ? 'That date has passed.'
     : picked
-      ? 'Tickets open soon'
+      ? signed
+        ? 'You’re on the list. Tickets open soon.'
+        : 'Tickets open soon'
       : signed
-        ? 'We’re picking the date. Tickets open after that.'
+        ? 'You’re on the list. We’re picking the date.'
         : n > 0
           ? `${n} signed up · pick the dates you can play`
           : 'Pick the dates you can play';
@@ -175,7 +177,7 @@ export function TicketCard({
   const now = picked ? 1 : 0;
   const state = picked ? 'date' : signed ? 'listed' : 'open';
   return (
-    <section className="tc" aria-label={`${t.name}, doubles tournament`} data-tc={state}>
+    <section className="tc" aria-label={`${t.name}, ${formatKicker(t.format).toLowerCase()}`} data-tc-format={t.format} data-tc={state}>
       <Court />
       <div className="tc-top">
         <div className="tc-stub" aria-label={picked ? `On ${stub!.weekday} ${stub!.month} ${stub!.day} at ${startLabel(t.start)}` : `Date not picked yet, around ${startLabel(t.start)}`}>
@@ -226,8 +228,8 @@ export function TicketCard({
           </button>
         </div>
       )}
-      <ol className="tc-track" aria-label="Tournament steps">
-        {STEPS.map((s, i) => (
+      <ol className="tc-track" aria-label="Tournament steps" style={{ '--tc-steps': stepsFor(t.format).length } as CSSProperties}>
+        {stepsFor(t.format).map((s, i) => (
           <li key={s} className={i < now ? 'tc-step-done' : i === now ? 'tc-step-now' : undefined} aria-current={i === now ? 'step' : undefined}>
             <span className="tc-step-dot" aria-hidden="true" />
             <span className="tc-step-label">{s.toUpperCase()}</span>

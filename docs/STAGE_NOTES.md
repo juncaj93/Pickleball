@@ -5372,6 +5372,8 @@ Pieces 2 (tickets, waitlist), 3 (teams, game day, End tournament) and 4 (tie whe
    approved_level, dates, joined_at; one row per player per tournament, kept after a back out), `tournament_level_history` (every level a player
    picked and every level the organizer set, per tournament, never edited). Later pieces will add `tournament_tickets`, `tournament_teams`,
    `tournament_games` next to them; status has no CHECK so they need no table rebuild.
+   (Pass 3, before shipping: `tournaments` also has `format` ('doubles' or 'americano', default 'doubles') and `second_credit_cents`
+   (Americano's 2nd place, default 0), at the end of the table in 0023 itself; 0023 has never shipped, so no 0024.)
 2. Create tournament (Settings > Schedule; `src/pages/admin/Tournament.tsx`): the mocks' cards (03, 01, 02, 24): name, Dates to offer (a
    scrollable calendar from this month, opening on next month after the 15th; tap to light; "N LIT"), Start time / Ends, Players expected 6/8/10/12
    with each size's court plans (BEST first; 2.5 and 3 hour plans only while Booking hours is on for everyone, else dimmed with the mock's note),
@@ -5497,3 +5499,24 @@ top, K rewritten for the hidden card). Preview redeployed and re-seeded. Live un
    "Edit" only. Piece 2 adds Open tickets here, piece 3 the game day buttons.
 4. No change: after the date is picked players see "Tickets open soon" with no pay button (piece 2).
 Tests: e2e/zip55.cjs 77 of 77. No tournament name is in the code (it is typed on Create). Live untouched: waiting for "ship it".
+
+### Pass 3 from Alex (Tue Nov 17): the FORMAT, preview only, NOT shipped
+- Two formats: Doubles (fixed teams for the night) and Americano (a new partner every round, everyone plays for themselves). Everything else
+  is the same for both (sign-up, levels, dates, tickets, $16, waitlist). No game day or End tournament screens.
+1. Create (and Edit): a "Format" card with two big choices, Doubles (default) and Americano, no extra text.
+2. Stored in 0023 itself: `format TEXT NOT NULL DEFAULT 'doubles' CHECK (format IN ('doubles', 'americano'))` and
+   `second_credit_cents INTEGER NOT NULL DEFAULT 0 CHECK (second_credit_cents >= 0)`, the last two columns of `tournaments`. On the preview
+   database (which already had 0023) the same two columns were added with ALTER TABLE ADD COLUMN, so it matches the file exactly; nothing
+   was dropped or wiped.
+3. The small label above the name on both Home cards: "DOUBLES TOURNAMENT" or "AMERICANO". Where a player stands moved into the line under
+   the name ("You're on the list. We're picking the date." / "You're on the list. Tickets open soon.").
+4. The player card's steps: Doubles Vote, Tickets, Teams, Games, Final; Americano Vote, Tickets, Games, Winners (the line fits 4 or 5 dots).
+5. The format can change until tickets open (`formatLocked`: any stage after date_picked; the server refuses a change then, the form shows
+   it Locked). Piece 1 never opens tickets, so here it can always change.
+6. Prizes: Doubles as before (credit for each of the 2 winners, plus medal). Americano: "1st place credit" ($14, plus a medal) and
+   "2nd place credit" ($7, no medal); both can be $0. Stored only (no money moves).
+7. Tournament test: a Format choice above the stages builds "Winter Americano" (1st $14, 2nd $7) at Sign-up open or Date picked.
+Tests: tests/zip55-tournament.test.ts 50 (format stored, sent, edited, refused if bad, database check, Americano test stages, steps);
+e2e/zip55.cjs 90 of 90 (N: Americano at both stages at 390, 360, 320, light and dark; Edit's Format and prize rows; Create defaults
+to Doubles). Live untouched: waiting for "ship it".
+

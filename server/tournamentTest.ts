@@ -5,7 +5,7 @@ import { requireAdmin } from './auth';
 import * as v from './validate';
 import { setTournamentsForAll, todayKey } from './tournament';
 import { previewSiteFor } from './secondChance';
-import { dayKey, dayParts, monthsBetween, monthStartPlus } from '../shared/tournament';
+import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus } from '../shared/tournament';
 
 // Zip 55, PREVIEW ONLY: the "Tournament test" page's server half. POST /api/admin/tournament-test { stage } puts the fake tournament back to a
 // stage, using only the preview's fixed fake names (docs/PREVIEW_FAKE_DB.md), and turns the Tournaments row on (a re-seed from another branch
@@ -51,6 +51,8 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   const group = await requireAdmin(ctx);
   if (!previewSiteFor(ctx)) throw new HttpError(404, 'not_found', 'Not found.');
   const stage = v.oneOf(body.stage, 'stage', TEST_STAGES);
+  // Either format at each stage (left out: Doubles). Americano has its own name and the 2nd place credit.
+  const format = body.format === undefined ? 'doubles' : v.oneOf(body.format, 'format', FORMATS);
   await setTournamentsForAll(ctx.db, group.id, true, ctx.nowIso);
   // The fake database only: every tournament of the (fake) group goes; its sign-ups and level history go with it (ON DELETE CASCADE).
   await ctx.db.prepare('DELETE FROM tournaments WHERE group_id = ?').bind(group.id).run();
@@ -69,10 +71,23 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db
       .prepare(
         `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
-           status, visibility, created_at, updated_at, date_picked_at, shown_at)
-         VALUES (?, ?, 'Winter Classic', 8, 2, 120, 1170, 1600, 1400, ?, ?, ?, 'all', ?, ?, ?, ?)`,
+           status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents)
+         VALUES (?, ?, ?, 8, 2, 120, 1170, 1600, 1400, ?, ?, ?, 'all', ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, group.id, JSON.stringify(dates), stage === 'date_picked' ? best : null, stage, at(0), ctx.nowIso, stage === 'date_picked' ? ctx.nowIso : null, at(1)),
+      .bind(
+        id,
+        group.id,
+        format === 'americano' ? 'Winter Americano' : 'Winter Classic',
+        JSON.stringify(dates),
+        stage === 'date_picked' ? best : null,
+        stage,
+        at(0),
+        ctx.nowIso,
+        stage === 'date_picked' ? ctx.nowIso : null,
+        at(1),
+        format,
+        format === 'americano' ? 700 : 0,
+      ),
   ];
   let n = 0;
   for (const c of CAST) {
@@ -96,5 +111,5 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     }
   }
   await ctx.db.batch(statements);
-  return { ok: true, stage, id, signedUp: n, date: stage === 'date_picked' ? best : null, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
+  return { ok: true, stage, format, id, signedUp: n, date: stage === 'date_picked' ? best : null, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
 }

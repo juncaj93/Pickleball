@@ -69,6 +69,23 @@ export const isSize = (v: unknown): v is Size => typeof v === 'number' && (SIZES
 export const DEFAULT_SIZE: Size = 8;
 export const DEFAULT_TICKET_CENTS = 1600;
 export const DEFAULT_CREDIT_CENTS = 1400;
+/** Americano's 2nd place credit to start ($7, no medal). */
+export const DEFAULT_SECOND_CREDIT_CENTS = 700;
+
+/**
+ * The format (Alex, before shipping piece 1): Doubles, fixed teams for the night; Americano, a new partner every round and everyone plays for
+ * themselves. Everything else is the same for both (sign-up, levels, dates, tickets, price, waitlist).
+ */
+export type TournamentFormat = 'doubles' | 'americano';
+export const FORMATS = ['doubles', 'americano'] as const;
+export const DEFAULT_FORMAT: TournamentFormat = 'doubles';
+export const formatName = (f: TournamentFormat): string => (f === 'americano' ? 'Americano' : 'Doubles');
+/** The small label above the name on both Home cards. */
+export const formatKicker = (f: TournamentFormat): string => (f === 'americano' ? 'Americano' : 'Doubles tournament');
+/** The progress strip on the player's card: Americano has no Teams step and ends with Winners. */
+export const stepsFor = (f: TournamentFormat): string[] => (f === 'americano' ? ['Vote', 'Tickets', 'Games', 'Winners'] : ['Vote', 'Tickets', 'Teams', 'Games', 'Final']);
+/** The format can change until tickets open (piece 2 adds that stage); piece 1's two stages are before it. */
+export const formatLocked = (status: string): boolean => status !== 'signup' && status !== 'date_picked';
 /** The most a ticket or the credit can be set to ($200), so a typo cannot store a silly number. */
 export const MAX_PRICE_CENTS = 20_000;
 /** Winners per tournament: one team of two (the champion prize card says "2 players"). */
@@ -287,6 +304,7 @@ export type Visibility = 'me' | 'all';
 export interface PlayerTournamentView {
   id: string;
   name: string;
+  format: TournamentFormat;
   status: TournamentStatus;
   /** Start of the plan, minutes after midnight Eastern ("7:30 PM" on the stub, "Games start around 7:30 PM"). */
   start: number;
@@ -319,6 +337,9 @@ export interface TournamentSignupView {
 export interface AdminTournamentView {
   id: string;
   name: string;
+  format: TournamentFormat;
+  /** Tickets are open (piece 2 on): the format cannot change any more. Always false in piece 1. */
+  formatLocked: boolean;
   status: TournamentStatus;
   visibility: Visibility;
   size: number;
@@ -326,7 +347,10 @@ export interface AdminTournamentView {
   minutes: number;
   start: number;
   ticketCents: number;
+  /** Doubles: each of the 2 winners. Americano: 1st place (plus a medal). */
   championCreditCents: number;
+  /** Americano: 2nd place (no medal). Doubles ignores it. */
+  secondCreditCents: number;
   offeredDates: string[];
   finalDate: string | null;
   createdAt: string;

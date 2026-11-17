@@ -10,7 +10,7 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
-  { stage: 'signup', label: 'Sign-up open', line: 'Winter Classic, Everyone. 6 on the list; Vic, Zoe, Reese and Alex are not.' },
+  { stage: 'signup', label: 'Sign-up open', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. Pick the format above first.' },
   { stage: 'date_picked', label: 'Date picked', line: '8 on the list, Sage set to 3.4, the date most can play picked. Vic is not on the list.' },
   { stage: 'none', label: 'No tournament', line: 'Nothing open, to try Create tournament.' },
 ] as const;
@@ -39,12 +39,16 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const t = ctx.d.tournament ?? null;
-  const now = t ? (t.status === 'date_picked' && t.finalDate ? `Date picked: ${dayLong(t.finalDate)}` : 'Sign-up open') : 'No tournament';
+  // Which format the stage buttons build (starts on the open tournament's).
+  const [format, setFormat] = useState<'doubles' | 'americano'>(t?.format ?? 'doubles');
+  const now = t
+    ? `${t.format === 'americano' ? 'Americano' : 'Doubles'} · ${t.status === 'date_picked' && t.finalDate ? `Date picked: ${dayLong(t.finalDate)}` : 'Sign-up open'}`
+    : 'No tournament';
   async function go(stage: string, label: string) {
     if (busy) return;
     setBusy(stage);
     try {
-      await api('POST', '/api/admin/tournament-test', { stage });
+      await api('POST', '/api/admin/tournament-test', { stage, format });
       await ctx.reload();
       toast(`${label}: ready`);
     } catch {
@@ -75,6 +79,14 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
           <span className="tm-chip" data-tm-test-now>
             {now}
           </span>
+        </div>
+        <div className="segmented tm-seg" role="group" aria-label="Format" data-tm-test-format>
+          <button type="button" aria-pressed={format === 'doubles'} disabled={!!busy} onClick={() => setFormat('doubles')} data-tm-test-fmt="doubles">
+            Doubles
+          </button>
+          <button type="button" aria-pressed={format === 'americano'} disabled={!!busy} onClick={() => setFormat('americano')} data-tm-test-fmt="americano">
+            Americano
+          </button>
         </div>
         <div className="stack">
           {STAGES.map((s) => (

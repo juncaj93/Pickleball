@@ -291,7 +291,8 @@
 .tc-track {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Doubles has 5 steps, Americano 4 (no Teams); the card sets --tc-steps. */
+  grid-template-columns: repeat(var(--tc-steps, 5), minmax(0, 1fr));
   margin: 10px 16px 0;
 }
 .tc-links + .tc-track {
@@ -307,8 +308,8 @@
   content: '';
   position: absolute;
   top: 17px;
-  left: 10%;
-  right: 10%;
+  left: calc(50% / var(--tc-steps, 5));
+  right: calc(50% / var(--tc-steps, 5));
   height: 2px;
   background: rgb(110 240 176 / 34%);
 }

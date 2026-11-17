@@ -149,6 +149,11 @@ dialog.sheet.tm-page {
   font-size: 1.25rem;
   font-weight: 650;
 }
+/* Format: two big, easy choices. */
+.segmented.tm-seg-format button {
+  min-height: 60px;
+  font-size: 1.3rem;
+}
 .tm-plans {
   display: flex;
   flex-direction: column;
