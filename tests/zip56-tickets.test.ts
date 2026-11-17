@@ -699,6 +699,6 @@ describe('preview test page: the ticket stages', () => {
 
     await stage('none');
     expect((await dash(ctx)).tournament).toBeUndefined();
-    expect(ctx.app.db.raw.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE reason LIKE 'tour:%' OR reason LIKE 'adjusted:Tournament test%'").get()).toEqual({ n: 0 });
+    expect(ctx.app.db.raw.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE reason LIKE 'tour:%' OR reason = 'adjusted:Ticket stage credit'").get()).toEqual({ n: 0 });
   });
 });

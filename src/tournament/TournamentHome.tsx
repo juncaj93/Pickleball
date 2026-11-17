@@ -145,7 +145,7 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
         onJoin={() => void joinWaitlist()}
       />
       {t.status === 'tickets' && k && signed && (
-        <Sheet calmFocus open={sheet === 'overlay'} title={t.name} back="Home" onClose={() => setSheet(null)} className="tw-overlay">
+        <Sheet calmFocus open={sheet === 'overlay'} title={t.name} back="Home" onClose={() => setSheet(null)} className="tc-tw-overlay">
           <Overlay
             t={t}
             k={k}
@@ -325,7 +325,8 @@ function ticketWords(t: PlayerTournamentView, s: TicketState, org: string): { ki
   const mine = k.mine;
   switch (s) {
     case 'lock':
-      return { kicker: 'Tickets open', sub: payBy ? `${hours} · Pay by ${payBy}` : hours };
+      // "Pay by Tue 7:00 PM" stays together: on a small phone the line breaks after the dot, never before "PM".
+      return { kicker: 'Tickets open', sub: payBy ? `${hours} · ${`Pay by ${payBy}`.replace(/ /g, '\u00a0')}` : hours };
     case 'full':
       return { kicker: takenWords(k), sub: 'Join the waitlist in case someone drops' };
     case 'in':
@@ -578,7 +579,7 @@ function Overlay({
   const sub = s === 'in' ? hoursLabel(t.minutes) : s === 'line' ? takenWords(k) : w.sub;
   const lists = [<WhoIn key="in" k={k} s={s} meName={meName} />, k.line.length > 0 ? <Waitlist key="line" k={k} /> : null];
   return (
-    <div className="tw stack" data-tw={s}>
+    <div className="tc-tw stack" data-tw={s}>
       <section className="tc" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={s}>
         <Court />
         <div className="tc-top">
@@ -593,7 +594,7 @@ function Overlay({
         </div>
         {s === 'in' && (
           <div className="tc-row" data-tc-locked>
-            <span className="tw-ball tw-ball-gold" aria-hidden="true">
+            <span className="tc-tw-ball tc-tw-ball-gold" aria-hidden="true">
               <Pickleball />
             </span>
             <span className="tc-row-text tc-row-lime">You’re locked in</span>
@@ -604,7 +605,7 @@ function Overlay({
         )}
         {s === 'line' && (
           <div className="tc-row" data-tc-place>
-            <span className="tw-num" aria-hidden="true">
+            <span className="tc-tw-num" aria-hidden="true">
               {place || '–'}
             </span>
             <span className="tc-row-text">{place > 0 ? `You’re ${placeWord(place)} on the waitlist` : 'You’re on the waitlist'}</span>
@@ -655,39 +656,39 @@ function WhoIn({ k, s, meName }: { k: PlayerTicketsView; s: TicketState; meName:
   const meRow = (s === 'lock' || s === 'waiting') && !full ? { label: s === 'waiting' ? 'Waiting to confirm' : 'Pay to lock in' } : null;
   const open = Math.max(0, k.size - k.locked.length - (meRow ? 1 : 0));
   return (
-    <section className="tw-card" aria-label="Who's in" data-tw-in>
-      <div className="tw-head">
-        <h3 className="tw-label">Who’s in</h3>
-        <span className={full ? 'tw-chip tw-chip-full' : 'tw-chip'} data-tw-count>
+    <section className="tc-tw-card" aria-label="Who's in" data-tw-in>
+      <div className="tc-tw-head">
+        <h3 className="tc-tw-label">Who’s in</h3>
+        <span className={full ? 'tc-tw-chip tc-tw-chip-full' : 'tc-tw-chip'} data-tw-count>
           {k.locked.length} of {k.size}
         </span>
       </div>
-      <ol className="tw-rows">
+      <ol className="tc-tw-rows">
         {k.locked.map((p, i) => (
-          <li key={`${p.name}-${i}`} className={p.me ? 'tw-me' : undefined} data-tw-row={p.name}>
-            <span className="tw-n">{i + 1}</span>
-            <span className="tw-ball tw-ball-gold" aria-hidden="true">
+          <li key={`${p.name}-${i}`} className={p.me ? 'tc-tw-me' : undefined} data-tw-row={p.name}>
+            <span className="tc-tw-n">{i + 1}</span>
+            <span className="tc-tw-ball tc-tw-ball-gold" aria-hidden="true">
               <Pickleball />
             </span>
-            <span className="tw-name">{p.name}</span>
-            <span className="tw-tag tw-gold">Locked in</span>
+            <span className="tc-tw-name">{p.name}</span>
+            <span className="tc-tw-tag tc-tw-gold">Locked in</span>
           </li>
         ))}
         {meRow && (
-          <li className="tw-me" data-tw-row="me">
-            <span className="tw-n">{k.locked.length + 1}</span>
-            <span className="tw-ball" aria-hidden="true">
+          <li className="tc-tw-me" data-tw-row="me">
+            <span className="tc-tw-n">{k.locked.length + 1}</span>
+            <span className="tc-tw-ball" aria-hidden="true">
               <Pickleball />
             </span>
-            <span className="tw-name">{meName ?? 'You'}</span>
-            <span className="tw-tag">{meRow.label}</span>
+            <span className="tc-tw-name">{meName ?? 'You'}</span>
+            <span className="tc-tw-tag">{meRow.label}</span>
           </li>
         )}
         {Array.from({ length: open }, (_, i) => (
           <li key={`open-${i}`} data-tw-row="open">
-            <span className="tw-n">{k.locked.length + (meRow ? 1 : 0) + i + 1}</span>
-            <span className="tw-ball tw-ball-open" aria-hidden="true" />
-            <span className="tw-name">Open spot</span>
+            <span className="tc-tw-n">{k.locked.length + (meRow ? 1 : 0) + i + 1}</span>
+            <span className="tc-tw-ball tc-tw-ball-open" aria-hidden="true" />
+            <span className="tc-tw-name">Open spot</span>
             <span />
           </li>
         ))}
@@ -700,19 +701,19 @@ function WhoIn({ k, s, meName }: { k: PlayerTicketsView; s: TicketState; meName:
 function Waitlist({ k }: { k: PlayerTicketsView }) {
   const firstPaid = k.line.findIndex((x) => x.paid);
   return (
-    <section className="tw-card" aria-label="Waitlist" data-tw-line>
-      <div className="tw-head">
-        <h3 className="tw-label">Waitlist</h3>
+    <section className="tc-tw-card" aria-label="Waitlist" data-tw-line>
+      <div className="tc-tw-head">
+        <h3 className="tc-tw-label">Waitlist</h3>
       </div>
-      <ol className="tw-rows">
+      <ol className="tc-tw-rows">
         {k.line.map((p, i) => (
-          <li key={`${p.name}-${i}`} className={p.me ? 'tw-me' : undefined} data-tw-row={p.name}>
+          <li key={`${p.name}-${i}`} className={p.me ? 'tc-tw-me' : undefined} data-tw-row={p.name}>
             <span />
-            <span className="tw-num" aria-hidden="true">
+            <span className="tc-tw-num" aria-hidden="true">
               {i + 1}
             </span>
-            <span className="tw-name">{p.name}</span>
-            <span className={p.me ? 'tw-tag' : p.paid ? 'tw-tag tw-gold' : 'tw-tag'}>{p.me ? 'You' : p.paid ? (i === firstPaid ? 'Paid, first in line' : 'Paid') : 'Not paid'}</span>
+            <span className="tc-tw-name">{p.name}</span>
+            <span className={p.me ? 'tc-tw-tag' : p.paid ? 'tc-tw-tag tc-tw-gold' : 'tc-tw-tag'}>{p.me ? 'You' : p.paid ? (i === firstPaid ? 'Paid, first in line' : 'Paid') : 'Not paid'}</span>
           </li>
         ))}
       </ol>

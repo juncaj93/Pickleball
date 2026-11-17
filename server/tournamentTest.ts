@@ -26,7 +26,7 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 //   odd            7 locked in and Pay by already passed: the organizer's card says "7 locked in. Need 1 more or 1 less."
 //   canceled       spots_full, then Cancel tournament (the real statements): every paid ticket is credit now; players on the list see Canceled
 //   rescheduled    tickets_open, then Reschedule (the real statements): back to the date step, tickets held, "Rescheduled. Pick your dates again"
-// Every ticket's money is real on the fake database (a confirmed Venmo payment, or credit the stage first gives as a "Tournament test" credit
+// Every ticket's money is real on the fake database (a confirmed Venmo payment, or credit the stage first gives as a "Ticket stage credit"
 // adjustment), so the books read all zeros (scripts/integrity-checks-tournament.sql) at every stage. A new stage first takes out the last one's
 // ticket credit rows and test credit (the fake database only).
 // The page's own words and buttons live in src/pages/admin/TournamentTest.tsx, which only a preview build carries.
@@ -34,7 +34,7 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'spots_full', 'all_locked', 'odd', 'canceled', 'rescheduled'] as const;
 type Stage = (typeof TEST_STAGES)[number];
 
-/** The fixed names and their picks (Kai is not one of the preview's names, so he is not here). Levels in hundredths. */
+/** The fixed names and their picks (Kai is not one of the preview's names, so Kai is not here). Levels in hundredths. */
 const CAST: { name: string; level: number; stage: 'signup' | 'date_picked'; every: number; offset: number }[] = [
   { name: 'Parker', level: 360, stage: 'signup', every: 2, offset: 0 },
   { name: 'Rowan', level: 350, stage: 'signup', every: 1, offset: 0 },
@@ -112,7 +112,7 @@ const TICKET_STAGES: Partial<Record<Stage, { name: string; place: 'spot' | 'line
   ],
 };
 
-const TEST_CREDIT = 'adjusted:Tournament test';
+const TEST_CREDIT = 'adjusted:Ticket stage credit';
 
 export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);

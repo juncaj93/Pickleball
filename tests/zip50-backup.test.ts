@@ -110,7 +110,8 @@ describe('Zip 50: the backup holds the switches, price locks, alert settings and
     expect([...BACKUP_TABLES]).toEqual(TABLES);
     for (const t of NEW) expect(BACKUP_TABLES as readonly string[], t).toContain(t);
     // Zip 55: the three tournament tables are left out of the file for now (piece 1 holds no money; Time Travel keeps them; Alex decides).
-    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events', 'tournament_level_history', 'tournament_signups', 'tournaments']);
+    // Zip 56: the tickets too, until Alex decides whether the four join the file (a version 3 file): a question in the Zip 56 report.
+    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events', 'tournament_level_history', 'tournament_signups', 'tournament_tickets', 'tournaments']);
     // The world really has what the old file lost.
     expect(locksBefore.length).toBe(11);
     expect(switchesBefore.length).toBeGreaterThan(10);

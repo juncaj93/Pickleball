@@ -932,7 +932,7 @@ dialog.sheet.tm-sheet {
   margin-right: -2px;
   font-size: 0.865rem;
 }
-.tc-row .tw-num {
+.tc-row .tc-tw-num {
   border-color: rgb(255 255 255 / 40%);
   color: #ffffff;
 }
@@ -973,18 +973,18 @@ dialog.sheet.tm-sheet {
 }
 
 /* The sheet header with a back button (src/ui.tsx `back`): "‹ Home" on the left, the title in the middle (mocks 09, 11, 12). */
-.sheet-has-back .sheet-head {
+.tc-tw-overlay.sheet-has-back .sheet-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
-.sheet-has-back .sheet-head h2 {
+.tc-tw-overlay.sheet-has-back .sheet-head h2 {
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 62vw;
 }
-.sheet-back {
+.tc-tw-overlay .sheet-back {
   justify-self: start;
   display: inline-flex;
   align-items: center;
@@ -999,7 +999,7 @@ dialog.sheet.tm-sheet {
   color: var(--accent-text);
   cursor: pointer;
 }
-.sheet-back svg {
+.tc-tw-overlay .sheet-back svg {
   width: 22px;
   height: 22px;
   fill: none;
@@ -1008,49 +1008,49 @@ dialog.sheet.tm-sheet {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.sheet-back:focus-visible {
+.tc-tw-overlay .sheet-back:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
 /* The overlay itself: a tall sheet the color of the page, cards on it, all measured from the pictures at 420 wide: it stops 44 px under the top
    of the screen, its head is 63 px with the title 37 px down, the cards start 12 px under the head's line, 14 px from each side. */
-dialog.sheet.tw-overlay {
+dialog.sheet.tc-tw-overlay {
   --sheet-bg: var(--bg);
   height: calc(100dvh - 44px);
   max-height: calc(100dvh - 44px);
 }
-.tw-overlay .sheet-head {
+.tc-tw-overlay .sheet-head {
   padding: 16px 12px 3px var(--gutter);
 }
-.tw-overlay .sheet-body {
+.tc-tw-overlay .sheet-body {
   padding: 12px 14px calc(env(safe-area-inset-bottom) + 24px);
 }
-.tw {
+.tc-tw {
   --tw-gold: #8a6410;
   --tw-ring: #d5aa3e;
   gap: 12px;
 }
 /* Lock my spot in the overlay sits 1 px higher than on Home (picture 09). */
-.tw .tc-actions {
+.tc-tw .tc-actions {
   padding-top: 9px;
 }
-:root[data-theme='dark'] .tw {
+:root[data-theme='dark'] .tc-tw {
   --tw-gold: #f6d56a;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tw {
+  :root:not([data-theme='light']) .tc-tw {
     --tw-gold: #f6d56a;
   }
 }
 /* Who's in and the waitlist (mocks 09, 11, 12). */
-.tw-card {
+.tc-tw-card {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
   overflow: hidden;
 }
-.tw-head {
+.tc-tw-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1059,7 +1059,7 @@ dialog.sheet.tw-overlay {
   padding: 7px 16px;
   border-bottom: 1px solid var(--line);
 }
-.tw-label {
+.tc-tw-label {
   margin: 0;
   font-size: 0.7rem;
   font-weight: 700;
@@ -1067,7 +1067,7 @@ dialog.sheet.tw-overlay {
   text-transform: uppercase;
   color: var(--ink-2);
 }
-.tw-chip {
+.tc-tw-chip {
   display: inline-flex;
   align-items: center;
   min-height: 21px;
@@ -1081,17 +1081,17 @@ dialog.sheet.tw-overlay {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.tw-chip-full {
+.tc-tw-chip-full {
   background: var(--ok-bg);
   color: var(--ok-fg);
 }
 /* Rows: 48 px of room and a 1 px dashed line (49 px apart); the number, a 40 px ball 10 px after it, the name 11 px after the ball. */
-.tw-rows {
+.tc-tw-rows {
   margin: 0;
   padding: 0 16px 4px;
   list-style: none;
 }
-.tw-rows li {
+.tc-tw-rows li {
   display: grid;
   grid-template-columns: 19px 40px minmax(0, 1fr) auto;
   align-items: center;
@@ -1100,38 +1100,38 @@ dialog.sheet.tw-overlay {
   margin: 0 -16px;
   padding: 4px 16px;
 }
-.tw-rows li + li {
+.tc-tw-rows li + li {
   min-height: 49px;
   border-top: 1px dashed var(--line);
 }
-.tw-rows li.tw-me {
+.tc-tw-rows li.tc-tw-me {
   background: var(--accent-soft);
 }
-.tw-n {
+.tc-tw-n {
   font-size: 0.84rem;
   font-weight: 700;
   color: var(--ink-2);
   text-align: right;
 }
-.tw-ball {
+.tc-tw-ball {
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
   border-radius: 50%;
 }
-.tw-ball svg {
+.tc-tw-ball svg {
   width: 32px;
   height: 32px;
 }
-.tw-ball-gold {
+.tc-tw-ball-gold {
   box-shadow: inset 0 0 0 3px var(--tw-ring, #d5aa3e);
 }
-.tw-ball-open {
+.tc-tw-ball-open {
   border: 1.5px dashed var(--line-strong);
 }
 /* The waitlist's number in a dashed circle. */
-.tw-num {
+.tc-tw-num {
   display: grid;
   place-items: center;
   box-sizing: border-box;
@@ -1142,24 +1142,24 @@ dialog.sheet.tw-overlay {
   font-weight: 700;
   color: var(--ink-2);
 }
-.tw-name {
+.tc-tw-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 1rem;
 }
-.tw-me .tw-name {
+.tc-tw-me .tc-tw-name {
   font-weight: 750;
 }
-.tw-tag {
+.tc-tw-tag {
   font-size: 0.81rem;
   font-weight: 650;
   color: var(--ink-2);
   white-space: nowrap;
   text-align: right;
 }
-.tw-gold {
+.tc-tw-gold {
   font-weight: 750;
   color: var(--tw-gold);
 }

@@ -149,6 +149,9 @@ describe('Zip 48: /admin', () => {
       '<!-- Zip 48: /admin only. The organizer files, started at once (vite.config.ts, adminPage). -->',
       `<link rel="modulepreload" crossorigin href="/assets/${js}">`,
       `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^zip11-.*\.js$/)}">`,
+      // Zip 56: the ticket rules (shared/tournamentTickets.ts), shared by the organizer file, the player's tournament file and View as's copy of
+      // the server, so the build keeps them in one small file of their own (no style).
+      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^tournamentTickets-.*\.js$/)}">`,
       // Zip 55: the tournament calendar and level list, shared with the player's tournament file (src/tournament/parts.tsx), and its style.
       `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^parts-.*\.js$/)}">`,
       `<link rel="stylesheet" crossorigin href="/assets/${asset(split, /^parts-.*\.css$/)}">`,

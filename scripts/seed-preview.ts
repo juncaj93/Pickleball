@@ -55,6 +55,9 @@ function guardTarget() {
   return { id, groups: groups.length };
 }
 
+/** Rows ON on live (read Tue Nov 17, 2026) that the small world's switch lists leave out (Zip 56, PREVIEW SWITCHES RULE). */
+export const LIVE_ON_SINCE_ZIP56 = ['cheaper_fix_on', 'error_alerts_on', 'game_day_text_on', 'home_screen_tip_on', 'christmas_skin_me'] as const;
+
 async function main() {
   const args = process.argv.slice(2);
   const dry = args.includes('--dry-run');
@@ -67,7 +70,13 @@ async function main() {
   // instead (its two late-drop games and the Venue charge alert's cards). Zip 56 (step 29): the tournament starts at Date picked for Everyone
   // (the first tap is Open tickets); `--zip55` builds Zip 55's start instead (Only me, nobody on the list).
   const zip51 = args.includes('--zip51');
-  const { sql, summary } = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') });
+  const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') });
+  const { summary } = built;
+  // PREVIEW SWITCHES RULE, Zip 56: five more rows are ON on live (read Tue Nov 17, 2026, switch rows only) that the lists in
+  // scripts/preview-world-small.ts do not have. They go on the real preview only (a local e2e world keeps its lists, so other zips' browser
+  // checks see the world they were written for). Home Screen tip and Game day text are on on every preview anyway ([env.preview.vars]).
+  const sql = built.sql + LIVE_ON_SINCE_ZIP56.map((task) => `INSERT OR IGNORE INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${new Date().toISOString()}' FROM groups;`).join('\n') + '\n';
+  summary.push(`Also ON, as on live: ${LIVE_ON_SINCE_ZIP56.join(', ')}`);
   for (const s of summary) console.log('  - ' + s);
 
   if (outFile) writeFileSync(outFile, sql);
