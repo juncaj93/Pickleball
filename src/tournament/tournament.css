@@ -182,28 +182,8 @@
   min-width: 0;
   padding: 17px 12px 8px 18px;
 }
-.tc-kicker {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  line-height: 1.2;
-  text-transform: uppercase;
-  color: var(--tc-lime);
-}
-.tc-kdot {
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--tc-lime);
-  box-shadow: 0 0 9px 1px rgb(216 240 59 / 55%);
-}
 .tc-title {
-  margin: 8px 0 0;
+  margin: 0;
   font-family: var(--display);
   font-size: 1.8rem;
   font-weight: 800;
@@ -216,8 +196,23 @@
 .tc-title.tc-title-long {
   font-size: 1.42rem;
 }
+/* The format under the name ("Locked doubles" or "Americano"), then its one rule in smaller text. */
+.tc-format {
+  margin: 5px 0 0;
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.2;
+  color: var(--tc-lime);
+}
+.tc-rule {
+  margin: 1px 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--tc-mint);
+}
 .tc-sub {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 0.875rem;
   line-height: 1.36;
   color: var(--tc-sub);

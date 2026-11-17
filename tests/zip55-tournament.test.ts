@@ -798,12 +798,13 @@ describe('format: Doubles or Americano (Alex, before shipping)', () => {
   });
 
   it('the format locks once tickets open (piece 2); piece 1 stages never lock it; the steps follow the format', async () => {
-    const { formatLocked, stepsFor, formatKicker } = await import('../shared/tournament');
+    const { formatLocked, stepsFor, formatName, formatRule } = await import('../shared/tournament');
     expect(formatLocked('signup')).toBe(false);
     expect(formatLocked('date_picked')).toBe(false);
     expect(formatLocked('tickets')).toBe(true);
     expect(stepsFor('doubles')).toEqual(['Vote', 'Tickets', 'Teams', 'Games', 'Final']);
     expect(stepsFor('americano')).toEqual(['Vote', 'Tickets', 'Games', 'Winners']);
-    expect([formatKicker('doubles'), formatKicker('americano')]).toEqual(['Doubles tournament', 'Americano']);
+    expect([formatName('doubles'), formatName('americano')]).toEqual(['Locked doubles', 'Americano']);
+    expect([formatRule('doubles'), formatRule('americano')]).toEqual(['Same partner all night', 'New partner every round']);
   });
 });

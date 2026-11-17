@@ -28,7 +28,8 @@ import {
   SIZES,
   type Visibility,
   WINNERS,
-  formatKicker,
+  formatName,
+  formatRule,
   DEFAULT_FORMAT,
   DEFAULT_SECOND_CREDIT_CENTS,
   type TournamentFormat,
@@ -126,14 +127,15 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
   const today = todayKeyOf(ctx.d.now, ctx.d.group.timezone);
   const datesPassed = !t.finalDate && !t.offeredDates.some((d) => d >= today);
   return (
-    <section className="tm-home card" aria-label={`${t.name}, ${formatKicker(t.format).toLowerCase()}`} data-tm-home>
+    <section className="tm-home card" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home>
       <div className="tm-home-top">
         <span className="tm-home-ball" aria-hidden="true" />
         <div className="tm-home-text">
-          <p className="tm-home-kicker" data-tm-home-format={t.format}>
-            {formatKicker(t.format)}
-          </p>
           <h2 className="tm-home-title">{t.name}</h2>
+          <p className="tm-home-format" data-tm-home-format={t.format}>
+            {formatName(t.format)}
+          </p>
+          <p className="tm-home-rule">{formatRule(t.format)}</p>
           <p className="tm-home-sub">
             {statusLine(t)} · {who}
           </p>
@@ -357,7 +359,8 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         <div className="segmented tm-seg tm-seg-format" role="group" aria-label="Format">
           {(['doubles', 'americano'] as const).map((f) => (
             <button key={f} type="button" aria-pressed={format === f} disabled={formatLocked} onClick={() => setFormat(f)} data-format={f}>
-              {f === 'americano' ? 'Americano' : 'Doubles'}
+              <span className="tm-format-name">{formatName(f)}</span>
+              <span className="tm-format-rule">{formatRule(f)}</span>
             </button>
           ))}
         </div>
@@ -557,7 +560,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
         <div className="tm-rows">
           <div className="tm-row">
             <span>Format</span>
-            <b data-tm-format-row>{t.format === 'americano' ? 'Americano' : 'Doubles'}</b>
+            <b data-tm-format-row>{formatName(t.format)}</b>
           </div>
           <div className="tm-row">
             <span>Players expected</span>

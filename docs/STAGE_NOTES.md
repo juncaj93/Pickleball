@@ -5519,4 +5519,8 @@ Tests: e2e/zip55.cjs 77 of 77. No tournament name is in the code (it is typed on
 Tests: tests/zip55-tournament.test.ts 50 (format stored, sent, edited, refused if bad, database check, Americano test stages, steps);
 e2e/zip55.cjs 90 of 90 (N: Americano at both stages at 390, 360, 320, light and dark; Edit's Format and prize rows; Create defaults
 to Doubles). Live untouched: waiting for "ship it".
+Pass 3 follow-up (Alex): the formats are named "Locked doubles" and "Americano" everywhere they show (Create and Edit, the tournament
+page, both Home cards, the Tournament test page; stored as 'doubles' and 'americano'). The small label above the name is gone: under the
+name come the format (subtitle style) and its one rule in smaller text, "Same partner all night" or "New partner every round", then where
+the player stands. The Create choice shows the same rule under each name; the two choices are stacked full width so neither wraps at 320.
 

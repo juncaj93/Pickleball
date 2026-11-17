@@ -7,7 +7,7 @@
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
 import { type CSSProperties, useMemo, useState } from 'react';
 import type { PlayerTournamentView } from '../../shared/tournament';
-import { dayShort, formatKicker, levelLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
+import { dayShort, formatName, formatRule, levelLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../lib';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { type DayLook, LevelList, MonthCalendar } from './parts';
@@ -160,8 +160,7 @@ export function TicketCard({
   // The picked date has passed: nothing to pick, so no Sign up (the list, Edit and Drop out stay for those on it). (Every offered date passed
   // with none picked: the server sends no card at all.)
   const noDates = t.openDates.length === 0;
-  // The small label above the name is the format ("DOUBLES TOURNAMENT" or "AMERICANO"); where they stand goes in the line under the name.
-  const kicker = formatKicker(t.format);
+  // Under the name: the format ("Locked doubles" or "Americano") and its one rule, then where they stand.
   const sub = noDates
     ? 'That date has passed.'
     : picked
@@ -177,7 +176,7 @@ export function TicketCard({
   const now = picked ? 1 : 0;
   const state = picked ? 'date' : signed ? 'listed' : 'open';
   return (
-    <section className="tc" aria-label={`${t.name}, ${formatKicker(t.format).toLowerCase()}`} data-tc-format={t.format} data-tc={state}>
+    <section className="tc" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={state}>
       <Court />
       <div className="tc-top">
         <div className="tc-stub" aria-label={picked ? `On ${stub!.weekday} ${stub!.month} ${stub!.day} at ${startLabel(t.start)}` : `Date not picked yet, around ${startLabel(t.start)}`}>
@@ -195,11 +194,13 @@ export function TicketCard({
           </span>
         </div>
         <div className="tc-main">
-          <p className="tc-kicker">
-            <span className="tc-kdot" aria-hidden="true" />
-            {kicker}
-          </p>
           <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
+          <p className="tc-format" data-tc-format-name>
+            {formatName(t.format)}
+          </p>
+          <p className="tc-rule" data-tc-rule>
+            {formatRule(t.format)}
+          </p>
           <p className="tc-sub" data-tc-sub>
             {sub}
           </p>

@@ -42,7 +42,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   // Which format the stage buttons build (starts on the open tournament's).
   const [format, setFormat] = useState<'doubles' | 'americano'>(t?.format ?? 'doubles');
   const now = t
-    ? `${t.format === 'americano' ? 'Americano' : 'Doubles'} · ${t.status === 'date_picked' && t.finalDate ? `Date picked: ${dayLong(t.finalDate)}` : 'Sign-up open'}`
+    ? `${t.format === 'americano' ? 'Americano' : 'Locked doubles'} · ${t.status === 'date_picked' && t.finalDate ? `Date picked: ${dayLong(t.finalDate)}` : 'Sign-up open'}`
     : 'No tournament';
   async function go(stage: string, label: string) {
     if (busy) return;
@@ -82,7 +82,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
         </div>
         <div className="segmented tm-seg" role="group" aria-label="Format" data-tm-test-format>
           <button type="button" aria-pressed={format === 'doubles'} disabled={!!busy} onClick={() => setFormat('doubles')} data-tm-test-fmt="doubles">
-            Doubles
+            Locked doubles
           </button>
           <button type="button" aria-pressed={format === 'americano'} disabled={!!busy} onClick={() => setFormat('americano')} data-tm-test-fmt="americano">
             Americano

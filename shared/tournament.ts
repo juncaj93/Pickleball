@@ -79,9 +79,10 @@ export const DEFAULT_SECOND_CREDIT_CENTS = 700;
 export type TournamentFormat = 'doubles' | 'americano';
 export const FORMATS = ['doubles', 'americano'] as const;
 export const DEFAULT_FORMAT: TournamentFormat = 'doubles';
-export const formatName = (f: TournamentFormat): string => (f === 'americano' ? 'Americano' : 'Doubles');
-/** The small label above the name on both Home cards. */
-export const formatKicker = (f: TournamentFormat): string => (f === 'americano' ? 'Americano' : 'Doubles tournament');
+/** The format's name, everywhere it shows (Alex: "Locked doubles" and "Americano"). */
+export const formatName = (f: TournamentFormat): string => (f === 'americano' ? 'Americano' : 'Locked doubles');
+/** Its one rule, in a short line under the name (both Home cards and the Create choice). */
+export const formatRule = (f: TournamentFormat): string => (f === 'americano' ? 'New partner every round' : 'Same partner all night');
 /** The progress strip on the player's card: Americano has no Teams step and ends with Winners. */
 export const stepsFor = (f: TournamentFormat): string[] => (f === 'americano' ? ['Vote', 'Tickets', 'Games', 'Winners'] : ['Vote', 'Tickets', 'Teams', 'Games', 'Final']);
 /** The format can change until tickets open (piece 2 adds that stage); piece 1's two stages are before it. */
