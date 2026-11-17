@@ -14,6 +14,7 @@
  *   I  Create tournament (No tournament first): a 32-letter name, 10 players, $0 credit, Only me.
  *   J  Every screen at 390, 360 and 320 wide, light and dark: nothing wider than the screen, no clipped button, the level rows on one line.
  *   L  The date is picked while a player's Edit sheet is open: look again, the stale date drops out.
+ *   M  Pass 2: the admin card's stage buttons, every month pair fits the stub, room above Dates that work.
  *   K  Every offered date has passed (clock moved to Jan 20): players get no card at all; the admin card says "Dates have passed. Add dates."
  * Screenshots: .data/zip55-shots (not in git).
  */
@@ -336,8 +337,10 @@ async function main() {
     for (const width of SIZES)
       await check(`F the level list and Sage's level sheet look right (${width} ${scheme})`, async () => {
         const a = await adminPage({ width, scheme });
-        await a.page.locator('[data-tm-open-levels]').click();
+        // Levels live inside Edit (pass 2: no Levels button on the card).
+        await a.page.locator('[data-tm-open-edit]').click();
         await a.page.locator('[data-tm-level-row]').first().waitFor();
+        await a.page.locator('[data-tm-card="levels"]').scrollIntoViewIfNeeded();
         const rows = await a.page.locator('[data-tm-level-row]').evaluateAll((els) => els.map((e) => ({ name: e.dataset.tmLevelRow, h: e.getBoundingClientRect().height })));
         assert(rows.length === 6, `rows: ${rows.length}`);
         // One line each (the long name ends with "..." rather than wrapping).
@@ -354,7 +357,7 @@ async function main() {
       });
   await check("F the organizer sets Sage to 3.4: the row shows 3.4, Picked 3.0; Sage's own phone still shows her pick", async () => {
     const a = await adminPage();
-    await a.page.locator('[data-tm-open-levels]').click();
+    await a.page.locator('[data-tm-open-edit]').click();
     await a.page.locator('[data-tm-level-row="Sage"] [data-tm-pencil]').click();
     await a.page.locator('[data-tm-level-sheet] [data-level="340"]').click();
     assert(flat(await a.page.locator('[data-tm-level-save]').innerText()) === 'Save 3.4', 'Save 3.4');
@@ -385,8 +388,10 @@ async function main() {
   });
   await check('G after the date is picked the admin card says Edit; it opens the whole tournament page at the top and stays where you scroll', async () => {
     const a = await adminPage();
-    assert(flat(await a.page.locator('[data-tm-open-dates]').innerText()) === 'Edit', 'the button says Edit');
-    await a.page.locator('[data-tm-open-dates]').click();
+    // Pass 2: once the date is picked the card has one button, Edit.
+    const btns = await a.page.locator('.tm-home-actions .btn').allInnerTexts();
+    assert(btns.map(flat).join('|') === 'Edit', btns.join('|'));
+    await a.page.locator('[data-tm-open-edit]').click();
     await a.page.locator('[data-tm-page]').waitFor();
     await a.page.waitForTimeout(600);
     const top = await a.page.evaluate(() => document.querySelector('dialog[open] .sheet-body')?.scrollTop ?? document.querySelector('dialog[open]').scrollTop);
@@ -526,6 +531,54 @@ async function main() {
     assert((await a.page.locator('[data-tm-form="create"]').count()) === 0, 'Create opened anyway');
     await a.ctx.close();
   });
+
+  // ---------------------------------------------------------------- M  pass 2 (Alex): card buttons, the month pair, Edit sheet spacing
+  await stage('signup');
+  for (const scheme of SCHEMES)
+    for (const width of SIZES)
+      await check(`M no date yet: the admin card has one row, Pick date and Edit (no Levels) (${width} ${scheme})`, async () => {
+        const a = await adminPage({ width, scheme });
+        await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+        const b = await a.page.locator('.tm-home-actions .btn').evaluateAll((els) => els.map((e) => ({ t: e.innerText.trim(), top: Math.round(e.getBoundingClientRect().top), h: e.getBoundingClientRect().height })));
+        assert(b.map((x) => x.t).join('|') === 'Pick date|Edit', JSON.stringify(b));
+        assert(b[0].top === b[1].top && b.every((x) => x.h < 60), `one row, one line each: ${JSON.stringify(b)}`);
+        await fits(a.page, '[data-tm-home]');
+        await shot(a.page, `M-admin-card-${width}-${scheme}`);
+        await a.ctx.close();
+      });
+  await check('M every month pair on the stub ("DEC–JAN", "MAY–JUN", ...) fits the date column with room on both sides, at 320', async () => {
+    const v = await playerPage('Vic', { width: 320 });
+    await v.page.locator('.tc .tc-mon').waitFor({ timeout: 15000 });
+    const label = flat(await v.page.locator('.tc .tc-mon').innerText());
+    assert(/^[A-Z]{3}–[A-Z]{3}$/.test(label) && (await v.page.locator('.tc .tc-mon-span').count()) === 1, label);
+    const worst = await v.page.evaluate(() => {
+      const M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const el = document.querySelector('.tc .tc-mon');
+      const col = document.querySelector('.tc .tc-stub').getBoundingClientRect();
+      let w = { room: 99, text: '' };
+      for (let i = 0; i < 12; i++) {
+        el.textContent = `${M[i]}–${M[(i + 1) % 12]}`;
+        const r = el.getBoundingClientRect();
+        const room = Math.min(r.left - col.left, col.right - r.right);
+        if (room < w.room) w = { room, text: el.textContent, width: r.width, col: col.width };
+      }
+      return w;
+    });
+    assert(worst.room >= 6, `tightest: ${JSON.stringify(worst)}`);
+    await shot(v.page, 'M-stub-320');
+    await v.ctx.close();
+  });
+  for (const scheme of SCHEMES)
+    for (const width of SIZES)
+      await check(`M Edit my sign-up: room above "Dates that work" (${width} ${scheme})`, async () => {
+        const p = await playerPage('Parker', { width, scheme });
+        await p.page.locator('[data-tc-edit]').click();
+        await p.page.locator('dialog[open] .tm-eyebrow-dates').waitFor();
+        const gap = await p.page.evaluate(() => document.querySelector('dialog[open] .tm-eyebrow-dates').getBoundingClientRect().top - document.querySelector('dialog[open] [data-tm-mylevel]').getBoundingClientRect().bottom);
+        assert(gap >= 22, `gap ${gap}`);
+        await shot(p.page, `M-edit-${width}-${scheme}`);
+        await p.ctx.close();
+      });
 
   // ---------------------------------------------------------------- J  organizer Home at every size
   for (const scheme of SCHEMES)

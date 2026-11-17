@@ -151,6 +151,11 @@
   color: var(--tc-lime);
   white-space: nowrap;
 }
+/* Two months before a date is picked ("DEC–JAN"): smaller and tighter, so the widest pair keeps room on both sides of the 77 px stub. */
+.tc-mon-span {
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+}
 .tc-day {
   margin: 5px 0 3px;
   font-family: var(--display);
@@ -395,6 +400,10 @@
 }
 .tm-steps span.on {
   background: var(--court);
+}
+/* Edit my sign-up: room between the level row and "Dates that work". */
+.tm-eyebrow.tm-eyebrow-dates {
+  margin-top: 26px;
 }
 .tm-eyebrow {
   margin: 0 0 13px;

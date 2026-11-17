@@ -5488,3 +5488,12 @@ read-only live check. Rollback: Production deployment `35acc09d` (the tables can
 Tests: tests/zip55-tournament.test.ts 46, e2e/zip55.cjs 64 of 64 (TBD, the notch, the Who header and focus, the Settings row, Edit at the
 top, K rewritten for the hidden card). Preview redeployed and re-seeded. Live untouched: waiting for "ship it".
 
+
+### Feedback pass 2 from Alex (Tue Nov 17), preview only, NOT shipped
+1. Ticket card stub: a two-month label ("DEC–JAN") is smaller and tighter (`.tc-mon-span`), so every pair (JAN–FEB to DEC–JAN) leaves at least
+   6 px on both sides of the date column at 320 wide (browser check M measures all twelve).
+2. Edit my sign-up: 26 px above "Dates that work".
+3. Admin Home card: no Levels button (levels live inside Edit). One row of stage buttons: no date yet, "Pick date" and "Edit"; date picked,
+   "Edit" only. Piece 2 adds Open tickets here, piece 3 the game day buttons.
+4. No change: after the date is picked players see "Tickets open soon" with no pay button (piece 2).
+Tests: e2e/zip55.cjs 77 of 77. No tournament name is in the code (it is typed on Create). Live untouched: waiting for "ship it".

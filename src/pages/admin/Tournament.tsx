@@ -114,7 +114,7 @@ export function TournamentScheduleRow({ ctx }: { ctx: AdminCtx }) {
 
 /** Home: the open tournament, with the two things to do now (the level list and picking the date). */
 export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
-  const [open, setOpen] = useState<null | 'levels' | 'dates' | 'edit'>(null);
+  const [open, setOpen] = useState<null | 'dates' | 'edit'>(null);
   const t = ctx.d.tournaments === true ? (ctx.d.tournament ?? null) : null;
   if (!t) return null;
   const who = t.visibility === 'me' ? 'Only you can see it' : 'Everyone can see it';
@@ -138,16 +138,19 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
           )}
         </div>
       </div>
+      {/* One row of buttons for the stage (Levels live inside Edit). No date yet: Pick date and Edit. Date picked: Edit only (piece 2 adds
+          Open tickets, piece 3 the game day buttons). Edit opens the whole tournament page at the top. */}
       <div className="tm-home-actions">
-        <button type="button" className="btn secondary" onClick={() => setOpen('levels')} data-tm-open-levels>
-          Levels
-        </button>
-        {/* Once the date is picked: Edit opens the whole tournament page at the top (every part editable there), not scrolled anywhere. */}
-        <button type="button" className="btn" onClick={() => setOpen(t.status === 'date_picked' ? 'edit' : 'dates')} data-tm-open-dates>
-          {t.status === 'date_picked' ? 'Edit' : 'Pick the date'}
+        {t.status !== 'date_picked' && (
+          <button type="button" className="btn" onClick={() => setOpen('dates')} data-tm-open-dates>
+            Pick date
+          </button>
+        )}
+        <button type="button" className={t.status === 'date_picked' ? 'btn' : 'btn secondary'} onClick={() => setOpen('edit')} data-tm-open-edit>
+          Edit
         </button>
       </div>
-      <TournamentPage ctx={ctx} t={t} open={open !== null} focus={open === 'levels' || open === 'dates' ? open : undefined} onClose={() => setOpen(null)} />
+      <TournamentPage ctx={ctx} t={t} open={open !== null} focus={open === 'dates' ? open : undefined} onClose={() => setOpen(null)} />
     </section>
   );
 }

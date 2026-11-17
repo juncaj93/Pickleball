@@ -185,7 +185,7 @@ export function TicketCard({
           <span className={stub ? 'tc-day' : 'tc-day tc-day-tbd'} aria-hidden="true">
             {stub ? stub.day : 'TBD'}
           </span>
-          <span className="tc-mon" aria-hidden="true">
+          <span className={!stub && monthSpan(t.openDates).includes('–') ? 'tc-mon tc-mon-span' : 'tc-mon'} aria-hidden="true">
             {stub ? stub.month : monthSpan(t.openDates) || '\u00a0'}
           </span>
           <span className="tc-time" aria-hidden="true">
@@ -379,7 +379,7 @@ function EditSheet({
       )}
       {t.openDates.length > 0 && (
         <>
-          <p className="tm-eyebrow">Dates that work</p>
+          <p className="tm-eyebrow tm-eyebrow-dates">Dates that work</p>
           <DatesPicker t={t} picked={picked} setPicked={setPicked} summary={false} />
         </>
       )}
