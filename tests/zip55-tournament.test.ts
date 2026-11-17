@@ -190,7 +190,7 @@ describe('ONLY ME: a normal player gets zero tournament data from the server', (
     const id = await create(ctx);
     const own = await organizerPhone(ctx);
     const mine = (await own.call('GET', '/api/group')).data.tournament;
-    expect(mine).toMatchObject({ id, name: 'Winter Classic', status: 'signup', onlyMe: true, names: [], me: null, openDates: DATES, start: 1170, prize: 'Winners each get a medal and a $14 game credit.' });
+    expect(mine).toMatchObject({ id, name: 'Winter Classic', status: 'signup', onlyMe: true, names: [], me: null, openDates: DATES, start: 1170 });
     const asBlair = (await ctx.organizer.call('GET', '/api/group', undefined, { 'X-View-As': ctx.byName.Blair })).data;
     expect(asBlair.tournament).toBeUndefined();
     const asAlex = (await ctx.organizer.call('GET', '/api/group', undefined, { 'X-View-As': ctx.byName.Alex })).data;
@@ -710,13 +710,16 @@ describe('second review fixes (Zip 55)', () => {
     expect((await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[1]] })).status).toBe(409);
   });
 
-  it('once every offered date has passed with none picked: no date to pick, the date pick refuses, Edit settings with new dates opens it again', async () => {
+  it('once every offered date has passed with none picked: hidden from players, the date pick refuses, Edit settings with new dates shows it again', async () => {
     const ctx = await world();
     const id = await create(ctx, { visibility: 'all' });
     ctx.app.advance(30 * DAY); // past Nov 17
     await ctx.organizer.call('POST', '/api/admin/login', { pin: PIN }); // a month later: signed in again
     const blair = await playerPhone(ctx, 'Blair');
-    expect((await blair.call('GET', '/api/group')).data.tournament.openDates).toEqual([]);
+    // Hidden from players (the same as none open): no card, and the player routes say "not open".
+    expect((await blair.call('GET', '/api/group')).data.tournament).toBeUndefined();
+    expect((await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[4]] })).status).toBe(404);
+    expect((await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament).toMatchObject({ id, status: 'signup' });
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[4] })).status).toBe(400);
     const later = ['2026-12-08', '2026-12-10'];
     const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: later });

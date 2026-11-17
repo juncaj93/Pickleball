@@ -425,6 +425,7 @@ export function Sheet({
   className,
   hideClose,
   titleAfter,
+  calmFocus,
 }: {
   open: boolean;
   title: string;
@@ -438,6 +439,11 @@ export function Sheet({
   hideClose?: boolean;
   /** Something right after the title, on its line (the Players redo's small pencil). Left out: exactly as before. */
   titleAfter?: ReactNode;
+  /**
+   * Zip 55 (the tournament sheets only): on open, focus the sheet itself instead of its first button, so the ✕ does not light up with a
+   * focus ring on a tap. Keyboard users still get Tab, Escape and rings (:focus-visible). Left out: exactly as before.
+   */
+  calmFocus?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -477,7 +483,10 @@ export function Sheet({
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      d.showModal();
+      if (calmFocus) d.focus({ preventScroll: true });
+    }
     if (!open && d.open && !keep.current) {
       d.close();
       d.style.transform = '';
@@ -490,8 +499,9 @@ export function Sheet({
   return (
     <dialog
       ref={ref}
-      className={`sheet${className ? ` ${className}` : ''}${closing && !open ? ' m-closing' : ''}`}
+      className={`sheet${className ? ` ${className}` : ''}${calmFocus ? ' sheet-calm-focus' : ''}${closing && !open ? ' m-closing' : ''}`}
       aria-labelledby={titleId}
+      tabIndex={calmFocus ? -1 : undefined}
       // Only this sheet's own close: a confirm box opened inside it (Remove X?) closing must not close this sheet too (Zip 13: that sent
       // the held Remove at once, so its Undo always said "Too late").
       onClose={(e) => {

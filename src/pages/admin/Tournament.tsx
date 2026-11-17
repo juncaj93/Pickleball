@@ -2,7 +2,7 @@
 // the tournament's own page (who can see it, the level list of mock 14, how many can make each date and picking it, Edit, Cancel), the card on
 // Home, and the level and date sheets. Only drawn while the switch is on for this phone (ctx.d.tournaments). No money moves here: the ticket
 // price and the champion credit are stored for pieces 2 and 3.
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import {
   type AdminTournamentView,
   CREATE_MONTHS,
@@ -24,7 +24,6 @@ import {
   planLine,
   PLANS,
   planTitle,
-  prizeLine,
   type Size,
   SIZES,
   type Visibility,
@@ -81,19 +80,32 @@ const statusLine = (t: AdminTournamentView) =>
 /** Settings > Schedule: "Create tournament" (none open) or the open tournament's row. */
 export function TournamentScheduleRow({ ctx }: { ctx: AdminCtx }) {
   const [open, setOpen] = useState<null | 'create' | 'page'>(null);
+  const toast = useToast();
   if (ctx.d.tournaments !== true) return null;
   const t = ctx.d.tournament ?? null;
   return (
     <div className="set-row-wrap" data-row="tournament">
-      <button type="button" className="set-row tm-set-row" onClick={() => setOpen(t ? 'page' : 'create')} data-tm-schedule-row>
+      {/* Always here. One tournament at a time: with one open, a tap says so (the open one has its own row below). */}
+      <button type="button" className="set-row tm-set-row" onClick={() => (t ? toast('Finish or cancel the current one first.') : setOpen('create'))} data-tm-schedule-row>
         <span className="set-label">
-          <span className="set-name">{t ? t.name : 'Create tournament'}</span>
-          <span className="set-hint">{t ? statusLine(t) : 'Doubles, once a year'}</span>
+          <span className="set-name">Create tournament</span>
+          <span className="set-hint">Doubles, once a year</span>
         </span>
         <span className="tm-chevron" aria-hidden="true">
           ›
         </span>
       </button>
+      {t && (
+        <button type="button" className="set-row tm-set-row" onClick={() => setOpen('page')} data-tm-open-row>
+          <span className="set-label">
+            <span className="set-name">{t.name}</span>
+            <span className="set-hint">{statusLine(t)}</span>
+          </span>
+          <span className="tm-chevron" aria-hidden="true">
+            ›
+          </span>
+        </button>
+      )}
       <CreateSheet ctx={ctx} open={open === 'create'} onClose={() => setOpen(null)} />
       {t && <TournamentPage ctx={ctx} t={t} open={open === 'page'} onClose={() => setOpen(null)} />}
     </div>
@@ -102,10 +114,13 @@ export function TournamentScheduleRow({ ctx }: { ctx: AdminCtx }) {
 
 /** Home: the open tournament, with the two things to do now (the level list and picking the date). */
 export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
-  const [open, setOpen] = useState<null | 'levels' | 'dates'>(null);
+  const [open, setOpen] = useState<null | 'levels' | 'dates' | 'edit'>(null);
   const t = ctx.d.tournaments === true ? (ctx.d.tournament ?? null) : null;
   if (!t) return null;
   const who = t.visibility === 'me' ? 'Only you can see it' : 'Everyone can see it';
+  // Every offered date has passed and none is picked: players do not see the card any more (server/tournament.ts), so say it here.
+  const today = todayKeyOf(ctx.d.now, ctx.d.group.timezone);
+  const datesPassed = !t.finalDate && !t.offeredDates.some((d) => d >= today);
   return (
     <section className="tm-home card" aria-label={`${t.name}, doubles tournament`} data-tm-home>
       <div className="tm-home-top">
@@ -116,17 +131,23 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
           <p className="tm-home-sub">
             {statusLine(t)} · {who}
           </p>
+          {datesPassed && (
+            <p className="tm-home-note" data-tm-home-note>
+              Dates have passed. Add dates.
+            </p>
+          )}
         </div>
       </div>
       <div className="tm-home-actions">
         <button type="button" className="btn secondary" onClick={() => setOpen('levels')} data-tm-open-levels>
           Levels
         </button>
-        <button type="button" className="btn" onClick={() => setOpen('dates')} data-tm-open-dates>
-          {t.status === 'date_picked' ? 'Change the date' : 'Pick the date'}
+        {/* Once the date is picked: Edit opens the whole tournament page at the top (every part editable there), not scrolled anywhere. */}
+        <button type="button" className="btn" onClick={() => setOpen(t.status === 'date_picked' ? 'edit' : 'dates')} data-tm-open-dates>
+          {t.status === 'date_picked' ? 'Edit' : 'Pick the date'}
         </button>
       </div>
-      <TournamentPage ctx={ctx} t={t} open={open !== null} focus={open ?? undefined} onClose={() => setOpen(null)} />
+      <TournamentPage ctx={ctx} t={t} open={open !== null} focus={open === 'levels' || open === 'dates' ? open : undefined} onClose={() => setOpen(null)} />
     </section>
   );
 }
@@ -215,7 +236,7 @@ function PlanRows({ size, plan, onPick, ticketCents, longGames }: { size: Size; 
 export function CreateSheet({ ctx, open, onClose, editing }: { ctx: AdminCtx; open: boolean; onClose: () => void; editing?: AdminTournamentView }) {
   // A fresh form each time it opens (the key), so a Create after a Cancel starts clean.
   return (
-    <Sheet open={open} title={editing ? `Edit ${editing.name}` : 'Create tournament'} onClose={onClose} className="tm-page">
+    <Sheet calmFocus open={open} title={editing ? `Edit ${editing.name}` : 'Create tournament'} onClose={onClose} className="tm-page">
       {open && <CreateForm key={editing?.id ?? 'new'} ctx={ctx} editing={editing} onDone={onClose} />}
     </Sheet>
   );
@@ -360,12 +381,6 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         </p>
       </Card>
 
-      <Card label="What players see" data="players-see">
-        <p className="tm-says">
-          Sign-up says: <b>{prizeLine(credit ?? 0)}</b>
-        </p>
-      </Card>
-
       <Card label="Who can see it" data="who">
         <div className="segmented tm-seg tm-seg-who" role="group" aria-label="Who can see it">
           <button type="button" aria-pressed={visibility === 'me'} onClick={() => setVisibility('me')} data-vis="me">
@@ -396,7 +411,7 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
 
 export function TournamentPage({ ctx, t, open, onClose, focus }: { ctx: AdminCtx; t: AdminTournamentView; open: boolean; onClose: () => void; focus?: 'levels' | 'dates' }) {
   return (
-    <Sheet open={open} title={t.name} onClose={onClose} className="tm-page">
+    <Sheet calmFocus open={open} title={t.name} onClose={onClose} className="tm-page">
       {open && <PageBody ctx={ctx} t={t} focus={focus} onClosed={onClose} />}
     </Sheet>
   );
@@ -416,9 +431,12 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
   // A day that has passed can no longer be picked (its count still shows).
   const look = (d: string): DayLook => (d === t.finalDate ? 'on' : offered.has(d) ? (d < today ? 'past' : 'open') : 'off');
   const who = t.signups.find((s) => s.playerId === levelFor) ?? null;
-  // Open on the part the Home card asked for.
+  // Open on the part the Home card asked for, ONCE: a later redraw (a save, a live update) never scrolls the page back there.
+  const scrolled = useRef(false);
   const scrollRef = (el: HTMLElement | null) => {
-    if (el && focus) requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+    if (!el || !focus || scrolled.current) return;
+    scrolled.current = true;
+    requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
   };
   return (
     <div className="tm-form stack" data-tm-page>
@@ -553,6 +571,7 @@ function LevelSheet({ ctx, t, who, onClose }: { ctx: AdminCtx; t: AdminTournamen
   const first = (who?.name ?? '').split(' ')[0];
   return (
     <Sheet
+      calmFocus
       open={!!who}
       title={who ? `${first}’s level` : 'Level'}
       onClose={() => {
@@ -592,7 +611,7 @@ function DateSheet({ ctx, t, day, names, onClose }: { ctx: AdminCtx; t: AdminTou
   const cant = day ? t.signups.filter((s) => !s.dates.includes(day)).map((s) => s.name) : [];
   const isFinal = !!day && day === t.finalDate;
   return (
-    <Sheet open={!!day} title={day ? dayLong(day) : 'Date'} onClose={onClose} className="tm-date-sheet">
+    <Sheet calmFocus open={!!day} title={day ? dayLong(day) : 'Date'} onClose={onClose} className="tm-date-sheet">
       {day && (
         <div className="stack" data-tm-date-sheet={day}>
           <p className="tm-date-count">

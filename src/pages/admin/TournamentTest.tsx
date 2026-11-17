@@ -28,7 +28,7 @@ export default function TournamentTestRow({ ctx, home }: { ctx: AdminCtx; home?:
           ›
         </span>
       </button>
-      <Sheet open={open} title="Tournament test" onClose={() => setOpen(false)} className="tm-page">
+      <Sheet calmFocus open={open} title="Tournament test" onClose={() => setOpen(false)} className="tm-page">
         {open && <TestBody ctx={ctx} />}
       </Sheet>
     </div>

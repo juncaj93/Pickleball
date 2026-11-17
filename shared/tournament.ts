@@ -50,7 +50,6 @@ export const LEVELS: readonly Level[] = [
 ];
 
 /** The note under the level list (mock 05). */
-export const LEVEL_NOTE = 'Not sure? No worries. Teams are organized in a fair way before the tournament to keep things even.';
 
 export const isLevel = (v: unknown): v is number => typeof v === 'number' && LEVELS.some((l) => l.value === v);
 export const levelOf = (v: number): Level | null => LEVELS.find((l) => l.value === v) ?? null;
@@ -162,7 +161,7 @@ export const planTitle = (p: Pick<Plan, 'courts' | 'minutes'>): string => `${p.c
 /** "7:30 to 9:30 PM. Everyone plays every round. ..." */
 export const planLine = (p: Plan): string => `${planRange(p.start, p.minutes)}. ${p.note}`;
 
-/** What the sign-up tells players about the prize (mock 24, "What players see"). $0: the medal only. */
+/** The prize in words (mock 24). $0: the medal only. Not shown in piece 1 (Alex took it off the sign-up); kept for piece 3's final. */
 export function prizeLine(creditCents: number): string {
   if (creditCents <= 0) return 'Winners each get a medal.';
   const d = creditCents % 100 === 0 ? `$${creditCents / 100}` : `$${(creditCents / 100).toFixed(2)}`;
@@ -297,8 +296,6 @@ export interface PlayerTournamentView {
   finalDate: string | null;
   /** Everyone on the list, in sign-up order (names only), for "See who's signed up" and the count. */
   names: string[];
-  /** "Winners each get a medal and a $14 game credit." (mock 24). */
-  prize: string;
   /** This player's own sign-up (null: not on the list). Their own pick only, never the organizer's level. */
   me: { level: number; dates: string[] } | null;
   /** Only me is on: this is the organizer's own phone (the "Only you can see this" strip). */

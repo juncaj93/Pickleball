@@ -21,7 +21,6 @@ import {
   NAME_MAX,
   planAllowed,
   type PlayerTournamentView,
-  prizeLine,
   TOURNAMENTS,
   tournamentsAllowed,
   type TournamentStatus,
@@ -192,6 +191,9 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   const row = await activeTournamentForPlayer(ctx.db, group, playerId);
   if (!row) return null;
   const { org_saved: orgSaved, viewer_name: viewerName, ...t } = row;
+  // Every offered date has passed with none picked: hidden from every player (Alex, Zip 55 feedback), the same as none open. The organizer's
+  // Home card says "Dates have passed. Add dates."; Edit settings with new dates shows it again.
+  if (statusOf(t) === 'signup' && openDatesOf(t, todayKey(ctx.nowMs, group.timezone)).length === 0) return null;
   if (t.visibility === 'all') return { t, onlyMe: false };
   // Only me: the organizer's own player, on the organizer's own signed-in phone (or the organizer's View as of their own player). Any other
   // player is answered from the one read above (organizerIdOf's own rule: the saved player if it still exists, else the name in Settings), so
@@ -223,7 +225,6 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
     openDates: openDatesOf(t, todayKey(ctx.nowMs, group.timezone)),
     finalDate: statusOf(t) === 'date_picked' ? t.final_date : null,
     names: rows.map((r) => r.display_name),
-    prize: prizeLine(t.champion_credit_cents),
     // Their own pick only (never the organizer's level for them).
     me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates) } : null,
     ...(onlyMe ? { onlyMe: true as const } : {}),

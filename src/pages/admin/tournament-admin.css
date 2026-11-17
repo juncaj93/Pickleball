@@ -302,11 +302,6 @@ dialog.sheet.tm-page {
   outline: 3px solid var(--focus);
   outline-offset: 1px;
 }
-.tm-says {
-  margin: 0;
-  font-size: 1.08rem;
-  line-height: 1.45;
-}
 .tm-who-note {
   margin-top: 12px;
 }
@@ -535,4 +530,12 @@ dialog.sheet.tm-page {
   border: 1.5px dashed var(--line-strong);
   border-radius: 16px;
   background: var(--surface);
+}
+/* Every offered date has passed with none picked (players no longer see the card). */
+.tm-home-note {
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--ink);
 }

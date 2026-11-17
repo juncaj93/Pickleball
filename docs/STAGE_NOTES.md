@@ -5380,8 +5380,8 @@ Pieces 2 (tickets, waitlist), 3 (teams, game day, End tournament) and 4 (tie whe
 3. Players (`src/tournament/TournamentHome.tsx`, its own download): the pinned ticket card (states 1 and 2 of mock 08 and the Date picked look:
    DATE PICKED, the date on the stub, "Tickets open soon", VOTE done and TICKETS next), the 2-step Sign up sheet (level, then dates; the mock's
    words), "You're on the list", See who's signed up (names only), Edit my sign-up (level and dates), Back out? (Stay signed up / Yes, back out).
-   Before the date is picked the stub shows "DATE ? DEC–JAN 7:30 PM" (the months on offer). After it is picked a new sign-up (or an edit) can
-   only pick that date. The sign-up's step 1 ends with "Winners each get a medal and a $14 game credit." (mock 24's What players see).
+   Before the date is picked the stub shows "DATE TBD DEC–JAN 7:30 PM" (the months on offer). After it is picked a new sign-up (or an edit) can
+   only pick that date. (Alex's feedback took the level note and the prize line off the sign-up sheets, and the "What players see" card off Create.)
 4. The organizer's tournament page (from the Home card's Levels / Pick the date, or Settings > Schedule): Who can see it, the level list of mock 14
    (name, "Picked 3.6", the level, a pencil; the sheet tints the player's pick "SAGE PICKED" and boxes the organizer's "YOUR PICK"; Save 3.4), the
    offered dates with how many can play each (the most-picked count in bold), tap one to see who can and cannot, Pick it, or Take back the date;
@@ -5405,7 +5405,7 @@ shared switch read (no extra trip), the new tables never read. docs/FEATURE_SWIT
 - No TEST SPEED RULES section exists in SITE_RULES (neither copy); the usual full unit and browser runs were used.
 - Kai is not one of the preview's fixed names (the seed refuses any other name), so the test page uses the 10 fixed names only.
 - The kill switch has no wrangler.toml line (Zip 45: allowed-unless-off switches have none); "off" is added only to pull it.
-- The stub cannot show "THU 17 DEC" before a date is picked: it shows DATE ? and the months on offer.
+- The stub cannot show "THU 17 DEC" before a date is picked: it shows DATE TBD and the months on offer.
 - "Date picked" kicker reads DATE PICKED (state 3's TICKETS OPEN would contradict "Tickets open soon").
 - 8-player plan words follow the Create screen (mock 03); the other sizes follow mocks 01 and 02.
 - The tournament tables are not in the backup FILE yet (BACKUP_LEFT_OUT; Time Travel keeps them; docs/RESTORE.md says so).
@@ -5471,3 +5471,20 @@ card; Vic's phone gets no tournament key and no card. The preview PIN is in docs
 Live runs main's code (Production deployment `35acc09d`, source `12019b8`; main `166d368` differs only by Zip 54's deploy notes). Nothing was migrated or
 deployed. To ship: SQL backup and Time Travel bookmark first, apply `0023_tournaments` to `pickleball`, merge to main, `npm run deploy`, the
 read-only live check. Rollback: Production deployment `35acc09d` (the tables can stay; old code never reads them).
+
+### Feedback pass 1 from Alex (Tue Nov 17), preview only, NOT shipped
+1. Ticket card: no line above the half circle at the top (the card's edge is drawn inside it now, so the notch covers it). The half circle stays.
+2. The stub says "TBD" (not "?") before a date is picked.
+3. Off the sign-up sheets: "Not sure? No worries. Teams are organized..." and "Winners each get a medal and a $14 game credit." The organizer's
+   Create screen lost its "What players see" card (it previewed that line), and the player answer no longer carries the prize text.
+4. Who's signed up: "SIGNED UP" on one line with the count beside it. The tournament sheets only (a new `calmFocus` option on Sheet, off for
+   every other screen) focus the sheet itself on open, so the ✕ never shows a ring after a tap; rings show for keyboard use (:focus-visible).
+5. Settings > Schedule: "Create tournament" always shows; with one open a tap says "Finish or cancel the current one first." The open
+   tournament has its own row under it (opens its page).
+6. Admin Home card: "Change the date" is now "Edit": it opens the whole tournament page at the top (who can see it, levels, dates, settings
+   with Edit, Cancel). "Pick the date" and "Levels" still open on their part, scrolled once only (no snapping back).
+7. Every offered date passed with none picked: hidden from every player (no card, routes say not open, the same as none). The admin card says
+   "Dates have passed. Add dates."; Edit settings with new dates shows it again.
+Tests: tests/zip55-tournament.test.ts 46, e2e/zip55.cjs 64 of 64 (TBD, the notch, the Who header and focus, the Settings row, Edit at the
+top, K rewritten for the hidden card). Preview redeployed and re-seeded. Live untouched: waiting for "ship it".
+

@@ -14,7 +14,7 @@
  *   I  Create tournament (No tournament first): a 32-letter name, 10 players, $0 credit, Only me.
  *   J  Every screen at 390, 360 and 320 wide, light and dark: nothing wider than the screen, no clipped button, the level rows on one line.
  *   L  The date is picked while a player's Edit sheet is open: look again, the stale date drops out.
- *   K  Every offered date has passed (clock moved to Jan 20): no Sign up, the card says so, Edit has no dates, the organizer's note.
+ *   K  Every offered date has passed (clock moved to Jan 20): players get no card at all; the admin card says "Dates have passed. Add dates."
  * Screenshots: .data/zip55-shots (not in git).
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -188,6 +188,9 @@ async function main() {
         const card = flat(await a.page.locator('.tc').innerText());
         assert(card.includes('DOUBLES TOURNAMENT') && card.includes('Winter Classic'.toUpperCase()) === false ? true : true, card);
         assert(/Pick the dates you can play/.test(card) && /Sign up/.test(card) && /VOTE/.test(card) && /FINAL/.test(card), card);
+        // Feedback pass 1: the stub says TBD (not ?), and the card has no border line running over the notch (its edge is drawn inside).
+        assert(flat(await a.page.locator('.tc-day').innerText()) === 'TBD', 'the stub says TBD');
+        assert((await a.page.locator('.tc').evaluate((el) => getComputedStyle(el).borderTopWidth)) === '0px', 'a border line over the notch');
         await fits(a.page, '.tc, .tc-strip');
         assert(a.errors.length === 0, a.errors.join(' | '));
         await shot(a.page, `A-alex-only-me-${width}-${scheme}`);
@@ -264,6 +267,14 @@ async function main() {
     assert(names.length === 7 && names.includes('Vic') && names.includes('Christopher Vanderberg'), names.join(', '));
     const sheet = await v.page.locator('dialog[open]').innerText();
     assert(!/\$|3\.\d|2\.\d/.test(sheet), `the list shows money or levels: ${flat(sheet)}`);
+    // Feedback pass 1: "SIGNED UP" on one line with the count beside it; the sheet opens without focusing the X (no ring after a tap).
+    const head = await v.page.locator('dialog[open] .tm-who-head').evaluate((el) => {
+      const [label, chip] = [el.querySelector('.tm-head-label').getBoundingClientRect(), el.querySelector('.tm-chip').getBoundingClientRect()];
+      return { labelH: label.height, chipLeft: chip.left, labelRight: label.right, sameRow: Math.abs(label.top + label.height / 2 - (chip.top + chip.height / 2)) < 4 };
+    });
+    assert(head.sameRow && head.chipLeft > head.labelRight && head.labelH < 24, JSON.stringify(head));
+    const focused = await v.page.evaluate(() => (document.activeElement ? `${document.activeElement.tagName}.${document.activeElement.className}` : ''));
+    assert(!/BUTTON/.test(focused), `focused on open: ${focused}`);
     await shot(v.page, 'C4-who');
     await v.ctx.close();
     d = await dash();
@@ -372,6 +383,29 @@ async function main() {
     finalDay = d.tournament.finalDate;
     assert(d.tournament.status === 'date_picked' && finalDay === best, JSON.stringify([d.tournament.status, finalDay, best]));
   });
+  await check('G after the date is picked the admin card says Edit; it opens the whole tournament page at the top and stays where you scroll', async () => {
+    const a = await adminPage();
+    assert(flat(await a.page.locator('[data-tm-open-dates]').innerText()) === 'Edit', 'the button says Edit');
+    await a.page.locator('[data-tm-open-dates]').click();
+    await a.page.locator('[data-tm-page]').waitFor();
+    await a.page.waitForTimeout(600);
+    const top = await a.page.evaluate(() => document.querySelector('dialog[open] .sheet-body')?.scrollTop ?? document.querySelector('dialog[open]').scrollTop);
+    assert(top === 0, `opened scrolled to ${top}`);
+    // Scroll down and it stays put.
+    await a.page.evaluate(() => {
+      const b = document.querySelector('dialog[open] .sheet-body');
+      const el = b && b.scrollHeight > b.clientHeight ? b : document.querySelector('dialog[open]');
+      el.scrollTop = 400;
+    });
+    await a.page.waitForTimeout(1500);
+    const after = await a.page.evaluate(() => {
+      const b = document.querySelector('dialog[open] .sheet-body');
+      return Math.max(b ? b.scrollTop : 0, document.querySelector('dialog[open]').scrollTop);
+    });
+    assert(after >= 300, `snapped back to ${after}`);
+    assert((await a.page.locator('dialog[open] [data-tm-edit-settings]').count()) === 1, 'Edit settings is there');
+    await a.ctx.close();
+  });
   for (const scheme of SCHEMES)
     for (const width of SIZES)
       await check(`G the Date picked card, signed up (Parker) and not (Zoe) (${width} ${scheme})`, async () => {
@@ -461,7 +495,7 @@ async function main() {
     await a.page.locator('[data-size="10"]').click();
     assert((await a.page.locator('.tm-plan-on').getAttribute('data-plan')) === '2c-150', 'the 10-player best plan (Booking hours is on in the preview)');
     await a.page.locator('#tm-credit').fill('0');
-    assert(flat(await a.page.locator('.tm-says').innerText()) === 'Sign-up says: Winners each get a medal.', 'the $0 line');
+    assert((await a.page.locator('.tm-says, [data-tm-card="players-see"]').count()) === 0, 'no "What players see" card (Alex took the prize line off the sign-up)');
     assert(flat(await a.page.locator('[data-tm-total]').innerText()) === '$0', 'total $0');
     assert(flat(await a.page.locator('[data-tm-open-signup]').innerText()) === 'Open sign-up (only me)', 'the button');
     await a.page.locator('[data-tm-open-signup]').click();
@@ -477,6 +511,20 @@ async function main() {
       await shot(al.page, `I-long-name-${width}`);
       await al.ctx.close();
     }
+  });
+
+  await check('I with a tournament open, Settings > Schedule still shows Create tournament; a tap says "Finish or cancel the current one first." and opens nothing', async () => {
+    const a = await adminPage();
+    await a.page.locator('.tabbar button', { hasText: 'Settings' }).click();
+    const sched = a.page.locator('[data-section="schedule"]');
+    if (!(await sched.getAttribute('open'))) await sched.locator('summary').click();
+    const row = a.page.locator('[data-tm-schedule-row]');
+    assert(flat(await row.innerText()).startsWith('Create tournament'), await row.innerText());
+    assert((await a.page.locator('[data-tm-open-row]').count()) === 1, 'the open tournament has its own row');
+    await row.click();
+    await a.page.getByText('Finish or cancel the current one first.').first().waitFor({ timeout: 5000 });
+    assert((await a.page.locator('[data-tm-form="create"]').count()) === 0, 'Create opened anyway');
+    await a.ctx.close();
   });
 
   // ---------------------------------------------------------------- J  organizer Home at every size
@@ -523,35 +571,29 @@ async function main() {
   await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: clockMs }) });
   assert((await admin.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } })).ok(), 'admin login again');
   adminCookies = await admin.cookies();
-  await check('K every date has passed: nothing to pick in the answer; the date pick refuses', async () => {
-    const { data } = await playerAnswer('Vic');
-    assert(data.tournament && data.tournament.openDates.length === 0, JSON.stringify(data.tournament && data.tournament.openDates));
+  await check('K every date has passed: players get no tournament at all (the same as none); the date pick refuses', async () => {
+    for (const n of ['Vic', 'Parker']) {
+      const { text, data } = await playerAnswer(n);
+      assert(!('tournament' in data) && !text.includes('Winter Classic'), `${n} still gets the tournament`);
+    }
     const t = (await dash()).tournament;
     const r = await admin.request.fetch(BASE + `/api/admin/tournament/${t.id}/date`, { method: 'PUT', data: { date: t.offeredDates[0] }, headers: { Origin: BASE } });
     assert(r.status() === 400, `date pick: ${r.status()}`);
   });
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`K every date has passed: Vic's card has no Sign up and says so; Parker keeps the list, Edit and Drop out; Edit has no dates (${width} ${scheme})`, async () => {
-        const v = await playerPage('Vic', { width, scheme });
-        await v.page.locator('.tc').waitFor({ timeout: 15000 });
-        assert((await v.page.locator('.tc [data-tc-signup]').count()) === 0, 'a Sign up button with nothing to pick');
-        assert(flat(await v.page.locator('[data-tc-sub]').innerText()) === 'The dates offered have passed.', await v.page.locator('[data-tc-sub]').innerText());
-        await fits(v.page, '.tc');
-        assert(v.errors.length === 0, v.errors.join(' | '));
-        await shot(v.page, `K-vic-passed-${width}-${scheme}`);
-        await v.ctx.close();
-        const p = await playerPage('Parker', { width, scheme });
-        await p.page.locator('.tc [data-tc-who]').waitFor({ timeout: 15000 });
-        assert((await p.page.locator('.tc [data-tc-edit]').count()) === 1 && (await p.page.locator('.tc [data-tc-drop]').count()) === 1, 'Edit and Drop out');
-        await fits(p.page, '.tc');
-        await p.page.locator('[data-tc-edit]').click();
-        await p.page.locator('dialog[open] [data-tm-save]').waitFor();
-        assert((await p.page.locator('dialog[open] .tm-cal').count()) === 0, 'Edit shows a calendar with nothing to pick');
-        assert(!(await p.page.locator('dialog[open] [data-tm-save]').isDisabled()), 'Save works for a level change');
-        await fits(p.page, 'dialog[open]');
-        await shot(p.page, `K-parker-edit-passed-${width}-${scheme}`);
-        await p.ctx.close();
+      await check(`K every date has passed: no card for Vic or Parker; the admin card says "Dates have passed. Add dates." (${width} ${scheme})`, async () => {
+        for (const n of ['Vic', 'Parker']) {
+          const v = await playerPage(n, { width, scheme });
+          assert((await v.page.locator('.tc, .tc-shell').count()) === 0, `${n} sees a card`);
+          await v.ctx.close();
+        }
+        const a = await adminPage({ width, scheme });
+        await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+        assert(flat(await a.page.locator('[data-tm-home-note]').innerText()) === 'Dates have passed. Add dates.', 'the admin note');
+        await fits(a.page, '[data-tm-home]');
+        await shot(a.page, `K-admin-home-passed-${width}-${scheme}`);
+        await a.ctx.close();
       });
   await check('K the organizer\'s Pick the date card says every date has passed and points to Edit', async () => {
     const a = await adminPage();

@@ -74,22 +74,22 @@
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid var(--tc-line);
+  /* The edge is drawn inside the card (not a border), so the notch below covers it: no line above the half circle. */
   border-radius: 22px;
   background:
     radial-gradient(120% 90% at 18% 0%, #112a1f 0%, rgb(17 42 31 / 0%) 60%),
     linear-gradient(180deg, #0e241a 0%, #0c1f16 62%, #0b1b14 100%);
   color: #ffffff;
-  box-shadow: 0 14px 30px rgb(10 24 17 / 24%), 0 2px 6px rgb(10 24 17 / 18%);
+  box-shadow: inset 0 0 0 1px var(--tc-line), 0 14px 30px rgb(10 24 17 / 24%), 0 2px 6px rgb(10 24 17 / 18%);
 }
 :root[data-theme='dark'] .tc {
   --tc-line: #2a5a42;
-  box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
+  box-shadow: inset 0 0 0 1px var(--tc-line), 0 10px 26px rgb(0 0 0 / 40%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tc {
     --tc-line: #2a5a42;
-    box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
+    box-shadow: inset 0 0 0 1px var(--tc-line), 0 10px 26px rgb(0 0 0 / 40%);
   }
 }
 /* The ticket's notch at the top of the stub line: the page color shows through. */
@@ -158,6 +158,12 @@
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
+}
+/* Before a date is picked: "TBD", smaller than a day number so it fits the stub. */
+.tc-day-tbd {
+  margin: 9px 0 7px;
+  font-size: 1.5rem;
+  letter-spacing: 0.02em;
 }
 .tc-time {
   margin-top: 11px;
@@ -410,13 +416,6 @@
   font-size: 0.875rem;
   line-height: 1.42;
   color: var(--ink-2);
-}
-.tm-prize {
-  margin: 8px 2px 0;
-  font-size: 0.875rem;
-  font-weight: 650;
-  line-height: 1.4;
-  color: var(--ink);
 }
 /* The picked-dates summary (mock 06): "4 picked  Dec 15 · Dec 17 · ...". */
 .tm-picked {
@@ -779,10 +778,13 @@ button.tm-day {
   background: var(--surface);
   overflow: hidden;
 }
-.tm-who-head {
+/* The header row: "SIGNED UP" on one line with the count beside it (it beats the row grid below). */
+.tm-who li.tm-who-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  white-space: nowrap;
   min-height: 48px;
   padding: 8px 14px 8px 16px;
   border-bottom: 1px solid var(--line);
@@ -835,4 +837,10 @@ button.tm-day {
 /* The sign-up and edit sheets leave the ticket card in sight above them (mocks 05, 06, 13): at most about three quarters of the screen. */
 dialog.sheet.tm-sheet {
   max-height: min(76dvh, 92dvh);
+}
+
+/* Zip 55 feedback: the tournament sheets focus the sheet itself on open (no ring on the ✕ after a tap). The sheet never shows a ring. */
+.sheet-calm-focus:focus,
+.sheet-calm-focus:focus-visible {
+  outline: none;
 }

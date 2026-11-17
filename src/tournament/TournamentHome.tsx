@@ -7,7 +7,7 @@
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
 import { useMemo, useState } from 'react';
 import type { PlayerTournamentView } from '../../shared/tournament';
-import { dayShort, levelLabel, LEVEL_NOTE, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
+import { dayShort, levelLabel, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../lib';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { type DayLook, LevelList, MonthCalendar } from './parts';
@@ -158,13 +158,12 @@ export function TicketCard({
   const picked = t.status === 'date_picked' && !!t.finalDate;
   const stub = picked ? stubParts(t.finalDate!) : null;
   const n = t.names.length;
-  // Every date on offer (or the picked one) has passed: nothing to pick, so no Sign up (the list, Edit and Drop out stay for those on it).
+  // The picked date has passed: nothing to pick, so no Sign up (the list, Edit and Drop out stay for those on it). (Every offered date passed
+  // with none picked: the server sends no card at all.)
   const noDates = t.openDates.length === 0;
   const kicker = picked ? 'Date picked' : signed ? 'You’re on the list' : 'Doubles tournament';
   const sub = noDates
-    ? picked
-      ? 'That date has passed.'
-      : 'The dates offered have passed.'
+    ? 'That date has passed.'
     : picked
       ? 'Tickets open soon'
       : signed
@@ -183,8 +182,8 @@ export function TicketCard({
           <span className="tc-wd" aria-hidden="true">
             {stub ? stub.weekday : 'Date'}
           </span>
-          <span className="tc-day" aria-hidden="true">
-            {stub ? stub.day : '?'}
+          <span className={stub ? 'tc-day' : 'tc-day tc-day-tbd'} aria-hidden="true">
+            {stub ? stub.day : 'TBD'}
           </span>
           <span className="tc-mon" aria-hidden="true">
             {stub ? stub.month : monthSpan(t.openDates) || '\u00a0'}
@@ -291,7 +290,7 @@ function SignUpSheet({
   // Only the dates still open count: one that closed while the sheet was open (the date was picked, midnight passed) drops out, never sent.
   const picked = pickedRaw.filter((d) => t.openDates.includes(d));
   return (
-    <Sheet open={open} title="Sign up" onClose={onClose} className="tm-sheet">
+    <Sheet calmFocus open={open} title="Sign up" onClose={onClose} className="tm-sheet">
       <div className="tm-steps" aria-hidden="true">
         <span className="on" />
         <span className={step === 2 ? 'on' : undefined} />
@@ -300,10 +299,6 @@ function SignUpSheet({
         <div data-tm-step="1">
           <p className="tm-eyebrow">Step 1 of 2 · Your level</p>
           <LevelList value={level} onPick={setLevel} />
-          <p className="tm-note">{LEVEL_NOTE}</p>
-          <p className="tm-prize" data-tm-prize>
-            {t.prize}
-          </p>
           <div className="tm-bottom">
             <button type="button" className="btn" disabled={level === null} onClick={() => setStep(2)} data-tm-next>
               Next
@@ -359,7 +354,7 @@ function EditSheet({
     setPickedRaw(d);
   };
   return (
-    <Sheet open={open} title="Edit my sign-up" onClose={onClose} className="tm-sheet">
+    <Sheet calmFocus open={open} title="Edit my sign-up" onClose={onClose} className="tm-sheet">
       {changing ? (
         <div className="tm-change-level" data-tm-change-level>
           <p className="tm-eyebrow">Your level</p>
@@ -370,7 +365,6 @@ function EditSheet({
               setChanging(false);
             }}
           />
-          <p className="tm-note">{LEVEL_NOTE}</p>
         </div>
       ) : (
         <div className="tm-mylevel" data-tm-mylevel>
@@ -403,7 +397,7 @@ function EditSheet({
 
 function WhoSheet({ t, open, onClose }: { t: PlayerTournamentView; open: boolean; onClose: () => void }) {
   return (
-    <Sheet open={open} title="Who's signed up" onClose={onClose} className="tm-sheet">
+    <Sheet calmFocus open={open} title="Who's signed up" onClose={onClose} className="tm-sheet">
       <ol className="tm-who" aria-label="Signed up">
         <li className="tm-who-head" aria-hidden="true">
           <span className="tm-head-label">Signed up</span>
