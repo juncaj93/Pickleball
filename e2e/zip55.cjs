@@ -13,6 +13,7 @@
  *   H  Changes after the date is picked: a new sign-up (only that date), an edit, a back out.
  *   I  Create tournament (No tournament first): a 32-letter name, 10 players, $0 credit, Only me.
  *   J  Every screen at 390, 360 and 320 wide, light and dark: nothing wider than the screen, no clipped button, the level rows on one line.
+ *   L  The date is picked while a player's Edit sheet is open: look again, the stale date drops out.
  *   K  Every offered date has passed (clock moved to Jan 20): no Sign up, the card says so, Edit has no dates, the organizer's note.
  * Screenshots: .data/zip55-shots (not in git).
  */
@@ -489,6 +490,32 @@ async function main() {
         await shot(a.page, `J-admin-home-${width}-${scheme}`);
         await a.ctx.close();
       });
+
+  // ---------------------------------------------------------------- L  the date is picked while a player's Edit sheet is open
+  await stage('signup');
+  await check('L Parker ticks a date in Edit, the organizer picks another date meanwhile: Save says look again, the stale date drops out, then he saves the picked date', async () => {
+    const before = (await dash()).tournament;
+    const mine = before.signups.find((x) => x.name === 'Parker').dates;
+    const other = before.offeredDates.find((x) => !mine.includes(x));
+    const final = mine[0];
+    const p = await playerPage('Parker');
+    await p.page.locator('[data-tc-edit]').click();
+    await p.page.locator(`dialog[open] [data-day="${other}"]`).click();
+    assert((await p.page.locator(`dialog[open] [data-day="${other}"]`).getAttribute('aria-pressed')) === 'true', 'ticked');
+    await call('PUT', `/api/admin/tournament/${before.id}/date`, { date: final });
+    await p.page.locator('dialog[open] [data-tm-save]').click();
+    await p.page.waitForTimeout(1200);
+    assert((await p.page.locator('dialog[open] [data-tm-save]').count()) === 1, 'the sheet stays open after look again');
+    assert((await p.page.locator(`dialog[open] [data-day="${other}"].tm-on`).count()) === 0, 'the stale date is still on');
+    const tap = p.page.locator(`dialog[open] [data-day="${final}"]`);
+    if ((await tap.getAttribute('aria-pressed')) !== 'true') await tap.click();
+    await p.page.locator('dialog[open] [data-tm-save]').click();
+    await p.page.locator('dialog[open] [data-tm-save]').waitFor({ state: 'detached', timeout: 10000 });
+    assert(p.errors.length === 0, p.errors.join(' | '));
+    await p.ctx.close();
+    const after = (await dash()).tournament.signups.find((x) => x.name === 'Parker').dates;
+    assert(after.join() === final, after.join());
+  });
 
   // ---------------------------------------------------------------- K  every offered date has passed (none picked)
   await stage('signup');
