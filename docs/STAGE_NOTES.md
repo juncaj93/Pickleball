@@ -5458,7 +5458,14 @@ shows the Tournament test row and the card (Sign-up open, 0 signed up, Only you 
 card; Vic's phone gets no tournament key and no card. The preview PIN is in docs/PREVIEW_FAKE_DB.md.
 
 ### Tests
-TESTS_LINE
+- Unit: 190 files passed, 1 skipped; 3,425 tests passed, 2 skipped (`npx vitest run`); `npx tsc -b` clean. New: tests/zip55-tournament.test.ts
+  (46: Only me leak and trip counts, sign-up, edit, back out, levels, the date pick, every race the reviews found, passed dates) and
+  tests/zip55-build.test.ts (5: no test page in a live build; the tournament screens are their own file).
+- Browser: e2e/zip55.cjs 62 of 62 (A to L; 390, 360 and 320, light and dark; long names; no row wraps); e2e/zip55-off.cjs 47 of 47 (switch OFF:
+  answers, stamps, Home HTML and pixels identical to main). Full run of 85 scripts, then the failures alone, then the 14 still failing side by
+  side with a clean main `166d368`: the same counts on both (money-rework, zip16, zip23, zip27, zip30, zip32, zip34, zip35, zip38, zip39, zip42,
+  zip43: the "newest switch is the top Settings row" checks since Zip 51b, and older ones). Flaky under load, green alone or on a rerun:
+  circles, round2, run, late-fees, money-visible, banner (banner also failed 1 of 3 runs on main).
 
 ### Live: NOT done (waiting for "ship it")
 Live runs main's code (Production deployment `35acc09d`, source `12019b8`; main `166d368` differs only by Zip 54's deploy notes). Nothing was migrated or
