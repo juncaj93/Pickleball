@@ -7,7 +7,11 @@ import * as v from './validate';
 import { organizerSignedIn } from './zip13';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { localParts } from '../shared/time';
+import { formatPrice } from '../shared/money';
 import {
+  type AdminTicketView,
+  type PlayerTicketsView,
+  type TicketPlaceView,
   DEFAULT_FORMAT,
   FORMATS,
   formatLocked,
@@ -30,6 +34,8 @@ import {
   type TournamentStatus,
   type Visibility,
 } from '../shared/tournament';
+import { defaultPayBy, endMsOf, startMsOf, ticketOwed, ticketPaid } from '../shared/tournamentTickets';
+import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
 //  - its wrangler.toml var is not "off" (the kill switch, needs a deploy), and
@@ -98,6 +104,8 @@ export interface TournamentRow {
   canceled_at: string | null;
   format: string;
   second_credit_cents: number;
+  /** Zip 56 (migration 0024): when ticket money is due; NULL until tickets first open. Missing on a database before 0024. */
+  pay_by?: string | null;
 }
 
 interface SignupRow {
@@ -116,10 +124,19 @@ interface SignupRow {
   is_active: number;
 }
 
-/** The stages piece 1 knows. Later pieces add theirs here. */
-const OPEN = "('signup', 'date_picked')";
+/** The stages a tournament is open in: piece 1's two, then piece 2's (Zip 56) tickets and rescheduled. Later pieces add theirs here. */
+const OPEN = "('signup', 'date_picked', 'tickets', 'rescheduled')";
 
-/** The group's open tournament (piece 1: signing up, or the date picked), or null. Null too while the tables do not exist yet. */
+/**
+ * Zip 56: a canceled tournament keeps a plain Canceled card (organizer Home, and the players who were on the list) for this many days, never
+ * past its picked date, and only when it got that far (a date picked or tickets open); piece 1's early cancel still just hides it.
+ */
+export const CANCELED_DAYS = 7;
+const canceledFrom = (nowMs: number) => new Date(nowMs - CANCELED_DAYS * 86_400_000).toISOString();
+/** SQL: a canceled tournament that still shows its Canceled card (?2: the cutoff). `t`: the table's alias, or '' for none. */
+const shownCanceled = (t = '') => `(${t}status = 'canceled' AND ${t}canceled_at >= ?2 AND (${t}final_date IS NOT NULL OR ${t}pay_by IS NOT NULL))`;
+
+/** The group's open tournament, or null. Null too while the tables do not exist yet. (Create's "one at a time" and every organizer save.) */
 export async function activeTournament(db: D1Database, groupId: string): Promise<TournamentRow | null> {
   return db
     .prepare(`SELECT * FROM tournaments WHERE group_id = ? AND status IN ${OPEN} ORDER BY created_at DESC LIMIT 1`)
@@ -128,21 +145,64 @@ export async function activeTournament(db: D1Database, groupId: string): Promise
     .catch(() => null);
 }
 
+/** Its picked date has passed (Eastern): a canceled one stops showing then. */
+const datePassed = (t: TournamentRow, today: string) => !!t.final_date && t.final_date < today;
+
+/**
+ * What the organizer's screens show (Zip 56): the open tournament, else one canceled in the last CANCELED_DAYS days (its plain Canceled card),
+ * in ONE read.
+ */
+export async function shownTournament(db: D1Database, group: GroupRow, nowMs: number): Promise<TournamentRow | null> {
+  // A canceled one with an I paid still waiting stays until the organizer answers it (only confirmed money becomes credit), whatever its age.
+  const waiting = "EXISTS (SELECT 1 FROM tournament_tickets k WHERE k.tournament_id = tournaments.id AND k.claim_cents > 0)";
+  const row = await db
+    .prepare(
+      `SELECT *, (status = 'canceled' AND ${waiting}) AS claims_waiting FROM tournaments
+       WHERE group_id = ?1 AND (status IN ${OPEN} OR ${shownCanceled()} OR (status = 'canceled' AND ${waiting}))
+       ORDER BY CASE WHEN status = 'canceled' THEN 1 ELSE 0 END, created_at DESC LIMIT 1`,
+    )
+    .bind(group.id, canceledFrom(nowMs))
+    .first<TournamentRow & { claims_waiting: number }>()
+    .catch(() => null);
+  if (!row) return null;
+  const { claims_waiting: claims, ...t } = row;
+  if (t.status === 'canceled' && !claims && datePassed(t, todayKey(nowMs, group.timezone))) return null;
+  return t;
+}
+
+/** Zip 56: a canceled tournament still has an I paid waiting for the organizer's answer (Create waits for it: nowhere else would show it). */
+async function canceledClaimWaiting(db: D1Database, groupId: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 AS x FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id WHERE t.group_id = ? AND t.status = 'canceled' AND k.claim_cents > 0 LIMIT 1")
+    .bind(groupId)
+    .first()
+    .catch(() => null);
+  return !!row;
+}
+
 /**
  * The same read for a player's phone, in the SAME single trip: on an Only me tournament it also brings the two facts that decide whether this
  * player is the organizer's own (the organizer's saved player still exists; this player's name). So Only me costs any player exactly the trips
- * of "none open" (nothing to time), whether the organizer's player is saved by id or matched by name.
+ * of "none open" (nothing to time), whether the organizer's player is saved by id or matched by name. Zip 56: a recently canceled one too
+ * (open ones first), with whether this player was on its list (only they see the Canceled card), still in the same one trip.
  */
-async function activeTournamentForPlayer(db: D1Database, group: GroupRow, playerId: string): Promise<(TournamentRow & { org_saved: string | null; viewer_name: string | null }) | null> {
+async function activeTournamentForPlayer(
+  db: D1Database,
+  group: GroupRow,
+  playerId: string,
+  nowMs: number,
+): Promise<(TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null }) | null> {
   return db
     .prepare(
       `SELECT t.*,
-         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ? AND group_id = t.group_id) END AS org_saved,
-         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ? AND group_id = t.group_id) END AS viewer_name
-       FROM tournaments t WHERE t.group_id = ? AND t.status IN ${OPEN} ORDER BY t.created_at DESC LIMIT 1`,
+         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
+         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ?4 AND group_id = t.group_id) END AS viewer_name,
+         CASE WHEN t.status = 'canceled' THEN (SELECT status FROM tournament_signups WHERE tournament_id = t.id AND player_id = ?4) ELSE NULL END AS my_signup
+       FROM tournaments t WHERE t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownCanceled('t.')})
+       ORDER BY CASE WHEN t.status = 'canceled' THEN 1 ELSE 0 END, t.created_at DESC LIMIT 1`,
     )
-    .bind(group.organizer_player_id ?? '', playerId, group.id)
-    .first<TournamentRow & { org_saved: string | null; viewer_name: string | null }>()
+    .bind(group.id, canceledFrom(nowMs), group.organizer_player_id ?? '', playerId)
+    .first<TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null }>()
     .catch(() => null);
 }
 
@@ -169,17 +229,37 @@ export function storedDays(json: string | null | undefined): string[] {
 /** The stored format, read safely (anything odd reads as Doubles). */
 const formatOf = (t: TournamentRow): TournamentFormat => (t.format === 'americano' ? 'americano' : 'doubles');
 
-const statusOf = (t: TournamentRow): TournamentStatus => (t.status === 'date_picked' ? 'date_picked' : 'signup');
+const STATUSES: readonly TournamentStatus[] = ['signup', 'date_picked', 'tickets', 'rescheduled', 'canceled'];
+export const statusOf = (t: TournamentRow): TournamentStatus => (STATUSES.find((s) => s === t.status) ?? 'signup');
+
+/** The date is set (picked, or tickets open on it): sign-up and Edit offer only that one date. */
+const dateFixed = (t: TournamentRow) => (statusOf(t) === 'date_picked' || statusOf(t) === 'tickets') && !!t.final_date;
+
+/** Zip 56: tickets have been open at some point (Pay by is set): the price, size, format and Who can see it stay as they are. */
+export const ticketsEverOpened = (t: TournamentRow): boolean => !!t.pay_by;
 
 /**
- * The dates a player can pick now: every offered date from today on while sign-up is open; only the picked one once it is picked. A day that
- * has passed is never a choice (so the list can be empty: every offered date, or the picked one, has passed). `today`: the Eastern calendar
- * day ('YYYY-MM-DD').
+ * The dates a player can pick now: every offered date from today on while sign-up is open (also after a Reschedule); only the picked one once
+ * it is picked (and while tickets are open on it). A day that has passed is never a choice (so the list can be empty: every offered date, or
+ * the picked one, has passed). `today`: the Eastern calendar day ('YYYY-MM-DD'). A canceled tournament offers none.
  */
 export function openDatesOf(t: TournamentRow, today: string): string[] {
-  const days = statusOf(t) === 'date_picked' && t.final_date ? [t.final_date] : storedDays(t.offered_dates);
+  if (statusOf(t) === 'canceled') return [];
+  const days = dateFixed(t) ? [t.final_date as string] : storedDays(t.offered_dates);
   return days.filter((d) => d >= today);
 }
+
+/** Zip 56: the moment the tournament night starts and ends (ms), or null without a date. Ticket sales close at the start. */
+export function nightOf(t: TournamentRow, tz: string): { start: number; end: number } | null {
+  if (!t.final_date) return null;
+  return { start: startMsOf(t.final_date, t.start_minutes, tz), end: endMsOf(t.final_date, t.start_minutes, t.minutes, tz) };
+}
+
+/** Ticket sales are closed: the tournament night has started. */
+export const salesClosed = (t: TournamentRow, tz: string, nowMs: number) => {
+  const n = nightOf(t, tz);
+  return !!n && nowMs >= n.start;
+};
 
 /** Eastern calendar day of a moment, 'YYYY-MM-DD'. */
 export function todayKey(nowMs: number, tz = 'America/Detroit'): string {
@@ -197,9 +277,11 @@ export function todayKey(nowMs: number, tz = 'America/Detroit'): string {
  */
 async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: boolean): Promise<{ t: TournamentRow; onlyMe: boolean } | null> {
   if (!(await tournamentsFlags(ctx, group.id)).on) return null;
-  const row = await activeTournamentForPlayer(ctx.db, group, playerId);
+  const row = await activeTournamentForPlayer(ctx.db, group, playerId, ctx.nowMs);
   if (!row) return null;
-  const { org_saved: orgSaved, viewer_name: viewerName, ...t } = row;
+  const { org_saved: orgSaved, viewer_name: viewerName, my_signup: mySignupStatus, ...t } = row;
+  // Zip 56: a canceled tournament's plain card is only for the players who were on its list, and only until its date has passed.
+  if (statusOf(t) === 'canceled' && (mySignupStatus !== 'in' || datePassed(t, todayKey(ctx.nowMs, group.timezone)))) return null;
   // Every offered date has passed with none picked: hidden from every player (Alex, Zip 55 feedback), the same as none open. The organizer's
   // Home card says "Dates have passed. Add dates."; Edit settings with new dates shows it again.
   if (statusOf(t) === 'signup' && openDatesOf(t, todayKey(ctx.nowMs, group.timezone)).length === 0) return null;
@@ -217,6 +299,9 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   return { t, onlyMe: true };
 }
 
+/** The picked date as the screens show it: once picked, while tickets are open on it, and on a canceled tournament's card. */
+const shownDate = (t: TournamentRow): string | null => (statusOf(t) === 'date_picked' || statusOf(t) === 'tickets' || statusOf(t) === 'canceled' ? t.final_date : null);
+
 /** GET /api/group `tournament`: this player's card, or null (then the answer has no `tournament` key at all). */
 export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: string | null, viewAs: boolean): Promise<PlayerTournamentView | null> {
   if (!playerId) return null;
@@ -225,7 +310,7 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
   const { t, onlyMe } = seen;
   const rows = (await signupRows(ctx.db, t.id)).filter((r) => r.status === 'in' && r.is_active === 1);
   const mine = rows.find((r) => r.player_id === playerId) ?? null;
-  return {
+  const base: PlayerTournamentView = {
     id: t.id,
     name: t.name,
     format: formatOf(t),
@@ -233,24 +318,120 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
     start: t.start_minutes,
     minutes: t.minutes,
     openDates: openDatesOf(t, todayKey(ctx.nowMs, group.timezone)),
-    finalDate: statusOf(t) === 'date_picked' ? t.final_date : null,
+    finalDate: shownDate(t),
     names: rows.map((r) => r.display_name),
     // Their own pick only (never the organizer's level for them).
     me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates) } : null,
     ...(onlyMe ? { onlyMe: true as const } : {}),
   };
+  // Zip 56: the plain Canceled card, with what came back to this player.
+  if (statusOf(t) === 'canceled') return { ...base, canceled: await canceledMoneyOf(ctx.db, t.id, playerId) };
+  // Piece 1's stages (tickets never opened) send exactly what they did.
+  if (!ticketsEverOpened(t)) return base;
+  const tickets = await returnUnusedHolds(ctx, group, t, await loadTickets(ctx.db, t.id));
+  return { ...base, tickets: playerTicketsView(t, tickets, playerId, group, ctx.nowMs) };
 }
 
-/** The organizer's view of the open tournament (dashboard `tournament`), or null. */
+/** Zip 56: the ticket part of one player's card: names only for everyone else, their own money only. */
+function playerTicketsView(t: TournamentRow, tickets: TicketWithName[], playerId: string, group: GroupRow, nowMs: number): PlayerTicketsView {
+  const listed = tickets.filter((k) => k.signup_status === 'in');
+  const me = (k: TicketWithName) => (k.player_id === playerId ? { me: true as const } : {});
+  const money = (k: TicketWithName) => ({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents });
+  const own = tickets.find((k) => k.player_id === playerId) ?? null;
+  return {
+    size: t.size,
+    // The organizer pays the venue, never the group: their own seat is $0.
+    priceCents: own ? own.price_cents : group.organizer_player_id === playerId ? 0 : t.ticket_cents,
+    payBy: statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null,
+    closed: statusOf(t) === 'tickets' && salesClosed(t, group.timezone, nowMs),
+    locked: listed.filter((k) => k.place === 'spot').map((k) => ({ name: k.display_name, ...me(k) })),
+    line: listed.filter((k) => k.place === 'line').map((k) => ({ name: k.display_name, paid: ticketPaid(money(k)), ...me(k) })),
+    mine: own
+      ? { place: placeOf(own), creditCents: own.credit_cents, paidCents: own.paid_cents, claimCents: own.claim_cents, owedCents: ticketOwed(money(own)) }
+      : null,
+  };
+}
+
+const placeOf = (k: { place: string }): TicketPlaceView => (k.place === 'spot' || k.place === 'line' ? k.place : 'none');
+
+/**
+ * Zip 56: what a cancel gave back to this player (the plain Canceled card): the cash that became credit and the credit that went back to the
+ * pot, both written by the cancel, and an I paid still waiting for the organizer. One small read, only on a canceled tournament's card.
+ */
+async function canceledMoneyOf(db: D1Database, tournamentId: string, playerId: string): Promise<{ backCents: number; claimCents: number }> {
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE player_id = ?1 AND kind = 'kept' AND reason = ?2) +
+         (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE player_id = ?1 AND kind = 'used' AND reason = ?3 AND ended_reason = 'canceled') AS back,
+         (SELECT COALESCE(SUM(claim_cents), 0) FROM tournament_tickets WHERE tournament_id = ?4 AND player_id = ?1) AS claim`,
+    )
+    .bind(playerId, `tour:${tournamentId}:cancel`, `tour:${tournamentId}`, tournamentId)
+    .first<{ back: number; claim: number }>()
+    .catch(() => null);
+  return { backCents: row?.back ?? 0, claimCents: row?.claim ?? 0 };
+}
+
+/**
+ * Zip 56: a hold that never got a spot comes back as credit once the tournament night is over (its date, at the start plus the plan's minutes):
+ * every ticket in line or not placed, with credit or confirmed cash on it and no I paid waiting, by the site's own credit rules (credit used goes
+ * back to the pot, cash becomes a credit entry). Done by the first screen that reads the tournament after that moment (a player's, the
+ * organizer's, or a 5-second check), in one all-or-nothing batch that a second reader finds nothing left to do in. A read with the read-only
+ * PIN writes nothing (server/viewOnly.ts), so it waits for the next real reader. Returns the tickets as they are now.
+ */
+async function returnUnusedHolds(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets: TicketWithName[]): Promise<TicketWithName[]> {
+  if (statusOf(t) !== 'tickets') return tickets;
+  const night = nightOf(t, group.timezone);
+  if (!night || ctx.nowMs < night.end) return tickets;
+  const due = tickets.filter((k) => k.place !== 'spot' && k.claim_cents === 0 && (k.credit_cents > 0 || k.paid_cents > 0));
+  if (due.length === 0) return tickets;
+  const endIso = new Date(night.end).toISOString();
+  const when = (x: string) =>
+    `(${x}.place <> 'spot' AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets') AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)})`;
+  try {
+    const res = await ctx.db.batch(ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId: null, why: 'unused', endedReason: 'canceled', nowIso: ctx.nowIso, when }));
+    if ((res[2]?.meta?.changes ?? 0) > 0) {
+      await audit(ctx.db, group.id, null, 'tournament_holds_returned', { tournament: t.name, count: due.length, amountCents: due.reduce((s, k) => s + k.credit_cents + k.paid_cents, 0) }, ctx.nowIso);
+    }
+  } catch {
+    return tickets;
+  }
+  return loadTickets(ctx.db, t.id);
+}
+
+/** The organizer's view of the open tournament (dashboard `tournament`), else of one canceled lately (its Canceled card), or null. */
 export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<AdminTournamentView | null> {
-  const t = await activeTournament(ctx.db, group.id);
+  const t = await shownTournament(ctx.db, group, ctx.nowMs);
   if (!t) return null;
   const rows = (await signupRows(ctx.db, t.id)).filter((r) => r.is_active === 1);
+  const tickets = ticketsEverOpened(t) ? await returnUnusedHolds(ctx, group, t, await loadTickets(ctx.db, t.id)) : [];
+  const tz = group.timezone;
   return {
     id: t.id,
     name: t.name,
     format: formatOf(t),
-    formatLocked: formatLocked(t.status),
+    // Zip 56: once tickets have been open the format stays (also after a Reschedule).
+    formatLocked: formatLocked(t.status) || ticketsEverOpened(t),
+    settingsLocked: ticketsEverOpened(t),
+    payBy:
+      statusOf(t) === 'tickets' ? (t.pay_by ?? null) : statusOf(t) === 'date_picked' && t.final_date ? defaultPayBy(t.final_date, t.start_minutes, tz, ctx.nowMs) : null,
+    closed: salesClosed(t, tz, ctx.nowMs),
+    tickets: tickets.map(
+      (k): AdminTicketView => ({
+        playerId: k.player_id,
+        name: k.display_name,
+        place: placeOf(k),
+        placeAt: k.place_at,
+        priceCents: k.price_cents,
+        creditCents: k.credit_cents,
+        paidCents: k.paid_cents,
+        claimCents: k.claim_cents,
+        claimAt: k.claim_at,
+        out: k.signup_status !== 'in',
+        organizer: !!group.organizer_player_id && k.player_id === group.organizer_player_id,
+      }),
+    ),
+    canceledAt: t.canceled_at,
     status: statusOf(t),
     visibility: t.visibility === 'all' ? 'all' : 'me',
     size: t.size,
@@ -261,7 +442,7 @@ export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<Adm
     championCreditCents: t.champion_credit_cents,
     secondCreditCents: t.second_credit_cents ?? 0,
     offeredDates: storedDays(t.offered_dates),
-    finalDate: statusOf(t) === 'date_picked' ? t.final_date : null,
+    finalDate: shownDate(t),
     createdAt: t.created_at,
     signups: rows
       .filter((r) => r.status === 'in')
@@ -303,22 +484,24 @@ export async function adminTournamentStamp(ctx: Ctx, group: GroupRow): Promise<s
 // ---------------------------------------------------------------------------------------------------------------------
 
 /** Organizer routes: the organizer's sign-in, and the switch on for this phone (off: refused, nothing read or written). */
-async function organizerOn(ctx: Ctx): Promise<GroupRow> {
+export async function organizerOn(ctx: Ctx): Promise<GroupRow> {
   const group = await requireAdmin(ctx);
   if (!(await tournamentsFlags(ctx, group.id)).on) throw new HttpError(403, 'tournaments_off', 'Tournaments are switched off.');
   return group;
 }
 
-async function openById(ctx: Ctx, group: GroupRow): Promise<TournamentRow> {
+export async function openById(ctx: Ctx, group: GroupRow): Promise<TournamentRow> {
   const id = v.id(ctx.params.id, 'tournament');
   const t = await activeTournament(ctx.db, group.id);
   if (!t || t.id !== id) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   return t;
 }
 
-/** Only an open tournament (piece 1's two stages) is ever changed: a save racing a Cancel changes nothing and says "look again". */
-const OPEN_GUARD = "AND status IN ('signup', 'date_picked')";
-const changedOrLookAgain = (res: { meta?: { changes?: number } }) => {
+/** Only an open tournament is ever changed: a save racing a Cancel changes nothing and says "look again". */
+export const OPEN_GUARD = `AND status IN ${OPEN}`;
+/** Zip 56: the date step (pick a date, take it back) is open before tickets open, and again after a Reschedule. */
+const DATE_GUARD = "AND status IN ('signup', 'date_picked', 'rescheduled')";
+export const changedOrLookAgain = (res: { meta?: { changes?: number } }) => {
   if ((res.meta?.changes ?? 0) === 0) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
 };
 
@@ -390,6 +573,7 @@ export async function createTournament(ctx: Ctx, body: Record<string, unknown>) 
   const group = await organizerOn(ctx);
   const s = readSettings(body, group, ctx.nowMs);
   if (await activeTournament(ctx.db, group.id)) throw new HttpError(409, 'tournament_open', 'A tournament is already open.');
+  if (await canceledClaimWaiting(ctx.db, group.id)) throw new HttpError(409, 'claim_waiting', 'Answer the I paid waiting on the canceled tournament first.');
   const id = newId();
   try {
     await ctx.db
@@ -422,9 +606,16 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   // A save that leaves the format or the 2nd place credit out keeps what the tournament has (only Create starts them at their defaults).
   if (body.format === undefined) s.format = formatOf(t);
   if (body.secondCreditCents === undefined) s.secondCreditCents = t.second_credit_cents ?? 0;
-  // The format is locked once tickets open (piece 2): a save that tries to change it then is refused.
-  if (s.format !== formatOf(t) && formatLocked(t.status)) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
-  if (t.final_date && statusOf(t) === 'date_picked' && !s.dates.includes(t.final_date)) {
+  // The format is locked once tickets open (piece 2): a save that tries to change it then is refused. So are the price, the size (the spots) and
+  // Only me once tickets have been open at all (Zip 56), also after a Reschedule: players have paid that price for those spots, and a player who
+  // holds a ticket must always see it.
+  if (s.format !== formatOf(t) && (formatLocked(t.status) || ticketsEverOpened(t))) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
+  if (ticketsEverOpened(t)) {
+    if (s.ticketCents !== t.ticket_cents) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
+    if (s.size !== t.size) throw new HttpError(409, 'size_locked', `Tickets have been sold. The spots stay ${t.size}.`);
+    if (s.visibility !== 'all') throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
+  }
+  if (t.final_date && dateFixed(t) && !s.dates.includes(t.final_date)) {
     throw new HttpError(409, 'final_date_kept', 'That date is the one you picked. Pick another date first.');
   }
   // For History only: how many players on the list (shown on the level list) lose a date they had picked. The trim itself runs on the rows as
@@ -438,9 +629,10 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
       .prepare(
         `UPDATE tournaments SET name = ?, size = ?, courts = ?, minutes = ?, start_minutes = ?, ticket_cents = ?, champion_credit_cents = ?, offered_dates = ?,
            visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?
-         WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))`,
+         WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))
+           AND (pay_by IS NULL OR (ticket_cents = ? AND size = ? AND format = ? AND ? = 'all'))`,
       )
-      .bind(s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, s.format, s.secondCreditCents, t.id, group.id, offer),
+      .bind(s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, s.format, s.secondCreditCents, t.id, group.id, offer, s.ticketCents, s.size, s.format, s.visibility),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
     // tournament holds exactly the new offer and is still open).
     ctx.db
@@ -465,10 +657,12 @@ export async function setTournamentVisibility(ctx: Ctx, body: Record<string, unk
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
   const visibility = v.oneOf(body.visibility, 'visibility', ['me', 'all'] as const);
+  // Zip 56: once tickets have been open, players hold tickets: it stays on Everyone (a player must always see a ticket they hold).
+  if (visibility === 'me' && ticketsEverOpened(t)) throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
   changedOrLookAgain(
     await ctx.db
-      .prepare(`UPDATE tournaments SET visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ? WHERE id = ? ${OPEN_GUARD}`)
-      .bind(visibility, visibility, ctx.nowIso, ctx.nowIso, t.id)
+      .prepare(`UPDATE tournaments SET visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ? WHERE id = ? ${OPEN_GUARD} AND (? = 'all' OR pay_by IS NULL)`)
+      .bind(visibility, visibility, ctx.nowIso, ctx.nowIso, t.id, visibility)
       .run(),
   );
   if (visibility !== (t.visibility === 'all' ? 'all' : 'me')) await audit(ctx.db, group.id, null, visibility === 'all' ? 'tournament_shown' : 'tournament_hidden', { tournament: t.name }, ctx.nowIso);
@@ -508,9 +702,15 @@ export async function setTournamentLevel(ctx: Ctx, body: Record<string, unknown>
 export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
+  // Zip 56: once tickets are open the date stays; Cancel or reschedule changes it (Reschedule goes back to this step).
+  if (statusOf(t) === 'tickets') throw new HttpError(409, 'tickets_open', 'Tickets are open. Reschedule to change the date.');
   if (body.date === null) {
+    // Back to picking. A tournament that has had tickets goes back to Rescheduled (players keep seeing "Pick your dates again").
     changedOrLookAgain(
-      await ctx.db.prepare(`UPDATE tournaments SET status = 'signup', final_date = NULL, date_picked_at = NULL, updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, t.id).run(),
+      await ctx.db
+        .prepare(`UPDATE tournaments SET status = CASE WHEN pay_by IS NOT NULL THEN 'rescheduled' ELSE 'signup' END, final_date = NULL, date_picked_at = NULL, updated_at = ? WHERE id = ? ${DATE_GUARD}`)
+        .bind(ctx.nowIso, t.id)
+        .run(),
     );
     if (t.final_date) await audit(ctx.db, group.id, null, 'tournament_date', { tournament: t.name, date: null }, ctx.nowIso);
     return { ok: true, date: null };
@@ -522,7 +722,7 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
     await ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'date_picked', final_date = ?, date_picked_at = ?, updated_at = ?
-         WHERE id = ? ${OPEN_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?)`,
+         WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?)`,
       )
       .bind(date, ctx.nowIso, ctx.nowIso, t.id, date)
       .run(),
@@ -531,13 +731,32 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
   return { ok: true, date };
 }
 
-/** POST /api/admin/tournament/:id/cancel: the tournament is over before it started (piece 1: nothing was paid). The list is kept. */
+/**
+ * POST /api/admin/tournament/:id/cancel: the tournament is over before it started. The list is kept. Zip 56: every paid ticket comes back as
+ * credit in the SAME all-or-nothing batch (credit used goes back to the pot, confirmed cash becomes a credit entry), once and only once: a second
+ * tap finds it canceled and changes nothing. An I paid still waiting stays as it is until the organizer answers it (then it becomes credit).
+ */
 export async function cancelTournament(ctx: Ctx) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
-  changedOrLookAgain(await ctx.db.prepare(`UPDATE tournaments SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, ctx.nowIso, t.id).run());
-  await audit(ctx.db, group.id, null, 'tournament_canceled', { tournament: t.name }, ctx.nowIso);
-  return { ok: true };
+  const before = ticketsEverOpened(t) ? await loadTickets(ctx.db, t.id) : [];
+  const [res] = await ctx.db.batch([
+    ctx.db.prepare(`UPDATE tournaments SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, ctx.nowIso, t.id),
+    ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId: null, why: 'cancel', endedReason: 'canceled', nowIso: ctx.nowIso, when: tournamentCanceled }),
+  ]);
+  changedOrLookAgain(res);
+  const back = before.filter((k) => k.claim_cents === 0 && k.credit_cents + k.paid_cents > 0);
+  const returnedCents = back.reduce((s, k) => s + k.credit_cents + k.paid_cents, 0);
+  const waiting = before.filter((k) => k.claim_cents > 0).length;
+  await audit(
+    ctx.db,
+    group.id,
+    null,
+    'tournament_canceled',
+    { tournament: t.name, ...(back.length ? { returned: back.length, amountCents: returnedCents } : {}), ...(waiting ? { waiting } : {}) },
+    ctx.nowIso,
+  );
+  return { ok: true, returned: back.length, returnedCents, waiting };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -550,12 +769,12 @@ export interface TournamentActor {
   viewAsName: string | null;
 }
 
-async function playerTarget(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>): Promise<{ t: TournamentRow; playerId: string }> {
+export async function playerTarget(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>): Promise<{ t: TournamentRow; playerId: string }> {
   if (who.viewAsName && !ctx.env.SANDBOX) throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
   if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const seen = await visibleTo(ctx, who.group, who.playerId, !!who.viewAsName);
-  // The same answer for "none", "switched off" and "Only me": nothing about a hidden tournament leaks through an error either.
-  if (!seen) throw new HttpError(404, 'tournament_not_open', 'This tournament is not open.');
+  // The same answer for "none", "switched off", "Only me" and (Zip 56) a canceled one: nothing leaks through an error either.
+  if (!seen || statusOf(seen.t) === 'canceled') throw new HttpError(404, 'tournament_not_open', 'This tournament is not open.');
   if (typeof body.tournamentId === 'string' && body.tournamentId !== seen.t.id) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   return { t: seen.t, playerId: who.playerId };
 }
@@ -578,13 +797,13 @@ function readDates(body: Record<string, unknown>, open: readonly string[]): stri
  * A player's own tap in History, under their own name. No phone code (Zip 30 "Acting for others" keeps to the game taps it was built for;
  * a tournament sign-up never shows on its Home card).
  */
-async function logPlayer(ctx: Ctx, group: GroupRow, playerId: string, action: string, details: Record<string, unknown>) {
+export async function logPlayer(ctx: Ctx, group: GroupRow, playerId: string, action: string, details: Record<string, unknown>) {
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(playerId).first<{ display_name: string }>();
   const name = p?.display_name ?? 'A player';
   await audit(ctx.db, group.id, null, action, { player: name, playerId, ...details }, ctx.nowIso, name);
 }
 
-async function mySignup(db: D1Database, tournamentId: string, playerId: string) {
+export async function mySignup(db: D1Database, tournamentId: string, playerId: string) {
   return db
     .prepare('SELECT id, status, picked_level, dates FROM tournament_signups WHERE tournament_id = ? AND player_id = ?')
     .bind(tournamentId, playerId)
@@ -619,6 +838,10 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
             .prepare(`INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) SELECT ?, ?, ?, ?, 'player', ? WHERE ${UNCHANGED}`)
             .bind(newId(), t.id, playerId, level, ctx.nowIso, ...unchangedValues(t)),
         ]
+      : []),
+    // Zip 56: the organizer signing up while tickets are open takes their own $0 seat at once (a spot if one is open, else first paid in line).
+    ...(statusOf(t) === 'tickets' && playerId === (await organizerIdOf(ctx.db, who.group))
+      ? [organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]
       : []),
   ]);
   changedOrLookAgain(res);
@@ -660,14 +883,49 @@ export async function playerTournamentEdit(ctx: Ctx, who: TournamentActor, body:
   return { ok: true, result: 'saved' };
 }
 
-/** POST /api/tournament/back-out { tournamentId }: off the list (the row stays, so their level stays with this tournament). */
+/**
+ * POST /api/tournament/back-out { tournamentId, backCents? }: off the list (the row stays, so their level stays with this tournament).
+ * Zip 56: their ticket comes back as credit in the SAME all-or-nothing batch (credit used goes back to the pot, confirmed cash becomes a credit
+ * entry), the spot opens, and the first PAID person in line takes it. An I paid still waiting stays until the organizer answers it (then it
+ * becomes credit). `backCents`: what the Back out? sheet said comes back; if the ticket changed since, nothing moves ("look again"). A second
+ * tap finds them off the list and moves nothing. From the start of the tournament night a ticket that holds a spot or money stays (ask Alex).
+ */
 export async function playerTournamentBackOut(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
   const { t, playerId } = await playerTarget(ctx, who, body);
   const before = await mySignup(ctx.db, t.id, playerId);
   if (!before || before.status !== 'in') return { ok: true, result: 'not_signed_up' };
-  const res = await ctx.db.prepare("UPDATE tournament_signups SET status = 'out', backed_out_at = ?, updated_at = ? WHERE id = ? AND status = 'in'").bind(ctx.nowIso, ctx.nowIso, before.id).run();
-  if ((res.meta?.changes ?? 0) > 0) await logPlayer(ctx, who.group, playerId, 'tournament_back_out', { tournament: t.name });
-  return { ok: true, result: 'backed_out' };
+  const k = ticketsEverOpened(t) ? await ticketOf(ctx.db, t.id, playerId) : null;
+  const holds = !!k && (k.place === 'spot' || k.credit_cents + k.paid_cents + k.claim_cents > 0);
+  if (holds && salesClosed(t, who.group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', `The tournament has started. Ask ${firstName(who.group)}.`);
+  if (body.backCents !== undefined) {
+    const shown = v.cents(body.backCents, 'backCents') ?? 0;
+    if (shown !== (k ? k.credit_cents + k.paid_cents + k.claim_cents : 0)) throw new HttpError(409, 'amount_changed', 'Your ticket just changed. Look again.');
+  }
+  const res = await ctx.db.batch([
+    ctx.db.prepare("UPDATE tournament_signups SET status = 'out', backed_out_at = ?, updated_at = ? WHERE id = ? AND status = 'in'").bind(ctx.nowIso, ctx.nowIso, before.id),
+    ...(k
+      ? [
+          ...ticketBackStatements(ctx.db, { groupId: who.group.id, tournamentId: t.id, playerId, why: 'back', endedReason: 'dropped', nowIso: ctx.nowIso, when: offList }),
+          fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
+        ]
+      : []),
+  ]);
+  if ((res[0].meta?.changes ?? 0) === 0) return { ok: true, result: 'not_signed_up' };
+  const waiting = k && k.claim_cents > 0 ? k.credit_cents + k.paid_cents + k.claim_cents : 0;
+  const cash = k && !waiting ? k.paid_cents : 0;
+  const credit = k && !waiting ? k.credit_cents : 0;
+  await logPlayer(ctx, who.group, playerId, 'tournament_back_out', {
+    tournament: t.name,
+    ...(cash + credit > 0 ? { amountCents: cash + credit } : {}),
+    ...(waiting ? { waitingCents: waiting } : {}),
+  });
+  // creditBackCents: cash that became credit; creditReturnedCents: credit that went back; waitingCents: held until the organizer answers an I paid.
+  return { ok: true, result: 'backed_out', creditBackCents: cash, creditReturnedCents: credit, waitingCents: waiting };
+}
+
+/** The organizer's first name for the players' words ("Ask Alex"), or "the organizer". */
+export function firstName(group: GroupRow): string {
+  return (group.organizer_name ?? '').trim().split(/\s+/)[0] || 'the organizer';
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -678,9 +936,18 @@ export interface TournamentTables {
   tournaments: Record<string, unknown>[];
   tournament_signups: Record<string, unknown>[];
   tournament_level_history: Record<string, unknown>[];
+  /** Zip 56: the tickets (missing from an older server's answer). */
+  tournament_tickets?: Record<string, unknown>[];
 }
 
 export async function tournamentTablesFor(db: D1Database, groupId: string): Promise<TournamentTables | null> {
+  // Zip 56: the tickets too (a database before 0024 has none: the three tables alone, as before).
+  const tickets = await db
+    .prepare('SELECT k.* FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id WHERE t.group_id = ? ORDER BY k.created_at, k.id')
+    .bind(groupId)
+    .all<Record<string, unknown>>()
+    .then((r) => r.results)
+    .catch(() => null);
   try {
     const [a, b, c] = await db.batch([
       db.prepare('SELECT * FROM tournaments WHERE group_id = ? ORDER BY created_at, id').bind(groupId),
@@ -691,6 +958,7 @@ export async function tournamentTablesFor(db: D1Database, groupId: string): Prom
       tournaments: a.results as Record<string, unknown>[],
       tournament_signups: b.results as Record<string, unknown>[],
       tournament_level_history: c.results as Record<string, unknown>[],
+      ...(tickets ? { tournament_tickets: tickets } : {}),
     };
   } catch {
     return null;

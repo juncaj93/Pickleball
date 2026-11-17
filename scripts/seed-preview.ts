@@ -3,7 +3,8 @@
 //   npm run db:seed:preview              build the fake world, load it into pickleball-preview
 //   npm run db:seed:preview -- --dry-run build it and run the safety checks, touch nothing remote
 //   npm run db:seed:preview -- --full    the WHOLE world (every zip's scenes). The default is the CALM one (PREVIEW CALM RULE, docs/SITE_RULES.md).
-//   npm run db:seed:preview -- --zip51   the calm profile of Zip 51 instead of Zip 55's (the default since Zip 55)
+//   npm run db:seed:preview -- --zip51   the calm profile of Zip 51 instead of Zip 56's (the default since Zip 56: the tournament at Date picked)
+//   npm run db:seed:preview -- --zip55   Zip 55's start instead (the tournament just created, Only me, nobody on the list)
 //   npm run db:seed:preview -- --out x.sql   also keep the SQL it would load
 //
 // How it works: it plays a fake group on a throwaway in-memory copy of the site (the real site code,
@@ -63,9 +64,10 @@ async function main() {
   console.log('Building the fake world on a throwaway in-memory copy...');
   // The SMALL world (Alex, Nov 8): the fixed names of docs/PREVIEW_FAKE_DB.md, nothing else (scripts/preview-world-small.ts).
   // Zip 55: the calm preview opens on the Tournaments scene alone (scripts/preview-world-small.ts step 28). `--zip51` builds Zip 51's calm profile
-  // instead (its two late-drop games and the Venue charge alert's cards).
+  // instead (its two late-drop games and the Venue charge alert's cards). Zip 56 (step 29): the tournament starts at Date picked for Everyone
+  // (the first tap is Open tickets); `--zip55` builds Zip 55's start instead (Only me, nobody on the list).
   const zip51 = args.includes('--zip51');
-  const { sql, summary } = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51 });
+  const { sql, summary } = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') });
   for (const s of summary) console.log('  - ' + s);
 
   if (outFile) writeFileSync(outFile, sql);

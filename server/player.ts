@@ -98,7 +98,7 @@ async function lateFeeClearsFor(ctx: Ctx, groupId: string, playerId: string): Pr
 }
 import { NO_SEAT_CREDIT, potBalance, type SeatCredit, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { owedOf, seatOf } from './owed';
-import { cashOutOffer, loadLedger, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead } from './credit';
+import { cashOutOffer, loadLedger, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf } from './credit';
 import { hiddenGameIdsRead } from './hideGame';
 import { directLoadFor, fewerDb, lastScreenFor } from './speed';
 import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
@@ -135,6 +135,7 @@ import { christmasSkinFor, christmasSkinModeFor, setChristmasSkinMeOn } from './
 import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup } from './tournament';
+import { playerTicketLock, playerTicketPaid, playerTicketWaitlist } from './tournamentTickets';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
 import { refuseOverLimit, unpaidNudgeFor } from './unpaidNudge';
@@ -249,8 +250,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       );
       // Their own entries only, including ones that ended (credit used on a game that went back to them), so the
       // credit sheet can say what happened to their money in plain words.
-      credit.history = visibleEntries(ledger)
-        .filter((e) => e.playerId === me.id)
+      const mineOnly = visibleEntries(ledger).filter((e) => e.playerId === me.id);
+      // Zip 56: a tournament ticket's entries name it (one small read, only for a player who has such entries).
+      const tourNames = await tourNamesOf(ctx.db, mineOnly);
+      credit.history = mineOnly
         .map(
           (e): CreditEntryView => ({
             id: e.id,
@@ -266,6 +269,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
             playedCount: e.playedCount ?? null,
             ...(e.reason === 'adjusted' ? { note: e.note ?? '' } : {}),
             lateFee: e.sessionId ? (feeClears.get(`${e.sessionId}|${e.kind === 'used' ? e.endedAt : e.createdAt}`) ?? null) : null,
+            ...tourFields(e, tourNames),
           }),
         )
         .reverse();
@@ -465,9 +469,24 @@ export async function tournamentEdit(ctx: Ctx, body: Record<string, unknown>) {
   return playerTournamentEdit(ctx, await viewer(ctx), body);
 }
 
-/** Zip 55: POST /api/tournament/back-out { tournamentId }. */
+/** Zip 55: POST /api/tournament/back-out { tournamentId }. Zip 56: with a ticket, its money comes back as credit (server/tournament.ts). */
 export async function tournamentBackOut(ctx: Ctx, body: Record<string, unknown>) {
   return playerTournamentBackOut(ctx, await viewer(ctx), body);
+}
+
+/** Zip 56 (server/tournamentTickets.ts): POST /api/tournament/lock { tournamentId, intent, priceCents }: Lock my spot / Hold my spot. */
+export async function tournamentLock(ctx: Ctx, body: Record<string, unknown>) {
+  return playerTicketLock(ctx, await viewer(ctx), body);
+}
+
+/** Zip 56: POST /api/tournament/paid { tournamentId, cents }: I paid on the Pay sheet (waits for the organizer). */
+export async function tournamentPaid(ctx: Ctx, body: Record<string, unknown>) {
+  return playerTicketPaid(ctx, await viewer(ctx), body);
+}
+
+/** Zip 56: POST /api/tournament/waitlist { tournamentId }: Join waitlist. */
+export async function tournamentWaitlist(ctx: Ctx, body: Record<string, unknown>) {
+  return playerTicketWaitlist(ctx, await viewer(ctx), body);
 }
 
 export async function christmasSkinMe(ctx: Ctx, body: Record<string, unknown>) {

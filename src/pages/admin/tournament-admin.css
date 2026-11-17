@@ -570,3 +570,180 @@ dialog.sheet.tm-page {
   line-height: 1.4;
   color: var(--ink);
 }
+
+/* ---------- Zip 56, piece 2: tickets (pictures 29 and 30) ---------- */
+/* Picture 29: the tournament on Home from the date picked on, built from the same card, label, chip and rows as the tournament page, at the
+   picture's own sizes (measured at 420 wide: a 43 px head, 38 px rows, the big button, the link 15 px under it). */
+.tm-tix {
+  padding: 13px 16px 6px;
+}
+.tm-tix .tm-card-head {
+  min-height: 21px;
+  margin-bottom: 0;
+}
+.tm-tix .tm-head-line {
+  padding-bottom: 10px;
+}
+.tm-tix .tm-label {
+  font-size: 0.67rem;
+}
+.tm-tix .tm-chip {
+  min-height: 21px;
+  padding: 2px 10px;
+  font-size: 0.76rem;
+}
+.tm-tix .tm-head-line + .tm-rows {
+  margin-top: 0;
+}
+.tm-tix .tm-row {
+  min-height: 37px;
+  font-size: 0.95rem;
+}
+/* Every row after the first holds its dashed line inside: 38 px, so every row is 37 px of room and a 1 px line, as in the picture. */
+.tm-tix .tm-row + .tm-row {
+  min-height: 38px;
+}
+.tm-tix-name {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-tix-name .tm-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-chip.tm-chip-ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.tm-tix-go {
+  margin-top: 14px;
+}
+.tm-quiet-link.tm-tix-link,
+.tm-tix-link {
+  align-self: center;
+  min-height: 44px;
+  margin: 0 auto;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 1.05rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+/* The evens rule: a plain warning on the card (no one is taken off by the site). */
+.tm-evens {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+/* Picture 30: the two big buttons with room above them, and the words under them (measured at 420 wide). */
+.tm-cor {
+  padding-top: 12px;
+}
+/* Both buttons the same height (Cancel tournament takes two lines at this size). */
+.tm-cor .confirm-row {
+  align-items: stretch;
+}
+.tm-cor-note {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 0.94rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+/* Pay by: the day and the time, picked from lists. */
+.tm-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 62%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.tm-row-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.tm-mini {
+  min-height: 34px;
+  padding: 4px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+/* The Tickets list on the tournament page: each row opens that player's ticket. */
+.tm-tk {
+  margin: 0 -16px -16px;
+  padding: 0;
+  list-style: none;
+}
+.tm-tk li + li {
+  border-top: 1px dashed var(--line);
+}
+.tm-tk-head {
+  padding: 12px 16px 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.tm-tk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 16px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-tk-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.02rem;
+  font-weight: 650;
+}
+.tm-tk-tag {
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tm-tk-in .tm-tk-tag {
+  color: var(--ok-fg);
+  font-weight: 650;
+}

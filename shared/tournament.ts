@@ -298,8 +298,36 @@ export function cleanDays(list: unknown): string[] | null {
 // organizer on their own signed-in phone).
 // ---------------------------------------------------------------------------------------------------------------------
 
-export type TournamentStatus = 'signup' | 'date_picked';
+/**
+ * Piece 1's stages, then piece 2's (Zip 56): 'tickets' (tickets open), 'rescheduled' (tickets had opened; the organizer went back to the date
+ * step: sign-up is open again, every ticket stays as it is) and 'canceled' (players on the list see a plain Canceled card for a while).
+ */
+export type TournamentStatus = 'signup' | 'date_picked' | 'tickets' | 'rescheduled' | 'canceled';
 export type Visibility = 'me' | 'all';
+
+/** Zip 56: where a ticket stands (shared/tournamentTickets.ts has the rules). */
+export type TicketPlaceView = 'spot' | 'line' | 'none';
+
+/**
+ * Zip 56, piece 2: the ticket part of a player's card, from the moment tickets open (and while a Reschedule holds tickets). Names only for
+ * everyone else; the waitlist says whether each spot is paid, as the pictures do ("Paid, first in line", "Not paid"). Never anyone's amounts.
+ */
+export interface PlayerTicketsView {
+  /** Spots: the players expected (6, 8, 10 or 12). */
+  size: number;
+  /** This player's ticket price: the tournament's flat price, $0 for the organizer (who pays the venue, not the group). */
+  priceCents: number;
+  /** When ticket money is due (ISO), or null when tickets are not open right now (after a Reschedule). */
+  payBy: string | null;
+  /** Ticket sales are over: the tournament night has started. */
+  closed: boolean;
+  /** Locked in, in the order they took their spots. */
+  locked: { name: string; me?: true }[];
+  /** The waitlist, in the order they joined it. `paid`: their spot is paid, so they move in when a spot opens. */
+  line: { name: string; paid: boolean; me?: true }[];
+  /** This player's own ticket (null: none yet). Their own money only. */
+  mine: { place: TicketPlaceView; creditCents: number; paidCents: number; claimCents: number; owedCents: number } | null;
+}
 
 /** What a player's Home gets (GET /api/group `tournament`). Names only: never a level, a phone number or money of anyone else. */
 export interface PlayerTournamentView {
@@ -319,6 +347,27 @@ export interface PlayerTournamentView {
   me: { level: number; dates: string[] } | null;
   /** Only me is on: this is the organizer's own phone (the "Only you can see this" strip). */
   onlyMe?: true;
+  /** Zip 56: tickets (only once tickets have opened; piece 1's two stages send exactly what they did). */
+  tickets?: PlayerTicketsView;
+  /** Zip 56: the canceled tournament's plain card (only for players who were on the list): what came back to this player. */
+  canceled?: { backCents: number; claimCents: number };
+}
+
+/** Zip 56: one ticket on the organizer's tournament page and Home cards (the organizer sees everyone's money). */
+export interface AdminTicketView {
+  playerId: string;
+  name: string;
+  place: TicketPlaceView;
+  placeAt: string | null;
+  priceCents: number;
+  creditCents: number;
+  paidCents: number;
+  claimCents: number;
+  claimAt: string | null;
+  /** No longer on the list (backed out or taken off) while an I paid still waits for the organizer's answer. */
+  out: boolean;
+  /** The organizer's own seat ($0). */
+  organizer: boolean;
 }
 
 /** One player on the organizer's level list. */
@@ -359,6 +408,16 @@ export interface AdminTournamentView {
   signups: TournamentSignupView[];
   /** Backed out (names only), newest first. */
   backedOut: { playerId: string; name: string }[];
+  /** Zip 56: tickets have been open (Pay by set): the price, the size and the format stay locked, also after a Reschedule. */
+  settingsLocked?: boolean;
+  /** Zip 56: when ticket money is due. Stored once tickets open; with the date picked and tickets not open yet, what Open tickets starts with. */
+  payBy?: string | null;
+  /** Zip 56: the tournament night has started (ticket sales are over). */
+  closed?: boolean;
+  /** Zip 56: every ticket, spots first (in the order they were taken), then the waitlist, then the rest. */
+  tickets?: AdminTicketView[];
+  /** Zip 56: when it was canceled (the Canceled card). */
+  canceledAt?: string | null;
 }
 
 /** For each offered date, who can make it (from the players on the list). */

@@ -262,13 +262,40 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_date':
       return typeof d.date === 'string' ? `${who} picked ${d.date} for the ${tourName(d)}` : `${who} took back the date for the ${tourName(d)}`;
     case 'tournament_canceled':
-      return `${who} canceled the ${tourName(d)}`;
+      return `${who} canceled the ${tourName(d)}${typeof d.returned === 'number' && d.returned > 0 ? ` (${d.returned} ${d.returned === 1 ? 'ticket' : 'tickets'}, ${cents(d.amountCents)} back as credit)` : ''}`;
     case 'tournament_signup':
       return `${player} signed up for the ${tourName(d)}${typeof d.level === 'string' ? ` (${d.level})` : ''}`;
     case 'tournament_signup_edited':
       return `${player} changed their sign-up for the ${tourName(d)}`;
     case 'tournament_back_out':
-      return `${player} backed out of the ${tourName(d)}`;
+      return `${player} backed out of the ${tourName(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+    // Zip 56 "Tournaments" piece 2 (server/tournamentTickets.ts): tickets, the waitlist and their money.
+    case 'tournament_tickets_opened':
+      return `${who} opened tickets for the ${tourName(d)} (${num(d.spots)} spots, ${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''})`;
+    case 'tournament_pay_by':
+      return `${who} set Pay by for the ${tourName(d)} to ${typeof d.payBy === 'string' ? d.payBy : '?'}`;
+    case 'tournament_ticket': {
+      const used = num(d.creditUsedCents) > 0 ? ` (${cents(d.creditUsedCents)} credit used)` : '';
+      if (d.result === 'locked') return `${player} locked in for the ${tourName(d)}${used}`;
+      if (d.result === 'held') return `${player} paid to hold a spot on the ${tourName(d)} waitlist${used}`;
+      return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock my spot'} for the ${tourName(d)}${used}`;
+    }
+    case 'tournament_i_paid':
+      return `${player} tapped I paid (${cents(d.amountCents)}) for a ${tourName(d)} ticket`;
+    case 'tournament_waitlist':
+      return `${player} joined the ${tourName(d)} waitlist`;
+    case 'tournament_ticket_confirmed':
+      return `${who} confirmed ${player}'s ${cents(d.amountCents)} for the ${tourName(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
+    case 'tournament_ticket_rejected':
+      return `${who} said ${player} didn't pay (${cents(d.amountCents)}) for the ${tourName(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
+    case 'tournament_ticket_marked_paid':
+      return `${who} marked ${player} paid ${cents(d.amountCents)} for the ${tourName(d)}`;
+    case 'tournament_taken_off':
+      return `${who} took ${player} off the ${tourName(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+    case 'tournament_rescheduled':
+      return `${who} rescheduled the ${tourName(d)}${typeof d.date === 'string' ? ` (was ${d.date})` : ''}${num(d.held) > 0 ? `, ${d.held} ${d.held === 1 ? 'ticket' : 'tickets'} held` : ''}`;
+    case 'tournament_holds_returned':
+      return `${num(d.count)} unused ${tourName(d)} ${d.count === 1 ? 'hold' : 'holds'} came back as credit (${cents(d.amountCents)})`;
     case 'guest_spot_on':
       return `${who} switched "Guest spot" on`;
     case 'guest_spot_off':
@@ -490,6 +517,11 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
 function tourName(d: Record<string, unknown>): string {
   return typeof d.tournament === 'string' && d.tournament ? d.tournament : 'tournament';
 }
+
+/** Zip 56: a number from a line's details (0 when missing). */
+const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
+/** Zip 56: an amount from a line's details, as the site writes money ("$16"). */
+const cents = (x: unknown): string => formatPrice(num(x));
 
 /** The split on a "session_canceled" line (LATE_FEE_SPLIT): { count, priceCents }, or null. */
 function splitOf(d: Record<string, unknown>): { count: number; priceCents: number } | null {

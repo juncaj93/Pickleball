@@ -65,7 +65,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead } from './credit';
+import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
@@ -200,6 +200,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   );
   const starts = sessionStartsRead(group.id);
   const startsOf = new Map((await ctx.db.prepare(starts.sql).bind(...starts.values).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]));
+  // Zip 56: tournament tickets' entries name their tournament (one small read, only when such entries exist).
+  const tourNames = await tourNamesOf(ctx.db, ledger);
   const creditLedger = [...new Set(ledger.map((e) => e.playerId))]
     .map((playerId) => {
       const balanceCents = potBalance(ledger, playerId);
@@ -224,6 +226,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
               reason: e.reason ?? null,
               playedCount: e.playedCount ?? null,
               ...(e.reason === 'adjusted' ? { note: e.note ?? '', balanceAfterCents: balanceAfterEntry(ledger, e.id) } : {}),
+              ...tourFields(e, tourNames),
             }),
           ),
       };
@@ -1874,6 +1877,22 @@ export async function removePlayer(ctx: Ctx) {
       `${p.display_name} is still in ${upcoming.length === 1 ? 'a game' : `${upcoming.length} games`} (${list}). Take ${p.display_name} out of ${upcoming.length === 1 ? 'it' : 'them'} first (gear > Players), then remove the name.`,
     );
   }
+  // Zip 56 "Tournaments" piece 2: a ticket is money (and a spot). While the name holds one on a tournament that is not over (a spot, a place in
+  // line, money or an I paid), it stays: the organizer takes them off the list first (Tournament > Tickets), which gives the money back as
+  // credit. Any ticket at all is history (never deleted with the name). A database before migration 0024 has no tickets: nothing changes.
+  const ticket = await ctx.db
+    .prepare(
+      `SELECT
+         (SELECT t.name FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
+           WHERE k.player_id = ?1 AND t.status <> 'ended' AND (k.place <> 'none' OR k.credit_cents + k.paid_cents + k.claim_cents > 0) LIMIT 1) AS holds,
+         (SELECT COUNT(*) FROM tournament_tickets WHERE player_id = ?1) AS n`,
+    )
+    .bind(id)
+    .first<{ holds: string | null; n: number }>()
+    .catch(() => null);
+  if (ticket?.holds) {
+    throw new HttpError(409, 'player_has_ticket', `${p.display_name} holds a ticket for the ${ticket.holds}. Take ${p.display_name} off its list first (the tournament's Tickets), then remove the name.`);
+  }
   const history = await ctx.db
     .prepare(
       `SELECT
@@ -1883,7 +1902,7 @@ export async function removePlayer(ctx: Ctx) {
     )
     .bind(id)
     .first<{ n: number }>();
-  if ((history?.n ?? 0) > 0) {
+  if ((history?.n ?? 0) + (ticket?.n ?? 0) > 0) {
     await ctx.db.prepare('UPDATE players SET is_active = 0, is_new = 0 WHERE id = ?').bind(id).run();
     await audit(ctx.db, group.id, null, 'player_hidden', { name: p.display_name }, ctx.nowIso);
     return { result: 'hidden' };

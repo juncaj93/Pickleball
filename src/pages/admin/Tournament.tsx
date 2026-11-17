@@ -4,8 +4,11 @@
 // price and the champion credit are stored for pieces 2 and 3.
 import { type ReactNode, useMemo, useRef, useState } from 'react';
 import {
+  type AdminTicketView,
   type AdminTournamentView,
   CREATE_MONTHS,
+  startLabel,
+  stubParts,
   dateCounts,
   dayLong,
   DEFAULT_CREDIT_CENTS,
@@ -35,6 +38,8 @@ import {
   type TournamentFormat,
 } from '../../../shared/tournament';
 import { formatPrice, parseDollars } from '../../../shared/money';
+import { evensWarning, payByAt, payByDays, payByLabel, payByParts, ticketsLine } from '../../../shared/tournamentTickets';
+import { AlertCard } from '../../AlertCard';
 import { localParts } from '../../../shared/time';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Sheet, useToast } from '../../ui';
@@ -76,7 +81,30 @@ function useSave(ctx: AdminCtx) {
 }
 
 const statusLine = (t: AdminTournamentView) =>
-  t.status === 'date_picked' && t.finalDate ? `${dayLong(t.finalDate)} · ${t.signups.length} signed up` : `Sign-up open · ${t.signups.length} signed up`;
+  t.status === 'canceled'
+    ? 'Canceled'
+    : t.status === 'tickets' && t.finalDate
+      ? `${dayLong(t.finalDate)} · ${lockedOf(t).length} of ${t.size} locked in`
+      : t.status === 'date_picked' && t.finalDate
+        ? `${dayLong(t.finalDate)} · ${t.signups.length} signed up`
+        : t.status === 'rescheduled'
+          ? `Rescheduled · ${t.signups.length} signed up${heldOf(t) ? ` · ${heldOf(t)} ${heldOf(t) === 1 ? 'ticket' : 'tickets'} held` : ''}`
+          : `Sign-up open · ${t.signups.length} signed up`;
+
+/** Zip 56: the tickets in a spot (Who's in), in the order they were taken. */
+const lockedOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.place === 'spot' && !k.out);
+/** Zip 56: the waitlist, in the order they joined it. */
+const lineOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.place === 'line' && !k.out);
+/** Zip 56: I paid taps waiting for the organizer's answer. */
+const claimsOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.claimCents > 0);
+/** Zip 56: tickets holding money or a spot (a Reschedule keeps them). */
+const heldOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => !k.out && (k.place === 'spot' || k.creditCents + k.paidCents + k.claimCents > 0)).length;
+/** Zip 56: paid in full with money that counts (credit and confirmed cash). */
+const ticketIsPaid = (k: AdminTicketView) => k.creditCents + k.paidCents >= k.priceCents;
+/** Zip 56: Pay by has passed (the moment the evens rule is checked). */
+const payByPassed = (t: AdminTournamentView, nowIso: string) => t.status === 'tickets' && !!t.payBy && Date.parse(nowIso) >= Date.parse(t.payBy);
+/** Zip 56: the plain warning on the card: an odd number locked in at the Pay by time (nobody is taken off by the site). */
+const evensOf = (t: AdminTournamentView, nowIso: string) => (payByPassed(t, nowIso) && lockedOf(t).length % 2 === 1 ? evensWarning(lockedOf(t).length) : null);
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Where the organizer finds it: Settings > Schedule, and a card on Home while one is open.
@@ -88,10 +116,12 @@ export function TournamentScheduleRow({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   if (ctx.d.tournaments !== true) return null;
   const t = ctx.d.tournament ?? null;
+  // Zip 56: a canceled one (its Canceled card still shows for a few days) never blocks a new one.
+  const current = t && t.status !== 'canceled' ? t : null;
   return (
     <div className="set-row-wrap" data-row="tournament">
       {/* Always here. One tournament at a time: with one open, a tap says so (the open one has its own row below). */}
-      <button type="button" className="set-row tm-set-row" onClick={() => (t ? toast('Finish or cancel the current one first.') : setOpen('create'))} data-tm-schedule-row>
+      <button type="button" className="set-row tm-set-row" onClick={() => (current ? toast('Finish or cancel the current one first.') : setOpen('create'))} data-tm-schedule-row>
         <span className="set-label">
           <span className="set-name">Create tournament</span>
           <span className="set-hint">Doubles, once a year</span>
@@ -117,11 +147,29 @@ export function TournamentScheduleRow({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-/** Home: the open tournament, with the two things to do now (the level list and picking the date). */
+/**
+ * Home: the open tournament. Before the date is picked (and after a Reschedule): piece 1's card with Pick date and Edit. Zip 56: from the date
+ * picked on, the card of picture 29 (the facts, the stage's one button, Cancel or reschedule), with an I paid card above it for each payment
+ * waiting for an answer and, while tickets are open, the "Tickets: 6 of 8 locked in" card.
+ */
 export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
-  const [open, setOpen] = useState<null | 'dates' | 'edit'>(null);
   const t = ctx.d.tournaments === true ? (ctx.d.tournament ?? null) : null;
   if (!t) return null;
+  const claims = claimsOf(t);
+  return (
+    <>
+      {claims.map((k) => (
+        <TicketClaimCard key={k.playerId} ctx={ctx} t={t} k={k} />
+      ))}
+      {t.status === 'tickets' && <TicketsCountCard ctx={ctx} t={t} />}
+      {t.status === 'date_picked' || t.status === 'tickets' || t.status === 'canceled' ? <TicketsHomeCard ctx={ctx} t={t} /> : <SignupHomeCard ctx={ctx} t={t} />}
+    </>
+  );
+}
+
+/** Piece 1's Home card (sign-up open, or rescheduled): Pick date and Edit. */
+function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const [open, setOpen] = useState<null | 'dates' | 'edit'>(null);
   const who = t.visibility === 'me' ? 'Only you can see it' : 'Everyone can see it';
   // Every offered date has passed and none is picked: players do not see the card any more (server/tournament.ts), so say it here.
   const today = todayKeyOf(ctx.d.now, ctx.d.group.timezone);
@@ -160,6 +208,459 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
       </div>
       <TournamentPage ctx={ctx} t={t} open={open !== null} focus={open === 'dates' ? open : undefined} onClose={() => setOpen(null)} />
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 56, piece 2: tickets on the organizer's side (pictures 29 and 30)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** "Thu Dec 17 · 7:30 PM" (picture 29's Date row). */
+const dateRow = (t: AdminTournamentView) => {
+  if (!t.finalDate) return 'Not picked';
+  const s = stubParts(t.finalDate);
+  return `${s.weekday.charAt(0)}${s.weekday.slice(1).toLowerCase()} ${s.month.charAt(0)}${s.month.slice(1).toLowerCase()} ${s.day} · ${startLabel(t.start)}`;
+};
+
+/** How a ticket was paid, in a few words (the organizer sees everyone's money). */
+function paidWords(k: AdminTicketView): string {
+  if (k.organizer) return 'You, free';
+  if (k.creditCents > 0 && k.paidCents > 0) return `${formatPrice(k.creditCents)} credit + ${formatPrice(k.paidCents)}`;
+  if (k.creditCents > 0) return `${formatPrice(k.creditCents)} credit`;
+  if (k.paidCents > 0) return `Paid ${formatPrice(k.paidCents)}`;
+  return 'Not paid';
+}
+
+/** Zip 56: an I paid on a ticket, waiting for the organizer (the same amber card and words as a game's I paid). */
+function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k: AdminTicketView }) {
+  const { busy, save } = useSave(ctx);
+  const where = t.status === 'canceled' ? `The ${t.name} was canceled.` : k.out ? `Backed out of the ${t.name}.` : `${t.name} ticket.`;
+  const answer = (action: 'confirm' | 'reject') =>
+    save(
+      () => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId: k.playerId, action, cents: k.claimCents }),
+      action === 'reject' ? 'Cleared' : t.status === 'canceled' || k.out ? `${k.name}'s ${formatPrice(k.claimCents)} is credit now` : `${k.name}'s ${formatPrice(k.claimCents)} is in`,
+    );
+  return (
+    <AlertCard
+      tone="amber"
+      icon="owe"
+      label={`${k.name} payment not confirmed`}
+      titleAs="h3"
+      data={{ 'data-ticket-claim': k.name }}
+      title={`${k.name} tapped I paid (${formatPrice(k.claimCents)}), not confirmed.`}
+      sub={where}
+      actions={
+        <>
+          <button className="ac-btn" disabled={busy} data-claim-paid onClick={() => void answer('confirm')}>
+            Paid
+          </button>
+          <button className="ac-btn ac-out" disabled={busy} data-claim-not-paid onClick={() => void answer('reject')}>
+            Didn't pay
+          </button>
+        </>
+      }
+    />
+  );
+}
+
+/** Zip 56: "Tickets: 6 of 8 locked in" (the site's own alert card), while tickets are open. Tickets opens the list on the tournament page. */
+function TicketsCountCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const [open, setOpen] = useState(false);
+  const locked = lockedOf(t).length;
+  const full = locked >= t.size;
+  const line = lineOf(t);
+  const sub = line.length ? `${line.length} on the waitlist (${line.filter(ticketIsPaid).length} paid)` : undefined;
+  return (
+    <>
+      <AlertCard
+        tone={full ? 'green' : 'blue'}
+        icon={full ? 'ok' : 'person'}
+        label={ticketsLine(locked, t.size)}
+        titleAs="h3"
+        data={{ 'data-tickets-card': `${locked}/${t.size}` }}
+        title={ticketsLine(locked, t.size)}
+        sub={sub}
+        action={
+          <button className="ac-btn" onClick={() => setOpen(true)} data-tickets-open>
+            Tickets
+          </button>
+        }
+      />
+      <TournamentPage ctx={ctx} t={t} open={open} focus="tickets" onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+/**
+ * Picture 29: the tournament on Home once the date is picked. The name and the stage, then the facts, then the stage's one button (Open tickets;
+ * while tickets are open, Tickets) and Cancel or reschedule. The name opens the whole tournament page (levels, settings).
+ */
+function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const [open, setOpen] = useState<null | 'page' | 'tickets' | 'open' | 'change'>(null);
+  const tz = ctx.d.group.timezone;
+  const chip = t.status === 'canceled' ? 'Canceled' : t.status === 'tickets' ? (t.closed ? 'Tickets closed' : 'Tickets open') : 'Date picked';
+  const evens = evensOf(t, ctx.d.now);
+  const locked = lockedOf(t).length;
+  const line = lineOf(t);
+  return (
+    <section className="tm-card tm-tix" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={t.status}>
+      <div className="tm-card-head tm-head-line">
+        <button type="button" className="tm-tix-name" onClick={() => setOpen('page')} data-tm-open-page>
+          <h2 className="tm-label">{t.name}</h2>
+        </button>
+        <span className={t.status === 'canceled' ? 'tm-chip' : 'tm-chip tm-chip-ok'} data-tm-stage>
+          {chip}
+        </span>
+      </div>
+      <div className="tm-rows">
+        <div className="tm-row">
+          <span>Date</span>
+          <b data-tm-row="date">{dateRow(t)}</b>
+        </div>
+        <div className="tm-row">
+          <span>Plan</span>
+          <b>
+            {t.size} players · {planTitle(t)}
+          </b>
+        </div>
+        {t.status === 'tickets' ? (
+          <>
+            <div className="tm-row">
+              <span>Locked in</span>
+              <b data-tm-row="locked">
+                {locked} of {t.size}
+              </b>
+            </div>
+            {line.length > 0 && (
+              <div className="tm-row">
+                <span>Waitlist</span>
+                <b data-tm-row="line">
+                  {line.length} ({line.filter(ticketIsPaid).length} paid)
+                </b>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="tm-row">
+            <span>Signed up</span>
+            <b data-tm-row="signed">
+              {t.signups.length} ({t.size} spots)
+            </b>
+          </div>
+        )}
+        {t.status !== 'canceled' && (
+          <div className="tm-row">
+            <span>Ticket</span>
+            <b data-tm-row="ticket">
+              {formatPrice(t.ticketCents)}
+              {t.payBy ? ` · pay by ${payByLabel(t.payBy, tz, t.finalDate)}` : ''}
+            </b>
+          </div>
+        )}
+        {t.status !== 'canceled' && (
+          <div className="tm-row">
+            <span>Who can see it</span>
+            <b>{t.visibility === 'all' ? 'Everyone' : 'Only me'}</b>
+          </div>
+        )}
+      </div>
+      {evens && (
+        <p className="tm-evens" role="status" data-tm-evens>
+          {evens}
+        </p>
+      )}
+      {t.status === 'canceled' ? (
+        <p className="tm-card-note" data-tm-canceled-note>
+          Every paid ticket came back as credit.
+        </p>
+      ) : (
+        <>
+          {t.status === 'date_picked' ? (
+            <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('open')} data-tm-open-tickets>
+              Open tickets
+            </button>
+          ) : (
+            <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('tickets')} data-tm-tickets>
+              Tickets
+            </button>
+          )}
+          <CancelOrReschedule ctx={ctx} t={t} />
+        </>
+      )}
+      <TournamentPage ctx={ctx} t={t} open={open === 'page' || open === 'tickets'} focus={open === 'tickets' ? 'tickets' : undefined} onClose={() => setOpen(null)} />
+      {t.status === 'date_picked' && <PayBySheet ctx={ctx} t={t} open={open === 'open'} mode="open" onClose={() => setOpen(null)} />}
+    </section>
+  );
+}
+
+/** Zip 56: the Pay by choices: every day from today to the tournament day, and the time (every 30 minutes, 6:00 AM to 11:30 PM). */
+const PAY_TIMES = Array.from({ length: 36 }, (_, i) => 360 + i * 30);
+const timeWords = (m: number) => `${m % 720 >= 60 ? Math.floor((m % 720) / 60) : 12}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`;
+
+/**
+ * Zip 56: Open tickets (the spots, the price, Pay by) or a new Pay by while tickets are open. Pay by starts on the tournament's own (two days
+ * before at 7:00 PM, or the one already set).
+ */
+function PayBySheet({ ctx, t, open, mode, onClose }: { ctx: AdminCtx; t: AdminTournamentView; open: boolean; mode: 'open' | 'change'; onClose: () => void }) {
+  return (
+    <Sheet calmFocus open={open} title={mode === 'open' ? 'Open tickets' : 'Pay by'} onClose={onClose} className="tm-sheet-pay">
+      {open && <PayByBody key={t.payBy ?? 'none'} ctx={ctx} t={t} mode={mode} onDone={onClose} />}
+    </Sheet>
+  );
+}
+
+function PayByBody({ ctx, t, mode, onDone }: { ctx: AdminCtx; t: AdminTournamentView; mode: 'open' | 'change'; onDone: () => void }) {
+  const tz = ctx.d.group.timezone;
+  const nowMs = Date.parse(ctx.d.now);
+  const start = t.payBy ? payByParts(t.payBy, tz) : { day: t.finalDate ?? '', minutes: 19 * 60 };
+  const [day, setDay] = useState(start.day);
+  const [minutes, setMinutes] = useState(start.minutes);
+  const { busy, save } = useSave(ctx);
+  const days = t.finalDate ? payByDays(t.finalDate, tz, nowMs) : [];
+  const iso = day ? payByAt(day, minutes, tz) : null;
+  const times = PAY_TIMES.includes(minutes) ? PAY_TIMES : [...PAY_TIMES, minutes].sort((a, b) => a - b);
+  async function go() {
+    if (!iso) return;
+    const ok =
+      mode === 'open'
+        ? await save(() => api('POST', `/api/admin/tournament/${t.id}/open-tickets`, { payBy: iso }), 'Tickets are open')
+        : await save(() => api('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: iso }), `Pay by ${payByLabel(iso, tz, t.finalDate)}`);
+    if (ok) onDone();
+  }
+  return (
+    <div className="stack" data-tm-pay-by={mode}>
+      <div className="tm-rows">
+        {mode === 'open' && (
+          <>
+            <div className="tm-row">
+              <span>Spots</span>
+              <b data-tm-row="spots">{t.size}</b>
+            </div>
+            <div className="tm-row">
+              <span>Ticket</span>
+              <b>{formatPrice(t.ticketCents)}</b>
+            </div>
+          </>
+        )}
+        <label className="tm-row" htmlFor="tm-pay-day">
+          <span>Pay by</span>
+          <select id="tm-pay-day" className="tm-select" value={day} onChange={(e) => setDay(e.target.value)} data-tm-pay-day>
+            {days.map((d) => (
+              <option key={d} value={d}>
+                {dayLong(d)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="tm-row" htmlFor="tm-pay-time">
+          <span>Time</span>
+          <select id="tm-pay-time" className="tm-select" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} data-tm-pay-time>
+            {times.map((m) => (
+              <option key={m} value={m}>
+                {timeWords(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <button type="button" className="btn block tm-go" disabled={busy || !iso} onClick={() => void go()} data-tm-pay-go>
+        {busy ? 'Working…' : mode === 'open' ? 'Open tickets' : 'Save'}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Picture 30: "Cancel or reschedule". Reschedule (back to the date step, tickets stay paid and held) or Cancel tournament (every paid ticket comes
+ * back as credit). Each asks "Are you sure" first.
+ */
+function CancelOrReschedule({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; onDone?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [ask, setAsk] = useState<null | 'reschedule' | 'cancel'>(null);
+  const { busy, save } = useSave(ctx);
+  const back = (t.tickets ?? []).filter((k) => !k.out && k.claimCents === 0 && k.creditCents + k.paidCents > 0);
+  const backCents = back.reduce((s, k) => s + k.creditCents + k.paidCents, 0);
+  return (
+    <>
+      <button type="button" className="tm-quiet-link tm-tix-link" onClick={() => setOpen(true)} data-tm-cancel-or-reschedule>
+        Cancel or reschedule
+      </button>
+      <Sheet calmFocus open={open} title="Cancel or reschedule" onClose={() => setOpen(false)}>
+        <div className="stack tm-cor" data-tm-cor>
+          <div className="btn-row confirm-row">
+            <button type="button" className="btn big confirm-safe" onClick={() => setAsk('reschedule')} data-tm-reschedule>
+              Reschedule
+            </button>
+            <button type="button" className="btn big danger confirm-out" onClick={() => setAsk('cancel')} data-tm-cancel-tournament>
+              Cancel tournament
+            </button>
+          </div>
+          <p className="tm-cor-note">Reschedule: pick new dates. Players can back out and get their money back as credit. Cancel: everyone gets their money back as credit.</p>
+        </div>
+      </Sheet>
+      <ConfirmDialog
+        open={ask === 'reschedule'}
+        title="Reschedule?"
+        body={<p>Are you sure? The date comes off and everyone picks their dates again. Paid tickets stay held.</p>}
+        confirmLabel="Reschedule"
+        busy={busy}
+        onCancel={() => setAsk(null)}
+        onConfirm={async () => {
+          const ok = await save(() => api('POST', `/api/admin/tournament/${t.id}/reschedule`, {}), 'Rescheduled. Pick new dates.');
+          setAsk(null);
+          if (ok) {
+            setOpen(false);
+            onDone?.();
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={ask === 'cancel'}
+        title="Cancel the tournament?"
+        body={
+          <p>
+            Are you sure? Players see it canceled.
+            {back.length > 0 ? ` ${back.length} paid ${back.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(backCents)}).` : ' Nothing was paid, so nothing comes back.'}
+          </p>
+        }
+        cancelLabel="Keep it"
+        confirmLabel="Cancel tournament"
+        danger
+        busy={busy}
+        onCancel={() => setAsk(null)}
+        onConfirm={async () => {
+          const ok = await save(() => api('POST', `/api/admin/tournament/${t.id}/cancel`, {}), 'Tournament canceled');
+          setAsk(null);
+          if (ok) {
+            setOpen(false);
+            onDone?.();
+          }
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Zip 56: the Tickets list on the tournament page: I paid taps waiting, who is locked in and how they paid, the waitlist, and the players on the
+ * list with no ticket. A row opens its actions (Paid or Didn't pay, Mark paid, Take off the list).
+ */
+function TicketsCard({ ctx, t, scrollRef }: { ctx: AdminCtx; t: AdminTournamentView; scrollRef?: (el: HTMLElement | null) => void }) {
+  const [who, setWho] = useState<string | null>(null);
+  const tickets = t.tickets ?? [];
+  const has = new Set(tickets.filter((k) => !k.out && (k.place !== 'none' || k.creditCents + k.paidCents + k.claimCents > 0)).map((k) => k.playerId));
+  const locked = lockedOf(t);
+  const line = lineOf(t);
+  const firstPaid = line.findIndex(ticketIsPaid);
+  const others = t.signups.filter((s) => !has.has(s.playerId));
+  const evens = evensOf(t, ctx.d.now);
+  const row = (key: string, name: string, tag: string, cls = '', data = '') => (
+    <li key={key} className={cls}>
+      <button type="button" className="tm-tk-row" onClick={() => setWho(key)} data-tm-ticket-row={data || name}>
+        <span className="tm-tk-name">{name}</span>
+        <span className="tm-tk-tag">{tag}</span>
+      </button>
+    </li>
+  );
+  return (
+    <section className="tm-card" aria-label="Tickets" data-tm-card="tickets" ref={scrollRef}>
+      <div className="tm-card-head tm-head-line">
+        <h3 className="tm-label">Tickets</h3>
+        <span className={locked.length >= t.size ? 'tm-chip tm-chip-ok' : 'tm-chip'} data-tm-locked-chip>
+          {locked.length} of {t.size} locked in
+        </span>
+      </div>
+      {evens && (
+        <p className="tm-evens" role="status">
+          {evens}
+        </p>
+      )}
+      <ul className="tm-tk">
+        {locked.map((k) => row(k.playerId, k.name, paidWords(k), 'tm-tk-in'))}
+        {line.length > 0 && <li className="tm-tk-head">Waitlist</li>}
+        {line.map((k, i) => row(k.playerId, `${i + 1}. ${k.name}`, ticketIsPaid(k) ? (i === firstPaid ? 'Paid, first in line' : 'Paid') : k.claimCents > 0 ? 'I paid, waiting' : 'Not paid', '', k.name))}
+        {tickets.filter((k) => !k.out && k.place === 'none' && k.claimCents > 0).map((k) => row(k.playerId, k.name, 'I paid, waiting'))}
+        {others.length > 0 && <li className="tm-tk-head">No ticket yet</li>}
+        {others.map((s) => row(s.playerId, s.name, 'Not paid'))}
+      </ul>
+      <TicketSheet ctx={ctx} t={t} playerId={who} onClose={() => setWho(null)} />
+    </section>
+  );
+}
+
+/** Zip 56: one player's ticket: what it holds, and the organizer's taps on it. */
+function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTournamentView; playerId: string | null; onClose: () => void }) {
+  const { busy, save } = useSave(ctx);
+  const [askOff, setAskOff] = useState(false);
+  const k = (t.tickets ?? []).find((x) => x.playerId === playerId) ?? null;
+  const s = t.signups.find((x) => x.playerId === playerId) ?? null;
+  const name = k?.name ?? s?.name ?? '';
+  const owed = k ? Math.max(0, k.priceCents - k.creditCents - k.paidCents - k.claimCents) : t.ticketCents;
+  const backCents = k ? k.creditCents + k.paidCents : 0;
+  const act = async (action: 'confirm' | 'reject' | 'mark_paid' | 'take_off', cents: number | undefined, done: string) => {
+    const ok = await save(() => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId, action, ...(cents === undefined ? {} : { cents }) }), done);
+    if (ok) onClose();
+  };
+  return (
+    <Sheet calmFocus open={!!playerId} title={name ? `${name}’s ticket` : 'Ticket'} onClose={onClose}>
+      {playerId && (
+        <div className="stack" data-tm-ticket-sheet={name}>
+          <div className="tm-rows">
+            <div className="tm-row">
+              <span>Where</span>
+              <b>{k?.place === 'spot' ? 'Locked in' : k?.place === 'line' ? 'Waitlist' : 'No spot yet'}</b>
+            </div>
+            <div className="tm-row">
+              <span>Paid</span>
+              <b>{k ? paidWords(k) : 'Not paid'}</b>
+            </div>
+            {k && k.claimCents > 0 && (
+              <div className="tm-row">
+                <span>I paid, not confirmed</span>
+                <b>{formatPrice(k.claimCents)}</b>
+              </div>
+            )}
+          </div>
+          {k && k.claimCents > 0 ? (
+            <div className="btn-row confirm-row">
+              <button type="button" className="btn confirm-safe" disabled={busy} onClick={() => void act('confirm', k.claimCents, `${name}'s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-paid>
+                Paid
+              </button>
+              <button type="button" className="btn danger confirm-out" disabled={busy} onClick={() => void act('reject', k.claimCents, 'Cleared')} data-tm-ticket-not-paid>
+                Didn't pay
+              </button>
+            </div>
+          ) : (
+            t.status === 'tickets' &&
+            owed > 0 &&
+            !k?.organizer && (
+              <button type="button" className="btn block" disabled={busy} onClick={() => void act('mark_paid', owed, `${name} marked paid`)} data-tm-ticket-mark>
+                Mark paid {formatPrice(owed)}
+              </button>
+            )
+          )}
+          {s && (
+            <button type="button" className="tm-cancel-link" disabled={busy} onClick={() => setAskOff(true)} data-tm-ticket-off>
+              Take {name} off the list
+            </button>
+          )}
+          <ConfirmDialog
+            open={askOff}
+            title={`Take ${name} off?`}
+            body={<p>{backCents > 0 ? `${name}'s ${formatPrice(backCents)} comes back as credit. ` : ''}{k?.place === 'spot' ? 'The spot goes to the first paid player in line.' : `${name} comes off the list.`}</p>}
+            cancelLabel="Keep"
+            confirmLabel="Take off"
+            danger
+            busy={busy}
+            onCancel={() => setAskOff(false)}
+            onConfirm={async () => {
+              setAskOff(false);
+              await act('take_off', undefined, `${name} is off the list`);
+            }}
+          />
+        </div>
+      )}
+    </Sheet>
   );
 }
 
@@ -271,6 +772,8 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   // Americano's 2nd place: what an Americano tournament has, else the $7 start (a Doubles one switched to Americano starts there too).
   const [second, setSecond] = useState<number | null>(editing?.format === 'americano' ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
   const formatLocked = editing?.formatLocked === true;
+  // Zip 56: once tickets have been open, the price, the spots and Only me stay as they are (players hold tickets; the server refuses too).
+  const sold = editing?.settingsLocked === true;
   const americano = format === 'americano';
   const [visibility, setVisibility] = useState<Visibility>(editing?.visibility ?? 'me');
   const [error, setError] = useState<string | null>(null);
@@ -366,10 +869,10 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         </div>
       </Card>
 
-      <Card label="Players expected" data="size">
+      <Card label="Players expected" data="size" chip={sold ? <span className="tm-chip">Locked</span> : undefined}>
         <div className="segmented tm-seg" role="group" aria-label="Players expected">
           {SIZES.map((s) => (
-            <button key={s} type="button" aria-pressed={size === s} onClick={() => pickSize(s)} data-size={s}>
+            <button key={s} type="button" aria-pressed={size === s} disabled={sold && size !== s} onClick={() => !sold && pickSize(s)} data-size={s}>
               {s}
             </button>
           ))}
@@ -414,7 +917,7 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         <div className="tm-rows">
           <label className="tm-row" htmlFor="tm-ticket">
             <span>Each player pays</span>
-            <MoneyBox id="tm-ticket" cents={ticket} onChange={setTicket} label="Each player pays" />
+            {sold ? <b data-tm-ticket-locked>{formatPrice(editing!.ticketCents)}</b> : <MoneyBox id="tm-ticket" cents={ticket} onChange={setTicket} label="Each player pays" />}
           </label>
           <div className="tm-row">
             <span>Same for 6, 8, 10 and 12 players</span>
@@ -422,13 +925,17 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
           </div>
         </div>
         <p className="tm-card-note">
-          {editing ? 'You host and pay the court bill. Change the price any time before tickets open.' : 'You host and pay the court bill. Change the price any time before sign-up opens.'}
+          {sold
+            ? 'Tickets have been sold, so the price stays.'
+            : editing
+              ? 'You host and pay the court bill. Change the price any time before tickets open.'
+              : 'You host and pay the court bill. Change the price any time before sign-up opens.'}
         </p>
       </Card>
 
       <Card label="Who can see it" data="who">
         <div className="segmented tm-seg tm-seg-who" role="group" aria-label="Who can see it">
-          <button type="button" aria-pressed={visibility === 'me'} onClick={() => setVisibility('me')} data-vis="me">
+          <button type="button" aria-pressed={visibility === 'me'} disabled={sold} onClick={() => setVisibility('me')} data-vis="me">
             Only me
           </button>
           <button type="button" aria-pressed={visibility === 'all'} onClick={() => setVisibility('all')} data-vis="all">
@@ -454,7 +961,19 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
 // The tournament's own page: who can see it, the level list (mock 14), the dates and picking one, the settings, Cancel.
 // ---------------------------------------------------------------------------------------------------------------------
 
-export function TournamentPage({ ctx, t, open, onClose, focus }: { ctx: AdminCtx; t: AdminTournamentView; open: boolean; onClose: () => void; focus?: 'levels' | 'dates' }) {
+export function TournamentPage({
+  ctx,
+  t,
+  open,
+  onClose,
+  focus,
+}: {
+  ctx: AdminCtx;
+  t: AdminTournamentView;
+  open: boolean;
+  onClose: () => void;
+  focus?: 'levels' | 'dates' | 'tickets';
+}) {
   return (
     <Sheet calmFocus open={open} title={t.name} onClose={onClose} className="tm-page">
       {open && <PageBody ctx={ctx} t={t} focus={focus} onClosed={onClose} />}
@@ -462,12 +981,32 @@ export function TournamentPage({ ctx, t, open, onClose, focus }: { ctx: AdminCtx
   );
 }
 
-function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTournamentView; focus?: 'levels' | 'dates'; onClosed: () => void }) {
+/** The stage in a word, for the page's chip. */
+const stageWord = (t: AdminTournamentView) =>
+  t.status === 'canceled'
+    ? 'Canceled'
+    : t.status === 'tickets'
+      ? 'Tickets open'
+      : t.status === 'date_picked'
+        ? 'Date picked'
+        : t.status === 'rescheduled'
+          ? 'Rescheduled'
+          : 'Sign-up open';
+
+function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTournamentView; focus?: 'levels' | 'dates' | 'tickets'; onClosed: () => void }) {
   const { busy, save } = useSave(ctx);
   const [levelFor, setLevelFor] = useState<string | null>(null);
   const [day, setDay] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [askCancel, setAskCancel] = useState(false);
+  const [payBy, setPayBy] = useState(false);
+  const canceled = t.status === 'canceled';
+  // Zip 56: the date stays once tickets are open (Cancel or reschedule moves it).
+  const dateLocked = t.status === 'tickets' || canceled;
+  const showTickets = (t.tickets ?? []).length > 0 || t.status === 'tickets';
+  const held = (t.tickets ?? []).filter((k) => !k.out && k.claimCents === 0 && k.creditCents + k.paidCents > 0);
+  const heldCents = held.reduce((s, k) => s + k.creditCents + k.paidCents, 0);
+  const tz = ctx.d.group.timezone;
   const counts = useMemo(() => new Map(dateCounts(t.offeredDates, t.signups).map((c) => [c.day, c.names])), [t]);
   const best = Math.max(0, ...[...counts.values()].map((n) => n.length));
   const months = useMemo(() => (t.offeredDates.length ? monthsBetween(t.offeredDates[0], t.offeredDates[t.offeredDates.length - 1]) : []), [t.offeredDates]);
@@ -485,14 +1024,16 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
   };
   return (
     <div className="tm-form stack" data-tm-page>
-      <Card label="Who can see it" chip={<span className="tm-chip">{t.status === 'date_picked' ? 'Date picked' : 'Sign-up open'}</span>} data="page-who">
+      {showTickets && <TicketsCard ctx={ctx} t={t} scrollRef={focus === 'tickets' ? scrollRef : undefined} />}
+      <Card label="Who can see it" chip={<span className="tm-chip">{stageWord(t)}</span>} data="page-who">
         <div className="segmented tm-seg tm-seg-who" role="group" aria-label="Who can see it">
           {(['me', 'all'] as const).map((v) => (
             <button
               key={v}
               type="button"
               aria-pressed={t.visibility === v}
-              disabled={busy}
+              // Zip 56: once tickets have been open it stays on Everyone (players hold tickets).
+              disabled={busy || canceled || (v === 'me' && t.settingsLocked === true)}
               onClick={() => t.visibility !== v && void save(() => api('PUT', `/api/admin/tournament/${t.id}/visibility`, { visibility: v }), v === 'all' ? 'Everyone can see it now' : 'Only you can see it now')}
               data-vis={v}
             >
@@ -541,9 +1082,13 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
           <span className="tm-chip">{t.finalDate ? dayLong(t.finalDate) : `${t.offeredDates.length} offered`}</span>
         </div>
         <p className="tm-card-note tm-dates-note" data-tm-dates-note>
-          {!t.finalDate && !t.offeredDates.some((d) => d >= today)
-            ? 'Every date you offered has passed. Tap Edit below to offer new ones.'
-            : 'The number on each date is how many can play. Tap a date to pick it.'}
+          {dateLocked
+            ? canceled
+              ? 'Canceled.'
+              : 'Tickets are open on this date. To move it, use Cancel or reschedule.'
+            : !t.finalDate && !t.offeredDates.some((d) => d >= today)
+              ? 'Every date you offered has passed. Tap Edit below to offer new ones.'
+              : 'The number on each date is how many can play. Tap a date to pick it.'}
         </p>
         <MonthCalendar
           months={months}
@@ -551,7 +1096,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
           boxed={false}
           label="Offered dates, with how many can play"
           look={look}
-          onTap={(d) => offered.has(d) && (d >= today || d === t.finalDate) && setDay(d)}
+          onTap={(d) => !dateLocked && offered.has(d) && (d >= today || d === t.finalDate) && setDay(d)}
           badge={(d) => (offered.has(d) ? <span className={(counts.get(d)?.length ?? 0) === best && best > 0 ? 'tm-best-count' : undefined}>{counts.get(d)?.length ?? 0}</span> : null)}
         />
       </section>
@@ -574,6 +1119,17 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
             <span>Ticket price</span>
             <b>{formatPrice(t.ticketCents)}</b>
           </div>
+          {t.status === 'tickets' && t.payBy && (
+            <div className="tm-row">
+              <span>Pay by</span>
+              <span className="tm-row-end">
+                <b data-tm-pay-by-row>{payByLabel(t.payBy, tz, t.finalDate)}</b>
+                <button type="button" className="tm-mini" onClick={() => setPayBy(true)} data-tm-pay-by-change>
+                  Change
+                </button>
+              </span>
+            </div>
+          )}
           {t.format === 'americano' ? (
             <>
               <div className="tm-row">
@@ -592,24 +1148,41 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
             </div>
           )}
         </div>
-        <button type="button" className="btn secondary block tm-edit" onClick={() => setEditing(true)} data-tm-edit-settings>
-          Edit
-        </button>
+        {!canceled && (
+          <button type="button" className="btn secondary block tm-edit" onClick={() => setEditing(true)} data-tm-edit-settings>
+            Edit
+          </button>
+        )}
       </Card>
 
       {t.backedOut.length > 0 && <p className="tm-card-note tm-backed">Backed out: {t.backedOut.map((b) => b.name).join(', ')}</p>}
 
-      <button type="button" className="tm-cancel-link" onClick={() => setAskCancel(true)} data-tm-cancel>
-        Cancel tournament
-      </button>
+      {/* Zip 56: once the date is picked, Cancel or reschedule (picture 30); before it (and after a Reschedule), Cancel tournament. */}
+      {!canceled &&
+        (t.status === 'date_picked' || t.status === 'tickets' ? (
+          <CancelOrReschedule ctx={ctx} t={t} onDone={onClosed} />
+        ) : (
+          <button type="button" className="tm-cancel-link" onClick={() => setAskCancel(true)} data-tm-cancel>
+            Cancel tournament
+          </button>
+        ))}
 
       <LevelSheet ctx={ctx} t={t} who={who} onClose={() => setLevelFor(null)} />
       <DateSheet ctx={ctx} t={t} day={day} names={day ? (counts.get(day) ?? []) : []} onClose={() => setDay(null)} />
       <CreateSheet ctx={ctx} open={editing} editing={t} onClose={() => setEditing(false)} />
+      {t.status === 'tickets' && <PayBySheet ctx={ctx} t={t} open={payBy} mode="change" onClose={() => setPayBy(false)} />}
       <ConfirmDialog
         open={askCancel}
         title="Cancel the tournament?"
-        body={<p>Players stop seeing the {t.name}. The list stays saved. Nothing was paid, so nothing comes back.</p>}
+        body={
+          <p>
+            {held.length > 0
+              ? `Are you sure? Players see it canceled. ${held.length} paid ${held.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(heldCents)}).`
+              : t.finalDate
+                ? 'Are you sure? Players on the list see it canceled. Nothing was paid, so nothing comes back.'
+                : `Players stop seeing the ${t.name}. The list stays saved. Nothing was paid, so nothing comes back.`}
+          </p>
+        }
         cancelLabel="Keep it"
         confirmLabel="Cancel tournament"
         danger

@@ -142,6 +142,10 @@ export interface CreditEntryView {
   /** An organizer adjustment (reason 'adjusted'): why, and the pot right after it (admin screens). */
   note?: string;
   balanceAfterCents?: number;
+  /** Zip 56, a tournament ticket (reason 'tournament'): the tournament's name, why its cash came back, and whether it was canceled. Missing on every other entry. */
+  tournamentName?: string;
+  tourWhy?: 'back' | 'off' | 'cancel' | 'unused' | null;
+  tourCanceled?: true;
 }
 
 /** A player's own credit (never anyone else's). */

@@ -360,10 +360,14 @@ describe('the level list and picking the date', () => {
     const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: DATES.slice(2) });
     expect(r.status).toBe(409);
     expect((await ctx.organizer.call('POST', `/api/admin/tournament/${id}/cancel`, {})).status).toBe(200);
-    expect((await blair.call('GET', '/api/group')).data.tournament).toBeUndefined();
-    expect((await dash(ctx)).tournament).toBeUndefined();
-    // A new one can be made; the old list stays in the database with its levels.
+    // Zip 56: canceled after its date was picked, it shows a plain Canceled card (Blair was on the list; nothing was paid, so nothing comes back).
+    expect((await blair.call('GET', '/api/group')).data.tournament).toMatchObject({ status: 'canceled', canceled: { backCents: 0, claimCents: 0 } });
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'canceled', name: 'Holiday Cup' });
+    // A player who was not on the list sees nothing.
+    expect((await (await playerPhone(ctx, 'Casey')).call('GET', '/api/group')).data.tournament).toBeUndefined();
+    // A new one can be made (and is what both screens show); the old list stays in the database with its levels.
     await create(ctx, { name: 'Spring Fling' });
+    expect((await dash(ctx)).tournament).toMatchObject({ name: 'Spring Fling', status: 'signup' });
     expect(ctx.app.db.raw.prepare("SELECT COUNT(*) AS n FROM tournament_signups WHERE tournament_id = ?").get(id)).toEqual({ n: 1 });
   });
 

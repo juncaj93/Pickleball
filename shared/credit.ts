@@ -17,7 +17,10 @@ export type CreditKind = 'kept' | 'used' | 'refunded';
  * toward a seat whose price then went up (a reopen and a redo with fewer
  * players): the pot is unchanged, the seat owes the rest. Never shown.
  */
-export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request' | 'cash' | 'adjusted' | 'extension';
+export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request' | 'cash' | 'adjusted' | 'extension' | 'tournament';
+// 'tournament' (Zip 56, shared/tournamentTickets.ts): credit used on a tournament ticket ('used', column "tour:<tournament id>"), or a ticket's
+// cash back as credit ('kept', column "tour:<tournament id>:<why>", why: back, off, cancel or unused). session_id is empty, as with 'extension':
+// no seat of any game ever counts them. loadLedger turns the column into reason 'tournament' plus `tourId` and `tourWhy`.
 // 'extension' (Zip 31, shared/extension.ts): credit used for a share of extra court time ('used'), or put back when the share went
 // down ('kept'). The ledger column holds "ext:<game id>" and session_id is empty; loadLedger turns it into reason 'extension' plus `extSessionId`.
 // 'adjusted': the organizer added ('kept') or removed ('used') credit by hand, no game attached (shared/adjustCredit.ts). The ledger
@@ -49,6 +52,27 @@ export interface CreditRow {
   note?: string;
   /** Zip 31: the game whose extra time this credit paid for or came back from (reason 'extension'). Never a seat's own credit. */
   extSessionId?: string;
+  /** Zip 56: the tournament whose ticket this credit paid for or came back from (reason 'tournament'), and why cash came back. */
+  tourId?: string;
+  tourWhy?: TourWhy | null;
+}
+
+/** Zip 56: why a ticket's cash came back as credit: they backed out, the organizer took them off, it was canceled, or it never got a spot. */
+export type TourWhy = 'back' | 'off' | 'cancel' | 'unused';
+
+/** Zip 56: a ticket's money in the player's words: "the Winter Classic" and why it came back. */
+function tourText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'tournamentName' | 'tourWhy' | 'tourCanceled'>, money: string): string {
+  const name = e.tournamentName ? `the ${e.tournamentName}` : 'a tournament';
+  if (e.kind === 'used') return `${money} used for ${name}`;
+  const why = e.tourWhy === 'back' ? 'you backed out' : e.tourWhy === 'off' ? 'taken off the list' : e.tourWhy === 'cancel' ? 'canceled' : 'no spot opened';
+  return `${money} back from ${name} (${why})`;
+}
+
+/** Zip 56: credit used on a ticket that went back to the pot, in the player's words. */
+function tourEndText(e: Pick<CreditEntryView, 'cents' | 'endedReason' | 'tournamentName' | 'tourCanceled'>): string {
+  const name = e.tournamentName ? `the ${e.tournamentName}` : 'a tournament';
+  const why = e.endedReason === 'dropped' ? 'off the list' : e.tourCanceled ? 'canceled' : 'no spot opened';
+  return `${formatPrice(e.cents)} returned from ${name} (${why})`;
 }
 
 // Rows arrive in the order they were made (created_at, then insertion order), and sorts keep that order for ties.
@@ -239,12 +263,18 @@ export function creditOweText(oweCents: number, creditCents: number): string {
  * organizer: "+$5 Thu, Oct 29 (6 played)", "-$14 used for Tue, Nov 3",
  * "+$14 canceled Thu, Nov 5", "-$14 refunded" (a player's sheet: "-$14 cashed out").
  */
-export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'sessionStartsAt' | 'reason' | 'playedCount'>, tz: string, forPlayer = false): string {
+export function creditEntryText(
+  e: Pick<CreditEntryView, 'kind' | 'cents' | 'sessionStartsAt' | 'reason' | 'playedCount'> & Partial<Pick<CreditEntryView, 'tournamentName' | 'tourWhy' | 'tourCanceled'>>,
+  tz: string,
+  forPlayer = false,
+): string {
   const money = formatPrice(e.cents);
   if (e.reason === 'adjusted') return `${signedPrice(e.kind === 'kept' ? e.cents : -e.cents)} adjusted by organizer`;
   const day = e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : null;
   // Zip 31: extra court time ("-$3 used for extra time Thu, Nov 12", "+$1 extra time changed Thu, Nov 12").
   if (e.reason === 'extension') return e.kind === 'used' ? `-${money} used for extra time${day ? ` ${day}` : ''}` : `+${money} extra time changed${day ? ` ${day}` : ''}`;
+  // Zip 56: a tournament ticket ("-$16 used for the Winter Classic", "+$16 back from the Winter Classic (canceled)").
+  if (e.reason === 'tournament') return `${e.kind === 'used' ? '-' : '+'}${tourText(e, money)}`;
   if (e.kind === 'used') return `-${money} used${day ? ` for ${day}` : ''}`;
   // The organizer's screens say refunded; the player's own sheet says cashed out.
   if (e.kind === 'refunded') return `-${money} ${forPlayer ? 'cashed out' : 'refunded'}`;
@@ -335,6 +365,8 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     if (e.reason === 'adjusted') text = `${adjustedPlayerLine(e.kind === 'kept' ? e.cents : -e.cents).replace(/^Credit/, 'credit')}${e.note ? `. ${e.note}` : ''}`;
     // Zip 31: "Nov 12: $3 used for extra time on Nov 12", "Nov 13: $1 back from Nov 12 (extra time changed)".
     else if (e.reason === 'extension') text = e.kind === 'used' ? `${money} used for extra time${game ? ` on ${game}` : ''}` : `${money} back${from} (extra time changed)`;
+    // Zip 56: "Dec 1: $16 used for the Winter Classic", "Dec 3: $16 back from the Winter Classic (you backed out)".
+    else if (e.reason === 'tournament') text = tourText(e, money);
     else if (e.kind === 'used') text = `${money} used${game ? ` for ${game}` : ''}`;
     else if (e.kind === 'refunded') text = `${money} cashed out`;
     else if (e.reason === 'finalized') text = `${money} back${from}${e.playedCount ? ` (${e.playedCount} played)` : ''}`;
@@ -350,6 +382,8 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     if (!e.endedAt) return;
     let end: string;
     if (e.reason === 'adjusted') end = `${signedPrice(e.kind === 'kept' ? -e.cents : e.cents)} taken back (adjustment undone)`;
+    // Zip 56: "Dec 3: $16 returned from the Winter Classic (off the list)".
+    else if (e.reason === 'tournament' && e.kind === 'used') end = tourEndText(e);
     else if (e.kind === 'used') {
       const why =
         e.endedReason === 'dropped'

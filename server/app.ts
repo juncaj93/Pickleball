@@ -7,6 +7,7 @@ import * as player from './player';
 import * as guest from './guestActions';
 import * as playersRedo from './playersRedo';
 import * as tournament from './tournament';
+import * as tickets from './tournamentTickets';
 import { tournamentTestStage } from './tournamentTest';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
@@ -72,6 +73,10 @@ route('POST', '/api/money-note/seen', player.moneyNoteSeen);
 route('POST', '/api/tournament/signup', player.tournamentSignup);
 route('PUT', '/api/tournament/signup', player.tournamentEdit);
 route('POST', '/api/tournament/back-out', player.tournamentBackOut);
+// Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Lock my spot (or Hold my spot), I paid, Join waitlist.
+route('POST', '/api/tournament/lock', player.tournamentLock);
+route('POST', '/api/tournament/paid', player.tournamentPaid);
+route('POST', '/api/tournament/waitlist', player.tournamentWaitlist);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
@@ -208,6 +213,11 @@ route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVis
 route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
 route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
 route('POST', '/api/admin/tournament/:id/cancel', (ctx) => tournament.cancelTournament(ctx));
+// Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Open tickets, Pay by, the answers on one ticket, Reschedule.
+route('POST', '/api/admin/tournament/:id/open-tickets', tickets.openTickets);
+route('PUT', '/api/admin/tournament/:id/pay-by', tickets.setPayBy);
+route('POST', '/api/admin/tournament/:id/ticket', tickets.adminTicket);
+route('POST', '/api/admin/tournament/:id/reschedule', (ctx) => tickets.rescheduleTournament(ctx));
 // Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever PREVIEW_CALM is not on (live),
 // after the usual organizer sign-in check.
 route('POST', '/api/admin/tournament-test', tournamentTestStage);

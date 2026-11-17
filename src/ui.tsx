@@ -426,6 +426,7 @@ export function Sheet({
   hideClose,
   titleAfter,
   calmFocus,
+  back,
 }: {
   open: boolean;
   title: string;
@@ -444,6 +445,11 @@ export function Sheet({
    * focus ring on a tap. Keyboard users still get Tab, Escape and rings (:focus-visible). Left out: exactly as before.
    */
   calmFocus?: boolean;
+  /**
+   * Zip 56 (the tournament's "Who's in" overlay only, mocks 09, 11, 12): a back button on the left ("‹ Home") instead of the ✕, the title in the
+   * middle. Left out: exactly as before.
+   */
+  back?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -499,7 +505,7 @@ export function Sheet({
   return (
     <dialog
       ref={ref}
-      className={`sheet${className ? ` ${className}` : ''}${calmFocus ? ' tm-calm-focus' : ''}${closing && !open ? ' m-closing' : ''}`}
+      className={`sheet${className ? ` ${className}` : ''}${calmFocus ? ' tm-calm-focus' : ''}${back !== undefined ? ' sheet-has-back' : ''}${closing && !open ? ' m-closing' : ''}`}
       aria-labelledby={titleId}
       tabIndex={calmFocus ? -1 : undefined}
       // Only this sheet's own close: a confirm box opened inside it (Remove X?) closing must not close this sheet too (Zip 13: that sent
@@ -560,6 +566,14 @@ export function Sheet({
               d.style.transform = '';
             }}
           >
+            {back !== undefined && (
+              <button type="button" className="sheet-back" onClick={onClose} data-sheet-back>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 5l-7 7 7 7" />
+                </svg>
+                {back}
+              </button>
+            )}
             {titleAfter ? (
               <div className="sheet-title-row">
                 <h2 id={titleId}>{title}</h2>
@@ -569,7 +583,8 @@ export function Sheet({
               <h2 id={titleId}>{title}</h2>
             )}
             {headerAction}
-            {!hideClose && (
+            {back !== undefined && <span className="sheet-back-room" aria-hidden="true" />}
+            {!hideClose && back === undefined && (
               <button className="icon-btn" onClick={onClose} aria-label="Close">
                 ✕
               </button>

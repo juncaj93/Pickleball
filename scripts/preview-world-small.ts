@@ -99,7 +99,8 @@ export async function buildSmallPreview(
   /** `zip49`: add Zip 49's three games and keep only them in the calm profile (the preview seed). Left out: the world exactly as before (the local browser tests). */
   /** `zip51`: Zip 51's two late-drop games instead (the preview seed from Zip 51 on). */
   /** `zip55`: the calm profile of Zip 55 (Tournaments): no zip's games, no Venue cards, and a fresh "Winter Classic" on Only me (the preview seed). */
-  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean } = {},
+  /** `zip56`: Zip 55's profile, with the tournament at Date picked for Everyone (Zip 56, tickets: the organizer's first tap is Open tickets). */
+  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean } = {},
 ): Promise<Seed> {
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
@@ -663,6 +664,20 @@ export async function buildSmallPreview(
     summary.push('Zip 55 Tournaments (on): "Winter Classic" just created, Only me, nobody on the list; no other zip\'s games or cards (the Tournament test page sets the stages)');
   }
 
+  // 29. Zip 56, Tournaments piece 2 (tickets; ON in the preview: BUILDING_ON). The calm preview opens on the Date picked stage (Everyone, 8 on the
+  //     list, Sage set to 3.4, the third Thursday of next month picked), made by the Tournament test page's own server half, so organizer Home
+  //     shows picture 29's card and the first tap is Open tickets. Every other ticket stage is one tap away on the Tournament test page.
+  if (opts.zip56) {
+    if (!opts.zip55) throw new Error('zip56 builds on the zip55 profile');
+    w.env.PREVIEW_CALM = 'on';
+    try {
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'date_picked' });
+    } finally {
+      delete w.env.PREVIEW_CALM;
+    }
+    summary.push('Zip 56 Tournaments piece 2 (on): "Winter Classic" at Date picked for Everyone (8 on the list, the third Thursday of next month); organizer Home shows Open tickets; the Tournament test page has Tickets open, Spots full with waitlist, All locked in, 7 locked in after Pay by, Canceled and Rescheduled');
+  }
+
   await refresh();
   const names = (dash.players as { name: string }[]).map((p) => p.name).sort();
   if (names.join('|') !== [...SMALL_NAMES].sort().join('|')) throw new Error(`the small preview must have exactly the fixed names, has: ${names.join(', ')}`);
@@ -693,7 +708,8 @@ export async function buildSmallPreview(
 export function tournamentRows(w: World): string {
   const lit = (v: unknown) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
   const out: string[] = [];
-  for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history']) {
+  // Zip 56: the tickets too, after their tournament (parents first).
+  for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) {
     for (const row of w.db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all() as Record<string, unknown>[]) {
       const cols = Object.keys(row);
       out.push(`INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map((c) => lit(row[c])).join(', ')});`);

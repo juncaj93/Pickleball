@@ -11,9 +11,25 @@ import './tournament-admin.css';
 
 const STAGES = [
   { stage: 'signup', label: 'Sign-up open', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. Pick the format above first.' },
-  { stage: 'date_picked', label: 'Date picked', line: '8 on the list, Sage set to 3.4, the date most can play picked. Vic is not on the list.' },
+  { stage: 'date_picked', label: 'Date picked', line: '8 on the list, Sage set to 3.4, the date most can play picked. Vic is not on the list. Open tickets is on Home.' },
+  // Zip 56, piece 2.
+  { stage: 'tickets_open', label: 'Tickets open', line: '6 of 8 locked in. Vic, Zoe and Reese have no ticket yet: view as Vic to Lock my spot.' },
+  { stage: 'spots_full', label: 'Spots full with waitlist', line: '8 of 8 (your own seat is free). Reese paid and is first in line; Vic sees Join waitlist. Back out as Zoe and Reese moves in.' },
+  { stage: 'all_locked', label: 'All locked in', line: '8 of 8, Vic among them. Nobody is waiting.' },
+  { stage: 'odd', label: '7 locked in after Pay by', line: 'Pay by has passed with 7 locked in: Home shows the evens warning.' },
+  { stage: 'canceled', label: 'Canceled', line: 'Spots full, then canceled: every paid ticket is credit now. Players who were on the list see Canceled.' },
+  { stage: 'rescheduled', label: 'Rescheduled', line: 'Tickets open, then rescheduled: tickets stay held, players pick their dates again.' },
   { stage: 'none', label: 'No tournament', line: 'Nothing open, to try Create tournament.' },
 ] as const;
+
+/** What the tournament is at now, in a few words. */
+const nowWords: Record<string, string> = {
+  signup: 'Sign-up open',
+  date_picked: 'Date picked',
+  tickets: 'Tickets open',
+  rescheduled: 'Rescheduled',
+  canceled: 'Canceled',
+};
 
 export default function TournamentTestRow({ ctx, home }: { ctx: AdminCtx; home?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -42,7 +58,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   // Which format the stage buttons build (starts on the open tournament's).
   const [format, setFormat] = useState<'doubles' | 'americano'>(t?.format ?? 'doubles');
   const now = t
-    ? `${t.format === 'americano' ? 'Americano' : 'Locked doubles'} · ${t.status === 'date_picked' && t.finalDate ? `Date picked: ${dayLong(t.finalDate)}` : 'Sign-up open'}`
+    ? `${t.format === 'americano' ? 'Americano' : 'Locked doubles'} · ${nowWords[t.status] ?? 'Sign-up open'}${t.finalDate && (t.status === 'date_picked' || t.status === 'tickets') ? `: ${dayLong(t.finalDate)}` : ''}`
     : 'No tournament';
   async function go(stage: string, label: string) {
     if (busy) return;

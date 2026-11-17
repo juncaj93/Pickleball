@@ -139,6 +139,9 @@ export const BACKUP_LEFT_OUT: Record<string, string> = {
   tournaments: 'tournament settings (Zip 55 piece 1): no money yet; Time Travel keeps them',
   tournament_signups: 'tournament sign-ups and picked dates (Zip 55 piece 1): no money yet; Time Travel keeps them',
   tournament_level_history: 'tournament level history (Zip 55 piece 1): no money yet; Time Travel keeps it',
+  // Zip 56, piece 2: tickets DO hold money (cash the organizer confirmed; credit lives in credit_ledger, which is in the file). Left out until Alex
+  // decides the four tournament tables join the file (a version 3 file): the question is in the Zip 56 report. Time Travel keeps it meanwhile.
+  tournament_tickets: 'tournament tickets (Zip 56 piece 2): cash paid for tickets; Time Travel keeps it; joining the file is a question for Alex',
 };
 
 const NAME = /^[a-z_][a-z0-9_]*$/;

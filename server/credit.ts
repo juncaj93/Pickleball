@@ -17,6 +17,7 @@ import type { GroupSettings } from '../shared/settings';
 import { OPEN_FEE } from './lateFees';
 import { hasGuestColumns } from './guestSpot';
 import { seatUnits } from '../shared/guestSpot';
+import { tourOfReason } from '../shared/tournamentTickets';
 
 const HISTORY_MS = 90 * 86_400_000;
 
@@ -71,7 +72,12 @@ export async function loadLedger(db: D1Database, groupId: string): Promise<Ledge
     .prepare(r.sql)
     .bind(...r.values)
     .all<RawRow>();
-  return results.map((r) => ({
+  return results.map((r) => loadedRow(r));
+}
+
+function loadedRow(r: RawRow): LedgerRow {
+  const tour = tourOfReason(r.reason);
+  return {
     id: r.id,
     playerId: r.player_id,
     kind: r.kind,
@@ -82,12 +88,36 @@ export async function loadLedger(db: D1Database, groupId: string): Promise<Ledge
     endedAt: r.ended_at,
     endedReason: r.ended_reason,
     // An adjustment keeps its why in the same column ("adjusted:<why>"); everywhere else it is plain reason 'adjusted' plus a note.
-    reason: adjustNoteOf(r.reason) !== null ? 'adjusted' : extSessionOf(r.reason) !== null ? 'extension' : ((r.reason as CreditReason | null) ?? null),
+    // Zip 56: a tournament ticket's ("tour:<id>" or "tour:<id>:<why>") is reason 'tournament' plus tourId and tourWhy.
+    reason: adjustNoteOf(r.reason) !== null ? 'adjusted' : extSessionOf(r.reason) !== null ? 'extension' : tour ? 'tournament' : ((r.reason as CreditReason | null) ?? null),
+    ...(tour ? { tourId: tour.tournamentId, tourWhy: tour.why } : {}),
     playedCount: r.played_count,
     ...(adjustNoteOf(r.reason) !== null ? { note: adjustNoteOf(r.reason) as string } : {}),
     // Zip 31: extra court time; the game is only named here, never as session_id (no seat counts it).
     ...(extSessionOf(r.reason) !== null ? { extSessionId: extSessionOf(r.reason) as string } : {}),
-  }));
+  };
+}
+
+/**
+ * Zip 56: the names (and whether canceled) of the tournaments some ledger rows paid tickets for, for the credit history's words. ONE small read,
+ * and only when such rows exist (every other answer reads nothing new).
+ */
+export async function tourNamesOf(db: D1Database, rows: readonly Pick<CreditRow, 'tourId'>[]): Promise<Map<string, { name: string; canceled: boolean }>> {
+  const ids = [...new Set(rows.map((r) => r.tourId).filter((x): x is string => !!x))];
+  if (ids.length === 0) return new Map();
+  const { results } = await db
+    .prepare(`SELECT id, name, status FROM tournaments WHERE id IN (${ids.map(() => '?').join(', ')})`)
+    .bind(...ids)
+    .all<{ id: string; name: string; status: string }>()
+    .catch(() => ({ results: [] as { id: string; name: string; status: string }[] }));
+  return new Map(results.map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled' }]));
+}
+
+/** Zip 56: a ticket row's extra words for a CreditEntryView (nothing on any other row, so every other entry is exactly as before). */
+export function tourFields(e: Pick<CreditRow, 'tourId' | 'tourWhy'>, names: Map<string, { name: string; canceled: boolean }>) {
+  if (!e.tourId) return {};
+  const t = names.get(e.tourId);
+  return { ...(t ? { tournamentName: t.name } : {}), tourWhy: e.tourWhy ?? null, ...(t?.canceled ? { tourCanceled: true as const } : {}) };
 }
 
 export interface RefundRequestRow {
