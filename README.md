@@ -363,6 +363,18 @@ listed, it asks "Is this you?" first. New names get a "New" tag on the
 Players screen. Removing a name deletes it if the person never signed up or
 paid; otherwise it's hidden so old records stay correct.
 
+## Tournaments (Zip 55, piece 1 of 4; switch TOURNAMENTS, ships off)
+
+Once a year (no new code each year), the organizer opens Settings > Schedule > **Create tournament**: a name, the dates
+to offer, players expected (6, 8, 10 or 12) and the court plan for that size, the ticket price and the champion credit
+(both only stored in piece 1: nothing is charged or credited yet), and **Who can see it**: Only me first, then Everyone.
+Players sign up from a ticket card pinned at the top of Home: their level, then every date that works; they can see
+who signed up (names only), edit or back out. The organizer's Home card opens the level list (each player's own pick,
+which the organizer can change; every change is kept) and the dates with how many can play; tapping one picks it, and
+the card then shows the date and "Tickets open soon". While a tournament is on Only me, players get nothing about it
+from the server. Tickets and the waitlist (piece 2), teams and game day (piece 3) and the final (piece 4) come later.
+The rules and the switch: `docs/FEATURE_SWITCHES.md`.
+
 ## Home Screen app
 
 Settings shows the 3 iPhone steps (Share > Add to Home Screen > Add), and

@@ -5358,3 +5358,56 @@ Regular. On live (Mon Nov 16, 1:54 PM) Julian saw "Tomorrow needs 2 more" while 
   organizer data (dashboard, money, activity) answers 401 without the PIN.
 - Not done by this session (no organizer PIN here): opening Money > Totals on live. Alex's expected numbers today: Membership $60 (2 months), Court costs after
   players $24 (4 games), Out of pocket $84, Average per month $42, SINCE OCT, per game $21 (they change as games are finalized). Month by month also lists Oct 2026 now.
+
+## Zip 55: Tournaments, piece 1 (🎾55.tourney1), Tue Nov 17, 2026
+Branch `claude/new-session-yjbe3g` (the session is named "🎾55.tourney1"; the build system pins the branch name). Built on main `166d368` (Zip 54
+live). New switch **TOURNAMENTS**, ships OFF. **Database change: migration `0023_tournaments` (three NEW tables).** Applied to the fake preview
+database only; NOT on live: waiting for Alex's "ship it" (STOP RULE). No money moves: the ticket price and the champion credit are only stored.
+Pieces 2 (tickets, waitlist), 3 (teams, game day, End tournament) and 4 (tie wheel, final) are NOT built.
+
+### What it does
+1. Tables (`migrations/0023_tournaments.sql`, additive only, every foreign key ON DELETE CASCADE so a restore, a re-seed or Remove player can never
+   fail because of them): `tournaments` (name, size, courts, minutes, start, ticket_cents, champion_credit_cents, offered_dates, final_date, status,
+   visibility me/all, times; one open tournament per group by a partial unique index), `tournament_signups` (player, status in/out, picked_level,
+   approved_level, dates, joined_at; one row per player per tournament, kept after a back out), `tournament_level_history` (every level a player
+   picked and every level the organizer set, per tournament, never edited). Later pieces will add `tournament_tickets`, `tournament_teams`,
+   `tournament_games` next to them; status has no CHECK so they need no table rebuild.
+2. Create tournament (Settings > Schedule; `src/pages/admin/Tournament.tsx`): the mocks' cards (03, 01, 02, 24): name, Dates to offer (a
+   scrollable calendar from this month, opening on next month after the 15th; tap to light; "N LIT"), Start time / Ends, Players expected 6/8/10/12
+   with each size's court plans (BEST first; 2.5 and 3 hour plans only while Booking hours is on for everyone, else dimmed with the mock's note),
+   Champion prize (credit $14, $0 allowed, total for 2 winners), Ticket price ($16, the same for every size), What players see, Who can see it
+   (Only me first), "Open sign-up (only me)". It opens as a full-height sheet (title bar and ✕), like Edit game.
+3. Players (`src/tournament/TournamentHome.tsx`, its own download): the pinned ticket card (states 1 and 2 of mock 08 and the Date picked look:
+   DATE PICKED, the date on the stub, "Tickets open soon", VOTE done and TICKETS next), the 2-step Sign up sheet (level, then dates; the mock's
+   words), "You're on the list", See who's signed up (names only), Edit my sign-up (level and dates), Back out? (Stay signed up / Yes, back out).
+   Before the date is picked the stub shows "DATE ? DEC–JAN 7:30 PM" (the months on offer). After it is picked a new sign-up (or an edit) can
+   only pick that date. The sign-up's step 1 ends with "Winners each get a medal and a $14 game credit." (mock 24's What players see).
+4. The organizer's tournament page (from the Home card's Levels / Pick the date, or Settings > Schedule): Who can see it, the level list of mock 14
+   (name, "Picked 3.6", the level, a pencil; the sheet tints the player's pick "SAGE PICKED" and boxes the organizer's "YOUR PICK"; Save 3.4), the
+   offered dates with how many can play each (the most-picked count in bold), tap one to see who can and cannot, Pick it, or Take back the date;
+   Settings (Edit); Cancel tournament. History gets a line for each step and each player's sign-up, edit and back out.
+5. Only me (`server/tournament.ts` `visibleTo`): only the organizer's own player on a phone signed in with the real PIN (or the organizer's View
+   as of their own player) sees the card and the "Only you can see this" strip (mock 04, Show to everyone with a confirm). Anyone else, including
+   a phone that only picked the organizer's name and a read-only PIN helper: no `tournament` key in `/api/group`, the same change fingerprint as
+   with no tournament, and every player route answers 404 "This tournament is not open." (the same for none, off and Only me).
+6. Preview test page (`src/pages/admin/TournamentTest.tsx`, `server/tournamentTest.ts`): organizer Home (first row) and Settings > Schedule,
+   "Tournament test": Sign-up open, Date picked, No tournament (each also turns the Tournaments row back on), Who can see it, View as each fixed
+   name (`/?as=Name`) or Admin. Built only into a preview (`__PREVIEW_BUILD__`, set by `npm run deploy:preview`; `tests/zip55-build.test.ts`
+   checks a live build has none of it); the server half answers Not found unless PREVIEW_CALM is on (only previews). The route's address is in
+   the live View as copy's file (it runs the server's own code), where it also answers Not found.
+
+### The switch
+`TOURNAMENTS`: Settings > Feature switches > "Tournaments" (top row), a kill switch allowed unless "off" (no wrangler.toml line, Zip 45's rule),
+the private link `?tournaments=on` (X-Tournaments). Off: no new key in any answer, no new fingerprint segment, the switch read answered by the
+shared switch read (no extra trip), the new tables never read. docs/FEATURE_SWITCHES.md has the row.
+
+### Where it differs from the brief (the code is the truth)
+- No TEST SPEED RULES section exists in SITE_RULES (neither copy); the usual full unit and browser runs were used.
+- Kai is not one of the preview's fixed names (the seed refuses any other name), so the test page uses the 10 fixed names only.
+- The kill switch has no wrangler.toml line (Zip 45: allowed-unless-off switches have none); "off" is added only to pull it.
+- The stub cannot show "THU 17 DEC" before a date is picked: it shows DATE ? and the months on offer.
+- "Date picked" kicker reads DATE PICKED (state 3's TICKETS OPEN would contradict "Tickets open soon").
+- 8-player plan words follow the Create screen (mock 03); the other sizes follow mocks 01 and 02.
+- The tournament tables are not in the backup FILE yet (BACKUP_LEFT_OUT; Time Travel keeps them; docs/RESTORE.md says so).
+- Create and the tournament page are full-height sheets (with a way back), not a page with no back button.
+- The ticket price stays editable after Create in piece 1 (nothing is sold); the Edit screen's note says "before tickets open".
