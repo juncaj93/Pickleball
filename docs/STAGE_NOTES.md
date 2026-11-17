@@ -5524,3 +5524,22 @@ page, both Home cards, the Tournament test page; stored as 'doubles' and 'americ
 name come the format (subtitle style) and its one rule in smaller text, "Same partner all night" or "New partner every round", then where
 the player stands. The Create choice shows the same rule under each name; the two choices are stacked full width so neither wraps at 320.
 
+### Deploy (Tue Nov 17, 2026, about 4:40 PM Eastern; loud hours waived by Alex for this one, `--override-loud-hours`)
+- Alex said "ship it" for piece 1 with the TOURNAMENTS switch staying OFF. No other deploy was running.
+- Restore point: Time Travel bookmark `000016a0-00000000-00005126-5737654412065639167a97dd98e88e16` (taken before the migration). SQL export of
+  live (258 KB) saved to `pickleball-backups` as `export-20261117205113`, checked, then the local copy deleted (phone numbers inside).
+  Integrity checks 21 of 21 and the extension checks 8 of 8 at 0 before; 21 of 21 at 0 after.
+- Migration `0023_tournaments` applied to live (it was the only one pending): `tournaments` (20 columns, ending with `format` and
+  `second_credit_cents`), `tournament_signups`, `tournament_level_history`, all empty after.
+- A fresh reviewer read passes 1 to 3: SAFE TO SHIP. Its one low finding (an Edit that leaves out the format turned it back into Locked
+  doubles; no live client could do it) is fixed with a test, and a test flake (a random id holding "340") fixed. Unit 3,430 passed, 2 skipped;
+  `npx tsc -b` clean.
+- Main fast-forwarded from `166d368` to `752e34c` (plain push), then `npm run deploy -- --override-loud-hours` from main.
+  Production deployment `f8e4a506-d689-4cfa-84e7-1e0da732e919`. Rollback: Pages deployment `35acc09d-d6dc-4634-a98c-bd842ab1e7c0` (Zip 54,
+  `12019b8`); the new tables can stay (old code never reads them).
+- Live check (public, no PIN, `pickleball-club-9h0.pages.dev`): page and /admin load (200); the served bundle (`index-BdcaC14s.js`) is the
+  one built and holds no Tournament test page; `/api/group` has no `tournament` key or word; a fresh phone at 390 and 320, light and dark,
+  sees "Who are you?", no card, no tournament or organizer file fetched, no page errors; organizer data and the test route answer 401 without
+  the PIN. No Tournaments switch row exists on live (OFF). e2e/zip55-off.cjs 47 of 47 (old main `166d368` against the code now live).
+- Not done by this session (no PIN here): the read-only PIN look at the organizer screens, and Alex's private test with `?tournaments=on`.
+
