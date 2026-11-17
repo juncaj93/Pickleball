@@ -158,8 +158,20 @@ export function TicketCard({
   const picked = t.status === 'date_picked' && !!t.finalDate;
   const stub = picked ? stubParts(t.finalDate!) : null;
   const n = t.names.length;
+  // Every date on offer (or the picked one) has passed: nothing to pick, so no Sign up (the list, Edit and Drop out stay for those on it).
+  const noDates = t.openDates.length === 0;
   const kicker = picked ? 'Date picked' : signed ? 'You’re on the list' : 'Doubles tournament';
-  const sub = picked ? 'Tickets open soon' : signed ? 'We’re picking the date. Tickets open after that.' : n > 0 ? `${n} signed up · pick the dates you can play` : 'Pick the dates you can play';
+  const sub = noDates
+    ? picked
+      ? 'That date has passed.'
+      : 'The dates offered have passed.'
+    : picked
+      ? 'Tickets open soon'
+      : signed
+        ? 'We’re picking the date. Tickets open after that.'
+        : n > 0
+          ? `${n} signed up · pick the dates you can play`
+          : 'Pick the dates you can play';
   // Piece 1: VOTE while the date is being picked; once it is picked, VOTE is done and TICKETS is next (as state 3's track).
   const now = picked ? 1 : 0;
   const state = picked ? 'date' : signed ? 'listed' : 'open';
@@ -175,7 +187,7 @@ export function TicketCard({
             {stub ? stub.day : '?'}
           </span>
           <span className="tc-mon" aria-hidden="true">
-            {stub ? stub.month : monthSpan(t.openDates)}
+            {stub ? stub.month : monthSpan(t.openDates) || '\u00a0'}
           </span>
           <span className="tc-time" aria-hidden="true">
             {startLabel(t.start)}
@@ -192,17 +204,19 @@ export function TicketCard({
           </p>
         </div>
       </div>
-      <div className="tc-actions">
-        {signed ? (
-          <button type="button" className="tc-btn tc-gray" onClick={onWho} data-tc-who>
-            See who’s signed up
-          </button>
-        ) : (
-          <button type="button" className="tc-btn tc-lime" onClick={onSignUp} data-tc-signup>
-            Sign up
-          </button>
-        )}
-      </div>
+      {(signed || !noDates) && (
+        <div className="tc-actions">
+          {signed ? (
+            <button type="button" className="tc-btn tc-gray" onClick={onWho} data-tc-who>
+              See who’s signed up
+            </button>
+          ) : (
+            <button type="button" className="tc-btn tc-lime" onClick={onSignUp} data-tc-signup>
+              Sign up
+            </button>
+          )}
+        </div>
+      )}
       {signed && (
         <div className="tc-links">
           <button type="button" className="tc-link" onClick={onEdit} data-tc-edit>
@@ -273,7 +287,9 @@ function SignUpSheet({
   const [step, setStep] = useState<1 | 2>(1);
   const [level, setLevel] = useState<number | null>(null);
   // Once the date is picked there is one date to pick: it starts picked.
-  const [picked, setPicked] = useState<string[]>(t.openDates.length === 1 ? [...t.openDates] : []);
+  const [pickedRaw, setPicked] = useState<string[]>(t.openDates.length === 1 ? [...t.openDates] : []);
+  // Only the dates still open count: one that closed while the sheet was open (the date was picked, midnight passed) drops out, never sent.
+  const picked = pickedRaw.filter((d) => t.openDates.includes(d));
   return (
     <Sheet open={open} title="Sign up" onClose={onClose} className="tm-sheet">
       <div className="tm-steps" aria-hidden="true">
@@ -334,7 +350,9 @@ function EditSheet({
   const [changing, setChanging] = useState(false);
   // Only the dates still open count (once the date is picked, that one date). Untouched dates are not sent: a level-only change never makes
   // anyone tick a date they cannot make (the server keeps their dates as they are).
-  const [picked, setPickedRaw] = useState<string[]>(me.dates.filter((d) => t.openDates.includes(d)));
+  const [pickedRaw, setPickedRaw] = useState<string[]>(me.dates);
+  // Only the dates still open count, also after a reload under the open sheet (a date that closed drops out and is never sent).
+  const picked = pickedRaw.filter((d) => t.openDates.includes(d));
   const [touched, setTouched] = useState(false);
   const setPicked = (d: string[]) => {
     setTouched(true);
@@ -365,8 +383,12 @@ function EditSheet({
           </button>
         </div>
       )}
-      <p className="tm-eyebrow">Dates that work</p>
-      <DatesPicker t={t} picked={picked} setPicked={setPicked} summary={false} />
+      {t.openDates.length > 0 && (
+        <>
+          <p className="tm-eyebrow">Dates that work</p>
+          <DatesPicker t={t} picked={picked} setPicked={setPicked} summary={false} />
+        </>
+      )}
       <div className="tm-bottom tm-bottom-stack">
         <button type="button" className="btn" disabled={busy || (touched && picked.length === 0)} onClick={() => onSubmit(level, touched ? picked : null)} data-tm-save>
           {busy ? 'Saving…' : 'Save changes'}

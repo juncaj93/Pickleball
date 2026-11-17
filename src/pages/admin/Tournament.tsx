@@ -477,7 +477,11 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
           <h3 className="tm-label">Pick the date</h3>
           <span className="tm-chip">{t.finalDate ? dayLong(t.finalDate) : `${t.offeredDates.length} offered`}</span>
         </div>
-        <p className="tm-card-note tm-dates-note">The number on each date is how many can play. Tap a date to pick it.</p>
+        <p className="tm-card-note tm-dates-note" data-tm-dates-note>
+          {!t.finalDate && !t.offeredDates.some((d) => d >= today)
+            ? 'Every date you offered has passed. Tap Edit below to offer new ones.'
+            : 'The number on each date is how many can play. Tap a date to pick it.'}
+        </p>
         <MonthCalendar
           months={months}
           variant="counts"

@@ -164,11 +164,13 @@ export function storedDays(json: string | null | undefined): string[] {
 const statusOf = (t: TournamentRow): TournamentStatus => (t.status === 'date_picked' ? 'date_picked' : 'signup');
 
 /**
- * The dates a player can pick now: every offered date from today on while sign-up is open (a day that has passed is no longer a choice); only
- * the picked one once it is picked. `today`: the Eastern calendar day ('YYYY-MM-DD').
+ * The dates a player can pick now: every offered date from today on while sign-up is open; only the picked one once it is picked. A day that
+ * has passed is never a choice (so the list can be empty: every offered date, or the picked one, has passed). `today`: the Eastern calendar
+ * day ('YYYY-MM-DD').
  */
 export function openDatesOf(t: TournamentRow, today: string): string[] {
-  return statusOf(t) === 'date_picked' && t.final_date ? [t.final_date] : storedDays(t.offered_dates).filter((d) => d >= today);
+  const days = statusOf(t) === 'date_picked' && t.final_date ? [t.final_date] : storedDays(t.offered_dates);
+  return days.filter((d) => d >= today);
 }
 
 /** Eastern calendar day of a moment, 'YYYY-MM-DD'. */
@@ -197,8 +199,10 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   const orgName = (group.organizer_name ?? '').trim().toLowerCase();
   const maybeOrganizer = orgSaved ? playerId === orgSaved : !!orgName && (viewerName ?? '').trim().toLowerCase() === orgName;
   if (!maybeOrganizer) return null;
-  if (!orgSaved && playerId !== (await organizerIdOf(ctx.db, group))) return null; // two players with the organizer's name: only the first
+  // The sign-in check next: a phone with no organizer cookie (every player, also one that picked the organizer's name) is refused with no trip.
   if (!viewAs && !(await organizerSignedIn(ctx, group.id))) return null;
+  // Only the organizer's own signed-in phone (or View as) gets here: two players with the organizer's name, only the first is theirs.
+  if (!orgSaved && playerId !== (await organizerIdOf(ctx.db, group))) return null;
   return { t, onlyMe: true };
 }
 
@@ -399,28 +403,34 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   if (t.final_date && statusOf(t) === 'date_picked' && !s.dates.includes(t.final_date)) {
     throw new HttpError(409, 'final_date_kept', 'That date is the one you picked. Pick another date first.');
   }
-  const rows = await signupRows(ctx.db, t.id);
-  const trims = rows
-    .map((r) => ({ r, kept: storedDays(r.dates).filter((d) => s.dates.includes(d)) }))
-    .filter((x) => x.kept.length !== storedDays(x.r.dates).length);
+  // For History only: how many players on the list (shown on the level list) lose a date they had picked. The trim itself runs on the rows as
+  // they are when the save lands (below), so a player's own edit that lands in between is never overwritten.
+  const offer = JSON.stringify(s.dates);
+  const trimmed = (await signupRows(ctx.db, t.id)).filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).some((d) => !s.dates.includes(d))).length;
   const [res] = await ctx.db.batch([
+    // Also guarded on the picked date still being in the new offer: a date pick that lands between the read above and this save is never left
+    // outside the offered dates ("look again" instead).
     ctx.db
       .prepare(
         `UPDATE tournaments SET name = ?, size = ?, courts = ?, minutes = ?, start_minutes = ?, ticket_cents = ?, champion_credit_cents = ?, offered_dates = ?,
            visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?
-         WHERE id = ? AND group_id = ? ${OPEN_GUARD}`,
+         WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))`,
       )
-      .bind(s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, JSON.stringify(s.dates), s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, t.id, group.id),
-    // A player's dates lose only the days taken off the offer (and only while this tournament is still open).
-    ...trims.map((x) =>
-      ctx.db
-        .prepare(`UPDATE tournament_signups SET dates = ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM tournaments WHERE id = ? ${OPEN_GUARD})`)
-        .bind(JSON.stringify(x.kept), ctx.nowIso, x.r.id, t.id),
-    ),
+      .bind(s.name, s.size, s.courts, s.minutes, s.start, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, t.id, group.id, offer),
+    // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
+    // tournament holds exactly the new offer and is still open).
+    ctx.db
+      .prepare(
+        `UPDATE tournament_signups SET
+           dates = (SELECT json_group_array(value) FROM (SELECT j.value AS value FROM json_each(tournament_signups.dates) j WHERE j.value IN (SELECT value FROM json_each(?1)) ORDER BY j.value)),
+           updated_at = ?2
+         WHERE tournament_id = ?3
+           AND EXISTS (SELECT 1 FROM json_each(tournament_signups.dates) j WHERE j.value NOT IN (SELECT value FROM json_each(?1)))
+           AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?3 AND offered_dates = ?1 ${OPEN_GUARD})`,
+      )
+      .bind(offer, ctx.nowIso, t.id),
   ]);
   changedOrLookAgain(res);
-  // History says how many players lost a date they had picked (their names are on the level list; they can pick again).
-  const trimmed = trims.filter((x) => x.r.status === 'in').length;
   await audit(ctx.db, group.id, null, 'tournament_edited', { tournament: s.name, ...(trimmed ? { trimmed } : {}) }, ctx.nowIso);
   if (s.visibility !== (t.visibility === 'all' ? 'all' : 'me')) await audit(ctx.db, group.id, null, s.visibility === 'all' ? 'tournament_shown' : 'tournament_hidden', { tournament: s.name }, ctx.nowIso);
   return { ok: true };
@@ -486,8 +496,11 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
   if ((date as string) < todayKey(ctx.nowMs, group.timezone)) bad('invalid_date', 'That date has passed. Pick another one.');
   changedOrLookAgain(
     await ctx.db
-      .prepare(`UPDATE tournaments SET status = 'date_picked', final_date = ?, date_picked_at = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD}`)
-      .bind(date, ctx.nowIso, ctx.nowIso, t.id)
+      .prepare(
+        `UPDATE tournaments SET status = 'date_picked', final_date = ?, date_picked_at = ?, updated_at = ?
+         WHERE id = ? ${OPEN_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?)`,
+      )
+      .bind(date, ctx.nowIso, ctx.nowIso, t.id, date)
       .run(),
   );
   await audit(ctx.db, group.id, null, 'tournament_date', { tournament: t.name, date: dayLong(date as string), day: date }, ctx.nowIso);
@@ -523,6 +536,13 @@ async function playerTarget(ctx: Ctx, who: TournamentActor, body: Record<string,
   return { t: seen.t, playerId: who.playerId };
 }
 
+/**
+ * A player's save lands only while the tournament is still as this request read it (the same stage, offered dates and picked date), so a
+ * sign-up racing the organizer's date pick, Edit settings or Cancel never keeps a date that is gone ("look again" instead). Five values.
+ */
+const UNCHANGED = 'EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND status = ? AND offered_dates = ? AND final_date IS ?)';
+const unchangedValues = (t: TournamentRow) => [t.id, t.status, t.offered_dates, t.final_date ?? null];
+
 function readDates(body: Record<string, unknown>, open: readonly string[]): string[] {
   const dates = cleanDays(body.dates);
   if (!dates || dates.length === 0) bad('invalid_dates', 'Pick at least one date.');
@@ -557,26 +577,27 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
   // A second tap of Sign up (or another phone) with exactly the same answers: nothing to save, nothing to write in History.
   if (before && before.status === 'in' && before.picked_level === level && JSON.stringify(storedDays(before.dates)) === JSON.stringify(dates)) return { ok: true, result: 'signed_up' };
   const levelChanged = !before || before.picked_level !== level || before.status !== 'in';
-  await ctx.db.batch([
+  const [res] = await ctx.db.batch([
     ctx.db
       .prepare(
         `INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at, backed_out_at)
-         VALUES (?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?, NULL)
+         SELECT ?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?, NULL WHERE ${UNCHANGED}
          ON CONFLICT (tournament_id, player_id) DO UPDATE SET
            joined_at = CASE WHEN tournament_signups.status = 'in' THEN tournament_signups.joined_at ELSE excluded.joined_at END,
            -- The organizer's level stands only while the player's own pick is the one it was set for: a new pick goes back to be reviewed.
            approved_level = CASE WHEN tournament_signups.picked_level = excluded.picked_level THEN tournament_signups.approved_level ELSE NULL END,
            status = 'in', picked_level = excluded.picked_level, dates = excluded.dates, updated_at = excluded.updated_at, backed_out_at = NULL`,
       )
-      .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ctx.nowIso, ctx.nowIso),
+      .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ctx.nowIso, ctx.nowIso, ...unchangedValues(t)),
     ...(levelChanged
       ? [
           ctx.db
-            .prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, ?, 'player', ?)")
-            .bind(newId(), t.id, playerId, level, ctx.nowIso),
+            .prepare(`INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) SELECT ?, ?, ?, ?, 'player', ? WHERE ${UNCHANGED}`)
+            .bind(newId(), t.id, playerId, level, ctx.nowIso, ...unchangedValues(t)),
         ]
       : []),
   ]);
+  changedOrLookAgain(res);
   if (!before || before.status !== 'in') await logPlayer(ctx, who.group, playerId, 'tournament_signup', { tournament: t.name, level: levelShort(level) });
   else await logPlayer(ctx, who.group, playerId, 'tournament_signup_edited', { tournament: t.name });
   return { ok: true, result: 'signed_up' };
@@ -591,19 +612,26 @@ export async function playerTournamentEdit(ctx: Ctx, who: TournamentActor, body:
   const level = body.level === undefined ? before.picked_level : (body.level as number);
   const dates = body.dates === undefined ? storedDays(before.dates) : readDates(body, openDatesOf(t, todayKey(ctx.nowMs, who.group.timezone)));
   if (level === before.picked_level && JSON.stringify(dates) === JSON.stringify(storedDays(before.dates))) return { ok: true, result: 'saved' };
-  await ctx.db.batch([
+  const [res] = await ctx.db.batch([
     // A new pick of their own level goes back to be reviewed (the organizer's earlier level stays in the level history).
     ctx.db
-      .prepare('UPDATE tournament_signups SET picked_level = ?, approved_level = CASE WHEN picked_level = ? THEN approved_level ELSE NULL END, dates = ?, updated_at = ? WHERE id = ?')
-      .bind(level, level, JSON.stringify(dates), ctx.nowIso, before.id),
+      .prepare(
+        `UPDATE tournament_signups SET picked_level = ?, approved_level = CASE WHEN picked_level = ? THEN approved_level ELSE NULL END, dates = ?, updated_at = ?
+         WHERE id = ? AND status = 'in' AND ${UNCHANGED}`,
+      )
+      .bind(level, level, JSON.stringify(dates), ctx.nowIso, before.id, ...unchangedValues(t)),
     ...(level !== before.picked_level
       ? [
           ctx.db
-            .prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, ?, 'player', ?)")
-            .bind(newId(), t.id, playerId, level, ctx.nowIso),
+            .prepare(
+              `INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at)
+               SELECT ?, ?, ?, ?, 'player', ? WHERE ${UNCHANGED} AND EXISTS (SELECT 1 FROM tournament_signups WHERE id = ? AND status = 'in')`,
+            )
+            .bind(newId(), t.id, playerId, level, ctx.nowIso, ...unchangedValues(t), before.id),
         ]
       : []),
   ]);
+  changedOrLookAgain(res);
   await logPlayer(ctx, who.group, playerId, 'tournament_signup_edited', { tournament: t.name });
   return { ok: true, result: 'saved' };
 }

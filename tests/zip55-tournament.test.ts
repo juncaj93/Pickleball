@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DAY, playerPhone, setupGroup, withoutIds } from './harness';
+import { DAY, PIN, playerPhone, setupGroup, withoutIds } from './harness';
 import { routeList } from '../server/app';
 import { LEVELS, PLANS, planLine, planRange, planTitle, prizeLine, levelLabel, levelShort, dayLong, stubParts, monthSpan, monthsBetween, isDayKey, cleanDays } from '../shared/tournament';
 import { testDates } from '../server/tournamentTest';
@@ -587,5 +587,167 @@ describe('review fixes (fresh reviewer, Zip 55)', () => {
     expect(await measure()).toEqual(none);
     expect((await blair.call('GET', '/api/group')).data.tournament).toBeUndefined();
     expect((await (await organizerPhone(ctx)).call('GET', '/api/group')).data.tournament).toMatchObject({ name: 'Winter Classic', onlyMe: true });
+  });
+});
+
+describe('second review fixes (Zip 55)', () => {
+  /** Runs `between` (plain SQL, as another phone's tap) right before the first statement matching `sql` is prepared: the race, on purpose. */
+  function raceAt(ctx: Ctx, sql: RegExp, between: () => void) {
+    const inner = ctx.app.env.DB;
+    let done = false;
+    ctx.app.env.DB = {
+      ...inner,
+      prepare(text: string) {
+        if (!done && sql.test(text)) {
+          done = true;
+          between();
+        }
+        return inner.prepare(text);
+      },
+      batch: (st: any) => inner.batch(st),
+    } as any;
+    return () => {
+      ctx.app.env.DB = inner;
+    };
+  }
+  const row = (ctx: Ctx, id: string) => ctx.app.db.raw.prepare('SELECT status, final_date, offered_dates FROM tournaments WHERE id = ?').get(id) as any;
+  const datesOf = (ctx: Ctx, name: string) => JSON.parse((ctx.app.db.raw.prepare('SELECT dates FROM tournament_signups WHERE player_id = ?').get(ctx.byName[name]) as any).dates);
+
+  for (const how of ['by name (no saved id)', 'saved id of a removed player'] as const) {
+    it(`ONLY ME: a phone that merely picked the organizer's name costs the trips of "none open" too (${how})`, async () => {
+      const { countingDb } = await import('../dev/countingDb');
+      const ctx = await world();
+      if (how !== 'by name (no saved id)') ctx.app.db.raw.prepare("UPDATE groups SET organizer_player_id = 'gone-player'").run();
+      const fake = await playerPhone(ctx, 'Alex'); // no organizer cookie
+      const inner = ctx.app.env.DB;
+      const trips = async (method: string, path: string, body?: unknown) => {
+        const c = { trips: 0, statements: 0, sql: [] as string[] };
+        ctx.app.env.DB = countingDb(inner, c);
+        await fake.call(method, path, body);
+        ctx.app.env.DB = inner;
+        return c.trips;
+      };
+      const measure = async () => [await trips('GET', '/api/group'), await trips('GET', '/api/group/version'), await trips('POST', '/api/tournament/back-out', {})];
+      await trips('GET', '/api/group');
+      const none = await measure();
+      await create(ctx, { visibility: 'me' });
+      expect(await measure()).toEqual(none);
+      expect((await fake.call('GET', '/api/group')).data.tournament).toBeUndefined();
+      // The organizer's own signed-in phone still sees it.
+      expect((await (await organizerPhone(ctx)).call('GET', '/api/group')).data.tournament).toMatchObject({ onlyMe: true });
+    });
+  }
+
+  it('Edit settings that takes off a date picked a moment earlier (on another phone) changes nothing: "look again"', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[3], DATES[4]] });
+    const undo = raceAt(ctx, /UPDATE tournaments SET name/, () =>
+      ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'date_picked', final_date = ? WHERE id = ?").run(DATES[4], id),
+    );
+    const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: DATES.slice(0, 4) });
+    undo();
+    expect(r.status).toBe(409);
+    expect(row(ctx, id)).toMatchObject({ status: 'date_picked', final_date: DATES[4], offered_dates: JSON.stringify(DATES) });
+    expect(datesOf(ctx, 'Blair')).toEqual([DATES[3], DATES[4]]);
+  });
+
+  it('a date pick that lands just after Edit settings took that date off changes nothing: "look again"', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    const undo = raceAt(ctx, /SET status = 'date_picked'/, () =>
+      ctx.app.db.raw.prepare('UPDATE tournaments SET offered_dates = ? WHERE id = ?').run(JSON.stringify(DATES.slice(0, 4)), id),
+    );
+    const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[4] });
+    undo();
+    expect(r.status).toBe(409);
+    expect(row(ctx, id)).toMatchObject({ status: 'signup', final_date: null });
+  });
+
+  it("Edit settings trims each player's dates as they are when it lands: a player's edit in between is kept", async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0], DATES[4]] });
+    await (await playerPhone(ctx, 'Casey')).call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[1]] });
+    const undo = raceAt(ctx, /UPDATE tournaments SET name/, () =>
+      ctx.app.db.raw.prepare('UPDATE tournament_signups SET dates = ? WHERE player_id = ?').run(JSON.stringify([DATES[2], DATES[4]]), ctx.byName.Blair),
+    );
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: DATES.slice(0, 4) })).status).toBe(200);
+    undo();
+    expect(datesOf(ctx, 'Blair')).toEqual([DATES[2]]);
+    expect(datesOf(ctx, 'Casey')).toEqual([DATES[1]]); // untouched
+  });
+
+  it('a player whose last date is taken off keeps an empty list (still on the list, can pick again)', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    const blair = await playerPhone(ctx, 'Blair');
+    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[4]] });
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: DATES.slice(0, 4) });
+    expect(datesOf(ctx, 'Blair')).toEqual([]);
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 300, dates: [] });
+    expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, dates: [DATES[1]] })).status).toBe(200);
+  });
+
+  it('History counts only players still on the level list (a hidden player is left out)', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    for (const n of ['Blair', 'Casey']) await (await playerPhone(ctx, n)).call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] });
+    ctx.app.db.raw.prepare('UPDATE players SET is_active = 0 WHERE id = ?').run(ctx.byName.Casey);
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: DATES.slice(1) });
+    const line = (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: any) => e.action === 'tournament_edited');
+    expect(line.details).toMatchObject({ trimmed: 1 });
+  });
+
+  it('once the picked date has passed, nobody can sign up for it (the card stays, with nothing to pick)', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[1] });
+    ctx.app.advance(12 * DAY); // Nov 6 or later (Eastern): Nov 5 has passed
+    const blair = await playerPhone(ctx, 'Blair');
+    const t = (await blair.call('GET', '/api/group')).data.tournament;
+    expect(t).toMatchObject({ status: 'date_picked', finalDate: DATES[1], openDates: [] });
+    expect((await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[1]] })).status).toBe(409);
+  });
+
+  it('once every offered date has passed with none picked: no date to pick, the date pick refuses, Edit settings with new dates opens it again', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    ctx.app.advance(30 * DAY); // past Nov 17
+    await ctx.organizer.call('POST', '/api/admin/login', { pin: PIN }); // a month later: signed in again
+    const blair = await playerPhone(ctx, 'Blair');
+    expect((await blair.call('GET', '/api/group')).data.tournament.openDates).toEqual([]);
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[4] })).status).toBe(400);
+    const later = ['2026-12-08', '2026-12-10'];
+    const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: later });
+    expect(r.status, r.text).toBe(200);
+    expect((await blair.call('GET', '/api/group')).data.tournament.openDates).toEqual(later);
+  });
+
+  it('a sign-up that lands just after the date is picked (its dates read before) changes nothing: "look again"', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    const blair = await playerPhone(ctx, 'Blair');
+    const undo = raceAt(ctx, /INSERT INTO tournament_signups/, () =>
+      ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'date_picked', final_date = ? WHERE id = ?").run(DATES[1], id),
+    );
+    const r = await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] });
+    undo();
+    expect(r.status).toBe(409);
+    expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_signups').get()).toEqual({ n: 0 });
+    expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_level_history').get()).toEqual({ n: 0 });
+  });
+
+  it('an Edit sign-up that lands just after Cancel changes nothing', async () => {
+    const ctx = await world();
+    const id = await create(ctx, { visibility: 'all' });
+    const blair = await playerPhone(ctx, 'Blair');
+    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] });
+    const undo = raceAt(ctx, /UPDATE tournament_signups SET picked_level/, () => ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'canceled' WHERE id = ?").run(id));
+    const r = await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 340 });
+    undo();
+    expect(r.status).toBe(409);
+    expect(ctx.app.db.raw.prepare('SELECT picked_level FROM tournament_signups').get()).toEqual({ picked_level: 300 });
+    expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_level_history').get()).toEqual({ n: 1 });
   });
 });

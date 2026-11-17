@@ -13,6 +13,7 @@
  *   H  Changes after the date is picked: a new sign-up (only that date), an edit, a back out.
  *   I  Create tournament (No tournament first): a 32-letter name, 10 players, $0 credit, Only me.
  *   J  Every screen at 390, 360 and 320 wide, light and dark: nothing wider than the screen, no clipped button, the level rows on one line.
+ *   K  Every offered date has passed (clock moved to Jan 20): no Sign up, the card says so, Edit has no dates, the organizer's note.
  * Screenshots: .data/zip55-shots (not in git).
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -73,6 +74,7 @@ async function main() {
   }
   await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: NOW_MS }) });
   const browser = await chromium.launch();
+  let clockMs = NOW_MS; // the browser's clock follows the server's dev clock (K moves both)
   const shift = (ctx) =>
     ctx.addInitScript((delta) => {
       const Real = Date;
@@ -86,12 +88,12 @@ async function main() {
         }
       }
       window.Date = Shifted;
-    }, NOW_MS - Date.now());
+    }, clockMs - Date.now());
 
   // The organizer, through the API (the same calls the screens make).
   const admin = await browser.newContext();
   assert((await admin.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } })).ok(), 'admin login');
-  const adminCookies = await admin.cookies();
+  let adminCookies = await admin.cookies();
   const dash = async () => (await admin.request.get(BASE + '/api/admin/dashboard')).json();
   const call = async (method, url, data) => {
     const r = await admin.request.fetch(BASE + url, { method, data, headers: { Origin: BASE } });
@@ -487,6 +489,55 @@ async function main() {
         await shot(a.page, `J-admin-home-${width}-${scheme}`);
         await a.ctx.close();
       });
+
+  // ---------------------------------------------------------------- K  every offered date has passed (none picked)
+  await stage('signup');
+  clockMs = Date.parse('2027-01-20T15:00:00.000Z'); // Wed Jan 20, 10:00 AM Eastern: the last test date (Jan 14) has passed
+  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: clockMs }) });
+  assert((await admin.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } })).ok(), 'admin login again');
+  adminCookies = await admin.cookies();
+  await check('K every date has passed: nothing to pick in the answer; the date pick refuses', async () => {
+    const { data } = await playerAnswer('Vic');
+    assert(data.tournament && data.tournament.openDates.length === 0, JSON.stringify(data.tournament && data.tournament.openDates));
+    const t = (await dash()).tournament;
+    const r = await admin.request.fetch(BASE + `/api/admin/tournament/${t.id}/date`, { method: 'PUT', data: { date: t.offeredDates[0] }, headers: { Origin: BASE } });
+    assert(r.status() === 400, `date pick: ${r.status()}`);
+  });
+  for (const scheme of SCHEMES)
+    for (const width of SIZES)
+      await check(`K every date has passed: Vic's card has no Sign up and says so; Parker keeps the list, Edit and Drop out; Edit has no dates (${width} ${scheme})`, async () => {
+        const v = await playerPage('Vic', { width, scheme });
+        await v.page.locator('.tc').waitFor({ timeout: 15000 });
+        assert((await v.page.locator('.tc [data-tc-signup]').count()) === 0, 'a Sign up button with nothing to pick');
+        assert(flat(await v.page.locator('[data-tc-sub]').innerText()) === 'The dates offered have passed.', await v.page.locator('[data-tc-sub]').innerText());
+        await fits(v.page, '.tc');
+        assert(v.errors.length === 0, v.errors.join(' | '));
+        await shot(v.page, `K-vic-passed-${width}-${scheme}`);
+        await v.ctx.close();
+        const p = await playerPage('Parker', { width, scheme });
+        await p.page.locator('.tc [data-tc-who]').waitFor({ timeout: 15000 });
+        assert((await p.page.locator('.tc [data-tc-edit]').count()) === 1 && (await p.page.locator('.tc [data-tc-drop]').count()) === 1, 'Edit and Drop out');
+        await fits(p.page, '.tc');
+        await p.page.locator('[data-tc-edit]').click();
+        await p.page.locator('dialog[open] [data-tm-save]').waitFor();
+        assert((await p.page.locator('dialog[open] .tm-cal').count()) === 0, 'Edit shows a calendar with nothing to pick');
+        assert(!(await p.page.locator('dialog[open] [data-tm-save]').isDisabled()), 'Save works for a level change');
+        await fits(p.page, 'dialog[open]');
+        await shot(p.page, `K-parker-edit-passed-${width}-${scheme}`);
+        await p.ctx.close();
+      });
+  await check('K the organizer\'s Pick the date card says every date has passed and points to Edit', async () => {
+    const a = await adminPage();
+    await a.page.locator('[data-tm-open-dates]').click();
+    const note = flat(await a.page.locator('[data-tm-dates-note]').innerText());
+    assert(note === 'Every date you offered has passed. Tap Edit below to offer new ones.', note);
+    assert((await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').count()) === 0, 'an offered date still looks open');
+    assert((await a.page.locator('[data-tm-card="dates"] button.tm-day.tm-past').count()) === 0, 'a past date can be tapped');
+    assert((await a.page.locator('[data-tm-card="dates"] .tm-day.tm-past').count()) > 0, 'the past dates are shown');
+    await fits(a.page, 'dialog[open]');
+    await shot(a.page, 'K-admin-dates-passed');
+    await a.ctx.close();
+  });
 
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
