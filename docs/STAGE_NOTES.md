@@ -5419,8 +5419,27 @@ A fresh reviewer (no part in the build) read the whole change: no Only me leak i
 findings were fixed in `afddf2a` with a test each: a day that has passed is no longer a choice (players and the date pick); a player's new level
 pick goes back to be reviewed (the same pick keeps the organizer's level; the history keeps every step); a level-only edit sends no dates;
 every organizer save is guarded so a canceled tournament never comes back; Edit settings keeps a 2.5 or 3 hour plan after Booking hours is
-turned off; a second Sign up tap with the same answers writes nothing; the Only me path costs no extra read; History says how many players
-lost a picked date. A second, smaller review of those fixes: RESULT_SECOND_REVIEW.
+turned off; a second Sign up tap with the same answers writes nothing; the Only me path costs no extra read for a normal player; History says
+how many players lost a picked date.
+
+A second review (3 independent reviewers, each finding checked by a separate skeptic who tried to refute it): 12 findings, 7 confirmed, all
+fixed in `bf2050d` with a test each (unit, plus browser checks K and L):
+- Only me: a phone that merely picked the organizer's name (organizer matched by name, or a saved id of a removed player) cost 1 or 2 extra
+  reads while Only me was open (a timing tell, no data). The sign-in check now comes first: such a phone is refused with no extra trip.
+- A date pick and an Edit settings save landing at the same moment could leave the picked date outside the offered dates. Both now re-check
+  in the same statement ("look again" otherwise).
+- Edit settings trimmed players' dates from an earlier read, so a player's own edit in between was lost. The trim now runs on the rows as they
+  are, in the same batch. A player's sign-up or edit lands only while the tournament is as it was read (date pick, Edit or Cancel in between:
+  "look again").
+- History's lost-date count included hidden players. Now only players on the level list.
+- A picked date that has passed was still open for sign-up. Now never.
+- Every offered date passed, none picked: players had a Sign up that could not work. Now no Sign up, the card says "The dates offered have
+  passed.", Edit hides the empty calendar, and the organizer's date card says "Every date you offered has passed. Tap Edit below to offer new
+  ones." (Edit with new dates opens it again.)
+- A sheet left open kept a date that had closed, so every Save failed. Sheets now drop closed dates.
+Refuted (not changed): a player tap racing Cancel (now guarded anyway), saving the same organizer level twice (two lines, as tapped), an Edit
+with no change still writing a History line (as before), a level change after the date is picked replacing dates (by design), and a passed
+picked date that can be taken back (the organizer's choice).
 
 ### Cost (in-process server, 10 players, trips per answer)
 | | Player screen | 5-second check |
@@ -5433,7 +5452,10 @@ OFF adds nothing (the switch read rides the shared switch read). Server time per
 
 ### Preview
 `pickleball-preview` (fake): migration 0023 applied (the only one pending), re-seeded with the Zip 55 calm profile (10 fixed names, 10 games,
-"Winter Classic" on Only me with no sign-ups, every switch that is on live on, plus TOURNAMENTS). PREVIEW_DEPLOY_LINE
+"Winter Classic" on Only me with no sign-ups, every switch that is on live on, plus TOURNAMENTS). Deployed from `a1f6f7b` (deployment `00fea4a9`) to
+https://claude-new-session-yjbe3g.pickleball-club-9h0.pages.dev, then re-seeded. Checked in a browser (390, light and dark): organizer Home
+shows the Tournament test row and the card (Sign-up open, 0 signed up, Only you can see it); Alex's own signed-in phone shows the strip and the
+card; Vic's phone gets no tournament key and no card. The preview PIN is in docs/PREVIEW_FAKE_DB.md.
 
 ### Tests
 TESTS_LINE
