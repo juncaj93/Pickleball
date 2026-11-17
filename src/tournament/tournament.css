@@ -840,7 +840,7 @@ dialog.sheet.tm-sheet {
 }
 
 /* Zip 55 feedback: the tournament sheets focus the sheet itself on open (no ring on the ✕ after a tap). The sheet never shows a ring. */
-.sheet-calm-focus:focus,
-.sheet-calm-focus:focus-visible {
+.tm-calm-focus:focus,
+.tm-calm-focus:focus-visible {
   outline: none;
 }

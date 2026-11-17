@@ -499,7 +499,7 @@ export function Sheet({
   return (
     <dialog
       ref={ref}
-      className={`sheet${className ? ` ${className}` : ''}${calmFocus ? ' sheet-calm-focus' : ''}${closing && !open ? ' m-closing' : ''}`}
+      className={`sheet${className ? ` ${className}` : ''}${calmFocus ? ' tm-calm-focus' : ''}${closing && !open ? ' m-closing' : ''}`}
       aria-labelledby={titleId}
       tabIndex={calmFocus ? -1 : undefined}
       // Only this sheet's own close: a confirm box opened inside it (Remove X?) closing must not close this sheet too (Zip 13: that sent
