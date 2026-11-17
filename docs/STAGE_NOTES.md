@@ -5411,3 +5411,34 @@ shared switch read (no extra trip), the new tables never read. docs/FEATURE_SWIT
 - The tournament tables are not in the backup FILE yet (BACKUP_LEFT_OUT; Time Travel keeps them; docs/RESTORE.md says so).
 - Create and the tournament page are full-height sheets (with a way back), not a page with no back button.
 - The ticket price stays editable after Create in piece 1 (nothing is sold); the Edit screen's note says "before tickets open".
+- Only me is decided from the same single read as "is a tournament open?" (`activeTournamentForPlayer`), so any player other than the
+  organizer's own costs exactly the trips of "none open", whether the organizer's player is saved by id or matched by the Settings name.
+
+### Review
+A fresh reviewer (no part in the build) read the whole change: no Only me leak in any answer, stamp or error, no authorization hole. Its real
+findings were fixed in `afddf2a` with a test each: a day that has passed is no longer a choice (players and the date pick); a player's new level
+pick goes back to be reviewed (the same pick keeps the organizer's level; the history keeps every step); a level-only edit sends no dates;
+every organizer save is guarded so a canceled tournament never comes back; Edit settings keeps a 2.5 or 3 hour plan after Booking hours is
+turned off; a second Sign up tap with the same answers writes nothing; the Only me path costs no extra read; History says how many players
+lost a picked date. A second, smaller review of those fixes: RESULT_SECOND_REVIEW.
+
+### Cost (in-process server, 10 players, trips per answer)
+| | Player screen | 5-second check |
+|---|---|---|
+| Switch OFF (as main) | 52 | 23 |
+| ON, no tournament | 54 | 24 |
+| ON, Only me (any other player) | 54 | 24 |
+| ON, Everyone, 3 signed up | 56 | 25 |
+OFF adds nothing (the switch read rides the shared switch read). Server time per answer stayed within noise (about 1 to 6 ms here).
+
+### Preview
+`pickleball-preview` (fake): migration 0023 applied (the only one pending), re-seeded with the Zip 55 calm profile (10 fixed names, 10 games,
+"Winter Classic" on Only me with no sign-ups, every switch that is on live on, plus TOURNAMENTS). PREVIEW_DEPLOY_LINE
+
+### Tests
+TESTS_LINE
+
+### Live: NOT done (waiting for "ship it")
+Live runs main's code (Production deployment `35acc09d`, source `12019b8`; main `166d368` differs only by Zip 54's deploy notes). Nothing was migrated or
+deployed. To ship: SQL backup and Time Travel bookmark first, apply `0023_tournaments` to `pickleball`, merge to main, `npm run deploy`, the
+read-only live check. Rollback: Production deployment `35acc09d` (the tables can stay; old code never reads them).
