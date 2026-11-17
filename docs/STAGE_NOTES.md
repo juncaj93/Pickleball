@@ -5345,3 +5345,16 @@ Regular. On live (Mon Nov 16, 1:54 PM) Julian saw "Tomorrow needs 2 more" while 
 - Browser: full run of 84 scripts, 4 at a time, then the failures again alone. e2e/zip54.cjs 17 of 17. Zip 23's order and 9 px gap checks updated for the new card (39 of 40 alone).
   Failing on today's main too, same counts on a clean checkout of main `4aee6d4` (not this zip): the "newest switch is the top Settings row" checks (money-rework, zip16, zip23, zip27, zip30, zip32,
   zip34, zip35, zip38, zip39, zip42, and zip30's three Casey/Harper checks), late-fees (18 of 19), zip30 (22 of 32), zip43 (12 of 13).
+
+### Deploy (Mon Nov 16, 2026, 7:10 PM Eastern; loud hours waived by Alex for this one, `--override-loud-hours`)
+- Restore point: Time Travel bookmark `00001595-00000000-00005125-e6c4319f9e58ae964aaa7501390f6aec` (6:18 PM). A SQL export of live (254 KB) was taken and checked
+  before the merge, then deleted from this machine (phone numbers inside); it was not saved to `pickleball-backups` (the Time Travel bookmark is the restore point).
+  Integrity checks 21 of 21 at 0 before and after.
+- Main fast-forwarded from `4aee6d4` to `12019b8` (plain push, no force), then `npm run deploy` from main (the guard's rules passed; no other deploy was running).
+  Production deployment `35acc09d-d6dc-4634-a98c-bd842ab1e7c0`. Rollback: Pages deployment `5c9c4630-4b8f-4ec3-b5a5-3f24673bc404` (Zip 53, `cbecfad`).
+  No schema change, no Cloudflare variable, no switch; the clock Worker did not change.
+- Live check (public files only, no PIN, `pickleball-club-9h0.pages.dev`; the custom domain does not answer from this build machine): page and /admin load (200),
+  the served bundle (`index-DXkGQNVl.js`) is the one built; a fresh phone at 390 wide sees "Who are you?" with no page errors and never fetches the organizer files;
+  organizer data (dashboard, money, activity) answers 401 without the PIN.
+- Not done by this session (no organizer PIN here): opening Money > Totals on live. Alex's expected numbers today: Membership $60 (2 months), Court costs after
+  players $24 (4 games), Out of pocket $84, Average per month $42, SINCE OCT, per game $21 (they change as games are finalized). Month by month also lists Oct 2026 now.
