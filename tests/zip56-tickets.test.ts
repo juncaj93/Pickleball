@@ -1087,6 +1087,31 @@ describe('third review fixes (Zip 56)', () => {
 describe('ship answers (Alex, Zip 56)', () => {
   const TOUR_TABLES = ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets'];
 
+  it('answer 4: Money > Totals has its own Tournament tickets line: money on tickets paid in full this month, to the cent; nothing else moves', async () => {
+    const ctx = await world({ signUp: ['Alex', 'Blair', 'Casey', 'Devon', 'Emery'] });
+    expect((await ctx.organizer.call('PUT', '/api/admin/money-rework', { on: true })).status).toBe(200);
+    await payCash(ctx, 'Blair'); // $16 cash, confirmed
+    await giveCredit(ctx, 'Casey', 1600);
+    await lock(ctx, 'Casey'); // $16 credit
+    await lock(ctx, 'Devon');
+    await iPaid(ctx, 'Devon', 1600); // waiting for Alex: not counted
+    await giveCredit(ctx, 'Emery', 1600);
+    await lock(ctx, 'Emery');
+    await backOut(ctx, 'Emery'); // back as credit: not counted
+    const money = async (month: string) => (await ctx.organizer.call('GET', `/api/admin/money?month=${month}`)).data;
+    const on = await money('2026-10');
+    expect(on.rework.tournamentTickets).toEqual({ cents: 3200, paid: 2 });
+    // Another month: no line.
+    expect((await money('2026-11')).rework.tournamentTickets).toBeUndefined();
+    // Not part of the venue cost: with the switch off the answer is exactly what it was, without the line.
+    expect((await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: false })).status).toBe(200);
+    const off = await money('2026-10');
+    expect(off.rework.tournamentTickets).toBeUndefined();
+    const { tournamentTickets: _line, ...rest } = on.rework;
+    expect(off.rework).toEqual(rest);
+    books(ctx);
+  });
+
   it('answer 3: the backup file (version 3) carries the four tournament tables, and a restore brings every ticket and its money back exactly', async () => {
     const ctx = await world({ signUp: ['Alex', 'Blair', 'Casey', 'Devon'] });
     await payCash(ctx, 'Blair');

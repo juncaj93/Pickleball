@@ -22,6 +22,27 @@ import { fewerDb } from './speed';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 import { membershipMonth, PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
 import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
+import { tournamentsFlags } from './tournament';
+
+/**
+ * Zip 56 (Alex, ship answer 4): the money on tournament tickets paid in full this month (credit used and cash the organizer confirmed, still on
+ * the ticket: money that went back as credit is not counted, and neither is an I paid still waiting), shown as its own line, "Tournament
+ * tickets", under the Totals cards. Not part of the venue cost: the site does not know a tournament's court bill. Only while Tournaments is
+ * on for this phone, so with it off the answer is exactly as before. Null when there is none.
+ */
+async function ticketMoneyOf(ctx: Ctx, groupId: string, from: string, to: string): Promise<{ cents: number; paid: number } | null> {
+  if (!(await tournamentsFlags(ctx, groupId)).on) return null;
+  const row = await ctx.db
+    .prepare(
+      `SELECT COALESCE(SUM(k.credit_cents + k.paid_cents), 0) AS cents, COUNT(*) AS paid
+       FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
+       WHERE t.group_id = ? AND k.paid_at >= ? AND k.paid_at < ? AND k.price_cents > 0 AND k.credit_cents + k.paid_cents >= k.price_cents`,
+    )
+    .bind(groupId, from, to)
+    .first<{ cents: number; paid: number }>()
+    .catch(() => null);
+  return row && Number(row.cents) > 0 ? { cents: Number(row.cents), paid: Number(row.paid) } : null;
+}
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -187,6 +208,8 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
     });
   }
   const net = collected - courts;
+  // Zip 56: the Tournament tickets line (only on the reworked Totals, only while Tournaments is on).
+  const tickets = rework && !forceRework ? await ticketMoneyOf(ctx, group.id, from, to) : null;
   const reworkTotals = rework
     ? (() => {
         const p = localParts(ctx.nowMs, tz);
@@ -220,6 +243,7 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
             playersPayCents: projPlayersCents,
             ...split(rwCourts + projCourts, projPlayersCents, projMembership),
           },
+          ...(tickets ? { tournamentTickets: tickets } : {}),
         };
       })()
     : undefined;

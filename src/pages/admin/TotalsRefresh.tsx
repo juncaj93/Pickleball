@@ -35,6 +35,21 @@ export function TotalsRefresh({ ctx, t, month }: { ctx: AdminCtx; t: Rework; mon
     <div className="tr" data-totals data-totals-refresh>
       <TotalsCardView kind="sf" title="So far" paidLabel="Players paid" c={soFarCard(t)} />
       <TotalsCardView kind="pj" title="Projected" paidLabel="Players pay" c={projectedCard(t)} />
+      {/* Zip 56 (Alex): ticket money paid this month, its own line (not part of the venue cost: the site does not know a tournament's court bill). */}
+      {t.tournamentTickets && (
+        <section className="tr-card tt" data-card="tournament-tickets" aria-label="Tournament tickets">
+          <dl className="tr-rows">
+            <div className="tr-ln" data-row="tournament-tickets">
+              <dt>
+                Tournament tickets <em>{t.tournamentTickets.paid} paid</em>
+              </dt>
+              <dd className="gr" data-tickets-total={t.tournamentTickets.cents}>
+                {formatPrice(t.tournamentTickets.cents)}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
       <RunningTotal open={rtOpen} onToggle={() => setRtOpen((v) => !v)} past={past} currentMonth={currentMonth} current={month === currentMonth ? t : (answers.byMonth[currentMonth] ?? null)} answers={answers} />
       <MonthByMonth open={mmOpen} onToggle={() => setMmOpen((v) => !v)} past={past} answers={answers} />
     </div>

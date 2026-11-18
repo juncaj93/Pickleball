@@ -891,5 +891,10 @@ export interface MonthlyMoney {
       yourCostCourtCents: number;
       yourCostMembershipCents: number;
     };
+    /**
+     * Zip 56: the money on tournament tickets paid in full this month (credit and confirmed cash still on them) and how many tickets, while
+     * Tournaments is on for this phone and there is some. Its own line under the cards; not part of the venue cost.
+     */
+    tournamentTickets?: { cents: number; paid: number };
   };
 }
