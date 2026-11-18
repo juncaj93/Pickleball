@@ -206,8 +206,8 @@ async function main() {
   // ---------------------------------------------------------------- A  the seed
   await check('A seed: the Winter Classic, the date picked: tickets are open (Alex), nobody paid; Home has picture 29\'s card with Tickets and the plan', async () => {
     const t = d.tournament;
-    assert(t && t.status === 'tickets' && t.visibility === 'all' && t.signups.length === 8 && t.finalDate === '2026-12-17', JSON.stringify(t && { s: t.status, v: t.visibility, n: t.signups.length, f: t.finalDate }));
-    assert(t.payBy === '2026-12-16T00:00:00.000Z', `Pay by Tue Dec 15, 7:00 PM: ${t.payBy}`);
+    assert(t && t.status === 'tickets' && t.visibility === 'all' && t.signups.length === 8 && t.finalDate === '2026-11-26', JSON.stringify(t && { s: t.status, v: t.visibility, n: t.signups.length, f: t.finalDate }));
+    assert(t.payBy === '2026-11-26T00:00:00.000Z', `Pay by Wed Nov 25, 7:00 PM (Zip 59: the night before): ${t.payBy}`);
     assert(t.size === 6 && t.courts === 1 && t.minutes === 150, `the smart plan for nobody locked in: ${JSON.stringify([t.size, t.courts, t.minutes])}`);
     const a = await adminPage();
     await a.page.locator('[data-tm-tickets]').waitFor({ timeout: 15000 });
@@ -221,7 +221,7 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- B  picking the date opens tickets
-  await check('B picking the date opens tickets at once: the date sheet says so, Pay by Tue 7:00 PM, the Home line says Tickets: 0 of 6 locked in', async () => {
+  await check('B picking the date opens tickets at once: the date sheet says so, Pay by Wed 7:00 PM, the Home line says Tickets: 0 of 6 locked in', async () => {
     await stage('signup');
     const a = await adminPage();
     await a.page.locator('[data-tm-open-dates]').click();
@@ -233,7 +233,7 @@ async function main() {
     await a.page.locator('[data-tm-date-pick]').waitFor({ state: 'detached', timeout: 10000 });
     await a.ctx.close();
     d = await dash();
-    assert(d.tournament.status === 'tickets' && d.tournament.finalDate === '2026-12-17' && d.tournament.payBy === '2026-12-16T00:00:00.000Z', JSON.stringify({ s: d.tournament.status, p: d.tournament.payBy }));
+    assert(d.tournament.status === 'tickets' && d.tournament.finalDate === '2026-12-17' && d.tournament.payBy === '2026-12-17T00:00:00.000Z', JSON.stringify({ s: d.tournament.status, p: d.tournament.payBy }));
     const h = await adminPage();
     await h.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
     assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/6', 'the Home line');
@@ -250,7 +250,7 @@ async function main() {
     await card.waitFor({ timeout: 15000 });
     const words = flat(await card.innerText());
     // Nobody locked in yet: the plan is 6 players, 2.5 hours (Alex's smart plan); players see its hours.
-    assert(/tickets open/i.test(words) && words.includes('2.5 hours · Pay by Tue 7:00 PM') && words.includes('Lock my spot · $16') && words.includes('See who’s in'), words);
+    assert(/tickets open/i.test(words) && words.includes('2.5 hours · Pay by Wed 7:00 PM') && words.includes('Lock my spot · $16') && words.includes('See who’s in'), words);
     await card.locator('[data-tc-lock]').click();
     const pay = p.page.locator('[data-pay-sheet]');
     await pay.waitFor({ timeout: 10000 });
