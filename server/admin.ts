@@ -87,7 +87,7 @@ import { adminExtensionPayment, markSharesWithSeat, undoSharesWithSeat, extended
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { homeScreenTipForAll, setHomeScreenTipForAll } from './homeScreenTip';
-import { christmasSkinMode, setChristmasSkinMode } from './christmasSkin';
+import { christmasSkinMode, markPreviewOff, setChristmasSkinMode } from './christmasSkin';
 import { parseMode } from '../shared/christmasSkin';
 import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
@@ -2826,6 +2826,8 @@ export async function setChristmasSkinSwitch(ctx: Ctx, body: Record<string, unkn
   const mode = parseMode(typeof body.mode === 'string' ? body.mode : null);
   if (!mode) throw new HttpError(400, 'bad_mode', 'Choose Off, Just me or Everyone.');
   await setChristmasSkinMode(ctx.db, group.id, mode, ctx.nowIso);
+  // A preview only (the row is harmless on live, where nothing reads it): remember that Off was chosen on purpose.
+  if ((ctx.env.CHRISTMAS_SKIN_PREVIEW ?? '').trim().toLowerCase() === 'on') await markPreviewOff(ctx.db, group.id, mode === 'off', ctx.nowIso);
   await audit(ctx.db, group.id, null, mode === 'all' ? 'christmas_skin_everyone' : mode === 'me' ? 'christmas_skin_me' : 'christmas_skin_off', {}, ctx.nowIso);
   return { ok: true, mode };
 }

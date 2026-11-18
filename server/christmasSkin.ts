@@ -65,16 +65,32 @@ export async function christmasSkinFor(ctx: Ctx, groupId: string, meIsOrganizer 
   const inWindow = inChristmasWindow(pretend ?? Date.parse(ctx.nowIso));
   const mine = meIsOrganizer && !viewAs;
   let mode: SkinMode;
-  if (preview) mode = parseMode(ctx.req.headers.get(CHRISTMAS_SKIN.modeHeader)) ?? 'all';
+  // Zip 59 (preview only): Settings > Feature switches > Christmas skin works on a preview too. The link/header still wins; else the Settings choice
+  // (Off, Just me, Everyone) counts, and Everyone shows on any date and Just me shows the theme at once (no logo tap), so it can be looked at today.
+  const fromHeader = preview ? parseMode(ctx.req.headers.get(CHRISTMAS_SKIN.modeHeader)) : null;
+  const settingsMode = preview && !fromHeader ? await previewSettingsMode(ctx.db, groupId) : null;
+  if (preview) mode = fromHeader ?? settingsMode ?? 'all';
   else if (inWindow && (await hasMark(ctx.db, groupId, CHRISTMAS_SKIN.task))) mode = 'all';
   else mode = mine && (await hasMark(ctx.db, groupId, CHRISTMAS_SKIN.meTask)) ? 'me' : 'off';
-  if (mode === 'all') return inWindow ? { all: true, me: null } : none;
-  if (mode === 'me' && mine) return { all: false, me: { on: await christmasSkinMeOn(ctx.db, groupId) } };
+  if (mode === 'all') return inWindow || (settingsMode === 'all' && !pretend) ? { all: true, me: null } : none;
+  if (mode === 'me' && mine) return { all: false, me: { on: settingsMode === 'me' ? true : await christmasSkinMeOn(ctx.db, groupId) } };
   return none;
+}
+
+/** Preview only: the Settings choice, or null when Settings was never touched there (then the old preview default, Everyone, stays). */
+async function previewSettingsMode(db: D1Database, groupId: string): Promise<SkinMode | null> {
+  const mode = await christmasSkinMode(db, groupId);
+  if (mode !== 'off') return mode;
+  return (await hasMark(db, groupId, PREVIEW_OFF_TASK)) ? 'off' : null;
+}
+/** Preview only: a row that says Off was chosen on purpose in Settings (otherwise Off and "never touched" look the same). */
+export const PREVIEW_OFF_TASK = 'christmas_skin_preview_off';
+export async function markPreviewOff(db: D1Database, groupId: string, off: boolean, nowIso: string): Promise<void> {
+  await setMark(db, groupId, PREVIEW_OFF_TASK, off, nowIso);
 }
 
 /** The mode in force for this request, whatever the date: on a preview the mode header (if any), else the Settings row. (The save in Just me asks this.) */
 export async function christmasSkinModeFor(ctx: Ctx, groupId: string): Promise<SkinMode> {
-  if (isPreview(ctx)) return parseMode(ctx.req.headers.get(CHRISTMAS_SKIN.modeHeader)) ?? 'all';
+  if (isPreview(ctx)) return parseMode(ctx.req.headers.get(CHRISTMAS_SKIN.modeHeader)) ?? (await previewSettingsMode(ctx.db, groupId)) ?? 'all';
   return christmasSkinMode(ctx.db, groupId);
 }

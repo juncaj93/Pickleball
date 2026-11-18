@@ -310,13 +310,19 @@ export const lockedCount = (tickets: readonly { place: string; signup_status: st
  *   cut    3 hours before the start: nothing more, a freed spot included
  */
 export type TicketPhase = 'open' | 'after' | 'cut';
-export function ticketPhase(t: TournamentRow, tz: string, nowMs: number): TicketPhase {
-  const n = nightOf(t, tz);
-  if (!n) return 'open';
-  if (nowMs >= salesCutoffMs(n.start)) return 'cut';
+export function ticketPhase(t: TournamentRow, tz: string, nowMs: number, startMinutes: number = NIGHT_START_MINUTES): TicketPhase {
+  if (!t.final_date) return 'open';
+  // The cutoff follows the REAL start of the games (the plan: 7:30 PM start means 4:30 PM), not a fixed 7:00 PM.
+  if (nowMs >= salesCutoffMs(startMsOf(t.final_date, startMinutes, tz))) return 'cut';
   if (t.pay_by && nowMs >= Date.parse(t.pay_by)) return 'after';
   return 'open';
 }
+
+/** Zip 59: the same "a freed spot is still unclaimed" test as freedSpots, as SQL (inside the write that claims it, so two taps cannot both win). */
+export const freedSpotSql = (groupId: string, t: TournamentRow): string =>
+  `((SELECT COUNT(*) FROM admin_audit_log WHERE group_id = ${sqlText(groupId)} AND action IN ('tournament_back_out', 'tournament_taken_off') AND created_at >= ${sqlText(t.pay_by ?? '')}
+      AND json_extract(details_json, '$.tournamentId') = ${sqlText(t.id)} AND json_extract(details_json, '$.freedSpot') = 1)
+    - (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = ${sqlText(t.id)} AND place = 'spot' AND place_at >= ${sqlText(t.pay_by ?? '')})) > 0`;
 
 /**
  * Zip 59: spots freed since Pay by and not claimed yet. A spot held since before Pay by that is given up after it (a back out, or taken off) counts
@@ -390,22 +396,6 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   // Only the organizer's own signed-in phone (or View as) gets here: two players with the organizer's name, only the first is theirs.
   if (!orgSaved && playerId !== (await organizerIdOf(ctx.db, group))) return null;
   return { t, onlyMe: true };
-}
-
-/**
- * Zip 59: the slim Home line shows until the first day of the calendar month of the tournament date (Eastern); from then on the full card.
- * No date picked yet: slim.
- */
-export function slimUntilMonth(finalDate: string | null, nowMs: number, tz: string, payBy: string | null = null): boolean {
-  if (!finalDate) return true;
-  const today = todayKey(nowMs, tz);
-  if (today.slice(0, 7) >= finalDate.slice(0, 7)) return false;
-  // A Pay by that falls in an earlier month (a game on the 1st) must not hide behind the slim line: the full card from that month.
-  if (payBy) {
-    const p = localParts(Date.parse(payBy), tz);
-    if (today.slice(0, 7) >= dayKey(p.year, p.month, p.day).slice(0, 7)) return false;
-  }
-  return true;
 }
 
 /** The picked date as the screens show it: once picked, while tickets are open on it, and on a canceled tournament's card. */
@@ -507,8 +497,6 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
     me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates) } : null,
     ...(before ? { lockedLevel: before.first_level ?? before.picked_level } : {}),
     ...(onlyMe ? { onlyMe: true as const } : {}),
-    // Zip 59: one slim line until the month of the tournament date (and before a date is picked).
-    ...(statusOf(t) !== 'canceled' && slimUntilMonth(shownDate(t), ctx.nowMs, group.timezone, statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null) ? { slim: true as const } : {}),
   };
   // Zip 56: the plain Canceled card, with what came back to this player.
   if (statusOf(t) === 'canceled') return { ...base, canceled: await canceledMoneyOf(ctx.db, t.id, playerId) };
@@ -524,14 +512,13 @@ async function playerTicketsView(ctx: Ctx, t: TournamentRow, tickets: TicketWith
   const money = (k: TicketWithName) => ({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents });
   const own = tickets.find((k) => k.player_id === playerId) ?? null;
   const locked = lockedCount(tickets);
-  const phase = statusOf(t) === 'tickets' ? ticketPhase(t, group.timezone, ctx.nowMs) : 'open';
+  const planStart = smartPlan(locked).start;
+  const phase = statusOf(t) === 'tickets' ? ticketPhase(t, group.timezone, ctx.nowMs, planStart) : 'open';
   const freed = phase === 'after' ? await freedSpots(ctx.db, group.id, t) : 0;
-  const closed =
-    statusOf(t) === 'tickets' &&
-    (salesClosed(t, group.timezone, ctx.nowMs) ||
-      // A player already holding something (a paid place in line, or an I paid waiting) keeps seeing that, not "Tickets closed".
-      (!(own && (own.claim_cents > 0 || (own.place === 'line' && own.credit_cents + own.paid_cents >= own.price_cents))) &&
-        (phase === 'cut' || (phase === 'after' && freed === 0 && own?.place !== 'line'))));
+  // Someone who already holds something (a spot, a paid place in line, an I paid waiting) keeps seeing it. Everyone else: closed once the night
+  // started, 3 hours before the real start, or after Pay by with no freed spot. A waitlist player waits on the list (no Hold button) until a spot is freed.
+  const holding = !!own && (own.place === 'spot' || own.claim_cents > 0 || (own.place === 'line' && own.credit_cents + own.paid_cents >= own.price_cents));
+  const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && freed === 0))));
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at 12.
     size: smartPlan(locked).size,

@@ -138,10 +138,6 @@ async function main() {
     await shift(ctx);
     if (organizer) await ctx.addCookies(adminCookies.map((c) => ({ ...c })));
     const page = await ctx.newPage();
-    // Zip 59: Home is one slim line until the month of the date; these checks test the full card, so the line is opened the moment it appears.
-    await page.addInitScript(() => {
-      new MutationObserver(() => document.querySelector('.tc-slim')?.click()).observe(document, { childList: true, subtree: true });
-    });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     return { ctx, page, errors };
@@ -206,8 +202,8 @@ async function main() {
   // ---------------------------------------------------------------- A  the seed
   await check('A seed: the Winter Classic, the date picked: tickets are open (Alex), nobody paid; Home has picture 29\'s card with Tickets and the plan', async () => {
     const t = d.tournament;
-    assert(t && t.status === 'tickets' && t.visibility === 'all' && t.signups.length === 8 && t.finalDate === '2026-11-26', JSON.stringify(t && { s: t.status, v: t.visibility, n: t.signups.length, f: t.finalDate }));
-    assert(t.payBy === '2026-11-26T00:00:00.000Z', `Pay by Wed Nov 25, 7:00 PM (Zip 59: the night before): ${t.payBy}`);
+    assert(t && t.status === 'tickets' && t.visibility === 'all' && t.signups.length === 8 && t.finalDate === '2026-12-17', JSON.stringify(t && { s: t.status, v: t.visibility, n: t.signups.length, f: t.finalDate }));
+    assert(t.payBy === '2026-12-17T00:00:00.000Z', `Pay by Wed Dec 16, 7:00 PM (Zip 59: the night before): ${t.payBy}`);
     assert(t.size === 6 && t.courts === 1 && t.minutes === 150, `the smart plan for nobody locked in: ${JSON.stringify([t.size, t.courts, t.minutes])}`);
     const a = await adminPage();
     await a.page.locator('[data-tm-tickets]').waitFor({ timeout: 15000 });

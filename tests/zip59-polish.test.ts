@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { playerPhone, setupGroup } from './harness';
 import { defaultPayBy, salesCutoffMs } from '../shared/tournamentTickets';
 import { NIGHT_START_MINUTES } from '../shared/tournament';
-import { slimUntilMonth } from '../server/tournament';
 
 // Zip 59 (🎾59.polish), Tournaments polish before the switch flips. The rules with a number or a clock in them, in the server:
-//   1. the slim Home line until the month of the tournament date (Eastern)
 //   2. Pay by = the night before at 7:00 PM; after it no new tickets and no waitlist joins, except a spot freed by a back out, until 3 hours
 //      before the start; no credit or charge amount changes
 //   3. Hide a canceled tournament (and Restore it), and the leak rules
@@ -80,33 +78,6 @@ describe('the shared rules', () => {
   it('a Tuesday game closes Monday at 7:00 PM', () => {
     expect(defaultPayBy('2026-11-17', NIGHT_START_MINUTES, 'America/Detroit', NOW0)).toBe('2026-11-17T00:00:00.000Z');
   });
-
-  it('the slim line shows until the first day of the month of the date', () => {
-    const tz = 'America/Detroit';
-    expect(slimUntilMonth(null, NOW0, tz)).toBe(true); // no date picked
-    expect(slimUntilMonth('2026-11-12', NOW0, tz)).toBe(true); // Oct 26, the date is in November
-    expect(slimUntilMonth('2026-11-12', Date.parse('2026-11-01T04:00:00.000Z'), tz)).toBe(false); // Nov 1, 12:00 AM Eastern: the full card
-    expect(slimUntilMonth('2026-11-12', Date.parse('2026-11-01T03:59:00.000Z'), tz)).toBe(true); // Oct 31, 11:59 PM Eastern: still slim
-    expect(slimUntilMonth('2026-11-12', Date.parse('2026-11-12T20:00:00.000Z'), tz)).toBe(false);
-    expect(slimUntilMonth('2027-01-05', Date.parse('2026-12-31T20:00:00.000Z'), tz)).toBe(true); // across a year
-    expect(slimUntilMonth('2027-01-05', Date.parse('2027-01-01T06:00:00.000Z'), tz)).toBe(false);
-  });
-});
-
-describe('the slim card (server)', () => {
-  it('the player card says slim before the month and before a date is picked; not once the month starts', async () => {
-    const ctx = await world();
-    // Sign-up open, no date: slim.
-    expect((await card(ctx, 'Blair')).slim).toBe(true);
-    await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/signup', { tournamentId: ctx.tid, level: 320, dates: [DATE] });
-    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE })).status).toBe(200);
-    // Date picked, tickets open, Oct 26: the month of the date has not started.
-    expect((await card(ctx, 'Blair')).slim).toBe(true);
-    ctx.app.now = Date.parse('2026-11-01T05:00:00.000Z'); // Nov 1, 12:00 AM Eastern
-    const full = await card(ctx, 'Blair');
-    expect(full.slim).toBeUndefined();
-    expect(full.status).toBe('tickets');
-  });
 });
 
 describe('tickets close the night before (Pay by)', () => {
@@ -167,12 +138,14 @@ describe('tickets close the night before (Pay by)', () => {
     // The new buyer who backs out again frees nothing extra beyond the one they took: one spot, one claim.
     expect((await backOut(ctx, 'Devon')).status).toBe(200);
     expect((await card(ctx, 'Blair')).tickets.freed).toBe(1);
-    // Thursday 4:00 PM, 3 hours before the start: nothing more, a freed spot included.
+    // The cutoff is 3 hours before the REAL start of the games: with this few locked in the plan starts at 7:30 PM, so 4:30 PM, not 4:00 PM.
     ctx.app.now = CUTOFF_MS;
+    expect((await card(ctx, 'Blair')).tickets.closed).toBe(false);
+    ctx.app.now = CUTOFF_MS + 30 * 60_000;
     const cut = await card(ctx, 'Blair');
     expect(cut.tickets.closed).toBe(true);
     expect(cut.tickets.started).toBe(false);
-    const turned = await lock(ctx, 'Blair');
+    const turned = await lock(ctx, 'Emery');
     expect(turned.status).toBe(409);
   });
 
@@ -203,6 +176,33 @@ describe('tickets close the night before (Pay by)', () => {
     const k = (await card(ctx, 'Blair')).tickets;
     expect(k.closed).toBe(true);
     expect(k.started).toBe(true);
+  });
+});
+
+describe('a waitlist player after Pay by', () => {
+  it('stays on the list: Lock and Hold only while a freed spot exists', async () => {
+    const ctx = await world({ signUp: ['Blair', 'Casey'] });
+    await giveCredit(ctx, 'Blair', 1600);
+    await giveCredit(ctx, 'Casey', 1600);
+    expect((await lock(ctx, 'Blair')).data.result).toBe('locked');
+    // Casey is already in line (as if the 12 spots had been full when she joined), nothing paid.
+    ctx.app.db.raw
+      .prepare("INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, created_at, updated_at) VALUES ('wl1', ?, ?, 'line', '2026-10-27T00:00:00.000Z', 1600, '2026-10-27T00:00:00.000Z', '2026-10-27T00:00:00.000Z')")
+      .run(ctx.tid, ctx.byName.Casey);
+    ctx.app.now = AFTER_PAY_BY;
+    const potBefore = pot(ctx, 'Casey');
+    const closed = await card(ctx, 'Casey');
+    expect(closed.tickets.mine.place).toBe('line'); // still on the list
+    expect(closed.tickets.closed).toBe(true); // no button for her
+    const hold = await (await playerPhone(ctx, 'Casey')).call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'hold', priceCents: 1600 });
+    expect(hold.status).toBe(409);
+    expect((await lock(ctx, 'Casey')).status).toBe(409);
+    expect(pot(ctx, 'Casey')).toBe(potBefore);
+    // Blair backs out after Pay by: a spot is freed, so Casey may lock it (her credit pays at once).
+    expect((await backOut(ctx, 'Blair')).status).toBe(200);
+    expect((await card(ctx, 'Casey')).tickets.closed).toBe(false);
+    expect((await lock(ctx, 'Casey')).data.result).toBe('locked');
+    expect(pot(ctx, 'Casey')).toBe(potBefore - 1600);
   });
 });
 

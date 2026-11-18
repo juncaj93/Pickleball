@@ -77,48 +77,24 @@
   isolation: isolate;
   border-radius: 22px;
   color: #ffffff;
-  /* Zip 59: the card's own fill and edge are drawn on ::before so the ticket notch can be a REAL cutout (a mask, below). The soft shadow stays
-     on the card itself: an outer shadow is never painted inside the card's own box, so the half circle shows the bare page in light and dark. */
-  box-shadow: 0 14px 30px rgb(10 24 17 / 24%), 0 2px 6px rgb(10 24 17 / 18%);
+  background:
+    radial-gradient(120% 90% at 18% 0%, #112a1f 0%, rgb(17 42 31 / 0%) 60%),
+    linear-gradient(180deg, #0e241a 0%, #0c1f16 62%, #0b1b14 100%);
+  /* The 1 px edge is inside the card (so the notch cuts it too). No outer shadow (Zip 59): it showed as a grey band above the card and filled
+     the notch. */
+  box-shadow: inset 0 0 0 1px var(--tc-line);
+  /* Zip 59: the ticket notch is a REAL cutout: the card itself is masked with a circle hole centered on its top edge at the dashed line.
+     Nothing is drawn in the hole: the page (or any skin or gradient behind the card) shows through. */
+  -webkit-mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
+  mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
 }
 :root[data-theme='dark'] .tc {
   --tc-line: #2a5a42;
-  box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tc {
     --tc-line: #2a5a42;
-    box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
   }
-}
-/* The card itself: the deep green fill and its 1 px edge (drawn inside, so the notch cuts the edge too: no line above the half circle).
-   The notch at the top of the stub line is transparent: the mask removes a circle centered on the card's top edge. */
-.tc::before {
-  content: '';
-  position: absolute;
-  z-index: -2;
-  inset: 0;
-  border-radius: 22px;
-  background:
-    radial-gradient(120% 90% at 18% 0%, #112a1f 0%, rgb(17 42 31 / 0%) 60%),
-    linear-gradient(180deg, #0e241a 0%, #0c1f16 62%, #0b1b14 100%);
-  box-shadow: inset 0 0 0 1px var(--tc-line);
-  -webkit-mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
-  mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
-}
-/* The faint court in the top right corner. */
-.tc-court {
-  position: absolute;
-  z-index: -1;
-  top: 0;
-  right: 0;
-  width: 224px;
-  height: 176px;
-  pointer-events: none;
-}
-.tc-court line {
-  stroke: rgb(110 240 176 / 13%);
-  stroke-width: 1.5;
 }
 .tc-top {
   display: flex;
@@ -1187,53 +1163,6 @@ dialog.sheet.tc-tw-overlay {
 .tc-tw-gold {
   font-weight: 750;
   color: var(--tw-gold);
-}
-
-/* ---------- Zip 59: the slim Home line (until the month of the tournament date) ---------- */
-/* One line, the same card look as the rest of Home (the surface, the thin line, 16 px corners): the name left, the date right, a small arrow. */
-.tc-slim {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 52px;
-  padding: 10px 14px 10px 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-.tc-slim:active {
-  background: var(--fill);
-}
-.tc-slim-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--display);
-  font-size: 1.02rem;
-  font-weight: 800;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tc-slim-date {
-  flex: 0 0 auto;
-  font-size: 0.9rem;
-  font-weight: 650;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.tc-slim-go {
-  flex: 0 0 auto;
-  font-size: 1.3rem;
-  line-height: 1;
-  color: var(--ink-2);
 }
 
 /* ---------- Zip 59: the ticket punch (mocks/ticket-tap.mp4), about 1.5 seconds, CSS only ---------- */

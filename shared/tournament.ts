@@ -40,16 +40,14 @@ export interface Level {
 }
 
 export const LEVELS: readonly Level[] = [
-  { value: 250, label: '2.5', short: '2.5', text: 'Just starting. Still learning the rules and how to serve.' },
-  { value: 275, label: '2.75', short: '2.75', text: 'Can keep a short rally going most of the time.' },
-  { value: 300, label: '3.0', short: '3.0', text: 'Can keep a steady rally. Still learning the soft shots at the net.' },
-  { value: 320, label: '3.2', short: '3.2', text: 'Comfortable rallies. Soft shots at the net work about half the time.' },
-  { value: 340, label: '3.4', short: '3.4', text: 'Mixes soft and hard shots on purpose. Still misses easy ones now and then.' },
-  { value: 350, label: '3.5', short: '3.5', text: 'Mostly steady. Handles fast shots. Easy misses are not common.' },
-  { value: 360, label: '3.6+', short: '3.6', text: 'Rarely makes a mistake. A level none of us have reached yet.' },
+  { value: 250, label: '2.5', short: '2.5', text: 'Learning the rules and serve. Short rallies.' },
+  { value: 275, label: '2.75', short: '2.75', text: 'Keeps short rallies going. Avoids the backhand.' },
+  { value: 300, label: '3.0', short: '3.0', text: 'Steady rallies. Still learning to dink.' },
+  { value: 320, label: '3.2', short: '3.2', text: 'Dinks work about half the time. Learning drop shots.' },
+  { value: 340, label: '3.4', short: '3.4', text: "Steady dinks. Drop shots don't always land. Misses an easy one now and then." },
+  { value: 350, label: '3.5', short: '3.5', text: 'Steady dinks. Drop shots usually land. Smart about speed. Few easy misses.' },
+  { value: 360, label: '3.6+', short: '3.6', text: 'Dinks and drop shots are reliable. Smart about speed. Almost no easy misses.' },
 ];
-
-/** The note under the level list (mock 05). */
 
 export const isLevel = (v: unknown): v is number => typeof v === 'number' && LEVELS.some((l) => l.value === v);
 export const levelOf = (v: number): Level | null => LEVELS.find((l) => l.value === v) ?? null;
@@ -414,11 +412,6 @@ export interface PlayerTournamentView {
   me: { level: number; dates: string[] } | null;
   /** Off the list after signing up before: the level they picked first, which stays theirs (Alex: a level is picked once). */
   lockedLevel?: number;
-  /**
-   * Zip 59: Home shows ONE slim line (the name and the date, or "Date TBD") until the calendar month of the tournament date (Eastern). Set by the
-   * server (it knows the clock). Absent: the full card, as before.
-   */
-  slim?: true;
   /** Only me is on: this is the organizer's own phone (the "Only you can see this" strip). */
   onlyMe?: true;
   /** Zip 56: tickets (only once tickets have opened; piece 1's two stages send exactly what they did). */

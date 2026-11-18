@@ -31,16 +31,12 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 // ticket credit rows and test credit (the fake database only).
 // The page's own words and buttons live in src/pages/admin/TournamentTest.tsx, which only a preview build carries.
 
-// Zip 59 (🎾59.polish), the stages for the polish piece. The Home card shows ONE slim line until the calendar month of the date, so the older
-// stages now pick a date THIS month (the full card, nothing to tap first; the last days of a month fall back to next month's Thursday, a slim
-// card) and these new ones show the rest:
-//   slim           the same 6 paid, but the date is next month: Home is the one slim line (name and date), a tap opens the full card
-//   full           the 6 paid with the date this month: the full card
+// Zip 59 (🎾59.polish), the stages for the polish piece:
 //   closed         6 paid and Pay by passed an hour ago: new tickets and the waitlist are closed ("Tickets closed. Pay by was ...")
 //   hidden         canceled, then Hidden: out of Home; Settings > Advanced > Hidden tournaments lists it with Restore
-//   (canceled)     the Canceled card now has Hide on the organizer's Home
-//   (signup)       sign-up open with the date not picked: Home is the slim line; view as Vic, open it, Sign up: the ticket punch
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'slim', 'full', 'closed', 'hidden'] as const;
+//   (canceled)     the Canceled card has Hide on the organizer's Home
+//   (signup)       sign-up open: view as Vic, Sign up: the ticket punch
+export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden'] as const;
 type Stage = (typeof TEST_STAGES)[number];
 
 /** The fixed names and their picks (Kai is not one of the preview's names, so Kai is not here). Levels in hundredths. */
@@ -72,21 +68,6 @@ export function testDates(today: string): string[] {
     }
   }
   return out;
-}
-
-/**
- * Zip 59: a date in the rest of this month the full Home card can show: a Thursday (else a Tuesday to Friday) at least 3 days ahead, so its
- * Pay by (the night before at 7:00 PM) is still to come. None left: null.
- */
-export function thisMonthDate(today: string): string | null {
-  const p = dayParts(today);
-  const days: string[] = [];
-  for (let d = p.day + 3; d <= 28; d++) {
-    const key = dayKey(p.year, p.month, d);
-    const w = dayParts(key);
-    if (w.month === p.month && w.weekday >= 2 && w.weekday <= 5 && !/-12-(24|25|31)$/.test(key)) days.push(key);
-  }
-  return days.find((d) => dayParts(d).weekday === 4) ?? days[0] ?? null;
 }
 
 /** Zip 56: who is on the list at each ticket stage, and their ticket: a spot, a place in line, or none; paid by Venmo, credit, $0 (Alex), or not. */
@@ -149,10 +130,8 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   const dates = testDates(todayKey(ctx.nowMs, group.timezone));
   // The date everyone on the list can make: the third Thursday of next month (or the middle offered date).
   const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
-  const nextMonthBest = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
-  // Zip 59: this month's date (the full Home card), unless the stage is the slim one; none left this month: next month's.
-  const best = stage === 'slim' ? nextMonthBest : (thisMonthDate(todayKey(ctx.nowMs, group.timezone)) ?? nextMonthBest);
-  const tickets = TICKET_STAGES[['canceled', 'rescheduled', 'slim', 'full', 'closed', 'hidden'].includes(stage) ? 'tickets_open' : stage] ?? null;
+  const best = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
+  const tickets = TICKET_STAGES[['canceled', 'rescheduled', 'closed', 'hidden'].includes(stage) ? 'tickets_open' : stage] ?? null;
   // Alex: picking the date opens tickets, so every stage after Sign-up open has them open (Canceled and Rescheduled then run the real taps).
   const picked = stage !== 'signup';
   const id = newId();

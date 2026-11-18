@@ -3,8 +3,7 @@
  *   node e2e/zip59.cjs      (also run by npm run test:e2e)
  *
  * The world is the preview's calm Zip 56 profile as of Tue Nov 17 2026, 10:00 AM Eastern, with the Tournament test page's stages (server/tournamentTest.ts).
- *   A  slim card: one line (name and date) until the month of the date; tap opens the full card; 390/360/320, light and dark, one line
- *   B  full card from the month of the date (a date this month); the hero card's blank space and the gap above it (the banner present and absent)
+ *   B  the full card all the way (no slim line); the hero card's blank space and the gap above it (the banner present and absent)
  *   C  Tickets closed after Pay by: the card says so, no Lock my spot, no Join waitlist, the server turns a tap away
  *   D  Hide on a canceled tournament, Settings > Advanced > Hidden tournaments, Restore
  *   E  the ticket notch is a real cutout (the page shows through it) in light and dark
@@ -60,7 +59,7 @@ async function main() {
   if (await fetch(`${BASE}/api/status`).then((r) => r.ok, () => false)) throw new Error(`port ${PORT} is already in use`);
   const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
     cwd: ROOT,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip59-setup-token-0123456789', DEV_CLOCK: '1', PREVIEW_CALM: 'on', PB_PREVIEW_BUILD: '1' },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip59-setup-token-0123456789', DEV_CLOCK: '1', PREVIEW_CALM: 'on', PB_PREVIEW_BUILD: '1', CHRISTMAS_SKIN_PREVIEW: 'on' },
     stdio: 'ignore',
     detached: true,
   });
@@ -205,54 +204,12 @@ async function main() {
   }
   const cardBox = (page, sel) => page.evaluate((s) => { const b = document.querySelector(s).getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, height: b.height }; }, sel);
 
-  // ---------------------------------------------------------------- A  slim
-  await check('A slim: until the month of the date, Home is ONE line (name and date); a tap opens the full card; one line at 390/360/320, light and dark', async () => {
-    await stage('slim');
-    const t = (await dash()).tournament;
-    assert(t.finalDate && t.finalDate.slice(0, 7) > '2026-11', `the date is next month: ${t.finalDate}`);
-    for (const width of SIZES) {
-      for (const scheme of SCHEMES) {
-        const p = await homeOf('Vic', { width, scheme });
-        await p.page.locator('.tc-slim').waitFor({ timeout: 15000 });
-        assert((await p.page.locator('.tc').count()) === 0, 'no full card yet');
-        const text = flat(await p.page.locator('.tc-slim').innerText());
-        assert(/^Winter Classic .*(Thu|Fri|Wed|Tue), (Dec|Nov|Jan) \d+/.test(text.replace('›', '').trim()), text);
-        const box = await cardBox(p.page, '.tc-slim');
-        assert(box.height <= 66, `one line: ${box.height}px high`);
-        const oneLine = await p.page.evaluate(() => [...document.querySelectorAll('.tc-slim span')].every((s) => { const r = document.createRange(); r.selectNodeContents(s); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size <= 1; }));
-        assert(oneLine, 'name and date on one line');
-        await fits(p.page, '.tc-slim');
-        await shot(p.page, `A-slim-${width}-${scheme}`);
-        if (width === 390 && scheme === 'light') {
-          await p.page.locator('.tc-slim').click();
-          await p.page.locator('.tc').first().waitFor({ timeout: 10000 });
-          assert((await p.page.locator('.tc-slim').count()) === 0, 'the slim line is replaced by the full card');
-          assert(flat(await p.page.locator('.tc').first().innerText()).includes('Lock my spot') || /sign up|tickets/i.test(flat(await p.page.locator('.tc').first().innerText())), 'the full card');
-          await shot(p.page, 'A-slim-opened');
-        }
-        assert(p.errors.length === 0, p.errors.join(' | '));
-        await p.ctx.close();
-      }
-    }
-  });
-  await check('A2 sign-up open with no date picked: Home is the slim line with "Date TBD"', async () => {
-    await stage('signup');
-    const p = await homeOf('Vic');
-    await p.page.locator('.tc-slim').waitFor({ timeout: 15000 });
-    const text = flat(await p.page.locator('.tc-slim').innerText());
-    assert(text.includes('Winter Classic') && text.includes('Date TBD'), text);
-    await shot(p.page, 'A2-slim-tbd');
-    await p.ctx.close();
-  });
-
   // ---------------------------------------------------------------- B  full card, spacing
-  await check('B a date this month: the full card (no slim line); the gap above it is about half as tall with the banner (Only me), and the same with it absent', async () => {
-    await stage('full');
+  await check('B the full card; the gap above it is about half as tall with the banner (Only me), and the same with it absent', async () => {
+    await stage('tickets_open');
     const t = (await dash()).tournament;
-    assert(t.finalDate.slice(0, 7) === '2026-11', `the date is this month: ${t.finalDate}`);
     const p = await homeOf('Vic');
     await p.page.locator('.tc').first().waitFor({ timeout: 15000 });
-    assert((await p.page.locator('.tc-slim').count()) === 0, 'no slim line');
     const noBanner = await p.page.evaluate(() => ({ cardTop: document.querySelector('.tc').getBoundingClientRect().top, above: document.querySelector('.topbar').getBoundingClientRect().bottom }));
     assert(noBanner.cardTop - noBanner.above >= 8 && noBanner.cardTop - noBanner.above <= 32, `the gap with no banner: ${JSON.stringify(noBanner)}`);
     console.log(`      gap from the header to the card with no banner: ${Math.round(noBanner.cardTop - noBanner.above)} px`);
@@ -273,7 +230,6 @@ async function main() {
   await check('B2 the hero card: little blank space between the last text line and the button (sign-up card and ticket card), the date block and dashed line still fit', async () => {
     await stage('signup');
     const v = await homeOf('Vic');
-    await v.page.locator('.tc-slim').click();
     await v.page.locator('[data-tc-signup]').waitFor();
     for (const width of SIZES) {
       await v.page.setViewportSize({ width, height: 844 });
@@ -346,50 +302,96 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- E  the notch
-  await check('E the ticket notch is a real cutout: the pixels inside it are the page background (not a colored circle), light and dark, at 390/360/320', async () => {
-    await stage('full');
+  // One pixel's color, read back from a real screenshot (decoded in the page).
+  async function px(page, x, y) {
+    const png = await page.screenshot({ clip: { x: Math.round(x), y: Math.round(y), width: 1, height: 1 } });
+    return page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + b64;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = c.height = 1;
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0);
+      return [...g.getImageData(0, 0, 1, 1).data].slice(0, 3);
+    }, png.toString('base64'));
+  }
+  const near = (a, b, tol) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
+  /** The notch pixel is what is BEHIND the card (the pixel just above the card, same column), and not the card's own color. */
+  async function notchIsCutout(page, label) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+    const m = await page.evaluate(() => {
+      const c = document.querySelector('.tc');
+      const b = c.getBoundingClientRect();
+      const w = parseFloat(getComputedStyle(c).getPropertyValue('--tc-stub-w'));
+      const st = getComputedStyle(c);
+      return { x: b.left + w + 1, top: b.top, mask: st.maskImage || st.webkitMaskImage, shadow: st.boxShadow };
+    });
+    assert(/radial-gradient/.test(m.mask), `${label}: the card itself carries the mask: ${m.mask}`);
+    assert(!m.shadow.includes('), ') && m.shadow.includes('inset'), `${label}: only the 1px inside edge, no outer shadow: ${m.shadow}`);
+    const hole = await px(page, m.x, m.top + 2);
+    const behind = await px(page, m.x, m.top - 4);
+    const card = await px(page, m.x + 40, m.top + 30);
+    assert(near(hole, behind, 8), `${label}: the notch is ${hole} but what is behind the card is ${behind}`);
+    assert(!near(hole, card, 8), `${label}: the notch looks like the card (${hole} vs ${card})`);
+  }
+  await check('E the ticket notch is a real cutout (a mask on the card itself): its pixels are whatever is behind the card, on the plain page, on a gradient, light and dark, at 390/360/320', async () => {
+    await stage('tickets_open');
     for (const width of SIZES) {
       for (const scheme of SCHEMES) {
         const p = await homeOf('Vic', { width, scheme });
         await p.page.locator('.tc').first().waitFor({ timeout: 15000 });
-        await p.page.evaluate(() => window.scrollTo(0, 0));
-        await p.page.waitForTimeout(300);
-        const m = await p.page.evaluate(() => {
-          const c = document.querySelector('.tc');
-          const b = c.getBoundingClientRect();
-          const w = parseFloat(getComputedStyle(c).getPropertyValue('--tc-stub-w'));
-          const mask = getComputedStyle(c, '::before').maskImage || getComputedStyle(c, '::before').webkitMaskImage;
-          return { x: b.left + w + 1, top: b.top, mask };
-        });
-        assert(/radial-gradient/.test(m.mask), `the notch is a mask: ${m.mask}`);
-        // One pixel's color, read back from a real screenshot (decoded in the page).
-        const px = async (x, y) => {
-          const png = await p.page.screenshot({ clip: { x: Math.round(x), y: Math.round(y), width: 1, height: 1 } });
-          return p.page.evaluate(async (b64) => {
-            const img = new Image();
-            img.src = 'data:image/png;base64,' + b64;
-            await img.decode();
-            const c = document.createElement('canvas');
-            c.width = c.height = 1;
-            const g = c.getContext('2d');
-            g.drawImage(img, 0, 0);
-            return [...g.getImageData(0, 0, 1, 1).data].slice(0, 3);
-          }, png.toString('base64'));
-        };
-        const inside = await px(m.x, m.top + 2);
-        const margin = await px(3, m.top + 2); // the page, beside the card, at the same height
-        const card = await px(m.x + 40, m.top + 30);
-        const near = (a, b, tol) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
-        assert(near(inside, margin, 12), `${width} ${scheme}: the notch is ${inside} but the page is ${margin}`);
-        assert(!near(inside, card, 8), `${width} ${scheme}: the notch looks like the card (${inside} vs ${card})`);
+        await notchIsCutout(p.page, `${width} ${scheme} plain`);
+        // Not a solid page: a gradient straight behind the card.
+        await p.page.addStyleTag({ content: '.tc-wrap { background: linear-gradient(90deg, #e11d48, #2563eb, #16a34a) !important; padding: 24px 0 !important; }' });
+        await notchIsCutout(p.page, `${width} ${scheme} gradient`);
         await p.ctx.close();
       }
     }
   });
+  await check('E2 Christmas skin on (Everyone, theme on): the notch is still a cutout and the card, Sign up sheet and Pay sheet look right, light and dark', async () => {
+    await stage('tickets_open');
+    await call('PUT', '/api/admin/christmas-skin-switch', { mode: 'all' });
+    try {
+      for (const scheme of SCHEMES) {
+        const p = await newPage({ scheme });
+        await p.ctx.addInitScript(() => localStorage.setItem('pb_xmas_theme', 'on'));
+        await p.page.goto(`${BASE}/?as=Vic`);
+        await p.page.locator('.tc').first().waitFor({ timeout: 30000 });
+        await p.page.waitForTimeout(800);
+        assert((await p.page.evaluate(() => document.documentElement.getAttribute('data-skin'))) === 'christmas', 'the Christmas skin is on');
+        await notchIsCutout(p.page, `christmas ${scheme}`);
+        await shot(p.page, `E2-christmas-card-${scheme}`);
+        await p.page.locator('[data-tc-lock]').first().click();
+        await p.page.locator('[data-pay-sheet]').waitFor({ timeout: 10000 });
+        await p.page.waitForTimeout(500);
+        await shot(p.page, `E2-christmas-pay-${scheme}`);
+        await fits(p.page, 'dialog[open]');
+        assert(p.errors.length === 0, p.errors.join(' | '));
+        await p.ctx.close();
+      }
+    } finally {
+      await call('PUT', '/api/admin/christmas-skin-switch', { mode: 'off' });
+    }
+  });
+  await check('E3 Christmas skin on the preview from Settings: Off, Just me (the organizer\'s own player sees it today), Everyone (any date)', async () => {
+    const skin = async (name) => (await answerOf(name)).data;
+    await call('PUT', '/api/admin/christmas-skin-switch', { mode: 'off' });
+    let a = await skin('Vic');
+    assert(a.christmasSkin === undefined && a.christmasSkinMe === undefined, 'Off');
+    await call('PUT', '/api/admin/christmas-skin-switch', { mode: 'all' });
+    a = await skin('Vic');
+    assert(a.christmasSkin === true, 'Everyone shows today');
+    await call('PUT', '/api/admin/christmas-skin-switch', { mode: 'me' });
+    a = await skin('Vic');
+    assert(a.christmasSkin === undefined && a.christmasSkinMe === undefined, 'Just me: other players see nothing');
+    await call('PUT', '/api/admin/christmas-skin-switch', { mode: 'off' });
+  });
 
   // ---------------------------------------------------------------- F  the focus ring
   await check('F no focus ring after a tap (the X on a sheet); the ring is back for the keyboard (Tab)', async () => {
-    await stage('full');
+    await stage('tickets_open');
     const p = await homeOf('Vic');
     await p.page.locator('[data-tc-who]').first().waitFor({ timeout: 15000 });
     // A tap opens the sheet; the browser puts its focus on the first button, the X.
@@ -420,7 +422,6 @@ async function main() {
     await stage('signup');
     const id = (await dash()).tournament.id;
     async function signUp(p) {
-      await p.page.locator('.tc-slim').click();
       await p.page.locator('[data-tc-signup]').click();
       await p.page.locator('[data-level="340"]').click();
       await p.page.locator('[data-tm-next]').click();
@@ -431,7 +432,7 @@ async function main() {
     // Motion on.
     const m = await newPage({ motion: true });
     await m.page.goto(`${BASE}/?as=Vic`);
-    await m.page.locator('.tc-slim').waitFor({ timeout: 30000 });
+    await m.page.locator('[data-tc-signup]').waitFor({ timeout: 30000 });
     await signUp(m);
     const t0 = Date.now();
     await m.page.locator('[data-tm-submit]').click();
@@ -455,7 +456,7 @@ async function main() {
     await stage('signup');
     const r = await newPage({ motion: false });
     await r.page.goto(`${BASE}/?as=Vic`);
-    await r.page.locator('.tc-slim').waitFor({ timeout: 30000 });
+    await r.page.locator('[data-tc-signup]').waitFor({ timeout: 30000 });
     await signUp(r);
     await r.page.locator('[data-tm-submit]').click();
     await r.page.locator('.tc [data-tc-edit]').waitFor({ timeout: 10000 });
@@ -471,8 +472,7 @@ async function main() {
       for (const scheme of SCHEMES) {
         const p = await newPage({ width, height, scheme });
         await p.page.goto(`${BASE}/?as=Vic`);
-        await p.page.locator('.tc-slim').waitFor({ timeout: 30000 });
-        await p.page.locator('.tc-slim').click();
+        await p.page.locator('[data-tc-signup]').waitFor({ timeout: 30000 });
         await p.page.locator('[data-tc-signup]').click();
         await p.page.locator('dialog[open] [data-tm-step="1"]').waitFor();
         await p.page.waitForTimeout(500);
@@ -515,6 +515,27 @@ async function main() {
     assert(off.tournament === undefined && off.hiddenTournaments === undefined, 'switch off: nothing');
     for (const n of ['Vic', 'Parker']) assert(!('tournament' in (await answerOf(n)).data), `${n} off`);
     await call('PUT', '/api/admin/tournaments-switch', { on: true });
+  });
+
+  await check('L the level list: the seven new descriptions, and "Not sure? Ask Alex." under it', async () => {
+    await stage('signup');
+    const p = await homeOf('Vic');
+    await p.page.locator('[data-tc-signup]').click();
+    await p.page.locator('dialog[open] [data-tm-step="1"]').waitFor();
+    const texts = await p.page.locator('dialog[open] .tm-level-text').allInnerTexts();
+    const want = [
+      'Learning the rules and serve. Short rallies.',
+      'Keeps short rallies going. Avoids the backhand.',
+      'Steady rallies. Still learning to dink.',
+      'Dinks work about half the time. Learning drop shots.',
+      "Steady dinks. Drop shots don't always land. Misses an easy one now and then.",
+      'Steady dinks. Drop shots usually land. Smart about speed. Few easy misses.',
+      'Dinks and drop shots are reliable. Smart about speed. Almost no easy misses.',
+    ];
+    assert(JSON.stringify(texts.map(flat)) === JSON.stringify(want), JSON.stringify(texts));
+    assert(flat(await p.page.locator('[data-tm-level-note]').innerText()) === 'Not sure? Ask Alex.', 'the note');
+    await shot(p.page, 'L-levels');
+    await p.ctx.close();
   });
 
   await stage('date_picked');

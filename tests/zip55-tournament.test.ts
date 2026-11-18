@@ -41,8 +41,8 @@ async function organizerPhone(ctx: Ctx) {
 describe('the shared rules (words from the pictures)', () => {
   it('levels copied word for word from mock 05, 3.6+ shown as 3.6 on the level list', () => {
     expect(LEVELS.map((l) => l.label)).toEqual(['2.5', '2.75', '3.0', '3.2', '3.4', '3.5', '3.6+']);
-    expect(LEVELS[0].text).toBe('Just starting. Still learning the rules and how to serve.');
-    expect(LEVELS[6].text).toBe('Rarely makes a mistake. A level none of us have reached yet.');
+    expect(LEVELS[0].text).toBe('Learning the rules and serve. Short rallies.');
+    expect(LEVELS[6].text).toBe('Dinks and drop shots are reliable. Smart about speed. Almost no easy misses.');
     expect(levelLabel(360)).toBe('3.6+');
     expect(levelShort(360)).toBe('3.6');
     expect(levelShort(300)).toBe('3.0');

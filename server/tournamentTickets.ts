@@ -18,7 +18,7 @@ import { newId } from './crypto';
 import * as v from './validate';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { formatPrice } from '../shared/money';
-import { dayLong, MAX_SPOTS } from '../shared/tournament';
+import { dayLong, MAX_SPOTS, smartPlan } from '../shared/tournament';
 import { payByLabel, salesCutoffMs, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
 import {
   changedOrLookAgain,
@@ -31,9 +31,12 @@ import {
   organizerOn,
   playerTarget,
   salesClosed,
+  lockedCount,
   freedSpots,
   heldSpotSincePayBy,
   ticketPhase,
+  freedSpotSql,
+  type TicketPhase,
   statusOf,
   tournamentsFlags,
   type TournamentActor,
@@ -83,26 +86,22 @@ function lookAgainOn(err: unknown): never {
  * out, which a new buyer can claim (the first PAID person in line gets it by itself, so only an unclaimed one reaches a new buyer). Three
  * hours before the start everything closes, a freed spot included.
  */
-async function ticketsTarget(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>, kind: 'lock' | 'hold' | 'paid' | 'waitlist'): Promise<{ t: TournamentRow; playerId: string }> {
+async function ticketsTarget(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>, kind: 'lock' | 'hold' | 'paid' | 'waitlist'): Promise<{ t: TournamentRow; playerId: string; phase: TicketPhase }> {
   const { t, playerId } = await playerTarget(ctx, who, body);
   if (statusOf(t) !== 'tickets') throw new HttpError(409, 'tickets_not_open', 'Tickets are not open now. Look again.');
   if (salesClosed(t, who.group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. The tournament has started.');
   const s = await mySignup(ctx.db, t.id, playerId);
   if (!s || s.status !== 'in') throw new HttpError(409, 'not_signed_up', 'You are not on the list. Sign up first.');
-  const phase = ticketPhase(t, who.group.timezone, ctx.nowMs);
+  const planStart = smartPlan(lockedCount(await loadTickets(ctx.db, t.id))).start;
+  const phase = ticketPhase(t, who.group.timezone, ctx.nowMs, planStart);
   if (phase === 'cut') throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
   if (phase === 'after') {
     const own = await ticketOf(ctx.db, t.id, playerId);
-    const inLine = own?.place === 'line';
-    const waitingPaid = (own?.claim_cents ?? 0) > 0;
-    // Finishing what they started: a player in line holds their spot (Hold my spot) and an I paid they already tapped stays.
-    const finishing = kind === 'hold' ? inLine : kind === 'paid' ? inLine || own?.place === 'spot' : false;
-    if (!finishing && !waitingPaid) {
-      const claimable = kind === 'lock' || kind === 'paid' ? (inLine ? 1 : await freedSpots(ctx.db, who.group.id, t)) : 0;
-      if (claimable <= 0) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. Pay by has passed.');
-    }
+    // Only an I paid already waiting stays (and a spot holder's own I paid). Everything else, a waitlist player included, needs a freed spot.
+    const keeps = kind === 'paid' && (own?.place === 'spot' || (own?.claim_cents ?? 0) > 0);
+    if (!keeps && (kind === 'waitlist' || (await freedSpots(ctx.db, who.group.id, t)) <= 0)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. Pay by has passed.');
   }
-  return { t, playerId };
+  return { t, playerId, phase };
 }
 
 /** Where a ticket stands after a tap, for the player's screen and words. */
@@ -120,7 +119,9 @@ function answerOf(k: TicketRow | null) {
  */
 export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
   const intent = body.intent === undefined ? 'lock' : v.oneOf(body.intent, 'intent', ['lock', 'hold'] as const);
-  const { t, playerId } = await ticketsTarget(ctx, who, body, intent);
+  const { t, playerId, phase } = await ticketsTarget(ctx, who, body, intent);
+  // After Pay by the claim itself checks that a freed spot is still unclaimed, in the very statements that take it (one winner).
+  const claimOk = phase === 'after' ? ` AND ${freedSpotSql(who.group.id, t)}` : '';
   // The organizer pays the venue, never the group: their own seat is $0.
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
   const price = organizer ? 0 : t.ticket_cents;
@@ -152,7 +153,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
       ctx.db
         .prepare(
           `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, created_at, updated_at)
-           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7 WHERE ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}`,
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7 WHERE ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}`,
         )
         .bind(ticketId, t.id, playerId, read.place, read.place_at, price, ctx.nowIso),
     );
@@ -161,14 +162,14 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
     // Into the line only while tickets are open and they are on the list (a Cancel or their own Back out in between: nothing).
     statements.push(
       ctx.db
-        .prepare(`UPDATE tournament_tickets SET place = 'line', place_at = ?1, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}`)
+        .prepare(`UPDATE tournament_tickets SET place = 'line', place_at = ?1, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}`)
         .bind(read.place_at, ctx.nowIso, k.id),
     );
   } else {
     read = k;
   }
   // Lock: only while a spot is open at that very moment (a race for the last spot never spends credit on a spot that is gone).
-  const guard = `${ticketAsRead(read)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}${intent === 'lock' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS}` : ''}`;
+  const guard = `${ticketAsRead(read)} AND ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}${intent === 'lock' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS}` : ''}`;
   const usedId = newId();
   const pay = payWithCreditStatements(ctx.db, { groupId: who.group.id, tournamentId: t.id, playerId, ticketId, usedId, nowIso: ctx.nowIso, guard });
   const at = statements.length + pay.ticketStatement;
