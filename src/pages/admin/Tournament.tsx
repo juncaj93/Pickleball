@@ -181,7 +181,8 @@ function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
           </p>
           {/* Alex's smart plan, a short line (it follows the players locked in; after a Reschedule the held spots count). */}
           <p className="tm-home-sub tm-home-plan" data-tm-home-plan>
-            Plan: {t.size} players · {planTitle(t)}
+            {/* Each part stays whole ("2.5 hours"); a narrow phone wraps between parts, like the line above. */}
+            {[`Plan: ${t.size} players`, ...planTitle(t).split(' · ')].map((part) => part.replace(/ /g, '\u00a0')).join(' · ')}
           </p>
           {datesPassed && (
             <p className="tm-home-note" data-tm-home-note>
