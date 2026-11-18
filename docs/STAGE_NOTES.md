@@ -5712,18 +5712,19 @@ read writes anything; nothing new runs on the 5-minute clock. Times are this mac
   (fixed: guarded on the price too). Each with a test.
 
 ### Tests
-- Unit: 192 files, 3,471 tests: 3,469 passed, 2 skipped, none failed, in one full run on the final code `a27b8df` (`npx vitest run`, 12
-  minutes). `npx tsc -b` clean. tests/zip56-tickets.test.ts (39): every money proof
+- Unit: 192 files, 3,475 tests: 3,473 passed, 2 skipped, none failed, in one full run on `74599f6` (the shipped code but for the preview
+  seed and two comments, whose own tests passed after); `npx tsc -b` clean. The run before it found the View as copy failing on an older
+  layout (fixed in `74599f6`). tests/zip56-tickets.test.ts (42): every money proof
   to the cent with both books files at zero after each step, the smart plan and the cost, the date pick opening tickets, the piece 1 upgrade,
   the 12-spot waitlist (16 harness players), races (a Lock landing mid Back out or Take off, the last spot, Hold just after a Cancel, two first
   sign-ups), Only me and the switch off for players, the settings lock, the leak tests, the test page stages; tests/zip55-tournament.test.ts
   (51, piece 1's, following Alex's changes).
-- Browser: e2e/zip56.cjs 52 of 52 in one pass on the final code (A to K: the seed, the date pick, Lock my spot and I paid, Paid on Home, back out, the waitlist at 12 (the
+- Browser, on the shipped code, each in one pass: e2e/zip56.cjs 57 of 57 (A to K: the seed, the date pick, Lock my spot and I paid, Paid on Home, back out, the waitlist at 12 (the
   answer stood in for: 10 names), Cancel or reschedule, the evens warning, every ticket screen at 390, 360 and 320 in light and dark with
   every row on one line, the leak checks, the smart plan and Booking hours note, the one-line format both formats at 390 and 320 light and
-  dark, Create with $ boxes 10 px apart, the level picked once, the fades, after the night, a canceled one and the switch off for players);
-  e2e/zip55.cjs 91 of 91 (piece 1, following Alex's changes; 90 in the full pass, the
-  Americano Edit check passed alone once it opened the form through the page, as the card does); e2e/zip56-off.cjs 47 of 47 (switch OFF: answers, stamps, Home HTML and pixels identical to main `beb1aad`, which equals live in
+  dark, Create with $ boxes 10 px apart, the level picked once, the fades, after the night, a canceled one and the switch off for players,
+  the format line on the ticket cards, the Tournament tickets line in Totals); e2e/zip55.cjs 91 of 91 (piece 1, following Alex's changes);
+  e2e/zip56-off.cjs 47 of 47 (switch OFF: answers, stamps, Home HTML and pixels identical to main `beb1aad`, which equals live in
   code).
 
 ### Preview
@@ -5737,8 +5738,21 @@ Home shows Tickets open, Thu Dec 17 · 7:30 PM, Plan 6 players · 1 court · 2.5
 Tue 7:00 PM; the Plan card ($8; With 0 paid now $88); Parker sees Lock my spot · $16; Vic, not on the list, sees "Tickets are open. Sign up
 first." No page errors. The preview PIN is in docs/PREVIEW_FAKE_DB.md.
 
-### Live: NOT done
-Waiting for Alex's "ship it". Then, in order: an SQL backup and a Time Travel bookmark of the live database, migration 0024 on live, merge to
-main, deploy from main (main equals live after it), the integrity checks (both files) on live. Live now runs deployment `f8e4a506` (code
-`752e34c`; main `beb1aad` adds only notes). Rollback: that deployment, and the Time Travel bookmark (the migration is additive; old code
-never reads the new table or column).
+### Live: shipped Tue Nov 17, 2026, 11:08 to 11:10 PM Eastern (Alex: "ship it"), TOURNAMENTS OFF
+1. Restore point first: Time Travel bookmark `00001707-00000000-00005127-d577d7ea066565234e3b12e586f05955` (11:08 PM), and the SQL export
+   (266 KB) saved as `export-20261118041113` in `pickleball-backups` (`node scripts/deploy-export.mjs list`); the local copy deleted.
+   Integrity checks before: all 0 (21 and 8 columns).
+2. Main fast-forwarded `beb1aad` to `3457751` and pushed (27 commits; live was `752e34c`, main had only notes on top of it).
+3. Migration `0024_tournament_tickets` on live, 11:09 PM (the only one pending).
+4. Site: `npm run deploy` from main, 11:09 PM, deployment `4d15fe00-7d46-4374-b795-c0310a816946` (code `3457751`, bundle
+   `index-CThk62i9.js`). The guard passed every rule (loud hours had ended at 11:00 PM).
+5. Clock Worker (`pickleball-alerts-clock`, for the version 3 weekly copy), 11:10 PM, after the site: version
+   `16201e11-42db-447a-b382-ee3962455477`. Its only code change since its last deploy (Zip 50): the backup's table list and version.
+6. After: the TOURNAMENTS switch is still OFF (no row); integrity checks all 0 (21, 8, and the tournament file's 11); the new column and
+   table are there, no tickets. Public live check (pickleball-club-9h0.pages.dev; pickleball.juncaj.net does not answer from the build
+   machine): page and /admin 200 with the new bundle; with `?tournaments=on` (the private link) no page errors, nothing wider than the screen,
+   and a phone with no name picked gets no tournament data, as before the deploy. The one tournament on live is Alex's piece 1 test, canceled
+   and on Only me, so the first read with the switch on opens nothing. The organizer screens were not opened (no read-only PIN in this session).
+Rollback: site deployment `f8e4a506-d689-4cfa-84e7-1e0da732e919` (Workers & Pages > pickleball-club > Deployments); Worker version
+`5564757b-178a-46dd-a653-0743d3b8065a` (`npx wrangler rollback 5564757b-178a-46dd-a653-0743d3b8065a --config worker/wrangler.toml`); data:
+the bookmark above. The migration is additive (old code never reads the new table or column), so a code rollback needs no database undo.
