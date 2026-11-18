@@ -5561,7 +5561,9 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
 ### Alex's changes after testing piece 1 (built in)
 - A. Picking the date opens tickets for everyone on the list, in the same tap (no Open tickets button, no other trigger). Pay by is still a
   setting: two days before at 7:00 PM (Tuesday for a Thursday), changeable. A tournament whose date was picked before this (piece 1 on live)
-  opens its tickets the same way the first time a screen reads it, before its night starts.
+  opens its tickets the same way the first time a screen reads it, before its night starts (with the same History line). On Only me (the
+  organizer's private test) tickets open too, but nobody else can see them: nobody else can take a ticket or be marked paid, and the price,
+  the format and Only me stay free until it is on Everyone.
 - B. Create and Edit have no Players expected and no court plan. The database is unchanged: the NOT NULL columns get harmless defaults on
   Create (size 12, 2 courts, 180 minutes, 7:00 PM: the cap and the whole night); a size or plan sent by an older screen is ignored.
 - C. The smart plan (organizer only: a Plan card on the tournament page, the Plan line and "Your cost if it fills" on the Home card): L = players
@@ -5582,8 +5584,8 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
 
 ### What it does
 1. Picking the date (organizer, the tournament page) opens tickets: the flat price ($16 to start, the same at any size, never from the court
-   cost), Pay by as above. From then on the price and format stay, and Who can see it stays Everyone. The organizer's own seat is a $0 ticket
-   and one of the spots, taken at once when they are on the list.
+   cost), Pay by as above. Once tickets are open on Everyone the price and format stay, and Who can see it stays Everyone. The organizer's own
+   seat is a $0 ticket and one of the spots, taken at once when they are on the list.
 2. Players (pictures 07 to 12): Tickets open, "Lock my spot · $16" and See who's in; tapping the card opens the overlay (Who's in N of the
    planned size, their own row "Pay to lock in", Open spot rows). Lock my spot uses their credit at once (the site's rule at I'm in); what is
    left opens the site's own Pay sheet (Pay Alex $16, Venmo, Copy Venmo, I paid). I paid waits for the organizer like a game's I paid ("Paid ·
@@ -5593,7 +5595,8 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
    Everyone sees the line by name with Paid or Not paid (picture 11), never an amount.
 4. Back out after paying (picture 13b's words plus "Your $16 comes back as credit."): credit used goes back to the pot, cash becomes one credit
    entry, the spot opens and the line fills it. An I paid still waiting comes back as credit when the organizer answers it. From the start of
-   the night (7:00 PM on the date) a ticket holder cannot back out ("Ask Alex") and the organizer cannot take anyone off.
+   the night (7:00 PM on the date) a ticket holder cannot back out ("Ask Alex"), and the organizer cannot take anyone off, mark anyone paid or
+   move Pay by (those taps are not offered then).
 5. The organizer: the amber "Vic tapped I paid ($16), not confirmed." card on Home (Paid / Didn't pay), "Tickets: 6 of 8 locked in" on Home,
    the Tickets list on the tournament page (locked in and how they paid, the waitlist, the list with no ticket; a row opens Paid / Didn't pay,
    Mark paid for cash in hand, Take off the list), the Plan card. Odd number locked in once Pay by has passed: "7 locked in. Need 1 more or 1
@@ -5602,7 +5605,8 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
    cancel), the organizer's card says Canceled ("Every paid ticket came back as credit."), the players who were on the list see a plain Canceled
    card ("Canceled. Your $16 is back as credit.") for 7 days (never past the date). Reschedule goes back to the date step: the list stays,
    everyone's dates are cleared ("Rescheduled. Pick your dates again"), every ticket keeps its money and its place; anyone can back out for
-   credit; picking a new date opens tickets again. Neither is possible once the night is over (10:00 PM): a played night is never refunded.
+   credit; picking a new date opens tickets again. Neither is possible once the night is over (10:00 PM): a played night is never refunded,
+   and Cancel or reschedule is not offered then. Players keep the Tickets closed card (piece 1's rule: the card stays after the date).
 7. A hold that never got a spot: once the night is over (10:00 PM on the date), the first screen that reads the tournament gives it back as
    credit by the same rules (credit to the pot, cash as a credit entry "back from the Winter Classic (no spot opened)"), once.
 8. Credit history (player and organizer): "$16 used for the Winter Classic", "$16 back from the Winter Classic (you backed out)", "(taken off
@@ -5622,3 +5626,100 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
   always run the money-back statements, so a Lock that lands in between still comes back.
 - Books: `scripts/integrity-checks-tournament.sql` (10 checks and one to-do, read-only; a separate file so the older checks still run on a
   database before 0024). The old `scripts/integrity-checks.sql` reads all zeros too.
+
+### Where it differs from the brief (the code is the truth)
+- Alex's changes A to G replace the brief's Open tickets step, players expected and the court plan (above).
+- First PAID in line means paid in full with money that counts (credit or confirmed cash), in the order they JOINED the line (not the order
+  they paid). An I paid still waiting holds nothing, for Lock my spot and for Hold my spot alike.
+- The rules use the whole night, 7:00 to 10:00 PM on the date, whatever the plan (the plan moves with the players): ticket taps stop at 7:00 PM,
+  and an unused hold comes back after 10:00 PM, done by the first screen that reads the tournament (no clock job; until then it stays on the
+  ticket, and the books are right either way).
+- A played night (after 10:00 PM) cannot be canceled or rescheduled (that would refund it), so it stays open until game day (piece 3) ends it:
+  Create says "A tournament is already open." and players keep its Tickets closed card. A question below.
+- Only me: picking the date opens tickets there too (Alex's rule has no exception), but only the organizer can see them (above).
+- Picture 29 has no Edit: the tournament's name opens its page. The evens warning shows only after Pay by has passed.
+- Sign-up open and Rescheduled keep piece 1's Home card (the format now one line) with a short Plan line added.
+- The Canceled card shows for 7 days (never past the date) and only to players who were on the list.
+- Reschedule clears everyone's picked dates (they pick again); picking a new date opens tickets again with a new Pay by.
+- Pictures 13 and 13b are piece 1's sheets; the back out words add "Your $16 comes back as credit." when the ticket holds money.
+- The ticket-stage cards (pictures 07 to 12, and 29) show no format line, as drawn. A question below.
+- The ticket table is not in the backup FILE (Time Travel keeps it). A question below.
+- The cost: "minus the champion credits" is read as the credits adding to the organizer's cost (he pays them out): court, minus tickets, plus
+  credits. 6 locked in: 2 courts for 2 hours $96, minus 7 x $16 = $112, plus 2 x $14 = $28: $12. The free seat is always taken off (Alex's
+  rule), also when the organizer is not on the list.
+- A piece 1 date pick opens tickets the first time any screen reads it: a player's 5-second check counts, and so does a phone with the private
+  tournaments link while the switch is off for everyone.
+
+### Switches on the preview (PREVIEW SWITCHES RULE)
+Read on live (switch rows only, Tue Nov 17, 2026, about 11:30 PM Eastern): 52 rows on, TOURNAMENTS off. The small world's lists had all but
+five: Made cheaper after paying, Error alerts, Game day text, Home Screen tip and the Christmas skin's "Just me". `npm run db:seed:preview`
+now adds those five on the real preview (`LIVE_ON_SINCE_ZIP56` in scripts/seed-preview.ts; a local e2e world keeps its lists), plus
+TOURNAMENTS on (`BUILDING_ON`). Home Screen tip and Game day text were on every preview already (`[env.preview.vars]`).
+
+### Cost (in-process server, 11 players, database trips per answer and server time)
+| | Player screen | 5-second check | Organizer Home |
+|---|---|---|---|
+| Switch OFF (as main) | 52, 3.4 ms | 23, 1.3 ms | 72, 3.8 ms |
+| ON, no tournament | 54 | 24 | 74 |
+| ON, Everyone, 10 signed up (sign-up open) | 56 | 25 | 76 |
+| ON, tickets open, 8 locked in (the plan for 10) | 59, 4.5 ms | 26, 1.9 ms | 81, 6.1 ms |
+OFF adds nothing (the same counts as main). Tickets add one read of the ticket table per tournament view (the answer and its "did anything
+change?" stamp each build the view, piece 1's own design) and one small read of tournament names for a player with ticket credit entries. No
+read writes anything; nothing new runs on the 5-minute clock. Times are this machine's in-process server, not Cloudflare's CPU meter.
+
+### Questions for Alex
+1. The database change above (one new table, one new column): OK to apply on live with the deploy?
+2. A played night stays open until piece 3 (game day) ends it: Create is blocked after it and players keep its Tickets closed card. Ship
+   piece 2 with piece 3, or add a small Close now (no refunds)?
+3. The backup FILE leaves the four tournament tables out (Time Travel keeps them). Now that tickets hold cash, add them (a version 3 file)?
+   Recommended: yes, before tickets are sold on live.
+4. Ticket money is not in Money > Totals yet (cash paid for tickets, credit used on them). Add a Tournament line there?
+5. The waitlist shows Paid or Not paid next to each name (picture 11). SITE_RULES says players never see other players' money; no amount is
+   shown, only paid or not. Keep it?
+6. The ticket-stage cards have no format line, as drawn. Add the one-line format under the name there too?
+7. An unused hold comes back as credit when the night is over (10:00 PM). Earlier, for example at Pay by?
+8. The cost reading above (court, minus tickets, plus credits): right?
+
+### Review (fresh reviewers, no part in the build)
+- First review (before Alex's changes): fixed the money findings (a Lock landing between a Back out or Take off read and its write, an I paid
+  answered after a back out, Hold my spot just after a Cancel, the credit words), Remove player with a ticket, and the organizer check in the
+  books. Reported, not changed: the private tournaments link works while the switch is off (the site's own design since piece 1), picture
+  wording, and the preview test page's reset.
+- Second review (Alex's changes, commit 463a5f8): tickets opening on Only me broke Edit and let a hidden player be marked paid (fixed: the rule
+  above, with tests); a played night stays open (question 2; the taps that would fail are no longer offered; players' card stays, piece 1's
+  rule); the piece 1 upgrade wrote no History line and was not guarded on who may see it (fixed); two first sign-ups at once could leave two
+  levels (fixed: the list takes the history's first, inside the batch); the canceled card's Plan line, the old date-picked card and the missing
+  Plan line on the sign-up card (fixed); browser checks behind the code (fixed). Its note on migration 0024: it had not been applied to the
+  preview yet, so the preview gets it as it is now.
+
+### Tests
+- Unit: 192 files, 3,468 tests: 3,465 passed and 2 skipped in one full run (`npx vitest run`); its one failure was a test that ran against
+  the server code from before that run's last edit, and the six tournament files (speed-queries, zip48-split, zip50-backup, zip55-build,
+  zip55-tournament, zip56-tickets: 126 tests) pass on the final code. `npx tsc -b` clean. tests/zip56-tickets.test.ts (36): every money proof
+  to the cent with both books files at zero after each step, the smart plan and the cost, the date pick opening tickets, the piece 1 upgrade,
+  the 12-spot waitlist (16 harness players), races (a Lock landing mid Back out or Take off, the last spot, Hold just after a Cancel, two first
+  sign-ups), Only me, the leak tests, the test page stages; tests/zip55-tournament.test.ts (51, piece 1's, following Alex's changes).
+- Browser: e2e/zip56.cjs 51 of 51 (A to K: the seed, the date pick, Lock my spot and I paid, Paid on Home, back out, the waitlist at 12 (the
+  answer stood in for: 10 names), Cancel or reschedule, the evens warning, every ticket screen at 390, 360 and 320 in light and dark with
+  every row on one line, the leak checks, the smart plan and Booking hours note, the one-line format both formats at 390 and 320 light and
+  dark, Create with $ boxes 10 px apart, the level picked once, the fades, after the night; 50 in the full pass, the after-the-night check
+  passed alone once it read its chip in capitals); e2e/zip55.cjs 91 of 91 (piece 1, following Alex's changes; 90 in the full pass, the
+  Americano Edit check passed alone once it opened the form through the page, as the card does); e2e/zip56-off.cjs 47 of 47 (switch OFF: answers, stamps, Home HTML and pixels identical to main `beb1aad`, which equals live in
+  code).
+
+### Preview
+`pickleball-preview` (fake) only. Restore points first: Time Travel bookmark `00000166-00000000-00005127-e5fb552ffbc0b3094ca212e028b97904`
+and an SQL export (82 KB, kept outside git). Then migration 0024 (the only one pending; it had never been applied there, so the spot triggers
+went on as they are now: a cap of 12). Deployed from `e6ae7bc` (deployment `c950231c`; one before it, `aa3dfb62`) to
+https://claude-new-session-16mfmv.pickleball-club-9h0.pages.dev. Every Tournament test stage was run there on the real preview database, both
+formats (organizer and Zoe at 320: no page errors, nothing wider than the screen, each stage's card right), then re-seeded (the Zip 56 calm profile: the Winter Classic with the date
+picked for Everyone, so tickets are open; 8 on the list; nobody paid). Checked in a browser on the preview (390, light and dark): organizer
+Home shows Tickets open, Thu Dec 17 · 7:30 PM, Plan 6 players · 1 court · 2.5 hours, Your cost if it fills $8, Locked in 0 of 6, $16 · pay by
+Tue 7:00 PM; the Plan card ($8; With 0 paid now $88); Parker sees Lock my spot · $16; Vic, not on the list, sees "Tickets are open. Sign up
+first." No page errors. The preview PIN is in docs/PREVIEW_FAKE_DB.md.
+
+### Live: NOT done
+Waiting for Alex's "ship it". Then, in order: an SQL backup and a Time Travel bookmark of the live database, migration 0024 on live, merge to
+main, deploy from main (main equals live after it), the integrity checks (both files) on live. Live now runs deployment `f8e4a506` (code
+`752e34c`; main `beb1aad` adds only notes). Rollback: that deployment, and the Time Travel bookmark (the migration is additive; old code
+never reads the new table or column).
