@@ -5886,3 +5886,11 @@ To ship: SQL backup and Time Travel bookmark of `pickleball` first, apply `0025_
 - Test page: new stage **Finalize screen (6 to 4 vote)**.
 - Tests: unit 194 files, 3,521 passed, 2 skipped (zip60 36 tests; the read-only PIN test now covers the new read); browser e2e/zip60.cjs 29 of 29 (Finalize at 420/390/360/320, light and dark, buttons in reach, edits kept through the 5-second refresh, override, votes-changed), zip55 91, zip56 57, zip59 12 (the zip55, zip56 and zip59 scripts follow the new Finalize tap and the alert), zip55-off and zip56-off 47 each (OFF equals main). A second fresh reviewer found a false "over" claim (fixed), weak tests (strengthened), and sheet error handling (fixed).
 - Preview: deployed from branch `claude/new-session-hnlsro` (deployment `d623a915`), the Finalize flow run on the real preview database (6 to 4, override to Locked doubles, alert "Format: Locked doubles"), then re-seeded (no tournament open). Live untouched: waiting for "ship it".
+
+### Live: shipped Wed Nov 18, 2026, 1:03 to 1:04 PM Eastern (Alex: "ship it"), TOURNAMENTS switch unchanged (OFF), The Cold Open untouched
+1. Restore points first: Time Travel bookmark `000017b3-00000000-00005127-1052acb50e04a75cf9d0b48b0a572635`; SQL export saved as `export-20261118180307` in `pickleball-backups` (local copy deleted). Integrity checks before and after: all 0 (21, 8, 11 columns).
+2. Migration `0025_format_vote` applied to live (the only one pending): `tournaments.format_source` and `tournament_signups.format_vote`, both empty.
+3. Main fast-forwarded from `cbf7272` to `e24d850` and pushed; `npm run deploy` from main: deployment `9798779c-c8d4-4586-9d15-924002bc5527`.
+4. Live check (public, no PIN): page and /admin 200; with `?tournaments=on` no page errors and nothing wider than the screen at 390 and 320, light and dark; no tournament or vote data in `/api/group` (with or without the private header); organizer reads answer 401/404 without the PIN.
+Rollback: site deployment `455d2bda-b4d4-4166-a7a9-aea3a68cbc8d` (Zip 59). No database undo is needed (the two columns can stay).
+
