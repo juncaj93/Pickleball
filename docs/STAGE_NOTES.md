@@ -5582,6 +5582,19 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
 - G. The test page stages follow: Date picked now means tickets open (nobody paid); there is no waitlist stage (12 spots need 13 people; the
   preview has 10 names and no names may be added).
 
+### Alex's answers to the 8 questions (with "ship it", Tue Nov 17)
+1. The database change: yes, on live (restore point first, then migrate, then deploy; never two deploys at once).
+2. Ship now with TOURNAMENTS OFF; no Close button: game day (piece 3) ends tournaments.
+3. Built: the four tournament tables are in the backup file and the weekly copy (file version 3; version 1 and 2 files still restore, their
+   tournament tables empty). The weekly copy needed the clock Worker deployed too.
+4. Built: Money > Totals has its own line under the two cards, "Tournament tickets", N paid, $X: the money on tickets paid in full that month
+   (credit used and cash Alex confirmed, still on the ticket; money given back and an I paid still waiting are not counted). It is not part
+   of the venue cost (the site does not know a tournament's court bill), so the cards and Spent stay as they were; only while Tournaments is on.
+5. Built: players see the waitlist by name only (their own row says You); Paid / Not paid stays on Alex's screen.
+6. Built: the one-line format on the ticket cards too (the player's card, the Who's in sheet, Alex's picture 29 card), one line down to 320.
+7. Unchanged: an unused hold comes back as credit at 10:00 PM on the night.
+8. Unchanged: cost = court, minus tickets, plus credits; negative means Alex comes out ahead.
+
 ### What it does
 1. Picking the date (organizer, the tournament page) opens tickets: the flat price ($16 to start, the same at any size, never from the court
    cost), Pay by as above. Once players may hold tickets (tickets open on Everyone, or a player other than the organizer has a ticket, also
@@ -5593,7 +5606,7 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
    Waiting for Alex to confirm"): it holds no spot. Paid in full with money that counts (credit, or cash the organizer confirmed) = locked in.
 3. Waitlist (after 12): "12 spots taken", Join waitlist, then "Hold my spot · $16" (pay to hold) or "Just keep me on the list". When a spot
    opens (a back out or Take off), the first PAID person in line (in the order they joined it) gets it by itself; unpaid people stay in line.
-   Everyone sees the line by name with Paid or Not paid (picture 11), never an amount.
+   Players see the line by name only (Alex's answer 5); Alex's Tickets list shows Paid or Not paid.
 4. Back out after paying (picture 13b's words plus "Your $16 comes back as credit."): credit used goes back to the pot, cash becomes one credit
    entry, the spot opens and the line fills it. An I paid still waiting comes back as credit when the organizer answers it. From the start of
    the night (7:00 PM on the date) a ticket holder cannot back out ("Ask Alex"), and the organizer cannot take anyone off, mark anyone paid or
@@ -5643,8 +5656,8 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
 - The Canceled card shows for 7 days (never past the date) and only to players who were on the list.
 - Reschedule clears everyone's picked dates (they pick again); picking a new date opens tickets again with a new Pay by.
 - Pictures 13 and 13b are piece 1's sheets; the back out words add "Your $16 comes back as credit." when the ticket holds money.
-- The ticket-stage cards (pictures 07 to 12, and 29) show no format line, as drawn. A question below.
-- The ticket table is not in the backup FILE (Time Travel keeps it). A question below.
+- The ticket-stage cards (pictures 07 to 12, and 29) show the one-line format under the name (Alex's answer 6; not drawn).
+- Picture 11's Paid / Not paid next to names is on Alex's screen only (Alex's answer 5).
 - The cost: "minus the champion credits" is read as the credits adding to the organizer's cost (he pays them out): court, minus tickets, plus
   credits. 6 locked in: 2 courts for 2 hours $96, minus 7 x $16 = $112, plus 2 x $14 = $28: $12. The free seat is always taken off (Alex's
   rule), also when the organizer is not on the list.
@@ -5668,7 +5681,7 @@ OFF adds nothing (the same counts as main). Tickets add one read of the ticket t
 change?" stamp each build the view, piece 1's own design) and one small read of tournament names for a player with ticket credit entries. No
 read writes anything; nothing new runs on the 5-minute clock. Times are this machine's in-process server, not Cloudflare's CPU meter.
 
-### Questions for Alex
+### Questions for Alex (answered with "ship it": see Alex's answers above)
 1. The database change above (one new table, one new column): OK to apply on live with the deploy?
 2. A played night stays open until piece 3 (game day) ends it: Create is blocked after it and players keep its Tickets closed card. Ship
    piece 2 with piece 3, or add a small Close now (no refunds)?
