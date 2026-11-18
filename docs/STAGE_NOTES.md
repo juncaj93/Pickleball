@@ -5699,12 +5699,12 @@ read writes anything; nothing new runs on the 5-minute clock. Times are this mac
   (fixed: guarded on the price too). Each with a test.
 
 ### Tests
-- Unit: 192 files, 3,468 tests: 3,466 passed, 2 skipped, none failed, in one full run on the final code (`npx vitest run`, 13 minutes).
-  After it only unused styles were removed (zip48-split, zip55-build and the browser checks of those screens pass again). `npx tsc -b`
-  clean. tests/zip56-tickets.test.ts (36): every money proof
+- Unit: 192 files, 3,471 tests: 3,469 passed, 2 skipped, none failed, in one full run on the final code `a27b8df` (`npx vitest run`, 12
+  minutes). `npx tsc -b` clean. tests/zip56-tickets.test.ts (39): every money proof
   to the cent with both books files at zero after each step, the smart plan and the cost, the date pick opening tickets, the piece 1 upgrade,
   the 12-spot waitlist (16 harness players), races (a Lock landing mid Back out or Take off, the last spot, Hold just after a Cancel, two first
-  sign-ups), Only me, the leak tests, the test page stages; tests/zip55-tournament.test.ts (51, piece 1's, following Alex's changes).
+  sign-ups), Only me and the switch off for players, the settings lock, the leak tests, the test page stages; tests/zip55-tournament.test.ts
+  (51, piece 1's, following Alex's changes).
 - Browser: e2e/zip56.cjs 52 of 52 in one pass on the final code (A to K: the seed, the date pick, Lock my spot and I paid, Paid on Home, back out, the waitlist at 12 (the
   answer stood in for: 10 names), Cancel or reschedule, the evens warning, every ticket screen at 390, 360 and 320 in light and dark with
   every row on one line, the leak checks, the smart plan and Booking hours note, the one-line format both formats at 390 and 320 light and
