@@ -287,13 +287,13 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_ticket': {
       const used = num(d.creditUsedCents) > 0 ? ` (${cents(d.creditUsedCents)} credit used)` : '';
       if (d.result === 'locked') return `${player} locked in for the ${tourName(d)}${used}`;
-      if (d.result === 'held') return `${player} paid to hold a spot on the ${tourName(d)} waitlist${used}`;
+      if (d.result === 'held') return `${player} paid to hold a standby spot for ${tourName(d)}${used}`;
       return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock my spot'} for the ${tourName(d)}${used}`;
     }
     case 'tournament_i_paid':
       return `${player} tapped I paid (${cents(d.amountCents)}) for a ${tourName(d)} ticket`;
     case 'tournament_waitlist':
-      return `${player} joined the ${tourName(d)} waitlist`;
+      return `${player} joined standby for ${tourName(d)}`;
     case 'tournament_ticket_confirmed':
       return `${who} confirmed ${player}'s ${cents(d.amountCents)} for the ${tourName(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
     case 'tournament_ticket_rejected':

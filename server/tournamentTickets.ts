@@ -142,7 +142,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   }
   const tickets = await loadTickets(ctx.db, t.id);
   if (intent === 'lock' && tickets.filter((x) => x.place === 'spot').length >= MAX_SPOTS) {
-    throw new HttpError(409, 'spots_full', `All ${MAX_SPOTS} spots just filled. Join the waitlist.`);
+    throw new HttpError(409, 'spots_full', 'Every spot just filled. Join standby.');
   }
   // The ticket as it will be after its first statement: a new one (Hold puts it in line), or the one read (Hold puts it in line if it was not).
   const ticketId = k?.id ?? newId();
@@ -177,7 +177,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   statements.push(...pay.statements);
   const res = await ctx.db.batch(statements).catch(lookAgainOn);
   if ((res[at].meta?.changes ?? 0) !== 1) {
-    throw intent === 'lock' ? new HttpError(409, 'spots_full', `All ${MAX_SPOTS} spots just filled. Join the waitlist.`) : new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
+    throw intent === 'lock' ? new HttpError(409, 'spots_full', 'Every spot just filled. Join standby.') : new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   }
   const used = (await ctx.db.prepare('SELECT amount_cents AS c FROM credit_ledger WHERE id = ?').bind(usedId).first<{ c: number }>())?.c ?? 0;
   const after = await ticketOf(ctx.db, t.id, playerId);

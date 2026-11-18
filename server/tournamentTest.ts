@@ -7,6 +7,7 @@ import { hiddenTask, lockDate, setTournamentsForAll, todayKey, type TournamentRo
 import { previewSiteFor } from './secondChance';
 import { organizerIdOf } from './repo';
 import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
+import { zonedTimeToUtc } from '../shared/time';
 import { defaultPayBy, tourReason } from '../shared/tournamentTickets';
 import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 
@@ -44,7 +45,57 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 //                  no Either); NOT locked. As Alex, tap the date on the tournament page: the Finalize screen opens. (The "over" line needs more than 12
 //                  players, and the preview has 10 names, so it does not show here.)
 //   vote_tie       the same with Locked 1, Americano 1, Either 2: a tie, the first tournament goes to Locked doubles, the alert says just the format
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check'] as const;
+// Zip 63 (🎾63.tickets): the pay countdown. Each is Tickets open (6 paid; Vic, Zoe and Reese with no ticket) with Pay by set from now, and the
+// tournament the day after Pay by (the usual: Pay by the night before). View as Vic: the alert at the top of Home.
+//   pay_3d, pay_2d  Pay by 7:00 PM three or two days from today: amber "3 days left to pay" / "2 days left to pay"
+//   pay_1d          Pay by 7:00 PM tomorrow: amber "Payment due tomorrow"
+//   pay_today       Pay by tonight, at least 6.5 hours from now (7:00 PM when that is far enough): red "Payment due today"
+//   pay_hours       Pay by 5 hours 20 minutes from now: red "Due in 5 hours"
+//   pay_minutes     Pay by 42 minutes from now: red "Due in 42 minutes" (it counts down while the page is open)
+//   pay_late        Pay by an hour ago, and Wren backed out after it (a freed spot, the existing late rule): red "Your payment is late"
+//   pay_closed      Pay by an hour ago, no spot freed: tickets closed for Vic, so no countdown (the card says Tickets closed)
+export const COUNTDOWN_STAGES = ['pay_3d', 'pay_2d', 'pay_1d', 'pay_today', 'pay_hours', 'pay_minutes', 'pay_late', 'pay_closed'] as const;
+export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES] as const;
+type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
+const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
+
+/** Zip 63: Pay by for a countdown stage, from now (Eastern). */
+function countdownPayBy(stage: CountdownStage, nowMs: number, tz: string): number {
+  const today = dayParts(todayKey(nowMs, tz));
+  const at7 = (plusDays: number) => {
+    const d = new Date(Date.UTC(today.year, today.month - 1, today.day + plusDays));
+    return zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), 19, 0, tz);
+  };
+  switch (stage) {
+    case 'pay_3d':
+      return at7(3);
+    case 'pay_2d':
+      return at7(2);
+    case 'pay_1d':
+      return at7(1);
+    case 'pay_today': {
+      // 7:00 PM tonight when that is 6.5 hours away or more; later tonight otherwise (on the half hour, before midnight when it can be).
+      const want = nowMs + 6.5 * 3_600_000;
+      if (at7(0) >= want) return at7(0);
+      const half = Math.ceil(want / 1_800_000) * 1_800_000;
+      return Math.min(half, at7(1) - 19 * 3_600_000 - 60_000);
+    }
+    case 'pay_hours':
+      return nowMs + (5 * 60 + 20) * 60_000;
+    case 'pay_minutes':
+      return nowMs + 42 * 60_000 + 30_000;
+    case 'pay_late':
+    case 'pay_closed':
+      return nowMs - 3_600_000;
+  }
+}
+
+/** Zip 63: the day after a moment (Eastern), as 'YYYY-MM-DD': the tournament of a countdown stage. */
+function dayAfter(ms: number, tz: string): string {
+  const p = dayParts(todayKey(ms, tz));
+  const d = new Date(Date.UTC(p.year, p.month - 1, p.day + 1));
+  return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
 type Stage = (typeof TEST_STAGES)[number];
 
 /** The fixed names and their picks (Kai is not one of the preview's names, so Kai is not here). Levels in hundredths. */
@@ -139,14 +190,21 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   const dates = testDates(todayKey(ctx.nowMs, group.timezone));
   // The date everyone on the list can make: the third Thursday of next month (or the middle offered date).
   const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
-  const best = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
-  const tickets = TICKET_STAGES[['canceled', 'rescheduled', 'closed', 'hidden'].includes(stage) ? 'tickets_open' : stage] ?? null;
+  // Zip 63: a countdown stage's tournament is the day after its Pay by.
+  const countdownBy = isCountdown(stage) ? countdownPayBy(stage, ctx.nowMs, group.timezone) : null;
+  const best = countdownBy !== null ? dayAfter(countdownBy, group.timezone) : (thursdays[2] ?? dates[Math.floor(dates.length / 2)]);
+  const tickets = TICKET_STAGES[['canceled', 'rescheduled', 'closed', 'hidden'].includes(stage) || isCountdown(stage) ? 'tickets_open' : stage] ?? null;
   // Alex: picking the date opens tickets, so every stage after Sign-up open has them open (Canceled and Rescheduled then run the real taps).
   const picked = stage !== 'signup';
   const id = newId();
   const t0 = Date.parse(ctx.nowIso) - 3 * 86_400_000;
   const at = (minutes: number) => new Date(t0 + minutes * 60_000).toISOString();
-  const payBy = stage === 'odd' || stage === 'closed' ? new Date(ctx.nowMs - 3_600_000).toISOString() : defaultPayBy(best, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
+  const payBy =
+    countdownBy !== null
+      ? new Date(countdownBy).toISOString()
+      : stage === 'odd' || stage === 'closed'
+        ? new Date(ctx.nowMs - 3_600_000).toISOString()
+        : defaultPayBy(best, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
   const statements = [
     ctx.db
       .prepare(
@@ -226,6 +284,22 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
       ctx.db.prepare("UPDATE tournaments SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ?").bind(ctx.nowIso, ctx.nowIso, id),
       ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: id, playerId: null, why: 'cancel', endedReason: 'canceled', nowIso: ctx.nowIso, when: tournamentCanceled }),
     ]);
+  }
+  // Zip 63: the late stage's freed spot: the same History line a back out after Pay by writes (Wren held a spot since before Pay by and gave it
+  // up), and Wren off the list with no ticket, so the spot count and the line agree.
+  if (stage === 'pay_late') {
+    const wren = idOf.get('Wren');
+    if (wren) {
+      const outAt = new Date(ctx.nowMs - 30 * 60_000).toISOString();
+      await ctx.db.batch([
+        ctx.db.prepare('DELETE FROM tournament_tickets WHERE tournament_id = ? AND player_id = ?').bind(id, wren),
+        ctx.db.prepare("UPDATE credit_ledger SET ended_at = ?, ended_reason = 'dropped' WHERE player_id = ? AND reason = ? AND ended_at IS NULL").bind(outAt, wren, tourReason(id)),
+        ctx.db.prepare("UPDATE tournament_signups SET status = 'out', updated_at = ? WHERE tournament_id = ? AND player_id = ?").bind(outAt, id, wren),
+        ctx.db
+          .prepare("INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at) VALUES (?, ?, NULL, 'Wren', 'tournament_back_out', ?, ?)")
+          .bind(newId(), group.id, JSON.stringify({ tournament: 'Winter Classic', tournamentId: id, freedSpot: true, player: 'Wren', playerId: wren }), outAt),
+      ]);
+    }
   }
   // Zip 59: hidden = canceled, then the same one row a Hide tap writes (the tournament and its tickets stay).
   if (stage === 'hidden') {

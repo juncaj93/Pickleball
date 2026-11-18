@@ -1426,3 +1426,191 @@ dialog.sheet.tc-tw-overlay {
     opacity: 1;
   }
 }
+
+/* ---------- Zip 63 (🎾63.tickets): the card's one look (zip63/mocks/BUILD_NOW 00 to 07 and 15, measured at 420 px wide) ----------
+   Top line, name, format, one pickleball per person (gold ring = locked in), the one button, the plain bottom line. No stub, no notch, no steps.
+   The same deep green in light and dark; a soft shadow under it in light only. */
+.tc.tk {
+  padding: 19px 17px 15px;
+  border-radius: 22px;
+  background:
+    radial-gradient(300px 150px at 100% 0%, #2c704c 0%, rgb(44 112 76 / 0%) 100%),
+    linear-gradient(180deg, #13261b 0%, #0b1410 100%);
+  box-shadow:
+    inset 0 0 0 1px #2f4a3a,
+    0 10px 26px rgb(0 0 0 / 17%);
+  -webkit-mask-image: none;
+  mask-image: none;
+  /* The top line and the format size themselves to the card (cqw) so neither wraps, down to 320 px phones. */
+  container-type: inline-size;
+}
+:root[data-theme='dark'] .tc.tk {
+  box-shadow: inset 0 0 0 1px #2f4a3a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tc.tk {
+    box-shadow: inset 0 0 0 1px #2f4a3a;
+  }
+}
+/* The big soft ring in the top right corner (cut by the card's edge). */
+.tk-ring {
+  position: absolute;
+  z-index: -1;
+  top: -24px;
+  right: -24px;
+  box-sizing: border-box;
+  width: 128px;
+  height: 128px;
+  border: 14px solid rgb(216 240 59 / 10.5%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.tk .tc-kicker {
+  gap: 9px;
+  margin: 0;
+  font-size: min(0.78rem, calc(3.9cqw - 0.7px));
+  letter-spacing: 0.17em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.tk .tc-kdot {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
+}
+.tk .tc-title {
+  margin: 13px 0 0;
+  font-size: 2rem;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  text-transform: none;
+}
+.tk .tc-title.tc-title-long {
+  font-size: 1.6rem;
+}
+.tk .tc-format {
+  margin: 6px 0 0;
+  font-size: min(0.97rem, 4.6cqw);
+  white-space: nowrap;
+  font-weight: 450;
+  line-height: 1.3;
+}
+/* "Tournament style TBD" in the mocks' quiet gray; a decided format keeps the green subtitle style (Alex, Zip 56). */
+.tk[data-tc-format='tbd'] .tc-format {
+  color: var(--tc-sub);
+}
+.tk .tc-actions {
+  padding: 0;
+  margin-top: 14px;
+}
+.tk .tc-btn {
+  min-height: 48px;
+  border-radius: 16px;
+  font-size: 1.12rem;
+}
+.tk .tc-lime {
+  box-shadow: none;
+}
+/* The plain bottom line: "Pay by 11/30" (not a link, not underlined). */
+.tk-foot {
+  margin: 9px 0 0;
+  overflow-wrap: break-word;
+  font-size: 0.97rem;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--tc-sub);
+}
+.tk .tc-links {
+  padding: 2px 0 0;
+}
+.tk .tc-punch-sub {
+  text-align: left;
+}
+/* The overlay's copy of the card: the line under the format (mocks 11 and 12 keep it short). */
+.tk-line {
+  margin: 4px 0 0;
+  font-size: 0.94rem;
+  line-height: 1.3;
+  color: var(--tc-sub);
+}
+.tk-overlay .tc-row,
+.tk-overlay .tc-choices {
+  padding-left: 0;
+  padding-right: 0;
+}
+.tk-overlay .tc-note {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* The balls: one row always. Each ball's size and the gap come from the card (TourBalls sets --tb-size and --tb-gap from the row's width). */
+.tb-row {
+  container-type: inline-size;
+  margin-top: 15px;
+}
+.tb {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--tb-gap, 9px);
+  height: 26px;
+}
+.tb-ball {
+  position: relative;
+  flex: none;
+  display: block;
+  width: var(--tb-size, 26px);
+  height: var(--tb-size, 26px);
+  border-radius: 50%;
+}
+.tb-ball .ball {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Gold = locked in: a thin dark gap, the gold ring and a soft steady glow (mocks 01 to 07). */
+.tb-gold {
+  box-shadow:
+    0 0 0 1px #102018,
+    0 0 0 3.5px #e6b83a,
+    0 0 0 5.5px rgb(230 184 58 / 27%);
+}
+/* Mocks 03 and 04: the ball pops (the site's own m-ball-pop, 240 ms) and the gold ring arrives with a big glow that eases to the steady ring. */
+@media (prefers-reduced-motion: no-preference) {
+  .tb-gold-new .ball {
+    animation: m-ball-pop 240ms var(--ease-spring, cubic-bezier(0.3, 1.2, 0.5, 1)) both;
+  }
+  .tb-gold-new {
+    animation: tb-gold-in 900ms ease-out both;
+  }
+}
+@keyframes tb-gold-in {
+  0% {
+    box-shadow:
+      0 0 0 1px rgb(16 32 24 / 0%),
+      0 0 0 1px rgb(230 184 58 / 0%),
+      0 0 0 1px rgb(230 184 58 / 0%),
+      0 0 0 0 rgb(246 210 92 / 0%);
+  }
+  30% {
+    box-shadow:
+      0 0 0 1px #102018,
+      0 0 0 3.5px #f0c64a,
+      0 0 0 5.5px rgb(230 184 58 / 45%),
+      0 0 18px 7px rgb(246 210 92 / 55%);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px #102018,
+      0 0 0 3.5px #e6b83a,
+      0 0 0 5.5px rgb(230 184 58 / 27%),
+      0 0 0 0 rgb(246 210 92 / 0%);
+  }
+}
+/* A narrow card (a 320 px phone): the top line's letters closer together, so the words stay big enough to read. */
+@container (max-width: 300px) {
+  .tk .tc-kicker {
+    font-size: min(0.78rem, calc(4.3cqw - 0.7px));
+    letter-spacing: 0.1em;
+  }
+}

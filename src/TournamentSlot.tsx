@@ -79,7 +79,7 @@ export function TournamentSlot({ t, onChanged, pay }: { t: PlayerTournamentView;
     return <Home t={t} onChanged={onChanged} pay={pay} />;
   }
   return (
-    <Suspense fallback={<div className={`tc-shell${t.onlyMe ? ' tc-shell-strip' : ''}`} aria-hidden="true" />}>
+    <Suspense fallback={<div className={`tc-shell skel${t.onlyMe ? ' tc-shell-strip' : ''}`} aria-hidden="true" data-tc-shell />}>
       <TournamentHome t={t} onChanged={onChanged} pay={pay} />
     </Suspense>
   );

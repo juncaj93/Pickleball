@@ -100,6 +100,12 @@ export function payByLabel(iso: string, tz: string, finalDate?: string | null): 
   return `${formatWeekdayShort(iso, tz)} ${formatTime(iso, tz)}`;
 }
 
+/** Zip 63: "11/30", the bottom line of the ticket card ("Pay by 11/30"): the Pay by day as month/day, Eastern. */
+export function payByShort(iso: string, tz: string): string {
+  const p = localParts(Date.parse(iso), tz);
+  return `${p.month}/${p.day}`;
+}
+
 /** The organizer's plain warning when the number locked in is odd at the Pay by time (no one is ever taken off by the site). */
 export const evensWarning = (locked: number): string => `${locked} locked in. Need 1 more or 1 less.`;
 
@@ -140,4 +146,66 @@ export function payByAt(day: string, minutes: number, tz: string): string {
 export function payByParts(iso: string, tz: string): { day: string; minutes: number } {
   const p = localParts(Date.parse(iso), tz);
   return { day: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`, minutes: p.hour * 60 + p.minute };
+}
+
+/**
+ * Zip 63: the pay countdown on a player's Home (mocks 08 to 13): the site's alert card, for a player on the list who can still lock a spot and
+ * has not paid. Nothing until 3 days before Pay by (counted in Eastern calendar days); then "3 days left to pay", "2 days left to pay" and
+ * "Payment due tomorrow" (amber), and on the day "Payment due today", "Due in 5 hours" (under 6 hours left) and "Due in 42 minutes" (the last
+ * hour), red. After Pay by (only while a spot can still be paid for, the existing late rule): red "Your payment is late". Null: no card now.
+ * A pure function of the moment, so the card counts down on its own while the page is open.
+ */
+export interface PayCountdown {
+  tone: 'amber' | 'red';
+  icon: 'owe' | 'clock' | 'stop';
+  title: string;
+  sub: string;
+  late: boolean;
+}
+
+/** Zip 63: "Due in 5 hours" from this much time left. */
+export const DUE_IN_HOURS_FROM_MS = 6 * 3_600_000;
+
+export function payCountdown(payByIso: string, nowMs: number, tz: string, tournamentName: string): PayCountdown | null {
+  const by = Date.parse(payByIso);
+  if (!Number.isFinite(by)) return null;
+  const left = by - nowMs;
+  if (left <= 0) return { tone: 'red', icon: 'stop', title: 'Your payment is late', sub: `Pay now to stay in ${tournamentName}`, late: true };
+  const t = localParts(nowMs, tz);
+  const b = localParts(by, tz);
+  const days = Math.round((Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(t.year, t.month - 1, t.day)) / 86_400_000);
+  if (days > 3) return null;
+  const time = formatTime(payByIso, tz);
+  if (days >= 2) return { tone: 'amber', icon: 'owe', title: `${days} days left to pay`, sub: `Pay by ${formatWeekdayShort(payByIso, tz)} ${time}`, late: false };
+  if (days === 1) return { tone: 'amber', icon: 'owe', title: 'Payment due tomorrow', sub: `Pay by ${time}`, late: false };
+  const sub = `Pay by ${time} ${b.hour >= 17 ? 'tonight' : 'today'}`;
+  if (left >= DUE_IN_HOURS_FROM_MS) return { tone: 'red', icon: 'clock', title: 'Payment due today', sub, late: false };
+  if (left >= 3_600_000) {
+    const h = Math.floor(left / 3_600_000);
+    return { tone: 'red', icon: 'clock', title: `Due in ${h} ${h === 1 ? 'hour' : 'hours'}`, sub, late: false };
+  }
+  const m = Math.max(1, Math.floor(left / 60_000));
+  return { tone: 'red', icon: 'clock', title: `Due in ${m} ${m === 1 ? 'minute' : 'minutes'}`, sub, late: false };
+}
+
+/**
+ * Zip 63: the organizer's "Remind all unpaid" text for a tournament (mock 14), ending with the plain site address like every text the site
+ * prepares: "Hey, please pay for The Cold Open tonight so the courts are locked in for tomorrow. pickleball.juncaj.net". The words follow the
+ * clock (Eastern): Pay by today is "tonight" (5:00 PM or later) or "today"; tomorrow "by tomorrow night" or "by tomorrow"; later "by Monday".
+ * The tournament day: "tonight", "tomorrow", its weekday within 6 days ("Tuesday"), else its date ("Tue, Dec 1").
+ */
+export function tournamentRemindText(name: string, payByIso: string, finalDate: string, nowMs: number, tz: string, link: string): string {
+  const t = localParts(nowMs, tz);
+  const today = Date.UTC(t.year, t.month - 1, t.day);
+  const b = localParts(Date.parse(payByIso), tz);
+  const byDays = Math.round((Date.UTC(b.year, b.month - 1, b.day) - today) / 86_400_000);
+  const evening = b.hour >= 17;
+  const weekdayLong = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(new Date(iso));
+  const when = byDays <= 0 ? (evening ? 'tonight' : 'today') : byDays === 1 ? (evening ? 'by tomorrow night' : 'by tomorrow') : `by ${weekdayLong(payByIso)}`;
+  const d = dayParts(finalDate);
+  const dayDiff = Math.round((Date.UTC(d.year, d.month - 1, d.day) - today) / 86_400_000);
+  const noonIso = new Date(zonedTimeToUtc(d.year, d.month, d.day, 12, 0, tz)).toISOString();
+  const day = dayDiff <= 0 ? 'tonight' : dayDiff === 1 ? 'tomorrow' : dayDiff <= 6 ? weekdayLong(noonIso) : formatShortDate(noonIso, tz);
+  const forDay = day === 'tonight' ? 'tonight' : `for ${day}`;
+  return `Hey, please pay for ${name} ${when} so the courts are locked in ${forDay}. ${link}`;
 }

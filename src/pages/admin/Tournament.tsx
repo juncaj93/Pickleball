@@ -34,12 +34,15 @@ import {
   voteCountsLine,
   VOTE_LABEL,
   DEFAULT_SECOND_CREDIT_CENTS,
+  MAX_SPOTS,
+  type TournamentSignupView,
 } from '../../../shared/tournament';
 import { formatPrice, parseDollars } from '../../../shared/money';
-import { evensWarning, payByAt, payByDays, payByLabel, payByParts, ticketsLine } from '../../../shared/tournamentTickets';
+import { evensWarning, payByAt, payByDays, payByLabel, payByParts, ticketsLine, tournamentRemindText } from '../../../shared/tournamentTickets';
+import { siteAddress, smsHref } from '../../../shared/messages';
 import { AlertCard } from '../../AlertCard';
 import { localParts } from '../../../shared/time';
-import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
+import { api, ApiError, isIOS, useNow, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Sheet, useToast } from '../../ui';
 import { type DayLook, LevelList, MonthCalendar } from '../../tournament/parts';
 import type { AdminCtx } from '../Admin';
@@ -159,7 +162,8 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
       {claims.map((k) => (
         <TicketClaimCard key={k.playerId} ctx={ctx} t={t} k={k} />
       ))}
-      {t.status === 'tickets' && <TicketsCountCard ctx={ctx} t={t} />}
+      {/* Zip 63: while anyone who can make the date has not paid, mock 14's card (Remind all unpaid) takes the count card's place. */}
+      {t.status === 'tickets' && (unpaidOf(t, ctx.d.now).length > 0 ? <RemindUnpaidCard ctx={ctx} t={t} /> : <TicketsCountCard ctx={ctx} t={t} />)}
       {t.status === 'date_picked' || t.status === 'tickets' || t.status === 'canceled' ? <TicketsHomeCard ctx={ctx} t={t} /> : <SignupHomeCard ctx={ctx} t={t} />}
     </>
   );
@@ -287,13 +291,79 @@ function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView;
   );
 }
 
+/**
+ * Zip 63: who still has to pay: on the list, able to make the picked date, no ticket paid in full and no I paid waiting (that one is the
+ * organizer's to answer), and never the organizer (their seat is free). Only while a spot can still be bought: tickets open, before Pay by and
+ * before every spot is taken. Empty otherwise (the card hides).
+ */
+export function unpaidOf(t: AdminTournamentView, nowIso: string): TournamentSignupView[] {
+  if (t.status !== 'tickets' || !t.finalDate || !t.payBy || t.closed || payByPassed(t, nowIso)) return [];
+  const tickets = t.tickets ?? [];
+  if (lockedOf(t).length >= MAX_SPOTS) return [];
+  const byId = new Map(tickets.map((k) => [k.playerId, k]));
+  return t.signups.filter((s) => {
+    const k = byId.get(s.playerId);
+    if (k?.organizer) return false;
+    if (!s.dates.includes(t.finalDate!)) return false;
+    return !k || (k.place !== 'spot' && !ticketIsPaid(k) && k.claimCents === 0);
+  });
+}
+
+/**
+ * Zip 63 (mock 14): "THE COLD OPEN · TICKETS" with the unpaid count as a small chip, Paid, Not paid yet, Pay by, and Remind all unpaid, which
+ * works exactly like the game money one (src/pages/admin/MoneyTab.tsx): it opens Messages with every unpaid person's number and a ready text;
+ * the organizer taps Send. The site never sends a text. Hidden when everyone has paid (the count card shows instead).
+ */
+function RemindUnpaidCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const now = useNow(60_000);
+  const tz = ctx.d.group.timezone;
+  const unpaid = unpaidOf(t, ctx.d.now);
+  const paid = (t.tickets ?? []).filter((k) => !k.out && !k.organizer && ticketIsPaid(k)).length;
+  const phoneOf = new Map(ctx.d.players.map((p) => [p.id, p.phone]));
+  const phones = unpaid.map((s) => phoneOf.get(s.playerId)).filter((p): p is string => !!p);
+  const missing = unpaid.filter((s) => !phoneOf.get(s.playerId)).map((s) => s.name);
+  const body = tournamentRemindText(t.name, t.payBy!, t.finalDate!, now, tz, siteAddress(ctx.d.group.playerLink));
+  return (
+    <section className="tm-card tm-remind" aria-label={`${t.name} tickets, ${unpaid.length} unpaid`} data-tm-remind={unpaid.length}>
+      <div className="tm-card-head tm-remind-head">
+        <h3 className="tm-label tm-remind-label">{t.name} · Tickets</h3>
+        <span className="tm-chip tm-chip-unpaid" data-tm-unpaid-chip>
+          {unpaid.length} unpaid
+        </span>
+      </div>
+      <div className="tm-rows">
+        <div className="tm-row">
+          <span>Paid</span>
+          <b data-tm-row="paid">{paid}</b>
+        </div>
+        <div className="tm-row">
+          <span>Not paid yet</span>
+          <b data-tm-row="unpaid">{unpaid.length}</b>
+        </div>
+        <div className="tm-row">
+          <span>Pay by</span>
+          <b data-tm-row="payby">{payByLabel(t.payBy!, tz, t.finalDate)}</b>
+        </div>
+      </div>
+      {missing.length > 0 && (
+        <p className="tm-card-note" data-tm-remind-missing>
+          No number for {missing.join(', ')}
+        </p>
+      )}
+      <a className="btn block big tm-remind-btn" href={smsHref(phones.length ? phones : null, body, isIOS)} data-tm-remind-btn>
+        Remind all unpaid
+      </a>
+    </section>
+  );
+}
+
 /** Zip 56: "Tickets: 6 of 8 locked in" (the site's own alert card), while tickets are open. Tickets opens the list on the tournament page. */
 function TicketsCountCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const [open, setOpen] = useState(false);
   const locked = lockedOf(t).length;
   const full = locked >= t.size;
   const line = lineOf(t);
-  const sub = line.length ? `${line.length} on the waitlist (${line.filter(ticketIsPaid).length} paid)` : undefined;
+  const sub = line.length ? `${line.length} on standby (${line.filter(ticketIsPaid).length} paid)` : undefined;
   return (
     <>
       <AlertCard
@@ -374,7 +444,7 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
             </div>
             {line.length > 0 && (
               <div className="tm-row">
-                <span>Waitlist</span>
+                <span>Standby</span>
                 <b data-tm-row="line">
                   {line.length} ({line.filter(ticketIsPaid).length} paid)
                 </b>
@@ -614,7 +684,7 @@ function TicketsCard({ ctx, t, scrollRef }: { ctx: AdminCtx; t: AdminTournamentV
       )}
       <ul className="tm-tk">
         {locked.map((k) => row(k.playerId, k.name, paidWords(k), 'tm-tk-in'))}
-        {line.length > 0 && <li className="tm-tk-head">Waitlist</li>}
+        {line.length > 0 && <li className="tm-tk-head">Standby</li>}
         {line.map((k, i) => row(k.playerId, `${i + 1}. ${k.name}`, ticketIsPaid(k) ? (i === firstPaid ? 'Paid, first in line' : 'Paid') : k.claimCents > 0 ? 'I paid, waiting' : 'Not paid', '', k.name))}
         {tickets.filter((k) => !k.out && k.place === 'none' && k.claimCents > 0).map((k) => row(k.playerId, k.name, 'I paid, waiting'))}
         {others.length > 0 && <li className="tm-tk-head">No ticket yet</li>}
@@ -645,7 +715,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
           <div className="tm-rows">
             <div className="tm-row">
               <span>Where</span>
-              <b>{k?.place === 'spot' ? 'Locked in' : k?.place === 'line' ? 'Waitlist' : 'No spot yet'}</b>
+              <b>{k?.place === 'spot' ? 'Locked in' : k?.place === 'line' ? 'Standby' : 'No spot yet'}</b>
             </div>
             <div className="tm-row">
               <span>Paid</span>
@@ -1378,7 +1448,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         </p>
         {view.over > 0 && (
           <p className="tm-card-note tm-fin-over" data-tm-fin-over>
-            {view.over} over the 12 spots. Once 12 are locked in, the rest can join the waitlist.
+            {view.over} over the {MAX_SPOTS} spots. Once {MAX_SPOTS} are locked in, the rest can join standby.
           </p>
         )}
       </section>

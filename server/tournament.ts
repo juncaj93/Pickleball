@@ -734,6 +734,8 @@ export async function playerTournamentFor(
     openDates: openDatesOf(t, todayKey(ctx.nowMs, group.timezone)),
     finalDate: shownDate(t),
     names: rows.map((r) => r.display_name),
+    // Zip 63: the card's balls once a date is picked: how many on the list can make it (a count, never who).
+    ...(shownDate(t) ? { going: rows.filter((r) => storedDays(r.dates).includes(shownDate(t)!)).length } : {}),
     // Their own pick only (never the organizer's level for them).
     me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates), ...(tbd ? { formatVote: isFormatVote(mine.format_vote) ? mine.format_vote : ('either' as const) } : {}) } : null,
     ...(tbd ? { formatTbd: true as const } : {}),

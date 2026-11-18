@@ -151,8 +151,8 @@ export function decideFormat(counts: VoteCounts, previous: TournamentFormat | nu
 
 /**
  * Zip 60, the Finalize screen: what the plan fits for the players who can make a date, by the same smart plan the cards use (the players rounded
- * UP to an even number, plus 2 of room, at least 6, at most 12). `over`: the players beyond the most spots there are (12): they would start on the
- * waitlist once tickets open. (Below 12 the plan always has room: the spots grow as people lock in.)
+ * UP to an even number, plus 2 of room, at least 6, at most 16). `over`: the players beyond the most spots there are (16 since Zip 63): they
+ * would start on standby once tickets open. (Below 16 the plan always has room: the spots grow as people lock in.)
  */
 export function planFit(players: number): { fits: number; over: number } {
   const fits = plannedSize(players);
@@ -268,8 +268,11 @@ export function findPlan(size: Size, courts: number, minutes: number, start: num
 // players locked in, for the organizer only; the site never books anything.
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** The most spots there are: players lock in until 12 are in, then the waitlist starts. */
-export const MAX_SPOTS = 12;
+/** The most spots there are (Zip 63: a hidden cap of 16; it was 12): players lock in until 16 are in, then standby starts. Players never see the
+ *  number; the database triggers (migration 0026) refuse a 17th spot whatever code path writes it. */
+export const MAX_SPOTS = 16;
+/** Zip 63: the largest court plan (PLANS stops at 12 players). From 13 to 16 locked in the plan stays the 12-player plan (2 courts, 3 hours). */
+export const PLAN_MAX: Size = 12;
 /** A court for an hour (SITE_RULES: $48 for 2 hours, $60 for 2.5, $72 for 3). */
 export const COURT_CENTS_PER_HOUR = 24_00;
 /**
@@ -281,15 +284,15 @@ export const NIGHT_END_MINUTES = 22 * 60;
 /** What Create stores in the size and plan columns, which no screen asks for any more (they are NOT NULL): the cap and the whole night. */
 export const STORED_PLAN = { size: MAX_SPOTS, courts: 2, minutes: 180, start: NIGHT_START_MINUTES } as const;
 
-/** Planned size: the players locked in rounded UP to an even number, plus 2 spots of room; at least 6, at most 12. */
-export function plannedSize(locked: number): Size {
+/** Planned size: the players locked in rounded UP to an even number, plus 2 spots of room; at least 6, at most the cap (16; 12 before Zip 63). */
+export function plannedSize(locked: number): number {
   const even = Math.ceil(Math.max(0, locked) / 2) * 2;
-  return Math.min(MAX_SPOTS, Math.max(6, even + 2)) as Size;
+  return Math.min(MAX_SPOTS, Math.max(6, even + 2));
 }
 
 export interface SmartPlan {
-  /** The planned size, also the spots players see ("6 of 8"). */
-  size: Size;
+  /** The planned size, also the spots players see ("6 of 8"), 6 to 16. */
+  size: number;
   courts: number;
   minutes: number;
   /** Start, minutes after midnight Eastern (each size's best plan: 7:30 PM, 7:00 PM for 3 hours). */
@@ -299,7 +302,9 @@ export interface SmartPlan {
 /** The plan for the players locked in: 6 = 1 court 2.5 hours, 8 = 2 courts 2 hours, 10 = 2 courts 2.5 hours, 12 = 2 courts 3 hours. */
 export function smartPlan(locked: number): SmartPlan {
   const size = plannedSize(locked);
-  const p = PLANS[size].find((x) => x.best) ?? PLANS[size][0];
+  // Zip 63: 14 and 16 have no court plan of their own: the courts and hours stay the 12-player plan's.
+  const courts = PLANS[Math.min(size, PLAN_MAX) as Size];
+  const p = courts.find((x) => x.best) ?? courts[0];
   return { size, courts: p.courts, minutes: p.minutes, start: p.start };
 }
 
@@ -487,9 +492,9 @@ export type TicketPlaceView = 'spot' | 'line' | 'none';
  * everyone else, the waitlist too (Alex: Paid / Not paid is on the organizer's screen only). Never anyone's amounts.
  */
 export interface PlayerTicketsView {
-  /** Spots players see: the planned size (6 to 12, from the players locked in; "6 of 8"). */
+  /** Spots players see: the planned size (6 to 16, from the players locked in; "6 of 8"). */
   size: number;
-  /** Every spot is taken (12 locked in): the waitlist is open. */
+  /** Every spot is taken (16 locked in, Zip 63): standby is open. */
   full: boolean;
   /** This player's ticket price: the tournament's flat price, $0 for the organizer (who pays the venue, not the group). */
   priceCents: number;
@@ -526,6 +531,9 @@ export interface PlayerTournamentView {
   finalDate: string | null;
   /** Everyone on the list, in sign-up order (names only), for "See who's signed up" and the count. */
   names: string[];
+  /** Zip 63: once a date is picked, how many on the list can make it (the card's pickleballs: one per player who can make that date). A count
+   *  only, never who. Left out before a date is picked (then the card draws one ball per sign-up). */
+  going?: number;
   /** This player's own sign-up (null: not on the list). Their own pick only, never the organizer's level. `formatVote`: their own format vote
    *  (Zip 60; only while the vote is open, never anyone else's). */
   me: { level: number; dates: string[]; formatVote?: FormatVote } | null;

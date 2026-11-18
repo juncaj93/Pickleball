@@ -746,3 +746,55 @@ dialog.sheet.tm-page {
     font-size: 0.82rem;
   }
 }
+
+/* ---------- Zip 63 (mock 14): "THE COLD OPEN · TICKETS", the unpaid chip, three rows and Remind all unpaid ---------- */
+.tm-remind {
+  padding: 0 16px 14px;
+}
+.tm-remind-head {
+  min-height: 42px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.tm-remind-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-chip.tm-chip-unpaid {
+  flex: 0 0 auto;
+  min-height: 25px;
+  padding: 2px 11px;
+  background: #fcf0d2;
+  color: #7b4a03;
+}
+:root[data-theme='dark'] .tm-chip.tm-chip-unpaid {
+  background: #33270b;
+  color: #f2c25c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tm-chip.tm-chip-unpaid {
+    background: #33270b;
+    color: #f2c25c;
+  }
+}
+.tm-remind .tm-rows {
+  margin-top: 2px;
+}
+.tm-remind .tm-row {
+  min-height: 44px;
+}
+.tm-remind-btn {
+  margin-top: 14px;
+  min-height: 54px;
+  text-decoration: none;
+}
+/* Mock 14 draws Remind all unpaid in the site's green (the color cleanup's texting purple would win otherwise). */
+a.btn.tm-remind-btn,
+:root[data-color-cleanup] a.btn.tm-remind-btn[href^='sms:'] {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
+}

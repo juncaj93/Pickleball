@@ -10,6 +10,16 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 63 (🎾63.tickets): the pay countdown at the top of Vic's Home. Each is Tickets open (6 paid) with Pay by set from now; the tournament is
+  // the day after Pay by. View as Vic to see the alert; Pay opens the same sheet as Lock my spot.
+  { stage: 'pay_3d', label: 'Countdown: 3 days left', line: 'Pay by is 7:00 PM three days from today. View as Vic: amber 3 days left to pay.' },
+  { stage: 'pay_2d', label: 'Countdown: 2 days left', line: 'Pay by is 7:00 PM two days from today: amber 2 days left to pay.' },
+  { stage: 'pay_1d', label: 'Countdown: due tomorrow', line: 'Pay by is 7:00 PM tomorrow: amber Payment due tomorrow.' },
+  { stage: 'pay_today', label: 'Countdown: due today', line: 'Pay by is tonight, 6.5 hours or more from now: red Payment due today.' },
+  { stage: 'pay_hours', label: 'Countdown: due in 5 hours', line: 'Pay by is 5 hours 20 minutes from now: red Due in 5 hours.' },
+  { stage: 'pay_minutes', label: 'Countdown: due in 42 minutes', line: 'Pay by is 42 minutes from now: red Due in 42 minutes, counting down while Home is open.' },
+  { stage: 'pay_late', label: 'Countdown: late', line: 'Pay by passed an hour ago and Wren backed out after it (a spot is free): red Your payment is late, Pay now.' },
+  { stage: 'pay_closed', label: 'Countdown: late, no spot free', line: 'Pay by passed an hour ago and no spot was freed: tickets are closed for Vic, so no countdown (the card says Tickets closed).' },
   // Zip 62 (🎾62.speed): The Cold Open as it is on live, to feel the speed (the format above does not apply).
   { stage: 'speed_check', label: 'Speed check (like live)', line: 'The Cold Open as on live: Everyone, the vote open, 9 on the list (everyone but you). Open Home and View as Vic: the card draws with the rest.' },
   // Zip 60 (🎾60.formatvote): the players vote the format. These build "The Cold Open" on Let players vote; the format above does not apply.
@@ -20,17 +30,27 @@ const STAGES = [
   { stage: 'signup', label: 'Sign-up open (sign-up finish)', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. View as Vic, Sign up, watch the ticket punch. Pick the format above first.' },
   // Alex: picking the date opens tickets.
   { stage: 'date_picked', label: 'Date picked, tickets open', line: '8 on the list, Sage set to 3.4, the date most can play picked. Nobody has paid yet. Vic is not on the list.' },
-  // Zip 56, piece 2. The spots follow the players locked in (6 to 12); with the 10 names the waitlist (after 12) cannot be shown.
+  // Zip 56, piece 2. The spots follow the players locked in (6 to 16 since Zip 63); with the 10 names standby (after 16) cannot be shown.
   { stage: 'tickets_open', label: 'Tickets open, 6 paid', line: '6 locked in, 6 of 8. Vic, Zoe and Reese have no ticket yet: view as Vic to Lock my spot.' },
   { stage: 'all_locked', label: 'All locked in', line: 'All 10 names locked in (your own seat is free), 10 of 12.' },
   { stage: 'odd', label: '7 locked in after Pay by', line: 'Pay by has passed with 7 locked in: Home shows the evens warning.' },
   { stage: 'canceled', label: 'Canceled', line: '6 paid, then canceled: every paid ticket is credit now. Players who were on the list see Canceled.' },
   { stage: 'rescheduled', label: 'Rescheduled', line: '6 paid, then rescheduled: tickets stay held, players pick their dates again.' },
   // Zip 59: the polish piece. 
-  { stage: 'closed', label: 'Tickets closed (Pay by passed)', line: 'Pay by passed an hour ago: no new tickets, no waitlist. View as Vic: Tickets closed.' },
+  { stage: 'closed', label: 'Tickets closed (Pay by passed)', line: 'Pay by passed an hour ago: no new tickets, no standby. View as Vic: Tickets closed.' },
   { stage: 'hidden', label: 'Canceled and hidden', line: 'Out of Home. Settings, Advanced, Hidden tournaments lists it with Restore. Cancel above, then Hide, does the same.' },
   { stage: 'none', label: 'No tournament', line: 'Nothing open, to try Create tournament.' },
 ] as const;
+
+/** Zip 63: the ball looks the 10 names cannot make (total, gold): the brief's 3, 8, 10, 12 and 16, and 14. */
+const BALL_LOOKS: [number, number][] = [
+  [3, 1],
+  [8, 5],
+  [10, 3],
+  [12, 7],
+  [14, 9],
+  [16, 12],
+];
 
 /** What the tournament is at now, in a few words. */
 const nowWords: Record<string, string> = {
@@ -140,6 +160,24 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
           </div>
         </section>
       )}
+      {/* Zip 63: the preview has 10 names, so a real card never shows 12 to 16 balls. These links draw that many on Vic's card (look only, this
+          phone, until ?balls=off); every other word and button is the real one. */}
+      <section className="tm-card" aria-label="Ball look" data-tm-test-balls>
+        <div className="tm-card-head">
+          <h3 className="tm-label">Ball look</h3>
+        </div>
+        <div className="name-grid">
+          {BALL_LOOKS.map(([n, g]) => (
+            <a key={n} className="btn secondary" href={`/?as=Vic&balls=${n},${g}`} data-tm-test-ball={n}>
+              {n} ({g} gold)
+            </a>
+          ))}
+          <a className="btn secondary" href="/?as=Vic&balls=off" data-tm-test-ball="off">
+            Real count
+          </a>
+        </div>
+        <p className="tm-card-note">Look only, as Vic on this phone: the card draws that many balls with that many gold. Start from a Tickets open stage.</p>
+      </section>
       <section className="tm-card" aria-label="View as">
         <div className="tm-card-head">
           <h3 className="tm-label">View as</h3>
