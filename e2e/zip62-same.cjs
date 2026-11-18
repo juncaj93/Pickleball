@@ -1,7 +1,8 @@
 /* Zip 62 (🎾62.speed): with the tournament reads moved into the stamp's own trip, every answer is still byte for byte main's. This runs
  * main's server code (a git checkout, path in MAIN_DIR) and this branch's on the very same saved fake worlds (local sqlite files, never
  * Cloudflare): every Tournament test stage with the switch on, three with it off, Only me at two stages, a piece 1 date pick that opens
- * tickets on its first read, and the night over with a paid hold in line (read at 11:00 PM: the hold comes back as credit). For each: the
+ * tickets on its first read, the night over with a paid hold in line (read at 11:00 PM: the hold comes back as credit), and the organizer
+ * found by the name in Settings or with a saved player that is gone. For each: the
  * dashboard and its check, History, Money, View as data, a phone with no name, and for every fixed name the Home and its check, the
  * organizer's own phone, View as, Pretend it's... at two moments and the read-only PIN (93 answers a state).
  *

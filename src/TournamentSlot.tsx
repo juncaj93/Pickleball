@@ -26,15 +26,24 @@ const Nothing = (_: HomeProps) => null;
 let loaded: HomeModule | null = null;
 /** Zip 62: the early fetch started by preloadTournamentHome, if any (null again if it failed: the card's own fetch then tries, as before). */
 let early: Promise<HomeModule | null> | null = null;
+/** Zip 62: an earlier try to fetch the card's file failed (its style file may then be one Vite will never fetch again). */
+let triedAndFailed = false;
 const fetchHome = (): Promise<HomeModule> =>
-  import('./tournament/TournamentHome').then(async (m) => {
-    // Vite's own loader never fetches a style file again once it failed (a weak signal when the page opened): the card's style file is
-    // fetched again first, as the organizer file's loader does (src/adminChunk.ts), so a card is never drawn without its look. If that fails
-    // too, no card shows (as before), and the next reload brings it.
-    await refetchFailedStyles();
-    loaded = m;
-    return m;
-  });
+  import('./tournament/TournamentHome').then(
+    async (m) => {
+      // Vite's own loader never fetches a style file again once it failed (a weak signal when the page opened). So after a failed try, the
+      // style files that failed are fetched again first, as the organizer file's loader does (src/adminChunk.ts): a card is never drawn without
+      // its look; if that fails too, no card shows (as before) and the next reload brings it. A first try that succeeds waited for its own style
+      // file already, so it waits for nothing else.
+      if (triedAndFailed) await refetchFailedStyles();
+      loaded = m;
+      return m;
+    },
+    (err: unknown) => {
+      triedAndFailed = true;
+      throw err;
+    },
+  );
 
 /** Zip 62: start fetching the card's file now, if it is not here or on its way. Never throws; a failure is forgotten. */
 export function preloadTournamentHome(): void {

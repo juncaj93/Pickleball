@@ -5993,7 +5993,11 @@ name), now in the same trip; a style file that failed at page open could have le
 again first); the old-way test proved less than it said (it now checks that the old way reads the row on its own and the single trip never
 does, and the proof against main is committed as e2e/zip62-same.cjs); Only me rows were read for phones that can never see them (now
 skipped); the row read and the pick now end their order on the id, so they provably pick the same tournament. Found during the build: "Pretend
-it's..." answers every batch with nothing, so the look-only databases keep the old reads.
+it's..." answers every batch with nothing, so the look-only databases keep the old reads. A second pass on those fixes (it ran main's code
+and this code on 31 states, 9 of its own: the organizer found by name, a saved organizer player that is gone, two players with the
+organizer's name, Only me with a canceled Everyone one behind it): nothing serious left, 0 answers different. Its one low point is fixed: the
+card's loader fetches failed style files again only after a failed try, so it never waits on another file's style (the organizer's phone
+fetches the organizer file in the background).
 
 ### Tests
 - Unit: tests/zip62-speed.test.ts (40): at every Tournament test stage no screen makes more trips with the switch on than off (the checks
@@ -6001,9 +6005,15 @@ it's..." answers every batch with nothing, so the look-only databases keep the o
   one read at a time (forced by a database that refuses the combined trip) at 15 stages; Only me: every other player and a phone with no name get byte for byte the answers of a world
   with no tournament (and never its name or id); "Pretend it's..." and the read-only PIN get the organizer's very tournament view (this test
   fails without the look-only rule: Pretend's batches answer nothing); the Hidden check plans as an index lookup; Hide and Restore still work.
-- By hand: `MAIN_DIR=<main checkout> node e2e/zip62-same.cjs` runs main's code and this code on 22 saved states (93 answers each: every name,
-  the organizer's phone, View as, Pretend at two moments, the read-only PIN): 22 of 22 the same, apart from the id SQLite makes at random
+- By hand: `MAIN_DIR=<main checkout> node e2e/zip62-same.cjs` runs main's code and this code on 27 saved states (93 answers each: every name,
+  the organizer's phone, View as, Pretend at two moments, the read-only PIN): 27 of 27 the same, apart from the id SQLite makes at random
   when a hold comes back.
-- Browser: e2e/zip62.cjs on the REAL built site (A to F: no placeholder and the card with the fresh games at 390/360/320, light and dark,
-  both stages; the first look as before; the same card both ways; switched off nothing fetched and the memory forgotten; View as; no em
-  dashes).
+- Unit, full run on the final code: 194 files, 3,561 passed, 2 skipped, none failed; `npx tsc -b` clean.
+- Browser: e2e/zip62.cjs 17 of 17 on the REAL built site (A to G: no placeholder and the card with the fresh games at 390/360/320, light and
+  dark, both stages; the first look as before; the same card both ways; switched off nothing fetched and the memory forgotten; View as; no
+  em dashes; a style file failing once at page open never leaves a card without its look, and this check fails without the fix).
+  Also green: zip55 91, zip56 57, zip59 12, zip60 29, zip12 26, zip12-admin 16, zip18 103, held 81; zip55-off and zip56-off 47 each (switch
+  OFF equals main `4c427ab`). e2e/live.cjs: 22 of 26, and the same 4 Drop out checks fail on main's own code too (they depend on the
+  calendar date), so not from this change.
+- By hand, e2e/zip62-same.cjs: 27 states of 27 the same as main (the organizer found by name and a saved organizer player that is gone
+  added after the second review).

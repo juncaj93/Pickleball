@@ -67,3 +67,15 @@ await stage('tickets_open');
 const t = raw.raw.prepare('SELECT final_date FROM tournaments LIMIT 1').get() as any;
 raw.raw.exec("UPDATE tournament_tickets SET place = 'line' WHERE id = (SELECT id FROM tournament_tickets WHERE place = 'spot' AND paid_cents > 0 ORDER BY rowid DESC LIMIT 1)");
 save(`after_night__${t.final_date}`);
+// Last (they change the group): the organizer found by the name in Settings (no saved player), and a saved organizer player that is gone.
+await stage('vote_open');
+raw.raw.prepare("UPDATE tournaments SET visibility = 'me'").run();
+raw.raw.prepare('UPDATE groups SET organizer_player_id = NULL').run();
+save('byname_onlyme_vote_open');
+for (const s of ['tickets_open', 'closed', 'canceled']) {
+  await stage(s);
+  save(`byname_${s}`);
+}
+await stage('tickets_open');
+raw.raw.prepare("UPDATE groups SET organizer_player_id = 'gone-player'").run();
+save('gone_saved_tickets_open');
