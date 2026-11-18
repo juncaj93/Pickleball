@@ -171,7 +171,7 @@ async function main() {
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
   const noDash = async (page, where) => {
     const text = await page.evaluate(() => document.body.innerText);
-    assert(!text.includes('—'), `an em dash on ${where}`);
+    assert(!text.includes('\u2014'), `an em dash on ${where}`);
   };
   const openSchedule = async (a) => {
     await a.page.locator('.tabbar button', { hasText: 'Settings' }).click();

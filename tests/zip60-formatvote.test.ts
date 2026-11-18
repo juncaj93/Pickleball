@@ -71,7 +71,7 @@ describe('the rule (a pure function)', () => {
   });
   it('no em dashes in the new words', () => {
     const all = JSON.stringify([VOTE_ROWS, formatAlertWords('X', '2026-12-17', 'doubles', 'vote'), formatAlertWords('X', '2026-12-17', 'doubles', 'tie')]);
-    expect(all).not.toContain('—');
+    expect(all).not.toContain('\u2014');
   });
 });
 
@@ -322,7 +322,7 @@ describe('History and the words', () => {
     const text = activityText({ id: 'x', actorLabel: 'organizer', action: 'tournament_format', details: d, createdAt: '2026-10-26T16:00:00.000Z', sessionStartsAt: null }, 'America/Detroit', 'Alex');
     expect(text).toContain('tie rule');
     expect(text).toContain('Locked 1, Americano 1, Either 1');
-    expect(text).not.toContain('—');
+    expect(text).not.toContain('\u2014');
   });
 });
 

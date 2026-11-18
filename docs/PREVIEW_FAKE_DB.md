@@ -265,3 +265,15 @@ tournament card (Tickets, the plan line, Your cost if it fills). `-- --zip55` bu
 - Try it: on Home, the tournament's name opens its page (the Plan card). Then **View as Parker**: Lock my spot, the Pay sheet, I paid; back on
   Admin, the amber card "Parker tapped I paid ($16), not confirmed." with Paid. View as Parker again: Drop out, Yes: $16 back as credit.
 - Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm --zip55 --zip56`; `node e2e/zip56.cjs` checks the screens.
+
+Zip 60 (🎾60.formatvote, Wed Nov 18, 2026): no new names, migration `0025_format_vote` (two nullable columns: `tournaments.format_source` and
+`tournament_signups.format_vote`; applied to `pickleball-preview` first). `npm run db:seed:preview` now opens CALM with the Tournaments row on and
+**NO tournament open**, so Create tournament (Settings > Schedule) starts on "Let players vote". `-- --zip56` builds Zip 56's start (the Locked
+doubles Winter Classic with the date picked), `-- --zip55` Zip 55's.
+- **Tournament test** stages added (all on "The Cold Open", Everyone): **Format vote open** (Parker votes Locked doubles, Rowan Americano, Sage
+  Either; Vic, Zoe, Reese and Alex are not on the list: view as Vic, Sign up), **Date locked, clear majority** (Americano wins; Vic sees the alert
+  "Most players voted Americano."; Alex's card shows Locked 1, Americano 2, Either 2) and **Date locked, tie** (Locked 1, Americano 1, Either 2:
+  the first tournament goes to Locked doubles; the alert says only the format). The date is locked by the real Pick date code.
+- Try it (about 3 taps): Create a tournament (Settings > Schedule; the default is Let players vote), View as Vic and Sign up (the three format
+  rows under the dates), as Alex Pick date and read the counts on the card, then View as Vic: the alert at the top of Home.
+- Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm --zip55 --zip60`; `node e2e/zip60.cjs` checks the screens.
