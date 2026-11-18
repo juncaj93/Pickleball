@@ -612,6 +612,37 @@ async function main() {
     await shot(a.page, 'K-night-over-ticket');
     await a.ctx.close();
   });
+  await check('K canceled: no Take off and no level pencils; Tournaments off for players: no Mark paid (the server refuses each of them)', async () => {
+    await stage('canceled');
+    const a = await adminPage();
+    await a.page.locator('[data-tm-open-page]').click();
+    await a.page.locator('dialog[open] [data-tm-page]').waitFor({ timeout: 15000 });
+    assert((await a.page.locator('dialog[open] [data-tm-pencil]').count()) === 0, 'no level pencils on a canceled tournament');
+    await a.page.waitForTimeout(600);
+    await a.page.locator('dialog[open] [data-tm-ticket-row="Vic"]').click();
+    await a.page.locator('dialog[open] [data-tm-ticket-sheet="Vic"]').waitFor({ timeout: 10000 });
+    assert((await a.page.locator('dialog[open] [data-tm-ticket-off], dialog[open] [data-tm-ticket-mark]').count()) === 0, 'no Take off, no Mark paid');
+    await a.ctx.close();
+    await stage('tickets_open');
+    const b = await newPage({ organizer: true });
+    // Off for players (the organizer on the private link): the answer stood in for, as the server sends it then.
+    await b.page.route('**/api/admin/dashboard', async (route) => {
+      const res = await route.fetch();
+      const data = await res.json();
+      delete data.tournamentsForAll;
+      await route.fulfill({ response: res, json: data });
+    });
+    await b.page.goto(`${BASE}/admin`);
+    await b.page.locator('[data-tm-tickets]').waitFor({ timeout: 30000 });
+    await b.page.locator('[data-tm-tickets]').click();
+    await b.page.locator('dialog[open] [data-tm-card="tickets"]').waitFor({ timeout: 10000 });
+    await b.page.waitForTimeout(600);
+    await b.page.locator('dialog[open] [data-tm-ticket-row="Vic"]').click();
+    await b.page.locator('dialog[open] [data-tm-ticket-sheet="Vic"]').waitFor({ timeout: 10000 });
+    assert((await b.page.locator('dialog[open] [data-tm-ticket-mark]').count()) === 0, 'no Mark paid while players cannot see it');
+    assert((await b.page.locator('dialog[open] [data-tm-ticket-off]').count()) === 1, 'Take off is still there');
+    await b.ctx.close();
+  });
   await check('K a level is picked once: Vic signs up at 3.4, backs out; signing up again skips the level (it stays 3.4); Edit sign-up is dates only', async () => {
     await stage('signup');
     const id = (await dash()).tournament.id;

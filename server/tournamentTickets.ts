@@ -32,6 +32,7 @@ import {
   playerTarget,
   salesClosed,
   statusOf,
+  tournamentsFlags,
   type TournamentActor,
   type TournamentRow,
 } from './tournament';
@@ -315,8 +316,10 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
     if (!signup || signup.status !== 'in') throw new HttpError(409, 'not_signed_up', `${name} is not on the list. Look again.`);
     if (k && k.claim_cents > 0) throw new HttpError(409, 'claim_waiting', `${name} tapped I paid. Answer that instead.`);
     const isOrganizer = playerId === (await organizerIdOf(ctx.db, group));
-    // Review: on Only me nobody else can see it, so nobody else can hold a ticket on it (Everyone with tickets open never goes back to Only me).
-    if (t.visibility !== 'all' && !isOrganizer) throw new HttpError(409, 'only_me', 'Only you can see it. Show it to everyone first.');
+    // Reviews: nobody gets a ticket on a tournament they cannot see: not on Only me, and not while Tournaments is off for players (the organizer
+    // can still work through the private link then). Everyone with tickets open never goes back to Only me.
+    if (!isOrganizer && t.visibility !== 'all') throw new HttpError(409, 'only_me', 'Only you can see it. Show it to everyone first.');
+    if (!isOrganizer && !(await tournamentsFlags(ctx, group.id)).forAll) throw new HttpError(409, 'switch_off', 'Tournaments are off for players. Turn the switch on first.');
     const price = k ? k.price_cents : isOrganizer ? 0 : t.ticket_cents;
     const owed = k ? ticketOwed(money(k)) : price;
     if (owed === 0) return { ok: true, changed: false, ...answerOf(k) };

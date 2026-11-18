@@ -653,10 +653,12 @@ describe('who may see it: nobody else gets any tournament data', () => {
     expect(res.data.tournament).toBeUndefined();
     for (const word of ['winter classic', ctx.tid, 'tournament']) expect(res.text.toLowerCase()).not.toContain(word);
     const stamp = (await casey.call('GET', '/api/group/version')).data.v;
-    // A ticket change made on the organizer's private link (X-Tournaments: on) moves nothing a switched-off phone can see.
+    // A ticket change made on the organizer's private link (X-Tournaments: on) moves nothing a switched-off phone can see; Mark paid for a
+    // player is refused while players cannot see it (third review).
     const link = { 'X-Tournaments': 'on' };
-    const marked = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/ticket`, { playerId: ctx.byName.Devon, action: 'mark_paid', cents: 1600 }, link);
-    expect(marked.status, marked.text).toBe(200);
+    const moved = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: '2026-11-09T00:00:00.000Z' }, link);
+    expect(moved.status, moved.text).toBe(200);
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/ticket`, { playerId: ctx.byName.Devon, action: 'mark_paid', cents: 1600 }, link)).status).toBe(409);
     expect((await casey.call('GET', '/api/group/version')).data.v).toBe(stamp);
     expect(withoutIds((await casey.call('GET', '/api/group')).text)).toBe(withoutIds(res.text));
     for (const [path, body] of [
@@ -1017,5 +1019,65 @@ describe('second review fixes (Zip 56)', () => {
     ctx.app.now = Date.parse('2026-11-13T17:00:00.000Z'); // Fri Nov 13, 12:00 PM Eastern
     expect(await card(ctx, 'Blair')).toMatchObject({ status: 'tickets', tickets: { closed: true } });
     expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', over: true });
+  });
+});
+
+describe('third review fixes (Zip 56)', () => {
+  it('Mark paid never gives a ticket to a player who cannot see it: not while Tournaments is off for players (the organizer on the private link)', async () => {
+    const ctx = await world({ signUp: ['Blair'], open: false });
+    // Off for everyone; the organizer keeps working through the private link.
+    expect((await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: false })).status).toBe(200);
+    const link = { 'X-Tournaments': 'on' };
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE }, link)).status).toBe(200);
+    const r = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/ticket`, { playerId: ctx.byName.Blair, action: 'mark_paid', cents: 1600 }, link);
+    expect(r.status).toBe(409);
+    expect(r.data.message).toBe('Tournaments are off for players. Turn the switch on first.');
+    expect(ticketRow(ctx, 'Blair')).toBeUndefined();
+    // On for everyone again: Blair can see it, and Mark paid works.
+    expect((await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: true })).status).toBe(200);
+    expect((await answer(ctx, 'Blair', 'mark_paid', 1600)).status).toBe(200);
+    expect(ticketRow(ctx, 'Blair')).toMatchObject({ place: 'spot', paid_cents: 1600 });
+    books(ctx);
+  });
+
+  it('the price, the format and Only me stay free until players may hold tickets (open on Everyone, or a player holds one), also after a Reschedule', async () => {
+    const ctx = await world({ signUp: ['Alex', 'Blair'], open: false });
+    const tour = `/api/admin/tournament/${ctx.tid}`;
+    // Only me, the date (tickets open privately), Reschedule, then Everyone: nobody ever bought in, so every setting is free.
+    expect((await ctx.organizer.call('PUT', `${tour}/visibility`, { visibility: 'me' })).status).toBe(200);
+    expect((await ctx.organizer.call('PUT', `${tour}/date`, { date: DATE })).status).toBe(200);
+    expect((await ctx.organizer.call('POST', `${tour}/reschedule`, {})).status).toBe(200);
+    expect((await ctx.organizer.call('PUT', `${tour}/visibility`, { visibility: 'all' })).status).toBe(200);
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'rescheduled', visibility: 'all', settingsLocked: false, formatLocked: false });
+    expect((await ctx.organizer.call('PUT', tour, { ...BASE, ticketCents: 2000 })).status).toBe(200);
+    expect((await ctx.organizer.call('PUT', `${tour}/visibility`, { visibility: 'me' })).status).toBe(200);
+    // Back on Everyone and the date picked: tickets are open on Everyone, so the settings lock.
+    expect((await ctx.organizer.call('PUT', `${tour}/visibility`, { visibility: 'all' })).status).toBe(200);
+    expect((await ctx.organizer.call('PUT', `${tour}/date`, { date: DATE })).status).toBe(200);
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', settingsLocked: true, formatLocked: true });
+    // Blair takes a ticket at $20; after a Reschedule it stays locked (a player holds a ticket).
+    await giveCredit(ctx, 'Blair', 2000);
+    const locked = await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: 2000 });
+    expect(locked.status, locked.text).toBe(200);
+    expect((await ctx.organizer.call('POST', `${tour}/reschedule`, {})).status).toBe(200);
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'rescheduled', settingsLocked: true, formatLocked: true });
+    expect((await ctx.organizer.call('PUT', tour, { ...BASE, ticketCents: 1600 })).data.message).toBe('Tickets have been sold. The price stays $20.');
+    expect((await ctx.organizer.call('PUT', `${tour}/visibility`, { visibility: 'me' })).data.message).toBe('Players have tickets. It stays on Everyone.');
+    books(ctx);
+  });
+
+  it('the piece 1 upgrade is guarded on the price too: an Edit landing in between wins, and the History line names the price that opened tickets', async () => {
+    const ctx = await world({ signUp: ['Blair'], open: false });
+    const blair = await playerPhone(ctx, 'Blair');
+    ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'date_picked', final_date = ?, date_picked_at = ? WHERE id = ?").run(DATE, '2026-10-26T15:00:00.000Z', ctx.tid);
+    const undo = raceAt(ctx, /UPDATE tournaments SET status = 'tickets', pay_by/, () => ctx.app.db.raw.prepare('UPDATE tournaments SET ticket_cents = 2000 WHERE id = ?').run(ctx.tid));
+    await blair.call('GET', '/api/group');
+    undo();
+    // The read that raced wrote nothing; the next build of the view (the same answer) opened tickets at $20.
+    const lines = ((await ctx.organizer.call('GET', '/api/admin/activity')).data.entries as { action: string; details: Record<string, unknown> }[]).filter((e) => e.action === 'tournament_tickets_opened');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].details).toMatchObject({ priceCents: 2000 });
+    expect((await card(ctx, 'Blair')).tickets).toMatchObject({ priceCents: 2000 });
+    books(ctx);
   });
 });

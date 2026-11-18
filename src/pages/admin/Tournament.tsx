@@ -615,7 +615,9 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
           ) : (
             t.status === 'tickets' &&
             !t.closed &&
+            // Nobody gets a ticket on a tournament they cannot see (Only me, or Tournaments off for players): the server refuses it too.
             t.visibility === 'all' &&
+            ctx.d.tournamentsForAll === true &&
             owed > 0 &&
             !k?.organizer && (
               <button type="button" className="btn block" disabled={busy} onClick={() => void act('mark_paid', owed, `${name} marked paid`)} data-tm-ticket-mark>
@@ -623,7 +625,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
               </button>
             )
           )}
-          {s && !t.closed && (
+          {s && !t.closed && t.status !== 'canceled' && (
             <button type="button" className="tm-cancel-link" disabled={busy} onClick={() => setAskOff(true)} data-tm-ticket-off>
               Take {name} off the list
             </button>
@@ -1037,12 +1039,15 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
                 <b className="tm-lrow-level" data-tm-level>
                   {levelShort(s.level)}
                 </b>
-                <button type="button" className="tm-pencil" aria-label={`Change ${s.name}'s level`} onClick={() => setLevelFor(s.playerId)} data-tm-pencil>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M4 20h4L19 9l-4-4L4 16v4z" />
-                    <path d="M13.5 6.5l4 4" />
-                  </svg>
-                </button>
+                {/* A canceled tournament's levels stay as they are (the server refuses a change). */}
+                {!canceled && (
+                  <button type="button" className="tm-pencil" aria-label={`Change ${s.name}'s level`} onClick={() => setLevelFor(s.playerId)} data-tm-pencil>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 20h4L19 9l-4-4L4 16v4z" />
+                      <path d="M13.5 6.5l4 4" />
+                    </svg>
+                  </button>
+                )}
               </li>
             ))}
           </ul>
