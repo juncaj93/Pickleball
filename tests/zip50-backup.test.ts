@@ -104,14 +104,14 @@ beforeAll(async () => {
 }, 180_000);
 
 describe('Zip 50: the backup holds the switches, price locks, alert settings and sign-ins (file version 2)', () => {
-  it('the file is version 2 and holds every table but the short-lived counters', () => {
-    expect(BACKUP_VERSION).toBe(2);
-    expect(download.version).toBe(2);
+  it('the file is version 3 (Zip 56) and holds every table but the short-lived counters', () => {
+    expect(BACKUP_VERSION).toBe(3);
+    expect(download.version).toBe(3);
     expect([...BACKUP_TABLES]).toEqual(TABLES);
     for (const t of NEW) expect(BACKUP_TABLES as readonly string[], t).toContain(t);
-    // Zip 55: the three tournament tables are left out of the file for now (piece 1 holds no money; Time Travel keeps them; Alex decides).
-    // Zip 56: the tickets too, until Alex decides whether the four join the file (a version 3 file): a question in the Zip 56 report.
-    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events', 'tournament_level_history', 'tournament_signups', 'tournament_tickets', 'tournaments']);
+    // Zip 56 (Alex): the four tournament tables joined the file (version 3); only the short-lived counters stay out.
+    for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) expect(BACKUP_TABLES as readonly string[], t).toContain(t);
+    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events']);
     // The world really has what the old file lost.
     expect(locksBefore.length).toBe(11);
     expect(switchesBefore.length).toBeGreaterThan(10);
@@ -229,15 +229,27 @@ describe('Zip 50: the backup holds the switches, price locks, alert settings and
     for (const t of NEW) expect(rowsOf(copy, t), t).toEqual([]);
   });
 
-  it('a version 2 file missing a new table, or an unknown version, is refused with a plain message', () => {
+  it('a version 3 file missing a new table, or an unknown version, is refused with a plain message', () => {
     const missing = JSON.parse(JSON.stringify(download));
     delete missing.tables.task_log;
     expect(() => backupToSql(missing)).toThrow('missing the task_log table');
-    expect(() => backupToSql({ ...download, version: 3 })).toThrow('version 3');
+    const noTickets = JSON.parse(JSON.stringify(download));
+    delete noTickets.tables.tournament_tickets;
+    expect(() => backupToSql(noTickets)).toThrow('missing the tournament_tickets table');
+    expect(() => backupToSql({ ...download, version: 4 })).toThrow('version 4');
+  });
+
+  it('a version 2 file (before Zip 56) still restores, its tournament tables empty; a version 3 file brings them back', () => {
+    const v2 = JSON.parse(JSON.stringify(download));
+    v2.version = 2;
+    for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) delete v2.tables[t];
+    const copy = restoreEmpty(backupToSql(v2));
+    for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) expect(rowsOf(copy, t), t).toEqual([]);
+    expect(rowsOf(copy, 'task_log').length).toBe(download.tables.task_log.length);
   });
 
   it('the read-only download has no sign-ins and no PIN, and the restore script refuses it (Audit C F-11)', () => {
-    expect(roDownload.version).toBe(2);
+    expect(roDownload.version).toBe(3);
     expect(roDownload.tables.admin_sessions).toEqual([]);
     expect(roDownload.tables.groups[0].admin_pin_hash).toBe('');
     // Its switches and price locks are there (View as uses this same file).

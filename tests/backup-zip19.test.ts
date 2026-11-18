@@ -299,12 +299,13 @@ describe('safety', () => {
     expect(r.made).toBe(true);
     expect(live.seen).toEqual({ calls: 3, statements: 3 });
     expect(back.seen).toEqual({ calls: 3, statements: 15 });
-    // D1 refuses one statement over 100,000 characters: the measure stays far under it.
+    // D1 refuses one statement over 100,000 characters: the measure stays far under it (Zip 56: 17 tables, about 36,000; one statement keeps
+    // the copy one consistent moment, so the margin grew instead of the read being split).
     const sql = ctx.app.db.raw.prepare("SELECT m.name AS t, p.name AS c, p.type AS y FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table' ORDER BY m.name, p.cid").all() as { t: string; c: string; y: string }[];
     const names: Record<string, string[]> = {};
     const numbers: Record<string, string[]> = {};
     for (const x of sql) ((names[x.t] ??= []).push(x.c), /INT/i.test(x.y) && (numbers[x.t] ??= []).push(x.c), (numbers[x.t] ??= []));
-    expect(measureSql(names, numbers).length).toBeLessThan(30_000);
+    expect(measureSql(names, numbers).length).toBeLessThan(50_000);
   });
 
   it('a copy asked for by hand is made at the next hourly look with its own label, and never changes the Sunday schedule', async () => {

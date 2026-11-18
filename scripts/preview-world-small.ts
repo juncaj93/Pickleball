@@ -703,8 +703,8 @@ export async function buildSmallPreview(
 }
 
 /**
- * Zip 55: the tournament tables, which the backup file leaves out (worker/backup.ts BACKUP_LEFT_OUT), as SQL added to the end of the seed: parents
- * first. Empty when the world made no tournament.
+ * Zip 55: the tournament tables, as SQL added to the end of the seed: parents first. Empty when the world made no tournament. Since Zip 56 the
+ * backup file (version 3) carries them too, so a row already there is skipped (INSERT OR IGNORE).
  */
 export function tournamentRows(w: World): string {
   const lit = (v: unknown) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
@@ -713,7 +713,7 @@ export function tournamentRows(w: World): string {
   for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) {
     for (const row of w.db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all() as Record<string, unknown>[]) {
       const cols = Object.keys(row);
-      out.push(`INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map((c) => lit(row[c])).join(', ')});`);
+      out.push(`INSERT OR IGNORE INTO ${t} (${cols.join(', ')}) VALUES (${cols.map((c) => lit(row[c])).join(', ')});`);
     }
   }
   return out.length ? out.join('\n') + '\n' : '';

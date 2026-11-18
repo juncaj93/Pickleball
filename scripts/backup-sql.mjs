@@ -19,13 +19,25 @@ export const TABLES = [
   'task_log',
   'organizer_alerts',
   'admin_sessions',
+  // Version 3 (Zip 56): the tournament tables, parents first. A version 1 or 2 file has none of them: they are emptied and stay empty, exactly
+  // as a restore always did (they also went with the group's rows).
+  'tournaments',
+  'tournament_signups',
+  'tournament_level_history',
+  'tournament_tickets',
 ];
 
-/** Tables only a version 2 file has (Zip 50). */
+/** Tables only a version 2 (or later) file has (Zip 50). */
 export const V2_TABLES = ['task_log', 'organizer_alerts', 'admin_sessions'];
 
-/** The file versions this reader takes: 1 (before Zip 50) and 2. */
-export const VERSIONS = [1, 2];
+/** Tables only a version 3 file has (Zip 56). */
+export const V3_TABLES = ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets'];
+
+/** The file versions this reader takes: 1 (before Zip 50), 2 (before Zip 56) and 3. */
+export const VERSIONS = [1, 2, 3];
+
+/** A table this file's version does not have (it restores empty). */
+const notInVersion = (version, t) => (version === 1 && V2_TABLES.includes(t)) || (version < 3 && V3_TABLES.includes(t));
 
 /** True when a file was downloaded with the read-only PIN: its PIN is blanked, so a restore would leave nobody able to sign in (F-11). */
 export function isReadOnlyDownload(backup) {
@@ -56,12 +68,13 @@ export function backupToSql(backup, columns) {
   if (!backup || backup.format !== 'pickleball-backup' || typeof backup.tables !== 'object' || backup.tables === null) {
     throw new Error('This is not a Pickleball backup file.');
   }
-  if (!VERSIONS.includes(backup.version)) throw new Error(`This backup file is version ${backup.version}; this copy of the site reads versions ${VERSIONS.join(' and ')}. Use a newer copy of the site.`);
+  if (!VERSIONS.includes(backup.version)) throw new Error(`This backup file is version ${backup.version}; this copy of the site reads versions ${VERSIONS.join(', ')}. Use a newer copy of the site.`);
   for (const t of TABLES) {
     // Backups made before the credit pot or refund requests existed lack those tables; they restore as empty.
     if ((t === 'credit_ledger' || t === 'refund_requests') && backup.tables[t] === undefined) continue;
-    // A version 1 file has no switches, alert settings or sign-ins: they restore as empty, as before Zip 50.
-    if (backup.version === 1 && V2_TABLES.includes(t)) continue;
+    // A version 1 file has no switches, alert settings or sign-ins (as before Zip 50), a version 1 or 2 file no tournaments (as before
+    // Zip 56): they restore as empty.
+    if (notInVersion(backup.version, t)) continue;
     if (!Array.isArray(backup.tables[t])) throw new Error(`The backup is missing the ${t} table.`);
   }
   if (backup.tables.groups.length === 0) throw new Error('The backup has no group in it.');
@@ -74,8 +87,8 @@ export function backupToSql(backup, columns) {
   // their players are in, then get canceled again.
   const canceled = backup.tables.sessions.filter((s) => s.status === 'canceled').map((s) => s.id);
   for (const t of TABLES) {
-    // A version 1 file never restores these three, even if something put them in (it would not be what the site wrote).
-    if (backup.version === 1 && V2_TABLES.includes(t)) continue;
+    // A file never restores a table its version does not have, even if something put it in (it would not be what the site wrote).
+    if (notInVersion(backup.version, t)) continue;
     for (const row of backup.tables[t] ?? []) {
       const known = columns && columns[t];
       const cols = Object.keys(row).filter((c) => !known || known.has(c));

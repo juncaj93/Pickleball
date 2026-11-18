@@ -6,6 +6,8 @@ import { defaultPayBy, evensWarning, payByLabel, placeWord, ticketOwed, ticketsL
 import { courtCentsOf, MAX_SPOTS, NIGHT_START_MINUTES, organizerCost, plannedSize, prizeCentsOf, smartPlan } from '../shared/tournament';
 import { creditChanges, creditEntryText } from '../shared/credit';
 import { routeList } from '../server/app';
+import { createNodeD1 } from '../dev/nodeD1';
+import { backupToSql } from '../scripts/restore-backup.mjs';
 
 // Zip 56, Tournaments piece 2 (server/tournamentTickets.ts, server/tournamentMoney.ts): tickets, the waitlist, paying, backing out, cancel and
 // reschedule, with Alex's changes after testing piece 1: picking the date opens tickets, the spots follow the players locked in (the smart plan,
@@ -1079,5 +1081,35 @@ describe('third review fixes (Zip 56)', () => {
     expect(lines[0].details).toMatchObject({ priceCents: 2000 });
     expect((await card(ctx, 'Blair')).tickets).toMatchObject({ priceCents: 2000 });
     books(ctx);
+  });
+});
+
+describe('ship answers (Alex, Zip 56)', () => {
+  const TOUR_TABLES = ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets'];
+
+  it('answer 3: the backup file (version 3) carries the four tournament tables, and a restore brings every ticket and its money back exactly', async () => {
+    const ctx = await world({ signUp: ['Alex', 'Blair', 'Casey', 'Devon'] });
+    await payCash(ctx, 'Blair');
+    await giveCredit(ctx, 'Casey', 1600);
+    await lock(ctx, 'Casey');
+    await lock(ctx, 'Devon');
+    await iPaid(ctx, 'Devon', 1600);
+    const file = (await ctx.organizer.call('GET', '/api/admin/backup')).data;
+    expect(file.version).toBe(3);
+    const rows = (db: { raw: { prepare: (q: string) => { all: () => unknown[] } } }, t: string) => db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all();
+    for (const t of TOUR_TABLES) expect(file.tables[t], t).toEqual(rows(ctx.app.db, t));
+    expect(file.tables.tournament_tickets.length).toBe(4); // Alex's $0 seat, Blair (cash), Casey (credit), Devon (I paid waiting)
+    // The real restore SQL into a fresh database with every migration.
+    const copy = createNodeD1(':memory:');
+    copy.raw.exec('BEGIN');
+    copy.raw.exec(backupToSql(file));
+    copy.raw.exec('COMMIT');
+    expect(copy.raw.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    for (const t of TOUR_TABLES) expect(rows(copy, t), t).toEqual(rows(ctx.app.db, t));
+    // The books read the same on the copy (every check 0).
+    for (const sql of [OLD_SQL, TOUR_SQL]) {
+      const row = copy.raw.prepare(sql).get() as Record<string, number>;
+      for (const [k, n] of Object.entries(row)) if (!k.startsWith('info_')) expect(Number(n), `${k} on the copy`).toBe(0);
+    }
   });
 });

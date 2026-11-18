@@ -7,6 +7,9 @@
 // venue months marked paid, the Christmas choice, hidden canceled games, "Do this now" taps and the "already sent" marks of alerts),
 // organizer_alerts (Settings > Alerts) and admin_sessions (organizer sign-ins, stored as hashes only), so a restore gives back the site
 // exactly as it was. A version 1 file (before Zip 50) still restores: those three come back empty, as they always did.
+//
+// Version 3 (Zip 56, Alex): the four tournament tables too (tournaments, sign-ups, the level history and the tickets, which hold cash the
+// organizer confirmed). A version 1 or 2 file still restores: the tournament tables come back empty, as they always did.
 import type { D1Database } from './db';
 
 export const BACKUP_TABLES = [
@@ -24,6 +27,11 @@ export const BACKUP_TABLES = [
   'task_log',
   'organizer_alerts',
   'admin_sessions',
+  // Version 3 (Zip 56, Alex: the tournament tables join the file once tickets hold cash). After groups and players, parents first.
+  'tournaments',
+  'tournament_signups',
+  'tournament_level_history',
+  'tournament_tickets',
 ] as const;
 
 /**
@@ -37,12 +45,15 @@ export const BACKUP_WHERE: Partial<Record<(typeof BACKUP_TABLES)[number], string
 /** The WHERE condition for a table ("1" when it keeps every row). */
 export const backupWhere = (t: string): string => (BACKUP_WHERE as Record<string, string>)[t] ?? '1';
 
-/** The file's version: 2 since Zip 50 (task_log, organizer_alerts and admin_sessions added). The reader takes 1 and 2. */
-export const BACKUP_VERSION = 2;
+/**
+ * The file's version: 2 since Zip 50 (task_log, organizer_alerts and admin_sessions added), 3 since Zip 56 (the four tournament tables).
+ * The reader takes 1, 2 and 3.
+ */
+export const BACKUP_VERSION = 3;
 
 export interface BackupObject {
   format: 'pickleball-backup';
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   createdAt: string;
   groupName: string;
   tables: Record<string, Record<string, unknown>[]>;

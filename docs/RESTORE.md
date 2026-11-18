@@ -14,7 +14,7 @@ There are four ways back, best first:
 | **Weekly copy** (every Sunday from 3:00 AM, `node scripts/weekly-backup.mjs list`) | the newest 8 weeks | the backup file below |
 | **Backup file** (Settings > Backup > Download backup file) | whenever you downloaded one | see below |
 
-### What the backup file and the weekly copy hold (since Zip 50, file version 2)
+### What the backup file and the weekly copy hold (since Zip 50, file version 2; since Zip 56, version 3)
 
 Everything a restore needs to give the site back as it was: settings, the PIN (scrambled, never the real digits), every player with
 their phone number, every game, who signed up, payments, refunds, credits, the History log, which phones remember which name,
@@ -24,12 +24,16 @@ Christmas choice, hidden canceled games, "Do this now" taps, the "already sent" 
 
 Not in it, on purpose: the wrong-PIN counters and the spam counters (short-lived; a restore leaves them as they are).
 
-Not in it YET (Zip 55 and 56, Tournaments pieces 1 and 2): the tournament, its sign-up list with each player's level and dates, the level
-history and the tickets (tables `tournaments`, `tournament_signups`, `tournament_level_history`, `tournament_tickets`). Time Travel (Plan A)
-keeps them. A restore from a FILE (Plan B) empties them (their rows go with the group they belong to, so the restore never fails because of
-them): players would sign up again, the cash paid for tickets would be forgotten, and credit used on tickets (that IS in the file, in the
-credit list) would stay spent with no ticket; the tournament checks (`scripts/integrity-checks-tournament.sql`, `tour_ledger_without_ticket`)
-would show each one. Whether the four join the file (a version 3 file) is Alex's call: asked in the Zip 56 report.
+**Since Zip 56 (file version 3, Alex's answer in the Zip 56 report): the tournaments too**: the tournament, its sign-up list with each
+player's level and dates, the level history and the tickets with the cash paid for them (tables `tournaments`, `tournament_signups`,
+`tournament_level_history`, `tournament_tickets`). The weekly copy holds them from the first Sunday after the clock Worker was deployed with
+Zip 56; until then the newest weekly copy is version 2.
+
+**Version 2 files (before Zip 56)** still restore, but their tournament tables come back EMPTY (their rows went with the group they belong
+to, so the restore never fails because of them): players would sign up again, the cash paid for tickets would be forgotten, and credit used on
+tickets (that IS in the file, in the credit list) would stay spent with no ticket; the tournament checks
+(`scripts/integrity-checks-tournament.sql`, `tour_ledger_without_ticket`) would show each one. The restore script says so ("a version 2 file
+has no tournaments"). Prefer Time Travel (Plan A) or a version 3 file then.
 
 **Older files (version 1, made before Sun Nov 15, 2026's Zip 50 deploy, and every weekly copy until the first Sunday after it,
 Nov 22) still restore**, but WITHOUT the switches, price locks, alert settings and sign-ins: after such a restore every feature switch
@@ -94,7 +98,9 @@ The commands run in a terminal in the project folder on a computer with this pro
 2. **Make the database steps** and read the summary line it prints:
    `node scripts/restore-backup.mjs pickleball-backup-<date>.json > restore.sql`
    It says when the file was made, the group, the rows and the **file version**.
-   - "file version 2": everything comes back, switches and price locks included. Go on.
+   - "file version 3": everything comes back, switches, price locks and tournaments included. Go on.
+   - "file version 2": everything but the tournaments comes back (they come back empty; the summary says so). Go on, or use Time Travel
+     if a tournament with tickets was running.
    - "old (version 1) file": the switches, price locks, alert settings and sign-ins are NOT in it. Before going on, save today's
      switch rows (keep the file private):
      `npx wrangler d1 execute pickleball --remote --json --command "SELECT * FROM task_log WHERE session_id IS NULL OR task IN ('price_lock','hidden_from_players')" > switches-<date>.json`
