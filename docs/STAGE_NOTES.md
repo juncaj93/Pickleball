@@ -6017,3 +6017,21 @@ fetches the organizer file in the background).
   calendar date), so not from this change.
 - By hand, e2e/zip62-same.cjs: 27 states of 27 the same as main (the organizer found by name and a saved organizer player that is gone
   added after the second review).
+
+### Preview
+Deployed from branch `claude/new-session-6jer9k` (code `2cc88b0`, deployment `0a866abf`) to
+https://claude-new-session-6jer9k.pickleball-club-9h0.pages.dev, then re-seeded with `npm run db:seed:preview` (calm: 10 players, 10 games,
+Tournaments on, no tournament open; "Speed check (like live)" is one tap on the Tournament test page). First screen at 390 px, light and
+dark: organizer Home shows the Tournament test row and the games list; Vic's Home shows tomorrow's game (Thu Nov 19, 8 PM) and next week's two.
+
+### Live: NOT shipped (Wed Nov 18, 2026, about 4:00 PM Eastern)
+- Ready: restore points taken at 3:56 PM: Time Travel bookmark `000017da-00000000-00005127-3c710c4acfe566b2414af7782a8bebd9`; an SQL export
+  (281 KB) was made and, since nothing shipped, deleted again without saving it (a ship takes a fresh one). Integrity checks before: all 0
+  (21, 8 and 11 columns). Money totals read from that export (kept out of git) for the before and after comparison. Live was `e24d850`
+  (deployment `9798779c`) and main `4c427ab` (live plus deploy notes), so main equals live.
+- Stopped at: pushing main (a fast-forward from `4c427ab` to `2cc88b0`). The build machine's safety check refused the push to main, so
+  nothing changed on GitHub's main or on live, and the local fast-forward was undone.
+- To ship (quiet window; no migration, no Worker change, switch states unchanged): a fresh SQL export and Time Travel bookmark, the three
+  integrity checks, fast-forward main to `claude/new-session-6jer9k` and push, `npm run deploy` from main, the integrity checks and money
+  totals again (must be identical), the public live check on `pickleball-club-9h0.pages.dev`, then save the export with
+  `node scripts/deploy-export.mjs save`. Rollback: site deployment `9798779c-c8d4-4586-9d15-924002bc5527` (Zip 60, live now).
