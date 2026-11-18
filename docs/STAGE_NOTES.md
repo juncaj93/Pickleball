@@ -5562,8 +5562,8 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
 - A. Picking the date opens tickets for everyone on the list, in the same tap (no Open tickets button, no other trigger). Pay by is still a
   setting: two days before at 7:00 PM (Tuesday for a Thursday), changeable. A tournament whose date was picked before this (piece 1 on live)
   opens its tickets the same way the first time a screen reads it, before its night starts (with the same History line). On Only me (the
-  organizer's private test) tickets open too, but nobody else can see them: nobody else can take a ticket or be marked paid, and the price,
-  the format and Only me stay free until it is on Everyone.
+  organizer's private test) tickets open too, but nobody else can see them: nobody else can take a ticket or be marked paid (nor while
+  Tournaments is off for players), and the price, the format and Only me stay free until players may hold tickets.
 - B. Create and Edit have no Players expected and no court plan. The database is unchanged: the NOT NULL columns get harmless defaults on
   Create (size 12, 2 courts, 180 minutes, 7:00 PM: the cap and the whole night); a size or plan sent by an older screen is ignored.
 - C. The smart plan (organizer only: a Plan card on the tournament page, the Plan line and "Your cost if it fills" on the Home card): L = players
@@ -5584,8 +5584,9 @@ COLUMN pay_by;` (only with no tickets sold). Alex's changes needed NO further ta
 
 ### What it does
 1. Picking the date (organizer, the tournament page) opens tickets: the flat price ($16 to start, the same at any size, never from the court
-   cost), Pay by as above. Once tickets are open on Everyone the price and format stay, and Who can see it stays Everyone. The organizer's own
-   seat is a $0 ticket and one of the spots, taken at once when they are on the list.
+   cost), Pay by as above. Once players may hold tickets (tickets open on Everyone, or a player other than the organizer has a ticket, also
+   after a Reschedule) the price and format stay, and Who can see it stays Everyone. The organizer's own seat is a $0 ticket and one of the
+   spots, taken at once when they are on the list.
 2. Players (pictures 07 to 12): Tickets open, "Lock my spot · $16" and See who's in; tapping the card opens the overlay (Who's in N of the
    planned size, their own row "Pay to lock in", Open spot rows). Lock my spot uses their credit at once (the site's rule at I'm in); what is
    left opens the site's own Pay sheet (Pay Alex $16, Venmo, Copy Venmo, I paid). I paid waits for the organizer like a game's I paid ("Paid ·
@@ -5691,6 +5692,11 @@ read writes anything; nothing new runs on the 5-minute clock. Times are this mac
   levels (fixed: the list takes the history's first, inside the batch); the canceled card's Plan line, the old date-picked card and the missing
   Plan line on the sign-up card (fixed); browser checks behind the code (fixed). Its note on migration 0024: it had not been applied to the
   preview yet, so the preview gets it as it is now.
+- Third review (the second round's fixes): Mark paid through the private link while Tournaments was off for players gave a hidden player a
+  ticket (fixed: refused, and hidden on the screen); the settings locked for good after Only me, a date, a Reschedule and Everyone though
+  nobody ever bought in (fixed: the lock is "open on Everyone now, or a player holds a ticket", checked again when the write lands); Take off
+  and the level pencil showed on a canceled tournament (fixed: not offered); the piece 1 upgrade's History line could keep an old price
+  (fixed: guarded on the price too). Each with a test.
 
 ### Tests
 - Unit: 192 files, 3,468 tests: 3,466 passed, 2 skipped, none failed, in one full run on the final code (`npx vitest run`, 13 minutes).
