@@ -12,6 +12,7 @@ import { lazy, type ReactElement, Suspense, useRef } from 'react';
 import type { GroupView } from '../shared/api';
 import type { PlayerTournamentView } from '../shared/tournament';
 import { storageGet, storageRemove, storageSet } from './lib';
+import { refetchFailedStyles } from './adminRecover';
 import './tournament-slot.css';
 
 /** Zip 56: the three group facts the ticket's Pay sheet reads (the site's own sheet, src/PaySheet.tsx), and the player's name for the Venmo note. */
@@ -26,7 +27,11 @@ let loaded: HomeModule | null = null;
 /** Zip 62: the early fetch started by preloadTournamentHome, if any (null again if it failed: the card's own fetch then tries, as before). */
 let early: Promise<HomeModule | null> | null = null;
 const fetchHome = (): Promise<HomeModule> =>
-  import('./tournament/TournamentHome').then((m) => {
+  import('./tournament/TournamentHome').then(async (m) => {
+    // Vite's own loader never fetches a style file again once it failed (a weak signal when the page opened): the card's style file is
+    // fetched again first, as the organizer file's loader does (src/adminChunk.ts), so a card is never drawn without its look. If that fails
+    // too, no card shows (as before), and the next reload brings it.
+    await refetchFailedStyles();
     loaded = m;
     return m;
   });

@@ -102,7 +102,7 @@ export async function changeStampAndTour(ctx: Ctx, group: GroupRow, playerId: st
   const queries = (withTime: boolean) => reads(withTime).map((r) => ctx.db.prepare(r.sql).bind(...r.values));
   // Zip 62: the tournament card's reads, in this same trip (only while the switch is on for this phone and a name is picked; off: none, the
   // batch is exactly main's). The switch question is answered from the switch rows the request already read (no trip).
-  const tour = playerId && (await tournamentsFlags(ctx, group.id)).on ? playerTourReads(group, playerId, ctx.nowMs) : null;
+  const tour = playerId && (await tournamentsFlags(ctx, group.id)).on ? playerTourReads(ctx, group, playerId) : null;
   // SPEED_FEWER_QUERIES (server/speed.ts): the two switch reads further down (player motion, hidden games) ride in the same trip.
   await fewerDb(ctx)?.prefetch([
     ...reads(true).map((r) => ({ kind: 'all' as const, ...r })),

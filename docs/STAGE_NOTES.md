@@ -5940,7 +5940,8 @@ tournament tables in Sunday's backup). No query was slow inside the database, so
 2. The views are built from those rows with no trip of their own, and the full answers (`dashboard`, `groupView`) send the view their own
    fingerprint built instead of building it again. Not reused (built again exactly as before): View as, a phone whose player is inactive, a
    build that hit an error, and a build that tried one of the two writes a read can make (a piece 1 date pick opening tickets, a hold coming back
-   after the night), so a change that landed in between is what the answer shows, as before.
+   after the night), so a change that landed in between is what the answer shows, as before. The two look-only databases keep the old reads
+   entirely ("Pretend it's...", whose batches answer nothing at all, and the read-only PIN's), so their answers are exactly what they were.
 3. The dashboard's Hidden tournaments list and the tournament names on ticket credit lines join the shared trip ("Fewer database trips"
    prefetch) while the switch is on; off, exactly main's.
 4. The Hidden check (`notHiddenSql`) names "no game" and the kind list the way the existing `task_log_once` index is written, so SQLite looks
@@ -5979,12 +5980,13 @@ The live-like Speed check stage, same rows, switch off then on: admin load 1.22 
   their own trip, as before.
 
 ### Tests
-- Unit: tests/zip62-speed.test.ts (35): at every Tournament test stage no screen makes more trips with the switch on than off (the checks
+- Unit: tests/zip62-speed.test.ts (37): at every Tournament test stage no screen makes more trips with the switch on than off (the checks
   exactly equal); the answers from the single trip equal, byte for byte, the answers built the old way one read at a time (forced by a database
   that refuses the combined trip) at 15 stages; Only me: every other player and a phone with no name get byte for byte the answers of a world
-  with no tournament (and never its name or id); the Hidden check plans as an index lookup; Hide and Restore still work. A one-time proof in the
-  build session also ran main's code and this code on 22 saved states (1,518 answers, every name, the organizer's phone, View as): identical,
-  apart from one id SQLite makes at random when a hold comes back.
+  with no tournament (and never its name or id); "Pretend it's..." and the read-only PIN get the organizer's very tournament view (this test
+  fails without the look-only rule: Pretend's batches answer nothing); the Hidden check plans as an index lookup; Hide and Restore still work.
+  A one-time proof in the build session also ran main's code and this code on 22 saved states (2,046 answers: every name, the organizer's phone,
+  View as, Pretend at two moments, the read-only PIN): identical, apart from one id SQLite makes at random when a hold comes back.
 - Browser: e2e/zip62.cjs on the REAL built site (A to F: no placeholder and the card with the fresh games at 390/360/320, light and dark,
   both stages; the first look as before; the same card both ways; switched off nothing fetched and the memory forgotten; View as; no em
   dashes).

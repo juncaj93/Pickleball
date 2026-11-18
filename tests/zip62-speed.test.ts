@@ -89,10 +89,13 @@ async function world(opts: { fewer?: boolean } = {}) {
       // The organizer's own phone (signed in, with the organizer's name picked): the Only me path.
       ['Alex Home, organizer phone', '/api/group', `${admin}; ${phones.Alex}`],
       ['Alex check, organizer phone', '/api/group/version', `${admin}; ${phones.Alex}`],
+      // View as with the real PIN (it decides Only me on its own, so it builds its card the old way, as before).
+      ['Vic view as', '/api/group', admin, { 'X-View-As': players.find((p) => p.name === 'Vic')!.id }],
+      ['Alex view as', '/api/group', admin, { 'X-View-As': players.find((p) => p.name === 'Alex')!.id }],
     ];
-    for (const [, path, ck] of list) await call('GET', path, ck);
-    const out: Record<string, { status: number; text: string; trips: number }> = {};
-    for (const [name, path, ck] of list) out[name] = await call('GET', path, ck);
+    for (const [, path, ck, h] of list) await call('GET', path, ck, undefined, h);
+    const out: Record<string, { status: number; text: string; trips: number; seq: string[] }> = {};
+    for (const [name, path, ck, h] of list) out[name] = await call('GET', path, ck, undefined, h);
     return out;
   };
   const oldWayToo = async <T>(f: () => Promise<T>): Promise<T> => {
@@ -109,14 +112,17 @@ async function world(opts: { fewer?: boolean } = {}) {
 type World = Awaited<ReturnType<typeof world>>;
 const tripsOf = (s: Awaited<ReturnType<World['screens']>>) => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.trips]));
 
-// Stages where no player's card needs a read of its own (after Pay by the freed-spot count, and a canceled card's money, still read once).
-const SAME_TRIPS = ['none', 'signup', 'speed_check', 'vote_open', 'vote_majority', 'vote_tie', 'date_picked', 'tickets_open', 'all_locked', 'rescheduled'];
+// Every Tournament test stage (after Pay by the freed-spot count and a canceled card's money ride in the same trip too).
+const SAME_TRIPS = ['none', 'signup', 'speed_check', 'vote_open', 'vote_majority', 'vote_tie', 'date_picked', 'tickets_open', 'all_locked', 'rescheduled', 'canceled', 'odd', 'closed', 'hidden'];
 /** Never more trips with the switch on than off on the same rows (once tickets are sold the dashboard even saves one: the tournament names
  * a ticket credit line shows now ride in the shared trip while the switch is on; switched off that read is exactly main's). `extra`: screens
  * allowed one more (named in each test). The 5-second checks are always exactly equal. */
 function noMore(on: Record<string, number>, off: Record<string, number>, extra: (k: string) => boolean = () => false) {
   expect(Object.keys(on).sort()).toEqual(Object.keys(off).sort());
   for (const k of Object.keys(on)) {
+    // View as is answered by the organizer's own in-browser copy (src/lib.ts, demo): its reads never cross the network, and it builds its
+    // card the old way on purpose (it decides Only me by its own rule). Its answers are in the byte for byte comparison below.
+    if (k.endsWith('view as')) continue;
     if (k.endsWith('check') || k.endsWith('check, organizer phone')) expect(on[k], k).toBe(off[k]);
     else expect(on[k], k).toBeLessThanOrEqual(off[k] + (extra(k) ? 1 : 0));
   }
@@ -139,6 +145,18 @@ describe('the switch on costs no database trip (Fewer database trips on, as live
     });
   }
 
+  for (const s of ['tickets_open', 'closed']) {
+    it(`a group whose organizer is found by the name in Settings (no saved player), stage ${s}: no screen costs more either`, async () => {
+      const w = await world();
+      await w.stage(s);
+      w.raw.raw.prepare('UPDATE groups SET organizer_player_id = NULL').run();
+      w.setSwitch(true);
+      const on = tripsOf(await w.screens());
+      w.setSwitch(false);
+      noMore(on, tripsOf(await w.screens()));
+    });
+  }
+
   for (const s of ['vote_open', 'tickets_open']) {
     it(`Only me (${s}): no screen makes more trips; only the organizer's own signed-in phone still checks its sign-in (Zip 55's rule)`, async () => {
       const w = await world();
@@ -158,21 +176,6 @@ describe('the switch on costs no database trip (Fewer database trips on, as live
     });
   }
 
-  for (const s of ['canceled', 'odd', 'closed']) {
-    it(`stage ${s}: the organizer's screens never cost more; a player's card reads at most its one small extra`, async () => {
-      const w = await world();
-      await w.stage(s);
-      w.setSwitch(true);
-      const on = tripsOf(await w.screens());
-      w.setSwitch(false);
-      const off = tripsOf(await w.screens());
-      expect(on.dashboard).toBeLessThanOrEqual(off.dashboard);
-      expect(on['admin check']).toBe(off['admin check']);
-      // After Pay by the freed-spot count, on a canceled card what came back: one small read for the players who see that card.
-      for (const k of Object.keys(on)) expect(on[k] - off[k], k).toBeLessThanOrEqual(1);
-    });
-  }
-
   it('also without "Fewer database trips" (its row off, not live): the checks are equal and no screen costs more than one extra read', async () => {
     const w = await world({ fewer: false });
     await w.stage('tickets_open');
@@ -186,7 +189,8 @@ describe('the switch on costs no database trip (Fewer database trips on, as live
 });
 
 describe('the answers are the answers of the old way, byte for byte', () => {
-  const STAGES = [...SAME_TRIPS, 'canceled', 'odd', 'closed', 'hidden', 'vote_finalize'];
+  // (The proof against main's own code, every saved stage, is the by-hand e2e/zip62-same.cjs.)
+  const STAGES = [...SAME_TRIPS, 'vote_finalize'];
   for (const s of STAGES) {
     it(`stage ${s}: one trip or one read after another, every screen says exactly the same (stamps included)`, async () => {
       const w = await world();
@@ -195,8 +199,11 @@ describe('the answers are the answers of the old way, byte for byte', () => {
       const fast = await w.screens();
       const old = await w.oldWayToo(() => w.screens());
       for (const k of Object.keys(fast)) expect(fast[k].text, k).toBe(old[k].text);
-      // The old way really was the old way: more trips somewhere.
-      expect(Object.keys(fast).some((k) => old[k].trips > fast[k].trips)).toBe(true);
+      // The two ways really differ: one read after another reads the tournament's row on its own (a first()), the single trip never does.
+      const ownRead = (seq: string[]) => seq.some((x) => /^first SELECT (t\.\*, CASE WHEN t\.visibility|\*, \(status = 'canceled')/.test(x));
+      const shared = Object.keys(fast).filter((k) => !k.endsWith('view as'));
+      expect(shared.filter((k) => ownRead(fast[k].seq))).toEqual([]);
+      expect(shared.some((k) => ownRead(old[k].seq))).toBe(true);
     });
   }
 
@@ -241,7 +248,8 @@ describe('a player who may not see the tournament gets nothing from the server a
     const hidden = await w.screens();
     w.raw.raw.prepare('DELETE FROM tournaments').run();
     const none = await w.screens();
-    const players = Object.keys(hidden).filter((k) => !k.startsWith('dashboard') && !k.startsWith('admin') && !k.includes('organizer phone'));
+    // Every player's own phone (the organizer's screens, the organizer's own phone and View as are the organizer's).
+    const players = Object.keys(hidden).filter((k) => !k.startsWith('dashboard') && !k.startsWith('admin') && !k.includes('organizer phone') && !k.endsWith('view as'));
     expect(players.length).toBeGreaterThan(10);
     for (const k of players) {
       expect(hidden[k].text, k).toBe(none[k].text);
@@ -275,7 +283,7 @@ describe('the Hidden check finds its mark through an index', () => {
     await w.stage('canceled');
     const plan = (sql: string, values: unknown[]) =>
       (w.raw.raw.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map((r) => r.detail);
-    const reads = [playerTourReads(w.group, 'someone', AT).reads[0], adminTourReads(w.group, AT).reads[0], hiddenTournamentsRead(w.group)];
+    const reads = [playerTourReads({ nowMs: AT, cookies: {} } as never, w.group, 'someone').reads[0], adminTourReads(w.group, AT).reads[0], hiddenTournamentsRead(w.group)];
     for (const r of reads) {
       const p = plan(r.sql, r.values);
       expect(p.some((d) => /SEARCH h USING (COVERING )?INDEX task_log_once/.test(d)), p.join(' | ')).toBe(true);
