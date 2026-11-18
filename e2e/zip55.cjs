@@ -455,12 +455,17 @@ async function main() {
     // Zip 63: tickets are open, so Edit sign-up and Drop out are in the card's overlay (a tap on the card).
     const p = await playerPage('Parker');
     await p.page.locator('.tc-hero .tc-title').first().click();
+    await p.page.locator('dialog[open] [data-tc-edit]').waitFor({ timeout: 10000 });
+    // The site drops a tap that comes right after the last one (its double-tap guard): a pause, as a person makes.
+    await p.page.waitForTimeout(700);
     await p.page.locator('dialog[open] [data-tc-edit]').click();
     await p.page.locator('dialog[open] [data-tm-save]').waitFor();
     assert((await p.page.locator('dialog[open] [data-tm-change]').count()) === 0, 'no level row (Alex)');
     await p.ctx.close();
     const q = await playerPage('Quinn');
     await q.page.locator('.tc-hero .tc-title').first().click();
+    await q.page.locator('dialog[open] [data-tc-drop]').waitFor({ timeout: 10000 });
+    await q.page.waitForTimeout(700);
     await q.page.locator('dialog[open] [data-tc-drop]').click();
     await q.page.locator('dialog[open] [data-confirm-go]').click();
     await q.page.locator('.tc [data-tc-signup]').waitFor({ timeout: 10000 });

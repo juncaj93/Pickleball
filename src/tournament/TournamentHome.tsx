@@ -172,7 +172,7 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
         onJoin={() => void joinWaitlist()}
       />
       {t.status === 'tickets' && k && signed && (
-        <Sheet calmFocus open={sheet === 'overlay'} title={t.name} back="Home" onClose={() => setSheet(null)} className="tc-tw-overlay">
+        <Sheet calmFocus open={sheet === 'overlay'} title={t.name} back="Home" onClose={() => setSheet((cur) => (cur === 'overlay' ? null : cur))} className="tc-tw-overlay">
           <Overlay
             t={t}
             k={k}

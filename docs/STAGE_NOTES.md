@@ -6045,3 +6045,83 @@ dark: organizer Home shows the Tournament test row and the games list; Vic's Hom
   (pickleball-club-9h0.pages.dev, no PIN): 16 of 16 (organizer data 401, no tournament data for a phone with no name, 390/320 light and dark
   with no page errors). Public games answer 0.36 s (median of 9). Organizer timing: Alex on his phone (no read-only PIN in this session).
 Rollback: site deployment `9798779c-c8d4-4586-9d15-924002bc5527` (Zip 60). No database undo needed.
+
+## Zip 63: The ticket card with gold pickleballs, the pay countdown, Remind all unpaid (🎾63.tickets), Wed Nov 18, 2026
+Branch `claude/new-session-kdibzi` (the session is named "🎾63.tickets"; the build system pins the branch name). Built on main `d098d6f` (Zip 62
+live). Same switch, TOURNAMENTS, and the per-tournament Who can see it. **Database change: migration `0026_tournament_cap_16`** (the two spot-cap
+triggers of 0024 dropped and made again with 16 instead of 12; no table, column or row changes). Applied to the fake preview database only.
+**NOT on live: the brief says STOP and show Alex the change first.**
+
+### What it does (the brief's five things)
+1. The card (zip63 mocks 00 to 07): every state has one look: the lime top line "TOURNAMENT · TUE DEC 1 · ~7:30 PM" ("DATE TBD" before a
+   date), the name, the format ("Tournament style TBD" while the vote is open), one pickleball per person, the one button, a plain bottom line
+   ("Pay by 11/30", not a link). No stub, notch, steps or counts. Before a date one ball per sign-up; after it one per player who can make the
+   date (the server sends `going`, a count only); a gold ring for each person locked in, left to right in the order people pay. A ball that
+   turns gold while the card is open pops (the site's m-ball-pop, 240 ms) and its glow eases to the steady ring (about 0.9 s, CSS only; none
+   with reduced motion). Up to 10 balls 26 px, 11 and 12 at 22, 13 and 14 at 19, 15 and 16 at 17 (gaps 9, 8, 6, 5), all from the card's own
+   width, so 320 px phones keep one row. Measured against the mocks at 420 px: card 388 x 254 (mock 387 x 255), balls and button at the same
+   heights. Once tickets are open, See who's in, Edit sign-up and Drop out live in the card's overlay (tap the card).
+2. The hidden cap: 16 locked in (was 12; `MAX_SPOTS`, the database triggers, the books check `tour_spots_over_cap`). The planned size keeps
+   growing to 16; the court plan stays the 12-player one (2 courts, 3 hours) from 11 locked in. Past the cap: "Join standby". Every player
+   and organizer word says Standby (card, overlay, toasts, the organizer's Tickets list and Home rows, History, Finalize's over line). Players
+   never see the number 16 (at the cap: "12 in", "Every spot is taken").
+3. The pay countdown (mocks 08 to 13): the site's alert card first on Home, only for a player on the list who can still lock a spot and has not
+   paid, from 3 days before Pay by (Eastern calendar days): "3 days left to pay", "2 days left to pay", "Payment due tomorrow" (amber), on the
+   day "Payment due today", "Due in 5 hours" (under 6 hours), "Due in 42 minutes" (the last hour), red. Second line "Pay by Fri 7:00 PM", "Pay
+   by 7:00 PM", "Pay by 7:00 PM tonight". "Pay $16" opens the Lock my spot flow (credit first, then the Pay sheet). After Pay by, red "Your
+   payment is late / Pay now to stay in NAME / Pay now", only while the existing late rule lets them pay (a freed spot, until 3 hours before
+   the start). Gone once they pay or tap I paid. Counts down on its own (a redraw every 15 s). Zip 60's date alert sits right under it.
+4. Remind all unpaid (mock 14): while anyone who can make the date has not paid (before Pay by, spots left), the organizer's Home shows
+   "NAME · TICKETS" with the "3 UNPAID" chip, Paid, Not paid yet, Pay by and Remind all unpaid: Messages with every unpaid number and "Hey, please
+   pay for The Cold Open tonight so the courts are locked in for tomorrow. <site address>" (the words follow the clock). Hidden when everyone
+   has paid: the count card shows instead.
+5. The card's loading placeholder has the site's .skel shimmer (in the card's greens).
+
+### Where it differs from the brief (the code is the truth)
+- "Tournament style TBD" follows the code's rule (Zip 60): it shows while the vote is open, which ends when the date is finalized, not when
+  tickets close (the brief says "do not change that rule"; the code's rule is kept). So the mocks' TBD with Lock my spot cannot happen.
+- "~7:30 PM" now stays after the date is picked too (the brief); Zip 60 showed the plain time then. Nothing sets a "real start" yet.
+- Late: the brief has "Your payment is late" when tickets are closed and paying follows "the existing late rule (a spot still open)". The
+  code's late rule (Zip 59) only lets an unpaid player pay after Pay by for a spot freed by a back out; with none, tickets are closed and Pay
+  now would fail, so no countdown shows then (the card says Tickets closed).
+- After paying, the card shows "You're locked in" with See who's in (mock 02 still draws Lock my spot; it only shows the balls).
+- Remind all unpaid is green as drawn (the color cleanup makes other text buttons purple).
+- Standby is the tournament's word only; games keep their own waitlist (SITE_RULES).
+- The preview has 10 names, so 12 to 16 locked in cannot be built on it: the Tournament test page's "Ball look" links draw 3 to 16 balls
+  (look only, that phone), the unit tests fill 16 spots with harness players, and the browser stands in a full answer for Join standby.
+
+### Review
+A fresh reviewer (no part in the build) read the change. Fixed: a standby player whose tickets had closed could see "Your payment is late"
+with a Pay now that fails (now no countdown while closed); the cap number showed at the cap ("16 of 16", "16 spots taken"; now "16 in",
+"Every spot is taken"); the older unit and browser tests followed the old cap and card (updated). Kept, as questions: the planned size above
+12 changes the organizer's plan line and cost estimate; the migration does not move paid standby players up at once (none exist on live).
+Checked fine: no leak (`going` is built after the visibility check), every spot write keeps the cap, the day math is Eastern and safe across
+daylight saving, the preview-only code is not in a live build.
+- Found by the browser run after the review: Edit sign-up inside the card's overlay closed the overlay, and the overlay's close then closed Edit
+  too. Fixed (closing the overlay only clears the overlay), with a browser check (zip63 D).
+
+### Tests
+- Unit: 195 files, 3,578 passed, 2 skipped, none failed (`npx vitest run`); `npx tsc -b` clean. New tests/zip63-tickets.test.ts (17: every
+  countdown moment and its words, the remind text by the clock, the 16 cap with 18 harness players and the trigger refusing a 17th spot, standby
+  words in History, `going` before and after a date, Only me and the switch off send nothing, the countdown test stages and their books).
+  Updated for the cap: tests/zip56-tickets.test.ts (16 locked in, the race for the last spot, the books check), tests/zip60-formatvote.test.ts
+  (over starts after 16), tests/zip48-split.test.ts (a container query counts as a tournament rule).
+- Browser: e2e/zip63.cjs 57 of 57 (A to I: the card at 390/360/320 light and dark, 3 to 16 balls on one row at 420/390/360/320 with the mocks'
+  sizes at 420, the gold pop and glow and none with reduced motion, before a date, the overlay links, standby with the cap hidden, every
+  countdown moment and its order on Home, the reviewer's closed-standby case, Remind all unpaid at every size, hidden when all paid, Only me and
+  the switch off, the shimmer). Older ones updated for the card's one look: zip55 91, zip56 57, zip59 12, zip60 29, zip62 17. Switch OFF equals
+  main `d098d6f`: e2e/zip55-off.cjs 47 of 47, e2e/zip56-off.cjs 47 of 47.
+
+### Preview
+`pickleball-preview` (fake): restore points first (Time Travel bookmark `00000184-00000000-00005127-c394affc1317f07175e875927d52e600`, SQL export
+85 KB kept outside git), then `0026_tournament_cap_16` (the only one pending; both triggers read 16 after). Deployed from this branch to
+https://claude-new-session-kdibzi.pickleball-club-9h0.pages.dev and re-seeded (`npm run db:seed:preview`: the Countdown: 2 days left stage).
+First screen at 390, light and dark: organizer Home shows the Tournament test row, Remind all unpaid (3 unpaid) and the tournament card; Vic's
+Home shows "2 days left to pay" first, the date alert, then the card (9 balls, 6 gold, Lock my spot · $16, Pay by 11/20). No page errors.
+Switches: every flag in live's public answer is on the preview too, plus TOURNAMENTS (live's organizer-only rows could not be read here).
+
+### Live: NOT done (STOP: the brief asks to show Alex the database change first)
+To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`, the three integrity checks, `npx wrangler d1 migrations list
+pickleball --remote` (must list only 0026), `npm run db:migrate:remote`, fast-forward main to this branch and push, `npm run deploy` from main, the
+checks again, the public live check. Rollback: site deployment `6c00f062-f737-4b09-9341-68fe94b43a08` (Zip 62); the new triggers can stay (old
+code checks 12 itself).

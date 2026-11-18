@@ -333,6 +333,12 @@ async function main() {
     assert((await sheet.locator('[data-tc-edit]').count()) === 1 && (await sheet.locator('[data-tc-drop]').count()) === 1, 'the two links in the overlay');
     await fits(v.page, 'dialog[open] .tc-hero');
     await shot(v.page, 'D-overlay');
+    // Edit sign-up from the overlay opens Edit my sign-up (closing the overlay must not close it again).
+    await v.page.waitForTimeout(700);
+    await sheet.locator('[data-tc-edit]').click();
+    await v.page.locator('dialog[open] [data-tm-save]').waitFor({ timeout: 10000 });
+    await v.page.waitForTimeout(600);
+    assert((await v.page.locator('dialog[open] [data-tm-save]').count()) === 1, 'Edit my sign-up stays open');
     await v.ctx.close();
   });
 

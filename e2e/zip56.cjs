@@ -208,6 +208,8 @@ async function main() {
     const own = page.locator(`.tc-hero [${attr}]`);
     if (await own.count()) return own.first().click();
     await openOverlay(page);
+    // The site drops a tap that comes right after the last one (its double-tap guard): a pause, as a person makes.
+    await page.waitForTimeout(700);
     await page.locator(`dialog[open] [${attr}]`).first().click();
   }
   // ---------------------------------------------------------------- A  the seed
