@@ -5693,9 +5693,9 @@ read writes anything; nothing new runs on the 5-minute clock. Times are this mac
   preview yet, so the preview gets it as it is now.
 
 ### Tests
-- Unit: 192 files, 3,468 tests: 3,465 passed and 2 skipped in one full run (`npx vitest run`); its one failure was a test that ran against
-  the server code from before that run's last edit, and the six tournament files (speed-queries, zip48-split, zip50-backup, zip55-build,
-  zip55-tournament, zip56-tickets: 126 tests) pass on the final code. `npx tsc -b` clean. tests/zip56-tickets.test.ts (36): every money proof
+- Unit: 192 files, 3,468 tests: 3,466 passed, 2 skipped, none failed, in one full run on the final code (`npx vitest run`, 13 minutes).
+  After it only unused styles were removed (zip48-split, zip55-build and the browser checks of those screens pass again). `npx tsc -b`
+  clean. tests/zip56-tickets.test.ts (36): every money proof
   to the cent with both books files at zero after each step, the smart plan and the cost, the date pick opening tickets, the piece 1 upgrade,
   the 12-spot waitlist (16 harness players), races (a Lock landing mid Back out or Take off, the last spot, Hold just after a Cancel, two first
   sign-ups), Only me, the leak tests, the test page stages; tests/zip55-tournament.test.ts (51, piece 1's, following Alex's changes).
