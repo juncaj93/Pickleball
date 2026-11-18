@@ -21,8 +21,9 @@ type Ctx = Awaited<ReturnType<typeof setupGroup>> & { tid: string };
 const DATE = '2026-11-12';
 const DATES = ['2026-11-03', '2026-11-05', '2026-11-10', DATE, '2026-11-17'];
 const BASE = { name: 'Winter Classic', dates: DATES, ticketCents: 1600, creditCents: 1400, visibility: 'all' };
-// The harness's six (Alex, Blair, Casey, Devon, Emery, Frankie) and these: 16 players besides the organizer, enough to fill 12 spots and wait.
-const MORE = ['Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Kai', 'Lee', 'Lane', 'Morgan', 'Jordan', 'Avery'];
+// The harness's six (Alex, Blair, Casey, Devon, Emery, Frankie) and these: 20 players besides the organizer, enough to fill 16 spots (Zip 63:
+// the hidden cap, 12 before) and wait.
+const MORE = ['Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Kai', 'Lee', 'Lane', 'Morgan', 'Jordan', 'Avery', 'Rory', 'Shay', 'Toni', 'Uma'];
 const OLD_SQL = readFileSync(join(process.cwd(), 'scripts/integrity-checks.sql'), 'utf8');
 const TOUR_SQL = readFileSync(join(process.cwd(), 'scripts/integrity-checks-tournament.sql'), 'utf8');
 
@@ -129,8 +130,9 @@ describe('the shared rules', () => {
     expect(ticketOwed({ priceCents: 1600, creditCents: 500, paidCents: 0, claimCents: 0 })).toBe(1100);
   });
 
-  it("Alex's smart plan: locked in rounded up to even, plus 2, 6 to 12; that size's plan; the organizer's cost", () => {
-    expect([0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(plannedSize)).toEqual([6, 6, 6, 6, 8, 8, 10, 10, 12, 12, 12, 12, 12]);
+  it("Alex's smart plan: locked in rounded up to even, plus 2, 6 to 16 (Zip 63); that size's plan; the organizer's cost", () => {
+    // Zip 63: the cap is 16, so the planned size goes on growing to 16; the court plan stays the 12-player one from 11 locked in.
+    expect([0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map(plannedSize)).toEqual([6, 6, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14, 16, 16, 16, 16]);
     expect([0, 5, 7, 9].map(smartPlan)).toEqual([
       { size: 6, courts: 1, minutes: 150, start: 1170 },
       { size: 8, courts: 2, minutes: 120, start: 1170 },
@@ -143,9 +145,11 @@ describe('the shared rules', () => {
     expect(prizeCentsOf('americano', 1400, 700)).toBe(2100);
     // 8 players, 2 courts, 2 hours: $96 court, 7 tickets of $16 = $112 if it fills, $28 of credits: $12; with 5 paid now: $96 - $80 + $28 = $44.
     expect(organizerCost(smartPlan(6), 1600, 2800, 5)).toEqual({ courtCents: 9600, ifFillsCents: 1200, nowCents: 4400 });
-    // 12 players, 2 courts, 3 hours, Americano: $144 - 11 x $16 + $21 = -$11 (tickets more than cover it).
-    expect(organizerCost(smartPlan(11), 1600, 2100, 11).ifFillsCents).toBe(-1100);
-    expect(MAX_SPOTS).toBe(12);
+    // 11 locked in: 14 spots (Zip 63), 2 courts, 3 hours, Americano: $144 - 13 x $16 + $21 = -$43 (tickets more than cover it).
+    expect(organizerCost(smartPlan(11), 1600, 2100, 11).ifFillsCents).toBe(-4300);
+    // 10 locked in: the 12-player plan as before: $144 - 11 x $16 + $21 = -$11.
+    expect(organizerCost(smartPlan(10), 1600, 2100, 10).ifFillsCents).toBe(-1100);
+    expect(MAX_SPOTS).toBe(16);
   });
 });
 
@@ -218,8 +222,9 @@ describe('the smart plan on the organizer\'s screens', () => {
     // 7: 10 spots, 2 courts, 2.5 hours.
     expect(await plan()).toMatchObject({ size: 10, courts: 2, minutes: 150 });
     for (const n of names.slice(6, 10)) await payCash(ctx, n);
-    // 11: 12 spots, 2 courts, 3 hours, starting at 7:00 PM. $144 - 11 x $16 + $28 = -$4 (the tickets cover it); 10 paid now: $144 - $160 + $28 = $12.
-    expect(await plan()).toEqual({ size: 12, courts: 2, minutes: 180, start: 1140, cost: { courtCents: 14400, ifFillsCents: -400, nowCents: 1200, paidNow: 10 } });
+    // 11: 14 spots (Zip 63: the cap is 16), the 12-player plan's 2 courts and 3 hours, starting at 7:00 PM. $144 - 13 x $16 + $28 = -$36 (the
+    // tickets cover it); 10 paid now: $144 - $160 + $28 = $12.
+    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 180, start: 1140, cost: { courtCents: 14400, ifFillsCents: -3600, nowCents: 1200, paidNow: 10 } });
     expect(await card(ctx, 'Kai')).toMatchObject({ start: 1140, minutes: 180 });
     // A drop moves it back down at once.
     await backOut(ctx, 'Blair');
@@ -337,20 +342,20 @@ async function creditLines(ctx: Ctx, name: string): Promise<string[]> {
   const credit = (await (await playerPhone(ctx, name)).call('GET', '/api/group')).data.credit;
   return creditChanges(credit.history, 'America/Detroit', 'Alex').map((c) => c.text);
 }
-// Twelve players: every spot (Alex: the waitlist starts after 12).
-const TWELVE = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Kai', 'Lee'];
+// Sixteen players: every spot (Zip 63: the hidden cap is 16, standby starts after it; it was 12).
+const SIXTEEN = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Kai', 'Lee', 'Rory', 'Shay', 'Toni', 'Uma'];
 
 describe('the waitlist', () => {
-  it('12 locked in: Lock spends nothing; Join waitlist keeps the order; unpaid people stay; the first PAID in line gets an opened spot automatically', async () => {
-    const ctx = await world({ signUp: [...TWELVE, 'Lane', 'Morgan', 'Jordan'] });
-    for (const n of TWELVE) await payCash(ctx, n);
-    expect((await card(ctx, 'Kit')).tickets).toMatchObject({ size: 12, full: true });
-    expect((await card(ctx, 'Kit')).tickets.locked.map((x: { name: string }) => x.name)).toEqual(TWELVE);
+  it('16 locked in: Lock spends nothing; Join waitlist keeps the order; unpaid people stay; the first PAID in line gets an opened spot automatically', async () => {
+    const ctx = await world({ signUp: [...SIXTEEN, 'Lane', 'Morgan', 'Jordan'] });
+    for (const n of SIXTEEN) await payCash(ctx, n);
+    expect((await card(ctx, 'Kit')).tickets).toMatchObject({ size: 16, full: true });
+    expect((await card(ctx, 'Kit')).tickets.locked.map((x: { name: string }) => x.name)).toEqual(SIXTEEN);
     // Full: Lock my spot is refused and spends no credit.
     await giveCredit(ctx, 'Lane', 1000);
     const refused = await lock(ctx, 'Lane');
     expect(refused.status).toBe(409);
-    expect(refused.data.message).toBe('All 12 spots just filled. Join the waitlist.');
+    expect(refused.data.message).toBe('Every spot just filled. Join standby.');
     expect(pot(ctx, 'Lane')).toBe(1000);
     expect(ticketRow(ctx, 'Lane')).toBeUndefined();
     // Join waitlist: Lane (unpaid), Morgan (holds with credit), Jordan (I paid, waiting for Alex).
@@ -405,22 +410,22 @@ describe('the waitlist', () => {
     ctx.app.advance(60_000);
     await backOut(ctx, 'Devon');
     expect(ticketRow(ctx, 'Lane')).toMatchObject({ place: 'spot', credit_cents: 1000, paid_cents: 600 });
-    expect(await spots(ctx)).toEqual([...TWELVE.slice(3), 'Morgan', 'Jordan', 'Lane']);
-    // Exactly what each one put in: back as credit for the three who left, on the ticket for the twelve who play.
+    expect(await spots(ctx)).toEqual([...SIXTEEN.slice(3), 'Morgan', 'Jordan', 'Lane']);
+    // Exactly what each one put in: back as credit for the three who left, on the ticket for the sixteen who play.
     expect([pot(ctx, 'Blair'), pot(ctx, 'Casey'), pot(ctx, 'Devon'), pot(ctx, 'Morgan'), pot(ctx, 'Lane'), pot(ctx, 'Jordan')]).toEqual([1600, 1600, 1600, 400, 0, 0]);
     books(ctx);
   });
 
   it('two phones race for the last spot: one locks in, the other is told it filled and spends nothing', async () => {
-    const ctx = await world({ signUp: [...TWELVE, 'Lane'] });
-    for (const n of TWELVE.slice(0, 11)) await payCash(ctx, n);
-    await giveCredit(ctx, 'Lee', 1600);
+    const ctx = await world({ signUp: [...SIXTEEN, 'Lane'] });
+    for (const n of SIXTEEN.slice(0, 15)) await payCash(ctx, n);
+    await giveCredit(ctx, 'Uma', 1600);
     await giveCredit(ctx, 'Lane', 1600);
-    const [a, b] = await Promise.all([lock(ctx, 'Lee'), lock(ctx, 'Lane')]);
+    const [a, b] = await Promise.all([lock(ctx, 'Uma'), lock(ctx, 'Lane')]);
     const results = [a, b].map((r) => (r.status === 200 ? r.data.result : r.data.message)).sort();
-    expect(results).toEqual(['All 12 spots just filled. Join the waitlist.', 'locked']);
-    expect(pot(ctx, 'Lee') + pot(ctx, 'Lane')).toBe(1600);
-    expect(await spots(ctx)).toHaveLength(12);
+    expect(results).toEqual(['Every spot just filled. Join standby.', 'locked']);
+    expect(pot(ctx, 'Uma') + pot(ctx, 'Lane')).toBe(1600);
+    expect(await spots(ctx)).toHaveLength(16);
     books(ctx);
   });
 
@@ -441,8 +446,8 @@ describe('the waitlist', () => {
 
 describe('a hold that never got a spot', () => {
   it('comes back as credit once the night is over (credit to the pot, cash as a credit entry), once only; an I paid still waiting comes back when Alex answers', async () => {
-    const ctx = await world({ signUp: [...TWELVE, 'Lane', 'Morgan', 'Jordan', 'Avery'] });
-    for (const n of TWELVE) await payCash(ctx, n);
+    const ctx = await world({ signUp: [...SIXTEEN, 'Lane', 'Morgan', 'Jordan', 'Avery'] });
+    for (const n of SIXTEEN) await payCash(ctx, n);
     await giveCredit(ctx, 'Lane', 1600);
     await joinLine(ctx, 'Lane');
     expect((await lock(ctx, 'Lane', 'hold')).data.result).toBe('held');
@@ -480,7 +485,7 @@ describe('a hold that never got a spot', () => {
     expect((await answer(ctx, 'Avery', 'confirm')).data).toMatchObject({ creditCents: 1600 });
     expect(pot(ctx, 'Avery')).toBe(1600);
     // The twelve who played keep their tickets.
-    for (const n of TWELVE) expect(ticketRow(ctx, n)).toMatchObject({ place: 'spot', paid_cents: 1600 });
+    for (const n of SIXTEEN) expect(ticketRow(ctx, n)).toMatchObject({ place: 'spot', paid_cents: 1600 });
     books(ctx);
     expect(await creditLines(ctx, 'Lane')).toContain('Nov 12: $16 returned from the Winter Classic (no spot opened)');
     expect(await creditLines(ctx, 'Morgan')).toContain('Nov 12: $16 back from the Winter Classic (no spot opened)');
@@ -709,7 +714,7 @@ describe('the books', () => {
       ['tour_over_price', `UPDATE tournament_tickets SET paid_cents = 2000 WHERE id = ${tk('Blair')}`],
       ['tour_spot_unpaid', `UPDATE tournament_tickets SET place = 'spot' WHERE id = ${tk('Casey')}`],
       [
-        'tour_spots_over_12',
+        'tour_spots_over_cap',
         `DROP TRIGGER tournament_tickets_cap_insert; DROP TRIGGER tournament_tickets_cap_update;
          INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, created_at, updated_at)
          SELECT 'x-' || id, '${ctx.tid}', id, 'spot', '2026-10-26T16:00:00.000Z', 0, '2026-10-26T16:00:00.000Z', '2026-10-26T16:00:00.000Z'
@@ -874,9 +879,9 @@ describe('review fixes (fresh reviewer, Zip 56)', () => {
   });
 
   it('Hold my spot landing just after a Cancel places nothing', async () => {
-    const ctx = await world({ signUp: [...TWELVE, 'Lane'] });
+    const ctx = await world({ signUp: [...SIXTEEN, 'Lane'] });
     expect((await lock(ctx, 'Lane')).data).toMatchObject({ result: 'due' });
-    for (const n of TWELVE) await payCash(ctx, n);
+    for (const n of SIXTEEN) await payCash(ctx, n);
     const undo = raceAt(ctx, /SET place = 'line', place_at = \?1/, () => ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'canceled' WHERE id = ?").run(ctx.tid));
     const r = await lock(ctx, 'Lane', 'hold');
     undo();

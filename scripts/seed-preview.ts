@@ -6,7 +6,8 @@
 //   npm run db:seed:preview -- --zip51   the calm profile of Zip 51 instead of Zip 56's (the default since Zip 56: the tournament at Date picked)
 //   npm run db:seed:preview -- --zip55   Zip 55's start instead (the tournament just created, Only me, nobody on the list)
 //   npm run db:seed:preview -- --zip56   Zip 56's start instead (the Locked doubles tournament with the date picked, tickets open)
-//   (no flag: Zip 60's start, the calm profile with NO tournament open, so Create starts on "Let players vote")
+//   npm run db:seed:preview -- --zip60   Zip 60's start instead (the calm profile with NO tournament open, so Create starts on "Let players vote")
+//   (no flag: Zip 63's start: Zip 60's profile, then the "Countdown: 2 days left" stage: tickets open, 6 paid, Vic sees the pay countdown)
 //   npm run db:seed:preview -- --out x.sql   also keep the SQL it would load
 //
 // How it works: it plays a fake group on a throwaway in-memory copy of the site (the real site code,
@@ -75,7 +76,10 @@ async function main() {
   // Zip 60 (🎾60.formatvote): the default profile now has NO tournament open (Create starts on "Let players vote"; the Tournament test page has the vote
   // stages). `--zip56` builds Zip 56's start (the Locked doubles tournament at Date picked), `--zip55` Zip 55's (just created, Only me).
   const zip56 = args.includes('--zip56');
-  const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') && zip56, zip60: !zip51 && !args.includes('--zip55') && !zip56 });
+  // Zip 63: the default is Zip 60's profile with the "Countdown: 2 days left" stage on top; `--zip60` builds Zip 60's start alone.
+  const zip60only = args.includes('--zip60');
+  const zip60 = !zip51 && !args.includes('--zip55') && !zip56;
+  const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') && zip56, zip60, zip63: zip60 && !zip60only });
   const { summary } = built;
   // PREVIEW SWITCHES RULE, Zip 56: five more rows are ON on live (read Tue Nov 17, 2026, switch rows only) that the lists in
   // scripts/preview-world-small.ts do not have. They go on the real preview only (a local e2e world keeps its lists, so other zips' browser

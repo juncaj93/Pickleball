@@ -28,8 +28,9 @@ SELECT
   ,(SELECT COUNT(*) FROM tournament_tickets WHERE credit_cents + paid_cents + claim_cents > price_cents) AS tour_over_price
   -- A spot that is not paid in full (the table refuses this too).
   ,(SELECT COUNT(*) FROM tournament_tickets WHERE place = 'spot' AND credit_cents + paid_cents < price_cents) AS tour_spot_unpaid
-  -- More than 12 spots taken on a tournament (Alex: the waitlist starts after 12; the database's cap trigger refuses this too).
-  ,(SELECT COUNT(*) FROM (SELECT tournament_id FROM tournament_tickets WHERE place = 'spot' GROUP BY tournament_id HAVING COUNT(*) > 12)) AS tour_spots_over_12
+  -- More than 16 spots taken on a tournament (Zip 63: the hidden cap of 16, it was 12; standby starts after it; the database's cap trigger refuses
+  -- this too).
+  ,(SELECT COUNT(*) FROM (SELECT tournament_id FROM tournament_tickets WHERE place = 'spot' GROUP BY tournament_id HAVING COUNT(*) > 16)) AS tour_spots_over_cap
   -- Money still on a ticket of a canceled tournament (an I paid still waiting for the organizer is a to-do, below, not a problem).
   ,(SELECT COUNT(*) FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
      WHERE t.status = 'canceled' AND k.claim_cents = 0 AND k.credit_cents + k.paid_cents > 0) AS tour_money_on_canceled

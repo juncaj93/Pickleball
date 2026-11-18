@@ -282,7 +282,7 @@ export const COURT_CENTS_PER_HOUR = 24_00;
 export const NIGHT_START_MINUTES = 19 * 60;
 export const NIGHT_END_MINUTES = 22 * 60;
 /** What Create stores in the size and plan columns, which no screen asks for any more (they are NOT NULL): the cap and the whole night. */
-export const STORED_PLAN = { size: MAX_SPOTS, courts: 2, minutes: 180, start: NIGHT_START_MINUTES } as const;
+export const STORED_PLAN = { size: PLAN_MAX, courts: 2, minutes: 180, start: NIGHT_START_MINUTES } as const;
 
 /** Planned size: the players locked in rounded UP to an even number, plus 2 spots of room; at least 6, at most the cap (16; 12 before Zip 63). */
 export function plannedSize(locked: number): number {

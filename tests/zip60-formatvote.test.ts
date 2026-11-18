@@ -402,9 +402,11 @@ describe('pass 2: the Finalize screen (server half)', () => {
     expect(planFit(0)).toEqual({ fits: 6, over: 0 });
     expect(planFit(5)).toEqual({ fits: 8, over: 0 });
     expect(planFit(10)).toEqual({ fits: 12, over: 0 });
-    expect(planFit(12)).toEqual({ fits: 12, over: 0 });
-    expect(planFit(13)).toEqual({ fits: 12, over: 1 });
-    expect(planFit(16)).toEqual({ fits: 12, over: 4 });
+    // Zip 63: the hidden cap is 16 (it was 12), so the plan keeps growing and "over" starts after 16.
+    expect(planFit(12)).toEqual({ fits: 14, over: 0 });
+    expect(planFit(13)).toEqual({ fits: 16, over: 0 });
+    expect(planFit(16)).toEqual({ fits: 16, over: 0 });
+    expect(planFit(18)).toEqual({ fits: 16, over: 2 });
     const c = (locked: number, americano: number, either = 0) => ({ locked, americano, either });
     expect(winnerWords(c(4, 6), decideFormat(c(4, 6), null), null)).toBe('Americano wins, 6 to 4.');
     expect(winnerWords(c(3, 1), decideFormat(c(3, 1), 'americano'), 'americano')).toBe('Locked doubles wins, 3 to 1.');
@@ -443,18 +445,18 @@ describe('pass 2: the Finalize screen (server half)', () => {
     expect(other.data.votes).toEqual({ locked: 1, americano: 0, either: 0 });
   });
 
-  it('over: more than 12 can make the date: the extra start on the waitlist once tickets open', async () => {
+  it('over: more than 16 can make the date (Zip 63: the cap, 12 before): the extra start on standby once tickets open', async () => {
     const { ctx, tid } = await world();
     const names: string[] = Object.keys(ctx.byName);
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 14; i++) {
       const r = await ctx.organizer.call('POST', '/api/admin/players', { name: `Extra${i}` });
       ctx.byName[`Extra${i}`] = r.data.id;
       names.push(`Extra${i}`);
     }
-    for (const n of names.filter((x) => x !== 'Alex').slice(0, 14)) await signUp(ctx, tid, n, 'americano');
+    for (const n of names.filter((x) => x !== 'Alex').slice(0, 18)) await signUp(ctx, tid, n, 'americano');
     const res = await fin(ctx, tid);
-    expect(res.data).toMatchObject({ fits: 12, over: 2 });
-    expect(res.data.players).toHaveLength(14);
+    expect(res.data).toMatchObject({ fits: 16, over: 2 });
+    expect(res.data.players).toHaveLength(18);
   });
 
   it('a tournament created on a format has no vote to count; the chooser starts on its format', async () => {

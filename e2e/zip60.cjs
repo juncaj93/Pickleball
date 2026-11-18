@@ -479,7 +479,7 @@ async function main() {
     });
     await openFinalize(a, day);
     const over = flat(await a.page.locator('[data-tm-fin-over]').innerText());
-    assert(over === '2 over the 12 spots. Once 12 are locked in, the rest can join the waitlist.', over);
+    assert(over === '2 over the 16 spots. Once 16 are locked in, the rest can join standby.', over);
     await fits(a.page, 'dialog[open]');
     const overLines = await a.page.locator('[data-tm-fin-over]').evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
     assert(overLines <= 3, `the over note takes ${overLines} lines`);

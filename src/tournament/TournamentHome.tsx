@@ -9,7 +9,7 @@
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormatVote, PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
-import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, hoursLabel, monthsBetween, startLabel, stubParts } from '../../shared/tournament';
+import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, hoursLabel, MAX_SPOTS, monthsBetween, startLabel, stubParts } from '../../shared/tournament';
 import { payByLabel, payByShort, payCountdown, placeWord } from '../../shared/tournamentTickets';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, useNow, VIEW_ONLY_MESSAGE } from '../lib';
@@ -143,7 +143,7 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
   return (
     <div className="tc-wrap stack" data-tournament={t.status}>
       {/* Zip 63: the pay countdown (mocks 08 to 13), first: only while this player can lock a spot and has not paid, from 3 days before Pay by. */}
-      {k?.payBy && ticketStateOf(t) === 'lock' && <PayCountdownCard t={t} payBy={k.payBy} due={dueOf(k)} busy={busy} onPay={() => void lock('lock')} />}
+      {k?.payBy && !k.closed && ticketStateOf(t) === 'lock' && <PayCountdownCard t={t} payBy={k.payBy} due={dueOf(k)} busy={busy} onPay={() => void lock('lock')} />}
       {t.onlyMe && (
         <div className="tc-strip" role="note" data-tc-strip>
           <div className="tc-strip-text">
@@ -421,12 +421,12 @@ export function TourBalls({ total, gold }: { total: number; gold: number }) {
   }, [lit]);
   if (n === 0) return null;
   const { size, gap } = ballSpec(n);
-  const style = { '--tb-size': `min(${size}px, calc(100cqw / ${n + ((n - 1) * gap) / size}))`, '--tb-gap': `calc(var(--tb-size) * ${gap / size})` } as CSSProperties;
+  const style = { '--tc-ball-size': `min(${size}px, calc(100cqw / ${n + ((n - 1) * gap) / size}))`, '--tc-ball-gap': `calc(var(--tc-ball-size) * ${gap / size})` } as CSSProperties;
   return (
-    <div className="tb-row" data-tc-balls={`${lit}/${n}`}>
-      <span className="tb" style={style} role="img" aria-label={lit > 0 ? `${n} ${n === 1 ? 'player' : 'players'}, ${lit} locked in` : `${n} ${n === 1 ? 'player' : 'players'}`}>
+    <div className="tc-balls-row" data-tc-balls={`${lit}/${n}`}>
+      <span className="tc-balls" style={style} role="img" aria-label={lit > 0 ? `${n} ${n === 1 ? 'player' : 'players'}, ${lit} locked in` : `${n} ${n === 1 ? 'player' : 'players'}`}>
         {Array.from({ length: n }, (_, i) => (
-          <span key={i} className={i < lit ? (fresh && i >= fresh[0] && i < fresh[1] ? 'tb-ball tb-gold tb-gold-new' : 'tb-ball tb-gold') : 'tb-ball'} data-tb={i < lit ? 'gold' : 'ball'}>
+          <span key={i} className={i < lit ? (fresh && i >= fresh[0] && i < fresh[1] ? 'tc-ball tc-gold tc-gold-new' : 'tc-ball tc-gold') : 'tc-ball'} data-tb={i < lit ? 'gold' : 'ball'}>
             <Pickleball />
           </span>
         ))}
@@ -461,8 +461,8 @@ function ballsOf(t: PlayerTournamentView): { total: number; gold: number } {
   return { total: Math.max(people, gold), gold };
 }
 
-/** Zip 56: "8 spots taken" (the overlay's line on standby). */
-const takenWords = (k: PlayerTicketsView) => `${k.size} spots taken`;
+/** Zip 56: "8 spots taken" (the overlay's line on standby). Zip 63: at the hidden cap no number ("Every spot is taken"). */
+const takenWords = (k: PlayerTicketsView) => (k.full ? 'Every spot is taken' : `${k.size} spots taken`);
 
 /** Zip 63: "Pay by 11/30", the card's plain bottom line while tickets are open. */
 const payByFoot = (k: PlayerTicketsView): string | null => (k.payBy ? `Pay by ${payByShort(k.payBy, 'America/Detroit')}` : null);
@@ -530,13 +530,13 @@ function CardShell({
   const b = ballsOf(t);
   return (
     <section
-      className={`tc tk${tap ? ' tc-tap' : ''}${punch ? ' tc-punching' : ''}`}
+      className={`tc tc-hero${tap ? ' tc-tap' : ''}${punch ? ' tc-punching' : ''}`}
       aria-label={t.status === 'canceled' ? `${t.name}, canceled` : cardLabel(t)}
       data-tc-format={t.formatTbd ? 'tbd' : t.format}
       data-tc={data}
       onClick={onClick}
     >
-      <span className="tk-ring" aria-hidden="true" />
+      <span className="tc-halo" aria-hidden="true" />
       {punch && <PunchRing />}
       <Kicker muted={muted}>{muted ? `Canceled · ${kickerWords(t).split(' · ').slice(1).join(' · ')}` : kickerWords(t)}</Kicker>
       <Title t={t} />
@@ -547,7 +547,7 @@ function CardShell({
       )}
       {balls && <TourBalls total={b.total} gold={b.gold} />}
       {actions && <div className="tc-actions">{actions}</div>}
-      <p className="tk-foot" data-tc-sub>
+      <p className="tc-foot" data-tc-sub>
         {punch ? <PunchSub /> : foot}
       </p>
       {links}
@@ -715,14 +715,14 @@ function Overlay({
   const lists = [<WhoIn key="in" k={k} s={s} meName={meName} />, k.line.length > 0 ? <Waitlist key="line" k={k} /> : null];
   return (
     <div className="tc-tw stack" data-tw={s}>
-      <section className="tc tk tk-overlay" aria-label={cardLabel(t)} data-tc-format={t.formatTbd ? 'tbd' : t.format} data-tc={s}>
-        <span className="tk-ring" aria-hidden="true" />
+      <section className="tc tc-hero tc-overlay" aria-label={cardLabel(t)} data-tc-format={t.formatTbd ? 'tbd' : t.format} data-tc={s}>
+        <span className="tc-halo" aria-hidden="true" />
         <Kicker>{kickerWords(t)}</Kicker>
         <Title t={t} />
         <p className="tc-format" data-tc-format-name>
           {formatText(t)}
         </p>
-        <p className="tk-line" data-tc-sub>
+        <p className="tc-under" data-tc-sub>
           {sub}
         </p>
         {s === 'in' && (
@@ -806,7 +806,8 @@ function WhoIn({ k, s, meName }: { k: PlayerTicketsView; s: TicketState; meName:
       <div className="tc-tw-head">
         <h3 className="tc-tw-label">Who’s in</h3>
         <span className={full ? 'tc-tw-chip tc-tw-chip-full' : 'tc-tw-chip'} data-tw-count>
-          {k.locked.length} of {k.size}
+          {/* Zip 63: the cap stays hidden: at the most spots there are, just how many are in. */}
+          {k.full || k.size >= MAX_SPOTS ? `${k.locked.length} in` : `${k.locked.length} of ${k.size}`}
         </span>
       </div>
       <ol className="tc-tw-rows">

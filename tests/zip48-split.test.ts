@@ -44,7 +44,8 @@ const gzKB = (text: string) => gzipSync(Buffer.from(text), { level: 9 }).length 
 export function isTournamentRule(rule: string): boolean {
   // Zip 59: the ticket punch's keyframes (named tc-...): they only move the tournament's own elements.
   if (/^@keyframes\s+(tc|tm)-/.test(rule)) return true;
-  const m = /^@media[^{]*\{([\s\S]*)\}$/.exec(rule);
+  // Zip 63: a container query (the ticket card sizes its top line to itself) counts like a media query.
+  const m = /^@(?:media|container)[^{]*\{([\s\S]*)\}$/.exec(rule);
   if (m) {
     const inner = cssRules(m[1]);
     return inner.length > 0 && inner.every(isTournamentRule);

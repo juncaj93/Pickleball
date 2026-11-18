@@ -100,8 +100,9 @@ export async function buildSmallPreview(
   /** `zip51`: Zip 51's two late-drop games instead (the preview seed from Zip 51 on). */
   /** `zip55`: the calm profile of Zip 55 (Tournaments): no zip's games, no Venue cards, and a fresh "Winter Classic" on Only me (the preview seed). */
   /** `zip56`: Zip 55's profile, with the tournament's date picked for Everyone (Zip 56: picking the date opens tickets; nobody has paid). */
+  /** `zip63`: Zip 60's profile, then the Tournament test page's "Countdown: 2 days left" stage (tickets open, 6 paid; Vic sees the pay countdown). */
   /** `zip60`: Zip 60's profile (the players vote the format): the Zip 55 profile with NO tournament open (Alex taps Create, the default is "Let players vote"; the Tournament test page has the vote stages). */
-  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean; zip60?: boolean } = {},
+  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean; zip60?: boolean; zip63?: boolean } = {},
 ): Promise<Seed> {
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
@@ -683,6 +684,20 @@ export async function buildSmallPreview(
       delete w.env.PREVIEW_CALM;
     }
     summary.push('Zip 56 Tournaments piece 2 (on): "Winter Classic" with the date picked for Everyone, so tickets are open (8 on the list, the third Thursday of next month, nobody paid); the Tournament test page has Tickets open (6 paid), All locked in, 7 locked in after Pay by, Canceled and Rescheduled');
+  }
+
+  // 30. Zip 63 (🎾63.tickets): the calm preview opens on the Tournament test page's "Countdown: 2 days left" stage: Winter Classic, Everyone,
+  //     tickets open, 6 locked in (gold), Vic, Zoe and Reese on the list and unpaid, Pay by 7:00 PM two days after the seed. Vic's Home: the amber
+  //     countdown and the card with 9 balls (6 gold); organizer Home: Remind all unpaid (3 unpaid). Every other moment is one tap away.
+  if (opts.zip63) {
+    if (!opts.zip60) throw new Error('zip63 builds on the zip60 profile');
+    w.env.PREVIEW_CALM = 'on';
+    try {
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'pay_2d' });
+    } finally {
+      delete w.env.PREVIEW_CALM;
+    }
+    summary.push('Zip 63 Tickets (on): "Winter Classic" at the Countdown: 2 days left stage (Everyone, tickets open, 6 paid; Vic, Zoe and Reese unpaid; Pay by 7:00 PM two days after the seed). Vic sees the amber countdown and the gold-ball card; organizer Home shows Remind all unpaid (3 unpaid)');
   }
 
   await refresh();
