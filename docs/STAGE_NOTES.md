@@ -6125,3 +6125,25 @@ To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`, the
 pickleball --remote` (must list only 0026), `npm run db:migrate:remote`, fast-forward main to this branch and push, `npm run deploy` from main, the
 checks again, the public live check. Rollback: site deployment `6c00f062-f737-4b09-9341-68fe94b43a08` (Zip 62); the new triggers can stay (old
 code checks 12 itself).
+
+### Round 2 (Alex's answers, Wed Nov 18, evening): OK to ship with three fixes, one deploy
+Answers: 0026 on live OK; late payers while spots are open are Zip 64 (not here); the plan counts above 11 locked in are fine; Remind all unpaid
+stays green.
+1. No "waiting for confirm" words on any player screen (the trust rule: we trust people that they paid; Alex undoes it if they did not). After
+   I paid the player sees a gold ball and "You're locked in" at once. The server's player `locked` list is now every spot AND every I paid for a
+   spot that waits for Alex, in the order they paid (a spot by when it was taken, an I paid by when it was tapped). Display only: the spots,
+   the cap, the plan, the books and Alex's I paid card with Paid / Didn't pay are exactly as before; Didn't pay takes the gold away again.
+   Gone everywhere a player sees it: the card ("Paid · Waiting for Alex to confirm"), standby ("Waiting for Alex to confirm your payment"),
+   the I paid toast ("once Alex confirms"), the back out sheet and toast, the canceled card. A paid or I-paid standby hold reads "Your spot is
+   held."
+2. The pop: on Alex's path (Pay $16, then I paid) the ball did not turn gold until Alex confirmed, so nothing moved. Now the Pay sheet closes at
+   the tap and the 7th ball turns gold when the answer lands (116 ms in the browser check), pops to 1.31x (the site's m-ball-pop) and glows
+   (an 18 px gold glow) that eases to the steady ring; measured every animation frame (e2e/zip63.cjs C2, frames in .data/zip63-shots). The
+   reduced-motion rule is the site's own (the global one in src/styles.css), the same as the game sign-up pop.
+3. See who's in (Alex's two mocks): the heading alone (no count chip), every player on the card (the same people as the balls: everyone who
+   can make the date), numbered, locked in first with gold rings in the order they paid, then the viewer's own row if unpaid ("Pay to lock
+   in", plain ball, right under the last gold one), then the others in sign-up order with no words. Only the viewer's own row has words
+   ("Locked in" or "Pay to lock in"). No Open spot rows, no plan size. Standby keeps its own section. The server now sends `going` as names
+   (the viewer's own marked), the same people the balls count. The card's gold and the list's gold are the same list, so they always match.
+   Why Alex saw 12 balls and 7 gold as Parker: the preview's "Ball look 12 (7 gold)" link was remembered by that phone; it now reads only the
+   page's own address, so another name shows its real card.

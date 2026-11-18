@@ -433,12 +433,13 @@ async function main() {
       await check(`E every spot taken: Join standby, 16 balls, standby words, no "waitlist" (${width} ${scheme})`, async () => {
         await stage('tickets_open');
         const v = await newPage({ width, scheme });
-        const names = ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Wren', 'Quinn', 'Zoe', 'Reese', 'Parker', 'Rowan', 'Sage', 'Wren', 'Quinn', 'Zoe', 'Reese'];
+        // 16 locked in (the 10 names cannot make it: stand-in names for the ones past 10), Vic and Christopher on standby side.
+        const names = ['Alex', 'Parker', 'Rowan', 'Sage', 'Wren', 'Quinn', 'Zoe', 'Reese', 'Ash', 'Bo', 'Cy', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal'];
         await v.page.route(/\/api\/group(\?|$)/, async (route) => {
           const res = await route.fetch();
           const j = await res.json();
           if (j.tournament && j.tournament.tickets) {
-            j.tournament.going = 17;
+            j.tournament.going = [...names.map((name) => ({ name })), { name: 'Christopher Vanderberg' }, { name: 'Vic', me: true }];
             j.tournament.tickets.full = true;
             j.tournament.tickets.size = 16;
             j.tournament.tickets.locked = names.map((name) => ({ name }));
@@ -461,6 +462,8 @@ async function main() {
         await sheet.locator('[data-tw]').waitFor({ timeout: 10000 });
         const words = flat(await sheet.innerText());
         assert(/standby/i.test(words) && !/wait ?list/i.test(words), words);
+        // Round 2 (the reviewer): every spot is taken, so Vic cannot lock: Vic's own row has no "Pay to lock in".
+        assert((await sheet.locator('[data-tw-in] [data-tw-row="me"] .tc-tw-tag').count()) === 0 && !/Pay to lock in/.test(words), 'no Pay to lock in when full');
         assert(!/of 16|16 spots/i.test(words), `the cap stays hidden: ${words}`);
         assert(!/wait ?list/i.test(flat(await v.page.locator('body').innerText())), 'no waitlist anywhere on Home');
         await v.ctx.close();

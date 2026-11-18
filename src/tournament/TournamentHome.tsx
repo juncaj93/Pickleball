@@ -48,14 +48,15 @@ export function ticketStateOf(t: PlayerTournamentView): TicketState | null {
   if (t.status !== 'tickets' || !k || !t.me) return null;
   const mine = k.mine;
   if (mine?.place === 'spot') return 'in';
+  // Zip 63 (Alex): we trust people that they paid. An I paid for the whole ticket (not a standby hold) is "locked in" at once, also after the
+  // night starts (the organizer confirms or undoes it).
+  if (mine && mine.place !== 'line' && mine.claimCents > 0 && mine.owedCents === 0) return 'in';
   // A waitlist player keeps their place on the card even when sales are closed (no Hold button then: it waits for a freed spot).
   if (k.closed && mine?.place !== 'line') return 'closed';
   // Alex: the spots follow the players locked in; every spot is taken only at 12, then the waitlist starts.
   const open = !k.full;
   const paid = !!mine && mine.creditCents + mine.paidCents >= k.priceCents;
   if (mine?.place === 'line') return open && !paid && mine.claimCents === 0 ? 'lock' : 'line';
-  // Zip 63 (Alex): we trust people that they paid. An I paid for the whole ticket is "locked in" at once (the organizer confirms or undoes it).
-  if (mine && mine.claimCents > 0 && mine.owedCents === 0) return 'in';
   return open ? 'lock' : 'full';
 }
 
@@ -130,6 +131,8 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
     // Zip 63: the sheet closes at the tap, so the card (and its new gold ball's pop) is in view when the answer lands. A failed save shows its
     // error and opens the sheet again.
     setPaying(null);
+    // Paid from the card's overlay: it closes too, so the card and its new gold ball are what they see.
+    setSheet(null);
     const ok = await run(() => api('POST', '/api/tournament/paid', { tournamentId: t.id, cents }), held ? 'Thanks. Your spot is held.' : 'Thanks. You’re locked in.');
     if (!ok) setPaying(cents);
   }
@@ -465,7 +468,8 @@ function ballsOf(t: PlayerTournamentView): { total: number; gold: number } {
 type Who = { name: string; me?: true };
 /**
  * Zip 63 round 2 (Alex): the people on the card, once a date is picked: the balls and See who's in are always the same people. `gold`: locked
- * in (every spot and every trusted I paid), in the order they paid. `rest`: everyone else who can make the date and is not on standby, the
+ * in (every spot and every trusted I paid), in the order they paid (after Alex confirms an I paid, by when he confirmed it, as spots always
+ * were). Standby players are in their own Standby list, not here. `rest`: everyone else who can make the date and is not on standby, the
  * viewer first (their row sits right under the last gold one), then the others in sign-up order. Null before a date (one ball per sign-up).
  */
 function cardRows(t: PlayerTournamentView): { gold: Who[]; rest: Who[] } | null {
@@ -813,6 +817,8 @@ function Overlay({
  */
 function WhoIn({ t }: { t: PlayerTournamentView }) {
   const rows = cardRows(t) ?? { gold: t.tickets?.locked ?? [], rest: [] };
+  // "Pay to lock in" only while they really can (a spot open for them, tickets not closed); otherwise their own row has no words.
+  const canLock = ticketStateOf(t) === 'lock';
   const all = [...rows.gold.map((p) => ({ ...p, gold: true })), ...rows.rest.map((p) => ({ ...p, gold: false }))];
   return (
     <section className="tc-tw-card" aria-label="Who's in" data-tw-in>
@@ -827,7 +833,7 @@ function WhoIn({ t }: { t: PlayerTournamentView }) {
               <Pickleball />
             </span>
             <span className="tc-tw-name">{p.name}</span>
-            {p.me ? <span className={p.gold ? 'tc-tw-tag tc-tw-gold' : 'tc-tw-tag'}>{p.gold ? 'Locked in' : 'Pay to lock in'}</span> : <span />}
+            {p.me && (p.gold || canLock) ? <span className={p.gold ? 'tc-tw-tag tc-tw-gold' : 'tc-tw-tag'}>{p.gold ? 'Locked in' : 'Pay to lock in'}</span> : <span />}
           </li>
         ))}
       </ol>
