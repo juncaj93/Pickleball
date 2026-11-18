@@ -396,10 +396,16 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
  * Zip 59: the slim Home line shows until the first day of the calendar month of the tournament date (Eastern); from then on the full card.
  * No date picked yet: slim.
  */
-export function slimUntilMonth(finalDate: string | null, nowMs: number, tz: string): boolean {
+export function slimUntilMonth(finalDate: string | null, nowMs: number, tz: string, payBy: string | null = null): boolean {
   if (!finalDate) return true;
   const today = todayKey(nowMs, tz);
-  return today.slice(0, 7) < finalDate.slice(0, 7);
+  if (today.slice(0, 7) >= finalDate.slice(0, 7)) return false;
+  // A Pay by that falls in an earlier month (a game on the 1st) must not hide behind the slim line: the full card from that month.
+  if (payBy) {
+    const p = localParts(Date.parse(payBy), tz);
+    if (today.slice(0, 7) >= dayKey(p.year, p.month, p.day).slice(0, 7)) return false;
+  }
+  return true;
 }
 
 /** The picked date as the screens show it: once picked, while tickets are open on it, and on a canceled tournament's card. */
@@ -502,7 +508,7 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
     ...(before ? { lockedLevel: before.first_level ?? before.picked_level } : {}),
     ...(onlyMe ? { onlyMe: true as const } : {}),
     // Zip 59: one slim line until the month of the tournament date (and before a date is picked).
-    ...(statusOf(t) !== 'canceled' && slimUntilMonth(shownDate(t), ctx.nowMs, group.timezone) ? { slim: true as const } : {}),
+    ...(statusOf(t) !== 'canceled' && slimUntilMonth(shownDate(t), ctx.nowMs, group.timezone, statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null) ? { slim: true as const } : {}),
   };
   // Zip 56: the plain Canceled card, with what came back to this player.
   if (statusOf(t) === 'canceled') return { ...base, canceled: await canceledMoneyOf(ctx.db, t.id, playerId) };
@@ -522,7 +528,10 @@ async function playerTicketsView(ctx: Ctx, t: TournamentRow, tickets: TicketWith
   const freed = phase === 'after' ? await freedSpots(ctx.db, group.id, t) : 0;
   const closed =
     statusOf(t) === 'tickets' &&
-    (salesClosed(t, group.timezone, ctx.nowMs) || phase === 'cut' || (phase === 'after' && freed === 0 && own?.place !== 'line' && !((own?.claim_cents ?? 0) > 0)));
+    (salesClosed(t, group.timezone, ctx.nowMs) ||
+      // A player already holding something (a paid place in line, or an I paid waiting) keeps seeing that, not "Tickets closed".
+      (!(own && (own.claim_cents > 0 || (own.place === 'line' && own.credit_cents + own.paid_cents >= own.price_cents))) &&
+        (phase === 'cut' || (phase === 'after' && freed === 0 && own?.place !== 'line'))));
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at 12.
     size: smartPlan(locked).size,
