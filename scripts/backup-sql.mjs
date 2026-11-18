@@ -80,15 +80,18 @@ export function backupToSql(backup, columns) {
   if (backup.tables.groups.length === 0) throw new Error('The backup has no group in it.');
 
   const out = ['PRAGMA defer_foreign_keys = true;'];
+  // Zip 56: a table the place the SQL runs does not have (`columns` says so: a demo copy built from an older layout, like the build before
+  // the tournaments) is left out, as a column it does not have is. A real restore passes no `columns`: every table is written.
+  const has = (t) => !columns || !columns[t] || columns[t].size > 0;
   // Clear what's there now, children first. Organizer sign-ins go too (they point at the group); a version 2 file brings its own back.
-  for (const t of [...TABLES].reverse()) out.push(`DELETE FROM ${t};`);
+  for (const t of [...TABLES].reverse()) if (has(t)) out.push(`DELETE FROM ${t};`);
 
   // A canceled game refuses sign-ups, so games go back as not canceled until
   // their players are in, then get canceled again.
   const canceled = backup.tables.sessions.filter((s) => s.status === 'canceled').map((s) => s.id);
   for (const t of TABLES) {
     // A file never restores a table its version does not have, even if something put it in (it would not be what the site wrote).
-    if (notInVersion(backup.version, t)) continue;
+    if (notInVersion(backup.version, t) || !has(t)) continue;
     for (const row of backup.tables[t] ?? []) {
       const known = columns && columns[t];
       const cols = Object.keys(row).filter((c) => !known || known.has(c));

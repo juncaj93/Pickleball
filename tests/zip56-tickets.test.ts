@@ -1113,6 +1113,25 @@ describe('ship answers (Alex, Zip 56)', () => {
     books(ctx);
   });
 
+  it('answer 3: a version 3 file still loads into a demo copy built before the tournament tables (View as rollback safety); with them it has every ticket', async () => {
+    const { readdirSync } = await import('node:fs');
+    const { default: initSqlJs } = await import('sql.js');
+    const { createSandbox } = await import('../src/demo/sandbox');
+    const { ORIGIN } = await import('./harness');
+    const ctx = await world({ signUp: ['Alex', 'Blair'] });
+    await payCash(ctx, 'Blair');
+    const file = (await ctx.organizer.call('GET', '/api/admin/backup')).data;
+    expect(file.version).toBe(3);
+    const all = readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort();
+    const SQL = await initSqlJs();
+    // The layout from before Zip 55 (no tournament tables): the copy still builds, the tournament rows are simply left out.
+    const old = await createSandbox(SQL, file, all.filter((f) => f < '0023').map((f) => readFileSync(`migrations/${f}`, 'utf8')), ORIGIN);
+    expect((await old.request('GET', '/api/admin/dashboard', undefined, {}, ctx.app.now)).status).toBe(200);
+    // Today's layout: the copy holds the tournament and its tickets (the copy's switch decides what it shows, as on the site).
+    const now = await createSandbox(SQL, file, all.map((f) => readFileSync(`migrations/${f}`, 'utf8')), ORIGIN);
+    expect((await now.request('GET', '/api/admin/dashboard', undefined, {}, ctx.app.now)).status).toBe(200);
+  });
+
   it('answer 3: the backup file (version 3) carries the four tournament tables, and a restore brings every ticket and its money back exactly', async () => {
     const ctx = await world({ signUp: ['Alex', 'Blair', 'Casey', 'Devon'] });
     await payCash(ctx, 'Blair');
