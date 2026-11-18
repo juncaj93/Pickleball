@@ -175,9 +175,11 @@ dialog.sheet.tm-page {
   color: var(--ink-2);
 }
 /* The format under the name on the organizer's Home card: ONE line, "Americano (new partner every round)", in the green subtitle style (Alex). */
+/* Alex: one line. Too narrow for 0.8rem (320 wide): the words shrink to fit the column (cqw); no cqw: 0.8rem. */
 .tm-home-format {
   margin: 3px 0 0;
   font-size: 0.8rem;
+  font-size: clamp(0.64rem, 4.9cqw, 0.8rem);
   font-weight: 650;
   line-height: 1.3;
   color: var(--accent-text);
@@ -526,7 +528,9 @@ dialog.sheet.tm-page {
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%);
 }
 .tm-home-text {
+  flex: 1 1 auto;
   min-width: 0;
+  container-type: inline-size;
 }
 .tm-home-title {
   margin: 0;

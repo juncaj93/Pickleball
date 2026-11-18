@@ -1,22 +1,24 @@
-/* Zip 56 (🎾56.tourney2): Tournaments, piece 2 (tickets), in a real browser.
+/* Zip 56 (🎾56.tourney2): Tournaments, piece 2 (tickets), in a real browser, with Alex's changes after testing piece 1.
  *
  *   node e2e/zip56.cjs      (also run by npm run test:e2e)
  *
- * The world is the preview's calm Zip 56 profile (scripts/preview-world-small.ts step 29: the Winter Classic at Date picked for Everyone, 8 on
- * the list, Thu Dec 17 picked) as of Tue Nov 17 2026, 9:00 AM Eastern, the clock 10:00 AM. The dev server runs with PREVIEW_CALM=on and
- * PB_PREVIEW_BUILD=1, as the preview does.
- *   A  The seed: organizer Home shows picture 29's card with Open tickets.
- *   B  Open tickets from Home: Pay by Tue Dec 15, 7:00 PM; the Home line "Tickets: 0 of 8 locked in".
+ * The world is the preview's calm Zip 56 profile (scripts/preview-world-small.ts step 29: the Winter Classic with the date picked for
+ * Everyone, which now means tickets are open, 8 on the list, Thu Dec 17) as of Tue Nov 17 2026, 9:00 AM Eastern, the clock 10:00 AM. The dev
+ * server runs with PREVIEW_CALM=on and PB_PREVIEW_BUILD=1, as the preview does.
+ *   A  The seed: tickets open, nobody paid; organizer Home has picture 29's card (Tickets, no Open tickets) with the smart plan's line.
+ *   B  Picking the date opens tickets (Alex: no Open tickets button): Pay by Tue Dec 15, 7:00 PM; "Tickets: 0 of 6 locked in".
  *   C  Parker: Lock my spot, the site's Pay sheet (Pay Alex $16, Venmo, I paid), then "Paid · Waiting for Alex to confirm".
  *   D  Alex answers on Home (Paid): Parker is locked in.
  *   E  Parker backs out after paying: the Are you sure words say the $16 comes back as credit, and it does.
- *   F  Spots full (test page stage): Vic sees "8 spots taken"; Join waitlist opens picture 12; Just keep me on the list; Zoe backs out and Reese
- *      (paid, first in line) moves in by itself.
+ *   F  The waitlist screens (12 locked in, picture 12): the 10 preview names cannot fill 12 spots, so the player's answer is stood in for.
  *   G  Cancel or reschedule (picture 30) on Home: Reschedule ("Rescheduled. Pick your dates again"), then Cancel (the plain Canceled card).
  *   H  7 locked in after Pay by: the plain warning on the organizer's card, nobody taken off.
  *   I  Every ticket screen at 390, 360 and 320 wide, light and dark: nothing wider than the screen, nothing sticking out, every list row on one
  *      line (Christopher Vanderberg too).
  *   J  Nobody else gets it: switched off, players get no tournament at all; a canceled one shows only to the players on its list.
+ *   K  Alex's changes: the smart plan and the cost lines (and the Booking hours note), the one-line format subtitle (both formats), Create with
+ *      no players expected or court plan and space between the $ boxes, a level picked once (Edit is dates only; signing up again skips the
+ *      level), and the soft fades only while there is more to scroll.
  * Screenshots: .data/zip56-shots (not in git).
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -195,35 +197,43 @@ async function main() {
   let d = await dash();
 
   // ---------------------------------------------------------------- A  the seed
-  await check('A seed: the Winter Classic at Date picked for Everyone, 8 on the list, Thu Dec 17; Home shows Open tickets', async () => {
+  await check('A seed: the Winter Classic, the date picked: tickets are open (Alex), nobody paid; Home has picture 29\'s card with Tickets and the plan', async () => {
     const t = d.tournament;
-    assert(t && t.status === 'date_picked' && t.visibility === 'all' && t.signups.length === 8 && t.finalDate === '2026-12-17', JSON.stringify(t && { s: t.status, v: t.visibility, n: t.signups.length, f: t.finalDate }));
-    assert(t.payBy === '2026-12-16T00:00:00.000Z', `Open tickets starts with Tue Dec 15, 7:00 PM: ${t.payBy}`);
+    assert(t && t.status === 'tickets' && t.visibility === 'all' && t.signups.length === 8 && t.finalDate === '2026-12-17', JSON.stringify(t && { s: t.status, v: t.visibility, n: t.signups.length, f: t.finalDate }));
+    assert(t.payBy === '2026-12-16T00:00:00.000Z', `Pay by Tue Dec 15, 7:00 PM: ${t.payBy}`);
+    assert(t.size === 6 && t.courts === 1 && t.minutes === 150, `the smart plan for nobody locked in: ${JSON.stringify([t.size, t.courts, t.minutes])}`);
     const a = await adminPage();
-    await a.page.locator('[data-tm-open-tickets]').waitFor({ timeout: 15000 });
+    await a.page.locator('[data-tm-tickets]').waitFor({ timeout: 15000 });
+    assert((await a.page.locator('[data-tm-open-tickets]').count()) === 0, 'no Open tickets button');
+    assert(flat(await a.page.locator('[data-tm-row="plan"]').innerText()) === '6 players · 1 court · 2.5 hours', 'the plan line');
+    assert(flat(await a.page.locator('[data-tm-row="cost"]').innerText()) === '$8', 'your cost if it fills');
+    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/6', 'the Home line');
     await shot(a.page, 'A-admin-29');
     assert(a.errors.length === 0, a.errors.join(' | '));
     await a.ctx.close();
   });
 
-  // ---------------------------------------------------------------- B  open tickets
-  await check('B Open tickets from Home: Pay by Tue 7:00 PM; the Home line says Tickets: 0 of 8 locked in', async () => {
+  // ---------------------------------------------------------------- B  picking the date opens tickets
+  await check('B picking the date opens tickets at once: the date sheet says so, Pay by Tue 7:00 PM, the Home line says Tickets: 0 of 6 locked in', async () => {
+    await stage('signup');
     const a = await adminPage();
-    await a.page.locator('[data-tm-open-tickets]').click();
-    const go = a.page.locator('[data-tm-pay-go]');
-    await go.waitFor({ timeout: 10000 });
-    const sheet = flat(await sheetOpen(a.page).innerText());
-    assert(/Pay by/i.test(sheet), sheet);
-    await shot(a.page, 'B-open-tickets-sheet');
-    await go.click();
-    await a.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/8', 'the Home line');
-    assert(flat(await a.page.locator('[data-tickets-card]').innerText()).includes('Tickets: 0 of 8 locked in'), 'the words');
-    await shot(a.page, 'B-admin-tickets-open');
-    assert(a.errors.length === 0, a.errors.join(' | '));
+    await a.page.locator('[data-tm-open-dates]').click();
+    await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').first().waitFor();
+    await a.page.locator('[data-tm-card="dates"] [data-day="2026-12-17"]').click();
+    assert(flat(await a.page.locator('[data-tm-date-opens]').innerText()) === 'Tickets open when you pick it.', 'the date sheet line');
+    await shot(a.page, 'B-date-sheet');
+    await a.page.locator('[data-tm-date-pick]').click();
+    await a.page.locator('[data-tm-date-pick]').waitFor({ state: 'detached', timeout: 10000 });
     await a.ctx.close();
     d = await dash();
-    assert(d.tournament.status === 'tickets' && d.tournament.payBy === '2026-12-16T00:00:00.000Z', JSON.stringify({ s: d.tournament.status, p: d.tournament.payBy }));
+    assert(d.tournament.status === 'tickets' && d.tournament.finalDate === '2026-12-17' && d.tournament.payBy === '2026-12-16T00:00:00.000Z', JSON.stringify({ s: d.tournament.status, p: d.tournament.payBy }));
+    const h = await adminPage();
+    await h.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
+    assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/6', 'the Home line');
+    assert(flat(await h.page.locator('[data-tickets-card]').innerText()).includes('Tickets: 0 of 6 locked in'), 'the words');
+    await shot(h.page, 'B-admin-tickets-open');
+    assert(h.errors.length === 0, h.errors.join(' | '));
+    await h.ctx.close();
   });
 
   // ---------------------------------------------------------------- C  lock my spot, the Pay sheet, I paid
@@ -232,7 +242,8 @@ async function main() {
     const card = p.page.locator('.tc').first();
     await card.waitFor({ timeout: 15000 });
     const words = flat(await card.innerText());
-    assert(/tickets open/i.test(words) && words.includes('2 hours · Pay by Tue 7:00 PM') && words.includes('Lock my spot · $16') && words.includes('See who’s in'), words);
+    // Nobody locked in yet: the plan is 6 players, 2.5 hours (Alex's smart plan); players see its hours.
+    assert(/tickets open/i.test(words) && words.includes('2.5 hours · Pay by Tue 7:00 PM') && words.includes('Lock my spot · $16') && words.includes('See who’s in'), words);
     await card.locator('[data-tc-lock]').click();
     const pay = p.page.locator('[data-pay-sheet]');
     await pay.waitFor({ timeout: 10000 });
@@ -256,11 +267,11 @@ async function main() {
     assert(flat(await claim.innerText()).includes('Parker tapped I paid ($16), not confirmed.'), flat(await claim.innerText()));
     await claim.locator('[data-claim-paid]').click();
     await claim.waitFor({ state: 'detached', timeout: 10000 });
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '1/8', 'the Home line');
+    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '1/6', 'the Home line');
     await a.ctx.close();
     const p = await playerPage('Parker');
     const words = flat(await p.page.locator('.tc').first().innerText());
-    assert(/you’re in/i.test(words) && words.includes('2 hours · You’re locked in') && words.includes('See who’s in') && words.includes('Drop out'), words);
+    assert(/you’re in/i.test(words) && words.includes('2.5 hours · You’re locked in') && words.includes('See who’s in') && words.includes('Drop out'), words);
     await shot(p.page, 'D-parker-locked-in');
     await p.ctx.close();
   });
@@ -284,40 +295,50 @@ async function main() {
     assert(data.tournament.me === null && data.tournament.tickets.locked.length === 0, JSON.stringify(data.tournament.tickets));
   });
 
-  // ---------------------------------------------------------------- F  spots full, the waitlist
-  await check('F spots full: Vic sees "8 spots taken"; Join waitlist opens picture 12; Just keep me on the list keeps Vic second', async () => {
-    await stage('spots_full');
-    const p = await playerPage('Vic');
-    const card = p.page.locator('.tc').first();
-    const words = flat(await card.innerText());
-    assert(/8 spots taken/i.test(words) && words.includes('Join the waitlist in case someone drops') && words.includes('Join waitlist'), words);
-    await card.locator('[data-tc-join]').click();
-    await p.page.locator('dialog[open] [data-tc-keep]').waitFor({ timeout: 10000 });
-    const overlay = flat(await sheetOpen(p.page).innerText());
+  // ---------------------------------------------------------------- F  the waitlist screens (12 locked in)
+  // The spots follow the players locked in and fill only at 12; the preview has 10 names (no new names allowed), so the player's answer is
+  // stood in for here: 12 locked in, Reese paid and first in line, Vic second (or not in line yet). The server's own waitlist rules are proven
+  // to the cent in tests/zip56-tickets.test.ts with 16 players.
+  const FILL = ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Wren', 'Quinn', 'Zoe', 'Parker', 'Rowan', 'Sage', 'Wren'];
+  async function fakeFull(page, inLine) {
+    await page.route('**/api/group', async (route) => {
+      const res = await route.fetch();
+      const data = await res.json();
+      const k = data.tournament && data.tournament.tickets;
+      if (k) {
+        k.size = 12;
+        k.full = true;
+        k.locked = FILL.map((name) => ({ name }));
+        k.line = inLine ? [{ name: 'Reese', paid: true }, { name: 'Vic', paid: false, me: true }] : [{ name: 'Reese', paid: true }];
+        k.mine = inLine ? { place: 'line', creditCents: 0, paidCents: 0, claimCents: 0, owedCents: 1600 } : null;
+      }
+      await route.fulfill({ response: res, json: data });
+    });
+  }
+  await check('F 12 locked in: Vic sees "12 spots taken" and Join waitlist; in line, picture 12 (Hold my spot · $16, Just keep me on the list)', async () => {
+    await stage('tickets_open');
+    const p = await newPage();
+    await fakeFull(p.page, false);
+    await p.page.goto(`${BASE}/?as=Vic`);
+    await p.page.locator('.tc').first().waitFor({ timeout: 30000 });
+    await p.page.waitForTimeout(500);
+    const words = flat(await p.page.locator('.tc').first().innerText());
+    assert(/12 spots taken/i.test(words) && words.includes('Join the waitlist in case someone drops') && words.includes('Join waitlist'), words);
+    await shot(p.page, 'F-full-card');
+    await p.ctx.close();
+    const q = await newPage();
+    await fakeFull(q.page, true);
+    await q.page.goto(`${BASE}/?as=Vic`);
+    await q.page.locator('.tc [data-tc-who]').first().waitFor({ timeout: 30000 });
+    await q.page.locator('.tc [data-tc-who]').first().click();
+    await q.page.locator('dialog[open] [data-tc-keep]').waitFor({ timeout: 10000 });
+    const overlay = flat(await sheetOpen(q.page).innerText());
     assert(overlay.includes('You’re second on the waitlist') && overlay.includes('Hold my spot · $16') && overlay.includes('Just keep me on the list'), overlay);
     assert(overlay.includes('If someone drops, you’re locked into that spot.') && overlay.includes('If a spot opens, whoever pays first gets it.'), overlay);
-    await shot(p.page, 'F-waitlist-overlay');
-    await p.page.locator('dialog[open] [data-tc-keep]').click();
-    await p.page.locator('dialog[open] [data-tc-keep]').waitFor({ state: 'detached', timeout: 10000 });
-    await p.page.waitForTimeout(400);
-    const after = flat(await p.page.locator('.tc').first().innerText());
-    assert(/waitlist/i.test(after) && after.includes('You’re second on the waitlist'), after);
-    assert(p.errors.length === 0, p.errors.join(' | '));
-    await p.ctx.close();
-  });
-  await check('F Zoe backs out: Reese (paid, first in line) moves into the spot by itself; Vic (unpaid) stays in line, now first', async () => {
-    const zoe = await phone('Zoe');
-    const out = await zoe.post('/api/tournament/back-out', { tournamentId: (await dash()).tournament.id, backCents: 1600 });
-    await zoe.close();
-    assert(out.status === 200 && out.data.result === 'backed_out', JSON.stringify(out));
-    d = await dash();
-    const reese = d.tournament.tickets.find((k) => k.name === 'Reese');
-    assert(reese && reese.place === 'spot', JSON.stringify(reese));
-    const p = await playerPage('Reese');
-    assert(/you’re in/i.test(flat(await p.page.locator('.tc').first().innerText())), 'Reese sees You\'re in');
-    await p.ctx.close();
-    const v = (await answerOf('Vic')).data.tournament.tickets;
-    assert(v.line.length === 1 && v.line[0].me && !v.line[0].paid, JSON.stringify(v.line));
+    assert(/12 of 12/i.test(overlay) && overlay.includes('Paid, first in line'), overlay);
+    await shot(q.page, 'F-waitlist-overlay');
+    assert(q.errors.length === 0, q.errors.join(' | '));
+    await q.ctx.close();
   });
 
   // ---------------------------------------------------------------- G  cancel or reschedule
@@ -368,7 +389,7 @@ async function main() {
     const warn = a.page.locator('[data-tm-evens]');
     await warn.waitFor({ timeout: 15000 });
     assert(flat(await warn.innerText()) === '7 locked in. Need 1 more or 1 less.', flat(await warn.innerText()));
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '7/8', 'the Home line');
+    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '7/10', 'the Home line (7 locked in: 10 planned)');
     await shot(a.page, 'H-odd');
     await a.ctx.close();
     d = await dash();
@@ -400,11 +421,14 @@ async function main() {
       });
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`I spots full: Vic's card and picture 12, Zoe's picture 11 (locked in, Drop out on the row) fit, rows on one line (${width} ${scheme})`, async () => {
-        await stage('spots_full');
-        const v = await playerPage('Vic', { width, scheme });
+      await check(`I 12 locked in: Vic's card and picture 12 (stood in for), Zoe's picture 11 (locked in, Drop out on the row) fit, rows on one line (${width} ${scheme})`, async () => {
+        await stage('all_locked');
+        const v = await newPage({ width, scheme });
+        await fakeFull(v.page, true);
+        await v.page.goto(`${BASE}/?as=Vic`);
+        await v.page.locator('.tc [data-tc-who]').first().waitFor({ timeout: 30000 });
         await fits(v.page, '.tc');
-        await v.page.locator('.tc [data-tc-join]').first().click();
+        await v.page.locator('.tc [data-tc-who]').first().click();
         await v.page.locator('dialog[open] [data-tc-keep]').waitFor({ timeout: 10000 });
         await v.page.waitForTimeout(300);
         await fits(v.page, 'dialog[open] .tc-tw');
@@ -429,8 +453,8 @@ async function main() {
       });
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`I organizer: Home's ticket card and line, the Tickets page and picture 30 fit (${width} ${scheme})`, async () => {
-        await stage('spots_full');
+      await check(`I organizer: Home's ticket card and line, the Tickets page, the plan and picture 30 fit (${width} ${scheme})`, async () => {
+        await stage('all_locked');
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
         await fits(a.page, 'main');
@@ -440,8 +464,11 @@ async function main() {
         await a.page.waitForTimeout(300);
         await fits(a.page, 'dialog[open]');
         const list = flat(await a.page.locator('dialog[open] [data-tm-card="tickets"]').innerText());
-        assert(list.includes('Christopher Vanderberg') && /8 of 8 locked in/i.test(list), list);
+        assert(list.includes('Christopher Vanderberg') && /10 of 12 locked in/i.test(list), list);
         await oneLineRows(a.page, 'dialog[open] [data-tm-ticket-row]');
+        await a.page.locator('dialog[open] [data-tm-card="plan"]').scrollIntoViewIfNeeded();
+        await oneLineRows(a.page, 'dialog[open] [data-tm-card="plan"] .tm-row');
+        await shot(a.page, `I-admin-plan-${width}-${scheme}`);
         await shot(a.page, `I-admin-tickets-${width}-${scheme}`);
         await a.page.keyboard.press('Escape');
         await a.page.waitForTimeout(300);
@@ -474,9 +501,150 @@ async function main() {
         }
       });
 
+  // ---------------------------------------------------------------- K  Alex's changes after testing piece 1
+  await check('K the smart plan on the tournament page: 8 players, 2 courts, 2 hours; your cost if it fills $12, with 6 paid now $28; the Booking hours note only when needed', async () => {
+    await stage('tickets_open');
+    const a = await adminPage();
+    await a.page.locator('[data-tm-open-page]').click();
+    const card = a.page.locator('dialog[open] [data-tm-card="plan"]');
+    await card.waitFor({ timeout: 10000 });
+    const words = flat(await card.innerText());
+    assert(words.includes('8 players') && words.includes('2 courts · 2 hours') && words.includes('Your cost if it fills $12') && words.includes('With 6 paid now $28'), words);
+    assert((await a.page.locator('dialog[open] [data-tm-booking-note]').count()) === 0, 'no Booking hours note for 2 hours');
+    await shot(a.page, 'K-plan-8');
+    await a.ctx.close();
+    // 10 locked in: 12 players, 2 courts, 3 hours. With Booking hours off the plan says to turn it on.
+    await stage('all_locked');
+    await call('PUT', '/api/admin/booking-hours-switch', { on: false });
+    try {
+      const b = await adminPage();
+      await b.page.locator('[data-tm-open-page]').click();
+      await b.page.locator('dialog[open] [data-tm-card="plan"]').waitFor({ timeout: 10000 });
+      const w2 = flat(await b.page.locator('dialog[open] [data-tm-card="plan"]').innerText());
+      // 10 locked in: 12 spots, 2 courts, 3 hours. $144 - 11 x $16 + $28 = -$4 (the tickets cover it); 9 paid now: $144 - $144 + $28 = $28.
+      assert(w2.includes('12 players') && w2.includes('2 courts · 3 hours') && w2.includes('Turn on Booking hours'), w2);
+      assert(w2.includes('Your cost if it fills -$4') && w2.includes('With 9 paid now $28'), w2);
+      await shot(b.page, 'K-plan-12-booking-off');
+      await b.ctx.close();
+    } finally {
+      await call('PUT', '/api/admin/booking-hours-switch', { on: true });
+    }
+  });
+  for (const format of ['doubles', 'americano'])
+    for (const scheme of SCHEMES)
+      for (const width of [390, 320])
+        await check(`K the format in one line under the name, player and organizer (${format}, ${width} ${scheme})`, async () => {
+          await call('POST', '/api/admin/tournament-test', { stage: 'signup', format });
+          const want = format === 'americano' ? 'Americano (new partner every round)' : 'Locked doubles (same partner all night)';
+          const v = await playerPage('Vic', { width, scheme });
+          const line = v.page.locator('.tc [data-tc-format-name]');
+          await line.waitFor({ timeout: 15000 });
+          assert(flat(await line.innerText()) === want && (await v.page.locator('.tc [data-tc-rule]').count()) === 0, flat(await line.innerText()));
+          const lines = await line.evaluate((el) => {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+          });
+          assert(lines === 1, `${lines} lines`);
+          const color = await line.evaluate((el) => getComputedStyle(el).color);
+          await fits(v.page, '.tc');
+          await shot(v.page, `K-format-${format}-${width}-${scheme}`);
+          await v.ctx.close();
+          const a = await adminPage({ width, scheme });
+          const al = a.page.locator('.tm-home-format');
+          await al.waitFor({ timeout: 15000 });
+          assert(flat(await al.innerText()) === want && (await a.page.locator('.tm-home-rule').count()) === 0, flat(await al.innerText()));
+          await fits(a.page, '[data-tm-home]');
+          await a.ctx.close();
+          assert(/rgb/.test(color), color);
+        });
+  for (const scheme of SCHEMES)
+    for (const width of [390, 320])
+      await check(`K Create and Edit: no players expected, no court plan; the $ boxes have clear space between them (${width} ${scheme})`, async () => {
+        await stage('none');
+        const a = await adminPage({ width, scheme });
+        await a.page.locator('.tabbar button', { hasText: 'Settings' }).click();
+        const sched = a.page.locator('[data-section="schedule"]');
+        if (!(await sched.getAttribute('open'))) await sched.locator('summary').click();
+        await a.page.locator('[data-tm-schedule-row]').click();
+        await a.page.locator('[data-tm-form="create"]').waitFor();
+        const text = flat(await a.page.locator('dialog[open]').innerText());
+        assert(!/Players expected/i.test(text) && (await a.page.locator('dialog[open] [data-tm-card="size"], dialog[open] .tm-plans').count()) === 0, 'no size or plan rows');
+        // The site's double-tap guard drops a tap within 0.4 s and 24 px of the tap that opened the sheet: wait like a person would.
+        await a.page.waitForTimeout(600);
+        await a.page.locator('[data-format="americano"]').click();
+        assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
+        await a.page.locator('[data-tm-card="prize"]').scrollIntoViewIfNeeded();
+        const gaps = await a.page.evaluate(() => {
+          const boxes = [...document.querySelectorAll('dialog[open] .tm-money')].map((b) => b.getBoundingClientRect()).sort((x, y) => x.top - y.top);
+          return boxes.slice(1).map((b, i) => Math.round(b.top - boxes[i].bottom));
+        });
+        assert(gaps.length >= 2 && gaps.every((g) => g >= 10), `space between the $ boxes: ${gaps}`);
+        await fits(a.page, 'dialog[open]');
+        await shot(a.page, `K-create-prizes-${width}-${scheme}`);
+        await a.ctx.close();
+      });
+  await check('K a level is picked once: Vic signs up at 3.4, backs out; signing up again skips the level (it stays 3.4); Edit sign-up is dates only', async () => {
+    await stage('signup');
+    const id = (await dash()).tournament.id;
+    const v = await phone('Vic');
+    const open = (await v.answer()).data.tournament.openDates;
+    assert((await v.post('/api/tournament/signup', { tournamentId: id, level: 340, dates: [open[0]] })).status === 200, 'Vic signs up');
+    assert((await v.post('/api/tournament/back-out', { tournamentId: id })).data.result === 'backed_out', 'Vic backs out');
+    await v.close();
+    const p = await playerPage('Vic');
+    await p.page.locator('.tc [data-tc-signup]').click();
+    await p.page.locator('dialog[open] [data-tm-step="2"]').waitFor({ timeout: 10000 });
+    assert((await p.page.locator('dialog[open] [data-tm-step="1"], dialog[open] [data-tm-back]').count()) === 0, 'no level step, no Back');
+    await p.page.locator('dialog[open] button.tm-day.tm-open').first().click();
+    await p.page.locator('dialog[open] [data-tm-submit]').click();
+    await p.page.locator('dialog[open] [data-tm-submit]').waitFor({ state: 'detached', timeout: 10000 });
+    await p.page.locator('.tc [data-tc-edit]').click();
+    await p.page.locator('dialog[open] [data-tm-save]').waitFor({ timeout: 10000 });
+    assert((await p.page.locator('dialog[open] [data-tm-mylevel], dialog[open] [data-tm-change]').count()) === 0, 'Edit has no level row');
+    await shot(p.page, 'K-edit-dates-only');
+    await p.ctx.close();
+    d = await dash();
+    assert(d.tournament.signups.find((s) => s.name === 'Vic').pickedLevel === 340, 'still 3.4');
+  });
+  await check('K the soft fade shows only while there is more to scroll: the Create calendar at the top, not at its end; the sign-up sheet', async () => {
+    await stage('none');
+    const a = await adminPage();
+    await a.page.locator('.tabbar button', { hasText: 'Settings' }).click();
+    const sched = a.page.locator('[data-section="schedule"]');
+    if (!(await sched.getAttribute('open'))) await sched.locator('summary').click();
+    await a.page.locator('[data-tm-schedule-row]').click();
+    const box = a.page.locator('dialog[open] .tm-cal-box');
+    await box.waitFor();
+    await box.evaluate((el) => (el.scrollTop = 0));
+    await a.page.waitForTimeout(200);
+    assert(await box.evaluate((el) => el.hasAttribute('data-more') && getComputedStyle(el).maskImage !== 'none'), 'the fade while more months are below');
+    await box.evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await a.page.waitForTimeout(250);
+    assert(await box.evaluate((el) => !el.hasAttribute('data-more') && getComputedStyle(el).maskImage === 'none'), 'no fade at the end');
+    await a.ctx.close();
+    await stage('signup');
+    const v = await playerPage('Vic', { height: 1400 });
+    await v.page.locator('.tc [data-tc-signup]').click();
+    const bar = v.page.locator('dialog[open] .tm-bottom');
+    await bar.waitFor({ timeout: 10000 });
+    await v.page.waitForTimeout(300);
+    const fit = await bar.evaluate((el) => ({ more: el.hasAttribute('data-more'), op: getComputedStyle(el, '::before').opacity }));
+    assert(!fit.more && fit.op === '0', `a tall screen: everything fits, no fade: ${JSON.stringify(fit)}`);
+    await v.ctx.close();
+    const w = await playerPage('Vic', { height: 560 });
+    await w.page.locator('.tc [data-tc-signup]').click();
+    const bar2 = w.page.locator('dialog[open] .tm-bottom');
+    await bar2.waitFor({ timeout: 10000 });
+    await w.page.waitForTimeout(300);
+    const short = await bar2.evaluate((el) => ({ more: el.hasAttribute('data-more'), op: getComputedStyle(el, '::before').opacity }));
+    assert(short.more && short.op === '1', `a short screen with more below: the fade: ${JSON.stringify(short)}`);
+    await w.ctx.close();
+  });
+
   // ---------------------------------------------------------------- J  nobody else gets it
   await check('J switched off while tickets are open: players get no tournament at all (no key, no name, no ticket words)', async () => {
-    await stage('spots_full');
+    await stage('tickets_open');
     const id = (await dash()).tournament.id;
     await call('PUT', '/api/admin/tournaments-switch', { on: false });
     try {
@@ -499,7 +667,7 @@ async function main() {
     }
   });
   await check('J canceled: only the players who were on its list see the Canceled card; Vic, off the list first, gets nothing', async () => {
-    await stage('spots_full');
+    await stage('tickets_open');
     const id = (await dash()).tournament.id;
     const v = await phone('Vic');
     assert((await v.post('/api/tournament/back-out', { tournamentId: id })).data.result === 'backed_out', 'Vic backs out');

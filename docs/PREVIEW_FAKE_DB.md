@@ -246,20 +246,22 @@ the first two weeks after offered (no Dec 24, 25, 31 or Jan 1), 8 players, 2 cou
   name sees nothing until Everyone.
 - Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm --zip55`; `node e2e/zip55.cjs` checks the screens.
 
-Zip 56 (Tournaments, piece 2: tickets, Tue Nov 17, 2026): no new names, migration `0024_tournament_tickets` (one new table, `tournament_tickets`,
-and one new column, `tournaments.pay_by`; applied to `pickleball-preview` first). `npm run db:seed:preview` now opens CALM on the **Winter Classic
-at Date picked for Everyone**: 8 on the list (Parker, Rowan, Sage, Christopher Vanderberg, Wren, Quinn, Zoe, Reese; Vic and Alex are not), Sage
-set to 3.4, the third Thursday of next month picked (7:30 PM, 2 hours, 8 spots, $16). Organizer Home shows the tournament card with **Open
-tickets** (Pay by starts at two days before, 7:00 PM). `-- --zip55` builds piece 1's opening (Only me, nobody on the list).
-- **Tournament test** has six more stages, each with real money rows on the fake database (a confirmed Venmo payment, or credit given first as a
-  "Ticket stage credit" adjustment and then used), so the books read all zeros at every stage:
-  **Tickets open** (6 of 8 locked in: Parker, Rowan, Sage, Christopher Vanderberg, Wren, Quinn; Vic, Zoe and Reese on the list with no ticket:
-  Vic sees Lock my spot), **Spots full with waitlist** (8 of 8: Alex's own $0 seat, Parker, Rowan, Sage, Christopher Vanderberg, Wren, Quinn,
-  Zoe; Reese paid and first in line; Vic on the list with no ticket: Vic sees "8 spots taken" and Join waitlist; Zoe backing out moves Reese in),
-  **All locked in** (8 of 8 with Vic: Vic sees You're in), **7 locked in after Pay by** (the organizer's "7 locked in. Need 1 more or 1 less."),
-  **Canceled** (Spots full, then the real Cancel: every paid ticket is credit, players on the list see the plain Canceled card) and
-  **Rescheduled** (Tickets open, then the real Reschedule: back to the date step, paid tickets held, "Rescheduled. Pick your dates again").
-  A new stage first takes out the last stage's ticket credit rows and its "Ticket stage credit" (the fake database only).
-- Try it: Tickets open, then **View as Vic**: tap the card (picture 09), Lock my spot, the Pay sheet, I paid; back on Admin, the amber card
-  "Vic tapped I paid ($16), not confirmed." with Paid. Or Spots full, View as Vic, Join waitlist (picture 12); View as Zoe, Drop out: Reese moves in.
+Zip 56 (Tournaments, piece 2: tickets, Tue Nov 17 to Wed Nov 18, 2026): no new names, migration `0024_tournament_tickets` (one new table,
+`tournament_tickets`, and one new column, `tournaments.pay_by`; applied to `pickleball-preview` first). Alex's changes after testing piece 1:
+picking the date opens tickets, the spots follow the players locked in (6 to 12, the smart plan; the waitlist starts after 12), a level is
+picked once. `npm run db:seed:preview` now opens CALM on the **Winter Classic with the date picked for Everyone, so tickets are open**: 8 on the
+list (Parker, Rowan, Sage, Christopher Vanderberg, Wren, Quinn, Zoe, Reese; Vic and Alex are not), Sage set to 3.4, the third Thursday of next
+month picked, $16, Pay by two days before at 7:00 PM, nobody paid yet (6 spots: the plan for nobody locked in). Organizer Home shows the
+tournament card (Tickets, the plan line, Your cost if it fills). `-- --zip55` builds piece 1's opening (Only me, nobody on the list).
+- **Tournament test** stages (each in Locked doubles or Americano; real money rows on the fake database: a confirmed Venmo payment, or credit
+  given first as a "Ticket stage credit" adjustment and then used, so the books read all zeros at every stage): **Sign-up open**, **Date
+  picked, tickets open** (nobody paid), **Tickets open, 6 paid** (Parker, Rowan, Sage, Christopher Vanderberg, Wren, Quinn: 6 of 8; Vic, Zoe
+  and Reese on the list with no ticket: Vic sees Lock my spot), **All locked in** (all 10 names, Alex's own $0 seat among them: 10 of 12),
+  **7 locked in after Pay by** (the organizer's "7 locked in. Need 1 more or 1 less."), **Canceled** (6 paid, then the real Cancel: every paid
+  ticket is credit; players on the list see the plain Canceled card), **Rescheduled** (6 paid, then the real Reschedule: tickets held,
+  "Rescheduled. Pick your dates again"), **No tournament**. No stage shows the waitlist: it starts after 12 locked in and the preview has 10
+  names (no names may be added). A new stage first takes out the last stage's ticket credit rows and its "Ticket stage credit" (the fake
+  database only).
+- Try it: on Home, the tournament's name opens its page (the Plan card). Then **View as Parker**: Lock my spot, the Pay sheet, I paid; back on
+  Admin, the amber card "Parker tapped I paid ($16), not confirmed." with Paid. View as Parker again: Drop out, Yes: $16 back as credit.
 - Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm --zip55 --zip56`; `node e2e/zip56.cjs` checks the screens.

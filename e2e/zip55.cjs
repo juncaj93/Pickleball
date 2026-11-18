@@ -9,7 +9,7 @@
  *   B  The Tournament test page from organizer Home: Sign-up open.
  *   C  A player signs up (level, then dates): "You're on the list", See who's signed up (names only).
  *   D  Edit sign-up (level and dates); E  Back out (Are you sure: Stay, then Yes).
- *   F  The level list: Sage's pick, the organizer sets 3.4. G  Pick the date: the card shows it, "Tickets open soon".
+ *   F  The level list: Sage's pick, the organizer sets 3.4. G  Pick the date: tickets open at once (Alex, Zip 56).
  *   H  Changes after the date is picked: a new sign-up (only that date), an edit, a back out.
  *   I  Create tournament (No tournament first): a 32-letter name, 10 players, $0 credit, Only me.
  *   J  Every screen at 390, 360 and 320 wide, light and dark: nothing wider than the screen, no clipped button, the level rows on one line.
@@ -189,8 +189,9 @@ async function main() {
         assert(strip.includes('Only you can see this') && strip.includes("Players don't see the Winter Classic yet.") && strip.includes('Show to everyone'), strip);
         const card = flat(await a.page.locator('.tc').innerText());
         // Under the name: the format and its one rule (no small label above the name any more).
-        assert(flat(await a.page.locator('[data-tc-format-name]').innerText()) === 'Locked doubles' && flat(await a.page.locator('[data-tc-rule]').innerText()) === 'Same partner all night', card);
-        const order = await a.page.evaluate(() => ['.tc-title', '[data-tc-format-name]', '[data-tc-rule]', '[data-tc-sub]'].map((q) => document.querySelector(q).getBoundingClientRect().top));
+        // Zip 56 (Alex): the format in ONE line, no separate rule line.
+        assert(flat(await a.page.locator('[data-tc-format-name]').innerText()) === 'Locked doubles (same partner all night)' && (await a.page.locator('[data-tc-rule]').count()) === 0, card);
+        const order = await a.page.evaluate(() => ['.tc-title', '[data-tc-format-name]', '[data-tc-sub]'].map((q) => document.querySelector(q).getBoundingClientRect().top));
         assert(order.every((y, i) => i === 0 || y > order[i - 1]), `title, format, rule, then the line: ${order}`);
         assert((await a.page.locator('.tc-kicker').count()) === 0, 'the old label above the name');
         assert(/Pick the dates you can play/.test(card) && /Sign up/.test(card) && /VOTE/.test(card) && /FINAL/.test(card), card);
@@ -294,8 +295,9 @@ async function main() {
       await check(`D Edit my sign-up and E the Back out confirm look right (${width} ${scheme})`, async () => {
         const v = await playerPage('Vic', { width, scheme });
         await v.page.locator('[data-tc-edit]').click();
-        await v.page.locator('[data-tm-mylevel]').waitFor();
-        assert(flat(await v.page.locator('[data-tm-mylevel]').innerText()).includes('3.4'), 'shows 3.4');
+        await v.page.locator('dialog[open] [data-tm-save]').waitFor();
+        // Zip 56 (Alex): Edit my sign-up is the dates only; the level was picked once.
+        assert((await v.page.locator('dialog[open] [data-tm-mylevel], dialog[open] [data-tm-change]').count()) === 0, 'no level row');
         await fits(v.page, 'dialog[open]');
         await shot(v.page, `D-edit-${width}-${scheme}`);
         await v.page.keyboard.press('Escape');
@@ -307,11 +309,9 @@ async function main() {
         await shot(v.page, `E-backout-${width}-${scheme}`);
         await v.ctx.close();
       });
-  await check('D Edit: Change level to 3.2 and one more date; Save changes', async () => {
+  await check('D Edit: one more date (the level stays: Alex, a level is picked once); Save changes', async () => {
     const v = await playerPage('Vic');
     await v.page.locator('[data-tc-edit]').click();
-    await v.page.locator('[data-tm-change]').click();
-    await v.page.locator('dialog[open] [data-level="320"]').click();
     const open = await v.page.locator('dialog[open] button.tm-day.tm-open').evaluateAll((els) => els.map((e) => e.dataset.day));
     await v.page.locator(`dialog[open] [data-day="${open[0]}"]`).click();
     await v.page.locator('[data-tm-save]').click();
@@ -320,7 +320,7 @@ async function main() {
     await v.ctx.close();
     d = await dash();
     const me = d.tournament.signups.find((s) => s.name === 'Vic');
-    assert(me.pickedLevel === 320 && me.dates.length === 3, JSON.stringify(me));
+    assert(me.pickedLevel === 340 && me.dates.length === 3, JSON.stringify(me));
   });
   await check('E Back out: Stay signed up keeps Vic on; Yes, back out takes Vic off; the card goes back to Sign up', async () => {
     const v = await playerPage('Vic');
@@ -377,7 +377,7 @@ async function main() {
 
   // ---------------------------------------------------------------- G  pick the date
   let finalDay = null;
-  await check('G Pick the date: the counts, the best date, Pick; the card shows the date and "Tickets open soon"', async () => {
+  await check('G Pick the date: the counts, the best date, Pick; tickets open at once (Zip 56, Alex)', async () => {
     const a = await adminPage();
     await a.page.locator('[data-tm-open-dates]').click();
     await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').first().waitFor();
@@ -389,12 +389,12 @@ async function main() {
     await a.ctx.close();
     d = await dash();
     finalDay = d.tournament.finalDate;
-    assert(d.tournament.status === 'date_picked' && finalDay === best, JSON.stringify([d.tournament.status, finalDay, best]));
+    assert(d.tournament.status === 'tickets' && finalDay === best && !!d.tournament.payBy, JSON.stringify([d.tournament.status, finalDay, best]));
   });
-  await check('G after the date is picked the admin card is picture 29 (Zip 56): Open tickets; the name opens the whole tournament page at the top and stays where you scroll', async () => {
+  await check('G after the date is picked the admin card is picture 29 (Zip 56): Tickets; the name opens the whole tournament page at the top and stays where you scroll', async () => {
     const a = await adminPage();
-    // Zip 56 (picture 29): once the date is picked the card's button is Open tickets, and the tournament's name opens its page (no Edit button).
-    assert((await a.page.locator('[data-tm-open-tickets]').count()) === 1 && (await a.page.locator('[data-tm-open-edit]').count()) === 0, 'Open tickets, no Edit');
+    // Zip 56 (picture 29, Alex): tickets are open: the button is Tickets (no Open tickets, no Edit); the tournament's name opens its page.
+    assert((await a.page.locator('[data-tm-tickets]').count()) === 1 && (await a.page.locator('[data-tm-open-tickets], [data-tm-open-edit]').count()) === 0, 'Tickets, no Open tickets, no Edit');
     await a.page.locator('[data-tm-open-page]').click();
     await a.page.locator('[data-tm-page]').waitFor();
     await a.page.waitForTimeout(600);
@@ -417,16 +417,16 @@ async function main() {
   });
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`G the Date picked card, signed up (Parker) and not (Zoe) (${width} ${scheme})`, async () => {
+      await check(`G the card once the date is picked: Parker (on the list) sees Lock my spot, Zoe (not on it) sees Sign up (${width} ${scheme})`, async () => {
         for (const who of ['Parker', 'Zoe']) {
           const v = await playerPage(who, { width, scheme });
-          await v.page.locator('.tc[data-tc="date"]').waitFor({ timeout: 15000 });
+          // Zip 56 (Alex): picking the date opened tickets.
+          await v.page.locator(who === 'Parker' ? '.tc[data-tc="lock"]' : '.tc[data-tc="date"]').waitFor({ timeout: 15000 });
           const card = flat(await v.page.locator('.tc').innerText());
-          assert(card.includes('Locked doubles') && card.includes(who === 'Parker' ? 'You’re on the list. Tickets open soon.' : 'Tickets open soon'), card);
+          assert(who === 'Parker' ? card.includes('Lock my spot · $16') : card.includes('Tickets are open. Sign up first.') && card.includes('Locked doubles (same partner all night)'), card);
           const [y, m, dd] = finalDay.split('-').map(Number);
           const wd = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(Date.UTC(y, m - 1, dd)).getUTCDay()];
           assert(card.includes(wd) && card.includes(String(dd)), `${card} (${finalDay})`);
-          assert(!/Lock my spot|\$16|Pay/.test(card), 'no ticket or pay button in piece 1');
           assert((await v.page.locator('[data-tc-signup]').count()) === (who === 'Zoe' ? 1 : 0), `${who}: Sign up shows only when not on the list`);
           await fits(v.page, '.tc');
           await shot(v.page, `G-${who}-${width}-${scheme}`);
@@ -435,7 +435,7 @@ async function main() {
       });
 
   // ---------------------------------------------------------------- H  changes after the date is picked
-  await check('H after the date is picked: Zoe signs up (only that date, already picked), Parker edits his level, Quinn backs out', async () => {
+  await check('H after the date is picked: Zoe signs up (only that date, already picked), Parker opens Edit (dates only), Quinn backs out', async () => {
     const z = await playerPage('Zoe');
     await z.page.locator('[data-tc-signup]').click();
     await z.page.locator('[data-level="275"]').click();
@@ -444,15 +444,13 @@ async function main() {
     assert(open.length === 1 && open[0] === finalDay, `open: ${open.join(',')}`);
     assert(flat(await z.page.locator('[data-tm-picked]').innerText()).startsWith('1 picked'), 'the date starts picked');
     await z.page.locator('[data-tm-submit]').click();
-    await z.page.locator('.tc[data-tc="date"] [data-tc-who]').waitFor({ timeout: 10000 });
+    await z.page.locator('.tc[data-tc="lock"] [data-tc-who]').waitFor({ timeout: 10000 });
     await z.ctx.close();
     const parkerDates = (await dash()).tournament.signups.find((s) => s.name === 'Parker').dates.join();
     const p = await playerPage('Parker');
     await p.page.locator('[data-tc-edit]').click();
-    await p.page.locator('[data-tm-change]').click();
-    await p.page.locator('dialog[open] [data-level="350"]').click();
-    await p.page.locator('[data-tm-save]').click();
-    await p.page.waitForTimeout(800);
+    await p.page.locator('dialog[open] [data-tm-save]').waitFor();
+    assert((await p.page.locator('dialog[open] [data-tm-change]').count()) === 0, 'no level row (Alex)');
     await p.ctx.close();
     const q = await playerPage('Quinn');
     await q.page.locator('[data-tc-drop]').click();
@@ -462,11 +460,9 @@ async function main() {
     d = await dash();
     const names = d.tournament.signups.map((s) => s.name);
     assert(names.includes('Zoe') && !names.includes('Quinn'), names.join(', '));
-    assert(d.tournament.signups.find((s) => s.name === 'Parker').pickedLevel === 350, 'Parker 3.5');
-    // A level-only edit sends no dates: his dates stay as they were (nobody has to tick the picked date to change a level).
     assert(d.tournament.signups.find((s) => s.name === 'Parker').dates.join() === parkerDates, 'Parker kept his dates');
     assert(d.tournament.signups.find((s) => s.name === 'Zoe').dates.join() === finalDay, 'Zoe can make the date');
-    assert(d.tournament.status === 'date_picked' && d.tournament.finalDate === finalDay, 'still the same date');
+    assert(d.tournament.status === 'tickets' && d.tournament.finalDate === finalDay, 'still the same date');
   });
 
   // ---------------------------------------------------------------- I  Create tournament
@@ -482,13 +478,13 @@ async function main() {
         await a.page.locator('[data-tm-form="create"]').waitFor();
         await fits(a.page, 'dialog[open]');
         await shot(a.page, `I-create-top-${width}-${scheme}`);
-        await a.page.locator('[data-tm-card="size"]').scrollIntoViewIfNeeded();
-        await shot(a.page, `I-create-plans-${width}-${scheme}`);
+        // Zip 56 (Alex): no players expected and no court plan on Create.
+        assert((await a.page.locator('dialog[open] [data-tm-card="size"], dialog[open] .tm-plans').count()) === 0, 'no size or plan rows');
         await a.page.locator('[data-tm-card="prize"]').scrollIntoViewIfNeeded();
         await shot(a.page, `I-create-prize-${width}-${scheme}`);
         await a.ctx.close();
       });
-  await check('I Create: a 32-letter name, three dates, 10 players (its best plan), $0 credit, Only me; then the card on Alex\'s phone', async () => {
+  await check('I Create: a 32-letter name, three dates, $0 credit, Only me; then the card on Alex\'s phone', async () => {
     const a = await adminPage();
     await a.page.locator('.tabbar button', { hasText: 'Settings' }).click();
     const sched = a.page.locator('[data-section="schedule"]');
@@ -501,8 +497,6 @@ async function main() {
     const days = await a.page.locator('[data-tm-card="name"] button.tm-day').evaluateAll((els) => els.map((e) => e.dataset.day).filter((x) => x >= '2026-12-01'));
     for (const day of days.slice(1, 4)) await a.page.locator(`[data-tm-card="name"] [data-day="${day}"]`).click();
     assert(flat(await a.page.locator('[data-tm-lit]').innerText()).toUpperCase() === '3 LIT', 'three lit');
-    await a.page.locator('[data-size="10"]').click();
-    assert((await a.page.locator('.tm-plan-on').getAttribute('data-plan')) === '2c-150', 'the 10-player best plan (Booking hours is on in the preview)');
     // Pass 3: the format starts on Locked doubles, two big choices, each with its one rule.
     assert((await a.page.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true', 'Doubles by default');
     assert(flat(await a.page.locator('[data-tm-card="format"]').innerText()).toUpperCase() === 'FORMAT LOCKED DOUBLES SAME PARTNER ALL NIGHT AMERICANO NEW PARTNER EVERY ROUND', await a.page.locator('[data-tm-card="format"]').innerText());
@@ -518,7 +512,7 @@ async function main() {
     await a.page.locator('[data-tm-form]').waitFor({ state: 'detached', timeout: 10000 });
     await a.ctx.close();
     d = await dash();
-    assert(d.tournament && d.tournament.name === name && d.tournament.size === 10 && d.tournament.championCreditCents === 0 && d.tournament.visibility === 'me', JSON.stringify(d.tournament));
+    assert(d.tournament && d.tournament.name === name && d.tournament.size === 6 && d.tournament.championCreditCents === 0 && d.tournament.visibility === 'me', JSON.stringify(d.tournament));
     assert(!('tournament' in (await playerAnswer('Vic')).data), 'a player still sees nothing');
     for (const width of SIZES) {
       const al = await playerPage('Alex', { width, organizer: true });
@@ -552,7 +546,7 @@ async function main() {
         await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
         const b = await a.page.locator('.tm-home-actions .btn').evaluateAll((els) => els.map((e) => ({ t: e.innerText.trim(), top: Math.round(e.getBoundingClientRect().top), h: e.getBoundingClientRect().height })));
         assert(b.map((x) => x.t).join('|') === 'Pick date|Edit', JSON.stringify(b));
-        assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Locked doubles' && flat(await a.page.locator('.tm-home-rule').innerText()) === 'Same partner all night', 'admin format and rule');
+        assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Locked doubles (same partner all night)' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin format in one line (Alex)');
         assert(b[0].top === b[1].top && b.every((x) => x.h < 60), `one row, one line each: ${JSON.stringify(b)}`);
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `M-admin-card-${width}-${scheme}`);
@@ -582,12 +576,12 @@ async function main() {
   });
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`M Edit my sign-up: room above "Dates that work" (${width} ${scheme})`, async () => {
+      await check(`M Edit my sign-up: dates only, "Dates that work" first, no level row (${width} ${scheme})`, async () => {
         const p = await playerPage('Parker', { width, scheme });
         await p.page.locator('[data-tc-edit]').click();
         await p.page.locator('dialog[open] .tm-eyebrow-dates').waitFor();
-        const gap = await p.page.evaluate(() => document.querySelector('dialog[open] .tm-eyebrow-dates').getBoundingClientRect().top - document.querySelector('dialog[open] [data-tm-mylevel]').getBoundingClientRect().bottom);
-        assert(gap >= 22, `gap ${gap}`);
+        assert((await p.page.locator('dialog[open] [data-tm-mylevel]').count()) === 0, 'no level row (Alex)');
+        await fits(p.page, 'dialog[open]');
         await shot(p.page, `M-edit-${width}-${scheme}`);
         await p.ctx.close();
       });
@@ -600,7 +594,8 @@ async function main() {
         await check(`N Americano, ${st === 'signup' ? 'sign-up open' : 'date picked'}: Americano and "New partner every round" under the name, steps Vote, Tickets, Games, Winners; the admin card too (${width} ${scheme})`, async () => {
           const v = await playerPage('Parker', { width, scheme });
           await v.page.locator('.tc[data-tc-format="americano"]').waitFor({ timeout: 15000 });
-          assert(flat(await v.page.locator('[data-tc-format-name]').innerText()) === 'Americano' && flat(await v.page.locator('[data-tc-rule]').innerText()) === 'New partner every round', 'format and rule');
+          // Zip 56 (Alex): picking the date opens tickets; the format shows on the cards before that, in one line.
+          if (st === 'signup') assert(flat(await v.page.locator('[data-tc-format-name]').innerText()) === 'Americano (new partner every round)' && (await v.page.locator('[data-tc-rule]').count()) === 0, 'format in one line');
           const steps = (await v.page.locator('.tc-step-label').allInnerTexts()).map(flat);
           assert(steps.join('|') === 'VOTE|TICKETS|GAMES|WINNERS', steps.join('|'));
           // The line through the dots runs from the first dot to the last.
@@ -618,21 +613,20 @@ async function main() {
           const a = await adminPage({ width, scheme });
           await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
           if (st === 'signup') {
-            assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Americano' && flat(await a.page.locator('.tm-home-rule').innerText()) === 'New partner every round', 'admin format and rule');
+            assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Americano (new partner every round)' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin format in one line');
           } else {
             // Zip 56: once the date is picked the organizer's card is picture 29's (no format line, as drawn; a question for Alex).
-            assert((await a.page.locator('[data-tm-home="date_picked"] [data-tm-open-tickets]').count()) === 1, 'picture 29\'s card');
+            assert((await a.page.locator('[data-tm-home="tickets"] [data-tm-tickets]').count()) === 1, 'picture 29\'s card, tickets open');
           }
           await fits(a.page, '[data-tm-home]');
           await a.ctx.close();
         });
   }
   await check('N Edit an Americano: Format shows Americano (can change), two prize rows 1st and 2nd; switch to Locked doubles and back in the form', async () => {
+    // Zip 56 (Alex): picking the date opens tickets and locks the format, so this Edit is during sign-up.
+    await call('POST', '/api/admin/tournament-test', { stage: 'signup', format: 'americano' });
     const a = await adminPage();
-    // The date is picked here: picture 29's card, whose name opens the page (Zip 56).
-    await a.page.locator('[data-tm-open-page]').click();
-    assert(flat(await a.page.locator('[data-tm-format-row]').innerText()) === 'Americano', 'the Settings row');
-    await a.page.locator('[data-tm-edit-settings]').click();
+    await a.page.locator('[data-tm-open-edit]').click();
     await a.page.locator('[data-tm-form="edit"]').waitFor();
     assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
     assert(!(await a.page.locator('[data-format="doubles"]').isDisabled()), 'not locked before tickets open');
@@ -643,6 +637,17 @@ async function main() {
     assert((await a.page.locator('#tm-credit2').count()) === 0 && flat(await a.page.locator('[data-tm-card="prize"]').innerText()).includes('Game credit for each winner'), 'Doubles rows');
     await a.page.locator('[data-format="americano"]').click();
     await shot(a.page, 'N-edit-americano');
+    await a.ctx.close();
+  });
+  await check('N the date is picked (tickets open): the page says Americano and Edit shows the format locked', async () => {
+    await call('POST', '/api/admin/tournament-test', { stage: 'date_picked', format: 'americano' });
+    const a = await adminPage();
+    await a.page.locator('[data-tm-open-page]').click();
+    assert(flat(await a.page.locator('[data-tm-format-row]').innerText()) === 'Americano', 'the Settings row');
+    await a.page.locator('[data-tm-edit-settings]').click();
+    await a.page.locator('[data-tm-form="edit"]').waitFor();
+    assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
+    assert(await a.page.locator('[data-format="doubles"]').isDisabled(), 'locked once tickets are open');
     await a.ctx.close();
   });
 

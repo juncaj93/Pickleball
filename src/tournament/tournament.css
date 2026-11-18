@@ -181,6 +181,8 @@
   flex: 1 1 auto;
   min-width: 0;
   padding: 17px 12px 8px 18px;
+  /* The format line below sizes itself to this column (cqw). */
+  container-type: inline-size;
 }
 .tc-title {
   margin: 0;
@@ -198,9 +200,12 @@
 }
 /* The format under the name ("Locked doubles" or "Americano"), then its one rule in smaller text. */
 /* Alex: the format in ONE line under the name, "Locked doubles (same partner all night)", in the green subtitle style. */
+/* Alex: the format is one line. Where the column is too narrow for it at 0.8rem (360 and 320 wide), the words shrink to fit the column;
+   phones that don't know cqw keep 0.8rem (and wrap). */
 .tc-format {
   margin: 5px 0 0;
   font-size: 0.8rem;
+  font-size: clamp(0.64rem, 4.9cqw, 0.8rem);
   font-weight: 650;
   line-height: 1.3;
   color: var(--tc-mint);
@@ -368,8 +373,13 @@
   .tc-title.tc-title-long {
     font-size: 1.22rem;
   }
+  /* A little more room for the one-line format: a narrower stub and less padding. */
+  .tc {
+    --tc-stub-w: 72px;
+  }
   .tc-main {
-    padding-left: 16px;
+    padding-left: 13px;
+    padding-right: 8px;
   }
   .tc-kicker {
     font-size: 0.64rem;
@@ -393,8 +403,9 @@
   background: var(--court);
 }
 /* Edit my sign-up: room between the level row and "Dates that work". */
+/* Edit my sign-up is dates only now (Alex): "Dates that work" is the first line, no level row above it to keep clear of. */
 .tm-eyebrow.tm-eyebrow-dates {
-  margin-top: 26px;
+  margin-top: 0;
 }
 .tm-eyebrow {
   margin: 0 0 13px;

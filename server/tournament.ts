@@ -431,7 +431,7 @@ async function canceledMoneyOf(db: D1Database, tournamentId: string, playerId: s
 }
 
 /**
- * Zip 56: a hold that never got a spot comes back as credit once the tournament night is over (its date, at the start plus the plan's minutes):
+ * Zip 56: a hold that never got a spot comes back as credit once the tournament night is over (10:00 PM on its date, nightOf):
  * every ticket in line or not placed, with credit or confirmed cash on it and no I paid waiting, by the site's own credit rules (credit used goes
  * back to the pot, cash becomes a credit entry). Done by the first screen that reads the tournament after that moment (a player's, the
  * organizer's, or a 5-second check), in one all-or-nothing batch that a second reader finds nothing left to do in. A read with the read-only

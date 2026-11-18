@@ -908,8 +908,8 @@ const stageWord = (t: AdminTournamentView) =>
           ? 'Rescheduled'
           : 'Sign-up open';
 
-/** "$12", or "$4 left over" when the tickets more than cover it. */
-const costWords = (cents: number) => (cents < 0 ? `${formatPrice(-cents)} left over` : formatPrice(cents));
+/** "$12", or "-$4" when the tickets more than cover it (the minus as Adjust credit writes it, "-$5"). */
+const costWords = (cents: number) => (cents < 0 ? `-${formatPrice(-cents)}` : formatPrice(cents));
 
 /**
  * Alex's smart plan (organizer only): the players locked in decide the planned size (rounded up to even, plus 2, 6 to 12), that size's courts
