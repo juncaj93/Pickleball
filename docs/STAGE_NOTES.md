@@ -5710,7 +5710,7 @@ read writes anything; nothing new runs on the 5-minute clock. Times are this mac
 ### Preview
 `pickleball-preview` (fake) only. Restore points first: Time Travel bookmark `00000166-00000000-00005127-e5fb552ffbc0b3094ca212e028b97904`
 and an SQL export (82 KB, kept outside git). Then migration 0024 (the only one pending; it had never been applied there, so the spot triggers
-went on as they are now: a cap of 12). Deployed from `e6ae7bc` (deployment `c950231c`; one before it, `aa3dfb62`) to
+went on as they are now: a cap of 12). Deployed from `0338777` (deployment `99f3221f`; before it `c950231c` and `aa3dfb62`, one at a time) to
 https://claude-new-session-16mfmv.pickleball-club-9h0.pages.dev. Every Tournament test stage was run there on the real preview database, both
 formats (organizer and Zoe at 320: no page errors, nothing wider than the screen, each stage's card right), then re-seeded (the Zip 56 calm profile: the Winter Classic with the date
 picked for Everyone, so tickets are open; 8 on the list; nobody paid). Checked in a browser on the preview (390, light and dark): organizer
