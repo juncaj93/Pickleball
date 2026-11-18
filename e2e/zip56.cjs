@@ -288,7 +288,11 @@ async function main() {
     await a.ctx.close();
     const p = await playerPage('Parker');
     const words = flat(await p.page.locator('.tc').first().innerText());
-    assert(/you’re in/i.test(words) && words.includes('2.5 hours · You’re locked in') && words.includes('See who’s in') && words.includes('Drop out'), words);
+    // Zip 63: the card's one look: See who's in and "You're locked in" at the bottom; the hours and Drop out are in the overlay.
+    assert(words.includes('See who’s in') && words.endsWith('You’re locked in'), words);
+    await openOverlay(p.page);
+    const over = flat(await sheetOpen(p.page).innerText());
+    assert(over.includes('2.5 hours') && over.includes('You’re locked in') && over.includes('Drop out'), over);
     await shot(p.page, 'D-parker-locked-in');
     await p.ctx.close();
   });

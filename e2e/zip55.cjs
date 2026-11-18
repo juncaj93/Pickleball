@@ -452,13 +452,16 @@ async function main() {
     await z.page.locator('.tc[data-tc="lock"] [data-tc-lock]').waitFor({ timeout: 10000 });
     await z.ctx.close();
     const parkerDates = (await dash()).tournament.signups.find((s) => s.name === 'Parker').dates.join();
+    // Zip 63: tickets are open, so Edit sign-up and Drop out are in the card's overlay (a tap on the card).
     const p = await playerPage('Parker');
-    await p.page.locator('[data-tc-edit]').click();
+    await p.page.locator('.tc-hero .tc-title').first().click();
+    await p.page.locator('dialog[open] [data-tc-edit]').click();
     await p.page.locator('dialog[open] [data-tm-save]').waitFor();
     assert((await p.page.locator('dialog[open] [data-tm-change]').count()) === 0, 'no level row (Alex)');
     await p.ctx.close();
     const q = await playerPage('Quinn');
-    await q.page.locator('[data-tc-drop]').click();
+    await q.page.locator('.tc-hero .tc-title').first().click();
+    await q.page.locator('dialog[open] [data-tc-drop]').click();
     await q.page.locator('dialog[open] [data-confirm-go]').click();
     await q.page.locator('.tc [data-tc-signup]').waitFor({ timeout: 10000 });
     await q.ctx.close();

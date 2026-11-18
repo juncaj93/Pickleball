@@ -285,3 +285,12 @@ Open as it is on live (Everyone, Let players vote with the vote open, 9 on the l
 the games, with no dark placeholder first; then Admin: "as of" goes away in about a second, as with the switch off.
 - Locally: `node e2e/zip62.cjs` checks the same on the real built site (390, 360 and 320, light and dark); `tests/zip62-speed.test.ts` proves
   the database trips with the switch on equal the trips with it off at every stage, and that the answers are byte for byte the old ones.
+
+Zip 63 (🎾63.tickets, Wed Nov 18, 2026): no new names, migration `0026_tournament_cap_16` (the two spot-cap triggers go from 12 to 16, nothing
+else) applied to `pickleball-preview` first (Time Travel bookmark `00000184-00000000-00005127-c394affc1317f07175e875927d52e600` and an SQL export
+taken before, kept outside git). `npm run db:seed:preview` now opens CALM on the Tournament test page's "Countdown: 2 days left" stage: Winter
+Classic on Everyone, tickets open, 6 locked in (gold balls), Vic, Zoe and Reese on the list and unpaid, Pay by 7:00 PM two days after the seed.
+View as Vic: the amber pay countdown first, then the card; organizer Home: Remind all unpaid (3 unpaid). `-- --zip60` builds Zip 60's start (no
+tournament). The other countdown moments are one tap each on the Tournament test page, and its "Ball look" links draw 3 to 16 balls on Vic's
+card (look only, this phone; the 10 names cannot make 12 to 16).
+
