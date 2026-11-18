@@ -6035,3 +6035,13 @@ dark: organizer Home shows the Tournament test row and the games list; Vic's Hom
   integrity checks, fast-forward main to `claude/new-session-6jer9k` and push, `npm run deploy` from main, the integrity checks and money
   totals again (must be identical), the public live check on `pickleball-club-9h0.pages.dev`, then save the export with
   `node scripts/deploy-export.mjs save`. Rollback: site deployment `9798779c-c8d4-4586-9d15-924002bc5527` (Zip 60, live now).
+
+### Live: shipped Wed Nov 18, 2026, about 4:15 PM Eastern (Alex: "ship it"), switch states unchanged
+- Restore point first: Time Travel bookmark `000017de-00000000-00005127-c96a61a8c43865ae05a104de9f3687ce` (4:12 PM); SQL export saved as
+  `export-20261118211413` in `pickleball-backups` (local copy deleted). Integrity checks before: all 0 (21, 8, 11 columns).
+- Main fast-forwarded `4c427ab` to `d01441f` and pushed; `npm run deploy` from main (guard passed): deployment
+  `6c00f062-f737-4b09-9341-68fe94b43a08` (code `d01441f`, bundle `index-CkPBzKzM.js`). No migration, no Worker deploy.
+- After: integrity checks all 0; money totals and rows per table identical to before (from exports, kept out of git). Public live check
+  (pickleball-club-9h0.pages.dev, no PIN): 16 of 16 (organizer data 401, no tournament data for a phone with no name, 390/320 light and dark
+  with no page errors). Public games answer 0.36 s (median of 9). Organizer timing: Alex on his phone (no read-only PIN in this session).
+Rollback: site deployment `9798779c-c8d4-4586-9d15-924002bc5527` (Zip 60). No database undo needed.
