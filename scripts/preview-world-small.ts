@@ -698,23 +698,9 @@ export async function buildSmallPreview(
   const backup = JSON.parse(backupRes.text);
   backup.tables.player_devices = [];
   await w.settle();
-  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + smallSwitchRows(N, !!opts.zip55) + calmSql + tournamentRows(w);
+  // Zip 56: the backup file (version 3) carries the tournament tables, so they go back with everything else (no second copy: a full
+  // tournament's 12-spot cap would refuse a second insert of its spots).
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + smallSwitchRows(N, !!opts.zip55) + calmSql;
   return { sql, summary };
 }
 
-/**
- * Zip 55: the tournament tables, as SQL added to the end of the seed: parents first. Empty when the world made no tournament. Since Zip 56 the
- * backup file (version 3) carries them too, so a row already there is skipped (INSERT OR IGNORE).
- */
-export function tournamentRows(w: World): string {
-  const lit = (v: unknown) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
-  const out: string[] = [];
-  // Zip 56: the tickets too, after their tournament (parents first).
-  for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) {
-    for (const row of w.db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all() as Record<string, unknown>[]) {
-      const cols = Object.keys(row);
-      out.push(`INSERT OR IGNORE INTO ${t} (${cols.join(', ')}) VALUES (${cols.map((c) => lit(row[c])).join(', ')});`);
-    }
-  }
-  return out.length ? out.join('\n') + '\n' : '';
-}

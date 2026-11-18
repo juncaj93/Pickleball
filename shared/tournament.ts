@@ -368,7 +368,7 @@ export type TicketPlaceView = 'spot' | 'line' | 'none';
 
 /**
  * Zip 56, piece 2: the ticket part of a player's card, from the moment tickets open (and while a Reschedule holds tickets). Names only for
- * everyone else; the waitlist says whether each spot is paid, as the pictures do ("Paid, first in line", "Not paid"). Never anyone's amounts.
+ * everyone else, the waitlist too (Alex: Paid / Not paid is on the organizer's screen only). Never anyone's amounts.
  */
 export interface PlayerTicketsView {
   /** Spots players see: the planned size (6 to 12, from the players locked in; "6 of 8"). */

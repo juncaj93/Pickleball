@@ -19,7 +19,10 @@ import { type TournamentTables, tournamentsFlags, tournamentTablesFor } from './
 export interface DemoExtras {
   taskLog: { id: string; group_id: string; session_id: string | null; task: string; kind: string; detail: string | null; at: string }[];
   env: Record<string, string>;
-  /** Zip 55 "Tournaments": the tournament rows (the backup file leaves them out), only while the switch is on for this phone. Missing: off. */
+  /**
+   * Zip 55 "Tournaments": the tournament rows, only while the switch is on for this phone (missing: off). Since Zip 56 the backup file (version
+   * 3) carries them too; the copy skips a row it already has. Kept so a copy made from an older file still has them.
+   */
   tournaments?: TournamentTables;
 }
 
