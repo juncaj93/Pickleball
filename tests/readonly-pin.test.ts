@@ -106,6 +106,7 @@ describe('read-only organizer PIN (Zip 8)', () => {
       const res = await ctx.viewer.call('GET', url, undefined, r.path.endsWith('/summary') ? { 'X-Players-Redo': 'on' } : {});
       if (r.path === '/api/cal/:param') expect(res.status).toBe(404); // retired feed: always Not found
       else if (r.path === '/api/admin/month-games') expect([200, 409], url).toContain(res.status); // 409 = Money rework switch off here
+      else if (r.path === '/api/admin/tournament/:param/finalize') expect(res.status, url).toBe(403); // Zip 60: Tournaments is switched off here (the next test has it on)
       else expect(res.status, url).toBe(200);
     }
     await ctx.app.settle();
@@ -114,6 +115,23 @@ describe('read-only organizer PIN (Zip 8)', () => {
     // The same reads by the real organizer still do their usual upkeep.
     await ctx.organizer.call('GET', '/api/admin/dashboard');
     expect(snapshot(ctx.app)).not.toBe(before);
+  });
+
+  it('Zip 60: the Finalize screen read works for a view-only phone with Tournaments on, writes nothing, and locking a date from it is refused', async () => {
+    const ctx = await world();
+    await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: true });
+    const created = await ctx.organizer.call('POST', '/api/admin/tournament', { name: 'The Cold Open', dates: ['2026-11-12', '2026-11-17'], ticketCents: 1600, creditCents: 1400, visibility: 'all' });
+    expect(created.status, created.text).toBe(200);
+    const tid = created.data.id as string;
+    const before = snapshot(ctx.app);
+    const read = await ctx.viewer.call('GET', `/api/admin/tournament/${tid}/finalize?date=2026-11-12`);
+    expect(read.status, read.text).toBe(200);
+    expect(read.data).toMatchObject({ date: '2026-11-12', players: [], votes: { locked: 0, americano: 0, either: 0 } });
+    expect(snapshot(ctx.app)).toBe(before);
+    const lock = await ctx.viewer.call('PUT', `/api/admin/tournament/${tid}/date`, { date: '2026-11-12' });
+    expect(lock.status).toBe(403);
+    expect(lock.data.error).toBe('view_only');
+    expect(snapshot(ctx.app)).toBe(before);
   });
 
   it('reads the real numbers: the same dashboard as the real PIN', async () => {
