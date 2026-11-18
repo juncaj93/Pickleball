@@ -300,8 +300,8 @@ async function main() {
 
   // ---------------------------------------------------------------- F  the waitlist screens (12 locked in)
   // The spots follow the players locked in and fill only at 12; the preview has 10 names (no new names allowed), so the player's answer is
-  // stood in for here: 12 locked in, Reese paid and first in line, Vic second (or not in line yet). The server's own waitlist rules are proven
-  // to the cent in tests/zip56-tickets.test.ts with 16 players.
+  // stood in for here (as the server sends it: names only, Alex's ship answer 5): 12 locked in, Reese first in line, Vic second (or not in
+  // line yet). The server's own waitlist rules are proven to the cent in tests/zip56-tickets.test.ts with 16 players.
   const FILL = ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Wren', 'Quinn', 'Zoe', 'Parker', 'Rowan', 'Sage', 'Wren'];
   async function fakeFull(page, inLine) {
     await page.route('**/api/group', async (route) => {
@@ -312,7 +312,7 @@ async function main() {
         k.size = 12;
         k.full = true;
         k.locked = FILL.map((name) => ({ name }));
-        k.line = inLine ? [{ name: 'Reese', paid: true }, { name: 'Vic', paid: false, me: true }] : [{ name: 'Reese', paid: true }];
+        k.line = inLine ? [{ name: 'Reese' }, { name: 'Vic', me: true }] : [{ name: 'Reese' }];
         k.mine = inLine ? { place: 'line', creditCents: 0, paidCents: 0, claimCents: 0, owedCents: 1600 } : null;
       }
       await route.fulfill({ response: res, json: data });
@@ -338,7 +338,9 @@ async function main() {
     const overlay = flat(await sheetOpen(q.page).innerText());
     assert(overlay.includes('You’re second on the waitlist') && overlay.includes('Hold my spot · $16') && overlay.includes('Just keep me on the list'), overlay);
     assert(overlay.includes('If someone drops, you’re locked into that spot.') && overlay.includes('If a spot opens, whoever pays first gets it.'), overlay);
-    assert(/12 of 12/i.test(overlay) && overlay.includes('Paid, first in line'), overlay);
+    // Alex (ship answer 5): no Paid or Not paid next to anyone else on a player's screen; their own row says You.
+    assert(/12 of 12/i.test(overlay) && !/Paid, first in line|Not paid/.test(overlay), overlay);
+    assert(flat(await q.page.locator('dialog[open] [data-tw-row="Vic"]').innerText()).endsWith('You'), 'Vic\'s own row');
     await shot(q.page, 'F-waitlist-overlay');
     assert(q.errors.length === 0, q.errors.join(' | '));
     await q.ctx.close();
@@ -642,6 +644,52 @@ async function main() {
     assert((await b.page.locator('dialog[open] [data-tm-ticket-mark]').count()) === 0, 'no Mark paid while players cannot see it');
     assert((await b.page.locator('dialog[open] [data-tm-ticket-off]').count()) === 1, 'Take off is still there');
     await b.ctx.close();
+  });
+  for (const format of ['doubles', 'americano'])
+    for (const [width, scheme] of [[390, 'light'], [320, 'dark']])
+      await check(`K the format line on the ticket cards too: the player card, Who's in and the organizer's card, one line (${format}, ${width} ${scheme})`, async () => {
+        await call('POST', '/api/admin/tournament-test', { stage: 'tickets_open', format });
+        const want = format === 'americano' ? 'Americano (new partner every round)' : 'Locked doubles (same partner all night)';
+        const oneLine = (loc) =>
+          loc.evaluate((el) => {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+          });
+        const p = await playerPage('Parker', { width, scheme });
+        const line = p.page.locator('.tc [data-tc-format-name]').first();
+        await line.waitFor({ timeout: 15000 });
+        assert(flat(await line.innerText()) === want && (await oneLine(line)) === 1, `card: ${flat(await line.innerText())}`);
+        await p.page.waitForTimeout(600);
+        await p.page.locator('.tc [data-tc-who]').first().click();
+        const inSheet = p.page.locator('dialog[open] .tc [data-tc-format-name]').first();
+        await inSheet.waitFor({ timeout: 10000 });
+        assert(flat(await inSheet.innerText()) === want && (await oneLine(inSheet)) === 1, 'Who\'s in');
+        await fits(p.page, 'dialog[open]');
+        await shot(p.page, `K-ticket-format-${format}-${width}-${scheme}`);
+        await p.ctx.close();
+        const a = await adminPage({ width, scheme });
+        const al = a.page.locator('[data-tm-home="tickets"] .tm-tix-format');
+        await al.waitFor({ timeout: 15000 });
+        assert(flat(await al.innerText()) === want && (await oneLine(al)) === 1, 'organizer card');
+        await fits(a.page, '[data-tm-home]');
+        await a.ctx.close();
+      });
+  await check('K Money > Totals: its own Tournament tickets line, 6 paid $96 (5 Venmo, 1 credit), under the two cards', async () => {
+    await stage('tickets_open');
+    const a = await adminPage();
+    await a.page.locator('.tabbar button', { hasText: 'Money' }).click();
+    const totals = a.page.locator('[role="group"][aria-label="Games or Totals"] button', { hasText: 'Totals' });
+    await totals.waitFor({ timeout: 15000 });
+    await a.page.waitForTimeout(600);
+    await totals.click();
+    const line = a.page.locator('[data-card="tournament-tickets"]');
+    await line.waitFor({ timeout: 15000 });
+    const words = flat(await line.innerText());
+    assert(words === 'Tournament tickets 6 paid $96', words);
+    assert((await a.page.locator('[data-tickets-total="9600"]').count()) === 1, 'the cents');
+    await shot(a.page, 'K-totals-tickets');
+    await a.ctx.close();
   });
   await check('K a level is picked once: Vic signs up at 3.4, backs out; signing up again skips the level (it stays 3.4); Edit sign-up is dates only', async () => {
     await stage('signup');

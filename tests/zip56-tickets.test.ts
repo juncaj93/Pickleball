@@ -366,13 +366,14 @@ describe('the waitlist', () => {
     expect((await joinLine(ctx, 'Jordan')).data.position).toBe(3);
     expect((await lock(ctx, 'Jordan', 'hold')).data).toMatchObject({ result: 'due', dueCents: 1600 });
     expect((await iPaid(ctx, 'Jordan', 1600)).data).toMatchObject({ result: 'waiting' });
-    // Everyone sees the line by name and paid or not (an I paid that waits is not paid yet), never anyone's money.
-    const seen = (await card(ctx, 'Kit')).tickets;
-    expect(seen.line).toEqual([
-      { name: 'Lane', paid: false },
-      { name: 'Morgan', paid: true },
-      { name: 'Jordan', paid: false },
-    ]);
+    // Players see the line by name only (Alex, ship answer 5): nobody else's paid status, never anyone's money. Their own row says it is them.
+    const seen = await (await playerPhone(ctx, 'Kit')).call('GET', '/api/group');
+    expect(seen.data.tournament.tickets.line).toEqual([{ name: 'Lane' }, { name: 'Morgan' }, { name: 'Jordan' }]);
+    expect(seen.text).not.toMatch(/"paid":/);
+    expect((await card(ctx, 'Morgan')).tickets.line).toEqual([{ name: 'Lane' }, { name: 'Morgan', me: true }, { name: 'Jordan' }]);
+    // The organizer's screen still has paid or not (an I paid that waits is not paid yet).
+    const line = ((await dash(ctx)).tournament.tickets as { name: string; place: string; creditCents: number; paidCents: number; priceCents: number }[]).filter((k) => k.place === 'line');
+    expect(line.map((k) => [k.name, k.creditCents + k.paidCents >= k.priceCents])).toEqual([['Lane', false], ['Morgan', true], ['Jordan', false]]);
     books(ctx);
 
     // Blair backs out: the spot goes to Morgan, the first PAID person in line; Lane (unpaid) stays first in line.

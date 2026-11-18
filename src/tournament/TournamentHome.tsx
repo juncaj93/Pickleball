@@ -438,6 +438,10 @@ export function TicketCard({
           <div className="tc-main">
             <Kicker>{w.kicker}</Kicker>
             <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
+            {/* Alex (ship answer 6): the same one-line format as the sign-up card, on the ticket cards too. */}
+            <p className="tc-format" data-tc-format-name>
+              {formatLine(t.format)}
+            </p>
             <p className="tc-sub" data-tc-sub>
               {w.sub}
             </p>
@@ -587,6 +591,9 @@ function Overlay({
           <div className="tc-main">
             <Kicker>{w.kicker}</Kicker>
             <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
+            <p className="tc-format" data-tc-format-name>
+              {formatLine(t.format)}
+            </p>
             <p className="tc-sub" data-tc-sub>
               {sub}
             </p>
@@ -697,9 +704,11 @@ function WhoIn({ k, s, meName }: { k: PlayerTicketsView; s: TicketState; meName:
   );
 }
 
-/** WAITLIST: everyone in line, in the order they joined it. The first PAID person gets the next spot (mock 11: "Paid, first in line"). */
+/**
+ * WAITLIST: everyone in line, in the order they joined it, by name. Alex (ship answer 5): no Paid or Not paid next to anyone else (that is the
+ * organizer's screen); the player's own row says You.
+ */
 function Waitlist({ k }: { k: PlayerTicketsView }) {
-  const firstPaid = k.line.findIndex((x) => x.paid);
   return (
     <section className="tc-tw-card" aria-label="Waitlist" data-tw-line>
       <div className="tc-tw-head">
@@ -713,7 +722,7 @@ function Waitlist({ k }: { k: PlayerTicketsView }) {
               {i + 1}
             </span>
             <span className="tc-tw-name">{p.name}</span>
-            <span className={p.me ? 'tc-tw-tag' : p.paid ? 'tc-tw-tag tc-tw-gold' : 'tc-tw-tag'}>{p.me ? 'You' : p.paid ? (i === firstPaid ? 'Paid, first in line' : 'Paid') : 'Not paid'}</span>
+            <span className="tc-tw-tag">{p.me ? 'You' : ''}</span>
           </li>
         ))}
       </ol>

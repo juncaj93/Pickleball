@@ -37,7 +37,7 @@ import {
   type TournamentStatus,
   type Visibility,
 } from '../shared/tournament';
-import { defaultPayBy, payByLabel, startMsOf, ticketOwed, ticketPaid } from '../shared/tournamentTickets';
+import { defaultPayBy, payByLabel, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
@@ -430,7 +430,8 @@ async function playerTicketsView(ctx: Ctx, t: TournamentRow, tickets: TicketWith
     payBy: statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null,
     closed: statusOf(t) === 'tickets' && salesClosed(t, group.timezone, ctx.nowMs),
     locked: listed.filter((k) => k.place === 'spot').map((k) => ({ name: k.display_name, ...me(k) })),
-    line: listed.filter((k) => k.place === 'line').map((k) => ({ name: k.display_name, paid: ticketPaid(money(k)), ...me(k) })),
+    // Alex (ship answer 5): names only. Paid or Not paid is for the organizer's screen; a player's own ticket is in `mine`.
+    line: listed.filter((k) => k.place === 'line').map((k) => ({ name: k.display_name, ...me(k) })),
     mine: own
       ? { place: placeOf(own), creditCents: own.credit_cents, paidCents: own.paid_cents, claimCents: own.claim_cents, owedCents: ticketOwed(money(own)) }
       : null,

@@ -482,6 +482,12 @@ dialog.sheet.tm-page {
    picture's own sizes (measured at 420 wide: a 43 px head, 38 px rows, the big button, the link 15 px under it). */
 .tm-tix {
   padding: 13px 16px 6px;
+  /* The format line sizes itself to the card (cqw), like the sign-up card's. */
+  container-type: inline-size;
+}
+/* Alex (ship answer 6): the one-line format under the name's line. */
+.tm-tix-format {
+  margin: 9px 0 1px;
 }
 .tm-tix .tm-card-head {
   min-height: 21px;

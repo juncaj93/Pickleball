@@ -310,6 +310,12 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
           {chip}
         </span>
       </div>
+      {/* Alex (ship answer 6): the same one-line format as the sign-up card. */}
+      {t.status !== 'canceled' && (
+        <p className="tm-home-format tm-tix-format" data-tm-home-format={t.format}>
+          {formatLine(t.format)}
+        </p>
+      )}
       <div className="tm-rows">
         <div className="tm-row">
           <span>Date</span>

@@ -383,8 +383,8 @@ export interface PlayerTicketsView {
   closed: boolean;
   /** Locked in, in the order they took their spots. */
   locked: { name: string; me?: true }[];
-  /** The waitlist, in the order they joined it. `paid`: their spot is paid, so they move in when a spot opens. */
-  line: { name: string; paid: boolean; me?: true }[];
+  /** The waitlist, in the order they joined it: names only (Alex: nobody's paid status but the player's own, which is in `mine`). */
+  line: { name: string; me?: true }[];
   /** This player's own ticket (null: none yet). Their own money only. */
   mine: { place: TicketPlaceView; creditCents: number; paidCents: number; claimCents: number; owedCents: number } | null;
 }
