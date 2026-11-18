@@ -15,6 +15,7 @@
  *      the next open fetches nothing
  *   E  the organizer: with a tournament on Home the card's file starts at once, and View as draws the player's card with no placeholder
  *   F  no em dashes on Home
+ *   G  a weak signal as the page opens: the card's style file fails once, and the card is never drawn without its look (it is fetched again)
  * Screenshots: .data/zip62-shots (not in git).
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -310,6 +311,33 @@ async function main() {
     assert(!text.includes('\u2014'), 'an em dash');
     assert(/The Cold Open|Winter/.test(flat(text)), 'the card is there');
     await p.ctx.close();
+  });
+
+  // ---------------------------------------------------------------- G  a weak signal as the page opens
+  await check("G the card's style file fails once as the page opens: the card is never drawn without its look (the file is fetched again)", async () => {
+    await stage('speed_check');
+    const first = await phone();
+    await open(first, 'Parker');
+    const state = await first.ctx.storageState();
+    await first.ctx.close();
+    // The same phone (its name and its memory of the card), an empty file cache so the style file crosses the network, failing once.
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, userAgent: UA, reducedMotion: 'reduce', storageState: state });
+    await shift(ctx);
+    await ctx.addInitScript(watch);
+    let tries = 0;
+    await ctx.route(/\/assets\/parts-[^/]+\.css$/, (route) => (tries++ === 0 ? route.abort('failed') : route.continue()));
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${BASE}/`);
+    await page.locator('.schedule:not([data-saved-copy]) [data-tier]').first().waitFor({ timeout: 30000 });
+    await page.waitForTimeout(2500);
+    assert(tries >= 1, 'the style file was asked for, and failed once');
+    const look = await page.evaluate(() => [...document.querySelectorAll('.tc')].map((el) => getComputedStyle(el).getPropertyValue('--tc-lime').trim()));
+    assert(look.every((v) => v === '#d8f03b'), `a card drawn without its look: ${JSON.stringify(look)}`);
+    assert(look.length >= 1 && tries >= 2, `the style file was fetched again and the card came with its look (tries ${tries}, cards ${look.length})`);
+    assert(errors.length === 0, `page errors: ${errors.join(' | ')}`);
+    await ctx.close();
   });
 
   await stage('none');

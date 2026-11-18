@@ -5935,8 +5935,11 @@ tournament tables in Sunday's backup). No query was slow inside the database, so
 
 ### What changed
 1. `server/stamp.ts`: the fingerprint's one batch carries the tournament reads too (only while the switch is on for that phone; off, the batch
-   is exactly main's): the row, and through a subquery that picks the SAME tournament (the same WHERE and ORDER BY, in the same batch), its
-   sign-ups and tickets, and the organizer's saved player (`playerTourReads`, `adminTourReads` in `server/tournament.ts`).
+   is exactly main's): the row, and through a subquery that picks the SAME tournament (the same WHERE and ORDER BY, ending on the id, in the
+   same batch), its sign-ups and tickets, the organizer's player (the saved one, or every player when the organizer is found by the name in
+   Settings), and for a player's card the freed-spot count (after Pay by) and what a cancel gave back (a canceled card) (`playerTourReads`,
+   `adminTourReads` in `server/tournament.ts`). On an Only me tournament a phone without the organizer's own sign-in cookie reads none of its
+   rows beyond the one that says it is Only me.
 2. The views are built from those rows with no trip of their own, and the full answers (`dashboard`, `groupView`) send the view their own
    fingerprint built instead of building it again. Not reused (built again exactly as before): View as, a phone whose player is inactive, a
    build that hit an error, and a build that tried one of the two writes a read can make (a piece 1 date pick opening tickets, a hold coming back
@@ -5948,7 +5951,9 @@ tournament tables in Sunday's backup). No query was slow inside the database, so
    the one mark up instead of reading every task_log row (same answer: a hide mark never has a game).
 5. Player page: a phone whose last answer had a card remembers it (`pb_tour_seen`) and starts the card's file the moment the page opens
    (usually from its cache), side by side with the games answer; a card whose file is already here is drawn directly, in the same moment as
-   the rest of Home, with no placeholder. The first look on a phone, and a file that fails, work as before. The organizer's phone starts the
+   the rest of Home, with no placeholder. The first look on a phone works as before; a style file that failed is fetched again before the
+   card is drawn (as the organizer file's loader does), so a weak signal can only mean no card until a reload, as before, never a card
+   without its look. The organizer's phone starts the
    file once the dashboard has a tournament, so View as draws the card at once too. The file is still its own download; a phone that never
    had a card fetches nothing; styles are byte for byte the same files.
 6. Preview only: Tournament test stage "Speed check (like live)" (The Cold Open on Everyone, the vote open, 9 on the list).
@@ -5974,19 +5979,31 @@ The live-like Speed check stage, same rows, switch off then on: admin load 1.22 
 - No index was added (no measured query needed one: D1's own time per query is under 1 ms); the Hidden check uses an existing index instead.
 - Not read from live (no read-only PIN in this session; a direct read of the live database was refused by the build machine's safety check):
   the organizer-only switch rows. The player-visible ones match: every flag in live's no-name answer is on the preview too.
-- Still one small read of its own, on purpose: after Pay by a player's card counts freed spots, and a canceled card reads what came back to that
-  player (each about 40 ms, only in those windows); the organizer's own signed-in phone on an Only me tournament still checks its sign-in
-  (Zip 55's rule); the Money tab's Tournament tickets line. Without "Fewer database trips" (not live) the Hidden list and the ticket names are
-  their own trip, as before.
+- Still a read of its own, as before: the organizer's own signed-in phone on an Only me tournament checks its sign-in (Zip 55's rule); the
+  Money tab's Tournament tickets line; View as builds its card the old way (it decides Only me by its own rule; it is answered by the
+  organizer's in-browser copy, so it costs no network trip). Without "Fewer database trips" (not live) the Hidden list and the ticket names
+  are their own trip, as before.
+- Left alone (not tournament work, older than it): the dashboard reads each hidden game's players one game at a time (Settings > Advanced >
+  Hidden games; about 40 ms per hidden game on live; 10 on the preview, which hides its empty games). A question below.
+
+### Review
+A fresh reviewer (no part in the build) read the whole change: nothing that changes an answer or reaches a player who may not see it. Its
+findings, all fixed with a test each: three states still cost one read on their own (after Pay by, a canceled card, an organizer found by
+name), now in the same trip; a style file that failed at page open could have let a retry draw the card without its look (now fetched
+again first); the old-way test proved less than it said (it now checks that the old way reads the row on its own and the single trip never
+does, and the proof against main is committed as e2e/zip62-same.cjs); Only me rows were read for phones that can never see them (now
+skipped); the row read and the pick now end their order on the id, so they provably pick the same tournament. Found during the build: "Pretend
+it's..." answers every batch with nothing, so the look-only databases keep the old reads.
 
 ### Tests
-- Unit: tests/zip62-speed.test.ts (37): at every Tournament test stage no screen makes more trips with the switch on than off (the checks
-  exactly equal); the answers from the single trip equal, byte for byte, the answers built the old way one read at a time (forced by a database
-  that refuses the combined trip) at 15 stages; Only me: every other player and a phone with no name get byte for byte the answers of a world
+- Unit: tests/zip62-speed.test.ts (40): at every Tournament test stage no screen makes more trips with the switch on than off (the checks
+  exactly equal, also with the organizer found by name); the answers from the single trip equal, byte for byte, the answers built the old way
+  one read at a time (forced by a database that refuses the combined trip) at 15 stages; Only me: every other player and a phone with no name get byte for byte the answers of a world
   with no tournament (and never its name or id); "Pretend it's..." and the read-only PIN get the organizer's very tournament view (this test
   fails without the look-only rule: Pretend's batches answer nothing); the Hidden check plans as an index lookup; Hide and Restore still work.
-  A one-time proof in the build session also ran main's code and this code on 22 saved states (2,046 answers: every name, the organizer's phone,
-  View as, Pretend at two moments, the read-only PIN): identical, apart from one id SQLite makes at random when a hold comes back.
+- By hand: `MAIN_DIR=<main checkout> node e2e/zip62-same.cjs` runs main's code and this code on 22 saved states (93 answers each: every name,
+  the organizer's phone, View as, Pretend at two moments, the read-only PIN): 22 of 22 the same, apart from the id SQLite makes at random
+  when a hold comes back.
 - Browser: e2e/zip62.cjs on the REAL built site (A to F: no placeholder and the card with the fresh games at 390/360/320, light and dark,
   both stages; the first look as before; the same card both ways; switched off nothing fetched and the memory forgotten; View as; no em
   dashes).
