@@ -5833,3 +5833,11 @@ Preview deployed from this branch (no migration): https://claude-new-session-3gt
 - Christmas skin on a preview: Settings > Feature switches > Christmas skin (Off, Just me, Everyone) now counts (a link still wins). Everyone shows on any date; Just me shows the theme at once for the organizer's own player (view as Alex). Preview only (CHRISTMAS_SKIN_PREVIEW); live is unchanged. Everyone: each phone still taps the logo to turn the theme on.
 - Level list text replaced (shared/tournament.ts) and "Not sure? Ask Alex." under it.
 - Tests: targeted unit 12 files, 323 passed; zip55 91, zip56 57, zip59 12 browser checks; zip55-off and zip56-off 47 each.
+
+### Live: shipped Wed Nov 18, 2026, about 9:45 AM Eastern (Alex: "ship it"), TOURNAMENTS OFF, no database change
+Last tweaks first: 12 px between the level cards and "Not sure? Ask Alex."; 3.4 and 3.6+ text as given; the 2.75 level now reads 2.7 (label and short label only, stored value 275 unchanged); level rows tightened (smaller line, tighter row, and at 320 px the round mark is hidden) so every level fits two lines or fewer at 390, 360 and 320, with no word cut.
+1. Restore points first (9:33 AM): Time Travel bookmark `00001783-00000000-00005127-c1bf9f04c15bc1f625237bb1c77cd2e3`; SQL export saved as `export-20261118143303` in `pickleball-backups`. Integrity checks before and after: all 0 (21, 8, 11 columns).
+2. Main fast-forwarded to `da5fe27` and pushed; deployed with `npm run deploy` from main (every guard rule passed): deployment `455d2bda-b4d4-4166-a7a9-aea3a68cbc8d`, bundle `index-CnoKIK_o.js`.
+3. Live check (public, no PIN): page and /admin 200; with `?tournaments=on` no page errors and nothing wider than the screen at 390 and 320, light and dark; no `tournament` key in the player answer with or without the private link (switch off, no name picked).
+Rollback: site deployment `4d15fe00-7d46-4374-b795-c0310a816946` (Workers & Pages > pickleball-club > Deployments). No database change, so no data undo; the bookmark above is the restore point.
+Tests before the deploy: unit 192 files, 3484 passed, 2 skipped; browser zip55 91, zip56 57, zip59 12; zip55-off and zip56-off 47 each (OFF equals main).
