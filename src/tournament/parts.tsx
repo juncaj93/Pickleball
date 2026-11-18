@@ -1,7 +1,7 @@
 // Zip 55 "Tournaments": the pieces the player sheets (src/tournament/TournamentHome.tsx, loaded only when a tournament is on a player's Home)
 // and the organizer screens (src/pages/admin/Tournament.tsx) share: the month calendar and the level list. Styles: src/tournament/tournament.css.
 import { type ReactNode, type RefObject, useEffect, useRef } from 'react';
-import { type CalMonth, LEVELS, monthTitle } from '../../shared/tournament';
+import { type CalMonth, type FormatVote, LEVELS, monthTitle, VOTE_ROWS } from '../../shared/tournament';
 import './tournament.css';
 
 const WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -189,6 +189,26 @@ export function LevelList({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Zip 60: "Format you'd like" on the sign-up sheets: three radio rows in the level list's own row style (Locked doubles with its short line, Americano
+ * with its short line, Either is fine). Your own pick only; nobody sees anyone else's.
+ */
+export function VoteList({ value, onPick }: { value: FormatVote; onPick: (v: FormatVote) => void }) {
+  return (
+    <div className="tm-levels tm-votes" role="radiogroup" aria-label="Format you'd like" data-tm-votes>
+      {VOTE_ROWS.map((r) => (
+        <button key={r.vote} type="button" role="radio" aria-checked={value === r.vote} className={`tm-level${value === r.vote ? ' tm-level-on' : ''}`} data-vote={r.vote} onClick={() => onPick(r.vote)}>
+          <span className="tm-vote-text">
+            <span className="tm-vote-name">{r.name}</span>
+            {r.line && <span className="tm-level-text tm-vote-line">{r.line}</span>}
+          </span>
+          <span className="tm-radio" aria-hidden="true" />
+        </button>
+      ))}
     </div>
   );
 }

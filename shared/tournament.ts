@@ -87,6 +87,81 @@ export const formatLine = (f: TournamentFormat): string => `${formatName(f)} (${
 export const stepsFor = (f: TournamentFormat): string[] => (f === 'americano' ? ['Vote', 'Tickets', 'Games', 'Winners'] : ['Vote', 'Tickets', 'Teams', 'Games', 'Final']);
 /** The format can change until tickets open (piece 2 adds that stage); piece 1's two stages are before it. */
 export const formatLocked = (status: string): boolean => status !== 'signup' && status !== 'date_picked';
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 60: players vote the format. The Create/Edit choice has a third option, "Let players vote" (the default); the vote is decided when the
+// organizer picks the date. Stored in two nullable columns (migrations/0025_format_vote.sql): tournaments.format_source and
+// tournament_signups.format_vote. While the vote is open `format` holds a placeholder that no screen shows.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** What the Create and Edit screen's format choice can be: the two formats, or "Let players vote". */
+export type FormatChoice = TournamentFormat | 'vote';
+export const FORMAT_CHOICES = ['vote', 'doubles', 'americano'] as const;
+/** New tournaments start on this choice. */
+export const DEFAULT_FORMAT_CHOICE: FormatChoice = 'vote';
+export const VOTE_LABEL = 'Let players vote';
+
+/** A player's vote, as stored: 'locked' is Locked doubles. Left out (NULL) counts as 'either'. */
+export type FormatVote = 'locked' | 'americano' | 'either';
+export const FORMAT_VOTES = ['locked', 'americano', 'either'] as const;
+export const DEFAULT_FORMAT_VOTE: FormatVote = 'either';
+export const isFormatVote = (v: unknown): v is FormatVote => typeof v === 'string' && (FORMAT_VOTES as readonly string[]).includes(v);
+/** The sign-up rows: the name and the short line under it (the existing words). */
+export const VOTE_ROWS: readonly { vote: FormatVote; name: string; line: string }[] = [
+  { vote: 'locked', name: 'Locked doubles', line: 'same partner all night' },
+  { vote: 'americano', name: 'Americano', line: 'new partner every round' },
+  { vote: 'either', name: 'Either is fine', line: '' },
+];
+
+/**
+ * How the format was set (tournaments.format_source). 'vote' and 'tie' are the vote at work (see the migration); 'admin' is the organizer
+ * changing it by hand after the vote was open; NULL is the organizer choosing it when creating the tournament (no vote, and no date alert).
+ */
+export type FormatSource = 'vote' | 'tie' | 'admin';
+export const sourceOf = (v: string | null | undefined): FormatSource | null => (v === 'vote' || v === 'tie' || v === 'admin' ? v : null);
+/** The vote decides this tournament's format (open until the date is picked). */
+export const isVoteSource = (v: string | null | undefined): boolean => v === 'vote' || v === 'tie';
+
+export interface VoteCounts {
+  locked: number;
+  americano: number;
+  either: number;
+}
+
+/** Count the votes. Anything that is not 'locked' or 'americano' (no vote, an odd value) counts as Either. */
+export function tallyVotes(votes: readonly (string | null | undefined)[]): VoteCounts {
+  const out: VoteCounts = { locked: 0, americano: 0, either: 0 };
+  for (const v of votes) {
+    if (v === 'locked') out.locked++;
+    else if (v === 'americano') out.americano++;
+    else out.either++;
+  }
+  return out;
+}
+
+/**
+ * THE RULE (a pure function, so tests can check every case): the majority of the Locked and Americano votes wins; Either counts for neither
+ * side. A tie, or nobody picking a side, goes by the tie rule: the first tournament ever (`previous` is null) is Locked doubles, otherwise the
+ * OPPOSITE of the format of the most recent earlier tournament that was not canceled.
+ */
+export function decideFormat(counts: VoteCounts, previous: TournamentFormat | null): { format: TournamentFormat; rule: 'majority' | 'tie' } {
+  if (counts.locked > counts.americano) return { format: 'doubles', rule: 'majority' };
+  if (counts.americano > counts.locked) return { format: 'americano', rule: 'majority' };
+  return { format: previous === null ? 'doubles' : previous === 'doubles' ? 'americano' : 'doubles', rule: 'tie' };
+}
+
+/** "Locked 3, Americano 6, Either 2" (the organizer's card). */
+export const voteCountsLine = (c: VoteCounts): string => `Locked ${c.locked}, Americano ${c.americano}, Either ${c.either}`;
+
+/** The player's alert once the date is locked (Home, the site's alert card): the title and the second line. `source` says whether to claim a vote. */
+export function formatAlertWords(name: string, dayKeyOfDate: string, format: TournamentFormat, source: FormatSource): { title: string; sub: string } {
+  const s = stubParts(dayKeyOfDate);
+  const day = `${s.weekday.charAt(0)}${s.weekday.slice(1).toLowerCase()} ${s.month.charAt(0)}${s.month.slice(1).toLowerCase()} ${s.day}`;
+  return {
+    title: `${name} is scheduled for ${day}.`,
+    sub: source === 'vote' ? `Most players voted ${formatName(format)}.` : `Format: ${formatName(format)}`,
+  };
+}
+
 /** The most a ticket or the credit can be set to ($200), so a typo cannot store a silly number. */
 export const MAX_PRICE_CENTS = 20_000;
 /** Winners per tournament: one team of two (the champion prize card says "2 players"). */
@@ -408,8 +483,13 @@ export interface PlayerTournamentView {
   finalDate: string | null;
   /** Everyone on the list, in sign-up order (names only), for "See who's signed up" and the count. */
   names: string[];
-  /** This player's own sign-up (null: not on the list). Their own pick only, never the organizer's level. */
-  me: { level: number; dates: string[] } | null;
+  /** This player's own sign-up (null: not on the list). Their own pick only, never the organizer's level. `formatVote`: their own format vote
+   *  (Zip 60; only while the vote is open, never anyone else's). */
+  me: { level: number; dates: string[]; formatVote?: FormatVote } | null;
+  /** Zip 60: the vote decides the format and the date is not locked: the card says "Tournament style TBD" and the sign-up asks "Format you'd like". */
+  formatTbd?: true;
+  /** Zip 60: the date was locked (the vote or the organizer set the format): the alert at the top of Home, dismissed per player. */
+  formatAlert?: { key: string; title: string; sub: string };
   /** Off the list after signing up before: the level they picked first, which stays theirs (Alex: a level is picked once). */
   lockedLevel?: number;
   /** Only me is on: this is the organizer's own phone (the "Only you can see this" strip). */
@@ -457,6 +537,12 @@ export interface AdminTournamentView {
   format: TournamentFormat;
   /** Tickets are open (piece 2 on): the format cannot change any more. Always false in piece 1. */
   formatLocked: boolean;
+  /** Zip 60: the vote decides the format and the date is not locked ("Format: players vote"). */
+  formatPending?: boolean;
+  /** Zip 60: how the format was set (null: chosen when the tournament was created). */
+  formatSource?: FormatSource | null;
+  /** Zip 60: the votes of the players on the list who can make the picked date (all of them before a date is picked). Organizer only. */
+  votes?: VoteCounts;
   status: TournamentStatus;
   visibility: Visibility;
   /** The smart plan for the players locked in now: the planned size (also the spots), courts, minutes and start. */

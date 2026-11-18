@@ -3,7 +3,7 @@
 //   npx vite-node scripts/load-small-local.ts -- <file.sqlite> [ISO time, default now] [--calm] [--zip49] [--zip51] [--zip55]   (--calm = the calm profile; with
 //   --zip55 it is the preview profile of Zip 55: e2e/zip55.cjs; with
 //   --zip49 it is the preview profile of Zip 49: e2e/zip49.cjs; with --zip51 the preview profile of Zip 51: e2e/zip51.cjs; with --zip55 --zip56 the
-//   preview profile of Zip 56: e2e/zip56.cjs)
+//   preview profile of Zip 56: e2e/zip56.cjs; with --zip55 --zip60 Zip 60's: no tournament open, e2e/zip60.cjs)
 import { rmSync } from 'node:fs';
 import { createNodeD1 } from '../dev/nodeD1';
 import { buildSmallPreview } from './preview-world-small';
@@ -13,11 +13,12 @@ const zip49 = process.argv.includes('--zip49');
 const zip51 = process.argv.includes('--zip51');
 const zip55 = process.argv.includes('--zip55');
 const zip56 = process.argv.includes('--zip56');
-const [out, at] = process.argv.slice(2).filter((a) => a !== '--' && a !== '--calm' && a !== '--zip49' && a !== '--zip51' && a !== '--zip55' && a !== '--zip56');
+const zip60 = process.argv.includes('--zip60');
+const [out, at] = process.argv.slice(2).filter((a) => a !== '--' && a !== '--calm' && a !== '--zip49' && a !== '--zip51' && a !== '--zip55' && a !== '--zip56' && a !== '--zip60');
 if (!out) throw new Error('Usage: vite-node scripts/load-small-local.ts -- <file.sqlite> [ISO time]');
 const startMs = at ? Date.parse(at) : Date.now();
 if (Number.isNaN(startMs)) throw new Error(`Not a time: ${at}`);
-const { sql, summary } = await buildSmallPreview(startMs, { calm, zip49, zip51, zip55, zip56 });
+const { sql, summary } = await buildSmallPreview(startMs, { calm, zip49, zip51, zip55, zip56, zip60 });
 rmSync(out, { force: true });
 const db = createNodeD1(out);
 db.raw.exec(sql);

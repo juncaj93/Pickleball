@@ -100,7 +100,8 @@ export async function buildSmallPreview(
   /** `zip51`: Zip 51's two late-drop games instead (the preview seed from Zip 51 on). */
   /** `zip55`: the calm profile of Zip 55 (Tournaments): no zip's games, no Venue cards, and a fresh "Winter Classic" on Only me (the preview seed). */
   /** `zip56`: Zip 55's profile, with the tournament's date picked for Everyone (Zip 56: picking the date opens tickets; nobody has paid). */
-  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean } = {},
+  /** `zip60`: Zip 60's profile (the players vote the format): the Zip 55 profile with NO tournament open (Alex taps Create, the default is "Let players vote"; the Tournament test page has the vote stages). */
+  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean; zip60?: boolean } = {},
 ): Promise<Seed> {
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
@@ -657,18 +658,23 @@ export async function buildSmallPreview(
   //     the card; players see nothing. The Tournament test page (preview builds only) moves it to "Sign-up open" or "Date picked".
   if (opts.zip55) {
     await w.org.ok('PUT', '/api/admin/tournaments-switch', { on: true });
-    await w.org.ok('POST', '/api/admin/tournament', { name: 'Winter Classic', dates: testDates(todayKey(N)), size: 8, courts: 2, minutes: 120, start: 1170, ticketCents: 1600, creditCents: 1400, visibility: 'me' });
+    // Zip 60: Create now starts on "Let players vote"; the older profiles (zip55, zip56) keep the Locked doubles tournament they were built for.
+    if (!opts.zip60) await w.org.ok('POST', '/api/admin/tournament', { name: 'Winter Classic', dates: testDates(todayKey(N)), size: 8, courts: 2, minutes: 120, start: 1170, ticketCents: 1600, creditCents: 1400, visibility: 'me', format: 'doubles' });
     keep.length = 0;
     venueKeep.length = 0;
     lateMove = undefined;
-    summary.push('Zip 55 Tournaments (on): "Winter Classic" just created, Only me, nobody on the list; no other zip\'s games or cards (the Tournament test page sets the stages)');
+    summary.push(
+      opts.zip60
+        ? 'Zip 60 (🎾60.formatvote), Tournaments on: NO tournament open, so Create tournament (Settings > Schedule) starts on "Let players vote"; no other zip\'s games or cards. The Tournament test page has Format vote open, Date locked with a clear majority and Date locked with a tie'
+        : 'Zip 55 Tournaments (on): "Winter Classic" just created, Only me, nobody on the list; no other zip\'s games or cards (the Tournament test page sets the stages)',
+    );
   }
 
   // 29. Zip 56, Tournaments piece 2 (tickets; ON in the preview: BUILDING_ON). The calm preview opens on the Date picked stage (Everyone, 8 on the
   //     list, Sage set to 3.4, the third Thursday of next month picked), made by the Tournament test page's own server half: picking the date
   //     opened tickets (Alex), so organizer Home shows picture 29's card with Tickets and the Plan line, and nobody has paid. Every other ticket
   //     stage is one tap away on the Tournament test page.
-  if (opts.zip56) {
+  if (opts.zip56 && !opts.zip60) {
     if (!opts.zip55) throw new Error('zip56 builds on the zip55 profile');
     w.env.PREVIEW_CALM = 'on';
     try {
@@ -690,7 +696,7 @@ export async function buildSmallPreview(
     calmSql = calmDown(w.db.raw, keep, N, lateMove, venueKeep);
     summary.push(
       opts.zip55
-        ? 'CALM profile (Zip 55): no game of any zip is kept (only the empty regular games, hidden from the organizer lists), no payment, credit entry or cash-out request, and the Venue charge alert row is dated now (no card); npm run db:seed:preview -- --full builds the whole world'
+        ? `CALM profile (${opts.zip60 ? 'Zip 60' : 'Zip 55'}): no game of any zip is kept (only the empty regular games, hidden from the organizer lists), no payment, credit entry or cash-out request, and the Venue charge alert row is dated now (no card); npm run db:seed:preview -- --full builds the whole world`
         : `CALM profile (${opts.zip51 ? 'Zip 51' : opts.zip49 ? 'Zip 49' : 'Zip 42'} and 43): that zip's games and last month's two booked games the Venue charge alert adds up (hidden from the lists) are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)`,
     );
   }

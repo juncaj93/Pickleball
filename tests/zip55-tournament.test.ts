@@ -237,7 +237,7 @@ describe('sign up, Edit sign-up, back out', () => {
     expect(r.status, r.text).toBe(200);
     await (await playerPhone(ctx, 'Casey')).call('POST', '/api/tournament/signup', { tournamentId: id, level: 275, dates: [DATES[0]] });
     const b = (await blair.call('GET', '/api/group')).data.tournament;
-    expect(b.me).toEqual({ level: 340, dates: [DATES[0], DATES[1]] });
+    expect(b.me).toEqual({ level: 340, dates: [DATES[0], DATES[1]], formatVote: 'either' });
     expect(b.names).toEqual(['Blair', 'Casey']);
     const devon = (await group(ctx, 'Devon')).tournament;
     expect(devon.me).toBeNull();
@@ -274,7 +274,7 @@ describe('sign up, Edit sign-up, back out', () => {
     ctx.app.advance(60_000);
     // A level sent with the edit (an older screen) is ignored: only the dates change.
     expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 340, dates: [DATES[2], DATES[3]] })).status).toBe(200);
-    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[2], DATES[3]] });
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[2], DATES[3]], formatVote: 'either' });
     // Back out: off the list for everyone.
     ctx.app.advance(60_000);
     expect((await blair.call('POST', '/api/tournament/back-out', { tournamentId: id })).data.result).toBe('backed_out');
@@ -291,7 +291,7 @@ describe('sign up, Edit sign-up, back out', () => {
     ctx.app.advance(60_000);
     await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 340, dates: [DATES[0]] });
     expect((await casey.call('GET', '/api/group')).data.tournament.names).toEqual(['Casey', 'Blair']);
-    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[0]] });
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[0]], formatVote: 'either' });
     const history = ctx.app.db.raw.prepare("SELECT level, set_by FROM tournament_level_history WHERE player_id = ? ORDER BY created_at").all(ctx.byName.Blair);
     expect(history).toEqual([{ level: 320, set_by: 'player' }]);
     const lines = (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries.map((e: any) => e.action);
@@ -694,7 +694,7 @@ describe('second review fixes (Zip 55)', () => {
     await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[4]] });
     await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', dates: DATES.slice(0, 4) });
     expect(datesOf(ctx, 'Blair')).toEqual([]);
-    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 300, dates: [] });
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 300, dates: [], formatVote: 'either' });
     expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, dates: [DATES[1]] })).status).toBe(200);
   });
 

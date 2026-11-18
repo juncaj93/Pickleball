@@ -8,15 +8,20 @@
 // This file is its own download (src/TournamentSlot.tsx loads it): a phone fetches it only when the server sends a tournament for it, so with
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import type { PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
-import { dayShort, formatLine, formatName, hoursLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
+import type { FormatVote, PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
+import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, hoursLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
 import { payByLabel, placeWord } from '../../shared/tournamentTickets';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../lib';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
-import { type DayLook, LevelList, MonthCalendar, useMoreBelow } from './parts';
+import { type DayLook, LevelList, MonthCalendar, useMoreBelow, VoteList } from './parts';
+
+/** Zip 60: the format line on the cards. While the players' vote is open it is "Tournament style TBD" (no other words). */
+const formatText = (t: PlayerTournamentView): string => (t.formatTbd ? 'Tournament style TBD' : formatLine(t.format));
+/** The card's label for screen readers. */
+const cardLabel = (t: PlayerTournamentView): string => (t.formatTbd ? `${t.name}, style to be decided` : `${t.name}, ${formatName(t.format)} tournament`);
 
 function errorText(err: unknown): string {
   if (err instanceof ApiError) return err.status === 403 && /view only/i.test(err.message) ? VIEW_ONLY_MESSAGE : err.message;
@@ -200,8 +205,8 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
         open={sheet === 'signup'}
         busy={busy}
         onClose={() => setSheet(null)}
-        onSubmit={async (level, dates) => {
-          const save = () => api('POST', '/api/tournament/signup', { tournamentId: t.id, level, dates });
+        onSubmit={async (level, dates, vote) => {
+          const save = () => api('POST', '/api/tournament/signup', { tournamentId: t.id, level, dates, ...(vote ? { formatVote: vote } : {}) });
           // Reduced motion: no punch, straight to "You're on the list" (the toast and the card).
           if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
             const ok = await run(save, "You're on the list");
@@ -229,9 +234,9 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
             setSheet(null);
             setAskOut(true);
           }}
-          onSubmit={async (dates) => {
-            // Alex: Edit sign-up changes the dates only (the level was picked once; only the organizer changes it).
-            const ok = await run(() => api('PUT', '/api/tournament/signup', { tournamentId: t.id, ...(dates ? { dates } : {}) }), 'Saved');
+          onSubmit={async (dates, vote) => {
+            // Alex: Edit sign-up changes the dates only (the level was picked once; only the organizer changes it). Zip 60: and the format vote.
+            const ok = await run(() => api('PUT', '/api/tournament/signup', { tournamentId: t.id, ...(dates ? { dates } : {}), ...(vote ? { formatVote: vote } : {}) }), 'Saved');
             if (ok) setSheet(null);
           }}
         />
@@ -344,6 +349,8 @@ function Stub({ t }: { t: PlayerTournamentView }) {
         {stub ? stub.month : monthSpan(t.openDates) || ' '}
       </span>
       <span className="tc-time" aria-hidden="true">
+        {/* Zip 60: "~7:30 PM" until the date is picked; the plain time after. */}
+        {picked ? '' : '~'}
         {startLabel(t.start)}
       </span>
     </div>
@@ -352,9 +359,11 @@ function Stub({ t }: { t: PlayerTournamentView }) {
 
 /** The steps along the bottom. `now`: the step they are on (1 = Tickets); none for a canceled tournament. */
 function Track({ t, now }: { t: PlayerTournamentView; now: number }) {
+  // Zip 60: with the style still to be decided, only the steps both formats share (no Teams, no Final or Winners).
+  const steps = t.formatTbd ? ['Vote', 'Tickets', 'Games'] : stepsFor(t.format);
   return (
-    <ol className="tc-track" aria-label="Tournament steps" style={{ '--tc-steps': stepsFor(t.format).length } as CSSProperties}>
-      {stepsFor(t.format).map((s, i) => (
+    <ol className="tc-track" aria-label="Tournament steps" style={{ '--tc-steps': steps.length } as CSSProperties}>
+      {steps.map((s, i) => (
         <li key={s} className={i < now ? 'tc-step-done' : i === now ? 'tc-step-now' : undefined} aria-current={i === now ? 'step' : undefined}>
           <span className="tc-step-dot" aria-hidden="true" />
           <span className="tc-step-label">{s.toUpperCase()}</span>
@@ -495,7 +504,7 @@ export function TicketCard({
         }
       : undefined;
     return (
-      <section className={`tc${onOpen ? ' tc-tap' : ''}${punch ? ' tc-punching' : ''}`} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={s} onClick={open}>
+      <section className={`tc${onOpen ? ' tc-tap' : ''}${punch ? ' tc-punching' : ''}`} aria-label={cardLabel(t)} data-tc-format={t.formatTbd ? 'tbd' : t.format} data-tc={s} onClick={open}>
                 <div className="tc-top">
           {punch && <PunchRing />}
           <Stub t={t} />
@@ -504,7 +513,7 @@ export function TicketCard({
             <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
             {/* Alex (ship answer 6): the same one-line format as the sign-up card, on the ticket cards too. */}
             <p className="tc-format" data-tc-format-name>
-              {formatLine(t.format)}
+              {formatText(t)}
             </p>
             <p className="tc-sub" data-tc-sub>
               {punch ? <PunchSub /> : w.sub}
@@ -566,7 +575,7 @@ export function TicketCard({
   const now = picked ? 1 : 0;
   const state = t.status === 'rescheduled' ? 'rescheduled' : picked ? 'date' : signed ? 'listed' : 'open';
   return (
-    <section className={punch ? 'tc tc-punching' : 'tc'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={state}>
+    <section className={punch ? 'tc tc-punching' : 'tc'} aria-label={cardLabel(t)} data-tc-format={t.formatTbd ? 'tbd' : t.format} data-tc={state}>
             <div className="tc-top">
         {punch && <PunchRing />}
         <Stub t={t} />
@@ -574,7 +583,7 @@ export function TicketCard({
           <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
           {/* Alex: one line, "Locked doubles (same partner all night)", in the green subtitle style. */}
           <p className="tc-format" data-tc-format-name>
-            {formatLine(t.format)}
+            {formatText(t)}
           </p>
           <p className="tc-sub" data-tc-sub>
             {punch ? <PunchSub /> : sub}
@@ -648,14 +657,14 @@ function Overlay({
   const lists = [<WhoIn key="in" k={k} s={s} meName={meName} />, k.line.length > 0 ? <Waitlist key="line" k={k} /> : null];
   return (
     <div className="tc-tw stack" data-tw={s}>
-      <section className="tc" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={s}>
+      <section className="tc" aria-label={cardLabel(t)} data-tc-format={t.formatTbd ? 'tbd' : t.format} data-tc={s}>
                 <div className="tc-top">
           <Stub t={t} />
           <div className="tc-main">
             <Kicker>{w.kicker}</Kicker>
             <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
             <p className="tc-format" data-tc-format-name>
-              {formatLine(t.format)}
+              {formatText(t)}
             </p>
             <p className="tc-sub" data-tc-sub>
               {sub}
@@ -836,6 +845,18 @@ function SheetBottom({ stack, children }: { stack?: boolean; children: ReactNode
   );
 }
 
+/** Zip 60: the short question under the dates, with its three rows. */
+function VoteBlock({ vote, onPick }: { vote: FormatVote; onPick: (v: FormatVote) => void }) {
+  return (
+    <>
+      <p className="tm-eyebrow tm-vote-head" data-tm-vote-head>
+        Format you’d like
+      </p>
+      <VoteList value={vote} onPick={onPick} />
+    </>
+  );
+}
+
 function SignUpSheet({
   t,
   org,
@@ -850,8 +871,10 @@ function SignUpSheet({
   open: boolean;
   busy: boolean;
   onClose: () => void;
-  onSubmit: (level: number, dates: string[]) => void;
+  onSubmit: (level: number, dates: string[], vote: FormatVote | null) => void;
 }) {
+  // Zip 60: "Format you'd like" (only while the players' vote is open); Either is fine is preselected.
+  const [vote, setVote] = useState<FormatVote>(DEFAULT_FORMAT_VOTE);
   // Alex: a level is picked once. Someone signing up again (after Drop out or Back out) keeps their first level: no level step.
   const locked = t.lockedLevel ?? null;
   const [step, setStep] = useState<1 | 2>(locked === null ? 1 : 2);
@@ -886,13 +909,14 @@ function SignUpSheet({
           <p className="tm-eyebrow">{locked === null ? 'Step 2 of 2 · Pick every date that works' : 'Pick every date that works'}</p>
           <p className="tm-help">Green dates are open. Games start around {startLabel(t.start)}.</p>
           <DatesPicker t={t} picked={picked} setPicked={setPicked} />
+          {t.formatTbd && <VoteBlock vote={vote} onPick={setVote} />}
           <SheetBottom>
             {locked === null && (
               <button type="button" className="btn secondary" onClick={() => setStep(1)} data-tm-back>
                 Back
               </button>
             )}
-            <button type="button" className="btn" disabled={busy || picked.length === 0 || level === null} onClick={() => level !== null && onSubmit(level, picked)} data-tm-submit>
+            <button type="button" className="btn" disabled={busy || picked.length === 0 || level === null} onClick={() => level !== null && onSubmit(level, picked, t.formatTbd ? vote : null)} data-tm-submit>
               {busy ? 'Signing up…' : 'Sign up'}
             </button>
           </SheetBottom>
@@ -915,10 +939,13 @@ function EditSheet({
   busy: boolean;
   onClose: () => void;
   onBackOut: () => void;
-  /** `dates` null: the dates were not touched (nothing to send). */
-  onSubmit: (dates: string[] | null) => void;
+  /** `dates` null: the dates were not touched (nothing to send). `vote` null: the format vote was not touched. */
+  onSubmit: (dates: string[] | null, vote: FormatVote | null) => void;
 }) {
   const me = t.me!;
+  // Zip 60: their own format vote, changeable until the date is locked.
+  const [vote, setVote] = useState<FormatVote>(me.formatVote ?? DEFAULT_FORMAT_VOTE);
+  const voteTouched = !!t.formatTbd && vote !== (me.formatVote ?? DEFAULT_FORMAT_VOTE);
   // Only the dates still open count (once the date is picked, that one date). Untouched dates are not sent.
   const [pickedRaw, setPickedRaw] = useState<string[]>(me.dates);
   // Only the dates still open count, also after a reload under the open sheet (a date that closed drops out and is never sent).
@@ -937,8 +964,9 @@ function EditSheet({
           <DatesPicker t={t} picked={picked} setPicked={setPicked} summary={false} />
         </>
       )}
+      {t.formatTbd && <VoteBlock vote={vote} onPick={setVote} />}
       <SheetBottom stack>
-        <button type="button" className="btn" disabled={busy || !touched || picked.length === 0} onClick={() => onSubmit(touched ? picked : null)} data-tm-save>
+        <button type="button" className="btn" disabled={busy || (!touched && !voteTouched) || (touched && picked.length === 0)} onClick={() => onSubmit(touched ? picked : null, voteTouched ? vote : null)} data-tm-save>
           {busy ? 'Saving…' : 'Save changes'}
         </button>
         <button type="button" className="tm-quiet-link" onClick={onBackOut} data-tm-backout>

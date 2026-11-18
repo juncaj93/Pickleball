@@ -26,9 +26,11 @@ import {
   formatLine,
   formatName,
   formatRule,
-  DEFAULT_FORMAT,
+  DEFAULT_FORMAT_CHOICE,
+  type FormatChoice,
+  voteCountsLine,
+  VOTE_LABEL,
   DEFAULT_SECOND_CREDIT_CENTS,
-  type TournamentFormat,
 } from '../../../shared/tournament';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { evensWarning, payByAt, payByDays, payByLabel, payByParts, ticketsLine } from '../../../shared/tournamentTickets';
@@ -160,6 +162,27 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
+/**
+ * Zip 60: the votes on the organizer's card ("Locked 3, Americano 6, Either 2") and which rule decided the format. Only the organizer sees counts;
+ * no player's screen ever carries them.
+ */
+function VoteLines({ t, tix }: { t: AdminTournamentView; tix?: boolean }) {
+  if (!t.votes || t.status === 'canceled') return null;
+  const how = t.formatPending ? null : t.formatSource === 'vote' ? 'Decided by the most votes' : t.formatSource === 'tie' ? 'Decided by the tie rule' : t.formatSource === 'admin' ? 'Changed by you' : null;
+  return (
+    <>
+      <p className={tix ? 'tm-home-sub tm-vote-counts tm-tix-votes' : 'tm-home-sub tm-vote-counts'} data-tm-vote-counts>
+        {voteCountsLine(t.votes)}
+      </p>
+      {how && (
+        <p className={tix ? 'tm-home-sub tm-vote-how tm-tix-votes' : 'tm-home-sub tm-vote-how'} data-tm-vote-how>
+          {how}
+        </p>
+      )}
+    </>
+  );
+}
+
 /** Piece 1's Home card (sign-up open, or rescheduled): Pick date and Edit. */
 function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const [open, setOpen] = useState<null | 'dates' | 'edit'>(null);
@@ -173,9 +196,10 @@ function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
         <span className="tm-home-ball" aria-hidden="true" />
         <div className="tm-home-text">
           <h2 className="tm-home-title">{t.name}</h2>
-          <p className="tm-home-format" data-tm-home-format={t.format}>
-            {formatLine(t.format)}
+          <p className="tm-home-format" data-tm-home-format={t.formatPending ? 'vote' : t.format}>
+            {t.formatPending ? 'Format: players vote' : formatLine(t.format)}
           </p>
+          <VoteLines t={t} />
           <p className="tm-home-sub">
             {statusLine(t)} · {who}
           </p>
@@ -312,9 +336,12 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
       </div>
       {/* Alex (ship answer 6): the same one-line format as the sign-up card. */}
       {t.status !== 'canceled' && (
-        <p className="tm-home-format tm-tix-format" data-tm-home-format={t.format}>
-          {formatLine(t.format)}
-        </p>
+        <>
+          <p className="tm-home-format tm-tix-format" data-tm-home-format={t.formatPending ? 'vote' : t.format}>
+            {t.formatPending ? 'Format: players vote' : formatLine(t.format)}
+          </p>
+          <VoteLines t={t} tix />
+        </>
       )}
       <div className="tm-rows">
         <div className="tm-row">
@@ -734,13 +761,17 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   const [dates, setDates] = useState<string[]>(editing?.offeredDates ?? []);
   const [ticket, setTicket] = useState<number | null>(editing?.ticketCents ?? DEFAULT_TICKET_CENTS);
   const [credit, setCredit] = useState<number | null>(editing?.championCreditCents ?? DEFAULT_CREDIT_CENTS);
-  const [format, setFormat] = useState<TournamentFormat>(editing?.format ?? DEFAULT_FORMAT);
+  // Zip 60: a format, or "Let players vote" (the start for a new tournament; an edited one starts on it while the vote is still open).
+  const [format, setFormat] = useState<FormatChoice>(editing ? (editing.formatPending ? 'vote' : editing.format) : DEFAULT_FORMAT_CHOICE);
+  // The vote can be switched on until the date is locked.
+  const canVote = !editing || !editing.finalDate || editing.formatPending === true;
   // Americano's 2nd place: what an Americano tournament has, else the $7 start (a Doubles one switched to Americano starts there too).
-  const [second, setSecond] = useState<number | null>(editing?.format === 'americano' ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
+  const [second, setSecond] = useState<number | null>(editing && (editing.format === 'americano' || editing.formatPending) ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
   const formatLocked = editing?.formatLocked === true;
   // Zip 56: once tickets have been open, the price, the spots and Only me stay as they are (players hold tickets; the server refuses too).
   const sold = editing?.settingsLocked === true;
   const americano = format === 'americano';
+  const voting = format === 'vote';
   const [visibility, setVisibility] = useState<Visibility>(editing?.visibility ?? 'me');
   const [error, setError] = useState<string | null>(null);
   const { busy, save } = useSave(ctx);
@@ -765,13 +796,13 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
               ? 'Type a ticket price.'
               : credit === null
                 ? 'Type a credit amount ($0 to skip it).'
-                : americano && second === null
+                : (americano || voting) && second === null
                   ? 'Type a 2nd place credit ($0 to skip it).'
                   : null;
     setError(problem);
     if (problem) return;
     // Alex: no players expected and no court plan (the smart plan follows the players locked in, on the tournament page).
-    const body = { name: n, dates, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: americano ? second : 0 };
+    const body = { name: n, dates, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: americano || voting ? second : 0 };
     const ok = editing
       ? await save(() => api('PUT', `/api/admin/tournament/${editing.id}`, body), 'Saved')
       : await save(() => api('POST', '/api/admin/tournament', body), visibility === 'me' ? 'Sign-up is open. Only you can see it.' : 'Sign-up is open for everyone');
@@ -822,6 +853,11 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
       {/* The format: two big choices. Locked once tickets open (piece 2); in piece 1 it can always change. */}
       <Card label="Format" data="format" chip={formatLocked ? <span className="tm-chip">Locked</span> : undefined}>
         <div className="segmented tm-seg tm-seg-format" role="group" aria-label="Format">
+          {canVote && (
+            <button type="button" aria-pressed={format === 'vote'} disabled={formatLocked} onClick={() => setFormat('vote')} data-format="vote">
+              <span className="tm-format-name">{VOTE_LABEL}</span>
+            </button>
+          )}
           {(['doubles', 'americano'] as const).map((f) => (
             <button key={f} type="button" aria-pressed={format === f} disabled={formatLocked} onClick={() => setFormat(f)} data-format={f}>
               <span className="tm-format-name">{formatName(f)}</span>
@@ -831,15 +867,15 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         </div>
       </Card>
 
-      <Card label={americano ? 'Prizes' : 'Champion prize'} data="prize" line>
-        {americano ? (
+      <Card label={americano || voting ? 'Prizes' : 'Champion prize'} data="prize" line>
+        {americano || voting ? (
           <div className="tm-rows">
             <label className="tm-row" htmlFor="tm-credit">
-              <span>1st place credit</span>
+              <span>{voting ? 'Winner or 1st place' : '1st place credit'}</span>
               <MoneyBox id="tm-credit" cents={credit} onChange={setCredit} label="1st place credit" />
             </label>
             <label className="tm-row" htmlFor="tm-credit2">
-              <span>2nd place credit</span>
+              <span>{voting ? '2nd place' : '2nd place credit'}</span>
               <MoneyBox id="tm-credit2" cents={second} onChange={setSecond} label="2nd place credit" />
             </label>
           </div>
@@ -860,7 +896,7 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
           </div>
         )}
         <p className="tm-card-note">
-          {americano ? '1st place also gets a medal. Set either credit to $0 to skip it.' : 'Medal and banner are automatic. Set the credit to $0 to skip it.'}
+          {americano || voting ? '1st place also gets a medal. Set either credit to $0 to skip it.' : 'Medal and banner are automatic. Set the credit to $0 to skip it.'}
         </p>
       </Card>
 
@@ -1108,7 +1144,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
         <div className="tm-rows">
           <div className="tm-row">
             <span>Format</span>
-            <b data-tm-format-row>{formatName(t.format)}</b>
+            <b data-tm-format-row>{t.formatPending ? 'Players vote' : formatName(t.format)}</b>
           </div>
           <div className="tm-row">
             <span>Ticket price</span>
@@ -1127,7 +1163,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               </span>
             </div>
           )}
-          {t.format === 'americano' ? (
+          {t.format === 'americano' || t.formatPending ? (
             <>
               <div className="tm-row">
                 <span>1st place credit</span>

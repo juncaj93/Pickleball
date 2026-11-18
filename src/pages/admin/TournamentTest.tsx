@@ -10,6 +10,10 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 60 (🎾60.formatvote): the players vote the format. These build "The Cold Open" on Let players vote; the format above does not apply.
+  { stage: 'vote_open', label: 'Format vote open', line: '3 on the list with mixed votes (Parker Locked doubles, Rowan Americano, Sage Either). View as Vic, Sign up: Format you’d like. The card says Tournament style TBD.' },
+  { stage: 'vote_majority', label: 'Date locked, clear majority', line: 'Americano wins 3 to 1 (two Either). View as Vic: the alert at the top says most players voted Americano. Your card shows the counts.' },
+  { stage: 'vote_tie', label: 'Date locked, tie', line: 'Locked 1, Americano 1, Either 2: a tie, so the first tournament is Locked doubles. The alert says only the format.' },
   { stage: 'signup', label: 'Sign-up open (sign-up finish)', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. View as Vic, Sign up, watch the ticket punch. Pick the format above first.' },
   // Alex: picking the date opens tickets.
   { stage: 'date_picked', label: 'Date picked, tickets open', line: '8 on the list, Sage set to 3.4, the date most can play picked. Nobody has paid yet. Vic is not on the list.' },
@@ -61,7 +65,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   // Which format the stage buttons build (starts on the open tournament's).
   const [format, setFormat] = useState<'doubles' | 'americano'>(t?.format ?? 'doubles');
   const now = t
-    ? `${t.format === 'americano' ? 'Americano' : 'Locked doubles'} · ${nowWords[t.status] ?? 'Sign-up open'}${t.finalDate && (t.status === 'date_picked' || t.status === 'tickets') ? `: ${dayLong(t.finalDate)}` : ''}`
+    ? `${t.formatPending ? 'Players vote' : t.format === 'americano' ? 'Americano' : 'Locked doubles'} · ${nowWords[t.status] ?? 'Sign-up open'}${t.finalDate && (t.status === 'date_picked' || t.status === 'tickets') ? `: ${dayLong(t.finalDate)}` : ''}`
     : 'No tournament';
   async function go(stage: string, label: string) {
     if (busy) return;

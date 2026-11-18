@@ -500,9 +500,10 @@ async function main() {
     const days = await a.page.locator('[data-tm-card="name"] button.tm-day').evaluateAll((els) => els.map((e) => e.dataset.day).filter((x) => x >= '2026-12-01'));
     for (const day of days.slice(1, 4)) await a.page.locator(`[data-tm-card="name"] [data-day="${day}"]`).click();
     assert(flat(await a.page.locator('[data-tm-lit]').innerText()).toUpperCase() === '3 LIT', 'three lit');
-    // Pass 3: the format starts on Locked doubles, two big choices, each with its one rule.
-    assert((await a.page.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true', 'Doubles by default');
-    assert(flat(await a.page.locator('[data-tm-card="format"]').innerText()).toUpperCase() === 'FORMAT LOCKED DOUBLES SAME PARTNER ALL NIGHT AMERICANO NEW PARTNER EVERY ROUND', await a.page.locator('[data-tm-card="format"]').innerText());
+    // Pass 3 (Zip 60: a third choice, "Let players vote", is the start): big choices, the two formats each with its one rule.
+    assert((await a.page.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true', 'Let players vote by default');
+    assert(flat(await a.page.locator('[data-tm-card="format"]').innerText()).toUpperCase() === 'FORMAT LET PLAYERS VOTE LOCKED DOUBLES SAME PARTNER ALL NIGHT AMERICANO NEW PARTNER EVERY ROUND', await a.page.locator('[data-tm-card="format"]').innerText());
+    await a.page.locator('[data-format="doubles"]').click();
     const big = await a.page.locator('[data-format]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
     assert(big.every((h) => h >= 56 && h < 90), `heights ${big}`);
     const lines = await a.page.locator('.tm-format-name').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));

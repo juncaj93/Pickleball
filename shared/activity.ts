@@ -261,6 +261,15 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} set ${player}'s level to ${typeof d.level === 'string' ? d.level : '?'} for the ${tourName(d)}`;
     case 'tournament_date':
       return typeof d.date === 'string' ? `${who} picked ${d.date} for the ${tourName(d)}` : `${who} took back the date for the ${tourName(d)}`;
+    // Zip 60: how the format was set. The players' vote (with the counts), the tie rule, or the organizer.
+    case 'tournament_format': {
+      const fmt = d.format === 'americano' ? 'Americano' : 'Locked doubles';
+      const counts = typeof d.locked === 'number' ? ` (Locked ${d.locked}, Americano ${num(d.americano)}, Either ${num(d.either)})` : '';
+      if (d.how === 'vote') return `The players' vote made the ${tourName(d)} ${fmt}${counts}`;
+      if (d.how === 'tie') return `No majority, so the tie rule made the ${tourName(d)} ${fmt}${counts}`;
+      if (d.how === 'vote_open') return `${who} let the players vote the ${tourName(d)} format`;
+      return `${who} set the ${tourName(d)} format to ${fmt}`;
+    }
     case 'tournament_canceled':
       return `${who} canceled the ${tourName(d)}${typeof d.returned === 'number' && d.returned > 0 ? ` (${d.returned} ${d.returned === 1 ? 'ticket' : 'tickets'}, ${cents(d.amountCents)} back as credit)` : ''}`;
     case 'tournament_signup':

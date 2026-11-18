@@ -3,7 +3,7 @@ import { HttpError } from './http';
 import { newId } from './crypto';
 import { requireAdmin } from './auth';
 import * as v from './validate';
-import { hiddenTask, setTournamentsForAll, todayKey } from './tournament';
+import { hiddenTask, lockDate, setTournamentsForAll, todayKey, type TournamentRow } from './tournament';
 import { previewSiteFor } from './secondChance';
 import { organizerIdOf } from './repo';
 import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
@@ -36,7 +36,12 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 //   hidden         canceled, then Hidden: out of Home; Settings > Advanced > Hidden tournaments lists it with Restore
 //   (canceled)     the Canceled card has Hide on the organizer's Home
 //   (signup)       sign-up open: view as Vic, Sign up: the ticket punch
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden'] as const;
+// Zip 60 (🎾60.formatvote): the players vote the format. The tournament is "The Cold Open", created on "Let players vote".
+//   vote_open      sign-up open, the vote open: 3 on the list (Parker votes Locked doubles, Rowan Americano, Sage Either). View as Vic, Sign up, see
+//                  "Format you'd like"; the card says "Tournament style TBD" and "~7:30 PM"
+//   vote_majority  the date locked by the organizer's real Pick date: Americano wins 3 to 1 (Wren and Christopher Either), the alert shows for Vic
+//   vote_tie       the same with Locked 1, Americano 1, Either 2: a tie, the first tournament goes to Locked doubles, the alert says just the format
+export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie'] as const;
 type Stage = (typeof TEST_STAGES)[number];
 
 /** The fixed names and their picks (Kai is not one of the preview's names, so Kai is not here). Levels in hundredths. */
@@ -124,6 +129,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie') return voteStage(ctx, group, stage);
 
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
@@ -229,4 +235,68 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ]);
   }
   return { ok: true, stage, format, id, signedUp: n, tickets: k, date: picked && stage !== 'rescheduled' ? best : null, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
+}
+
+
+/** Zip 60: the vote stages. The date is locked by the very code the organizer's Pick date runs (lockDate), so the count and the alert are the real ones. */
+const VOTERS: Record<'vote_open' | 'vote_majority' | 'vote_tie', { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[]> = {
+  vote_open: [
+    { name: 'Parker', level: 360, vote: 'locked' },
+    { name: 'Rowan', level: 350, vote: 'americano' },
+    { name: 'Sage', level: 300, vote: 'either' },
+  ],
+  vote_majority: [
+    { name: 'Parker', level: 360, vote: 'americano' },
+    { name: 'Rowan', level: 350, vote: 'americano' },
+    { name: 'Sage', level: 300, vote: 'locked' },
+    { name: 'Wren', level: 320, vote: 'either' },
+    { name: 'Christopher Vanderberg', level: 300, vote: 'either' },
+  ],
+  vote_tie: [
+    { name: 'Parker', level: 360, vote: 'locked' },
+    { name: 'Rowan', level: 350, vote: 'americano' },
+    { name: 'Sage', level: 300, vote: 'either' },
+    { name: 'Wren', level: 320, vote: 'either' },
+  ],
+};
+
+async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: 'vote_open' | 'vote_majority' | 'vote_tie') {
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const dates = testDates(todayKey(ctx.nowMs, group.timezone));
+  const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
+  const best = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
+  const id = newId();
+  const t0 = Date.parse(ctx.nowIso) - 3 * 86_400_000;
+  const at = (minutes: number) => new Date(t0 + minutes * 60_000).toISOString();
+  const statements = [
+    ctx.db
+      .prepare(
+        `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
+           status, visibility, created_at, updated_at, shown_at, format, second_credit_cents, format_source)
+         VALUES (?, ?, 'The Cold Open', ${STORED_PLAN.size}, ${STORED_PLAN.courts}, ${STORED_PLAN.minutes}, ${STORED_PLAN.start}, 1600, 1400, ?, NULL, 'signup', 'all', ?, ?, ?, 'doubles', 700, 'vote')`,
+      )
+      .bind(id, group.id, JSON.stringify([...new Set([...dates, best])].sort()), at(0), ctx.nowIso, at(1)),
+  ];
+  let n = 0;
+  for (const c of VOTERS[stage]) {
+    const pid = idOf.get(c.name);
+    if (!pid) continue;
+    n++;
+    statements.push(
+      ctx.db
+        .prepare(
+          `INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at, format_vote)
+           VALUES (?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?, ?)`,
+        )
+        .bind(newId(), id, pid, c.level, JSON.stringify([...new Set([...dates.filter((_, i) => i % 2 === n % 2), best])].sort()), at(10 + n * 7), at(10 + n * 7), at(10 + n * 7), c.vote),
+      ctx.db.prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, ?, 'player', ?)").bind(newId(), id, pid, c.level, at(10 + n * 7)),
+    );
+  }
+  await ctx.db.batch(statements);
+  if (stage !== 'vote_open') {
+    const row = await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<TournamentRow>();
+    await lockDate(ctx, group, row!, { date: best });
+  }
+  return { ok: true, stage, id, signedUp: n, date: stage === 'vote_open' ? null : best, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
 }

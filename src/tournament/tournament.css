@@ -626,6 +626,43 @@
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
+/* Zip 60: "Format you'd like": the same row, a name with its short line under it, and the round mark (kept down to 320 px: only three rows). */
+.tm-levels.tm-votes .tm-level {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 52px;
+  padding: 8px 12px;
+}
+.tm-levels.tm-votes .tm-radio {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+.tm-vote-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.tm-vote-name {
+  font-family: var(--display);
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.tm-levels.tm-votes .tm-level-on .tm-vote-name {
+  color: var(--accent-text);
+}
+@media (max-width: 339px) {
+  .tm-levels.tm-votes .tm-level {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .tm-levels.tm-votes .tm-radio {
+    display: block;
+  }
+}
+.tm-vote-head {
+  margin-top: 18px;
+}
 /* The organizer's flat list (mock 14). */
 .tm-levels-flat {
   gap: 0;

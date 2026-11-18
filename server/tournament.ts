@@ -13,8 +13,18 @@ import {
   type PlayerTicketsView,
   type TicketPlaceView,
   DEFAULT_FORMAT,
-  FORMATS,
+  DEFAULT_FORMAT_CHOICE,
+  decideFormat,
+  FORMAT_CHOICES,
+  type FormatChoice,
+  type FormatSource,
+  formatAlertWords,
+  isFormatVote,
+  isVoteSource,
+  sourceOf,
+  tallyVotes,
   type TournamentFormat,
+  type VoteCounts,
   type AdminTournamentView,
   cleanDays,
   dayKey,
@@ -109,6 +119,8 @@ export interface TournamentRow {
   second_credit_cents: number;
   /** Zip 56 (migration 0024): when ticket money is due; NULL until tickets first open. Missing on a database before 0024. */
   pay_by?: string | null;
+  /** Zip 60 (migration 0025): how the format was set ('vote', 'tie', 'admin', or NULL for the organizer's own choice). Missing before 0025. */
+  format_source?: string | null;
 }
 
 interface SignupRow {
@@ -123,6 +135,8 @@ interface SignupRow {
   created_at: string;
   updated_at: string;
   backed_out_at: string | null;
+  /** Zip 60 (migration 0025): this player's format vote ('locked', 'americano', 'either'; NULL counts as either). Never sent to another player. */
+  format_vote?: string | null;
   display_name: string;
   is_active: number;
   /** The level the player picked first for this tournament (the level history), or null for none: it stays theirs (Alex). */
@@ -279,6 +293,36 @@ async function playerTicketExists(db: D1Database, tournamentId: string, orgId: s
 }
 
 /**
+ * Zip 60: the vote is open: the players' vote decides this tournament's format and the date is not locked. The card then says "Tournament style
+ * TBD" and sign-up asks "Format you'd like". After a Reschedule that players hold tickets on, the format stays (they bought that format): not open.
+ * `tickets`: the tickets already loaded (else one small read, and only in the Reschedule case).
+ */
+export async function votePending(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets?: readonly { player_id: string }[]): Promise<boolean> {
+  if (!isVoteSource(t.format_source) || t.final_date) return false;
+  if (!ticketsEverOpened(t)) return true;
+  const org = await organizerIdOf(ctx.db, group);
+  const other = tickets ? tickets.some((k) => k.player_id !== org) : await playerTicketExists(ctx.db, t.id, org);
+  return !playersHoldTickets(t, other);
+}
+
+/**
+ * Zip 60: the format of the most recent EARLIER tournament that was not canceled (the tie rule), or null when there is none (the first one ever).
+ * A tournament whose vote was never decided (no date, no tickets) has no format yet and does not count.
+ */
+export async function previousFormat(db: D1Database, t: TournamentRow): Promise<TournamentFormat | null> {
+  const row = await db
+    .prepare(
+      `SELECT format FROM tournaments WHERE group_id = ? AND id <> ? AND status <> 'canceled' AND created_at < ?
+         AND (COALESCE(format_source, '') NOT IN ('vote', 'tie') OR final_date IS NOT NULL OR pay_by IS NOT NULL)
+       ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+    )
+    .bind(t.group_id, t.id, t.created_at)
+    .first<{ format: string }>()
+    .catch(() => null);
+  return row ? (row.format === 'americano' ? 'americano' : 'doubles') : null;
+}
+
+/**
  * The dates a player can pick now: every offered date from today on while sign-up is open (also after a Reschedule); only the picked one once
  * it is picked (and while tickets are open on it). A day that has passed is never a choice (so the list can be empty: every offered date, or
  * the picked one, has passed). `today`: the Eastern calendar day ('YYYY-MM-DD'). A canceled tournament offers none.
@@ -402,6 +446,19 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
 const shownDate = (t: TournamentRow): string | null => (statusOf(t) === 'date_picked' || statusOf(t) === 'tickets' || statusOf(t) === 'canceled' ? t.final_date : null);
 
 /**
+ * Zip 60: the alert at the top of Home once the date is locked, for a tournament the players' vote was open on (the vote decided it, or the
+ * organizer changed it by hand after): "The Cold Open is scheduled for Thu Dec 17." and "Most players voted Americano." (a tie, or the
+ * organizer's own change: just "Format: Locked doubles", no vote claim). `key` is new for every date pick (a re-pick or a reschedule shows a fresh
+ * alert) and carries the player, so a dismissed alert stays dismissed for that player only. No vote counts, ever.
+ */
+function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, nowMs: number): { key: string; title: string; sub: string } | null {
+  const source = sourceOf(t.format_source);
+  if (!source || !t.final_date || (statusOf(t) !== 'tickets' && statusOf(t) !== 'date_picked')) return null;
+  if (t.final_date < todayKey(nowMs, group.timezone)) return null;
+  return { key: `fmt:${t.id}:${t.date_picked_at ?? t.final_date}:${playerId}`, ...formatAlertWords(t.name, t.final_date, formatOf(t), source) };
+}
+
+/**
  * Zip 56 (Alex, after testing piece 1): picking the date opens tickets. A tournament whose date was picked before that rule (piece 1, by the
  * organizer's own test on live) opens them the first time a screen reads it, exactly as a date pick does now: Pay by the night before at 7:00 PM,
  * the organizer's $0 seat. Only before its night starts. A read with the read-only PIN writes nothing, so it waits for the next real reader.
@@ -483,6 +540,9 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
   // Zip 56: the tickets (once they have opened), and the smart plan they decide: the start time and the hours players see.
   const tickets = ticketsEverOpened(t) && statusOf(t) !== 'canceled' ? await returnUnusedHolds(ctx, group, t, await loadTickets(ctx.db, t.id)) : [];
   const plan = smartPlan(lockedCount(tickets));
+  // Zip 60: the vote is open (the card says "Tournament style TBD"), or the date was locked (the alert). Their own vote only, never anyone else's.
+  const tbd = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets));
+  const alert = formatAlertFor(t, group, playerId, ctx.nowMs);
   const base: PlayerTournamentView = {
     id: t.id,
     name: t.name,
@@ -494,7 +554,9 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
     finalDate: shownDate(t),
     names: rows.map((r) => r.display_name),
     // Their own pick only (never the organizer's level for them).
-    me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates) } : null,
+    me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates), ...(tbd ? { formatVote: isFormatVote(mine.format_vote) ? mine.format_vote : ('either' as const) } : {}) } : null,
+    ...(tbd ? { formatTbd: true as const } : {}),
+    ...(alert ? { formatAlert: alert } : {}),
     ...(before ? { lockedLevel: before.first_level ?? before.picked_level } : {}),
     ...(onlyMe ? { onlyMe: true as const } : {}),
   };
@@ -602,12 +664,17 @@ export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<Adm
   const plan = smartPlan(locked.length);
   const paidNow = locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).length;
   const prize = prizeCentsOf(formatOf(t), t.champion_credit_cents, t.second_credit_cents ?? 0);
+  const pending = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets));
+  const voters = rows.filter((r) => r.status === 'in' && (!t.final_date || storedDays(r.dates).includes(t.final_date)));
   return {
     id: t.id,
     name: t.name,
     format: formatOf(t),
     // Zip 56: once players may hold tickets (open on Everyone, or a player's ticket row) the format, the price and Everyone stay.
     formatLocked: playersHoldTickets(t, tickets.some((k) => k.player_id !== orgId)),
+    // Zip 60: the vote, with the counts (organizer only): while the date is not locked every player on the list, then the players who can make the picked date.
+    ...(pending ? { formatPending: true } : {}),
+    ...(sourceOf(t.format_source) ? { formatSource: sourceOf(t.format_source), votes: tallyVotes(voters.map((r) => r.format_vote)) } : {}),
     settingsLocked: playersHoldTickets(t, tickets.some((k) => k.player_id !== orgId)),
     payBy:
       statusOf(t) === 'tickets' ? (t.pay_by ?? null) : statusOf(t) === 'date_picked' && t.final_date ? defaultPayBy(t.final_date, NIGHT_START_MINUTES, tz, ctx.nowMs) : null,
@@ -718,7 +785,8 @@ interface Settings {
   ticketCents: number;
   creditCents: number;
   secondCreditCents: number;
-  format: TournamentFormat;
+  /** Zip 60: a format, or "Let players vote". Left out by an older screen: Create starts on the vote; Edit keeps what the tournament has. */
+  format: FormatChoice;
   visibility: Visibility;
 }
 
@@ -744,7 +812,7 @@ function readSettings(body: Record<string, unknown>, group: GroupRow, nowMs: num
     creditCents: wholeCents(body.creditCents, 'credit', 'The credit'),
     // Americano's 2nd place credit (left out, e.g. by Doubles: $0, nothing to pay).
     secondCreditCents: body.secondCreditCents === undefined ? 0 : wholeCents(body.secondCreditCents, 'second_credit', 'The 2nd place credit'),
-    format: body.format === undefined ? DEFAULT_FORMAT : v.oneOf(body.format, 'format', FORMATS),
+    format: body.format === undefined ? DEFAULT_FORMAT_CHOICE : v.oneOf(body.format, 'format', FORMAT_CHOICES),
     visibility: v.oneOf(body.visibility, 'visibility', ['me', 'all'] as const),
   };
 }
@@ -763,11 +831,11 @@ export async function createTournament(ctx: Ctx, body: Record<string, unknown>) 
     await ctx.db
       .prepare(
         `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
-           status, visibility, created_at, updated_at, shown_at, format, second_credit_cents)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'signup', ?, ?, ?, ?, ?, ?)`,
+           status, visibility, created_at, updated_at, shown_at, format, second_credit_cents, format_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'signup', ?, ?, ?, ?, ?, ?, ?)`,
       )
       // The size and plan columns are NOT NULL; no screen asks for them now: they hold harmless defaults (the 12-spot cap and the whole night).
-      .bind(id, group.id, s.name, STORED_PLAN.size, STORED_PLAN.courts, STORED_PLAN.minutes, STORED_PLAN.start, s.ticketCents, s.creditCents, JSON.stringify(s.dates), s.visibility, ctx.nowIso, ctx.nowIso, s.visibility === 'all' ? ctx.nowIso : null, s.format, s.secondCreditCents)
+      .bind(id, group.id, s.name, STORED_PLAN.size, STORED_PLAN.courts, STORED_PLAN.minutes, STORED_PLAN.start, s.ticketCents, s.creditCents, JSON.stringify(s.dates), s.visibility, ctx.nowIso, ctx.nowIso, s.visibility === 'all' ? ctx.nowIso : null, s.format === 'vote' ? DEFAULT_FORMAT : s.format, s.secondCreditCents, s.format === 'vote' ? 'vote' : null)
       .run();
   } catch (err) {
     if (tablesMissing(err)) throw notReady();
@@ -789,13 +857,32 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   const offered = storedDays(t.offered_dates);
   const s = readSettings(body, group, ctx.nowMs, offered);
   // A save that leaves the format or the 2nd place credit out keeps what the tournament has (only Create starts them at their defaults).
-  if (body.format === undefined) s.format = formatOf(t);
   if (body.secondCreditCents === undefined) s.secondCreditCents = t.second_credit_cents ?? 0;
   // Once players may hold tickets (tickets open on Everyone, Zip 56), also after a Reschedule: the format, the price and Everyone stay (players
   // have paid that price, and a player who holds a ticket must always see it). On Only me nobody else can hold one: every setting stays free.
   const org = await organizerIdOf(ctx.db, group);
   const held = playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org));
-  if (s.format !== formatOf(t) && held) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
+  // Zip 60: the format choice (a format, or "Let players vote"). The vote can be switched on only while no date is locked; a format picked by hand
+  // after the vote was open is the organizer's ('admin'): its date alert then says only the format.
+  const wasSource = t.format_source ?? null;
+  let nextFormat = formatOf(t);
+  let nextSource: string | null = wasSource;
+  if (body.format !== undefined) {
+    if (s.format === 'vote') {
+      if (!isVoteSource(wasSource)) {
+        if (t.final_date) throw new HttpError(409, 'format_locked', 'The date is picked. The format cannot go back to a vote now.');
+        nextSource = 'vote';
+      }
+    } else if (isVoteSource(wasSource)) {
+      if (!t.final_date || s.format !== nextFormat) {
+        nextFormat = s.format;
+        nextSource = 'admin';
+      }
+    } else if (s.format !== nextFormat) {
+      nextFormat = s.format;
+    }
+  }
+  if ((nextFormat !== formatOf(t) || nextSource !== wasSource) && held) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
   if (held) {
     if (s.ticketCents !== t.ticket_cents) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
     if (s.visibility !== 'all') throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
@@ -813,11 +900,12 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
     ctx.db
       .prepare(
         `UPDATE tournaments SET name = ?, ticket_cents = ?, champion_credit_cents = ?, offered_dates = ?,
-           visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?
+           visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?, format_source = ?
          WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))
+           AND format_source IS ?
            AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND format = ? AND ? = 'all'))`,
       )
-      .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, s.format, s.secondCreditCents, t.id, group.id, offer, s.ticketCents, s.format, s.visibility),
+      .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, nextFormat, s.secondCreditCents, nextSource, t.id, group.id, offer, wasSource, s.ticketCents, nextFormat, s.visibility),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
     // tournament holds exactly the new offer and is still open).
     ctx.db
@@ -833,6 +921,9 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   ]);
   changedOrLookAgain(res);
   await audit(ctx.db, group.id, null, 'tournament_edited', { tournament: s.name, ...(trimmed ? { trimmed } : {}) }, ctx.nowIso);
+  if (nextFormat !== formatOf(t) || nextSource !== wasSource) {
+    await audit(ctx.db, group.id, null, 'tournament_format', { tournament: s.name, format: nextFormat, how: nextSource === 'admin' ? 'admin' : nextSource === 'vote' ? 'vote_open' : 'admin' }, ctx.nowIso);
+  }
   if (s.visibility !== (t.visibility === 'all' ? 'all' : 'me')) await audit(ctx.db, group.id, null, s.visibility === 'all' ? 'tournament_shown' : 'tournament_hidden', { tournament: s.name }, ctx.nowIso);
   return { ok: true };
 }
@@ -889,6 +980,17 @@ export async function setTournamentLevel(ctx: Ctx, body: Record<string, unknown>
 export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
+  return lockDate(ctx, group, t, body);
+}
+
+/**
+ * The date step itself (also what the preview's Tournament test page runs, so its stages are made by the real statements). Zip 60: when the
+ * players' vote decides the format, picking the date counts the votes and saves the winner in the SAME statement that locks the date: only
+ * the votes of players who are on the list and picked THIS date count, Either counts for neither side, the majority of Locked doubles and
+ * Americano wins, a tie (or nobody picking a side) goes by the tie rule (shared/tournament.ts decideFormat). Picking again, or after a
+ * Reschedule, counts again. Once players hold tickets the format stays (they bought it).
+ */
+export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body: Record<string, unknown>) {
   // Zip 56: once tickets are open the date stays; Cancel or reschedule changes it (Reschedule goes back to this step).
   if (statusOf(t) === 'tickets') throw new HttpError(409, 'tickets_open', 'Tickets are open. Reschedule to change the date.');
   if (body.date === null) {
@@ -910,18 +1012,28 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
   // organizer can change it), the organizer's own $0 seat is taken when they are on the list. No other trigger.
   const payBy = defaultPayBy(date as string, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
   const org = await organizerIdOf(ctx.db, group);
+  // Zip 60: the vote, when the players decide the format and no player holds a ticket yet.
+  let decided: { format: TournamentFormat; source: FormatSource; counts: VoteCounts } | null = null;
+  if (isVoteSource(t.format_source) && !playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org))) {
+    const voters = (await signupRows(ctx.db, t.id)).filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date as string));
+    const counts = tallyVotes(voters.map((r) => r.format_vote));
+    const d = decideFormat(counts, await previousFormat(ctx.db, t));
+    decided = { format: d.format, source: d.rule === 'majority' ? 'vote' : 'tie', counts };
+  }
   const res = await ctx.db.batch([
     ctx.db
       .prepare(
-        `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?
-         WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?)`,
+        `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?,
+           format = COALESCE(?, format), format_source = COALESCE(?, format_source)
+         WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ?`,
       )
-      .bind(date, ctx.nowIso, payBy, ctx.nowIso, t.id, date),
+      .bind(date, ctx.nowIso, payBy, ctx.nowIso, decided?.format ?? null, decided?.source ?? null, t.id, date, t.format_source ?? null),
     ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
     fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
   ]);
   changedOrLookAgain(res[0]);
   await audit(ctx.db, group.id, null, 'tournament_date', { tournament: t.name, date: dayLong(date as string), day: date }, ctx.nowIso);
+  if (decided) await audit(ctx.db, group.id, null, 'tournament_format', { tournament: t.name, format: decided.format, how: decided.source, ...decided.counts }, ctx.nowIso);
   await audit(ctx.db, group.id, null, 'tournament_tickets_opened', { tournament: t.name, date: dayLong(date as string), priceCents: t.ticket_cents, payBy: payByLabel(payBy, group.timezone, date as string) }, ctx.nowIso);
   return { ok: true, date, payBy };
 }
@@ -983,6 +1095,18 @@ export async function playerTarget(ctx: Ctx, who: TournamentActor, body: Record<
 const UNCHANGED = 'EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND status = ? AND offered_dates = ? AND final_date IS ?)';
 const unchangedValues = (t: TournamentRow) => [t.id, t.status, t.offered_dates, t.final_date ?? null];
 
+/**
+ * Zip 60: the vote this save stores. Only while the vote is open (`pending`) a sent vote counts (a bad value is refused); a sign-up that sends none
+ * keeps the one it had (NULL counts as Either). Once the date is locked a sent vote is ignored: the format is decided.
+ */
+function readVote(body: Record<string, unknown>, pending: boolean, had: string | null | undefined): string | null {
+  if (!pending || body.formatVote === undefined) return had ?? null;
+  if (!isFormatVote(body.formatVote)) bad('invalid_format_vote', 'Pick Locked doubles, Americano or Either.');
+  return body.formatVote as string;
+}
+/** A missing vote and Either are the same vote. */
+const sameVote = (a: string | null | undefined, b: string | null | undefined) => (a ?? 'either') === (b ?? 'either');
+
 function readDates(body: Record<string, unknown>, open: readonly string[]): string[] {
   const dates = cleanDays(body.dates);
   if (!dates || dates.length === 0) bad('invalid_dates', 'Pick at least one date.');
@@ -1002,9 +1126,9 @@ export async function logPlayer(ctx: Ctx, group: GroupRow, playerId: string, act
 
 export async function mySignup(db: D1Database, tournamentId: string, playerId: string) {
   return db
-    .prepare('SELECT id, status, picked_level, dates FROM tournament_signups WHERE tournament_id = ? AND player_id = ?')
+    .prepare('SELECT id, status, picked_level, dates, format_vote FROM tournament_signups WHERE tournament_id = ? AND player_id = ?')
     .bind(tournamentId, playerId)
-    .first<{ id: string; status: string; picked_level: number; dates: string }>();
+    .first<{ id: string; status: string; picked_level: number; dates: string; format_vote: string | null }>();
 }
 
 /**
@@ -1022,8 +1146,9 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
   const level = first ? first.level : (body.level as number);
   const dates = readDates(body, openDatesOf(t, todayKey(ctx.nowMs, who.group.timezone)));
   const before = await mySignup(ctx.db, t.id, playerId);
+  const vote = readVote(body, await votePending(ctx, who.group, t), before?.format_vote);
   // A second tap of Sign up (or another phone) with exactly the same answers: nothing to save, nothing to write in History.
-  if (before && before.status === 'in' && JSON.stringify(storedDays(before.dates)) === JSON.stringify(dates)) return { ok: true, result: 'signed_up' };
+  if (before && before.status === 'in' && JSON.stringify(storedDays(before.dates)) === JSON.stringify(dates) && sameVote(before.format_vote, vote)) return { ok: true, result: 'signed_up' };
   const [, listRow] = await ctx.db.batch([
     // The level history gets the pick only the first time (first in the batch, so the list row below reads it).
     ctx.db
@@ -1036,15 +1161,16 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
     // on the one that landed first. The organizer's level for them stays as it is.
     ctx.db
       .prepare(
-        `INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at, backed_out_at)
+        `INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at, backed_out_at, format_vote)
          SELECT ?1, ?2, ?3, 'in',
            COALESCE((SELECT level FROM tournament_level_history WHERE tournament_id = ?2 AND player_id = ?3 AND set_by = 'player' ORDER BY created_at, rowid LIMIT 1), ?4),
-           NULL, ?5, ?6, ?6, ?6, NULL WHERE EXISTS (SELECT 1 FROM tournaments WHERE id = ?7 AND status = ?8 AND offered_dates = ?9 AND final_date IS ?10)
+           NULL, ?5, ?6, ?6, ?6, NULL, ?11 WHERE EXISTS (SELECT 1 FROM tournaments WHERE id = ?7 AND status = ?8 AND offered_dates = ?9 AND final_date IS ?10)
          ON CONFLICT (tournament_id, player_id) DO UPDATE SET
            joined_at = CASE WHEN tournament_signups.status = 'in' THEN tournament_signups.joined_at ELSE excluded.joined_at END,
-           status = 'in', picked_level = excluded.picked_level, dates = excluded.dates, updated_at = excluded.updated_at, backed_out_at = NULL`,
+           status = 'in', picked_level = excluded.picked_level, dates = excluded.dates, updated_at = excluded.updated_at, backed_out_at = NULL,
+           format_vote = excluded.format_vote`,
       )
-      .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ...unchangedValues(t)),
+      .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ...unchangedValues(t), vote),
     // Zip 56: the organizer signing up while tickets are open takes their own $0 seat at once (a spot if one is open, else first paid in line).
     ...(statusOf(t) === 'tickets' && playerId === (await organizerIdOf(ctx.db, who.group))
       ? [organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]
@@ -1068,10 +1194,12 @@ export async function playerTournamentEdit(ctx: Ctx, who: TournamentActor, body:
   const before = await mySignup(ctx.db, t.id, playerId);
   if (!before || before.status !== 'in') throw new HttpError(409, 'not_signed_up', 'You are not on the list. Sign up first.');
   const dates = body.dates === undefined ? storedDays(before.dates) : readDates(body, openDatesOf(t, todayKey(ctx.nowMs, who.group.timezone)));
-  if (JSON.stringify(dates) === JSON.stringify(storedDays(before.dates))) return { ok: true, result: 'saved' };
+  // Zip 60: the format vote can change until the date is locked (the same save as the dates).
+  const vote = readVote(body, await votePending(ctx, who.group, t), before.format_vote);
+  if (JSON.stringify(dates) === JSON.stringify(storedDays(before.dates)) && sameVote(before.format_vote, vote)) return { ok: true, result: 'saved' };
   const res = await ctx.db
-    .prepare(`UPDATE tournament_signups SET dates = ?, updated_at = ? WHERE id = ? AND status = 'in' AND ${UNCHANGED}`)
-    .bind(JSON.stringify(dates), ctx.nowIso, before.id, ...unchangedValues(t))
+    .prepare(`UPDATE tournament_signups SET dates = ?, format_vote = ?, updated_at = ? WHERE id = ? AND status = 'in' AND ${UNCHANGED}`)
+    .bind(JSON.stringify(dates), vote, ctx.nowIso, before.id, ...unchangedValues(t))
     .run();
   changedOrLookAgain(res);
   await logPlayer(ctx, who.group, playerId, 'tournament_signup_edited', { tournament: t.name });

@@ -5,6 +5,8 @@
 //   npm run db:seed:preview -- --full    the WHOLE world (every zip's scenes). The default is the CALM one (PREVIEW CALM RULE, docs/SITE_RULES.md).
 //   npm run db:seed:preview -- --zip51   the calm profile of Zip 51 instead of Zip 56's (the default since Zip 56: the tournament at Date picked)
 //   npm run db:seed:preview -- --zip55   Zip 55's start instead (the tournament just created, Only me, nobody on the list)
+//   npm run db:seed:preview -- --zip56   Zip 56's start instead (the Locked doubles tournament with the date picked, tickets open)
+//   (no flag: Zip 60's start, the calm profile with NO tournament open, so Create starts on "Let players vote")
 //   npm run db:seed:preview -- --out x.sql   also keep the SQL it would load
 //
 // How it works: it plays a fake group on a throwaway in-memory copy of the site (the real site code,
@@ -70,7 +72,10 @@ async function main() {
   // instead (its two late-drop games and the Venue charge alert's cards). Zip 56 (step 29): the tournament starts with its date picked for
   // Everyone (which opens tickets; nobody has paid); `--zip55` builds Zip 55's start instead (Only me, nobody on the list).
   const zip51 = args.includes('--zip51');
-  const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') });
+  // Zip 60 (🎾60.formatvote): the default profile now has NO tournament open (Create starts on "Let players vote"; the Tournament test page has the vote
+  // stages). `--zip56` builds Zip 56's start (the Locked doubles tournament at Date picked), `--zip55` Zip 55's (just created, Only me).
+  const zip56 = args.includes('--zip56');
+  const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') && zip56, zip60: !zip51 && !args.includes('--zip55') && !zip56 });
   const { summary } = built;
   // PREVIEW SWITCHES RULE, Zip 56: five more rows are ON on live (read Tue Nov 17, 2026, switch rows only) that the lists in
   // scripts/preview-world-small.ts do not have. They go on the real preview only (a local e2e world keeps its lists, so other zips' browser

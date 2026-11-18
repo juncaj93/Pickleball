@@ -785,6 +785,8 @@ export function PlayerHome({
             {/* Zip 51b "Money change note" (server/moneyNote.ts): first on the screen, and shown on a calm preview too (it is that zip's card). */}
             {view!.moneyNotes && view!.moneyNotes.length > 0 && <MoneyNotes notes={view!.moneyNotes} />}
             {/* Zip 55 "Tournaments": the pinned ticket card (and the Only me strip), only when the server sent one for this phone. Shown on a calm preview too (it is that zip's card). */}
+            {/* Zip 60: once the date is locked, the alert above the ticket card ("The Cold Open is scheduled for Thu Dec 17." and the format). The site's alert card, dismissed per player. */}
+            {view!.tournament?.formatAlert && <FormatAlertCard a={view!.tournament.formatAlert} />}
             {view!.tournament && <TournamentSlot t={view!.tournament} onChanged={load.reload} pay={{ group: g.group, meName: g.me?.name ?? null }} />}
             {/* Preview only (shared/previewCalm.ts): the alert cards stay hidden unless the phone opened ?alerts=all. */}
             {g.previewCalm !== true && (
@@ -1166,6 +1168,43 @@ function AdjustedCard({ adj }: { adj: { deltaCents: number; note: string; at: st
         setSeen(next);
       }}
       xLabel="Credit adjusted"
+    />
+  );
+}
+
+/** Zip 60: the format alerts this phone dismissed. The key holds the tournament, the date pick and the player, so a re-pick shows a fresh one. */
+const FORMAT_ALERT_SEEN_KEY = 'pb_format_alert_seen';
+function readFormatAlertSeen(): string[] {
+  try {
+    const v = JSON.parse(storageGet(FORMAT_ALERT_SEEN_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+/** The alert card with the tournament's name and date, and the format (who decided it) under it. The X hides it for good on this phone. */
+function FormatAlertCard({ a }: { a: { key: string; title: string; sub: string } }) {
+  const [seen, setSeen] = useState<string[]>(readFormatAlertSeen);
+  if (seen.includes(a.key)) return null;
+  return (
+    <AlertCard
+      as="section"
+      tone="blue"
+      icon="court"
+      label="Tournament scheduled"
+      title={a.title}
+      sub={a.sub}
+      data={{ 'data-format-alert': true }}
+      xLabel={a.title}
+      onX={() => {
+        const next = [...readFormatAlertSeen().filter((x) => x !== a.key), a.key].slice(-50);
+        try {
+          storageSet(FORMAT_ALERT_SEEN_KEY, JSON.stringify(next));
+        } catch {
+          /* it simply shows again next time */
+        }
+        setSeen(next);
+      }}
     />
   );
 }
