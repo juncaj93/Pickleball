@@ -250,10 +250,10 @@ describe('lock my spot', () => {
     expect(r.data).toMatchObject({ result: 'due', dueCents: 1600, creditUsedCents: 0 });
     expect((await iPaid(ctx, 'Blair', 1500)).data.message).toBe('The amount changed to $16. Look again.');
     expect((await iPaid(ctx, 'Blair', 1600)).data).toMatchObject({ result: 'waiting', claimCents: 1600 });
-    // Waiting: not locked in, no spot taken.
+    // Waiting for Alex: no spot taken (the money and the spots are as before); Zip 63's trust rule shows it as locked in on the player screens.
     let c = await card(ctx, 'Blair');
     expect(c.tickets.mine).toEqual({ place: 'none', creditCents: 0, paidCents: 0, claimCents: 1600, owedCents: 0 });
-    expect(c.tickets.locked).toEqual([]);
+    expect(c.tickets.locked).toEqual([{ name: 'Blair', me: true }]);
     expect((await dash(ctx)).tournament.tickets[0]).toMatchObject({ name: 'Blair', claimCents: 1600, place: 'none' });
     books(ctx);
     const ok = await answer(ctx, 'Blair', 'confirm', 1600);

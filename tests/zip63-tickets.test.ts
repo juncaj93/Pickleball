@@ -183,7 +183,7 @@ describe('the hidden cap of 16 (was 12)', () => {
 });
 
 describe('the card data (mocks 00 to 07)', () => {
-  it('before a date: no going count (one ball per sign-up); after: how many can make it, a count only', async () => {
+  it('before a date: no going list (one ball per sign-up); after: who can make it, names only, their own row marked', async () => {
     const ctx = await world({ noDate: true, signUp: [] });
     await signUp(ctx, 'Blair', [DATE]);
     await signUp(ctx, 'Casey', ['2026-11-03']);
@@ -193,7 +193,8 @@ describe('the card data (mocks 00 to 07)', () => {
     expect(c.going).toBeUndefined();
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE })).status).toBe(200);
     c = await card(ctx, 'Emery');
-    expect(c.going).toBe(2);
+    expect(c.going).toEqual([{ name: 'Blair' }, { name: 'Devon' }]);
+    expect((await card(ctx, 'Devon')).going).toEqual([{ name: 'Blair' }, { name: 'Devon', me: true }]);
     // Never who: nothing about Casey's dates or anyone's money in the answer.
     const text = JSON.stringify(c);
     expect(text).not.toContain('2026-11-03');
@@ -207,7 +208,35 @@ describe('the card data (mocks 00 to 07)', () => {
     await lockWithCredit(ctx, 'Blair');
     const c = await card(ctx, 'Devon');
     expect(c.tickets.locked.map((x: { name: string }) => x.name)).toEqual(['Emery', 'Blair']);
-    expect(c.going).toBe(4);
+    expect(c.going.map((g: { name: string }) => g.name)).toEqual(['Blair', 'Casey', 'Devon', 'Emery']);
+    books(ctx);
+  });
+
+  it('round 2, the trust rule: an I paid counts as locked in on every player screen at once, in the order people paid; spots and money do not move until Alex answers', async () => {
+    const ctx = await world({ signUp: ['Blair', 'Casey', 'Devon', 'Emery'] });
+    await lockWithCredit(ctx, 'Emery');
+    ctx.app.advance(60_000);
+    // Casey: Lock my spot with no credit (the Pay sheet), then I paid for the whole $16.
+    const casey = await playerPhone(ctx, 'Casey');
+    expect((await casey.call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: 1600 })).data.result).toBe('due');
+    expect((await casey.call('POST', '/api/tournament/paid', { tournamentId: ctx.tid, cents: 1600 })).data.result).toBe('waiting');
+    ctx.app.advance(60_000);
+    await lockWithCredit(ctx, 'Blair');
+    // Every player sees Emery, Casey (I paid), Blair as locked in; nobody sees a "waiting" or anyone's money.
+    for (const who of ['Devon', 'Casey']) {
+      const c = await card(ctx, who);
+      expect(c.tickets.locked.map((x: { name: string }) => x.name)).toEqual(['Emery', 'Casey', 'Blair']);
+    }
+    expect((await card(ctx, 'Casey')).tickets.locked[1]).toEqual({ name: 'Casey', me: true });
+    // The money and the spot are exactly as before: Casey's I paid waits for Alex, no spot yet, the plan counts 2 spots.
+    const t = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament;
+    expect(t.tickets.find((k: { name: string }) => k.name === 'Casey')).toMatchObject({ place: 'none', claimCents: 1600, paidCents: 0 });
+    expect(t.tickets.filter((k: { place: string }) => k.place === 'spot').map((k: { name: string }) => k.name)).toEqual(['Emery', 'Blair']);
+    expect(t.size).toBe(6);
+    books(ctx);
+    // Alex undoes it (Didn't pay): Casey is no longer locked in on any screen.
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/ticket`, { playerId: ctx.byName.Casey, action: 'reject' })).status).toBe(200);
+    expect((await card(ctx, 'Devon')).tickets.locked.map((x: { name: string }) => x.name)).toEqual(['Emery', 'Blair']);
     books(ctx);
   });
 });

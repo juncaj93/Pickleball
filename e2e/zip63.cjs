@@ -301,6 +301,91 @@ async function main() {
     await calm.ctx.close();
   });
 
+  // ---------------------------------------------------------------- C2  Alex's exact path: Pay $16, then I paid (round 2)
+  await check('C2 Alex\'s path: countdown Pay $16, then I paid: the 7th ball pops and glows right at the tap (frame by frame), then steady', async () => {
+    await stage('pay_2d');
+    const v = await vicCard({ reducedMotion: 'no-preference' });
+    await v.page.locator('[data-pay-countdown-btn]').click();
+    const sheet = v.page.locator('dialog[open]');
+    await sheet.waitFor({ timeout: 10000 });
+    await v.page.waitForTimeout(700);
+    // Start sampling every frame (requestAnimationFrame) BEFORE the tap: the ball's size and the glow around it, for 2.5 s.
+    await v.page.evaluate(() => {
+      window.__frames = [];
+      const t0 = performance.now();
+      window.__t0 = t0;
+      const tick = () => {
+        const balls = [...document.querySelectorAll('.tc-hero .tc-ball')];
+        const b = balls[6];
+        if (b) {
+          const svg = b.querySelector('.ball');
+          const m = getComputedStyle(svg).transform;
+          const scale = m === 'none' ? 1 : Number(m.split('(')[1].split(',')[0]);
+          const shadow = getComputedStyle(b).boxShadow;
+          const blurs = [...shadow.matchAll(/(-?[\d.]+)px (-?[\d.]+)px ([\d.]+)px ([\d.]+)px/g)].map((x) => Number(x[3]));
+          window.__frames.push({ t: Math.round(performance.now() - t0), gold: b.classList.contains('tc-gold'), fresh: b.classList.contains('tc-gold-new'), scale: +scale.toFixed(3), blur: Math.max(0, ...blurs) });
+        }
+        if (performance.now() - t0 < 2500) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const tapAt = await v.page.evaluate(() => Math.round(performance.now() - window.__t0));
+    await sheet.getByRole('button', { name: /I paid/ }).click();
+    // Pictures of the balls row while it happens (every 60 ms for about 1.2 s), for the frame strip in the shots folder.
+    const row = v.page.locator('.tc-hero .tc-balls');
+    for (let i = 0; i < 20; i++) {
+      await row.screenshot({ path: path.join(SHOTS, `C2-frame-${String(i).padStart(2, '0')}.png`) }).catch(() => null);
+      await v.page.waitForTimeout(45);
+    }
+    await v.page.waitForTimeout(1300);
+    const frames = await v.page.evaluate(() => window.__frames);
+    const firstGold = frames.find((f) => f.gold);
+    const popped = frames.filter((f) => f.fresh);
+    const peakScale = Math.max(...popped.map((f) => f.scale));
+    const peakBlur = Math.max(...popped.map((f) => f.blur));
+    const last = frames[frames.length - 1];
+    require('node:fs').writeFileSync(path.join(SHOTS, 'C2-frames.json'), JSON.stringify(frames));
+    assert(firstGold && popped.length >= 10, `the 7th ball turns gold and animates: ${JSON.stringify(frames.slice(-3))}`);
+    assert(peakScale >= 1.15, `it pops (the site's m-ball-pop, up to 1.3x): peak ${peakScale}`);
+    assert(peakBlur >= 12, `it glows (a big soft gold glow first): peak blur ${peakBlur}px`);
+    assert(last.gold && !last.fresh && last.scale === 1 && last.blur === 0, `then the steady ring: ${JSON.stringify(last)}`);
+    assert(flat(await v.page.locator('.tc-foot').innerText()) === 'You’re locked in', 'You\'re locked in');
+    console.log(`      C2: gold ${firstGold.t - tapAt} ms after the I paid tap (the save's round trip), ${popped.length} animated frames, peak scale ${peakScale}, peak glow ${peakBlur}px, steady at +${last.t - tapAt} ms`);
+    await v.ctx.close();
+  });
+
+  // ---------------------------------------------------------------- D2  See who's in (round 2, Alex's two mocks)
+  for (const scheme of SCHEMES)
+    for (const width of SIZES)
+      await check(`D2 See who's in: everyone on the card, numbered, gold first, only my row has words, no count or open spots (${width} ${scheme})`, async () => {
+        await stage('tickets_open');
+        for (const who of ['Vic', 'Parker']) {
+          const v = await vicCard({ who, width, scheme });
+          const cardGold = await v.page.locator('.tc-hero .tc-ball').evaluateAll((els) => els.map((e) => e.dataset.tb));
+          await v.page.locator('.tc-hero .tc-title').first().click();
+          const list = v.page.locator('dialog[open] [data-tw-in]');
+          await list.waitFor({ timeout: 10000 });
+          const rows = await list.locator('li').evaluateAll((els) =>
+            els.map((li) => ({ n: li.querySelector('.tc-tw-n').textContent, name: li.querySelector('.tc-tw-name').textContent, gold: li.querySelector('.tc-tw-ball').classList.contains('tc-tw-ball-gold'), tag: (li.querySelector('.tc-tw-tag') || { textContent: '' }).textContent, me: li.classList.contains('tc-tw-me') })),
+          );
+          assert(flat(await list.locator('.tc-tw-head').innerText()).toUpperCase() === 'WHO’S IN', `just the heading: ${await list.locator('.tc-tw-head').innerText()}`);
+          assert(rows.length === cardGold.length && rows.filter((r) => r.gold).length === cardGold.filter((g) => g === 'gold').length, `the same people as the balls: ${JSON.stringify({ rows: rows.length, balls: cardGold })}`);
+          assert(rows.every((r, i) => r.n === String(i + 1)), 'numbered 1, 2, 3');
+          const firstPlain = rows.findIndex((r) => !r.gold);
+          assert(rows.slice(0, firstPlain).every((r) => r.gold) && rows.slice(firstPlain).every((r) => !r.gold), 'gold first');
+          assert(rows.filter((r) => !r.me).every((r) => r.tag === ''), 'no words on other rows');
+          const mine = rows.find((r) => r.me);
+          if (who === 'Vic') assert(mine && mine.tag === 'Pay to lock in' && !mine.gold && rows.indexOf(mine) === firstPlain, `Vic's row right under the gold ones: ${JSON.stringify(rows)}`);
+          else assert(mine && mine.tag === 'Locked in' && mine.gold, `Parker's row: ${JSON.stringify(mine)}`);
+          const words = flat(await list.innerText());
+          assert(!/Open spot|\d+ of \d+|\b16\b|locked in\b.*locked in/i.test(words.replace(/^WHO’S IN/i, '')), words);
+          await oneLine(v.page, 'dialog[open] [data-tw-in] li');
+          await fits(v.page, 'dialog[open] .tc-tw');
+          await shot(v.page, `D2-who-${who}-${width}-${scheme}`);
+          await v.ctx.close();
+        }
+      });
+
   // ---------------------------------------------------------------- D  before a date; the overlay's links
   await check('D before a date: one ball per sign-up, no gold, DATE TBD; signed up: See who\'s signed up and the two links', async () => {
     await stage('vote_open');
@@ -436,7 +521,10 @@ async function main() {
     await sheet.waitFor({ timeout: 10000 });
     await sheet.getByRole('button', { name: /I paid/ }).click();
     await v.page.locator('[data-pay-countdown]').waitFor({ state: 'detached', timeout: 10000 });
-    assert(flat(await v.page.locator('.tc-foot').innerText()).startsWith('Paid'), await v.page.locator('.tc-foot').innerText());
+    // Round 2 (Alex, the trust rule): after I paid, "You're locked in" at once, a gold ball, no waiting words anywhere on the page.
+    await v.page.locator('.tc-foot', { hasText: 'You’re locked in' }).waitFor({ timeout: 10000 });
+    assert((await v.page.locator('.tc-hero .tc-gold').count()) === 7, 'the 7th ball is gold');
+    assert(!/confirm|waiting/i.test(flat(await v.page.locator('body').innerText())), 'no waiting words');
     await v.ctx.close();
     await stage('pay_closed');
     const c = await vicCard({});

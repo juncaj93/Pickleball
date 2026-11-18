@@ -160,8 +160,8 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
           </div>
         </section>
       )}
-      {/* Zip 63: the preview has 10 names, so a real card never shows 12 to 16 balls. These links draw that many on Vic's card (look only, this
-          phone, until ?balls=off); every other word and button is the real one. */}
+      {/* Zip 63: the preview has 10 names, so a real card never shows 12 to 16 balls. These links draw that many on Vic's card (look only, that
+          page only); every other word and button is the real one. */}
       <section className="tm-card" aria-label="Ball look" data-tm-test-balls>
         <div className="tm-card-head">
           <h3 className="tm-label">Ball look</h3>
@@ -176,7 +176,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
             Real count
           </a>
         </div>
-        <p className="tm-card-note">Look only, as Vic on this phone: the card draws that many balls with that many gold. Start from a Tickets open stage.</p>
+        <p className="tm-card-note">Look only, as Vic on that page: the card draws that many balls with that many gold. Start from a Tickets open stage. Any other link shows the real card.</p>
       </section>
       <section className="tm-card" aria-label="View as">
         <div className="tm-card-head">

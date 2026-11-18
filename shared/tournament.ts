@@ -509,7 +509,7 @@ export interface PlayerTicketsView {
   started: boolean;
   /** Zip 59: spots freed by a back out since Pay by that nobody has claimed (only counted after Pay by). */
   freed: number;
-  /** Locked in, in the order they took their spots. */
+  /** Locked in, in the order they paid: every spot, and (Zip 63, the trust rule) every I paid for a spot still waiting for the organizer. */
   locked: { name: string; me?: true }[];
   /** The waitlist, in the order they joined it: names only (Alex: nobody's paid status but the player's own, which is in `mine`). */
   line: { name: string; me?: true }[];
@@ -531,9 +531,10 @@ export interface PlayerTournamentView {
   finalDate: string | null;
   /** Everyone on the list, in sign-up order (names only), for "See who's signed up" and the count. */
   names: string[];
-  /** Zip 63: once a date is picked, how many on the list can make it (the card's pickleballs: one per player who can make that date). A count
-   *  only, never who. Left out before a date is picked (then the card draws one ball per sign-up). */
-  going?: number;
+  /** Zip 63: once a date is picked, who on the list can make it, in sign-up order (the card's pickleballs and See who's in: one per player
+   *  who can make that date). Names only (their own row says `me`), never anyone's dates or money. Left out before a date is picked (then the
+   *  card draws one ball per sign-up). */
+  going?: { name: string; me?: true }[];
   /** This player's own sign-up (null: not on the list). Their own pick only, never the organizer's level. `formatVote`: their own format vote
    *  (Zip 60; only while the vote is open, never anyone else's). */
   me: { level: number; dates: string[]; formatVote?: FormatVote } | null;

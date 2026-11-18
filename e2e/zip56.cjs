@@ -7,7 +7,7 @@
  * server runs with PREVIEW_CALM=on and PB_PREVIEW_BUILD=1, as the preview does.
  *   A  The seed: tickets open, nobody paid; organizer Home has picture 29's card (Tickets, no Open tickets) with the smart plan's line.
  *   B  Picking the date opens tickets (Alex: no Open tickets button): Pay by Tue Dec 15, 7:00 PM; "Tickets: 0 of 6 locked in".
- *   C  Parker: Lock my spot, the site's Pay sheet (Pay Alex $16, Venmo, I paid), then "Paid · Waiting for Alex to confirm".
+ *   C  Parker: Lock my spot, the site's Pay sheet (Pay Alex $16, Venmo, I paid), then "You're locked in" (Zip 63: no waiting words for players).
  *   D  Alex answers on Home (Paid): Parker is locked in.
  *   E  Parker backs out after paying: the Are you sure words say the $16 comes back as credit, and it does.
  *   F  The waitlist screens (12 locked in, picture 12): the 10 preview names cannot fill 12 spots, so the player's answer is stood in for.
@@ -270,7 +270,9 @@ async function main() {
     assert(sheet.includes('Pay Alex $16') && sheet.includes('Have the Venmo app? Click here') && /Copy Venmo/.test(sheet) && sheet.includes('I paid'), sheet);
     await shot(p.page, 'C-pay-sheet');
     await p.page.locator('[data-sheet-paid]').click();
-    await p.page.locator('.tc').filter({ hasText: 'Waiting for Alex to confirm' }).waitFor({ timeout: 10000 });
+    // Zip 63 (Alex, the trust rule): after I paid the player sees "You're locked in" at once; Alex still confirms or undoes it on Home.
+    await p.page.locator('.tc').filter({ hasText: 'You’re locked in' }).waitFor({ timeout: 10000 });
+    assert(!/confirm|waiting/i.test(flat(await p.page.locator('.tc').first().innerText())), 'no waiting words');
     assert(p.errors.length === 0, p.errors.join(' | '));
     await p.ctx.close();
     d = await dash();
@@ -360,7 +362,8 @@ async function main() {
     assert(overlay.includes('You’re second on standby') && overlay.includes('Hold my spot · $16') && overlay.includes('Just keep me on the list'), overlay);
     assert(overlay.includes('If someone drops, you’re locked into that spot.') && overlay.includes('If a spot opens, whoever pays first gets it.'), overlay);
     // Alex (ship answer 5): no Paid or Not paid next to anyone else on a player's screen; their own row says You.
-    assert(/12 in/i.test(overlay) && !/12 of 12|Paid, first in line|Not paid/.test(overlay), overlay);
+    // Zip 63 round 2: Who's in has no count chip at all.
+    assert(!/12 in|12 of 12|Paid, first in line|Not paid/.test(overlay) && (await q.page.locator('dialog[open] [data-tw-count]').count()) === 0, overlay);
     assert(flat(await q.page.locator('dialog[open] [data-tw-row="Vic"]').innerText()).endsWith('You'), 'Vic\'s own row');
     await shot(q.page, 'F-waitlist-overlay');
     assert(q.errors.length === 0, q.errors.join(' | '));
@@ -435,7 +438,8 @@ async function main() {
         await fits(p.page, 'dialog[open] .tc-tw');
         await oneLineRows(p.page, 'dialog[open] .tc-tw-rows li');
         const rows = flat(await p.page.locator('dialog[open] [data-tw-in]').innerText());
-        assert(/6 of 8/i.test(rows) && rows.includes('Christopher Vanderberg') && rows.includes('Pay to lock in') && rows.includes('Open spot'), rows);
+        // Zip 63 round 2 (Alex's mocks): everyone on the card, no count, no Open spot rows; only Vic's own row has words.
+        assert(!/6 of 8|Open spot/i.test(rows) && rows.includes('Christopher Vanderberg') && rows.includes('Pay to lock in'), rows);
         await shot(p.page, `I-overlay09-${width}-${scheme}`);
         await p.page.locator('dialog[open] [data-tc-lock]').click();
         await p.page.locator('[data-pay-sheet]').waitFor({ timeout: 10000 });

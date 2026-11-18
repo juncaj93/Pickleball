@@ -9,7 +9,7 @@
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormatVote, PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
-import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, hoursLabel, MAX_SPOTS, monthsBetween, startLabel, stubParts } from '../../shared/tournament';
+import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, hoursLabel, monthsBetween, startLabel, stubParts } from '../../shared/tournament';
 import { payByLabel, payByShort, payCountdown, placeWord } from '../../shared/tournamentTickets';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, useNow, VIEW_ONLY_MESSAGE } from '../lib';
@@ -38,10 +38,10 @@ const firstOf = (name: string | null | undefined) => (name ?? '').trim().split(/
  *   full     every spot is taken and they are not in line: Join waitlist (state 4)
  *   in       locked in (state 5)
  *   line     on the waitlist (unpaid: Hold my spot; paid: their spot is held)
- *   waiting  they tapped I paid; the organizer has not confirmed it yet (no spot until then)
+ *   (Zip 63, the trust rule: an I paid counts as locked in on the player's screens, so there is no "waiting" state for players any more)
  *   closed   ticket sales are over (the night has started) and they are not locked in
  */
-type TicketState = 'lock' | 'full' | 'in' | 'line' | 'waiting' | 'closed';
+type TicketState = 'lock' | 'full' | 'in' | 'line' | 'closed';
 
 export function ticketStateOf(t: PlayerTournamentView): TicketState | null {
   const k = t.tickets;
@@ -54,7 +54,8 @@ export function ticketStateOf(t: PlayerTournamentView): TicketState | null {
   const open = !k.full;
   const paid = !!mine && mine.creditCents + mine.paidCents >= k.priceCents;
   if (mine?.place === 'line') return open && !paid && mine.claimCents === 0 ? 'lock' : 'line';
-  if (mine && mine.claimCents > 0 && mine.owedCents === 0) return 'waiting';
+  // Zip 63 (Alex): we trust people that they paid. An I paid for the whole ticket is "locked in" at once (the organizer confirms or undoes it).
+  if (mine && mine.claimCents > 0 && mine.owedCents === 0) return 'in';
   return open ? 'lock' : 'full';
 }
 
@@ -125,8 +126,12 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
   async function iPaid() {
     if (paying === null) return;
     const held = k?.mine?.place === 'line' || ticketStateOf(t) === 'line';
-    const ok = await run(() => api('POST', '/api/tournament/paid', { tournamentId: t.id, cents: paying }), held ? `Thanks. Your spot is held once ${org} confirms.` : `Thanks. You're locked in once ${org} confirms.`);
-    if (ok) setPaying(null);
+    const cents = paying;
+    // Zip 63: the sheet closes at the tap, so the card (and its new gold ball's pop) is in view when the answer lands. A failed save shows its
+    // error and opens the sheet again.
+    setPaying(null);
+    const ok = await run(() => api('POST', '/api/tournament/paid', { tournamentId: t.id, cents }), held ? 'Thanks. Your spot is held.' : 'Thanks. You’re locked in.');
+    if (!ok) setPaying(cents);
   }
 
   async function joinWaitlist() {
@@ -137,7 +142,8 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
   // Back out: what the sheet says comes back is what the server checks (credit and confirmed cash on the ticket, an I paid that waits).
   const mine = k?.mine ?? null;
   const backCents = mine ? mine.creditCents + mine.paidCents + mine.claimCents : 0;
-  const backLine = !mine || backCents === 0 ? '' : mine.claimCents > 0 ? ` Your ${formatPrice(backCents)} comes back as credit once ${org} confirms your payment.` : ` Your ${formatPrice(backCents)} comes back as credit.`;
+  // Zip 63: no waiting words for players (an I paid still waiting comes back as credit when the organizer answers it, as before).
+  const backLine = !mine || backCents === 0 ? '' : ` Your ${formatPrice(backCents)} comes back as credit.`;
   const venmo = venmoPayUrl(pay.group.venmoUrl, paying ?? 0, `${t.name} ticket${pay.meName ? ` - ${pay.meName}` : ''}`);
 
   return (
@@ -266,7 +272,7 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
             () => api('POST', '/api/tournament/back-out', { tournamentId: t.id, ...(k ? { backCents } : {}) }),
             (r: { creditBackCents?: number; creditReturnedCents?: number; waitingCents?: number }) => {
               const back = (r?.creditBackCents ?? 0) + (r?.creditReturnedCents ?? 0);
-              if ((r?.waitingCents ?? 0) > 0) return `You're off the list. Your ${formatPrice(r.waitingCents!)} comes back as credit once ${org} confirms.`;
+              if ((r?.waitingCents ?? 0) > 0) return `You're off the list. Your ${formatPrice((r.waitingCents ?? 0) + back)} comes back as credit.`;
               if (back > 0) return (r.creditBackCents ?? 0) > 0 ? `You're off the list. ${formatPrice(back)} back as credit.` : `You're off the list. ${formatPrice(back)} credit returned.`;
               return "You're off the list";
             },
@@ -439,28 +445,36 @@ export function TourBalls({ total, gold }: { total: number; gold: number }) {
 
 /**
  * Zip 63, PREVIEW BUILDS ONLY (`__PREVIEW_BUILD__` is false in every live build, so this is not in the live file): the Tournament test page's
- * "Ball look" links (?balls=16,12) draw that many balls on this phone's card, look only, because the preview's 10 names cannot make 12 to 16.
+ * "Ball look" links (?balls=16,12) draw that many balls on the card of that page, look only, because the preview's 10 names cannot make 12 to 16.
  */
 function previewBalls(): { total: number; gold: number } | null {
   if (!__PREVIEW_BUILD__ || typeof window === 'undefined') return null;
-  try {
-    const q = new URLSearchParams(window.location.search).get('balls');
-    if (q === 'off') sessionStorage.removeItem('pb_test_balls');
-    else if (q && /^\d{1,2},\d{1,2}$/.test(q)) sessionStorage.setItem('pb_test_balls', q);
-    const m = /^(\d{1,2}),(\d{1,2})$/.exec(sessionStorage.getItem('pb_test_balls') ?? '');
-    return m ? { total: Number(m[1]), gold: Number(m[2]) } : null;
-  } catch {
-    return null;
-  }
+  // Round 2: only while the address has ?balls= (no memory on the phone), so another name opened next shows its real card.
+  const m = /^(\d{1,2}),(\d{1,2})$/.exec(new URLSearchParams(window.location.search).get('balls') ?? '');
+  return m ? { total: Number(m[1]), gold: Number(m[2]) } : null;
 }
 const PREVIEW_BALLS = previewBalls();
 
 /** Zip 63: how many balls and how many gold on this card. Before a date: one per sign-up. After: one per player who can make that date. */
 function ballsOf(t: PlayerTournamentView): { total: number; gold: number } {
   if (PREVIEW_BALLS) return PREVIEW_BALLS;
-  const gold = t.tickets?.locked.length ?? 0;
-  const people = t.finalDate && t.going !== undefined ? t.going : t.names.length;
-  return { total: Math.max(people, gold), gold };
+  const rows = cardRows(t);
+  return rows ? { total: rows.gold.length + rows.rest.length, gold: rows.gold.length } : { total: t.names.length, gold: 0 };
+}
+
+type Who = { name: string; me?: true };
+/**
+ * Zip 63 round 2 (Alex): the people on the card, once a date is picked: the balls and See who's in are always the same people. `gold`: locked
+ * in (every spot and every trusted I paid), in the order they paid. `rest`: everyone else who can make the date and is not on standby, the
+ * viewer first (their row sits right under the last gold one), then the others in sign-up order. Null before a date (one ball per sign-up).
+ */
+function cardRows(t: PlayerTournamentView): { gold: Who[]; rest: Who[] } | null {
+  if (!t.finalDate || !t.going) return null;
+  const k = t.tickets;
+  const gold = k?.locked ?? [];
+  const taken = new Set([...gold.map((g) => g.name), ...(k?.line ?? []).map((l) => l.name)]);
+  const left = t.going.filter((g) => !taken.has(g.name));
+  return { gold, rest: [...left.filter((g) => g.me), ...left.filter((g) => !g.me)] };
 }
 
 /** Zip 56: "8 spots taken" (the overlay's line on standby). Zip 63: at the hidden cap no number ("Every spot is taken"). */
@@ -473,7 +487,7 @@ const payByFoot = (k: PlayerTicketsView): string | null => (k.payBy ? `Pay by ${
 const standbyWhere = (place: number) => (place > 0 ? `You’re ${placeWord(place)} on standby` : 'You’re on standby');
 
 /** Zip 56, Zip 63: the words for each ticket state. `foot`: the card's plain bottom line; `sub`: the overlay's line under the name. */
-function ticketWords(t: PlayerTournamentView, s: TicketState, org: string): { foot: string; sub: string } {
+function ticketWords(t: PlayerTournamentView, s: TicketState): { foot: string; sub: string } {
   const k = t.tickets!;
   const hours = hoursLabel(t.minutes);
   const payBy = k.payBy ? payByLabel(k.payBy, 'America/Detroit', t.finalDate) : null;
@@ -489,8 +503,6 @@ function ticketWords(t: PlayerTournamentView, s: TicketState, org: string): { fo
       return { foot: foot ?? 'Every spot is taken', sub: 'Join standby in case someone drops' };
     case 'in':
       return { foot: 'You’re locked in', sub: hours };
-    case 'waiting':
-      return { foot: `Paid · Waiting for ${org} to confirm`, sub: `Paid · Waiting for ${org} to confirm` };
     case 'closed': {
       // Zip 59: closed because the night started, or because Pay by has passed (the freed-spot exception ended 3 hours before the start).
       const why = k.started ? 'The tournament has started.' : payBy ? `Tickets closed. Pay by was ${payBy}.` : 'Tickets are closed.';
@@ -498,8 +510,8 @@ function ticketWords(t: PlayerTournamentView, s: TicketState, org: string): { fo
     }
     case 'line': {
       const where = standbyWhere(place);
-      if (mine && mine.claimCents > 0) return { foot: `${where}. Waiting for ${org} to confirm.`, sub: `${where}. Waiting for ${org} to confirm your payment.` };
-      if (mine && mine.creditCents + mine.paidCents >= k.priceCents) return { foot: `${where}. Your spot is held.`, sub: `${where}. Your spot is held.` };
+      // Zip 63: a paid hold, or an I paid for it (trusted), is held.
+      if (mine && mine.creditCents + mine.paidCents + mine.claimCents >= k.priceCents) return { foot: `${where}. Your spot is held.`, sub: `${where}. Your spot is held.` };
       return { foot: where, sub: takenWords(k) };
     }
   }
@@ -559,7 +571,6 @@ function CardShell({
 
 export function TicketCard({
   t,
-  org,
   busy,
   punch = false,
   onSignUp,
@@ -595,7 +606,7 @@ export function TicketCard({
   if (t.status === 'canceled') {
     const c = t.canceled ?? { backCents: 0, claimCents: 0 };
     const money =
-      c.claimCents > 0 ? `Your ${formatPrice(c.claimCents)} comes back as credit once ${org} confirms your payment.` : c.backCents > 0 ? `Your ${formatPrice(c.backCents)} is back as credit.` : null;
+      c.claimCents > 0 ? `Your ${formatPrice(c.claimCents + c.backCents)} comes back as credit.` : c.backCents > 0 ? `Your ${formatPrice(c.backCents)} is back as credit.` : null;
     return <CardShell t={t} data="canceled" muted foot={money ? `Canceled. ${money}` : 'Canceled.'} />;
   }
 
@@ -612,7 +623,7 @@ export function TicketCard({
 
   // ---- Zip 56: tickets open (Lock my spot, Join standby, locked in, standby, waiting for a confirm, closed) ----
   if (s && k) {
-    const w = ticketWords(t, s, org);
+    const w = ticketWords(t, s);
     const due = dueOf(k);
     const paidLine = !!k.mine && k.mine.creditCents + k.mine.paidCents >= k.priceCents;
     // Mocks 00 to 07 and 15: the one lime button. The other states keep See who's in (Edit sign-up and Drop out are in the card's overlay).
@@ -683,8 +694,6 @@ export function TicketCard({
 function Overlay({
   t,
   k,
-  org,
-  meName,
   busy,
   onLock,
   onHold,
@@ -706,7 +715,7 @@ function Overlay({
   onEdit: () => void;
 }) {
   const s = ticketStateOf(t) ?? 'full';
-  const w = ticketWords(t, s, org);
+  const w = ticketWords(t, s);
   const due = dueOf(k);
   const place = linePlace(k);
   const mine = k.mine;
@@ -714,7 +723,7 @@ function Overlay({
   const claim = !!mine && mine.claimCents > 0;
   // The overlay's own words under the name: the pictures keep it short ("2 hours", "8 spots taken").
   const sub = s === 'in' ? hoursLabel(t.minutes) : s === 'line' ? takenWords(k) : w.sub;
-  const lists = [<WhoIn key="in" k={k} s={s} meName={meName} />, k.line.length > 0 ? <Waitlist key="line" k={k} /> : null];
+  const lists = [<WhoIn key="in" t={t} />, k.line.length > 0 ? <Waitlist key="line" k={k} /> : null];
   return (
     <div className="tc-tw stack" data-tw={s}>
       <section className="tc tc-hero tc-overlay" aria-label={cardLabel(t)} data-tc-format={t.formatTbd ? 'tbd' : t.format} data-tc={s}>
@@ -773,7 +782,7 @@ function Overlay({
         )}
         {s === 'line' && (paid || claim) && (
           <p className="tc-note" data-tc-note>
-            {claim ? `Waiting for ${org} to confirm your payment.` : 'Your spot is held. If someone drops, you’re locked into that spot.'}
+            Your spot is held. If someone drops, you’re locked into that spot.
           </p>
         )}
         {/* Zip 63: Edit sign-up and Drop out moved here from the Home card (the mocks' card has only its one button). Locked in: Drop out is
@@ -797,48 +806,28 @@ function Overlay({
   );
 }
 
-/** WHO'S IN: the locked-in players in the order they locked in, then this player if they can pay to lock in, then the open spots. */
-function WhoIn({ k, s, meName }: { k: PlayerTicketsView; s: TicketState; meName: string | null }) {
-  const full = k.full;
-  // "7 · Vic · Pay to lock in" (mock 09): their own row, only while a spot is open for them.
-  const meRow = (s === 'lock' || s === 'waiting') && !full ? { label: s === 'waiting' ? 'Waiting to confirm' : 'Pay to lock in' } : null;
-  const open = Math.max(0, k.size - k.locked.length - (meRow ? 1 : 0));
+/**
+ * WHO'S IN (Zip 63 round 2, Alex's two mocks): every player on the card, the same people as the balls, numbered down the list. Locked in first,
+ * in the order they paid, each ball with a gold ring; then the viewer's own row if they have not paid ("Pay to lock in", plain ball); then the
+ * others who have not paid, in sign-up order (plain ball, no words). Only the viewer's own row has words. No count, no open spots, no plan size.
+ */
+function WhoIn({ t }: { t: PlayerTournamentView }) {
+  const rows = cardRows(t) ?? { gold: t.tickets?.locked ?? [], rest: [] };
+  const all = [...rows.gold.map((p) => ({ ...p, gold: true })), ...rows.rest.map((p) => ({ ...p, gold: false }))];
   return (
     <section className="tc-tw-card" aria-label="Who's in" data-tw-in>
       <div className="tc-tw-head">
         <h3 className="tc-tw-label">Who’s in</h3>
-        <span className={full ? 'tc-tw-chip tc-tw-chip-full' : 'tc-tw-chip'} data-tw-count>
-          {/* Zip 63: the cap stays hidden: at the most spots there are, just how many are in. */}
-          {k.full || k.size >= MAX_SPOTS ? `${k.locked.length} in` : `${k.locked.length} of ${k.size}`}
-        </span>
       </div>
       <ol className="tc-tw-rows">
-        {k.locked.map((p, i) => (
-          <li key={`${p.name}-${i}`} className={p.me ? 'tc-tw-me' : undefined} data-tw-row={p.name}>
+        {all.map((p, i) => (
+          <li key={`${p.name}-${i}`} className={p.me ? 'tc-tw-me' : undefined} data-tw-row={p.me ? 'me' : p.name} data-tw-gold={p.gold ? '' : undefined}>
             <span className="tc-tw-n">{i + 1}</span>
-            <span className="tc-tw-ball tc-tw-ball-gold" aria-hidden="true">
+            <span className={p.gold ? 'tc-tw-ball tc-tw-ball-gold' : 'tc-tw-ball'} aria-hidden="true">
               <Pickleball />
             </span>
             <span className="tc-tw-name">{p.name}</span>
-            <span className="tc-tw-tag tc-tw-gold">Locked in</span>
-          </li>
-        ))}
-        {meRow && (
-          <li className="tc-tw-me" data-tw-row="me">
-            <span className="tc-tw-n">{k.locked.length + 1}</span>
-            <span className="tc-tw-ball" aria-hidden="true">
-              <Pickleball />
-            </span>
-            <span className="tc-tw-name">{meName ?? 'You'}</span>
-            <span className="tc-tw-tag">{meRow.label}</span>
-          </li>
-        )}
-        {Array.from({ length: open }, (_, i) => (
-          <li key={`open-${i}`} data-tw-row="open">
-            <span className="tc-tw-n">{k.locked.length + (meRow ? 1 : 0) + i + 1}</span>
-            <span className="tc-tw-ball tc-tw-ball-open" aria-hidden="true" />
-            <span className="tc-tw-name">Open spot</span>
-            <span />
+            {p.me ? <span className={p.gold ? 'tc-tw-tag tc-tw-gold' : 'tc-tw-tag'}>{p.gold ? 'Locked in' : 'Pay to lock in'}</span> : <span />}
           </li>
         ))}
       </ol>

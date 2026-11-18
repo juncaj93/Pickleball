@@ -735,7 +735,8 @@ export async function playerTournamentFor(
     finalDate: shownDate(t),
     names: rows.map((r) => r.display_name),
     // Zip 63: the card's balls once a date is picked: how many on the list can make it (a count, never who).
-    ...(shownDate(t) ? { going: rows.filter((r) => storedDays(r.dates).includes(shownDate(t)!)).length } : {}),
+    // Zip 63 round 2: the names, so See who's in lists exactly the people the balls are (Alex); still never anyone's dates or money.
+    ...(shownDate(t) ? { going: rows.filter((r) => storedDays(r.dates).includes(shownDate(t)!)).map((r) => ({ name: r.display_name, ...(r.player_id === playerId ? { me: true as const } : {}) })) } : {}),
     // Their own pick only (never the organizer's level for them).
     me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates), ...(tbd ? { formatVote: isFormatVote(mine.format_vote) ? mine.format_vote : ('either' as const) } : {}) } : null,
     ...(tbd ? { formatTbd: true as const } : {}),
@@ -785,7 +786,14 @@ async function playerTicketsView(
     ...(closed ? { closed: true as const } : { closed: false as const }),
     started: statusOf(t) === 'tickets' && salesClosed(t, group.timezone, ctx.nowMs),
     freed,
-    locked: listed.filter((k) => k.place === 'spot').map((k) => ({ name: k.display_name, ...me(k) })),
+    // Zip 63 (Alex, the trust rule): what players see as locked in is every spot AND every I paid for a spot that waits for the organizer, in the
+    // order they paid (a spot by when it was taken, an I paid by when it was tapped). Players never see "waiting"; the organizer confirms or
+    // undoes it as before. Display only: the spots, the cap, the plan and every money row are counted exactly as before.
+    locked: listed
+      .filter((k) => k.place === 'spot' || (k.place !== 'line' && k.claim_cents > 0 && ticketOwed(money(k)) === 0))
+      .map((k) => ({ k, at: (k.place === 'spot' ? k.place_at : k.claim_at) ?? k.updated_at }))
+      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)) // stable: a tie keeps the tickets' own order (as before)
+      .map(({ k }) => ({ name: k.display_name, ...me(k) })),
     // Alex (ship answer 5): names only. Paid or Not paid is for the organizer's screen; a player's own ticket is in `mine`.
     line: listed.filter((k) => k.place === 'line').map((k) => ({ name: k.display_name, ...me(k) })),
     mine: own
