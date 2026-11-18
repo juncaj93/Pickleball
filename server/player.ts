@@ -98,7 +98,7 @@ async function lateFeeClearsFor(ctx: Ctx, groupId: string, playerId: string): Pr
 }
 import { NO_SEAT_CREDIT, potBalance, type SeatCredit, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { owedOf, seatOf } from './owed';
-import { cashOutOffer, loadLedger, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf } from './credit';
+import { cashOutOffer, loadLedger, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf, tourNamesRead } from './credit';
 import { hiddenGameIdsRead } from './hideGame';
 import { directLoadFor, fewerDb, lastScreenFor } from './speed';
 import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
@@ -122,7 +122,7 @@ import { playerSessionView } from './views';
 import { applyPayment } from './admin';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
-import { changeStamp } from './stamp';
+import { changeStamp, changeStampAndTour } from './stamp';
 import { hiddenFromPlayers } from './hideGame';
 import { cardTimeFor } from './zip9';
 import { cardCleanupLook } from './zip10';
@@ -183,11 +183,15 @@ export async function groupVersion(ctx: Ctx): Promise<Response> {
 export async function groupView(ctx: Ctx): Promise<GroupView> {
   const { group, playerId: meId, viewAsName } = await viewer(ctx);
   // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
-  const version = await changeStamp(ctx, group, meId);
+  // Zip 62: it also brings the tournament card it built for this phone (its reads rode in the stamp's own trip), so it is not built twice.
+  const { stamp: version, tour: stampTour } = await changeStampAndTour(ctx, group, meId);
   await ensureSessions(ctx.db, group, ctx.nowMs);
   // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off).
   // Their own player's reads only when there is one (and it is not the organizer's own, who has no credit).
   const ownReads = meId && meId !== group.organizer_player_id;
+  // Zip 62: while the switch is on for this phone, the tournament names a ticket credit entry shows ride in this same trip too (asking the
+  // switch costs no trip: the switch rows are already read).
+  const tourNamesEarly = !!ownReads && (await tournamentsFlags(ctx, group.id)).on;
   await fewerDb(ctx)?.prefetch([
     { kind: 'all', ...playersRead(group.id) },
     ...moneyPictureFirstReads(group, ctx.nowMs),
@@ -197,6 +201,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...(ownReads ? [{ kind: 'all' as const, ...pendingRequestsRead(group.id) }] : []),
     { kind: 'all', ...hiddenGameIdsRead(group.id) },
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
+    ...(tourNamesEarly ? [{ kind: 'all' as const, ...tourNamesRead(group.id) }] : []),
   ]);
   const settings = settingsOf(group);
   const tz = group.timezone;
@@ -210,7 +215,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const skin = await christmasSkinFor(ctx, group.id, meIsOrganizer && !viewAsName, !!viewAsName);
   // Zip 55 "Tournaments" (server/tournament.ts): the pinned card's data, only while the switch is on AND the tournament is visible to this
   // player (Everyone, or Only me on the organizer's own signed-in phone). Otherwise nothing: this answer has no `tournament` key at all.
-  const tournament = await playerTournamentFor(ctx, group, me?.id ?? null, !!viewAsName);
+  // Zip 62: the card the stamp built for this same player (not View as, which decides Only me on its own), else built here as before.
+  const tournament =
+    stampTour !== undefined && !viewAsName && (me?.id ?? null) === meId ? stampTour : await playerTournamentFor(ctx, group, me?.id ?? null, !!viewAsName);
   const timeShift = await timeShiftFor(ctx, group.id);
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
@@ -254,7 +261,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       // Zip 56: a tournament ticket's entries name it (one small read, only for a player who has such entries), and only while the switch is on
       // for this phone: switched off, the entries say "a tournament" (review: no tournament data at all to a phone that may not see it).
       const tourOn = mineOnly.some((e) => e.tourId) && (await tournamentsFlags(ctx, group.id)).on;
-      const tourNames = await tourNamesOf(ctx.db, tourOn ? mineOnly : [], { everyoneOnly: true });
+      const tourNames = await tourNamesOf(ctx.db, tourOn ? mineOnly : [], { everyoneOnly: true, ...(tourOn ? { groupId: group.id } : {}) });
       credit.history = mineOnly
         .map(
           (e): CreditEntryView => ({

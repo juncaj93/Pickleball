@@ -10,6 +10,8 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 62 (🎾62.speed): The Cold Open as it is on live, to feel the speed (the format above does not apply).
+  { stage: 'speed_check', label: 'Speed check (like live)', line: 'The Cold Open as on live: Everyone, the vote open, 9 on the list (everyone but you). Open Home and View as Vic: the card draws with the rest.' },
   // Zip 60 (🎾60.formatvote): the players vote the format. These build "The Cold Open" on Let players vote; the format above does not apply.
   { stage: 'vote_open', label: 'Format vote open', line: '3 on the list with mixed votes (Parker Locked doubles, Rowan Americano, Sage Either). View as Vic, Sign up: Format you’d like. The card says Tournament style TBD.' },
   { stage: 'vote_finalize', label: 'Finalize screen (6 to 4 vote)', line: 'All 10 names can make the date; Americano 6, Locked doubles 4. Not locked yet: tap the date on the tournament page, see the votes, override the winner, Finalize. The over line needs more than 12 players (the preview has 10).' },

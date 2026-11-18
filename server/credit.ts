@@ -105,18 +105,27 @@ function loadedRow(r: RawRow): LedgerRow {
 export async function tourNamesOf(
   db: D1Database,
   rows: readonly Pick<CreditRow, 'tourId'>[],
-  opts: { everyoneOnly?: boolean } = {},
+  /** `groupId` (Zip 62, only while the switch is on): read the group's tournaments with tourNamesRead, the read the screen already sent in its shared trip. */
+  opts: { everyoneOnly?: boolean; groupId?: string } = {},
 ): Promise<Map<string, { name: string; canceled: boolean }>> {
   const ids = [...new Set(rows.map((r) => r.tourId).filter((x): x is string => !!x))];
   if (ids.length === 0) return new Map();
-  const { results } = await db
-    .prepare(`SELECT id, name, status, visibility FROM tournaments WHERE id IN (${ids.map(() => '?').join(', ')})`)
-    .bind(...ids)
+  const byGroup = opts.groupId ? tourNamesRead(opts.groupId) : null;
+  const { results } = await (byGroup
+    ? db.prepare(byGroup.sql).bind(...byGroup.values)
+    : db.prepare(`SELECT id, name, status, visibility FROM tournaments WHERE id IN (${ids.map(() => '?').join(', ')})`).bind(...ids)
+  )
     .all<{ id: string; name: string; status: string; visibility: string }>()
     .catch(() => ({ results: [] as { id: string; name: string; status: string; visibility: string }[] }));
+  const wanted = new Set(ids);
   // `everyoneOnly` (a player's own answer): an Only me tournament is never named (review: no tournament data to a player who may not see it).
-  return new Map(results.filter((t) => !opts.everyoneOnly || t.visibility === 'all').map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled' }]));
+  return new Map(
+    results.filter((t) => wanted.has(t.id) && (!opts.everyoneOnly || t.visibility === 'all')).map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled' }]),
+  );
 }
+
+/** Zip 62: every tournament of the group (a handful of rows): tourNamesOf's read when the screen can send it early (SPEED_FEWER_QUERIES prefetch). */
+export const tourNamesRead = (groupId: string): ReadSpec => ({ sql: 'SELECT id, name, status, visibility FROM tournaments WHERE group_id = ? ORDER BY created_at, id', values: [groupId] });
 
 /**
  * Zip 56: a ticket row's extra words for a CreditEntryView (nothing on any other row, so every other entry is exactly as before). The name only

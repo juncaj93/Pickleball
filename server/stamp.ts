@@ -20,7 +20,26 @@ import { alertCardsForAll } from './zip11';
 import { seatDotsForAll } from './seatDots';
 import { gameDayCardForAll } from './gameDay';
 import { afterGameCardForAll } from './afterGame';
-import { adminTournamentStamp, playerTournamentStamp } from './tournament';
+import { adminTournamentStamp, adminTourReads, playerTournamentStamp, playerTourReads, type TourReads, tournamentsFlags } from './tournament';
+import type { AdminTournamentView, PlayerTournamentView } from '../shared/tournament';
+import type { D1PreparedStatement, D1Result } from './db';
+
+/**
+ * Zip 62: one batch with the tournament reads added at its end (only while the switch is on), or, if that fails (a database without the
+ * tournament tables), the batch exactly as before and no tournament rows (the views then read the old way). `plain` is the screen's own batch.
+ */
+async function batchWithTour<Row>(
+  ctx: Ctx,
+  plain: () => Promise<D1Result[]>,
+  first: D1PreparedStatement[],
+  tour: TourReads<Row> | null,
+): Promise<{ results: D1Result[]; pre?: ReturnType<TourReads<Row>['from']> }> {
+  if (tour) {
+    const all = await ctx.db.batch([...first, ...tour.reads.map((r) => ctx.db.prepare(r.sql).bind(...r.values))]).catch(() => null);
+    if (all && all.length === first.length + tour.reads.length) return { results: all.slice(0, first.length), pre: tour.from(all.slice(first.length)) };
+  }
+  return { results: await plain() };
+}
 
 /** A new fingerprint at least this often, so clock-driven changes (tonight, game day 8:00 AM, started) show up. */
 const TIME_BUCKET_MS = 10 * 60_000;
@@ -41,6 +60,15 @@ const PAST_MS = 90 * 86_400_000;
  * round trip, so it is cheap to ask every few seconds.
  */
 export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | null): Promise<string> {
+  return (await changeStampAndTour(ctx, group, playerId)).stamp;
+}
+
+/**
+ * changeStamp, and (Zip 62) the tournament card it built on the way (`tour`, only when it was built without an error), so GET /api/group sends
+ * that card instead of reading and building it a second time. While the switch is on for this phone and a name is picked, the card's reads go
+ * in the stamp's own batch: no trip of their own.
+ */
+export async function changeStampAndTour(ctx: Ctx, group: GroupRow, playerId: string | null): Promise<{ stamp: string; tour?: PlayerTournamentView | null }> {
   const me = playerId ?? '';
   const upcomingFrom = new Date(ctx.nowMs - 36 * 3_600_000).toISOString();
   const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
@@ -69,13 +97,20 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     { sql: 'SELECT is_regular, is_active FROM players WHERE id = ? AND group_id = ?', values: [me, group.id] },
   ];
   const queries = (withTime: boolean) => reads(withTime).map((r) => ctx.db.prepare(r.sql).bind(...r.values));
+  // Zip 62: the tournament card's reads, in this same trip (only while the switch is on for this phone and a name is picked; off: none, the
+  // batch is exactly main's). The switch question is answered from the switch rows the request already read (no trip).
+  const tour = playerId && (await tournamentsFlags(ctx, group.id)).on ? playerTourReads(group, playerId, ctx.nowMs) : null;
   // SPEED_FEWER_QUERIES (server/speed.ts): the two switch reads further down (player motion, hidden games) ride in the same trip.
   await fewerDb(ctx)?.prefetch([
     ...reads(true).map((r) => ({ kind: 'all' as const, ...r })),
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
     { kind: 'all', ...hiddenGameIdsRead(group.id) },
+    ...(tour ? tour.reads.map((r) => ({ kind: 'all' as const, ...r })) : []),
   ]);
-  const [sessions, roster, mine, ledger, requests, players, self] = await ctx.db.batch(queries(true)).catch(() => ctx.db.batch(queries(false)));
+  const { results, pre } = await batchWithTour(ctx, () => ctx.db.batch(queries(true)).catch(() => ctx.db.batch(queries(false))), queries(true), tour);
+  const [sessions, roster, mine, ledger, requests, players, self] = results;
+  // Built once (last, where it always was): the stamp's part here, and the same card for GET /api/group.
+  let tourView: PlayerTournamentView | null | undefined;
   const part = (r: { results: unknown[] }) => JSON.stringify(r.results);
   const raw = [
     part(sessions),
@@ -130,12 +165,15 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     [...(await hiddenGameIds(ctx.db, group.id))].sort().join(','),
     // Zip 55 "Tournaments": a segment only while this player may see a tournament (switch on, and Everyone or the organizer's own Only me
     // phone), so with the switch off, or a tournament on Only me, the stamp is exactly what it was.
+    // Zip 62: switched off for this phone (or no name picked) nothing is built or read, exactly as before (the card would be null).
     ...(await (async () => {
-      const part = await playerTournamentStamp(ctx, group, playerId);
-      return part ? [part] : [];
+      if (!tour) return [];
+      const t = await playerTournamentStamp(ctx, group, playerId, pre);
+      tourView = t.view;
+      return t.part ? [t.part] : [];
     })()),
   ].join('|');
-  return (await sha256(raw)).slice(0, 16);
+  return { stamp: (await sha256(raw)).slice(0, 16), ...(tourView !== undefined ? { tour: tourView } : {}) };
 }
 
 /**
@@ -146,7 +184,18 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
  * one round trip of small queries, so it is cheap to ask every few seconds.
  */
 export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<string> {
+  return (await adminChangeStampAndTour(ctx, group)).stamp;
+}
+
+/**
+ * adminChangeStamp, and (Zip 62) the tournament view it built on the way (`tour`, only while the switch is on and built without an error), so
+ * the dashboard sends that view instead of reading and building it a second time. Its reads go in the stamp's own batch: no trip of their own.
+ */
+export async function adminChangeStampAndTour(ctx: Ctx, group: GroupRow): Promise<{ stamp: string; tour?: AdminTournamentView | null }> {
   const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
+  // Zip 62: while the switch is on for this phone, the tournament view's reads ride in this same trip (off: none, the batch is exactly main's).
+  // The switch question is answered from the switch rows the sign-in check already read (no trip).
+  const tour = (await tournamentsFlags(ctx, group.id)).on ? adminTourReads(group, ctx.nowMs) : null;
   // withTime: the "Still in" answers (migration 0016). Both extras are left out, one at a time, if missing.
   const queries = (withMarks: boolean, withTime = withMarks) => [
     ctx.db
@@ -171,11 +220,18 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
     // The "Do this now" taps. Everything else still works if that table is missing.
     ...(withMarks ? [ctx.db.prepare("SELECT session_id, task FROM task_log WHERE group_id = ? AND kind = 'mark' ORDER BY session_id, task").bind(group.id)] : []),
   ];
-  const results = await ctx.db
-    .batch(queries(true, true))
-    .catch(() => ctx.db.batch(queries(true, false)))
-    .catch(() => ctx.db.batch(queries(false, false)));
+  const { results, pre } = await batchWithTour(
+    ctx,
+    () =>
+      ctx.db
+        .batch(queries(true, true))
+        .catch(() => ctx.db.batch(queries(true, false)))
+        .catch(() => ctx.db.batch(queries(false, false))),
+    queries(true, true),
+    tour,
+  );
   const [sessions, roster, ledger, requests, players, audit] = results;
+  let tourView: AdminTournamentView | null | undefined;
   const marks = results[6] ?? { results: [] };
   const part = (r: { results: unknown[] }) => JSON.stringify(r.results);
   const raw = [
@@ -190,9 +246,11 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
     Math.floor(ctx.nowMs / TIME_BUCKET_MS),
     // Zip 55 "Tournaments": a segment only while the switch is on (off: the stamp is exactly what it was).
     ...(await (async () => {
-      const part = await adminTournamentStamp(ctx, group);
-      return part ? [part] : [];
+      if (!tour) return [];
+      const t = await adminTournamentStamp(ctx, group, pre);
+      tourView = t.view;
+      return t.part ? [t.part] : [];
     })()),
   ].join('|');
-  return (await sha256(raw)).slice(0, 16);
+  return { stamp: (await sha256(raw)).slice(0, 16), ...(tourView !== undefined ? { tour: tourView } : {}) };
 }

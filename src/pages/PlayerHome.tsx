@@ -46,7 +46,7 @@ import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtF
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
 import { HomeScreenTip } from '../homeScreenTip';
-import { TournamentSlot } from '../TournamentSlot';
+import { rememberTournament, TournamentSlot } from '../TournamentSlot';
 import { DEMO_PAY_TOAST, PaySheet } from '../PaySheet';
 import { SkinLogo } from '../skin/SkinLogo';
 import { useSkin, useSkinOn } from '../skin/store';
@@ -313,6 +313,8 @@ export function PlayerHome({
     fresh.current = { at: Date.now(), data: load.data };
     // Each fresh answer says whether the switches are on; the phone follows it (off: the copy and the memory are dropped).
     rememberDirectLoad(load.data.directLoad === true);
+    // Zip 62: whether this answer had a tournament card, so the next page open starts the card's file at once (src/TournamentSlot.tsx).
+    rememberTournament(!!load.data.tournament);
     // The sizes are read after the screen is drawn (an effect runs after the draw).
     saveLastScreen(savedPage, load.data, Date.now(), undefined, measureLayout());
   }, [load.data, ownPhone, savedPage]);

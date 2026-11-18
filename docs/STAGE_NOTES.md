@@ -5894,3 +5894,97 @@ To ship: SQL backup and Time Travel bookmark of `pickleball` first, apply `0025_
 4. Live check (public, no PIN): page and /admin 200; with `?tournaments=on` no page errors and nothing wider than the screen at 390 and 320, light and dark; no tournament or vote data in `/api/group` (with or without the private header); organizer reads answer 401/404 without the PIN.
 Rollback: site deployment `455d2bda-b4d4-4166-a7a9-aea3a68cbc8d` (Zip 59). No database undo is needed (the two columns can stay).
 
+
+## Zip 62: Make the admin and player screens fast again (🎾62.speed), Wed Nov 18, 2026
+Branch `claude/new-session-6jer9k` (the session is named "🎾62.speed"; the build system pins the branch name). Built on main `4c427ab` (Zip 60
+live, TOURNAMENTS switched on for everyone by Alex, The Cold Open visible). Same switch and the per-tournament Who can see it. **NO database
+change** (no table, no column, no index, no migration). Nothing looks or behaves differently: only when things arrive changes.
+
+### Measured first (before any change)
+How: (1) the real server code on a local copy of the preview's calm fake world with "Fewer database trips" on as on live, counting every
+database trip per answer (all trips in these handlers run one after another); (2) the same code deployed as a preview (fake database,
+`pickleball-preview`, region ENAM like live), timed from this machine, which Cloudflare serves from Chicago (ORD), median of 9; (3) a real
+browser on that preview with a warm cache, as a returning phone; (4) live, read only, no PIN: public answers and Cloudflare's own analytics.
+
+| Screen (preview, fake data) | Switch OFF | ON, vote open | ON, tickets open (6 paid) |
+|---|---|---|---|
+| Admin load (dashboard) | 1.28 s, 33 trips | 1.33 s, 38 trips | 1.56 s, 43 trips |
+| Admin 5-second check | 0.21 s, 3 | 0.26 s, 5 | 0.33 s, 7 |
+| Player Home (Parker, on the list) | 0.41 s, 9 | 0.59 s, 13 | 0.59 s, 15 |
+| Player Home (Vic, not on the list) | 0.40 s, 9 | 0.53 s, 13 | 0.69 s, 17 |
+| Player 5-second check | 0.23 s, 4 | 0.29 to 0.31 s, 6 | 0.32 to 0.35 s, 7 to 8 |
+
+Requests and order (browser, warm cache): the admin page asks one thing at open, the dashboard, after its files (from the cache); then one
+check every 5 seconds. The "as of" copy showed at 0.07 s; fresh data drew 1.10 s (OFF) and 1.33 s (ON) after the open. The player page asks
+/api/status and /api/group side by side; with the switch on, the card's own file (`TournamentHome`) was only asked for AFTER /api/group came
+back, then the dark placeholder showed, then the real card exactly 0.30 s after the fresh games (React holds a placeholder at least 300 ms once
+it shows one; this happened even with the file in the cache). On 4G (100 ms, 9 Mbps) the same: card 0.84 s after the first (saved copy) card.
+Bytes: dashboard 49 KB, player Home 9 KB, checks 24 bytes, the card's file 23 KB (7 KB compressed).
+Live, read only: one database trip costs about 40 ms (a 6-trip public answer 0.40 s against 0.15 s for one with none); D1's own time per
+query is tiny (half under 0.3 ms); in the hour Alex switched it on, live answers took about 1 second on average, and 1.5 to 3.3 seconds at
+1:20 to 1:25 PM Eastern, with 3 answers the phone gave up on. The per-query log showed the player tournament read at about 220 rows each and
+the Hidden tournaments list at about 420 (both reading the whole task list), on every 5-second check.
+
+### The cause (plain words)
+With the switch on, every screen read the tournament one step at a time: its row, then its sign-ups, then its tickets, then the organizer's
+player, each a separate trip to the database, in a row (about 40 ms each on live). The 5-second checks did all of it on every check, and the
+full answers did it TWICE (once for the "did anything change?" fingerprint, once for the answer), plus one more trip for the Hidden
+tournaments list. On the player page the card's file was fetched only after the games answer, and then React's minimum placeholder time
+added 0.3 s. Nothing new runs on the 5-minute clock (checked: `server/tasks.ts` has no tournament work; the clock Worker only puts the four
+tournament tables in Sunday's backup). No query was slow inside the database, so no index was needed.
+
+### What changed
+1. `server/stamp.ts`: the fingerprint's one batch carries the tournament reads too (only while the switch is on for that phone; off, the batch
+   is exactly main's): the row, and through a subquery that picks the SAME tournament (the same WHERE and ORDER BY, in the same batch), its
+   sign-ups and tickets, and the organizer's saved player (`playerTourReads`, `adminTourReads` in `server/tournament.ts`).
+2. The views are built from those rows with no trip of their own, and the full answers (`dashboard`, `groupView`) send the view their own
+   fingerprint built instead of building it again. Not reused (built again exactly as before): View as, a phone whose player is inactive, a
+   build that hit an error, and a build that tried one of the two writes a read can make (a piece 1 date pick opening tickets, a hold coming back
+   after the night), so a change that landed in between is what the answer shows, as before.
+3. The dashboard's Hidden tournaments list and the tournament names on ticket credit lines join the shared trip ("Fewer database trips"
+   prefetch) while the switch is on; off, exactly main's.
+4. The Hidden check (`notHiddenSql`) names "no game" and the kind list the way the existing `task_log_once` index is written, so SQLite looks
+   the one mark up instead of reading every task_log row (same answer: a hide mark never has a game).
+5. Player page: a phone whose last answer had a card remembers it (`pb_tour_seen`) and starts the card's file the moment the page opens
+   (usually from its cache), side by side with the games answer; a card whose file is already here is drawn directly, in the same moment as
+   the rest of Home, with no placeholder. The first look on a phone, and a file that fails, work as before. The organizer's phone starts the
+   file once the dashboard has a tournament, so View as draws the card at once too. The file is still its own download; a phone that never
+   had a card fetches nothing; styles are byte for byte the same files.
+6. Preview only: Tournament test stage "Speed check (like live)" (The Cold Open on Everyone, the vote open, 9 on the list).
+
+### After (same preview, same stages)
+| Screen (preview, fake data) | Switch OFF | ON, vote open | ON, tickets open (6 paid) |
+|---|---|---|---|
+| Admin load (dashboard) | 1.19 s, 33 trips | 1.21 s, 33 trips | 1.34 s, 33 trips |
+| Admin 5-second check | 0.19 s, 3 | 0.20 s, 3 | 0.20 s, 3 |
+| Player Home (Parker) | 0.43 s, 9 | 0.40 s, 9 | 0.43 s, 9 |
+| Player Home (Vic) | 0.43 s, 9 | 0.41 s, 9 | 0.41 s, 9 |
+| Player 5-second check | 0.21 to 0.23 s, 4 | 0.22 to 0.24 s, 4 | 0.23 to 0.24 s, 4 |
+The live-like Speed check stage, same rows, switch off then on: admin load 1.22 s / 1.23 s, admin check 0.19 / 0.20 s, player Home 0.41 /
+0.38 to 0.41 s, checks 0.21 to 0.24 s either way. Browser, warm cache: the card's file comes from the cache at 0.05 s, the games answer lands at
+0.45 s and the real card is drawn in that same moment (0 ms after the fresh games, no placeholder); on 4G the same. Admin fresh data about
+1.2 to 1.4 s after the open (the dashboard's own 33 trips: the same with the switch off).
+
+### Where it differs from the brief (the code is the truth)
+- No TEST SPEED RULES section exists in SITE_RULES (neither copy); the usual unit and browser runs were used.
+- The brief says the Players tab: the organizer's Players tab has no tournament part (it reads nothing new); the pop-in was the player's own
+  Home (and View as, which draws the same card). Both are fixed.
+- Kai is not one of the preview's fixed names (the seed refuses any other name), so the new stage uses the fixed names only.
+- No index was added (no measured query needed one: D1's own time per query is under 1 ms); the Hidden check uses an existing index instead.
+- Not read from live (no read-only PIN in this session; a direct read of the live database was refused by the build machine's safety check):
+  the organizer-only switch rows. The player-visible ones match: every flag in live's no-name answer is on the preview too.
+- Still one small read of its own, on purpose: after Pay by a player's card counts freed spots, and a canceled card reads what came back to that
+  player (each about 40 ms, only in those windows); the organizer's own signed-in phone on an Only me tournament still checks its sign-in
+  (Zip 55's rule); the Money tab's Tournament tickets line. Without "Fewer database trips" (not live) the Hidden list and the ticket names are
+  their own trip, as before.
+
+### Tests
+- Unit: tests/zip62-speed.test.ts (35): at every Tournament test stage no screen makes more trips with the switch on than off (the checks
+  exactly equal); the answers from the single trip equal, byte for byte, the answers built the old way one read at a time (forced by a database
+  that refuses the combined trip) at 15 stages; Only me: every other player and a phone with no name get byte for byte the answers of a world
+  with no tournament (and never its name or id); the Hidden check plans as an index lookup; Hide and Restore still work. A one-time proof in the
+  build session also ran main's code and this code on 22 saved states (1,518 answers, every name, the organizer's phone, View as): identical,
+  apart from one id SQLite makes at random when a hold comes back.
+- Browser: e2e/zip62.cjs on the REAL built site (A to F: no placeholder and the card with the fresh games at 390/360/320, light and dark,
+  both stages; the first look as before; the same card both ways; switched off nothing fetched and the memory forgotten; View as; no em
+  dashes).

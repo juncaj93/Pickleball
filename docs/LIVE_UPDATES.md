@@ -52,3 +52,9 @@ Not used in the organizer's "View as..." / "Pretend" demo, and not on organizer 
 - REALISTIC (people open the page a few times, look for a minute or two, lock the phone): a visit costs about 24 to 60 checks, 4 visits a day = under 250 per person, **about 2,500 requests a day (2.5%)** and about 250,000 rows (5%).
 - Test: `tests/live-poller.test.ts` simulates an hour on a fake clock: one active phone <= 720 checks, an untouched phone <= 58, a hidden tab 0, ten phones in the worst case <= 14,500 a day, a failing server <= about one request a minute per phone after back-off.
 - CPU: a check is a few small reads, one SHA-256 and a short JSON string, far below 10 ms (not measurable from here; watch the Cloudflare dashboard after deploy).
+
+## Tournaments (Zip 62, Wed Nov 18, 2026)
+While the TOURNAMENTS switch is on, the tournament card's reads ride in the same one batched trip as the rest of the check (`server/stamp.ts`,
+`playerTourReads` and `adminTourReads` in `server/tournament.ts`), so a check costs the trips it cost with the switch off (a player's check:
+4 trips on the preview's fake world; the organizer's: 3). Before Zip 62 each check with a tournament open added 2 to 4 trips in a row, and
+the "is it hidden?" part read the whole task list each time (about 220 rows a check on live); it now looks the one mark up in an index.

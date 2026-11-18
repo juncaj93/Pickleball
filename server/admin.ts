@@ -65,12 +65,12 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf } from './credit';
+import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf, tourNamesRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
 import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
-import { adminChangeStamp } from './stamp';
+import { adminChangeStamp, adminChangeStampAndTour } from './stamp';
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 import { everyoneSettingsOf, flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
@@ -104,7 +104,7 @@ import { guestSpotFlags, hasGuestColumns, trimGuestShares } from './guestSpot';
 import { removeGuestCore } from './guestActions';
 import { guestIn, guestOwed, headCount, seatUnits } from '../shared/guestSpot';
 import { phoneTagOf } from './phoneTag';
-import { adminTournamentFor, hiddenTournamentsView, setTournamentsForAll, tournamentsFlags } from './tournament';
+import { adminTournamentFor, hiddenTournamentsRead, hiddenTournamentsView, setTournamentsForAll, tournamentsFlags } from './tournament';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, previewSiteFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
@@ -151,8 +151,13 @@ const playedCountRead = (groupId: string, nowIso: string): ReadSpec => ({
 export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const group = await requireAdmin(ctx);
   // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
-  const version = await adminChangeStamp(ctx, group);
+  // Zip 62: it also brings the tournament view it built (its reads rode in the stamp's own trip), so the view is not read and built twice.
+  const { stamp: version, tour: stampTour } = await adminChangeStampAndTour(ctx, group);
   await ensureSessions(ctx.db, group, ctx.nowMs);
+  // Zip 55 "Tournaments" (server/tournament.ts): Create tournament, the Home card and the level list, only while on (off: this answer is exactly main's
+  // and the tournament tables are never read). Zip 62: asked here (the switch rows are already read: no trip) so the Hidden tournaments list
+  // can join the shared trip just below.
+  const tour = await tournamentsFlags(ctx, group.id);
   // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off).
   await fewerDb(ctx)?.prefetch([
     { kind: 'all', ...playersRead(group.id) },
@@ -168,6 +173,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     { kind: 'first', ...motionSettingRead(group.id, 'admin') },
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
+    // Zip 62: Settings > Advanced > Hidden tournaments, and the tournament names ticket credit entries show (both only while on).
+    ...(tour.on ? [{ kind: 'all' as const, ...hiddenTournamentsRead(group) }, { kind: 'all' as const, ...tourNamesRead(group.id) }] : []),
   ]);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);
@@ -202,8 +209,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   );
   const starts = sessionStartsRead(group.id);
   const startsOf = new Map((await ctx.db.prepare(starts.sql).bind(...starts.values).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]));
-  // Zip 56: tournament tickets' entries name their tournament (one small read, only when such entries exist).
-  const tourNames = await tourNamesOf(ctx.db, ledger);
+  // Zip 56: tournament tickets' entries name their tournament (one small read, only when such entries exist; Zip 62: while on, the read
+  // already sent in the shared trip above).
+  const tourNames = await tourNamesOf(ctx.db, ledger, tour.on ? { groupId: group.id } : {});
   const creditLedger = [...new Set(ledger.map((e) => e.playerId))]
     .map((playerId) => {
       const balanceCents = potBalance(ledger, playerId);
@@ -283,10 +291,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const moneyNoteRow = await moneyNoteForAll(ctx.db, group.id);
   // Zip 42 "Guest spot" (server/guestSpot.ts): Add a guest on the Players sheet, only while on (off: this answer is exactly main's).
   const guestSpot = await guestSpotFlags(ctx, group.id);
-  // Zip 55 "Tournaments" (server/tournament.ts): Create tournament, the Home card and the level list, only while on (off: this answer is exactly main's
-  // and the tournament tables are never read).
-  const tour = await tournamentsFlags(ctx, group.id);
-  const tourView = tour.on ? await adminTournamentFor(ctx, group) : null;
+  // Zip 55 "Tournaments": the view the stamp built above (Zip 62), else (it could not be built there) built here as before.
+  const tourView = tour.on ? (stampTour !== undefined ? stampTour : await adminTournamentFor(ctx, group)) : null;
   const hiddenTournaments = tour.on ? await hiddenTournamentsView(ctx.db, group) : null;
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.

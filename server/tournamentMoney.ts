@@ -205,11 +205,15 @@ export function organizerSeatStatement(db: D1Database, tournamentId: string, org
     .bind(tournamentId, organizerId, nowIso);
 }
 
-/** Every ticket of a tournament with the player's name and list status, Who's in first (in spot order), then the line, then the rest. */
-export const ticketsSql = `SELECT k.*, p.display_name, COALESCE(s.status, 'out') AS signup_status FROM tournament_tickets k
+/**
+ * Every ticket of a tournament with the player's name and list status, Who's in first (in spot order), then the line, then the rest.
+ * Zip 62: `idSql` is the tournament id (a `?`, or a subquery that picks it, so the tickets ride in the same trip as the tournament's own read).
+ */
+export const ticketsSqlFor = (idSql: string) => `SELECT k.*, p.display_name, COALESCE(s.status, 'out') AS signup_status FROM tournament_tickets k
   JOIN players p ON p.id = k.player_id
   LEFT JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id
-  WHERE k.tournament_id = ? ORDER BY CASE k.place WHEN 'spot' THEN 0 WHEN 'line' THEN 1 ELSE 2 END, k.place_at, k.rowid`;
+  WHERE k.tournament_id = ${idSql} ORDER BY CASE k.place WHEN 'spot' THEN 0 WHEN 'line' THEN 1 ELSE 2 END, k.place_at, k.rowid`;
+export const ticketsSql = ticketsSqlFor('?');
 
 export type TicketWithName = TicketRow & { display_name: string; signup_status: string };
 

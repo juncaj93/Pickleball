@@ -277,3 +277,11 @@ doubles Winter Classic with the date picked), `-- --zip55` Zip 55's.
 - Try it (about 3 taps): Create a tournament (Settings > Schedule; the default is Let players vote), View as Vic and Sign up (the three format
   rows under the dates), as Alex Pick date and read the counts on the card, then View as Vic: the alert at the top of Home.
 - Locally: `npx vite-node scripts/load-small-local.ts -- <file> [ISO time] --calm --zip55 --zip60`; `node e2e/zip60.cjs` checks the screens.
+
+Zip 62 (🎾62.speed, Wed Nov 18, 2026): no new names, no migration, nothing looks different. `npm run db:seed:preview` still opens CALM with
+the Tournaments row on and NO tournament open. **Tournament test** has one more stage at the top, **Speed check (like live)**: The Cold
+Open as it is on live (Everyone, Let players vote with the vote open, 9 on the list with mixed votes: every fixed name but Alex). Try it
+(about 3 taps): tap the stage, open the player page (`/?as=Vic`) twice: the second time the ticket card is on screen in the same moment as
+the games, with no dark placeholder first; then Admin: "as of" goes away in about a second, as with the switch off.
+- Locally: `node e2e/zip62.cjs` checks the same on the real built site (390, 360 and 320, light and dark); `tests/zip62-speed.test.ts` proves
+  the database trips with the switch on equal the trips with it off at every stage, and that the answers are byte for byte the old ones.

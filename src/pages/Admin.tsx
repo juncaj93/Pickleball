@@ -32,6 +32,7 @@ import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/tod
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
 import { VenueAlertCards } from './admin/VenueAlert';
 import { TournamentHomeCard } from './admin/Tournament';
+import { preloadTournamentHome } from '../TournamentSlot';
 
 /** Zip 55, PREVIEW BUILDS ONLY: the Tournament test row on a calm preview's Home. Null in every live build (vite.config.ts `__PREVIEW_BUILD__`). */
 const TournamentTestRow = __PREVIEW_BUILD__ ? lazy(() => import('./admin/TournamentTest')) : null;
@@ -88,6 +89,12 @@ export function AdminApp() {
   useEffect(() => {
     if (load.error?.status === 401) signedOutLastAdmin();
   }, [load.error]);
+  // Zip 62: a tournament on the organizer's Home means View as will draw a player's ticket card: its file starts now, so the card is drawn
+  // with the rest of that player's Home (src/TournamentSlot.tsx). Switched off, or no tournament: nothing is fetched.
+  const hasTournament = !!load.data?.tournament;
+  useEffect(() => {
+    if (hasTournament) preloadTournamentHome();
+  }, [hasTournament]);
   const shownView = instant.view ?? load.data ?? null;
   if (holding || (savedShown && shownView)) {
     // One wrapper for the whole page life once the copy was shown, so the fresh answer updates the same screen in place (nothing remounts).

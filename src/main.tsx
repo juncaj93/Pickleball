@@ -18,6 +18,7 @@ import { GoPage } from './pages/GoPage';
 import { GameDayTextPage } from './pages/GameDayTextPage';
 import { watchKeyboard } from './keyboard';
 import { watchInputMode } from './inputMode';
+import { preloadTournamentHome, tournamentSeen } from './TournamentSlot';
 // Last, so its big-text rules win over the page styles above.
 import './large-text.css';
 // Even later: the Zip 7 switches' rules (all under an <html> attribute that only exists while the switch is on).
@@ -62,6 +63,9 @@ watchKeyboard();
 watchInputMode();
 // Zip 12, "Load games at once" (SPEED_DIRECT_LOAD): on the plain address, both first questions leave now (only while the switch is on).
 startEarlyLoads(window.location.pathname);
+// Zip 62: a phone whose last games answer had a tournament card starts that card's own file now (usually from its cache), side by side with
+// the games answer, so the card is drawn with the rest of Home (src/TournamentSlot.tsx). Player pages only; a phone that never had one fetches nothing.
+if (/^\/(g\/[A-Za-z0-9_-]+\/?)?$/.test(window.location.pathname) && tournamentSeen()) preloadTournamentHome();
 
 function draw() {
   createRoot(document.getElementById('root')!).render(

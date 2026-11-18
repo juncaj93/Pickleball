@@ -5,7 +5,7 @@ import { newId } from './crypto';
 import { requireAdmin } from './auth';
 import * as v from './validate';
 import { organizerSignedIn } from './zip13';
-import { audit, type GroupRow, organizerIdOf } from './repo';
+import { audit, type GroupRow, organizerIdOf, organizerIdRead, type ReadSpec } from './repo';
 import { localParts } from '../shared/time';
 import { formatPrice } from '../shared/money';
 import {
@@ -53,7 +53,7 @@ import {
   type Visibility,
 } from '../shared/tournament';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
-import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, type TicketWithName, tournamentCanceled } from './tournamentMoney';
+import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
 //  - its wrangler.toml var is not "off" (the kill switch, needs a deploy), and
@@ -171,7 +171,11 @@ const shownCanceled = (t = '') =>
  * ever deleted (its tickets, credit and History stay), and Settings > Advanced > Hidden tournaments > Restore brings it back.
  */
 export const hiddenTask = (tournamentId: string): string => `tournament_hidden:${tournamentId}`;
-const notHiddenSql = (idRef: string) => `NOT EXISTS (SELECT 1 FROM task_log h WHERE h.kind = 'mark' AND h.task = 'tournament_hidden:' || ${idRef})`;
+// Zip 62: a hide mark never has a game (hideTournament writes session_id NULL), and with the kind list written the way the task_log_once index
+// is (its own WHERE is kind IN ('mark', 'sent')), SQLite looks the one mark up in that index instead of reading every task_log row for each
+// tournament (on live about 220 rows per read, on every 5-second check). Same answer, no new index.
+const notHiddenSql = (idRef: string) =>
+  `NOT EXISTS (SELECT 1 FROM task_log h WHERE h.session_id IS NULL AND h.task = 'tournament_hidden:' || ${idRef} AND h.kind IN ('mark', 'sent') AND h.kind = 'mark')`;
 
 /** The group's open tournament, or null. Null too while the tables do not exist yet. (Create's "one at a time" and every organizer save.) */
 export async function activeTournament(db: D1Database, groupId: string): Promise<TournamentRow | null> {
@@ -190,17 +194,25 @@ const datePassed = (t: TournamentRow, today: string) => !!t.final_date && t.fina
  * in ONE read.
  */
 export async function shownTournament(db: D1Database, group: GroupRow, nowMs: number): Promise<TournamentRow | null> {
-  // A canceled one with an I paid still waiting stays until the organizer answers it (only confirmed money becomes credit), whatever its age.
-  const waiting = "EXISTS (SELECT 1 FROM tournament_tickets k WHERE k.tournament_id = tournaments.id AND k.claim_cents > 0)";
   const row = await db
-    .prepare(
-      `SELECT *, (status = 'canceled' AND ${waiting}) AS claims_waiting FROM tournaments
-       WHERE group_id = ?1 AND (status IN ${OPEN} OR ${shownCanceled()} OR (status = 'canceled' AND ${waiting}))
-       ORDER BY CASE WHEN status = 'canceled' THEN 1 ELSE 0 END, created_at DESC LIMIT 1`,
-    )
+    .prepare(SHOWN_SQL)
     .bind(group.id, canceledFrom(nowMs))
-    .first<TournamentRow & { claims_waiting: number }>()
+    .first<ShownRow>()
     .catch(() => null);
+  return shownFrom(row, group, nowMs);
+}
+
+// A canceled one with an I paid still waiting stays until the organizer answers it (only confirmed money becomes credit), whatever its age.
+const WAITING = 'EXISTS (SELECT 1 FROM tournament_tickets k WHERE k.tournament_id = tournaments.id AND k.claim_cents > 0)';
+/** The organizer's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately, else one with an I paid waiting. */
+const SHOWN_WHERE = `group_id = ?1 AND (status IN ${OPEN} OR ${shownCanceled()} OR (status = 'canceled' AND ${WAITING}))
+       ORDER BY CASE WHEN status = 'canceled' THEN 1 ELSE 0 END, created_at DESC LIMIT 1`;
+const SHOWN_SQL = `SELECT *, (status = 'canceled' AND ${WAITING}) AS claims_waiting FROM tournaments
+       WHERE ${SHOWN_WHERE}`;
+type ShownRow = TournamentRow & { claims_waiting: number };
+
+/** shownTournament's rule on the row its read picked: a canceled one stops showing once its date has passed (unless an I paid waits). */
+function shownFrom(row: ShownRow | null, group: GroupRow, nowMs: number): TournamentRow | null {
   if (!row) return null;
   const { claims_waiting: claims, ...t } = row;
   if (t.status === 'canceled' && !claims && datePassed(t, todayKey(nowMs, group.timezone))) return null;
@@ -223,35 +235,105 @@ async function canceledClaimWaiting(db: D1Database, groupId: string): Promise<bo
  * of "none open" (nothing to time), whether the organizer's player is saved by id or matched by name. Zip 56: a recently canceled one too
  * (open ones first), with whether this player was on its list (only they see the Canceled card), still in the same one trip.
  */
-async function activeTournamentForPlayer(
-  db: D1Database,
-  group: GroupRow,
-  playerId: string,
-  nowMs: number,
-): Promise<(TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null }) | null> {
+async function activeTournamentForPlayer(db: D1Database, group: GroupRow, playerId: string, nowMs: number): Promise<ActiveRow | null> {
   return db
-    .prepare(
-      `SELECT t.*,
-         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
-         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ?4 AND group_id = t.group_id) END AS viewer_name,
-         CASE WHEN t.status = 'canceled' THEN (SELECT status FROM tournament_signups WHERE tournament_id = t.id AND player_id = ?4) ELSE NULL END AS my_signup
-       FROM tournaments t WHERE t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownCanceled('t.')})
-       ORDER BY CASE WHEN t.status = 'canceled' THEN 1 ELSE 0 END, t.created_at DESC LIMIT 1`,
-    )
+    .prepare(ACTIVE_FOR_PLAYER_SQL)
     .bind(group.id, canceledFrom(nowMs), group.organizer_player_id ?? '', playerId)
-    .first<TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null }>()
+    .first<ActiveRow>()
     .catch(() => null);
 }
 
+type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null };
+/** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately. */
+const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownCanceled('t.')})
+       ORDER BY CASE WHEN t.status = 'canceled' THEN 1 ELSE 0 END, t.created_at DESC LIMIT 1`;
+const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*,
+         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
+         CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ?4 AND group_id = t.group_id) END AS viewer_name,
+         CASE WHEN t.status = 'canceled' THEN (SELECT status FROM tournament_signups WHERE tournament_id = t.id AND player_id = ?4) ELSE NULL END AS my_signup
+       FROM tournaments t WHERE ${ACTIVE_WHERE}`;
+
+/** A tournament's sign-ups (names, and each player's first level). `idSql`: a `?`, or Zip 62's subquery that picks the tournament in the same trip. */
+const signupsSqlFor = (idSql: string) => `SELECT s.*, p.display_name, p.is_active, ${FIRST_LEVEL_SQL('s')} AS first_level FROM tournament_signups s JOIN players p ON p.id = s.player_id
+       WHERE s.tournament_id = ${idSql} ORDER BY s.joined_at, s.rowid`;
+
 async function signupRows(db: D1Database, tournamentId: string): Promise<SignupRow[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT s.*, p.display_name, p.is_active, ${FIRST_LEVEL_SQL('s')} AS first_level FROM tournament_signups s JOIN players p ON p.id = s.player_id
-       WHERE s.tournament_id = ? ORDER BY s.joined_at, s.rowid`,
-    )
-    .bind(tournamentId)
-    .all<SignupRow>();
+  const { results } = await db.prepare(signupsSqlFor('?')).bind(tournamentId).all<SignupRow>();
   return results;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 62 (🎾62.speed): a screen's tournament reads in the SAME trip as the screen's own "did anything change?" reads
+// ---------------------------------------------------------------------------------------------------------------------
+// Before Zip 62 every screen with the switch on read the tournament one step at a time (its row, then its sign-ups, then its tickets, then the
+// organizer's player), each a trip to the database in a row, and the full answers did all of it twice (once for the stamp, once for the answer).
+// Now the stamp's one batch carries these reads too: the row and, through a subquery that picks the SAME tournament (the same WHERE and ORDER
+// BY, in the same batch, so the same rows), its sign-ups and tickets, and the organizer's saved player. The views are then built from those rows
+// with no trip of their own, and the full answer uses the view its stamp built. Anything rarer (a piece 1 date pick opening tickets, holds
+// coming back after the night, Only me on the organizer's phone, Pay by passed, a canceled card) still reads what it reads today.
+
+/** What the one batched read brought for a screen's tournament. `org`: the organizer's saved player as read (null: ask organizerIdOf). */
+export interface TourPre<Row> {
+  row: Row | null;
+  signups: SignupRow[];
+  tickets: TicketWithName[];
+  org: { id: string } | null;
+}
+
+/** The reads (for the screen's batch) and how to read their answers back. Only while the switch is on for the request. */
+export interface TourReads<Row> {
+  reads: ReadSpec[];
+  from: (results: { results?: unknown[] }[]) => TourPre<Row>;
+}
+
+function tourReads<Row>(group: GroupRow, rowRead: ReadSpec, pickSql: string, pickValues: unknown[]): TourReads<Row> {
+  const org = group.organizer_player_id ? organizerIdRead(group) : null;
+  const reads: ReadSpec[] = [
+    rowRead,
+    { sql: signupsSqlFor(pickSql), values: pickValues },
+    { sql: ticketsSqlFor(pickSql), values: pickValues },
+    ...(org ? [org] : []),
+  ];
+  return {
+    reads,
+    from: (res) => {
+      const rows = (i: number) => (res[i]?.results ?? []) as never[];
+      const orgRow = org ? (rows(3)[0] as { id: string } | undefined) : undefined;
+      return { row: (rows(0)[0] as Row | undefined) ?? null, signups: rows(1), tickets: rows(2), org: orgRow ? { id: orgRow.id } : null };
+    },
+  };
+}
+
+/** A player's screen (GET /api/group and its 5-second check): the same row activeTournamentForPlayer reads, its sign-ups and tickets. */
+export function playerTourReads(group: GroupRow, playerId: string, nowMs: number): TourReads<ActiveRow> {
+  const cutoff = canceledFrom(nowMs);
+  return tourReads<ActiveRow>(
+    group,
+    { sql: ACTIVE_FOR_PLAYER_SQL, values: [group.id, cutoff, group.organizer_player_id ?? '', playerId] },
+    `(SELECT t.id FROM tournaments t WHERE ${ACTIVE_WHERE})`,
+    [group.id, cutoff],
+  );
+}
+
+/** The organizer's screens (the dashboard and its 5-second check): the same row shownTournament reads, its sign-ups and tickets. */
+export function adminTourReads(group: GroupRow, nowMs: number): TourReads<ShownRow> {
+  const values = [group.id, canceledFrom(nowMs)];
+  return tourReads<ShownRow>(group, { sql: SHOWN_SQL, values }, `(SELECT id FROM tournaments WHERE ${SHOWN_WHERE})`, values);
+}
+
+/**
+ * Zip 62: two rare moments make a read write (a piece 1 date pick opening tickets, and a hold coming back after the night; both guarded on the
+ * rows as read). A view whose build tried one is not handed on to the full answer: that answer builds its own from fresh reads, exactly as
+ * before Zip 62 (so a change that landed in between, which made the guarded write change nothing, is what the answer shows).
+ */
+export interface Upkeep {
+  tried: boolean;
+}
+
+/** organizerIdOf, asked at most once per view: the saved player the batch read, else the usual read (a group with no saved organizer). */
+function orgLookup(ctx: Ctx, group: GroupRow, pre?: TourPre<unknown>): () => Promise<string | null> {
+  let p: Promise<string | null> | null = pre?.org ? Promise.resolve(pre.org.id) : null;
+  return () => (p ??= organizerIdOf(ctx.db, group));
 }
 
 /** A stored list of days, read safely (anything odd reads as no days). */
@@ -302,10 +384,16 @@ async function playerTicketExists(db: D1Database, tournamentId: string, orgId: s
  * TBD" and sign-up asks "Format you'd like". After a Reschedule that players hold tickets on, the format stays (they bought that format): not open.
  * `tickets`: the tickets already loaded (else one small read, and only in the Reschedule case).
  */
-export async function votePending(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets?: readonly { player_id: string }[]): Promise<boolean> {
+export async function votePending(
+  ctx: Ctx,
+  group: GroupRow,
+  t: TournamentRow,
+  tickets?: readonly { player_id: string }[],
+  orgOf: () => Promise<string | null> = () => organizerIdOf(ctx.db, group),
+): Promise<boolean> {
   if (!isVoteSource(t.format_source) || t.final_date) return false;
   if (!ticketsEverOpened(t)) return true;
-  const org = await organizerIdOf(ctx.db, group);
+  const org = await orgOf();
   const other = tickets ? tickets.some((k) => k.player_id !== org) : await playerTicketExists(ctx.db, t.id, org);
   return !playersHoldTickets(t, other);
 }
@@ -423,9 +511,18 @@ export function todayKey(nowMs: number, tz = 'America/Detroit'): string {
  * The open tournament this player may see, or null (switch off, none open, or Only me and this is not the organizer's own signed-in phone).
  * `viewAs`: the organizer's View as (the request already passed the organizer's sign-in).
  */
-async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: boolean): Promise<{ t: TournamentRow; onlyMe: boolean } | null> {
-  if (!(await tournamentsFlags(ctx, group.id)).on) return null;
-  const row = await activeTournamentForPlayer(ctx.db, group, playerId, ctx.nowMs);
+async function visibleTo(
+  ctx: Ctx,
+  group: GroupRow,
+  playerId: string,
+  viewAs: boolean,
+  pre?: TourPre<ActiveRow>,
+  orgOf: () => Promise<string | null> = () => organizerIdOf(ctx.db, group),
+): Promise<{ t: TournamentRow; onlyMe: boolean } | null> {
+  // Zip 62: a screen's batch reads the rows only after this same switch question said on (playerTourReads), so it is not asked twice.
+  if (!pre && !(await tournamentsFlags(ctx, group.id)).on) return null;
+  // Zip 62: the row the screen's batch already read, else the one read of before.
+  const row = pre ? pre.row : await activeTournamentForPlayer(ctx.db, group, playerId, ctx.nowMs);
   if (!row) return null;
   const { org_saved: orgSaved, viewer_name: viewerName, my_signup: mySignupStatus, ...t } = row;
   // Zip 56: a canceled tournament's plain card is only for the players who were on its list, and only until its date has passed.
@@ -443,7 +540,7 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   // The sign-in check next: a phone with no organizer cookie (every player, also one that picked the organizer's name) is refused with no trip.
   if (!viewAs && !(await organizerSignedIn(ctx, group.id))) return null;
   // Only the organizer's own signed-in phone (or View as) gets here: two players with the organizer's name, only the first is theirs.
-  if (!orgSaved && playerId !== (await organizerIdOf(ctx.db, group))) return null;
+  if (!orgSaved && playerId !== (await orgOf())) return null;
   return { t, onlyMe: true };
 }
 
@@ -470,10 +567,11 @@ function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, now
  * organizer's own test on live) opens them the first time a screen reads it, exactly as a date pick does now: Pay by the night before at 7:00 PM,
  * the organizer's $0 seat. Only before its night starts. A read with the read-only PIN writes nothing, so it waits for the next real reader.
  */
-async function upgradeDatePicked(ctx: Ctx, group: GroupRow, t: TournamentRow): Promise<TournamentRow> {
+async function upgradeDatePicked(ctx: Ctx, group: GroupRow, t: TournamentRow, upkeep?: Upkeep): Promise<TournamentRow> {
   if (t.status !== 'date_picked' || !t.final_date) return t;
   const night = nightOf(t, group.timezone);
   if (!night || ctx.nowMs >= night.start) return t;
+  if (upkeep) upkeep.tried = true;
   try {
     const org = await organizerIdOf(ctx.db, group);
     const payBy = defaultPayBy(t.final_date, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
@@ -495,13 +593,18 @@ async function upgradeDatePicked(ctx: Ctx, group: GroupRow, t: TournamentRow): P
   }
 }
 
+/** Zip 62: hiddenTournamentsView's one read, so the dashboard can send it in its shared trip (SPEED_FEWER_QUERIES prefetch). */
+export const hiddenTournamentsRead = (group: Pick<GroupRow, 'id'>): ReadSpec => ({
+  sql: `SELECT id, name, final_date, canceled_at FROM tournaments WHERE group_id = ? AND status = 'canceled' AND NOT ${notHiddenSql('tournaments.id')} ORDER BY canceled_at DESC, created_at DESC LIMIT 50`,
+  values: [group.id],
+});
+
 /** Zip 59: the canceled tournaments the organizer hid, newest first, for Settings > Advanced > Hidden tournaments (each with Restore). */
 export async function hiddenTournamentsView(db: D1Database, group: GroupRow): Promise<{ id: string; name: string; finalDate: string | null; canceledAt: string | null }[]> {
+  const read = hiddenTournamentsRead(group);
   const { results } = await db
-    .prepare(
-      `SELECT id, name, final_date, canceled_at FROM tournaments WHERE group_id = ? AND status = 'canceled' AND NOT ${notHiddenSql('tournaments.id')} ORDER BY canceled_at DESC, created_at DESC LIMIT 50`,
-    )
-    .bind(group.id)
+    .prepare(read.sql)
+    .bind(...read.values)
     .all<{ id: string; name: string; final_date: string | null; canceled_at: string | null }>()
     .catch(() => ({ results: [] as { id: string; name: string; final_date: string | null; canceled_at: string | null }[] }));
   return results.map((r) => ({ id: r.id, name: r.name, finalDate: r.final_date, canceledAt: r.canceled_at }));
@@ -533,22 +636,35 @@ export async function hideTournament(ctx: Ctx, body: Record<string, unknown>) {
 }
 
 /** GET /api/group `tournament`: this player's card, or null (then the answer has no `tournament` key at all). */
-export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: string | null, viewAs: boolean): Promise<PlayerTournamentView | null> {
+export async function playerTournamentFor(
+  ctx: Ctx,
+  group: GroupRow,
+  playerId: string | null,
+  viewAs: boolean,
+  /** Zip 62: the rows the screen's batch read (playerTourReads); left out, the view reads them itself as before. */
+  pre?: TourPre<ActiveRow>,
+  /** Zip 62: set when building the view tried one of the two writes a read can make (see Upkeep). */
+  upkeep?: Upkeep,
+): Promise<PlayerTournamentView | null> {
   if (!playerId) return null;
-  const seen = await visibleTo(ctx, group, playerId, viewAs);
+  const orgOf = orgLookup(ctx, group, pre);
+  const seen = await visibleTo(ctx, group, playerId, viewAs, pre, orgOf);
   if (!seen) return null;
   const { onlyMe } = seen;
-  const t = await upgradeDatePicked(ctx, group, seen.t);
-  const all = await signupRows(ctx.db, t.id);
+  const t = await upgradeDatePicked(ctx, group, seen.t, upkeep);
+  // A piece 1 date pick that just opened tickets wrote the organizer's seat and the spots: its tickets are read again (as before, after it).
+  const readTickets = pre && t === seen.t ? pre.tickets : null;
+  const all = pre ? pre.signups : await signupRows(ctx.db, t.id);
   const rows = all.filter((r) => r.status === 'in' && r.is_active === 1);
   const mine = rows.find((r) => r.player_id === playerId) ?? null;
   // Off the list after signing up before: their first level stays theirs (Alex), so Sign up skips the level step.
   const before = mine ? null : (all.find((r) => r.player_id === playerId) ?? null);
   // Zip 56: the tickets (once they have opened), and the smart plan they decide: the start time and the hours players see.
-  const tickets = ticketsEverOpened(t) && statusOf(t) !== 'canceled' ? await returnUnusedHolds(ctx, group, t, await loadTickets(ctx.db, t.id)) : [];
+  const tickets =
+    ticketsEverOpened(t) && statusOf(t) !== 'canceled' ? await returnUnusedHolds(ctx, group, t, readTickets ?? (await loadTickets(ctx.db, t.id)), upkeep) : [];
   const plan = smartPlan(lockedCount(tickets));
   // Zip 60: the vote is open (the card says "Tournament style TBD"), or the date was locked (the alert). Their own vote only, never anyone else's.
-  const tbd = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets));
+  const tbd = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
   const alert = formatAlertFor(t, group, playerId, ctx.nowMs);
   const base: PlayerTournamentView = {
     id: t.id,
@@ -571,11 +687,18 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
   if (statusOf(t) === 'canceled') return { ...base, canceled: await canceledMoneyOf(ctx.db, t.id, playerId) };
   // Piece 1's stage (tickets never opened) sends what it did.
   if (!ticketsEverOpened(t)) return base;
-  return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group) };
+  return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf) };
 }
 
 /** Zip 56: the ticket part of one player's card: names only for everyone else, their own money only. */
-async function playerTicketsView(ctx: Ctx, t: TournamentRow, tickets: TicketWithName[], playerId: string, group: GroupRow): Promise<PlayerTicketsView> {
+async function playerTicketsView(
+  ctx: Ctx,
+  t: TournamentRow,
+  tickets: TicketWithName[],
+  playerId: string,
+  group: GroupRow,
+  orgOf: () => Promise<string | null>,
+): Promise<PlayerTicketsView> {
   const listed = tickets.filter((k) => k.signup_status === 'in');
   const me = (k: TicketWithName) => (k.player_id === playerId ? { me: true as const } : {});
   const money = (k: TicketWithName) => ({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents });
@@ -593,7 +716,7 @@ async function playerTicketsView(ctx: Ctx, t: TournamentRow, tickets: TicketWith
     size: smartPlan(locked).size,
     full: locked >= MAX_SPOTS,
     // The organizer pays the venue, never the group: their own seat is $0 (the organizer found as the site always finds them, saved or by name).
-    priceCents: own ? own.price_cents : playerId === (await organizerIdOf(ctx.db, group)) ? 0 : t.ticket_cents,
+    priceCents: own ? own.price_cents : playerId === (await orgOf()) ? 0 : t.ticket_cents,
     payBy: statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null,
     // Zip 59: closed for a player who is not locked in: the night has started, 3 hours before the start, or Pay by has passed with no freed spot
     // (a player already on the waitlist, or with an I paid waiting, can still finish what they started).
@@ -636,12 +759,13 @@ async function canceledMoneyOf(db: D1Database, tournamentId: string, playerId: s
  * organizer's, or a 5-second check), in one all-or-nothing batch that a second reader finds nothing left to do in. A read with the read-only
  * PIN writes nothing (server/viewOnly.ts), so it waits for the next real reader. Returns the tickets as they are now.
  */
-async function returnUnusedHolds(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets: TicketWithName[]): Promise<TicketWithName[]> {
+async function returnUnusedHolds(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets: TicketWithName[], upkeep?: Upkeep): Promise<TicketWithName[]> {
   if (statusOf(t) !== 'tickets') return tickets;
   const night = nightOf(t, group.timezone);
   if (!night || ctx.nowMs < night.end) return tickets;
   const due = tickets.filter((k) => k.place !== 'spot' && k.claim_cents === 0 && (k.credit_cents > 0 || k.paid_cents > 0));
   if (due.length === 0) return tickets;
+  if (upkeep) upkeep.tried = true;
   const endIso = new Date(night.end).toISOString();
   const when = (x: string) =>
     `(${x}.place <> 'spot' AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets') AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)})`;
@@ -657,21 +781,31 @@ async function returnUnusedHolds(ctx: Ctx, group: GroupRow, t: TournamentRow, ti
 }
 
 /** The organizer's view of the open tournament (dashboard `tournament`), else of one canceled lately (its Canceled card), or null. */
-export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<AdminTournamentView | null> {
-  const shown = await shownTournament(ctx.db, group, ctx.nowMs);
+export async function adminTournamentFor(
+  ctx: Ctx,
+  group: GroupRow,
+  /** Zip 62: the rows the stamp's batch read (adminTourReads); left out, the view reads them itself as before. */
+  pre?: TourPre<ShownRow>,
+  /** Zip 62: set when building the view tried one of the two writes a read can make (see Upkeep). */
+  upkeep?: Upkeep,
+): Promise<AdminTournamentView | null> {
+  const shown = pre ? shownFrom(pre.row, group, ctx.nowMs) : await shownTournament(ctx.db, group, ctx.nowMs);
   if (!shown) return null;
-  const t = await upgradeDatePicked(ctx, group, shown);
-  const rows = (await signupRows(ctx.db, t.id)).filter((r) => r.is_active === 1);
-  const tickets = ticketsEverOpened(t) ? await returnUnusedHolds(ctx, group, t, await loadTickets(ctx.db, t.id)) : [];
+  const orgOf = orgLookup(ctx, group, pre);
+  const t = await upgradeDatePicked(ctx, group, shown, upkeep);
+  // A piece 1 date pick that just opened tickets wrote the organizer's seat and the spots: its tickets are read again (as before, after it).
+  const readTickets = pre && t === shown ? pre.tickets : null;
+  const rows = (pre ? pre.signups : await signupRows(ctx.db, t.id)).filter((r) => r.is_active === 1);
+  const tickets = ticketsEverOpened(t) ? await returnUnusedHolds(ctx, group, t, readTickets ?? (await loadTickets(ctx.db, t.id)), upkeep) : [];
   const tz = group.timezone;
   // The organizer, as the site always finds them (saved, or by the name in Settings): their seat is the $0 one.
-  const orgId = tickets.length ? await organizerIdOf(ctx.db, group) : group.organizer_player_id;
+  const orgId = tickets.length ? await orgOf() : group.organizer_player_id;
   // Alex's smart plan: the players locked in decide the planned size, the courts and the hours; the organizer's cost follows.
   const locked = tickets.filter((k) => k.place === 'spot' && k.signup_status === 'in');
   const plan = smartPlan(locked.length);
   const paidNow = locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).length;
   const prize = prizeCentsOf(formatOf(t), t.champion_credit_cents, t.second_credit_cents ?? 0);
-  const pending = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets));
+  const pending = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
   const voters = rows.filter((r) => r.status === 'in' && (!t.final_date || storedDays(r.dates).includes(t.final_date)));
   return {
     id: t.id,
@@ -738,17 +872,37 @@ export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<Adm
  * The "did anything change?" part for a player's screen: only while the tournament is visible to them (so an Only me tournament changes
  * nothing a player's phone can see, not even its fingerprint). Null: nothing to add (the stamp is then exactly main's).
  */
-export async function playerTournamentStamp(ctx: Ctx, group: GroupRow, playerId: string | null): Promise<string | null> {
+export async function playerTournamentStamp(
+  ctx: Ctx,
+  group: GroupRow,
+  playerId: string | null,
+  pre?: TourPre<ActiveRow>,
+): Promise<{ part: string | null; view?: PlayerTournamentView | null }> {
   // Absent while there is nothing this player may see (switch off, none open, Only me for someone else): the stamp is then main's.
-  const view = await playerTournamentFor(ctx, group, playerId, false).catch(() => null);
-  return view ? `tour:${JSON.stringify(view)}` : null;
+  // Zip 62: the view comes back too (only when it was built without an error and without trying a write), so GET /api/group sends it
+  // instead of building it again.
+  try {
+    const upkeep: Upkeep = { tried: false };
+    const view = await playerTournamentFor(ctx, group, playerId, false, pre, upkeep);
+    return { part: view ? `tour:${JSON.stringify(view)}` : null, ...(upkeep.tried ? {} : { view }) };
+  } catch {
+    return { part: null };
+  }
 }
 
 /** The organizer's "did anything change?" part, only while the switch is on (null: the stamp is exactly main's). */
-export async function adminTournamentStamp(ctx: Ctx, group: GroupRow): Promise<string | null> {
-  if (!(await tournamentsFlags(ctx, group.id)).on) return null;
-  const view = await adminTournamentFor(ctx, group).catch(() => null);
-  return `tour:${view ? JSON.stringify(view) : 'none'}`;
+export async function adminTournamentStamp(ctx: Ctx, group: GroupRow, pre?: TourPre<ShownRow>): Promise<{ part: string | null; view?: AdminTournamentView | null }> {
+  // (The stamp's batch reads `pre` only after this same switch question said on, so it is not asked twice.)
+  if (!pre && !(await tournamentsFlags(ctx, group.id)).on) return { part: null };
+  // Zip 62: the view comes back too (only when it was built without an error and without trying a write), so the dashboard sends it instead
+  // of building it again.
+  try {
+    const upkeep: Upkeep = { tried: false };
+    const view = await adminTournamentFor(ctx, group, pre, upkeep);
+    return { part: `tour:${view ? JSON.stringify(view) : 'none'}`, ...(upkeep.tried ? {} : { view }) };
+  } catch {
+    return { part: 'tour:none' };
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
