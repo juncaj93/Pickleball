@@ -363,3 +363,34 @@ describe('Edit rules and the preview test stages', () => {
     expect(await dash(ctx)).toBeUndefined();
   });
 });
+
+describe('review fixes', () => {
+  it('Edit settings after a Reschedule works while players hold tickets: the unchanged format keeps the vote as its source', async () => {
+    const { ctx, tid } = await world();
+    await signUp(ctx, tid, 'Blair', 'americano');
+    await pick(ctx, tid);
+    const lock = await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/lock', { tournamentId: tid, intent: 'lock', priceCents: 1600 });
+    expect(lock.status, lock.text).toBe(200);
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${tid}/reschedule`, {})).status).toBe(200);
+    const d = await dash(ctx);
+    expect(d).toMatchObject({ format: 'americano', formatLocked: true });
+    // The form sends the format it shows (the decided one): nothing changes, the save lands.
+    const res = await ctx.organizer.call('PUT', `/api/admin/tournament/${tid}`, { ...BASE, name: 'The Cold Open 2', format: 'americano' });
+    expect(res.status, res.text).toBe(200);
+    expect(row(ctx, tid)).toMatchObject({ format: 'americano', format_source: 'vote' });
+    // A real change is still refused.
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${tid}`, { ...BASE, format: 'doubles' })).status).toBe(409);
+  });
+  it('the stale-tally guard does not block a normal pick after sign-ups (the race itself is a millisecond window)', async () => {
+    const { ctx, tid } = await world();
+    await signUp(ctx, tid, 'Blair', 'locked');
+    const before = (raw(ctx).prepare('SELECT MAX(updated_at) AS m FROM tournament_signups').get() as { m: string }).m;
+    ctx.app.advance(1000);
+    await signUp(ctx, tid, 'Casey', 'americano');
+    const after = (raw(ctx).prepare('SELECT MAX(updated_at) AS m FROM tournament_signups').get() as { m: string }).m;
+    expect(after > before).toBe(true);
+    await pick(ctx, tid);
+    expect(row(ctx, tid)).toMatchObject({ final_date: DATE, format_source: 'tie' });
+  });
+});
+

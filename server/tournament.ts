@@ -874,7 +874,9 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
         nextSource = 'vote';
       }
     } else if (isVoteSource(wasSource)) {
-      if (!t.final_date || s.format !== nextFormat) {
+      // A hand pick while the vote is still open, or a different format. Saving the format as it already stands (the form after a Reschedule that
+      // players hold tickets on, or after the vote decided it) changes nothing and keeps the vote as the source.
+      if (s.format !== nextFormat || (!t.final_date && !held)) {
         nextFormat = s.format;
         nextSource = 'admin';
       }
@@ -1013,21 +1015,24 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
   const payBy = defaultPayBy(date as string, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
   const org = await organizerIdOf(ctx.db, group);
   // Zip 60: the vote, when the players decide the format and no player holds a ticket yet.
-  let decided: { format: TournamentFormat; source: FormatSource; counts: VoteCounts } | null = null;
+  let decided: { format: TournamentFormat; source: FormatSource; counts: VoteCounts; stamp: string } | null = null;
   if (isVoteSource(t.format_source) && !playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org))) {
-    const voters = (await signupRows(ctx.db, t.id)).filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date as string));
+    const all = await signupRows(ctx.db, t.id);
+    const voters = all.filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date as string));
     const counts = tallyVotes(voters.map((r) => r.format_vote));
     const d = decideFormat(counts, await previousFormat(ctx.db, t));
-    decided = { format: d.format, source: d.rule === 'majority' ? 'vote' : 'tie', counts };
+    // `stamp`: the newest sign-up write the count was made from; the lock lands only if no sign-up changed since ("look again" otherwise).
+    decided = { format: d.format, source: d.rule === 'majority' ? 'vote' : 'tie', counts, stamp: all.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), '') };
   }
   const res = await ctx.db.batch([
     ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?,
            format = COALESCE(?, format), format_source = COALESCE(?, format_source)
-         WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ?`,
+         WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ?
+           AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)`,
       )
-      .bind(date, ctx.nowIso, payBy, ctx.nowIso, decided?.format ?? null, decided?.source ?? null, t.id, date, t.format_source ?? null),
+      .bind(date, ctx.nowIso, payBy, ctx.nowIso, decided?.format ?? null, decided?.source ?? null, t.id, date, t.format_source ?? null, decided?.stamp ?? null, decided?.stamp ?? null),
     ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
     fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
   ]);
