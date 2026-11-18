@@ -401,6 +401,10 @@
   line-height: 1.4;
   color: var(--ink-2);
 }
+.tm-level-note {
+  /* Zip 59: 12 px clear of the last level card, so the note never touches it. */
+  margin: 12px 0 12px;
+}
 .tm-note {
   margin: 12px 2px 0;
   font-size: 0.875rem;
@@ -563,8 +567,41 @@
   line-height: 1;
 }
 .tm-level-text {
-  font-size: 0.94rem;
-  line-height: 1.3;
+  font-size: 0.84rem;
+  line-height: 1.28;
+}
+/* Zip 59: every level line fits on two lines or fewer, down to a 320 px phone: a tighter row (number, gaps, radio) and a smaller line. */
+.tm-levels:not(.tm-levels-flat) .tm-level {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  padding: 6px 12px;
+  gap: 6px;
+}
+.tm-levels:not(.tm-levels-flat) .tm-radio {
+  width: 20px;
+  height: 20px;
+}
+@media (max-width: 379px) {
+  .tm-levels:not(.tm-levels-flat) .tm-level {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    padding: 6px 10px;
+  }
+  .tm-levels:not(.tm-levels-flat) .tm-radio {
+    width: 18px;
+    height: 18px;
+  }
+  .tm-levels:not(.tm-levels-flat) .tm-level-text {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+}
+/* A 320 px phone: the round mark goes (the picked card is still green with its green edge and tint), so the longest lines keep to two lines. */
+@media (max-width: 339px) {
+  .tm-levels:not(.tm-levels-flat) .tm-level {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+  .tm-levels:not(.tm-levels-flat) .tm-radio {
+    display: none;
+  }
 }
 .tm-radio {
   box-sizing: border-box;

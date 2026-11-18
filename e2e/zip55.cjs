@@ -247,7 +247,7 @@ async function main() {
         await v.page.locator('[data-tm-step="1"]').waitFor();
         assert(await v.page.locator('[data-tm-next]').isDisabled(), 'Next waits for a level');
         const labels = await v.page.locator('[data-tm-step="1"] .tm-level-num').allInnerTexts();
-        assert(labels.join(',') === '2.5,2.75,3.0,3.2,3.4,3.5,3.6+', labels.join(','));
+        assert(labels.join(',') === '2.5,2.7,3.0,3.2,3.4,3.5,3.6+', labels.join(','));
         await v.page.locator('[data-level="340"]').click();
         await fits(v.page, 'dialog[open]');
         await shot(v.page, `C2-step1-${width}-${scheme}`);

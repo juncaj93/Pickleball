@@ -476,9 +476,10 @@ async function main() {
         await p.page.locator('[data-tc-signup]').click();
         await p.page.locator('dialog[open] [data-tm-step="1"]').waitFor();
         await p.page.waitForTimeout(500);
-        const read = () => p.page.evaluate(() => { const d = document.querySelector('dialog[open]'); const bar = d.querySelector('.tm-bottom'); const head = d.querySelector('.sheet-head'); return { more: bar.hasAttribute('data-more'), op: getComputedStyle(bar, '::before').opacity, room: d.scrollHeight - d.clientHeight, bg: getComputedStyle(head).backdropFilter, headBg: getComputedStyle(head).backgroundColor }; });
+        const read = () => p.page.evaluate(() => { const d = document.querySelector('dialog[open]'); const bar = d.querySelector('.tm-bottom'); const head = d.querySelector('.sheet-head'); const above = bar.previousElementSibling; return { hidden: above.getBoundingClientRect().bottom - bar.getBoundingClientRect().top > 2, more: bar.hasAttribute('data-more'), op: getComputedStyle(bar, '::before').opacity, room: d.scrollHeight - d.clientHeight, bg: getComputedStyle(head).backdropFilter, headBg: getComputedStyle(head).backgroundColor }; });
         const top = await read();
-        if (top.room > 4) {
+        assert(top.more === top.hidden, `${width} ${scheme}: the fade follows what is really hidden behind the bar: ${JSON.stringify(top)}`);
+        if (top.hidden) {
           assert(top.more && top.op === '1', `${width} ${scheme}: it overflows, so the fade shows at the top: ${JSON.stringify(top)}`);
           await p.page.evaluate(() => { const d = document.querySelector('dialog[open]'); d.scrollTop = d.scrollHeight; });
           await p.page.waitForTimeout(300);
@@ -528,14 +529,34 @@ async function main() {
       'Keeps short rallies going. Avoids the backhand.',
       'Steady rallies. Still learning to dink.',
       'Dinks work about half the time. Learning drop shots.',
-      "Steady dinks. Drop shots don't always land. Misses an easy one now and then.",
+      "Steady dinks. Drop shots don't always land. Misses easy ones sometimes.",
       'Steady dinks. Drop shots usually land. Smart about speed. Few easy misses.',
-      'Dinks and drop shots are reliable. Smart about speed. Almost no easy misses.',
+      'Reliable dinks and drop shots. Smart about speed. Almost no easy misses.',
     ];
     assert(JSON.stringify(texts.map(flat)) === JSON.stringify(want), JSON.stringify(texts));
     assert(flat(await p.page.locator('[data-tm-level-note]').innerText()) === 'Not sure? Ask Alex.', 'the note');
     await shot(p.page, 'L-levels');
+    assert(!flat(await p.page.locator('dialog[open]').innerText()).includes('2.75'), 'no 2.75 on the sheet');
+    assert((await p.page.locator('dialog[open] .tm-level-num').allInnerTexts()).map(flat).join(',') === '2.5,2.7,3.0,3.2,3.4,3.5,3.6+', 'the labels');
     await p.ctx.close();
+    // Every level line fits on two lines or fewer, and the note sits 12 px under the last card, at every width, light and dark.
+    for (const width of SIZES) {
+      for (const scheme of SCHEMES) {
+        const q = await homeOf('Vic', { width, scheme });
+        await q.page.locator('[data-tc-signup]').click();
+        await q.page.locator('dialog[open] [data-tm-step="1"]').waitFor();
+        await q.page.waitForTimeout(400);
+        const r = await q.page.evaluate(() => {
+          const lines = [...document.querySelectorAll('dialog[open] .tm-level-text')].map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
+          const last = document.querySelector('dialog[open] .tm-level:last-child').getBoundingClientRect();
+          const note = document.querySelector('[data-tm-level-note]').getBoundingClientRect();
+          return { lines, gap: note.top - last.bottom };
+        });
+        assert(r.lines.every((n) => n <= 2), `${width} ${scheme}: lines per level ${r.lines}`);
+        assert(r.gap >= 11, `${width} ${scheme}: the note is ${r.gap}px under the last card`);
+        await q.ctx.close();
+      }
+    }
   });
 
   await stage('date_picked');

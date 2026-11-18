@@ -238,7 +238,7 @@ no payment, credit or cash-out piles, and the Venue charge alert row dated at th
 the first two weeks after offered (no Dec 24, 25, 31 or Jan 1), 8 players, 2 courts, 2 hours, 7:30 PM, $16 ticket, $14 credit.
 - Organizer Home (PIN above): the dashed **Tournament test** row (preview builds only), then the tournament card (Levels, Pick the date).
 - **Tournament test** (also Settings > Schedule): **Sign-up open** (Everyone; Parker 3.6+, Rowan 3.5, Sage 3.0, Christopher Vanderberg 3.0, Wren 3.2,
-  Quinn 2.5 on the list; Vic, Zoe, Reese and Alex are not), **Date picked** (the same plus Zoe 2.75 and Reese 3.4, Sage set to 3.4 by the organizer,
+  Quinn 2.5 on the list; Vic, Zoe, Reese and Alex are not), **Date picked** (the same plus Zoe 2.7 and Reese 3.4, Sage set to 3.4 by the organizer,
   the third Thursday of next month picked: everyone on the list can make it; Vic is still not on the list), **No tournament** (to try Create).
   Each button also turns the Tournaments row back on (another branch's re-seed drops it). **View as**: each fixed name opens `/?as=Name` on this
   phone (real taps on the fake database), **Admin** goes back. Kai is not one of the fixed names, so the test page leaves Kai out.

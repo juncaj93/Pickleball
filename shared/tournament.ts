@@ -41,12 +41,12 @@ export interface Level {
 
 export const LEVELS: readonly Level[] = [
   { value: 250, label: '2.5', short: '2.5', text: 'Learning the rules and serve. Short rallies.' },
-  { value: 275, label: '2.75', short: '2.75', text: 'Keeps short rallies going. Avoids the backhand.' },
+  { value: 275, label: '2.7', short: '2.7', text: 'Keeps short rallies going. Avoids the backhand.' },
   { value: 300, label: '3.0', short: '3.0', text: 'Steady rallies. Still learning to dink.' },
   { value: 320, label: '3.2', short: '3.2', text: 'Dinks work about half the time. Learning drop shots.' },
-  { value: 340, label: '3.4', short: '3.4', text: "Steady dinks. Drop shots don't always land. Misses an easy one now and then." },
+  { value: 340, label: '3.4', short: '3.4', text: "Steady dinks. Drop shots don't always land. Misses easy ones sometimes." },
   { value: 350, label: '3.5', short: '3.5', text: 'Steady dinks. Drop shots usually land. Smart about speed. Few easy misses.' },
-  { value: 360, label: '3.6+', short: '3.6', text: 'Dinks and drop shots are reliable. Smart about speed. Almost no easy misses.' },
+  { value: 360, label: '3.6+', short: '3.6', text: 'Reliable dinks and drop shots. Smart about speed. Almost no easy misses.' },
 ];
 
 export const isLevel = (v: unknown): v is number => typeof v === 'number' && LEVELS.some((l) => l.value === v);
