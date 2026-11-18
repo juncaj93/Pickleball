@@ -99,7 +99,7 @@ export async function buildSmallPreview(
   /** `zip49`: add Zip 49's three games and keep only them in the calm profile (the preview seed). Left out: the world exactly as before (the local browser tests). */
   /** `zip51`: Zip 51's two late-drop games instead (the preview seed from Zip 51 on). */
   /** `zip55`: the calm profile of Zip 55 (Tournaments): no zip's games, no Venue cards, and a fresh "Winter Classic" on Only me (the preview seed). */
-  /** `zip56`: Zip 55's profile, with the tournament at Date picked for Everyone (Zip 56, tickets: the organizer's first tap is Open tickets). */
+  /** `zip56`: Zip 55's profile, with the tournament's date picked for Everyone (Zip 56: picking the date opens tickets; nobody has paid). */
   opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean } = {},
 ): Promise<Seed> {
   const keep: string[] = [];
@@ -665,8 +665,9 @@ export async function buildSmallPreview(
   }
 
   // 29. Zip 56, Tournaments piece 2 (tickets; ON in the preview: BUILDING_ON). The calm preview opens on the Date picked stage (Everyone, 8 on the
-  //     list, Sage set to 3.4, the third Thursday of next month picked), made by the Tournament test page's own server half, so organizer Home
-  //     shows picture 29's card and the first tap is Open tickets. Every other ticket stage is one tap away on the Tournament test page.
+  //     list, Sage set to 3.4, the third Thursday of next month picked), made by the Tournament test page's own server half: picking the date
+  //     opened tickets (Alex), so organizer Home shows picture 29's card with Tickets and the Plan line, and nobody has paid. Every other ticket
+  //     stage is one tap away on the Tournament test page.
   if (opts.zip56) {
     if (!opts.zip55) throw new Error('zip56 builds on the zip55 profile');
     w.env.PREVIEW_CALM = 'on';
@@ -675,7 +676,7 @@ export async function buildSmallPreview(
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 56 Tournaments piece 2 (on): "Winter Classic" at Date picked for Everyone (8 on the list, the third Thursday of next month); organizer Home shows Open tickets; the Tournament test page has Tickets open, Spots full with waitlist, All locked in, 7 locked in after Pay by, Canceled and Rescheduled');
+    summary.push('Zip 56 Tournaments piece 2 (on): "Winter Classic" with the date picked for Everyone, so tickets are open (8 on the list, the third Thursday of next month, nobody paid); the Tournament test page has Tickets open (6 paid), All locked in, 7 locked in after Pay by, Canceled and Rescheduled');
   }
 
   await refresh();

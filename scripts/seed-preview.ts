@@ -67,8 +67,8 @@ async function main() {
   console.log('Building the fake world on a throwaway in-memory copy...');
   // The SMALL world (Alex, Nov 8): the fixed names of docs/PREVIEW_FAKE_DB.md, nothing else (scripts/preview-world-small.ts).
   // Zip 55: the calm preview opens on the Tournaments scene alone (scripts/preview-world-small.ts step 28). `--zip51` builds Zip 51's calm profile
-  // instead (its two late-drop games and the Venue charge alert's cards). Zip 56 (step 29): the tournament starts at Date picked for Everyone
-  // (the first tap is Open tickets); `--zip55` builds Zip 55's start instead (Only me, nobody on the list).
+  // instead (its two late-drop games and the Venue charge alert's cards). Zip 56 (step 29): the tournament starts with its date picked for
+  // Everyone (which opens tickets; nobody has paid); `--zip55` builds Zip 55's start instead (Only me, nobody on the list).
   const zip51 = args.includes('--zip51');
   const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') });
   const { summary } = built;
