@@ -313,9 +313,6 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   const { org_saved: orgSaved, viewer_name: viewerName, my_signup: mySignupStatus, ...t } = row;
   // Zip 56: a canceled tournament's plain card is only for the players who were on its list, and only until its date has passed.
   if (statusOf(t) === 'canceled' && (mySignupStatus !== 'in' || datePassed(t, todayKey(ctx.nowMs, group.timezone)))) return null;
-  // Zip 56 (review): a played night's "Tickets closed" card goes from the day after its date (game day, piece 3, will say how it went). The
-  // organizer's Home still has it, and its first read after 10:00 PM gives any unused hold back.
-  if (statusOf(t) === 'tickets' && datePassed(t, todayKey(ctx.nowMs, group.timezone))) return null;
   // Every offered date has passed with none picked: hidden from every player (Alex, Zip 55 feedback), the same as none open. The organizer's
   // Home card says "Dates have passed. Add dates."; Edit settings with new dates shows it again.
   if (statusOf(t) === 'signup' && openDatesOf(t, todayKey(ctx.nowMs, group.timezone)).length === 0) return null;

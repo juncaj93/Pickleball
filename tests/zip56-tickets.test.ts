@@ -1012,10 +1012,10 @@ describe('second review fixes (Zip 56)', () => {
     ctx.app.now = Date.parse('2026-11-13T03:00:00.000Z'); // 10:00 PM: over
     expect((await dash(ctx)).tournament).toMatchObject({ closed: true, over: true });
     expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/cancel`, {})).data.message).toBe('The tournament night is over. It cannot be canceled now.');
-    // Players keep the Tickets closed card on the night itself; from the next day it is gone (the organizer's Home keeps it).
+    // Players keep the Tickets closed card (piece 1's rule: the card stays once the picked date has passed; game day, piece 3, ends it).
     expect(await card(ctx, 'Blair')).toMatchObject({ status: 'tickets', tickets: { closed: true } });
     ctx.app.now = Date.parse('2026-11-13T17:00:00.000Z'); // Fri Nov 13, 12:00 PM Eastern
-    expect(await card(ctx, 'Blair')).toBeUndefined();
+    expect(await card(ctx, 'Blair')).toMatchObject({ status: 'tickets', tickets: { closed: true } });
     expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', over: true });
   });
 });
