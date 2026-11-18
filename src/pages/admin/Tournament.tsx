@@ -1318,7 +1318,17 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
     void load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day, t.id]);
-  if (failed) return <p className="field-error" role="alert" data-tm-finalize-error>{failed}</p>;
+  if (failed)
+    return (
+      <div className="stack" data-tm-finalize-error>
+        <p className="field-error" role="alert">
+          {failed}
+        </p>
+        <button type="button" className="btn secondary" onClick={onClose} data-tm-finalize-back>
+          Back
+        </button>
+      </div>
+    );
   if (!view) return <p className="tm-card-note" data-tm-finalize-loading>Looking…</p>;
   const winner = view.winner;
   const days = payByDays(day, tz, nowMs);
@@ -1338,7 +1348,8 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         ...(touched.price && !view!.locked ? { ticketCents: price } : {}),
         ...(winner ? { seenWinner: winner.format } : {}),
       });
-      await ctx.reload();
+      // The date is locked: a failed refresh must not read as a failed lock (the screen refreshes itself in 5 seconds).
+      await ctx.reload().catch(() => undefined);
       toast(`${dayLong(day)} is the date. Tickets are open.`);
       onClose();
     } catch (err) {
@@ -1367,7 +1378,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         </p>
         {view.over > 0 && (
           <p className="tm-card-note tm-fin-over" data-tm-fin-over>
-            {view.over} over. They start on the waitlist once tickets open.
+            {view.over} over the 12 spots. Once 12 are locked in, the rest can join the waitlist.
           </p>
         )}
       </section>

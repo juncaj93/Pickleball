@@ -545,5 +545,44 @@ describe('pass 2: the Finalize screen (server half)', () => {
     expect((await lock(b.ctx, b.tid, { format: 'americano' })).status).toBe(409);
     expect((await lock(b.ctx, b.tid, { ticketCents: 1600, format: 'doubles' })).status).toBe(200);
   });
+
+  it('counts that move without moving the winner do not stop the lock; the read writes nothing in any table', async () => {
+    const { ctx, tid } = await world();
+    await signUp(ctx, tid, 'Blair', 'americano');
+    await signUp(ctx, tid, 'Casey', 'americano');
+    await signUp(ctx, tid, 'Devon', 'locked');
+    const dump = () => JSON.stringify(['tournaments', 'tournament_signups', 'tournament_tickets', 'admin_audit_log', 'credit_ledger'].map((t) => raw(ctx).prepare(`SELECT * FROM ${t}`).all()));
+    const before = dump();
+    expect((await fin(ctx, tid)).data.winner.format).toBe('americano');
+    expect(dump()).toBe(before);
+    // Another player joins for Americano after the sheet opened: the counts moved, the winner did not.
+    await signUp(ctx, tid, 'Emery', 'americano');
+    const res = await lock(ctx, tid, { seenWinner: 'americano' });
+    expect(res.status, res.text).toBe(200);
+    expect(row(ctx, tid)).toMatchObject({ format: 'americano', format_source: 'vote' });
+  });
+
+  it('overriding a tie result, and a format picked at Create, both end as the organizer\'s (admin)', async () => {
+    const a = await world();
+    await signUp(a.ctx, a.tid, 'Blair', 'locked');
+    await signUp(a.ctx, a.tid, 'Casey', 'americano');
+    expect((await fin(a.ctx, a.tid)).data.winner).toMatchObject({ format: 'doubles', rule: 'tie' });
+    expect((await lock(a.ctx, a.tid, { format: 'americano' })).status).toBe(200);
+    expect(row(a.ctx, a.tid)).toMatchObject({ format: 'americano', format_source: 'admin' });
+    expect((await card(a.ctx, 'Blair')).formatAlert.sub).toBe('Format: Americano');
+    const b = await world({ format: 'doubles' });
+    await signUp(b.ctx, b.tid, 'Blair');
+    expect((await lock(b.ctx, b.tid, { format: 'americano' })).status).toBe(200);
+    expect(row(b.ctx, b.tid)).toMatchObject({ format: 'americano', format_source: 'admin' });
+  });
+
+  it('a second Finalize tap after the date is locked changes nothing (tickets are open)', async () => {
+    const { ctx, tid } = await world();
+    await signUp(ctx, tid, 'Blair', 'locked');
+    expect((await lock(ctx, tid, { format: 'americano' })).status).toBe(200);
+    const again = await lock(ctx, tid, { format: 'doubles' });
+    expect(again.status).toBe(409);
+    expect(row(ctx, tid)).toMatchObject({ format: 'americano', format_source: 'admin' });
+  });
 });
 

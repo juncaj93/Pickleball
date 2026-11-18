@@ -268,6 +268,9 @@ async function main() {
         });
         assert(order !== false, 'the question is under the dates');
         await oneLine(v.page, '[data-tm-votes] .tm-vote-name');
+        // The Locked doubles line is longer now: two lines at most, at every width (never three).
+        const lineRows = await v.page.locator('[data-tm-votes] .tm-vote-line').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight))));
+        assert(lineRows.every((n) => n <= 2), `a vote line runs past two lines: ${lineRows}`);
         await fits(v.page, 'dialog[open]');
         await shot(v.page, `B-step2-${width}-${scheme}`);
         await noDash(v.page, 'the sign-up sheet');
@@ -476,9 +479,10 @@ async function main() {
     });
     await openFinalize(a, day);
     const over = flat(await a.page.locator('[data-tm-fin-over]').innerText());
-    assert(over === '2 over. They start on the waitlist once tickets open.', over);
-    await oneLine(a.page, '[data-tm-fin-plan]');
+    assert(over === '2 over the 12 spots. Once 12 are locked in, the rest can join the waitlist.', over);
     await fits(a.page, 'dialog[open]');
+    const overLines = await a.page.locator('[data-tm-fin-over]').evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
+    assert(overLines <= 3, `the over note takes ${overLines} lines`);
     await shot(a.page, 'H-finalize-over-320');
     await a.ctx.close();
   });

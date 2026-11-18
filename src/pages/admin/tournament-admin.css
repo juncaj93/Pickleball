@@ -737,7 +737,6 @@ dialog.sheet.tm-page {
 /* The votes read on ONE line down to 320 px wide: "Locked doubles 4, Americano 6, Either 0". */
 .tm-fin-counts {
   font-size: 0.92rem;
-  white-space: nowrap;
 }
 .tm-fin-counts b {
   font-size: inherit;
