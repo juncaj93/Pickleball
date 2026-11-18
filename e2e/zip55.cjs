@@ -35,7 +35,10 @@ const SHOTS = path.join(ROOT, '.data', 'zip55-shots');
 
 let passed = 0;
 let failed = 0;
+// ZIP55_ONLY=<words>: run only the checks whose name has those words (to retry one check without the whole run).
+const ONLY = process.env.ZIP55_ONLY || '';
 async function check(name, fn) {
+  if (ONLY && !name.includes(ONLY)) return;
   try {
     await fn();
     passed++;
@@ -626,7 +629,11 @@ async function main() {
     // Zip 56 (Alex): picking the date opens tickets and locks the format, so this Edit is during sign-up.
     await call('POST', '/api/admin/tournament-test', { stage: 'signup', format: 'americano' });
     const a = await adminPage();
+    // Edit opens the tournament page; its Settings card's Edit opens the form (a pause first: the site drops a tap right after the last one).
     await a.page.locator('[data-tm-open-edit]').click();
+    await a.page.locator('dialog[open] [data-tm-edit-settings]').waitFor({ timeout: 15000 });
+    await a.page.waitForTimeout(600);
+    await a.page.locator('dialog[open] [data-tm-edit-settings]').click();
     await a.page.locator('[data-tm-form="edit"]').waitFor();
     assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
     assert(!(await a.page.locator('[data-format="doubles"]').isDisabled()), 'not locked before tickets open');
