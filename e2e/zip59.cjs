@@ -227,7 +227,7 @@ async function main() {
     await shot(a.page, 'B-banner');
     await a.ctx.close();
   });
-  await check('B2 the hero card: little blank space between the last text line and the button (sign-up card and ticket card), the date block and dashed line still fit', async () => {
+  await check('B2 (Zip 63: the card has one look, no stub) the sign-up card: the balls 14 px above the button, the bottom line under it, nothing sticks out', async () => {
     await stage('signup');
     const v = await homeOf('Vic');
     await v.page.locator('[data-tc-signup]').waitFor();
@@ -235,14 +235,13 @@ async function main() {
       await v.page.setViewportSize({ width, height: 844 });
       await v.page.waitForTimeout(300);
       const r = await v.page.evaluate(() => {
-        const sub = document.querySelector('.tc-sub').getBoundingClientRect();
+        const balls = document.querySelector('.tc-balls').getBoundingClientRect();
         const btn = document.querySelector('.tc-btn').getBoundingClientRect();
-        const stub = document.querySelector('.tc-stub').getBoundingClientRect();
-        const top = document.querySelector('.tc-top').getBoundingClientRect();
-        return { gap: btn.top - sub.bottom, stubBottom: stub.bottom, topBottom: top.bottom };
+        const foot = document.querySelector('.tc-foot').getBoundingClientRect();
+        const card = document.querySelector('.tc-hero').getBoundingClientRect();
+        return { gap: btn.top - balls.bottom, footBelow: foot.top >= btn.bottom, inside: foot.bottom <= card.bottom, stub: document.querySelectorAll('.tc-stub').length };
       });
-      assert(r.gap <= 12, `${width}: the blank space above the button is ${r.gap}px (it was about 18)`);
-      assert(r.stubBottom <= r.topBottom + 0.5, `${width}: the date block fits`);
+      assert(Math.abs(r.gap - 14) <= 1.5 && r.footBelow && r.inside && r.stub === 0, `${width}: ${JSON.stringify(r)}`);
     }
     await shot(v.page, 'B2-signup-card');
     await v.ctx.close();
@@ -317,24 +316,21 @@ async function main() {
     }, png.toString('base64'));
   }
   const near = (a, b, tol) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
-  /** The notch pixel is what is BEHIND the card (the pixel just above the card, same column), and not the card's own color. */
+  /** Zip 63: the card has no notch any more (no stub): no mask, the 1 px inside edge, and its rounded corner shows what is behind the card. */
   async function notchIsCutout(page, label) {
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(300);
     const m = await page.evaluate(() => {
       const c = document.querySelector('.tc');
       const b = c.getBoundingClientRect();
-      const w = parseFloat(getComputedStyle(c).getPropertyValue('--tc-stub-w'));
       const st = getComputedStyle(c);
-      return { x: b.left + w + 1, top: b.top, mask: st.maskImage || st.webkitMaskImage, shadow: st.boxShadow };
+      return { x: b.left + 2, top: b.top, mask: st.maskImage || st.webkitMaskImage, shadow: st.boxShadow };
     });
-    assert(/radial-gradient/.test(m.mask), `${label}: the card itself carries the mask: ${m.mask}`);
-    assert(!m.shadow.includes('), ') && m.shadow.includes('inset'), `${label}: only the 1px inside edge, no outer shadow: ${m.shadow}`);
-    const hole = await px(page, m.x, m.top + 2);
+    assert(!/radial-gradient/.test(m.mask), `${label}: no notch mask (Zip 63): ${m.mask}`);
+    assert(m.shadow.includes('inset'), `${label}: the 1px inside edge: ${m.shadow}`);
+    const corner = await px(page, m.x, m.top + 1);
     const behind = await px(page, m.x, m.top - 4);
-    const card = await px(page, m.x + 40, m.top + 30);
-    assert(near(hole, behind, 8), `${label}: the notch is ${hole} but what is behind the card is ${behind}`);
-    assert(!near(hole, card, 8), `${label}: the notch looks like the card (${hole} vs ${card})`);
+    assert(near(corner, behind, 12), `${label}: the rounded corner is ${corner} but what is behind the card is ${behind}`);
   }
   await check('E the ticket notch is a real cutout (a mask on the card itself): its pixels are whatever is behind the card, on the plain page, on a gradient, light and dark, at 390/360/320', async () => {
     await stage('tickets_open');
@@ -393,9 +389,9 @@ async function main() {
   await check('F no focus ring after a tap (the X on a sheet); the ring is back for the keyboard (Tab)', async () => {
     await stage('tickets_open');
     const p = await homeOf('Vic');
-    await p.page.locator('[data-tc-who]').first().waitFor({ timeout: 15000 });
-    // A tap opens the sheet; the browser puts its focus on the first button, the X.
-    await p.page.locator('[data-tc-who]').first().tap();
+    await p.page.locator('.tc-hero .tc-title').first().waitFor({ timeout: 15000 });
+    // A tap opens the sheet (Zip 63: a tap on the card opens its overlay); the browser puts its focus on the first button, the X.
+    await p.page.locator('.tc-hero .tc-title').first().tap();
     await p.page.locator('dialog[open]').waitFor({ timeout: 10000 });
     await p.page.waitForTimeout(400);
     let ring = await p.page.evaluate(() => { const a = document.activeElement; return { tag: a && a.tagName, cls: a && a.className, style: a && getComputedStyle(a).outlineStyle, input: document.documentElement.getAttribute('data-input') }; });
@@ -437,7 +433,7 @@ async function main() {
     const t0 = Date.now();
     await m.page.locator('[data-tm-submit]').click();
     await m.page.locator('[data-tc-punch]').waitFor({ timeout: 2000 });
-    const early = flat(await m.page.locator('.tc-sub').innerText());
+    const early = flat(await m.page.locator('[data-tc-sub]').innerText());
     assert(early.includes('Signing you up'), early);
     await shot(m.page, 'G-punch-1-signing');
     await m.page.waitForTimeout(800);
@@ -449,7 +445,7 @@ async function main() {
     await m.page.locator('[data-tc-punch]').waitFor({ state: 'detached', timeout: 3000 });
     const took = Date.now() - t0;
     assert(took > 1200 && took < 2600, `the punch lasts about 1.5 s: ${took} ms`);
-    assert(/You’re on the list/.test(flat(await m.page.locator('.tc-sub').innerText())), 'the card says You\'re on the list');
+    assert(/You’re on the list/.test(flat(await m.page.locator('[data-tc-sub]').innerText())), 'the card says You\'re on the list');
     assert(m.errors.length === 0, m.errors.join(' | '));
     await m.ctx.close();
     // Reduced motion: straight to the answer.
@@ -461,7 +457,7 @@ async function main() {
     await r.page.locator('[data-tm-submit]').click();
     await r.page.locator('.tc [data-tc-edit]').waitFor({ timeout: 10000 });
     assert((await r.page.locator('[data-tc-punch]').count()) === 0, 'no punch with reduced motion');
-    assert(/You’re on the list/.test(flat(await r.page.locator('.tc-sub').innerText())), 'You\'re on the list');
+    assert(/You’re on the list/.test(flat(await r.page.locator('[data-tc-sub]').innerText())), 'You\'re on the list');
     await r.ctx.close();
   });
 

@@ -336,7 +336,8 @@ async function main() {
         const card = flat(await v.page.locator('.tc').first().innerText());
         assert(card.includes('Americano (new partner every round)'), card);
         assert(!card.includes('TBD'), card);
-        assert(!card.includes('~'), `the plain time once the date is picked: ${card}`);
+        // Zip 63 (the brief): the top line keeps "~7:30 PM" until the real start is set (nothing sets it yet), also once the date is picked.
+        assert(card.includes('THU DEC 17 · ~7:30 PM'), `the top line: ${card}`);
         assert(!/Locked 1|Americano 2|votes/i.test(await v.page.evaluate(() => document.body.innerText)), 'no vote counts on a player screen');
         await fits(v.page, '[data-format-alert], .tc');
         await shot(v.page, `D-alert-${width}-${scheme}`);

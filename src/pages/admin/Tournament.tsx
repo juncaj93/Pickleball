@@ -324,7 +324,7 @@ function RemindUnpaidCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView })
   const missing = unpaid.filter((s) => !phoneOf.get(s.playerId)).map((s) => s.name);
   const body = tournamentRemindText(t.name, t.payBy!, t.finalDate!, now, tz, siteAddress(ctx.d.group.playerLink));
   return (
-    <section className="tm-card tm-remind" aria-label={`${t.name} tickets, ${unpaid.length} unpaid`} data-tm-remind={unpaid.length}>
+    <section className="tm-card tm-remind" aria-label={`${t.name} tickets, ${unpaid.length} unpaid`} data-tm-remind={unpaid.length} data-tickets-card={`${lockedOf(t).length}/${t.size}`}>
       <div className="tm-card-head tm-remind-head">
         <h3 className="tm-label tm-remind-label">{t.name} · Tickets</h3>
         <span className="tm-chip tm-chip-unpaid" data-tm-unpaid-chip>

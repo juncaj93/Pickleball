@@ -196,11 +196,11 @@ async function main() {
         assert(flat(await a.page.locator('[data-tc-format-name]').innerText()) === 'Locked doubles (same partner all night)' && (await a.page.locator('[data-tc-rule]').count()) === 0, card);
         const order = await a.page.evaluate(() => ['.tc-title', '[data-tc-format-name]', '[data-tc-sub]'].map((q) => document.querySelector(q).getBoundingClientRect().top));
         assert(order.every((y, i) => i === 0 || y > order[i - 1]), `title, format, rule, then the line: ${order}`);
-        assert((await a.page.locator('.tc-kicker').count()) === 0, 'the old label above the name');
-        assert(/Pick the dates you can play/.test(card) && /Sign up/.test(card) && /VOTE/.test(card) && /FINAL/.test(card), card);
-        // Feedback pass 1: the stub says TBD (not ?), and the card has no border line running over the notch (its edge is drawn inside).
-        assert(flat(await a.page.locator('.tc-day').innerText()) === 'TBD', 'the stub says TBD');
-        assert((await a.page.locator('.tc').evaluate((el) => getComputedStyle(el).borderTopWidth)) === '0px', 'a border line over the notch');
+        // Zip 63: the card's one look (zip63 mocks): the top line says DATE TBD (no stub, no steps); still no border line (the edge is drawn inside).
+        assert(flat(await a.page.locator('.tc-kicker').innerText()) === 'TOURNAMENT · DATE TBD · ~7:30 PM', 'the top line');
+        assert(/Pick the dates you can play/.test(card) && /Sign up/.test(card) && !/VOTE|FINAL/.test(card), card);
+        assert((await a.page.locator('.tc-stub, .tc-track').count()) === 0, 'no stub or steps (Zip 63)');
+        assert((await a.page.locator('.tc').evaluate((el) => getComputedStyle(el).borderTopWidth)) === '0px', 'a border line on the card');
         await fits(a.page, '.tc, .tc-strip');
         assert(a.errors.length === 0, a.errors.join(' | '));
         await shot(a.page, `A-alex-only-me-${width}-${scheme}`);
@@ -240,7 +240,8 @@ async function main() {
         const v = await playerPage('Vic', { width, scheme });
         await v.page.locator('.tc[data-tc="open"]').waitFor({ timeout: 15000 });
         const card = flat(await v.page.locator('.tc').innerText());
-        assert(card.includes('6 signed up · pick the dates you can play'), card);
+        // Zip 63: no counts on the card (one ball per sign-up says it).
+        assert(card.includes('Pick the dates you can play') && (await v.page.locator('.tc [data-tb="ball"]').count()) === 6, card);
         await fits(v.page, '.tc');
         await shot(v.page, `C1-card-${width}-${scheme}`);
         await v.page.locator('[data-tc-signup]').click();
@@ -448,7 +449,7 @@ async function main() {
     assert(open.length === 1 && open[0] === finalDay, `open: ${open.join(',')}`);
     assert(flat(await z.page.locator('[data-tm-picked]').innerText()).startsWith('1 picked'), 'the date starts picked');
     await z.page.locator('[data-tm-submit]').click();
-    await z.page.locator('.tc[data-tc="lock"] [data-tc-who]').waitFor({ timeout: 10000 });
+    await z.page.locator('.tc[data-tc="lock"] [data-tc-lock]').waitFor({ timeout: 10000 });
     await z.ctx.close();
     const parkerDates = (await dash()).tournament.signups.find((s) => s.name === 'Parker').dates.join();
     const p = await playerPage('Parker');
@@ -557,26 +558,15 @@ async function main() {
         await shot(a.page, `M-admin-card-${width}-${scheme}`);
         await a.ctx.close();
       });
-  await check('M every month pair on the stub ("DEC–JAN", "MAY–JUN", ...) fits the date column with room on both sides, at 320', async () => {
+  await check('M (Zip 63: the stub is gone) the top line "TOURNAMENT · DATE TBD · ~7:30 PM" stays on one line inside the card at 320', async () => {
     const v = await playerPage('Vic', { width: 320 });
-    await v.page.locator('.tc .tc-mon').waitFor({ timeout: 15000 });
-    const label = flat(await v.page.locator('.tc .tc-mon').innerText());
-    assert(/^[A-Z]{3}–[A-Z]{3}$/.test(label) && (await v.page.locator('.tc .tc-mon-span').count()) === 1, label);
-    const worst = await v.page.evaluate(() => {
-      const M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-      const el = document.querySelector('.tc .tc-mon');
-      const col = document.querySelector('.tc .tc-stub').getBoundingClientRect();
-      let w = { room: 99, text: '' };
-      for (let i = 0; i < 12; i++) {
-        el.textContent = `${M[i]}–${M[(i + 1) % 12]}`;
-        const r = el.getBoundingClientRect();
-        const room = Math.min(r.left - col.left, col.right - r.right);
-        if (room < w.room) w = { room, text: el.textContent, width: r.width, col: col.width };
-      }
-      return w;
+    await v.page.locator('.tc .tc-kicker').waitFor({ timeout: 15000 });
+    const k = await v.page.evaluate(() => {
+      const el = document.querySelector('.tc .tc-kicker');
+      return { sw: el.scrollWidth, cw: el.clientWidth, text: el.textContent };
     });
-    assert(worst.room >= 6, `tightest: ${JSON.stringify(worst)}`);
-    await shot(v.page, 'M-stub-320');
+    assert(k.sw <= k.cw + 1 && /DATE TBD/i.test(k.text), JSON.stringify(k));
+    await shot(v.page, 'M-top-line-320');
     await v.ctx.close();
   });
   for (const scheme of SCHEMES)
@@ -601,17 +591,9 @@ async function main() {
           await v.page.locator('.tc[data-tc-format="americano"]').waitFor({ timeout: 15000 });
           // Zip 56 (Alex): picking the date opens tickets; the format shows on the cards before that, in one line.
           if (st === 'signup') assert(flat(await v.page.locator('[data-tc-format-name]').innerText()) === 'Americano (new partner every round)' && (await v.page.locator('[data-tc-rule]').count()) === 0, 'format in one line');
-          const steps = (await v.page.locator('.tc-step-label').allInnerTexts()).map(flat);
-          assert(steps.join('|') === 'VOTE|TICKETS|GAMES|WINNERS', steps.join('|'));
-          // The line through the dots runs from the first dot to the last.
-          const line = await v.page.evaluate(() => {
-            const dots = [...document.querySelectorAll('.tc-step-dot')].map((d) => d.getBoundingClientRect());
-            const track = document.querySelector('.tc-track');
-            const b = getComputedStyle(track, '::before');
-            const r = track.getBoundingClientRect();
-            return { first: dots[0].left + dots[0].width / 2 - r.left, last: dots[dots.length - 1].left + dots[dots.length - 1].width / 2 - r.left, left: parseFloat(b.left), right: r.width - parseFloat(b.right) };
-          });
-          assert(Math.abs(line.first - line.left) < 3 && Math.abs(line.last - line.right) < 3, JSON.stringify(line));
+          // Zip 63: the card has no steps any more (the zip63 mocks); the format line says Americano in every state.
+          assert((await v.page.locator('.tc-step-label, .tc-track').count()) === 0, 'no steps (Zip 63)');
+          assert(/^Americano \(new partner every round\)$/.test(flat(await v.page.locator('[data-tc-format-name]').innerText())), 'Americano');
           await fits(v.page, '.tc');
           await shot(v.page, `N-americano-${st}-${width}-${scheme}`);
           await v.ctx.close();

@@ -199,6 +199,17 @@ async function main() {
 
   let d = await dash();
 
+  // Zip 63: the card's one look has no See who's in, Edit sign-up or Drop out while tickets are open: a tap on the card opens the overlay, which has them.
+  async function openOverlay(page) {
+    await page.locator('.tc-hero .tc-title').first().click();
+    await page.locator('dialog[open] [data-tw]').waitFor({ timeout: 10000 });
+  }
+  async function tapLink(page, attr) {
+    const own = page.locator(`.tc-hero [${attr}]`);
+    if (await own.count()) return own.first().click();
+    await openOverlay(page);
+    await page.locator(`dialog[open] [${attr}]`).first().click();
+  }
   // ---------------------------------------------------------------- A  the seed
   await check('A seed: the Winter Classic, the date picked: tickets are open (Alex), nobody paid; Home has picture 29\'s card with Tickets and the plan', async () => {
     const t = d.tournament;
@@ -234,7 +245,8 @@ async function main() {
     const h = await adminPage();
     await h.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
     assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/6', 'the Home line');
-    assert(flat(await h.page.locator('[data-tickets-card]').innerText()).includes('Tickets: 0 of 6 locked in'), 'the words');
+    // Zip 63: while players who can make the date have not paid, the count's card is mock 14's Remind all unpaid card (same data attribute).
+    assert(flat(await h.page.locator('[data-tm-row="paid"]').innerText()) === '0', 'Paid 0');
     await shot(h.page, 'B-admin-tickets-open');
     assert(h.errors.length === 0, h.errors.join(' | '));
     await h.ctx.close();
@@ -247,7 +259,8 @@ async function main() {
     await card.waitFor({ timeout: 15000 });
     const words = flat(await card.innerText());
     // Nobody locked in yet: the plan is 6 players, 2.5 hours (Alex's smart plan); players see its hours.
-    assert(/tickets open/i.test(words) && words.includes('2.5 hours · Pay by Wed 7:00 PM') && words.includes('Lock my spot · $16') && words.includes('See who’s in'), words);
+    // Zip 63: the card's one look (top line, name, format, balls, Lock my spot, Pay by): the hours and See who's in live in the overlay now.
+    assert(/^TOURNAMENT · /.test(words) && words.includes('Lock my spot · $16') && /Pay by \d+\/\d+$/.test(words), words);
     await card.locator('[data-tc-lock]').click();
     const pay = p.page.locator('[data-pay-sheet]');
     await pay.waitFor({ timeout: 10000 });
@@ -283,7 +296,7 @@ async function main() {
   // ---------------------------------------------------------------- E  back out after paying
   await check('E Parker backs out after paying: the words say the $16 comes back as credit, and it does', async () => {
     const p = await playerPage('Parker');
-    await p.page.locator('.tc [data-tc-drop]').first().click();
+    await tapLink(p.page, 'data-tc-drop');
     const text = p.page.locator('[data-tm-backout-text]');
     await text.waitFor({ timeout: 10000 });
     const words = flat(await text.innerText());
@@ -327,20 +340,21 @@ async function main() {
     await p.page.locator('.tc').first().waitFor({ timeout: 30000 });
     await p.page.waitForTimeout(500);
     const words = flat(await p.page.locator('.tc').first().innerText());
-    assert(/12 spots taken/i.test(words) && words.includes('Join the waitlist in case someone drops') && words.includes('Join waitlist'), words);
+    // Zip 63: standby (never waitlist), and the cap is hidden: Join standby, no number.
+    assert(words.includes('Join standby') && !/waitlist|12 spots/i.test(words), words);
     await shot(p.page, 'F-full-card');
     await p.ctx.close();
     const q = await newPage();
     await fakeFull(q.page, true);
     await q.page.goto(`${BASE}/?as=Vic`);
-    await q.page.locator('.tc [data-tc-who]').first().waitFor({ timeout: 30000 });
-    await q.page.locator('.tc [data-tc-who]').first().click();
+    await q.page.locator('.tc-hero').first().waitFor({ timeout: 30000 });
+    await openOverlay(q.page);
     await q.page.locator('dialog[open] [data-tc-keep]').waitFor({ timeout: 10000 });
     const overlay = flat(await sheetOpen(q.page).innerText());
-    assert(overlay.includes('You’re second on the waitlist') && overlay.includes('Hold my spot · $16') && overlay.includes('Just keep me on the list'), overlay);
+    assert(overlay.includes('You’re second on standby') && overlay.includes('Hold my spot · $16') && overlay.includes('Just keep me on the list'), overlay);
     assert(overlay.includes('If someone drops, you’re locked into that spot.') && overlay.includes('If a spot opens, whoever pays first gets it.'), overlay);
     // Alex (ship answer 5): no Paid or Not paid next to anyone else on a player's screen; their own row says You.
-    assert(/12 of 12/i.test(overlay) && !/Paid, first in line|Not paid/.test(overlay), overlay);
+    assert(/12 in/i.test(overlay) && !/12 of 12|Paid, first in line|Not paid/.test(overlay), overlay);
     assert(flat(await q.page.locator('dialog[open] [data-tw-row="Vic"]').innerText()).endsWith('You'), 'Vic\'s own row');
     await shot(q.page, 'F-waitlist-overlay');
     assert(q.errors.length === 0, q.errors.join(' | '));
@@ -409,7 +423,7 @@ async function main() {
         await stage('tickets_open');
         const p = await playerPage('Vic', { width, scheme });
         await fits(p.page, '.tc');
-        await p.page.locator('.tc [data-tc-who]').first().click();
+        await openOverlay(p.page);
         await p.page.locator('dialog[open] [data-tw-in]').waitFor({ timeout: 10000 });
         await p.page.waitForTimeout(300);
         await fits(p.page, 'dialog[open] .tc-tw');
@@ -432,9 +446,9 @@ async function main() {
         const v = await newPage({ width, scheme });
         await fakeFull(v.page, true);
         await v.page.goto(`${BASE}/?as=Vic`);
-        await v.page.locator('.tc [data-tc-who]').first().waitFor({ timeout: 30000 });
+        await v.page.locator('.tc-hero').first().waitFor({ timeout: 30000 });
         await fits(v.page, '.tc');
-        await v.page.locator('.tc [data-tc-who]').first().click();
+        await openOverlay(v.page);
         await v.page.locator('dialog[open] [data-tc-keep]').waitFor({ timeout: 10000 });
         await v.page.waitForTimeout(300);
         await fits(v.page, 'dialog[open] .tc-tw');
@@ -443,7 +457,7 @@ async function main() {
         assert(v.errors.length === 0, v.errors.join(' | '));
         await v.ctx.close();
         const z = await playerPage('Zoe', { width, scheme });
-        await z.page.locator('.tc [data-tc-who]').first().click();
+        await openOverlay(z.page);
         await z.page.locator('dialog[open] [data-tc-locked]').waitFor({ timeout: 10000 });
         await z.page.waitForTimeout(300);
         await fits(z.page, 'dialog[open] .tc-tw');
@@ -492,7 +506,7 @@ async function main() {
         await stage('all_locked');
         const v = await playerPage('Vic', { width, scheme });
         await fits(v.page, '.tc');
-        await v.page.locator('.tc [data-tc-drop]').first().click();
+        await tapLink(v.page, 'data-tc-drop');
         await v.page.locator('[data-tm-backout-text]').waitFor({ timeout: 10000 });
         await fits(v.page, 'dialog[open]');
         await shot(v.page, `I-backout-${width}-${scheme}`);
@@ -662,7 +676,7 @@ async function main() {
         await line.waitFor({ timeout: 15000 });
         assert(flat(await line.innerText()) === want && (await oneLine(line)) === 1, `card: ${flat(await line.innerText())}`);
         await p.page.waitForTimeout(600);
-        await p.page.locator('.tc [data-tc-who]').first().click();
+        await openOverlay(p.page);
         const inSheet = p.page.locator('dialog[open] .tc [data-tc-format-name]').first();
         await inSheet.waitFor({ timeout: 10000 });
         assert(flat(await inSheet.innerText()) === want && (await oneLine(inSheet)) === 1, 'Who\'s in');
@@ -707,7 +721,7 @@ async function main() {
     await p.page.locator('dialog[open] button.tm-day.tm-open').first().click();
     await p.page.locator('dialog[open] [data-tm-submit]').click();
     await p.page.locator('dialog[open] [data-tm-submit]').waitFor({ state: 'detached', timeout: 10000 });
-    await p.page.locator('.tc [data-tc-edit]').click();
+    await tapLink(p.page, 'data-tc-edit');
     await p.page.locator('dialog[open] [data-tm-save]').waitFor({ timeout: 10000 });
     assert((await p.page.locator('dialog[open] [data-tm-mylevel], dialog[open] [data-tm-change]').count()) === 0, 'Edit has no level row');
     await shot(p.page, 'K-edit-dates-only');
