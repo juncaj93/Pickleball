@@ -113,6 +113,8 @@ import { setZip13ForAll, zip13Flags } from './zip13';
 import { monthPlayedCounts } from './playersRedo';
 import type { Zip13Switch } from '../shared/zip13';
 import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
+import { NIGHT_START_MINUTES } from '../shared/tournament';
+import { startMsOf } from '../shared/tournamentTickets';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -1877,22 +1879,26 @@ export async function removePlayer(ctx: Ctx) {
       `${p.display_name} is still in ${upcoming.length === 1 ? 'a game' : `${upcoming.length} games`} (${list}). Take ${p.display_name} out of ${upcoming.length === 1 ? 'it' : 'them'} first (gear > Players), then remove the name.`,
     );
   }
-  // Zip 56 "Tournaments" piece 2: a ticket is money (and a spot). While the name holds one on a tournament that is not over (a spot, a place in
-  // line, money or an I paid), it stays: the organizer takes them off the list first (Tournament > Tickets), which gives the money back as
-  // credit. Any ticket at all is history (never deleted with the name). A database before migration 0024 has no tickets: nothing changes.
-  const ticket = await ctx.db
+  // Zip 56 "Tournaments" piece 2: a ticket is money (and a spot). While the name holds one on a tournament whose night has not started (a spot,
+  // a place in line, money), it stays: the organizer takes them off the list first (Tournament > Tickets), which gives the money back as credit.
+  // An I paid still waiting is answered first, whatever the stage. From the start of the night a ticket is history (it was played, or a hold that
+  // comes back by itself after the night): the name can be hidden. Any ticket at all is history (never deleted with the name). A database before
+  // migration 0024 has no tickets: nothing changes.
+  const tickets = await ctx.db
     .prepare(
-      `SELECT
-         (SELECT t.name FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
-           WHERE k.player_id = ?1 AND t.status <> 'ended' AND (k.place <> 'none' OR k.credit_cents + k.paid_cents + k.claim_cents > 0) LIMIT 1) AS holds,
-         (SELECT COUNT(*) FROM tournament_tickets WHERE player_id = ?1) AS n`,
+      `SELECT t.name, t.status, t.final_date, k.place, k.credit_cents + k.paid_cents AS money, k.claim_cents AS claim
+       FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id WHERE k.player_id = ?`,
     )
     .bind(id)
-    .first<{ holds: string | null; n: number }>()
-    .catch(() => null);
-  if (ticket?.holds) {
-    throw new HttpError(409, 'player_has_ticket', `${p.display_name} holds a ticket for the ${ticket.holds}. Take ${p.display_name} off its list first (the tournament's Tickets), then remove the name.`);
+    .all<{ name: string; status: string; final_date: string | null; place: string; money: number; claim: number }>()
+    .then((r) => r.results)
+    .catch(() => [] as { name: string; status: string; final_date: string | null; place: string; money: number; claim: number }[]);
+  const started = (d: string | null) => !!d && ctx.nowMs >= startMsOf(d, NIGHT_START_MINUTES, group.timezone);
+  const holds = tickets.find((k) => k.claim > 0 || (k.status !== 'canceled' && !started(k.final_date) && (k.place !== 'none' || k.money > 0)));
+  if (holds) {
+    throw new HttpError(409, 'player_has_ticket', `${p.display_name} holds a ticket for the ${holds.name}. Take ${p.display_name} off its list first (the tournament's Tickets), then remove the name.`);
   }
+  const ticket = { n: tickets.length };
   const history = await ctx.db
     .prepare(
       `SELECT

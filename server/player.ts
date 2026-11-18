@@ -134,7 +134,7 @@ import { homeScreenTipFor } from './homeScreenTip';
 import { christmasSkinFor, christmasSkinModeFor, setChristmasSkinMeOn } from './christmasSkin';
 import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
-import { playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup } from './tournament';
+import { playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup, tournamentsFlags } from './tournament';
 import { playerTicketLock, playerTicketPaid, playerTicketWaitlist } from './tournamentTickets';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
@@ -251,8 +251,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       // Their own entries only, including ones that ended (credit used on a game that went back to them), so the
       // credit sheet can say what happened to their money in plain words.
       const mineOnly = visibleEntries(ledger).filter((e) => e.playerId === me.id);
-      // Zip 56: a tournament ticket's entries name it (one small read, only for a player who has such entries).
-      const tourNames = await tourNamesOf(ctx.db, mineOnly);
+      // Zip 56: a tournament ticket's entries name it (one small read, only for a player who has such entries), and only while the switch is on
+      // for this phone: switched off, the entries say "a tournament" (review: no tournament data at all to a phone that may not see it).
+      const tourOn = mineOnly.some((e) => e.tourId) && (await tournamentsFlags(ctx, group.id)).on;
+      const tourNames = await tourNamesOf(ctx.db, tourOn ? mineOnly : []);
       credit.history = mineOnly
         .map(
           (e): CreditEntryView => ({

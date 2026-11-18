@@ -7,16 +7,16 @@
 //
 // This file is its own download (src/TournamentSlot.tsx loads it): a phone fetches it only when the server sends a tournament for it, so with
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
-import { type CSSProperties, type MouseEvent, type ReactNode, useMemo, useState } from 'react';
+import { type CSSProperties, type MouseEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 import type { PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
-import { dayShort, formatName, formatRule, hoursLabel, levelLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
+import { dayShort, formatLine, formatName, hoursLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
 import { payByLabel, placeWord } from '../../shared/tournamentTickets';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../lib';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
-import { type DayLook, LevelList, MonthCalendar } from './parts';
+import { type DayLook, LevelList, MonthCalendar, useMoreBelow } from './parts';
 
 function errorText(err: unknown): string {
   if (err instanceof ApiError) return err.status === 403 && /view only/i.test(err.message) ? VIEW_ONLY_MESSAGE : err.message;
@@ -43,7 +43,8 @@ export function ticketStateOf(t: PlayerTournamentView): TicketState | null {
   const mine = k.mine;
   if (mine?.place === 'spot') return 'in';
   if (k.closed) return 'closed';
-  const open = k.locked.length < k.size;
+  // Alex: the spots follow the players locked in; every spot is taken only at 12, then the waitlist starts.
+  const open = !k.full;
   const paid = !!mine && mine.creditCents + mine.paidCents >= k.priceCents;
   if (mine?.place === 'line') return open && !paid && mine.claimCents === 0 ? 'lock' : 'line';
   if (mine && mine.claimCents > 0 && mine.owedCents === 0) return 'waiting';
@@ -198,8 +199,9 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
             setSheet(null);
             setAskOut(true);
           }}
-          onSubmit={async (level, dates) => {
-            const ok = await run(() => api('PUT', '/api/tournament/signup', { tournamentId: t.id, level, ...(dates ? { dates } : {}) }), 'Saved');
+          onSubmit={async (dates) => {
+            // Alex: Edit sign-up changes the dates only (the level was picked once; only the organizer changes it).
+            const ok = await run(() => api('PUT', '/api/tournament/signup', { tournamentId: t.id, ...(dates ? { dates } : {}) }), 'Saved');
             if (ok) setSheet(null);
           }}
         />
@@ -502,11 +504,9 @@ export function TicketCard({
         <Stub t={t} />
         <div className="tc-main">
           <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
+          {/* Alex: one line, "Locked doubles (same partner all night)", in the green subtitle style. */}
           <p className="tc-format" data-tc-format-name>
-            {formatName(t.format)}
-          </p>
-          <p className="tc-rule" data-tc-rule>
-            {formatRule(t.format)}
+            {formatLine(t.format)}
           </p>
           <p className="tc-sub" data-tc-sub>
             {sub}
@@ -651,7 +651,7 @@ function Overlay({
 
 /** WHO'S IN: the locked-in players in the order they locked in, then this player if they can pay to lock in, then the open spots. */
 function WhoIn({ k, s, meName }: { k: PlayerTicketsView; s: TicketState; meName: string | null }) {
-  const full = k.locked.length >= k.size;
+  const full = k.full;
   // "7 · Vic · Pay to lock in" (mock 09): their own row, only while a spot is open for them.
   const meRow = (s === 'lock' || s === 'waiting') && !full ? { label: s === 'waiting' ? 'Waiting to confirm' : 'Pay to lock in' } : null;
   const open = Math.max(0, k.size - k.locked.length - (meRow ? 1 : 0));
@@ -753,6 +753,17 @@ function DatesPicker({ t, picked, setPicked, summary = true }: { t: PlayerTourna
   );
 }
 
+/** The sheets' sticky bottom bar. Its soft fade shows only while the sheet has more to scroll (Alex). */
+function SheetBottom({ stack, children }: { stack?: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useMoreBelow(ref, false);
+  return (
+    <div ref={ref} className={stack ? 'tm-bottom tm-bottom-stack' : 'tm-bottom'}>
+      {children}
+    </div>
+  );
+}
+
 function SignUpSheet({
   t,
   open,
@@ -766,41 +777,47 @@ function SignUpSheet({
   onClose: () => void;
   onSubmit: (level: number, dates: string[]) => void;
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
-  const [level, setLevel] = useState<number | null>(null);
+  // Alex: a level is picked once. Someone signing up again (after Drop out or Back out) keeps their first level: no level step.
+  const locked = t.lockedLevel ?? null;
+  const [step, setStep] = useState<1 | 2>(locked === null ? 1 : 2);
+  const [level, setLevel] = useState<number | null>(locked);
   // Once the date is picked there is one date to pick: it starts picked.
   const [pickedRaw, setPicked] = useState<string[]>(t.openDates.length === 1 ? [...t.openDates] : []);
   // Only the dates still open count: one that closed while the sheet was open (the date was picked, midnight passed) drops out, never sent.
   const picked = pickedRaw.filter((d) => t.openDates.includes(d));
   return (
     <Sheet calmFocus open={open} title="Sign up" onClose={onClose} className="tm-sheet">
-      <div className="tm-steps" aria-hidden="true">
-        <span className="on" />
-        <span className={step === 2 ? 'on' : undefined} />
-      </div>
+      {locked === null && (
+        <div className="tm-steps" aria-hidden="true">
+          <span className="on" />
+          <span className={step === 2 ? 'on' : undefined} />
+        </div>
+      )}
       {step === 1 ? (
         <div data-tm-step="1">
           <p className="tm-eyebrow">Step 1 of 2 · Your level</p>
           <LevelList value={level} onPick={setLevel} />
-          <div className="tm-bottom">
+          <SheetBottom>
             <button type="button" className="btn" disabled={level === null} onClick={() => setStep(2)} data-tm-next>
               Next
             </button>
-          </div>
+          </SheetBottom>
         </div>
       ) : (
         <div data-tm-step="2">
-          <p className="tm-eyebrow">Step 2 of 2 · Pick every date that works</p>
+          <p className="tm-eyebrow">{locked === null ? 'Step 2 of 2 · Pick every date that works' : 'Pick every date that works'}</p>
           <p className="tm-help">Green dates are open. Games start around {startLabel(t.start)}.</p>
           <DatesPicker t={t} picked={picked} setPicked={setPicked} />
-          <div className="tm-bottom">
-            <button type="button" className="btn secondary" onClick={() => setStep(1)} data-tm-back>
-              Back
-            </button>
+          <SheetBottom>
+            {locked === null && (
+              <button type="button" className="btn secondary" onClick={() => setStep(1)} data-tm-back>
+                Back
+              </button>
+            )}
             <button type="button" className="btn" disabled={busy || picked.length === 0 || level === null} onClick={() => level !== null && onSubmit(level, picked)} data-tm-submit>
               {busy ? 'Signing up…' : 'Sign up'}
             </button>
-          </div>
+          </SheetBottom>
         </div>
       )}
     </Sheet>
@@ -820,14 +837,11 @@ function EditSheet({
   busy: boolean;
   onClose: () => void;
   onBackOut: () => void;
-  /** `dates` null: the dates were not touched (only the level is sent). */
-  onSubmit: (level: number, dates: string[] | null) => void;
+  /** `dates` null: the dates were not touched (nothing to send). */
+  onSubmit: (dates: string[] | null) => void;
 }) {
   const me = t.me!;
-  const [level, setLevel] = useState<number>(me.level);
-  const [changing, setChanging] = useState(false);
-  // Only the dates still open count (once the date is picked, that one date). Untouched dates are not sent: a level-only change never makes
-  // anyone tick a date they cannot make (the server keeps their dates as they are).
+  // Only the dates still open count (once the date is picked, that one date). Untouched dates are not sent.
   const [pickedRaw, setPickedRaw] = useState<string[]>(me.dates);
   // Only the dates still open count, also after a reload under the open sheet (a date that closed drops out and is never sent).
   const picked = pickedRaw.filter((d) => t.openDates.includes(d));
@@ -838,42 +852,21 @@ function EditSheet({
   };
   return (
     <Sheet calmFocus open={open} title="Edit my sign-up" onClose={onClose} className="tm-sheet">
-      {changing ? (
-        <div className="tm-change-level" data-tm-change-level>
-          <p className="tm-eyebrow">Your level</p>
-          <LevelList
-            value={level}
-            onPick={(v) => {
-              setLevel(v);
-              setChanging(false);
-            }}
-          />
-        </div>
-      ) : (
-        <div className="tm-mylevel" data-tm-mylevel>
-          <div>
-            <small>YOUR LEVEL</small>
-            <b>{levelLabel(level)}</b>
-          </div>
-          <button type="button" className="btn" onClick={() => setChanging(true)} data-tm-change>
-            Change
-          </button>
-        </div>
-      )}
+      {/* Alex: dates only. The level was picked once at sign-up; only the organizer changes it. */}
       {t.openDates.length > 0 && (
         <>
           <p className="tm-eyebrow tm-eyebrow-dates">Dates that work</p>
           <DatesPicker t={t} picked={picked} setPicked={setPicked} summary={false} />
         </>
       )}
-      <div className="tm-bottom tm-bottom-stack">
-        <button type="button" className="btn" disabled={busy || (touched && picked.length === 0)} onClick={() => onSubmit(level, touched ? picked : null)} data-tm-save>
+      <SheetBottom stack>
+        <button type="button" className="btn" disabled={busy || !touched || picked.length === 0} onClick={() => onSubmit(touched ? picked : null)} data-tm-save>
           {busy ? 'Saving…' : 'Save changes'}
         </button>
         <button type="button" className="tm-quiet-link" onClick={onBackOut} data-tm-backout>
           Back out of tournament
         </button>
-      </div>
+      </SheetBottom>
     </Sheet>
   );
 }

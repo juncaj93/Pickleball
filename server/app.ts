@@ -213,8 +213,8 @@ route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVis
 route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
 route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
 route('POST', '/api/admin/tournament/:id/cancel', (ctx) => tournament.cancelTournament(ctx));
-// Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Open tickets, Pay by, the answers on one ticket, Reschedule.
-route('POST', '/api/admin/tournament/:id/open-tickets', tickets.openTickets);
+// Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Pay by, the answers on one ticket, Reschedule. (Tickets open when the date is
+// picked: PUT .../date above. Alex: no Open tickets button.)
 route('PUT', '/api/admin/tournament/:id/pay-by', tickets.setPayBy);
 route('POST', '/api/admin/tournament/:id/ticket', tickets.adminTicket);
 route('POST', '/api/admin/tournament/:id/reschedule', (ctx) => tickets.rescheduleTournament(ctx));

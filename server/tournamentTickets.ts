@@ -6,7 +6,7 @@
 //   POST /api/tournament/paid      { tournamentId, cents }                               I paid (on the site's own Pay sheet)
 //   POST /api/tournament/waitlist  { tournamentId }                                      Join waitlist
 // The organizer:
-//   POST /api/admin/tournament/:id/open-tickets  { payBy? }       Open tickets (the date is picked, Everyone can see it)
+//   (Tickets open when the organizer picks the date: server/tournament.ts setTournamentDate. Alex: no other trigger.)
 //   PUT  /api/admin/tournament/:id/pay-by        { payBy }        Change Pay by while tickets are open
 //   POST /api/admin/tournament/:id/ticket        { playerId, action: 'confirm' | 'reject' | 'mark_paid' | 'take_off', cents? }
 //   POST /api/admin/tournament/:id/reschedule                    Reschedule: back to the date step; every ticket stays as it is
@@ -18,13 +18,15 @@ import { newId } from './crypto';
 import * as v from './validate';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { formatPrice } from '../shared/money';
-import { dayLong } from '../shared/tournament';
-import { defaultPayBy, payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
+import { dayLong, MAX_SPOTS } from '../shared/tournament';
+import { payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
 import {
   changedOrLookAgain,
   logPlayer,
+  movedBack,
   mySignup,
   nightOf,
+  nightOver,
   openById,
   organizerOn,
   playerTarget,
@@ -114,8 +116,8 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
     return { ok: true, creditUsedCents: 0, ...answerOf(after) };
   }
   const tickets = await loadTickets(ctx.db, t.id);
-  if (intent === 'lock' && tickets.filter((x) => x.place === 'spot').length >= t.size) {
-    throw new HttpError(409, 'spots_full', `All ${t.size} spots just filled. Join the waitlist.`);
+  if (intent === 'lock' && tickets.filter((x) => x.place === 'spot').length >= MAX_SPOTS) {
+    throw new HttpError(409, 'spots_full', `All ${MAX_SPOTS} spots just filled. Join the waitlist.`);
   }
   // The ticket as it will be after its first statement: a new one (Hold puts it in line), or the one read (Hold puts it in line if it was not).
   const ticketId = k?.id ?? newId();
@@ -133,21 +135,24 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
     );
   } else if (intent === 'hold' && k.place === 'none') {
     read = { ...k, place: 'line', place_at: k.claim_at ?? ctx.nowIso };
+    // Into the line only while tickets are open and they are on the list (a Cancel or their own Back out in between: nothing).
     statements.push(
-      ctx.db.prepare(`UPDATE tournament_tickets SET place = 'line', place_at = ?1, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)}`).bind(read.place_at, ctx.nowIso, k.id),
+      ctx.db
+        .prepare(`UPDATE tournament_tickets SET place = 'line', place_at = ?1, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}`)
+        .bind(read.place_at, ctx.nowIso, k.id),
     );
   } else {
     read = k;
   }
   // Lock: only while a spot is open at that very moment (a race for the last spot never spends credit on a spot that is gone).
-  const guard = `${ticketAsRead(read)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}${intent === 'lock' ? ` AND ${spotsSql(t.id)} < ${Number(t.size) | 0}` : ''}`;
+  const guard = `${ticketAsRead(read)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}${intent === 'lock' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS}` : ''}`;
   const usedId = newId();
   const pay = payWithCreditStatements(ctx.db, { groupId: who.group.id, tournamentId: t.id, playerId, ticketId, usedId, nowIso: ctx.nowIso, guard });
   const at = statements.length + pay.ticketStatement;
   statements.push(...pay.statements);
   const res = await ctx.db.batch(statements).catch(lookAgainOn);
   if ((res[at].meta?.changes ?? 0) !== 1) {
-    throw intent === 'lock' ? new HttpError(409, 'spots_full', `All ${t.size} spots just filled. Join the waitlist.`) : new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
+    throw intent === 'lock' ? new HttpError(409, 'spots_full', `All ${MAX_SPOTS} spots just filled. Join the waitlist.`) : new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   }
   const used = (await ctx.db.prepare('SELECT amount_cents AS c FROM credit_ledger WHERE id = ?').bind(usedId).first<{ c: number }>())?.c ?? 0;
   const after = await ticketOf(ctx.db, t.id, playerId);
@@ -187,7 +192,7 @@ export async function playerTicketWaitlist(ctx: Ctx, who: TournamentActor, body:
   const k = await ticketOf(ctx.db, t.id, playerId);
   if (k && (k.place === 'line' || k.place === 'spot')) return { ok: true, result: k.place === 'spot' ? 'locked' : 'waitlist', position: await linePosition(ctx, t, playerId) };
   const tickets = await loadTickets(ctx.db, t.id);
-  if (tickets.filter((x) => x.place === 'spot').length < t.size) throw new HttpError(409, 'spots_open', 'A spot is open. Lock it now.');
+  if (tickets.filter((x) => x.place === 'spot').length < MAX_SPOTS) throw new HttpError(409, 'spots_open', 'A spot is open. Lock it now.');
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
   const statements = organizer
     ? [organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso)]
@@ -225,34 +230,6 @@ function readPayBy(raw: unknown, nowMs: number, startMs: number): string {
   if (ms <= nowMs) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time that has not passed.');
   if (ms > startMs) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time before the tournament starts.');
   return iso;
-}
-
-/**
- * POST /api/admin/tournament/:id/open-tickets { payBy? }: tickets open on the picked date. Spots = the players expected; the ticket is the
- * tournament's flat price; Pay by defaults to two days before at 7:00 PM. Everyone must be able to see it (players are about to pay). The
- * organizer's own seat ($0) is taken at once when they are on the list. After a Reschedule, every ticket kept its place and money.
- */
-export async function openTickets(ctx: Ctx, body: Record<string, unknown>) {
-  const group = await organizerOn(ctx);
-  const t = await openById(ctx, group);
-  if (statusOf(t) !== 'date_picked' || !t.final_date) throw new HttpError(409, 'no_date', 'Pick the date first.');
-  if (t.visibility !== 'all') throw new HttpError(409, 'show_first', 'Show it to everyone first.');
-  const night = nightOf(t, group.timezone)!;
-  if (ctx.nowMs >= night.start) throw new HttpError(409, 'date_passed', 'That date has passed. Reschedule it first.');
-  const payBy = body.payBy === undefined || body.payBy === null ? defaultPayBy(t.final_date, t.start_minutes, group.timezone, ctx.nowMs) : readPayBy(body.payBy, ctx.nowMs, night.start);
-  const org = await organizerIdOf(ctx.db, group);
-  const res = await ctx.db
-    .batch([
-      ctx.db
-        .prepare("UPDATE tournaments SET status = 'tickets', pay_by = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'date_picked' AND final_date = ?4 AND visibility = 'all' AND ticket_cents = ?5 AND size = ?6")
-        .bind(payBy, ctx.nowIso, t.id, t.final_date, t.ticket_cents, t.size),
-      ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
-      fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
-    ])
-    .catch(lookAgainOn);
-  changedOrLookAgain(res[0]);
-  await audit(ctx.db, group.id, null, 'tournament_tickets_opened', { tournament: t.name, date: dayLong(t.final_date), spots: t.size, priceCents: t.ticket_cents, payBy: payByLabel(payBy, group.timezone, t.final_date) }, ctx.nowIso);
-  return { ok: true, payBy };
 }
 
 /** PUT /api/admin/tournament/:id/pay-by { payBy }: a new Pay by while tickets are open. */
@@ -296,9 +273,8 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
     `(${offList(x)} OR ${tournamentCanceled(x)}${
       endIso ? ` OR (${x}.place <> 'spot' AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets'))` : ''
     })`;
-  const why = statusOf(t) === 'canceled' ? 'cancel' : signup && signup.status === 'off' ? 'off' : signup && signup.status !== 'in' ? 'back' : 'unused';
-  const endedReason = why === 'back' || why === 'off' ? 'dropped' : 'canceled';
-  const back = ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why, endedReason, nowIso: ctx.nowIso, when: settle });
+  // Why the money comes back is worked out when the answer lands (a Cancel or a Back out in between counts), not from the read above.
+  const back = ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why: 'auto', endedReason: 'auto', nowIso: ctx.nowIso, when: settle });
 
   if (action === 'confirm' || action === 'reject') {
     if (!k || k.claim_cents === 0) throw new HttpError(409, 'nothing_waiting', `${name} has no I paid waiting. Look again.`);
@@ -335,6 +311,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
 
   if (action === 'mark_paid') {
     if (statusOf(t) !== 'tickets') throw new HttpError(409, 'tickets_not_open', 'Tickets are not open. Look again.');
+    if (salesClosed(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. The tournament has started.');
     if (!signup || signup.status !== 'in') throw new HttpError(409, 'not_signed_up', `${name} is not on the list. Look again.`);
     if (k && k.claim_cents > 0) throw new HttpError(409, 'claim_waiting', `${name} tapped I paid. Answer that instead.`);
     const price = k ? k.price_cents : playerId === (await organizerIdOf(ctx.db, group)) ? 0 : t.ticket_cents;
@@ -363,27 +340,28 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
 
   // take_off
   if (statusOf(t) === 'canceled') throw new HttpError(409, 'tournament_changed', 'This tournament was canceled. Look again.');
+  // From the start of the night a ticket has been used: taking someone off then would give it back (review, Zip 56).
+  if (salesClosed(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'tournament_started', 'The tournament has started. Nobody can be taken off now.');
   if (!signup || signup.status !== 'in') return { ok: true, changed: false };
+  // The money-back statements always run (they do nothing without a ticket): a Lock landing between the read and this batch still comes back.
   const res = await ctx.db
     .batch([
       ctx.db
         .prepare(`UPDATE tournament_signups SET status = 'off', backed_out_at = ?1, updated_at = ?1 WHERE id = ?2 AND status = 'in' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?3 AND status <> 'canceled')`)
         .bind(ctx.nowIso, signup.id, t.id),
-      ...(k
-        ? ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why: 'off', endedReason: 'dropped', nowIso: ctx.nowIso, when: offList })
-        : []),
+      ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why: 'off', endedReason: 'dropped', nowIso: ctx.nowIso, when: offList }),
       fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
     ])
     .catch(lookAgainOn);
   if ((res[0].meta?.changes ?? 0) === 0) return { ok: true, changed: false };
-  const waiting = k && k.claim_cents > 0;
-  const creditCents = k && !waiting ? k.credit_cents + k.paid_cents : 0;
+  const moved = await movedBack(ctx.db, t.id, playerId, 'off', 'dropped', ctx.nowIso);
+  const creditCents = moved.cash + moved.credit;
   await audit(
     ctx.db,
     group.id,
     null,
     'tournament_taken_off',
-    { tournament: t.name, player: name, playerId, ...(creditCents ? { amountCents: creditCents } : {}), ...(waiting ? { waitingCents: k.credit_cents + k.paid_cents + k.claim_cents } : {}) },
+    { tournament: t.name, player: name, playerId, ...(creditCents ? { amountCents: creditCents } : {}), ...(moved.waiting ? { waitingCents: moved.waiting } : {}) },
     ctx.nowIso,
   );
   return { ok: true, changed: true, creditCents };
@@ -398,6 +376,7 @@ export async function rescheduleTournament(ctx: Ctx) {
   const group: GroupRow = await organizerOn(ctx);
   const t = await openById(ctx, group);
   if (statusOf(t) !== 'date_picked' && statusOf(t) !== 'tickets') throw new HttpError(409, 'no_date', 'There is no date to move. Look again.');
+  if (nightOver(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'tournament_played', 'The tournament night is over. It cannot be moved now.');
   const held = (await loadTickets(ctx.db, t.id)).filter((k) => k.signup_status === 'in' && (k.place === 'spot' || k.credit_cents + k.paid_cents + k.claim_cents > 0)).length;
   const res = await ctx.db.batch([
     ctx.db

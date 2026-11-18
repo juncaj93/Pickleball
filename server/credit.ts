@@ -113,11 +113,16 @@ export async function tourNamesOf(db: D1Database, rows: readonly Pick<CreditRow,
   return new Map(results.map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled' }]));
 }
 
-/** Zip 56: a ticket row's extra words for a CreditEntryView (nothing on any other row, so every other entry is exactly as before). */
-export function tourFields(e: Pick<CreditRow, 'tourId' | 'tourWhy'>, names: Map<string, { name: string; canceled: boolean }>) {
+/**
+ * Zip 56: a ticket row's extra words for a CreditEntryView (nothing on any other row, so every other entry is exactly as before). The name only
+ * when `names` has it (the player's own answer looks names up only while the switch is on for that phone); "canceled" only on credit a Cancel
+ * gave back (review: never on a row of someone who had left the list before).
+ */
+export function tourFields(e: Pick<CreditRow, 'tourId' | 'tourWhy' | 'kind' | 'endedReason'>, names: Map<string, { name: string; canceled: boolean }>) {
   if (!e.tourId) return {};
   const t = names.get(e.tourId);
-  return { ...(t ? { tournamentName: t.name } : {}), tourWhy: e.tourWhy ?? null, ...(t?.canceled ? { tourCanceled: true as const } : {}) };
+  const byCancel = !!t?.canceled && e.kind === 'used' && e.endedReason === 'canceled';
+  return { ...(t ? { tournamentName: t.name } : {}), tourWhy: e.tourWhy ?? null, ...(byCancel ? { tourCanceled: true as const } : {}) };
 }
 
 export interface RefundRequestRow {

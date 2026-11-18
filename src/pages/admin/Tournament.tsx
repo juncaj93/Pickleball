@@ -12,9 +12,7 @@ import {
   dateCounts,
   dayLong,
   DEFAULT_CREDIT_CENTS,
-  DEFAULT_SIZE,
   DEFAULT_TICKET_CENTS,
-  defaultPlan,
   levelOf,
   levelShort,
   MAX_DATES,
@@ -22,15 +20,10 @@ import {
   monthsBetween,
   monthStartPlus,
   NAME_MAX,
-  type Plan,
-  planAllowed,
-  planLine,
-  PLANS,
   planTitle,
-  type Size,
-  SIZES,
   type Visibility,
   WINNERS,
+  formatLine,
   formatName,
   formatRule,
   DEFAULT_FORMAT,
@@ -181,9 +174,8 @@ function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
         <div className="tm-home-text">
           <h2 className="tm-home-title">{t.name}</h2>
           <p className="tm-home-format" data-tm-home-format={t.format}>
-            {formatName(t.format)}
+            {formatLine(t.format)}
           </p>
-          <p className="tm-home-rule">{formatRule(t.format)}</p>
           <p className="tm-home-sub">
             {statusLine(t)} · {who}
           </p>
@@ -296,7 +288,7 @@ function TicketsCountCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView })
  * while tickets are open, Tickets) and Cancel or reschedule. The name opens the whole tournament page (levels, settings).
  */
 function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
-  const [open, setOpen] = useState<null | 'page' | 'tickets' | 'open' | 'change'>(null);
+  const [open, setOpen] = useState<null | 'page' | 'tickets'>(null);
   const tz = ctx.d.group.timezone;
   const chip = t.status === 'canceled' ? 'Canceled' : t.status === 'tickets' ? (t.closed ? 'Tickets closed' : 'Tickets open') : 'Date picked';
   const evens = evensOf(t, ctx.d.now);
@@ -317,12 +309,19 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
           <span>Date</span>
           <b data-tm-row="date">{dateRow(t)}</b>
         </div>
+        {/* Alex's smart plan: follows the players locked in (the planned size, its courts and hours). */}
         <div className="tm-row">
           <span>Plan</span>
-          <b>
+          <b data-tm-row="plan">
             {t.size} players · {planTitle(t)}
           </b>
         </div>
+        {t.cost && t.status !== 'canceled' && (
+          <div className="tm-row">
+            <span>Your cost if it fills</span>
+            <b data-tm-row="cost">{costWords(t.cost.ifFillsCents)}</b>
+          </div>
+        )}
         {t.status === 'tickets' ? (
           <>
             <div className="tm-row">
@@ -375,20 +374,14 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
         </p>
       ) : (
         <>
-          {t.status === 'date_picked' ? (
-            <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('open')} data-tm-open-tickets>
-              Open tickets
-            </button>
-          ) : (
-            <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('tickets')} data-tm-tickets>
-              Tickets
-            </button>
-          )}
+          {/* Alex: no Open tickets button. Picking the date opened them. */}
+          <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('tickets')} data-tm-tickets>
+            Tickets
+          </button>
           <CancelOrReschedule ctx={ctx} t={t} />
         </>
       )}
       <TournamentPage ctx={ctx} t={t} open={open === 'page' || open === 'tickets'} focus={open === 'tickets' ? 'tickets' : undefined} onClose={() => setOpen(null)} />
-      {t.status === 'date_picked' && <PayBySheet ctx={ctx} t={t} open={open === 'open'} mode="open" onClose={() => setOpen(null)} />}
     </section>
   );
 }
@@ -397,19 +390,16 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
 const PAY_TIMES = Array.from({ length: 36 }, (_, i) => 360 + i * 30);
 const timeWords = (m: number) => `${m % 720 >= 60 ? Math.floor((m % 720) / 60) : 12}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`;
 
-/**
- * Zip 56: Open tickets (the spots, the price, Pay by) or a new Pay by while tickets are open. Pay by starts on the tournament's own (two days
- * before at 7:00 PM, or the one already set).
- */
-function PayBySheet({ ctx, t, open, mode, onClose }: { ctx: AdminCtx; t: AdminTournamentView; open: boolean; mode: 'open' | 'change'; onClose: () => void }) {
+/** Zip 56: a new Pay by while tickets are open (it starts on the one set when the date was picked: two days before at 7:00 PM). */
+function PayBySheet({ ctx, t, open, onClose }: { ctx: AdminCtx; t: AdminTournamentView; open: boolean; onClose: () => void }) {
   return (
-    <Sheet calmFocus open={open} title={mode === 'open' ? 'Open tickets' : 'Pay by'} onClose={onClose} className="tm-sheet-pay">
-      {open && <PayByBody key={t.payBy ?? 'none'} ctx={ctx} t={t} mode={mode} onDone={onClose} />}
+    <Sheet calmFocus open={open} title="Pay by" onClose={onClose} className="tm-sheet-pay">
+      {open && <PayByBody key={t.payBy ?? 'none'} ctx={ctx} t={t} onDone={onClose} />}
     </Sheet>
   );
 }
 
-function PayByBody({ ctx, t, mode, onDone }: { ctx: AdminCtx; t: AdminTournamentView; mode: 'open' | 'change'; onDone: () => void }) {
+function PayByBody({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; onDone: () => void }) {
   const tz = ctx.d.group.timezone;
   const nowMs = Date.parse(ctx.d.now);
   const start = t.payBy ? payByParts(t.payBy, tz) : { day: t.finalDate ?? '', minutes: 19 * 60 };
@@ -421,27 +411,12 @@ function PayByBody({ ctx, t, mode, onDone }: { ctx: AdminCtx; t: AdminTournament
   const times = PAY_TIMES.includes(minutes) ? PAY_TIMES : [...PAY_TIMES, minutes].sort((a, b) => a - b);
   async function go() {
     if (!iso) return;
-    const ok =
-      mode === 'open'
-        ? await save(() => api('POST', `/api/admin/tournament/${t.id}/open-tickets`, { payBy: iso }), 'Tickets are open')
-        : await save(() => api('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: iso }), `Pay by ${payByLabel(iso, tz, t.finalDate)}`);
+    const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: iso }), `Pay by ${payByLabel(iso, tz, t.finalDate)}`);
     if (ok) onDone();
   }
   return (
-    <div className="stack" data-tm-pay-by={mode}>
+    <div className="stack" data-tm-pay-by="change">
       <div className="tm-rows">
-        {mode === 'open' && (
-          <>
-            <div className="tm-row">
-              <span>Spots</span>
-              <b data-tm-row="spots">{t.size}</b>
-            </div>
-            <div className="tm-row">
-              <span>Ticket</span>
-              <b>{formatPrice(t.ticketCents)}</b>
-            </div>
-          </>
-        )}
         <label className="tm-row" htmlFor="tm-pay-day">
           <span>Pay by</span>
           <select id="tm-pay-day" className="tm-select" value={day} onChange={(e) => setDay(e.target.value)} data-tm-pay-day>
@@ -464,7 +439,7 @@ function PayByBody({ ctx, t, mode, onDone }: { ctx: AdminCtx; t: AdminTournament
         </label>
       </div>
       <button type="button" className="btn block tm-go" disabled={busy || !iso} onClick={() => void go()} data-tm-pay-go>
-        {busy ? 'Working…' : mode === 'open' ? 'Open tickets' : 'Save'}
+        {busy ? 'Working…' : 'Save'}
       </button>
     </div>
   );
@@ -706,44 +681,6 @@ function Card({ label, chip, children, className = '', data, line }: { label: st
   );
 }
 
-function PlanRows({ size, plan, onPick, ticketCents, longGames }: { size: Size; plan: Plan; onPick: (p: Plan) => void; ticketCents: number | null; longGames: boolean }) {
-  const blocked = PLANS[size].some((p) => !planAllowed(p, longGames));
-  return (
-    <>
-      <div className="tm-plans" role="radiogroup" aria-label="Court plan">
-        {PLANS[size].map((p) => {
-          const ok = planAllowed(p, longGames);
-          const on = p.key === plan.key;
-          return (
-            <button
-              key={p.key}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              disabled={!ok}
-              className={`tm-plan${on ? ' tm-plan-on' : ''}`}
-              onClick={() => onPick(p)}
-              data-plan={p.key}
-            >
-              <span className="tm-plan-text">
-                <span className="tm-plan-title">
-                  {planTitle(p)}
-                  {p.best && <span className="tm-best">Best</span>}
-                </span>
-                <span className="tm-plan-line">{planLine(p)}</span>
-              </span>
-              <span className="tm-plan-price">
-                <b>{ticketCents === null ? '$?' : formatPrice(ticketCents)}</b>
-                <small>each</small>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {blocked && <p className="tm-foot">2.5 and 3 hour games need Booking hours turned on.</p>}
-    </>
-  );
-}
 
 export function CreateSheet({ ctx, open, onClose, editing }: { ctx: AdminCtx; open: boolean; onClose: () => void; editing?: AdminTournamentView }) {
   // A fresh form each time it opens (the key), so a Create after a Cancel starts clean.
@@ -756,16 +693,9 @@ export function CreateSheet({ ctx, open, onClose, editing }: { ctx: AdminCtx; op
 
 function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTournamentView; onDone: () => void }) {
   const tz = ctx.d.group.timezone;
-  const longGames = ctx.d.longGames === true;
   const today = todayKeyOf(ctx.d.now, tz);
   const [name, setName] = useState(editing?.name ?? '');
   const [dates, setDates] = useState<string[]>(editing?.offeredDates ?? []);
-  const [size, setSize] = useState<Size>(((editing && (SIZES as readonly number[]).includes(editing.size) ? editing.size : DEFAULT_SIZE) as Size));
-  const [plan, setPlan] = useState<Plan>(() => {
-    const s = (editing && (SIZES as readonly number[]).includes(editing.size) ? editing.size : DEFAULT_SIZE) as Size;
-    const found = editing ? PLANS[s].find((p) => p.courts === editing.courts && p.minutes === editing.minutes && p.start === editing.start) : null;
-    return found ?? defaultPlan(s, longGames);
-  });
   const [ticket, setTicket] = useState<number | null>(editing?.ticketCents ?? DEFAULT_TICKET_CENTS);
   const [credit, setCredit] = useState<number | null>(editing?.championCreditCents ?? DEFAULT_CREDIT_CENTS);
   const [format, setFormat] = useState<TournamentFormat>(editing?.format ?? DEFAULT_FORMAT);
@@ -785,11 +715,6 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   }, [today, dates]);
   const offered = new Set(editing?.offeredDates ?? []);
   const look = (d: string): DayLook => (dates.includes(d) ? 'on' : d < today && !offered.has(d) ? 'past' : 'off');
-  const pickSize = (s: Size) => {
-    setSize(s);
-    // Each size has its own plans (mocks 01, 02): a new size starts on its own best one.
-    setPlan(defaultPlan(s, longGames));
-  };
   async function submit() {
     const n = name.trim();
     const problem = !n
@@ -809,7 +734,8 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
                   : null;
     setError(problem);
     if (problem) return;
-    const body = { name: n, dates, size, courts: plan.courts, minutes: plan.minutes, start: plan.start, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: americano ? second : 0 };
+    // Alex: no players expected and no court plan (the smart plan follows the players locked in, on the tournament page).
+    const body = { name: n, dates, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: americano ? second : 0 };
     const ok = editing
       ? await save(() => api('PUT', `/api/admin/tournament/${editing.id}`, body), 'Saved')
       : await save(() => api('POST', '/api/admin/tournament', body), visibility === 'me' ? 'Sign-up is open. Only you can see it.' : 'Sign-up is open for everyone');
@@ -867,17 +793,6 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
             </button>
           ))}
         </div>
-      </Card>
-
-      <Card label="Players expected" data="size" chip={sold ? <span className="tm-chip">Locked</span> : undefined}>
-        <div className="segmented tm-seg" role="group" aria-label="Players expected">
-          {SIZES.map((s) => (
-            <button key={s} type="button" aria-pressed={size === s} disabled={sold && size !== s} onClick={() => !sold && pickSize(s)} data-size={s}>
-              {s}
-            </button>
-          ))}
-        </div>
-        <PlanRows size={size} plan={plan} onPick={setPlan} ticketCents={ticket} longGames={longGames} />
       </Card>
 
       <Card label={americano ? 'Prizes' : 'Champion prize'} data="prize" line>
@@ -993,6 +908,54 @@ const stageWord = (t: AdminTournamentView) =>
           ? 'Rescheduled'
           : 'Sign-up open';
 
+/** "$12", or "$4 left over" when the tickets more than cover it. */
+const costWords = (cents: number) => (cents < 0 ? `${formatPrice(-cents)} left over` : formatPrice(cents));
+
+/**
+ * Alex's smart plan (organizer only): the players locked in decide the planned size (rounded up to even, plus 2, 6 to 12), that size's courts
+ * and hours, and the organizer's cost: the court bill, minus the tickets, plus the winners' credits. The site never books anything.
+ */
+function PlanCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const locked = lockedOf(t).length;
+  // 2.5 and 3 hour games need Booking hours on (the same gate as their prices).
+  const needsBooking = t.minutes > 120 && ctx.d.longGames !== true;
+  return (
+    <section className="tm-card tm-plan-card" aria-label="Plan" data-tm-card="plan">
+      <div className="tm-card-head tm-head-line">
+        <h3 className="tm-label">Plan</h3>
+        <span className="tm-chip" data-tm-plan-locked>
+          {locked} locked in
+        </span>
+      </div>
+      <div className="tm-rows">
+        <div className="tm-row">
+          <span>{t.size} players</span>
+          <b data-tm-plan>{planTitle(t)}</b>
+        </div>
+        {t.cost && (
+          <>
+            <div className="tm-row tm-cost-main">
+              <span>Your cost if it fills</span>
+              <b data-tm-cost-fills>{costWords(t.cost.ifFillsCents)}</b>
+            </div>
+            <div className="tm-row tm-cost-now">
+              <span>
+                With {t.cost.paidNow} paid now
+              </span>
+              <span data-tm-cost-now>{costWords(t.cost.nowCents)}</span>
+            </div>
+          </>
+        )}
+      </div>
+      {needsBooking && (
+        <p className="tm-card-note tm-booking-note" data-tm-booking-note>
+          Turn on Booking hours
+        </p>
+      )}
+    </section>
+  );
+}
+
 function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTournamentView; focus?: 'levels' | 'dates' | 'tickets'; onClosed: () => void }) {
   const { busy, save } = useSave(ctx);
   const [levelFor, setLevelFor] = useState<string | null>(null);
@@ -1025,6 +988,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
   return (
     <div className="tm-form stack" data-tm-page>
       {showTickets && <TicketsCard ctx={ctx} t={t} scrollRef={focus === 'tickets' ? scrollRef : undefined} />}
+      {!canceled && <PlanCard ctx={ctx} t={t} />}
       <Card label="Who can see it" chip={<span className="tm-chip">{stageWord(t)}</span>} data="page-who">
         <div className="segmented tm-seg tm-seg-who" role="group" aria-label="Who can see it">
           {(['me', 'all'] as const).map((v) => (
@@ -1108,14 +1072,6 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
             <b data-tm-format-row>{formatName(t.format)}</b>
           </div>
           <div className="tm-row">
-            <span>Players expected</span>
-            <b>{t.size}</b>
-          </div>
-          <div className="tm-row">
-            <span>Court plan</span>
-            <b>{planTitle(t)}</b>
-          </div>
-          <div className="tm-row">
             <span>Ticket price</span>
             <b>{formatPrice(t.ticketCents)}</b>
           </div>
@@ -1170,7 +1126,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
       <LevelSheet ctx={ctx} t={t} who={who} onClose={() => setLevelFor(null)} />
       <DateSheet ctx={ctx} t={t} day={day} names={day ? (counts.get(day) ?? []) : []} onClose={() => setDay(null)} />
       <CreateSheet ctx={ctx} open={editing} editing={t} onClose={() => setEditing(false)} />
-      {t.status === 'tickets' && <PayBySheet ctx={ctx} t={t} open={payBy} mode="change" onClose={() => setPayBy(false)} />}
+      {t.status === 'tickets' && <PayBySheet ctx={ctx} t={t} open={payBy} onClose={() => setPayBy(false)} />}
       <ConfirmDialog
         open={askCancel}
         title="Cancel the tournament?"
@@ -1264,7 +1220,7 @@ function DateSheet({ ctx, t, day, names, onClose }: { ctx: AdminCtx; t: AdminTou
           )}
           {isFinal ? (
             <>
-              <p className="tm-card-note">This is the date. Players see it on their card with “Tickets open soon”.</p>
+              <p className="tm-card-note">This is the date.</p>
               <button
                 type="button"
                 className="btn secondary block"
@@ -1279,18 +1235,23 @@ function DateSheet({ ctx, t, day, names, onClose }: { ctx: AdminCtx; t: AdminTou
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              className="btn block tm-go"
-              disabled={busy}
-              onClick={async () => {
-                const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/date`, { date: day }), `${dayLong(day)} is the date`);
-                if (ok) onClose();
-              }}
-              data-tm-date-pick
-            >
-              {busy ? 'Working…' : `Pick ${dayLong(day)}`}
-            </button>
+            <>
+              <p className="tm-card-note" data-tm-date-opens>
+                Tickets open when you pick it.
+              </p>
+              <button
+                type="button"
+                className="btn block tm-go"
+                disabled={busy}
+                onClick={async () => {
+                  const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/date`, { date: day }), `${dayLong(day)} is the date. Tickets are open.`);
+                  if (ok) onClose();
+                }}
+                data-tm-date-pick
+              >
+                {busy ? 'Working…' : `Pick ${dayLong(day)}`}
+              </button>
+            </>
           )}
         </div>
       )}

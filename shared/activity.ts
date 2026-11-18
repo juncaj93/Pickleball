@@ -270,8 +270,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_back_out':
       return `${player} backed out of the ${tourName(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     // Zip 56 "Tournaments" piece 2 (server/tournamentTickets.ts): tickets, the waitlist and their money.
+    // Since Alex's changes, picking the date opens tickets (no spots count: the smart plan follows the players).
     case 'tournament_tickets_opened':
-      return `${who} opened tickets for the ${tourName(d)} (${num(d.spots)} spots, ${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''})`;
+      return `Tickets opened for the ${tourName(d)} (${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''})`;
     case 'tournament_pay_by':
       return `${who} set Pay by for the ${tourName(d)} to ${typeof d.payBy === 'string' ? d.payBy : '?'}`;
     case 'tournament_ticket': {

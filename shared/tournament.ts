@@ -81,8 +81,10 @@ export const FORMATS = ['doubles', 'americano'] as const;
 export const DEFAULT_FORMAT: TournamentFormat = 'doubles';
 /** The format's name, everywhere it shows (Alex: "Locked doubles" and "Americano"). */
 export const formatName = (f: TournamentFormat): string => (f === 'americano' ? 'Americano' : 'Locked doubles');
-/** Its one rule, in a short line under the name (both Home cards and the Create choice). */
+/** Its one rule (the Create choice shows it under the name). */
 export const formatRule = (f: TournamentFormat): string => (f === 'americano' ? 'New partner every round' : 'Same partner all night');
+/** The one-line subtitle under the name on the cards (Alex, after testing piece 1): "Locked doubles (same partner all night)". */
+export const formatLine = (f: TournamentFormat): string => `${formatName(f)} (${formatRule(f).toLowerCase()})`;
 /** The progress strip on the player's card: Americano has no Teams step and ends with Winners. */
 export const stepsFor = (f: TournamentFormat): string[] => (f === 'americano' ? ['Vote', 'Tickets', 'Games', 'Winners'] : ['Vote', 'Tickets', 'Teams', 'Games', 'Final']);
 /** The format can change until tickets open (piece 2 adds that stage); piece 1's two stages are before it. */
@@ -143,6 +145,62 @@ export function defaultPlan(size: Size, longGames: boolean): Plan {
 
 export function findPlan(size: Size, courts: number, minutes: number, start: number): Plan | null {
   return PLANS[size].find((p) => p.courts === courts && p.minutes === minutes && p.start === start) ?? null;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The smart plan (Alex, after testing piece 1): Create and Edit no longer ask for the players expected or a court plan. The plan follows the
+// players locked in, for the organizer only; the site never books anything.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The most spots there are: players lock in until 12 are in, then the waitlist starts. */
+export const MAX_SPOTS = 12;
+/** A court for an hour (SITE_RULES: $48 for 2 hours, $60 for 2.5, $72 for 3). */
+export const COURT_CENTS_PER_HOUR = 24_00;
+/**
+ * The tournament night on the picked date, Eastern, for the site's own rules: from the earliest plan start (7:00 PM) to the venue's close (10:00
+ * PM). Ticket taps stop at the start; a hold that never got a spot comes back as credit after the end.
+ */
+export const NIGHT_START_MINUTES = 19 * 60;
+export const NIGHT_END_MINUTES = 22 * 60;
+/** What Create stores in the size and plan columns, which no screen asks for any more (they are NOT NULL): the cap and the whole night. */
+export const STORED_PLAN = { size: MAX_SPOTS, courts: 2, minutes: 180, start: NIGHT_START_MINUTES } as const;
+
+/** Planned size: the players locked in rounded UP to an even number, plus 2 spots of room; at least 6, at most 12. */
+export function plannedSize(locked: number): Size {
+  const even = Math.ceil(Math.max(0, locked) / 2) * 2;
+  return Math.min(MAX_SPOTS, Math.max(6, even + 2)) as Size;
+}
+
+export interface SmartPlan {
+  /** The planned size, also the spots players see ("6 of 8"). */
+  size: Size;
+  courts: number;
+  minutes: number;
+  /** Start, minutes after midnight Eastern (each size's best plan: 7:30 PM, 7:00 PM for 3 hours). */
+  start: number;
+}
+
+/** The plan for the players locked in: 6 = 1 court 2.5 hours, 8 = 2 courts 2 hours, 10 = 2 courts 2.5 hours, 12 = 2 courts 3 hours. */
+export function smartPlan(locked: number): SmartPlan {
+  const size = plannedSize(locked);
+  const p = PLANS[size].find((x) => x.best) ?? PLANS[size][0];
+  return { size, courts: p.courts, minutes: p.minutes, start: p.start };
+}
+
+/** The court bill for a plan: courts x hours x $24. */
+export const courtCentsOf = (p: Pick<SmartPlan, 'courts' | 'minutes'>): number => Math.round((p.courts * p.minutes * COURT_CENTS_PER_HOUR) / 60);
+
+/** The winners' credits: Locked doubles, the champion credit for each of the 2 winners; Americano, 1st place plus 2nd place. */
+export const prizeCentsOf = (format: TournamentFormat, championCents: number, secondCents: number): number =>
+  format === 'americano' ? championCents + secondCents : WINNERS * championCents;
+
+/**
+ * The organizer's cost for the plan: the court bill, minus the tickets, plus the winners' credits (the organizer plays and pays no ticket).
+ * `ifFills`: every planned spot but the organizer's paid; `now`: the `paidNow` players who have paid so far.
+ */
+export function organizerCost(plan: SmartPlan, ticketCents: number, prizeCents: number, paidNow: number): { courtCents: number; ifFillsCents: number; nowCents: number } {
+  const court = courtCentsOf(plan);
+  return { courtCents: court, ifFillsCents: court - (plan.size - 1) * ticketCents + prizeCents, nowCents: court - paidNow * ticketCents + prizeCents };
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -313,8 +371,10 @@ export type TicketPlaceView = 'spot' | 'line' | 'none';
  * everyone else; the waitlist says whether each spot is paid, as the pictures do ("Paid, first in line", "Not paid"). Never anyone's amounts.
  */
 export interface PlayerTicketsView {
-  /** Spots: the players expected (6, 8, 10 or 12). */
+  /** Spots players see: the planned size (6 to 12, from the players locked in; "6 of 8"). */
   size: number;
+  /** Every spot is taken (12 locked in): the waitlist is open. */
+  full: boolean;
   /** This player's ticket price: the tournament's flat price, $0 for the organizer (who pays the venue, not the group). */
   priceCents: number;
   /** When ticket money is due (ISO), or null when tickets are not open right now (after a Reschedule). */
@@ -345,6 +405,8 @@ export interface PlayerTournamentView {
   names: string[];
   /** This player's own sign-up (null: not on the list). Their own pick only, never the organizer's level. */
   me: { level: number; dates: string[] } | null;
+  /** Off the list after signing up before: the level they picked first, which stays theirs (Alex: a level is picked once). */
+  lockedLevel?: number;
   /** Only me is on: this is the organizer's own phone (the "Only you can see this" strip). */
   onlyMe?: true;
   /** Zip 56: tickets (only once tickets have opened; piece 1's two stages send exactly what they did). */
@@ -392,10 +454,13 @@ export interface AdminTournamentView {
   formatLocked: boolean;
   status: TournamentStatus;
   visibility: Visibility;
+  /** The smart plan for the players locked in now: the planned size (also the spots), courts, minutes and start. */
   size: number;
   courts: number;
   minutes: number;
   start: number;
+  /** Zip 56 (Alex): the organizer's cost for that plan. `paidNow`: players who have paid (the organizer's own seat is not one). */
+  cost?: { courtCents: number; ifFillsCents: number; nowCents: number; paidNow: number };
   ticketCents: number;
   /** Doubles: each of the 2 winners. Americano: 1st place (plus a medal). */
   championCreditCents: number;
@@ -410,7 +475,7 @@ export interface AdminTournamentView {
   backedOut: { playerId: string; name: string }[];
   /** Zip 56: tickets have been open (Pay by set): the price, the size and the format stay locked, also after a Reschedule. */
   settingsLocked?: boolean;
-  /** Zip 56: when ticket money is due. Stored once tickets open; with the date picked and tickets not open yet, what Open tickets starts with. */
+  /** Zip 56: when ticket money is due (set when the date is picked: two days before at 7:00 PM; the organizer can change it). */
   payBy?: string | null;
   /** Zip 56: the tournament night has started (ticket sales are over). */
   closed?: boolean;

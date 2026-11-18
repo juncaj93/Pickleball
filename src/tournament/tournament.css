@@ -197,17 +197,11 @@
   font-size: 1.42rem;
 }
 /* The format under the name ("Locked doubles" or "Americano"), then its one rule in smaller text. */
+/* Alex: the format in ONE line under the name, "Locked doubles (same partner all night)", in the green subtitle style. */
 .tc-format {
   margin: 5px 0 0;
-  font-size: 1rem;
-  font-weight: 750;
-  line-height: 1.2;
-  color: var(--tc-lime);
-}
-.tc-rule {
-  margin: 1px 0 0;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 650;
   line-height: 1.3;
   color: var(--tc-mint);
 }
@@ -458,6 +452,7 @@
   padding: 14px var(--gutter) calc(env(safe-area-inset-bottom, 0px) + 12px);
   background: var(--sheet-bg);
 }
+/* The soft fade above the bar: only while the sheet has more to scroll (data-more, src/tournament/parts.tsx useMoreBelow; Alex). */
 .tm-bottom::before {
   content: '';
   position: absolute;
@@ -467,6 +462,10 @@
   height: 34px;
   background: linear-gradient(to bottom, color-mix(in srgb, var(--sheet-bg) 0%, transparent), var(--sheet-bg));
   pointer-events: none;
+  opacity: 0;
+}
+.tm-bottom[data-more]::before {
+  opacity: 1;
 }
 .tm-bottom .btn {
   flex: 1 1 0;
@@ -660,9 +659,12 @@
   max-height: 346px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding-bottom: 24px;
+}
+/* Its fade only while more months are below (Alex): none at the end, none when it all fits. */
+.tm-cal-box[data-more] {
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent);
-  padding-bottom: 24px;
 }
 .tm-month-title {
   margin: 0 0 8px 2px;

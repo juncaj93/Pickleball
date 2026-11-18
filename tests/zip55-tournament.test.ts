@@ -121,7 +121,10 @@ describe('Create tournament', () => {
     const ctx = await world();
     const id = await create(ctx);
     const t = (await dash(ctx)).tournament;
-    expect(t).toMatchObject({ id, name: 'Winter Classic', status: 'signup', visibility: 'me', size: 8, courts: 2, minutes: 120, start: 1170, ticketCents: 1600, championCreditCents: 1400, offeredDates: DATES, finalDate: null, signups: [] });
+    // Alex: no players expected or court plan any more. The organizer sees the smart plan for nobody locked in (6 players, 1 court, 2.5 hours,
+    // 7:30 PM); the NOT NULL columns hold harmless defaults (the 12-spot cap and the 7:00 to 10:00 PM night).
+    expect(t).toMatchObject({ id, name: 'Winter Classic', status: 'signup', visibility: 'me', size: 6, courts: 1, minutes: 150, start: 1170, ticketCents: 1600, championCreditCents: 1400, offeredDates: DATES, finalDate: null, signups: [] });
+    expect(ctx.app.db.raw.prepare('SELECT size, courts, minutes, start_minutes FROM tournaments WHERE id = ?').get(id)).toEqual({ size: 12, courts: 2, minutes: 180, start_minutes: 1140 });
     const again = await ctx.organizer.call('POST', '/api/admin/tournament', BASE);
     expect(again.status).toBe(409);
     expect(again.data.error).toBe('tournament_open');
@@ -134,10 +137,6 @@ describe('Create tournament', () => {
     expect((await bad({ name: 'x'.repeat(33) })).message).toBe('Keep the name to 32 letters.');
     expect((await bad({ dates: [] })).message).toBe('Pick at least one date.');
     expect((await bad({ dates: ['2026-10-20'] })).message).toBe('Pick dates from today on.');
-    expect((await bad({ size: 7 })).message).toBe('Pick 6, 8, 10 or 12 players.');
-    expect((await bad({ courts: 3 })).message).toBe('Pick a court plan.');
-    // 2.5 and 3 hour plans need Booking hours ON for everyone.
-    expect((await bad({ minutes: 150 })).message).toBe('2.5 and 3 hour games need Booking hours turned on.');
     expect((await bad({ ticketCents: -1 })).error).toBe('invalid_ticket');
     expect((await bad({ creditCents: 20_001 })).error).toBe('invalid_credit');
     expect((await bad({ visibility: 'some' })).error).toBe('invalid_visibility');
@@ -264,7 +263,7 @@ describe('sign up, Edit sign-up, back out', () => {
     expect((await blair.call('POST', '/api/tournament/signup', { tournamentId: 'nope', level: 300, dates: [DATES[0]] })).status).toBe(409);
   });
 
-  it('Edit sign-up changes the level and dates; the level history keeps every pick; back out takes them off; signing up again puts them at the end', async () => {
+  it('Edit sign-up changes the dates only (Alex: a level is picked once); back out takes them off; signing up again keeps the FIRST level, at the end', async () => {
     const ctx = await world();
     const id = await open(ctx);
     const blair = await playerPhone(ctx, 'Blair');
@@ -273,8 +272,9 @@ describe('sign up, Edit sign-up, back out', () => {
     ctx.app.advance(60_000);
     await casey.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[1]] });
     ctx.app.advance(60_000);
+    // A level sent with the edit (an older screen) is ignored: only the dates change.
     expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 340, dates: [DATES[2], DATES[3]] })).status).toBe(200);
-    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 340, dates: [DATES[2], DATES[3]] });
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[2], DATES[3]] });
     // Back out: off the list for everyone.
     ctx.app.advance(60_000);
     expect((await blair.call('POST', '/api/tournament/back-out', { tournamentId: id })).data.result).toBe('backed_out');
@@ -284,17 +284,16 @@ describe('sign up, Edit sign-up, back out', () => {
     // A second back out changes nothing.
     expect((await blair.call('POST', '/api/tournament/back-out', { tournamentId: id })).data.result).toBe('not_signed_up');
     // Edit after backing out is refused.
-    expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 300 })).status).toBe(409);
-    // Sign up again: at the end of the list.
+    expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, dates: [DATES[0]] })).status).toBe(409);
+    // Off the list, their card knows the level they picked first (Sign up skips the level step).
+    expect((await blair.call('GET', '/api/group')).data.tournament.lockedLevel).toBe(320);
+    // Sign up again: at the end of the list, with the FIRST level, whatever this tap sends (the loophole is closed).
     ctx.app.advance(60_000);
     await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 340, dates: [DATES[0]] });
     expect((await casey.call('GET', '/api/group')).data.tournament.names).toEqual(['Casey', 'Blair']);
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[0]] });
     const history = ctx.app.db.raw.prepare("SELECT level, set_by FROM tournament_level_history WHERE player_id = ? ORDER BY created_at").all(ctx.byName.Blair);
-    expect(history).toEqual([
-      { level: 320, set_by: 'player' },
-      { level: 340, set_by: 'player' },
-      { level: 340, set_by: 'player' },
-    ]);
+    expect(history).toEqual([{ level: 320, set_by: 'player' }]);
     const lines = (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries.map((e: any) => e.action);
     expect(lines.filter((a: string) => a.startsWith('tournament_'))).toEqual(expect.arrayContaining(['tournament_signup', 'tournament_signup_edited', 'tournament_back_out', 'tournament_created']));
   });
@@ -324,7 +323,7 @@ describe('the level list and picking the date', () => {
     expect(lines.find((e: any) => e.action === 'tournament_level').details).toMatchObject({ player: 'Casey', level: '3.4', tournament: 'Winter Classic' });
   });
 
-  it('pick the date: the card shows it, sign-up then only offers that date, changes after the date is picked still work, and the date can be taken back', async () => {
+  it('pick the date: tickets open at once (Alex); sign-up then only offers that date; Edit changes dates only; the date stays (Reschedule moves it)', async () => {
     const ctx = await world();
     const id = await create(ctx, { visibility: 'all' });
     const blair = await playerPhone(ctx, 'Blair');
@@ -332,21 +331,23 @@ describe('the level list and picking the date', () => {
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: '2026-11-04' })).status).toBe(400);
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[2] })).status).toBe(200);
     const b = (await blair.call('GET', '/api/group')).data.tournament;
-    expect(b).toMatchObject({ status: 'date_picked', finalDate: DATES[2], openDates: [DATES[2]] });
+    // Tickets are open: Pay by is two days before at 7:00 PM (Sun Nov 8 for Tue Nov 10); 6 spots while nobody is locked in.
+    expect(b).toMatchObject({ status: 'tickets', finalDate: DATES[2], openDates: [DATES[2]] });
+    expect(b.tickets).toMatchObject({ size: 6, full: false, priceCents: 1600, payBy: '2026-11-09T00:00:00.000Z', locked: [], mine: null });
     // A new sign-up after the date is picked: only the picked date can be picked.
     const casey = await playerPhone(ctx, 'Casey');
     expect((await casey.call('POST', '/api/tournament/signup', { tournamentId: id, level: 275, dates: [DATES[0]] })).status).toBe(409);
     expect((await casey.call('POST', '/api/tournament/signup', { tournamentId: id, level: 275, dates: [DATES[2]] })).status).toBe(200);
-    // Edit after the date is picked: the level alone; then the dates (only the picked one); back out still works.
-    expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 320 })).status).toBe(200);
-    expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 320, dates: [DATES[2]] })).status).toBe(200);
-    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[2]] });
+    // Edit after the date is picked: the dates only (just the picked one); back out still works.
+    expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, dates: [DATES[2]] })).status).toBe(200);
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 300, dates: [DATES[2]] });
     expect((await casey.call('POST', '/api/tournament/back-out', { tournamentId: id })).data.result).toBe('backed_out');
-    expect((await dash(ctx)).tournament).toMatchObject({ status: 'date_picked', finalDate: DATES[2] });
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', finalDate: DATES[2] });
     expect((await dash(ctx)).tournament.signups.map((s: any) => s.name)).toEqual(['Blair']);
-    // Taken back: sign-up open again, every offered date open again.
-    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: null })).status).toBe(200);
-    expect((await blair.call('GET', '/api/group')).data.tournament).toMatchObject({ status: 'signup', finalDate: null, openDates: DATES });
+    // The date stays once tickets are open: Cancel or reschedule moves it.
+    const back = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: null });
+    expect(back.status).toBe(409);
+    expect(back.data.message).toBe('Tickets are open. Reschedule to change the date.');
   });
 
   it('Edit settings: a date taken off comes off the picks; the picked date cannot be taken off; cancel ends it for everyone', async () => {
@@ -405,21 +406,23 @@ describe('preview test page server half', () => {
     expect((await dash(ctx)).tournamentTest).toBeUndefined();
     await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: true });
     let t = (await dash(ctx)).tournament;
-    expect(t).toMatchObject({ name: 'Winter Classic', status: 'signup', visibility: 'all', size: 8 });
+    expect(t).toMatchObject({ name: 'Winter Classic', status: 'signup', visibility: 'all', size: 6 });
     expect(t.signups.map((s: any) => s.name)).toEqual(['Parker', 'Rowan', 'Sage', 'Wren', 'Quinn']);
     const b = await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'date_picked' });
     t = (await dash(ctx)).tournament;
-    expect(t.status).toBe('date_picked');
+    // Alex: picking the date opens tickets.
+    expect(t.status).toBe('tickets');
     expect(t.finalDate).toBe(b.data.date);
     expect(t.signups).toHaveLength(7);
     expect(t.signups.every((s: any) => s.dates.includes(t.finalDate))).toBe(true);
     expect(t.signups.find((s: any) => s.name === 'Sage')).toMatchObject({ pickedLevel: 300, level: 340, reviewed: true });
-    expect((await group(ctx, 'Vic')).tournament).toMatchObject({ status: 'date_picked', me: null });
+    expect((await group(ctx, 'Vic')).tournament).toMatchObject({ status: 'tickets', me: null });
     // Americano at each stage (pass 3): its own name, the format, the 2nd place credit.
     for (const stage of ['signup', 'date_picked']) {
       expect((await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage, format: 'americano' })).status).toBe(200);
-      expect((await dash(ctx)).tournament).toMatchObject({ name: 'Winter Americano', format: 'americano', status: stage, championCreditCents: 1400, secondCreditCents: 700 });
-      expect((await group(ctx, 'Vic')).tournament).toMatchObject({ format: 'americano', status: stage });
+      const status = stage === 'date_picked' ? 'tickets' : stage;
+      expect((await dash(ctx)).tournament).toMatchObject({ name: 'Winter Americano', format: 'americano', status, championCreditCents: 1400, secondCreditCents: 700 });
+      expect((await group(ctx, 'Vic')).tournament).toMatchObject({ format: 'americano', status });
     }
     expect((await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'signup', format: 'singles' })).status).toBe(400);
     await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'none' });
@@ -466,7 +469,7 @@ describe('review fixes (fresh reviewer, Zip 55)', () => {
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[1] })).status).toBe(200);
   });
 
-  it("a new pick of the player's own level goes back to be reviewed; the same pick keeps the organizer's level", async () => {
+  it("Alex: a level is picked once. Edit ignores a level; signing up again keeps the first one and the organizer's level", async () => {
     const ctx = await world();
     const id = await create(ctx, { visibility: 'all' });
     const blair = await playerPhone(ctx, 'Blair');
@@ -477,37 +480,34 @@ describe('review fixes (fresh reviewer, Zip 55)', () => {
     // Dates only: the organizer's level stays.
     await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, dates: [DATES[0], DATES[1]] });
     expect(await row()).toMatchObject({ pickedLevel: 300, level: 340, reviewed: true });
-    // A new pick: back to be reviewed.
+    // A level sent with an edit is ignored: still the first pick, still the organizer's level.
     await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 320 });
-    expect(await row()).toMatchObject({ pickedLevel: 320, level: 320, reviewed: false });
-    // Back out and sign up again with the same pick after a review: the review stands; a different pick: reviewed again.
+    expect(await row()).toMatchObject({ pickedLevel: 300, level: 340, reviewed: true });
+    // Back out and sign up again with another level: the FIRST pick stays, and so does the organizer's level. Only the organizer changes it.
     await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/level`, { playerId: ctx.byName.Blair, level: 350 });
     await blair.call('POST', '/api/tournament/back-out', { tournamentId: id });
-    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 320, dates: [DATES[0]] });
-    expect(await row()).toMatchObject({ pickedLevel: 320, level: 350, reviewed: true });
-    await blair.call('POST', '/api/tournament/back-out', { tournamentId: id });
     await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 250, dates: [DATES[0]] });
-    expect(await row()).toMatchObject({ pickedLevel: 250, level: 250, reviewed: false });
-    // The level history kept every step.
+    expect(await row()).toMatchObject({ pickedLevel: 300, level: 350, reviewed: true });
+    await blair.call('POST', '/api/tournament/back-out', { tournamentId: id });
+    await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 360, dates: [DATES[0]] });
+    expect(await row()).toMatchObject({ pickedLevel: 300, level: 350, reviewed: true });
+    // The level history: the one pick, and the organizer's two.
     const h = ctx.app.db.raw.prepare('SELECT level, set_by FROM tournament_level_history WHERE player_id = ? ORDER BY rowid').all(ctx.byName.Blair);
     expect(h).toEqual([
       { level: 300, set_by: 'player' },
       { level: 340, set_by: 'organizer' },
-      { level: 320, set_by: 'player' },
       { level: 350, set_by: 'organizer' },
-      { level: 320, set_by: 'player' },
-      { level: 250, set_by: 'player' },
     ]);
   });
 
-  it('after the date is picked, a level-only edit keeps dates that do not include it (nobody has to tick a date they cannot make)', async () => {
+  it('after the date is picked, an edit without dates keeps the dates they had (nobody has to tick a date they cannot make)', async () => {
     const ctx = await world();
     const id = await create(ctx, { visibility: 'all' });
     const blair = await playerPhone(ctx, 'Blair');
     await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0], DATES[1]] });
     await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[3] });
     expect((await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 320 })).status).toBe(200);
-    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 320, dates: [DATES[0], DATES[1]] });
+    expect((await blair.call('GET', '/api/group')).data.tournament.me).toEqual({ level: 300, dates: [DATES[0], DATES[1]] });
   });
 
   it('a second Sign up tap with the same answers writes nothing and one History line in all', async () => {
@@ -520,15 +520,12 @@ describe('review fixes (fresh reviewer, Zip 55)', () => {
     expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_level_history').get()).toEqual({ n: 1 });
   });
 
-  it('Edit settings keeps a 2.5 hour plan after Booking hours is turned off (only a NEW long plan needs it); a new one is still refused', async () => {
+  it('Alex: Create and Edit no longer ask for players expected or a court plan; one sent by an older screen is ignored, never stored', async () => {
     const ctx = await world();
-    await ctx.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: true });
-    const id = await create(ctx, { size: 6, courts: 1, minutes: 150, start: 1170 });
-    await ctx.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: false });
-    const renamed = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, size: 6, courts: 1, minutes: 150, start: 1170, name: 'Renamed Cup' });
+    const id = await create(ctx, { size: 7, courts: 3, minutes: 150, start: 900 });
+    const renamed = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, size: 10, courts: 2, minutes: 150, start: 1170, name: 'Renamed Cup' });
     expect(renamed.status, renamed.text).toBe(200);
-    const other = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, size: 8, courts: 2, minutes: 150, start: 1170 });
-    expect(other.status).toBe(400);
+    expect(ctx.app.db.raw.prepare('SELECT name, size, courts, minutes, start_minutes FROM tournaments WHERE id = ?').get(id)).toEqual({ name: 'Renamed Cup', size: 12, courts: 2, minutes: 180, start_minutes: 1140 });
   });
 
   it('a save that lands just after a Cancel changes nothing (the canceled tournament never comes back)', async () => {
@@ -539,7 +536,7 @@ describe('review fixes (fresh reviewer, Zip 55)', () => {
     ctx.app.env.DB = {
       ...inner,
       prepare(sql: string) {
-        if (/SET status = 'date_picked'/.test(sql)) ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'canceled' WHERE id = ?").run(id);
+        if (/SET status = 'tickets', final_date/.test(sql)) ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'canceled' WHERE id = ?").run(id);
         return inner.prepare(sql);
       },
       batch: (st: any) => inner.batch(st),
@@ -667,7 +664,7 @@ describe('second review fixes (Zip 55)', () => {
   it('a date pick that lands just after Edit settings took that date off changes nothing: "look again"', async () => {
     const ctx = await world();
     const id = await create(ctx, { visibility: 'all' });
-    const undo = raceAt(ctx, /SET status = 'date_picked'/, () =>
+    const undo = raceAt(ctx, /SET status = 'tickets', final_date/, () =>
       ctx.app.db.raw.prepare('UPDATE tournaments SET offered_dates = ? WHERE id = ?').run(JSON.stringify(DATES.slice(0, 4)), id),
     );
     const r = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[4] });
@@ -718,7 +715,7 @@ describe('second review fixes (Zip 55)', () => {
     ctx.app.advance(12 * DAY); // Nov 6 or later (Eastern): Nov 5 has passed
     const blair = await playerPhone(ctx, 'Blair');
     const t = (await blair.call('GET', '/api/group')).data.tournament;
-    expect(t).toMatchObject({ status: 'date_picked', finalDate: DATES[1], openDates: [] });
+    expect(t).toMatchObject({ status: 'tickets', finalDate: DATES[1], openDates: [] });
     expect((await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[1]] })).status).toBe(409);
   });
 
@@ -758,11 +755,11 @@ describe('second review fixes (Zip 55)', () => {
     const id = await create(ctx, { visibility: 'all' });
     const blair = await playerPhone(ctx, 'Blair');
     await blair.call('POST', '/api/tournament/signup', { tournamentId: id, level: 300, dates: [DATES[0]] });
-    const undo = raceAt(ctx, /UPDATE tournament_signups SET picked_level/, () => ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'canceled' WHERE id = ?").run(id));
-    const r = await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, level: 340 });
+    const undo = raceAt(ctx, /UPDATE tournament_signups SET dates/, () => ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'canceled' WHERE id = ?").run(id));
+    const r = await blair.call('PUT', '/api/tournament/signup', { tournamentId: id, dates: [DATES[1]] });
     undo();
     expect(r.status).toBe(409);
-    expect(ctx.app.db.raw.prepare('SELECT picked_level FROM tournament_signups').get()).toEqual({ picked_level: 300 });
+    expect(ctx.app.db.raw.prepare('SELECT picked_level, dates FROM tournament_signups').get()).toEqual({ picked_level: 300, dates: JSON.stringify([DATES[0]]) });
     expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM tournament_level_history').get()).toEqual({ n: 1 });
   });
 });
@@ -780,10 +777,13 @@ describe('format: Doubles or Americano (Alex, before shipping)', () => {
     // Both credits can be $0.
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'americano', creditCents: 0, secondCreditCents: 0 })).status).toBe(200);
     expect((await dash(ctx)).tournament).toMatchObject({ championCreditCents: 0, secondCreditCents: 0 });
-    // Back to Doubles after the date is picked (tickets are not open in piece 1, so it can still change).
-    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[2] });
+    // Back to Doubles before the date is picked; once it is picked tickets are open (Alex), so the format stays.
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'doubles' })).status).toBe(200);
     expect((await dash(ctx)).tournament.format).toBe('doubles');
+    await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[2] });
+    const locked = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'americano' });
+    expect(locked.status).toBe(409);
+    expect(locked.data.message).toBe('Tickets are open. The format cannot change now.');
   });
 
   it('an Edit that leaves out the format and the 2nd place credit keeps them (it never turns an Americano back into Locked doubles)', async () => {
@@ -818,5 +818,8 @@ describe('format: Doubles or Americano (Alex, before shipping)', () => {
     expect(stepsFor('americano')).toEqual(['Vote', 'Tickets', 'Games', 'Winners']);
     expect([formatName('doubles'), formatName('americano')]).toEqual(['Locked doubles', 'Americano']);
     expect([formatRule('doubles'), formatRule('americano')]).toEqual(['Same partner all night', 'New partner every round']);
+    // Alex: the cards' one-line subtitle.
+    const { formatLine } = await import('../shared/tournament');
+    expect([formatLine('doubles'), formatLine('americano')]).toEqual(['Locked doubles (same partner all night)', 'Americano (new partner every round)']);
   });
 });

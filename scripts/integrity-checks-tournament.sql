@@ -28,9 +28,8 @@ SELECT
   ,(SELECT COUNT(*) FROM tournament_tickets WHERE credit_cents + paid_cents + claim_cents > price_cents) AS tour_over_price
   -- A spot that is not paid in full (the table refuses this too).
   ,(SELECT COUNT(*) FROM tournament_tickets WHERE place = 'spot' AND credit_cents + paid_cents < price_cents) AS tour_spot_unpaid
-  -- More spots taken than the tournament's size (the database's cap trigger refuses this too).
-  ,(SELECT COUNT(*) FROM (SELECT k.tournament_id FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
-     WHERE k.place = 'spot' GROUP BY k.tournament_id HAVING COUNT(*) > MAX(t.size))) AS tour_spots_over_size
+  -- More than 12 spots taken on a tournament (Alex: the waitlist starts after 12; the database's cap trigger refuses this too).
+  ,(SELECT COUNT(*) FROM (SELECT tournament_id FROM tournament_tickets WHERE place = 'spot' GROUP BY tournament_id HAVING COUNT(*) > 12)) AS tour_spots_over_12
   -- Money still on a ticket of a canceled tournament (an I paid still waiting for the organizer is a to-do, below, not a problem).
   ,(SELECT COUNT(*) FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
      WHERE t.status = 'canceled' AND k.claim_cents = 0 AND k.credit_cents + k.paid_cents > 0) AS tour_money_on_canceled
@@ -46,7 +45,7 @@ SELECT
      WHERE k.player_id = o.player_id AND (k.price_cents > 0 OR k.credit_cents + k.paid_cents + k.claim_cents > 0)) AS tour_organizer_paid
   -- An open spot while someone on the list has paid and waits in line (the line always fills every open spot).
   ,(SELECT COUNT(*) FROM tournaments t WHERE t.status IN ('signup', 'date_picked', 'tickets', 'rescheduled')
-     AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = t.id AND place = 'spot') < t.size
+     AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = t.id AND place = 'spot') < 12
      AND EXISTS (SELECT 1 FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
                  WHERE k.tournament_id = t.id AND k.place = 'line' AND k.credit_cents + k.paid_cents >= k.price_cents)) AS tour_paid_line_with_open_spot
   -- Not a problem, a to-do: I paid taps on tickets still waiting for the organizer's answer.

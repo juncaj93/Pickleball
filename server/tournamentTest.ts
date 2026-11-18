@@ -6,7 +6,7 @@ import * as v from './validate';
 import { setTournamentsForAll, todayKey } from './tournament';
 import { previewSiteFor } from './secondChance';
 import { organizerIdOf } from './repo';
-import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus } from '../shared/tournament';
+import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
 import { defaultPayBy, tourReason } from '../shared/tournamentTickets';
 import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 
@@ -16,22 +16,22 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 // same check the preview-only ?as=Name link uses), so on live this route does nothing at all. No new Cloudflare variable.
 //   none         no tournament (to try Create from Settings > Schedule)
 //   signup       "Winter Classic", Everyone, sign-up open, 6 on the list (Vic, Zoe, Reese and Alex are not)
-//   date_picked  the same with 8 on the list, Sage's level set to 3.4, and the date most of them can make picked
-// Zip 56 (piece 2), each from the date picked above, tickets open ($16, 8 spots, Pay by two days before at 7:00 PM):
-//   tickets_open   6 of 8 locked in (Parker, Rowan, Sage, Christopher, Wren, Quinn: Venmo confirmed, Sage with credit); Vic, Zoe and Reese on
-//                  the list with no ticket: Vic sees Lock my spot ($16), the pictures' 07 to 10
-//   spots_full     8 of 8 locked in (Alex's own $0 seat, Parker, Rowan, Sage, Christopher, Wren, Quinn, Zoe); Reese paid and first in line;
-//                  Vic on the list with no ticket: Vic sees "8 spots taken" and Join waitlist; Zoe backing out moves Reese in (11, 12)
-//   all_locked     8 of 8 locked in, Vic among them (Vic sees You're in), nobody waiting (Zoe and Reese are not on the list)
+//   date_picked  the same with 8 on the list, Sage's level set to 3.4, and the date most of them can make picked. Since Alex's changes, picking
+//                the date opens tickets ($16, Pay by two days before at 7:00 PM): nobody has paid yet (Alex is not on the list, so no $0 seat)
+// Zip 56 (piece 2), each from the date picked above, tickets open. The spots follow the players locked in (the smart plan: 6 to 12), so with
+// the preview's 10 names the 12 spots never fill: no stage can show the waitlist (it starts after 12; no new names are allowed).
+//   tickets_open   6 locked in (Parker, Rowan, Sage, Christopher, Wren, Quinn: Venmo confirmed, Sage with credit), "6 of 8"; Vic, Zoe and
+//                  Reese on the list with no ticket: Vic sees Lock my spot ($16), the pictures' 07 to 10
+//   all_locked     all 10 names locked in (Alex's own $0 seat and 9 paid), "10 of 12"; Vic sees You're in
 //   odd            7 locked in and Pay by already passed: the organizer's card says "7 locked in. Need 1 more or 1 less."
-//   canceled       spots_full, then Cancel tournament (the real statements): every paid ticket is credit now; players on the list see Canceled
+//   canceled       tickets_open, then Cancel tournament (the real statements): every paid ticket is credit now; players on the list see Canceled
 //   rescheduled    tickets_open, then Reschedule (the real statements): back to the date step, tickets held, "Rescheduled. Pick your dates again"
 // Every ticket's money is real on the fake database (a confirmed Venmo payment, or credit the stage first gives as a "Ticket stage credit"
 // adjustment), so the books read all zeros (scripts/integrity-checks-tournament.sql) at every stage. A new stage first takes out the last one's
 // ticket credit rows and test credit (the fake database only).
 // The page's own words and buttons live in src/pages/admin/TournamentTest.tsx, which only a preview build carries.
 
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'spots_full', 'all_locked', 'odd', 'canceled', 'rescheduled'] as const;
+export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled'] as const;
 type Stage = (typeof TEST_STAGES)[number];
 
 /** The fixed names and their picks (Kai is not one of the preview's names, so Kai is not here). Levels in hundredths. */
@@ -78,18 +78,6 @@ const TICKET_STAGES: Partial<Record<Stage, { name: string; place: 'spot' | 'line
     { name: 'Zoe', place: 'none', pay: 'none' },
     { name: 'Reese', place: 'none', pay: 'none' },
   ],
-  spots_full: [
-    { name: 'Alex', place: 'spot', pay: 'free' },
-    { name: 'Parker', place: 'spot', pay: 'cash' },
-    { name: 'Rowan', place: 'spot', pay: 'cash' },
-    { name: 'Sage', place: 'spot', pay: 'credit' },
-    { name: 'Christopher Vanderberg', place: 'spot', pay: 'cash' },
-    { name: 'Wren', place: 'spot', pay: 'cash' },
-    { name: 'Quinn', place: 'spot', pay: 'cash' },
-    { name: 'Zoe', place: 'spot', pay: 'cash' },
-    { name: 'Reese', place: 'line', pay: 'cash' },
-    { name: 'Vic', place: 'none', pay: 'none' },
-  ],
   all_locked: [
     { name: 'Alex', place: 'spot', pay: 'free' },
     { name: 'Parker', place: 'spot', pay: 'cash' },
@@ -98,6 +86,8 @@ const TICKET_STAGES: Partial<Record<Stage, { name: string; place: 'spot' | 'line
     { name: 'Christopher Vanderberg', place: 'spot', pay: 'cash' },
     { name: 'Wren', place: 'spot', pay: 'cash' },
     { name: 'Quinn', place: 'spot', pay: 'cash' },
+    { name: 'Zoe', place: 'spot', pay: 'cash' },
+    { name: 'Reese', place: 'spot', pay: 'cash' },
     { name: 'Vic', place: 'spot', pay: 'cash' },
   ],
   odd: [
@@ -135,18 +125,19 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   // The date everyone on the list can make: the third Thursday of next month (or the middle offered date).
   const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
   const best = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
-  const tickets = TICKET_STAGES[stage === 'canceled' ? 'spots_full' : stage === 'rescheduled' ? 'tickets_open' : stage] ?? null;
+  const tickets = TICKET_STAGES[stage === 'canceled' || stage === 'rescheduled' ? 'tickets_open' : stage] ?? null;
+  // Alex: picking the date opens tickets, so every stage after Sign-up open has them open (Canceled and Rescheduled then run the real taps).
   const picked = stage !== 'signup';
   const id = newId();
   const t0 = Date.parse(ctx.nowIso) - 3 * 86_400_000;
   const at = (minutes: number) => new Date(t0 + minutes * 60_000).toISOString();
-  const payBy = stage === 'odd' ? new Date(ctx.nowMs - 3_600_000).toISOString() : defaultPayBy(best, 1170, group.timezone, ctx.nowMs);
+  const payBy = stage === 'odd' ? new Date(ctx.nowMs - 3_600_000).toISOString() : defaultPayBy(best, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
   const statements = [
     ctx.db
       .prepare(
         `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
            status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, pay_by)
-         VALUES (?, ?, ?, 8, 2, 120, 1170, 1600, 1400, ?, ?, ?, 'all', ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ${STORED_PLAN.size}, ${STORED_PLAN.courts}, ${STORED_PLAN.minutes}, ${STORED_PLAN.start}, 1600, 1400, ?, ?, ?, 'all', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -154,14 +145,14 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
         format === 'americano' ? 'Winter Americano' : 'Winter Classic',
         JSON.stringify(dates),
         picked ? best : null,
-        tickets ? 'tickets' : stage,
+        picked ? 'tickets' : 'signup',
         at(0),
         ctx.nowIso,
         picked ? ctx.nowIso : null,
         at(1),
         format,
         format === 'americano' ? 700 : 0,
-        tickets ? payBy : null,
+        picked ? payBy : null,
       ),
   ];
   // Who is on the list: piece 1's stages as before; a ticket stage exactly its own names.

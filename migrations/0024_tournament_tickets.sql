@@ -10,9 +10,10 @@
 --   cash paid to the organizer the ticket's paid_cents below (an "I paid" waits in claim_cents until the organizer confirms it)
 -- So a player's pot (one per player) and every credit rule are exactly the site's own.
 
--- When ticket money is due ("Pay by"): an exact moment, UTC ISO like every *_at column. Set when the organizer opens tickets (default: two days
--- before the date at 7:00 PM Eastern; Tuesday 7:00 PM for a Thursday game), changeable while tickets are open. NULL: tickets never opened.
--- A tournament with pay_by set has sold tickets at some point, so its price, size and format stay locked (a Reschedule keeps them).
+-- When ticket money is due ("Pay by"): an exact moment, UTC ISO like every *_at column. Set when the organizer picks the date, which opens
+-- tickets (default: two days before the date at 7:00 PM Eastern; Tuesday 7:00 PM for a Thursday game), changeable while tickets are open.
+-- NULL: tickets never opened.
+-- A tournament with pay_by set has had tickets open (picking the date opens them), so its price and format stay locked (a Reschedule keeps them).
 ALTER TABLE tournaments ADD COLUMN pay_by TEXT;
 
 -- One row per player per tournament, made the first time they touch tickets (Lock my spot, Join waitlist, the organizer's own seat).
@@ -47,11 +48,12 @@ CREATE TABLE tournament_tickets (
 );
 CREATE INDEX tournament_tickets_player ON tournament_tickets (player_id);
 
--- Hard cap: a tournament never holds more spots than its size, whatever code path writes the row (as session_players_cap does for games).
+-- Hard cap: a tournament never holds more than 12 spots (Alex: the spots follow the players locked in; the waitlist starts after 12), whatever
+-- code path writes the row (as session_players_cap does for games).
 CREATE TRIGGER tournament_tickets_cap_insert
 BEFORE INSERT ON tournament_tickets
 WHEN NEW.place = 'spot'
-  AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = NEW.tournament_id AND place = 'spot') >= (SELECT size FROM tournaments WHERE id = NEW.tournament_id)
+  AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = NEW.tournament_id AND place = 'spot') >= 12
 BEGIN
   SELECT RAISE(ABORT, 'tournament_full');
 END;
@@ -59,7 +61,7 @@ END;
 CREATE TRIGGER tournament_tickets_cap_update
 BEFORE UPDATE OF place ON tournament_tickets
 WHEN NEW.place = 'spot' AND OLD.place <> 'spot'
-  AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = NEW.tournament_id AND place = 'spot') >= (SELECT size FROM tournaments WHERE id = NEW.tournament_id)
+  AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = NEW.tournament_id AND place = 'spot') >= 12
 BEGIN
   SELECT RAISE(ABORT, 'tournament_full');
 END;

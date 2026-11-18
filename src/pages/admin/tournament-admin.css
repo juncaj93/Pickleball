@@ -174,19 +174,13 @@ dialog.sheet.tm-page {
   line-height: 1.25;
   color: var(--ink-2);
 }
-/* The format under the name on the organizer's Home card, then its rule. */
+/* The format under the name on the organizer's Home card: ONE line, "Americano (new partner every round)", in the green subtitle style (Alex). */
 .tm-home-format {
   margin: 3px 0 0;
-  font-size: 0.98rem;
-  font-weight: 750;
-  line-height: 1.25;
-  color: var(--accent-text);
-}
-.tm-home-rule {
-  margin: 0;
   font-size: 0.8rem;
+  font-weight: 650;
   line-height: 1.3;
-  color: var(--ink-2);
+  color: var(--accent-text);
 }
 .tm-plans {
   display: flex;
@@ -300,6 +294,10 @@ dialog.sheet.tm-page {
   gap: 12px;
   min-height: 44px;
   font-size: 1.02rem;
+}
+/* Alex: the $ boxes never touch: clear space around every row that holds one (about 10 px between two boxes, at any text size). */
+.tm-row:has(.tm-money) {
+  padding-block: 5px;
 }
 .tm-head-line + .tm-rows {
   margin-top: 2px;
@@ -746,4 +744,24 @@ dialog.sheet.tm-page {
 .tm-tk-in .tm-tk-tag {
   color: var(--ok-fg);
   font-weight: 650;
+}
+
+/* Alex's smart plan on the tournament page (organizer only): the plan, the cost if it fills (the main line), with N paid now (small). */
+.tm-cost-main span,
+.tm-cost-main b {
+  font-weight: 750;
+}
+.tm-cost-main b {
+  font-size: 1.12rem;
+}
+.tm-rows .tm-row.tm-cost-now {
+  min-height: 30px;
+  border-top: 0;
+  font-size: 0.86rem;
+  color: var(--ink-2);
+}
+.tm-booking-note {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--warn-fg, var(--ink-2));
 }

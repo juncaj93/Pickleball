@@ -8,6 +8,7 @@
 import type { D1Database, D1PreparedStatement } from './db';
 import { USABLE } from './credit';
 import { tourBackReason, tourReason, type TourBackWhy } from '../shared/tournamentTickets';
+import { MAX_SPOTS } from '../shared/tournament';
 
 export interface TicketRow {
   id: string;
@@ -62,8 +63,9 @@ export const offList = (x: string): string =>
 export const tournamentCanceled = (x: string): string => `EXISTS (SELECT 1 FROM tournaments t WHERE t.id = ${x}.tournament_id AND t.status = 'canceled')`;
 
 /**
- * Every open spot goes to the first PAID people in line, in the order they joined it (only people still on the list). Never more spots
- * than the size (the LIMIT, and the database's own cap trigger behind it). Runs after every change that can open a spot or pay a ticket in line.
+ * Every open spot goes to the first PAID people in line, in the order they joined it (only people still on the list). Never more than 12
+ * spots (Alex: the spots follow the players locked in, and the waitlist starts after 12: the LIMIT, and the database's own cap trigger behind
+ * it). Runs after every change that can open a spot or pay a ticket in line.
  */
 export function fillSpotsStatement(db: D1Database, tournamentId: string, nowIso: string): D1PreparedStatement {
   return db
@@ -73,7 +75,7 @@ export function fillSpotsStatement(db: D1Database, tournamentId: string, nowIso:
          SELECT x.id FROM tournament_tickets x
          WHERE x.tournament_id = ?1 AND x.place = 'line' AND x.credit_cents + x.paid_cents >= x.price_cents AND ${onList('x')}
          ORDER BY x.place_at, x.rowid
-         LIMIT MAX(0, (SELECT size FROM tournaments WHERE id = ?1) - (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = ?1 AND place = 'spot')))
+         LIMIT MAX(0, ${MAX_SPOTS} - (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = ?1 AND place = 'spot')))
        AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?1 AND status IN ${TICKET_STAGES})`,
     )
     .bind(tournamentId, nowIso);
@@ -85,31 +87,51 @@ export function fillSpotsStatement(db: D1Database, tournamentId: string, nowIso:
  * nothing on it and no place. A ticket with an I paid still waiting keeps every cent it holds (only confirmed money becomes credit, so nothing
  * moves until the organizer answers) but loses its place. `when(alias)` is the SQL a ticket must meet, written over the alias given, true both
  * before and after this runs (the player is off the list, the tournament is canceled). `playerId` limits it to one player's ticket.
+ * `why` and `endedReason` 'auto' (the organizer's answer to an I paid): worked out in the same statement from how things stand when it lands,
+ * canceled first, then taken off, then backed out, else a hold the night never used (a Cancel or a Back out in between counts).
  */
 export function ticketBackStatements(
   db: D1Database,
-  args: { groupId: string; tournamentId: string; playerId: string | null; why: TourBackWhy; endedReason: 'dropped' | 'canceled'; nowIso: string; when: (x: string) => string },
+  args: {
+    groupId: string;
+    tournamentId: string;
+    playerId: string | null;
+    why: TourBackWhy | 'auto';
+    endedReason: 'dropped' | 'canceled' | 'auto';
+    nowIso: string;
+    when: (x: string) => string;
+  },
 ): D1PreparedStatement[] {
   const { groupId, tournamentId, playerId, why, endedReason, nowIso, when } = args;
   const t = sqlText(tournamentId);
   const who = (x: string) => (playerId ? ` AND ${x}.player_id = ${sqlText(playerId)}` : '');
+  const canceled = `EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${t} AND tt.status = 'canceled')`;
+  const signupIs = (player: string, test: string) => `EXISTS (SELECT 1 FROM tournament_signups ss WHERE ss.tournament_id = ${t} AND ss.player_id = ${player} AND ${test})`;
+  const reason =
+    why === 'auto'
+      ? `'tour:' || ${t} || ':' || CASE WHEN ${canceled} THEN 'cancel' WHEN ${signupIs('x.player_id', "ss.status = 'off'")} THEN 'off' WHEN ${signupIs('x.player_id', "ss.status <> 'in'")} THEN 'back' ELSE 'unused' END`
+      : sqlText(tourBackReason(tournamentId, why));
+  const ended =
+    endedReason === 'auto'
+      ? `CASE WHEN NOT ${canceled} AND ${signupIs('credit_ledger.player_id', "ss.status <> 'in'")} THEN 'dropped' ELSE 'canceled' END`
+      : sqlText(endedReason);
   return [
     // 1. Confirmed cash: one credit entry per ticket, for exactly what it holds now.
     db
       .prepare(
         `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, five_cents, session_id, created_at, reason)
-         SELECT ${SQL_ID}, ?1, x.player_id, 'kept', x.paid_cents, 0, NULL, ?2, ?3
+         SELECT ${SQL_ID}, ?1, x.player_id, 'kept', x.paid_cents, 0, NULL, ?2, ${reason}
          FROM tournament_tickets x WHERE x.tournament_id = ${t}${who('x')} AND x.paid_cents > 0 AND x.claim_cents = 0 AND ${when('x')}`,
       )
-      .bind(groupId, nowIso, tourBackReason(tournamentId, why)),
+      .bind(groupId, nowIso),
     // 2. Credit used on it: back to the pot (the rows end; an ended row no longer counts).
     db
       .prepare(
-        `UPDATE credit_ledger SET ended_at = ?1, ended_reason = ?2
-         WHERE kind = 'used' AND ended_at IS NULL AND reason = ?3
+        `UPDATE credit_ledger SET ended_at = ?1, ended_reason = ${ended}
+         WHERE kind = 'used' AND ended_at IS NULL AND reason = ?2
            AND player_id IN (SELECT x.player_id FROM tournament_tickets x WHERE x.tournament_id = ${t}${who('x')} AND x.credit_cents > 0 AND x.claim_cents = 0 AND ${when('x')})`,
       )
-      .bind(nowIso, endedReason, tourReason(tournamentId)),
+      .bind(nowIso, tourReason(tournamentId)),
     // 3. The ticket itself: nothing on it, no place (an I paid that waits keeps what it holds).
     db
       .prepare(

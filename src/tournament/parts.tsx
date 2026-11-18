@@ -1,10 +1,50 @@
 // Zip 55 "Tournaments": the pieces the player sheets (src/tournament/TournamentHome.tsx, loaded only when a tournament is on a player's Home)
 // and the organizer screens (src/pages/admin/Tournament.tsx) share: the month calendar and the level list. Styles: src/tournament/tournament.css.
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, type RefObject, useEffect, useRef } from 'react';
 import { type CalMonth, LEVELS, monthTitle } from '../../shared/tournament';
 import './tournament.css';
 
 const WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** The nearest ancestor that scrolls (overflow auto or scroll), or null. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if (o === 'auto' || o === 'scroll') return p;
+  }
+  return null;
+}
+
+/**
+ * Alex: the soft fade at the bottom shows ONLY while there is more to scroll. Puts `data-more` on `ref`'s element while its scroller (the
+ * element itself when `own`, else the nearest scrolling ancestor) is not at its end; never when the content fits. The style draws the fade
+ * only with `data-more`. Runs after every render, so a list that grows or a sheet that opens is measured again.
+ */
+export function useMoreBelow(ref: RefObject<HTMLElement | null>, own: boolean) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const scroller = own ? el : scrollParent(el);
+    const update = () => {
+      const more = !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 2;
+      el.toggleAttribute('data-more', more);
+    };
+    update();
+    if (!scroller) return;
+    scroller.addEventListener('scroll', update, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    if (ro) {
+      ro.observe(scroller);
+      for (const child of Array.from(scroller.children)) ro.observe(child);
+    }
+    return () => {
+      scroller.removeEventListener('scroll', update);
+      ro?.disconnect();
+    };
+  });
+}
+
+const NO_BOX: RefObject<HTMLElement | null> = { current: null };
 
 /** What one day looks like: not a choice (gray number), open (tap to pick), lit/picked (solid green with the ball dot), or past. */
 export type DayLook = 'off' | 'open' | 'on' | 'past';
@@ -36,6 +76,8 @@ export function MonthCalendar({
   scrollTo?: string | null;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  // The boxed calendar scrolls by itself: its fade only while more months are below.
+  useMoreBelow(boxed ? box : NO_BOX, true);
   useEffect(() => {
     if (!scrollTo || !box.current || !boxed) return;
     const el = box.current.querySelector<HTMLElement>(`[data-day="${scrollTo}"]`);
