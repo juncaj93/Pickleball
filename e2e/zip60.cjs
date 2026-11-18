@@ -445,6 +445,7 @@ async function main() {
         assert(flat(await a.page.locator('[data-format="vote"]').innerText()).includes('Americano wins'), 'the vote row names the winner');
         assert((await a.page.locator('[data-tm-fin-override]').count()) === 0, 'no override note yet');
         await oneLine(a.page, '[data-tm-fin-format] .tm-format-name');
+        await oneLine(a.page, '[data-tm-fin-counts]');
         await fits(a.page, 'dialog[open]');
         // Finalize date and Back are both on screen without scrolling the sheet (they stay at the bottom).
         const inView = await a.page.evaluate(() => ['[data-tm-finalize-go]', '[data-tm-finalize-back]'].map((s) => { const b = document.querySelector(s).getBoundingClientRect(); return b.top >= 0 && b.bottom <= window.innerHeight; }));

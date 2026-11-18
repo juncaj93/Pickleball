@@ -1373,7 +1373,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
       </section>
       {view.votes && winner && (
         <section className="tm-fin-block" aria-label="Format votes" data-tm-fin-votes>
-          <p className="tm-date-count" data-tm-fin-counts>
+          <p className="tm-date-count tm-fin-counts" data-tm-fin-counts>
             Locked doubles <b>{view.votes.locked}</b>, Americano <b>{view.votes.americano}</b>, Either <b>{view.votes.either}</b>
           </p>
           <p className="tm-card-note" data-tm-fin-winner>
