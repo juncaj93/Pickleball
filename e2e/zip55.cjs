@@ -386,7 +386,8 @@ async function main() {
     await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').first().waitFor();
     const best = await a.page.locator('[data-tm-card="dates"] .tm-best-count').first().evaluate((el) => el.closest('[data-day]').dataset.day);
     await a.page.locator(`[data-tm-card="dates"] [data-day="${best}"]`).click();
-    await a.page.locator('[data-tm-date-pick]').click();
+    // Zip 60: a tap on a date opens the Finalize screen first; Finalize date then does what Pick date did.
+    await a.page.locator('[data-tm-finalize-go]').click();
     await a.page.waitForTimeout(800);
     await shot(a.page, 'G-dates-picked');
     await a.ctx.close();

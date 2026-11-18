@@ -2,7 +2,7 @@
 // the tournament's own page (who can see it, the level list of mock 14, how many can make each date and picking it, Edit, Cancel), the card on
 // Home, and the level and date sheets. Only drawn while the switch is on for this phone (ctx.d.tournaments). No money moves here: the ticket
 // price and the champion credit are stored for pieces 2 and 3.
-import { type ReactNode, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AdminTicketView,
   type AdminTournamentView,
@@ -27,7 +27,10 @@ import {
   formatName,
   formatRule,
   DEFAULT_FORMAT_CHOICE,
+  type FinalizeView,
   type FormatChoice,
+  type TournamentFormat,
+  dayShort,
   voteCountsLine,
   VOTE_LABEL,
   DEFAULT_SECOND_CREDIT_CENTS,
@@ -1275,6 +1278,209 @@ function LevelSheet({ ctx, t, who, onClose }: { ctx: AdminCtx; t: AdminTournamen
 }
 
 /** One offered date: who can make it, and Pick (or, for the picked one, take it back). */
+/**
+ * Zip 60: the Finalize screen. Tapping a date no longer locks it: this opens with that date's facts (who can make it, what the plan fits, the votes of
+ * those same players and who wins), a format chooser that starts on the winner, Pay by and the ticket price, and a Finalize date button. Back locks
+ * nothing. Finalizing does what Pick date did (the date, tickets open, the format, the alert). The votes are counted again when it lands: if the
+ * winner moved while this was open it says so and locks nothing.
+ */
+function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournamentView; day: string; onClose: () => void }) {
+  const tz = ctx.d.group.timezone;
+  const nowMs = Date.parse(ctx.d.now);
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<FinalizeView | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [choice, setChoice] = useState<FormatChoice | null>(null);
+  const [payDay, setPayDay] = useState('');
+  const [payMinutes, setPayMinutes] = useState(19 * 60);
+  const [price, setPrice] = useState<number | null>(null);
+  const [touched, setTouched] = useState({ pay: false, price: false });
+  /** Read the facts for this date. `keep`: after a "votes changed" answer the organizer's own edits stay. */
+  async function load(keep: boolean) {
+    try {
+      const v = await api<FinalizeView>('GET', `/api/admin/tournament/${t.id}/finalize?date=${encodeURIComponent(day)}`);
+      setView(v);
+      setFailed(null);
+      if (!keep) {
+        setChoice(v.winner ? 'vote' : v.format);
+        const p = payByParts(v.payBy, tz);
+        setPayDay(p.day);
+        setPayMinutes(p.minutes);
+        setPrice(v.ticketCents);
+      } else if (!v.winner && choice === 'vote') setChoice(v.format);
+    } catch (err) {
+      setFailed(errText(err));
+    }
+  }
+  useEffect(() => {
+    void load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [day, t.id]);
+  if (failed) return <p className="field-error" role="alert" data-tm-finalize-error>{failed}</p>;
+  if (!view) return <p className="tm-card-note" data-tm-finalize-loading>Looking…</p>;
+  const winner = view.winner;
+  const days = payByDays(day, tz, nowMs);
+  const times = PAY_TIMES.includes(payMinutes) ? PAY_TIMES : [...PAY_TIMES, payMinutes].sort((a, b) => a - b);
+  const payIso = payDay ? payByAt(payDay, payMinutes, tz) : null;
+  // What the chooser means: "Let players vote" is the vote's winner; a format that is not the winner is the organizer's own pick.
+  const chosen: TournamentFormat = choice === 'doubles' || choice === 'americano' ? choice : (winner?.format ?? view.format);
+  const override = !!winner && chosen !== winner.format;
+  async function finalize() {
+    if (price === null || !payIso || busy) return;
+    setBusy(true);
+    try {
+      await api('PUT', `/api/admin/tournament/${t.id}/date`, {
+        date: day,
+        format: choice ?? undefined,
+        ...(touched.pay ? { payBy: payIso } : {}),
+        ...(touched.price && !view!.locked ? { ticketCents: price } : {}),
+        ...(winner ? { seenWinner: winner.format } : {}),
+      });
+      await ctx.reload();
+      toast(`${dayLong(day)} is the date. Tickets are open.`);
+      onClose();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'votes_changed') {
+        // The votes moved the winner while this was open: nothing was locked. Show the new counts and say so; the organizer taps Finalize again.
+        await load(true);
+        setBusy(false);
+        setNotice(err.message);
+      } else {
+        toast(errText(err), 'error');
+        if (err instanceof ApiError && err.status === 409) void ctx.reload();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="stack tm-finalize" data-tm-finalize={day}>
+      <section className="tm-fin-block" aria-label="Players for this date" data-tm-fin-players>
+        <p className="tm-date-count">
+          <b data-tm-fin-count>{view.players.length}</b> can play {dayShort(day)}
+        </p>
+        {view.players.length > 0 && <p className="tm-date-names" data-tm-fin-names>{view.players.join(', ')}</p>}
+        <p className="tm-card-note" data-tm-fin-plan>
+          The plan fits {view.fits}.
+        </p>
+        {view.over > 0 && (
+          <p className="tm-card-note tm-fin-over" data-tm-fin-over>
+            {view.over} over. They start on the waitlist once tickets open.
+          </p>
+        )}
+      </section>
+      {view.votes && winner && (
+        <section className="tm-fin-block" aria-label="Format votes" data-tm-fin-votes>
+          <p className="tm-date-count" data-tm-fin-counts>
+            Locked doubles <b>{view.votes.locked}</b>, Americano <b>{view.votes.americano}</b>, Either <b>{view.votes.either}</b>
+          </p>
+          <p className="tm-card-note" data-tm-fin-winner>
+            {winner.words}
+          </p>
+        </section>
+      )}
+      <section className="tm-fin-block" aria-label="Format" data-tm-fin-format>
+        <div className="tm-card-head">
+          <h3 className="tm-label">Format</h3>
+          {view.locked && <span className="tm-chip">Locked</span>}
+        </div>
+        <div className="segmented tm-seg tm-seg-format" role="group" aria-label="Format">
+          {winner && (
+            <button type="button" aria-pressed={choice === 'vote'} disabled={view.locked} onClick={() => setChoice('vote')} data-format="vote">
+              <span className="tm-format-name">{VOTE_LABEL}</span>
+              <span className="tm-format-rule">{formatName(winner.format)} wins</span>
+            </button>
+          )}
+          {(['doubles', 'americano'] as const).map((f) => (
+            <button key={f} type="button" aria-pressed={choice === f} disabled={view.locked} onClick={() => setChoice(f)} data-format={f}>
+              <span className="tm-format-name">{formatName(f)}</span>
+              <span className="tm-format-rule">{formatRule(f)}</span>
+            </button>
+          ))}
+        </div>
+        {override && (
+          <p className="tm-card-note" data-tm-fin-override>
+            Your pick. Players will see only the format, not the votes.
+          </p>
+        )}
+      </section>
+      <section className="tm-fin-block" aria-label="Settings" data-tm-fin-settings>
+        <div className="tm-rows">
+          <label className="tm-row" htmlFor="tm-fin-day">
+            <span>Pay by</span>
+            <select
+              id="tm-fin-day"
+              className="tm-select"
+              value={payDay}
+              onChange={(e) => {
+                setPayDay(e.target.value);
+                setTouched((x) => ({ ...x, pay: true }));
+              }}
+              data-tm-fin-pay-day
+            >
+              {days.map((d) => (
+                <option key={d} value={d}>
+                  {dayLong(d)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="tm-row" htmlFor="tm-fin-time">
+            <span>Time</span>
+            <select
+              id="tm-fin-time"
+              className="tm-select"
+              value={payMinutes}
+              onChange={(e) => {
+                setPayMinutes(Number(e.target.value));
+                setTouched((x) => ({ ...x, pay: true }));
+              }}
+              data-tm-fin-pay-time
+            >
+              {times.map((m) => (
+                <option key={m} value={m}>
+                  {timeWords(m)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="tm-row" htmlFor="tm-fin-price">
+            <span>Ticket price</span>
+            {view.locked ? (
+              <b data-tm-fin-price-locked>{formatPrice(view.ticketCents)}</b>
+            ) : (
+              <MoneyBox
+                id="tm-fin-price"
+                cents={price}
+                onChange={(c) => {
+                  setPrice(c);
+                  setTouched((x) => ({ ...x, price: true }));
+                }}
+                label="Ticket price"
+              />
+            )}
+          </label>
+        </div>
+      </section>
+      {notice && (
+        <p className="tm-card-note tm-fin-notice" role="status" data-tm-fin-notice>
+          {notice}
+        </p>
+      )}
+      <div className="tm-fin-actions">
+        <button type="button" className="btn secondary" disabled={busy} onClick={onClose} data-tm-finalize-back>
+          Back
+        </button>
+        <button type="button" className="btn tm-go" disabled={busy || price === null || !payIso} onClick={() => void finalize()} data-tm-finalize-go>
+          {busy ? 'Working…' : 'Finalize date'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DateSheet({ ctx, t, day, names, onClose }: { ctx: AdminCtx; t: AdminTournamentView; day: string | null; names: string[]; onClose: () => void }) {
   const { busy, save } = useSave(ctx);
   const cant = day ? t.signups.filter((s) => !s.dates.includes(day)).map((s) => s.name) : [];
@@ -1283,18 +1489,22 @@ function DateSheet({ ctx, t, day, names, onClose }: { ctx: AdminCtx; t: AdminTou
     <Sheet calmFocus open={!!day} title={day ? dayLong(day) : 'Date'} onClose={onClose} className="tm-date-sheet">
       {day && (
         <div className="stack" data-tm-date-sheet={day}>
-          <p className="tm-date-count">
-            <b>{names.length}</b> of {t.signups.length} can play
-          </p>
-          {names.length > 0 && (
-            <p className="tm-date-names">
-              <span>Can play:</span> {names.join(', ')}
-            </p>
-          )}
-          {cant.length > 0 && (
-            <p className="tm-date-names tm-cant">
-              <span>Can’t:</span> {cant.join(', ')}
-            </p>
+          {isFinal && (
+            <>
+              <p className="tm-date-count">
+                <b>{names.length}</b> of {t.signups.length} can play
+              </p>
+              {names.length > 0 && (
+                <p className="tm-date-names">
+                  <span>Can play:</span> {names.join(', ')}
+                </p>
+              )}
+              {cant.length > 0 && (
+                <p className="tm-date-names tm-cant">
+                  <span>Can’t:</span> {cant.join(', ')}
+                </p>
+              )}
+            </>
           )}
           {isFinal ? (
             <>
@@ -1313,23 +1523,7 @@ function DateSheet({ ctx, t, day, names, onClose }: { ctx: AdminCtx; t: AdminTou
               </button>
             </>
           ) : (
-            <>
-              <p className="tm-card-note" data-tm-date-opens>
-                Tickets open when you pick it.
-              </p>
-              <button
-                type="button"
-                className="btn block tm-go"
-                disabled={busy}
-                onClick={async () => {
-                  const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/date`, { date: day }), `${dayLong(day)} is the date. Tickets are open.`);
-                  if (ok) onClose();
-                }}
-                data-tm-date-pick
-              >
-                {busy ? 'Working…' : `Pick ${dayLong(day)}`}
-              </button>
-            </>
+            <FinalizeBody ctx={ctx} t={t} day={day} onClose={onClose} />
           )}
         </div>
       )}

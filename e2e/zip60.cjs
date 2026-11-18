@@ -254,7 +254,7 @@ async function main() {
         const rows = await v.page.locator('[data-tm-votes] [data-vote]').evaluateAll((els) => els.map((e) => ({ v: e.dataset.vote, on: e.getAttribute('aria-checked'), t: e.innerText.replace(/\s+/g, ' ').trim() })));
         assert(
           JSON.stringify(rows) === JSON.stringify([
-            { v: 'locked', on: 'false', t: 'Locked doubles same partner all night' },
+            { v: 'locked', on: 'false', t: 'Locked doubles teams balanced by skill, same partner all night' },
             { v: 'americano', on: 'false', t: 'Americano new partner every round' },
             { v: 'either', on: 'true', t: 'Either is fine' },
           ]),
@@ -267,7 +267,7 @@ async function main() {
           return cal && vote ? cal.getBoundingClientRect().top < vote.getBoundingClientRect().top : null;
         });
         assert(order !== false, 'the question is under the dates');
-        await oneLine(v.page, '[data-tm-votes]');
+        await oneLine(v.page, '[data-tm-votes] .tm-vote-name');
         await fits(v.page, 'dialog[open]');
         await shot(v.page, `B-step2-${width}-${scheme}`);
         await noDash(v.page, 'the sign-up sheet');
@@ -400,6 +400,146 @@ async function main() {
       const mine = (a.text.match(/"formatVote":"[a-z]+"/g) || []).length;
       assert(mine === (who === 'Vic' ? 0 : 1), `${who} got ${mine} votes in the answer (only their own)`);
     }
+  });
+
+  // ---------------------------------------------------------------- H  the Finalize screen
+  /** The date every signed-up player can make, for the Finalize stage. */
+  const commonDate = async () => {
+    const t = (await dash()).tournament;
+    return t.signups.map((x) => x.dates).reduce((acc, d) => acc.filter((x) => d.includes(x))).sort()[0];
+  };
+  const openFinalize = async (a, day) => {
+    await a.page.locator('[data-tm-open-dates]').click();
+    await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').first().waitFor();
+    await a.page.locator(`[data-tm-card="dates"] [data-day="${day}"]`).click();
+    await a.page.locator('[data-tm-finalize]').waitFor({ timeout: 10000 });
+    await a.page.locator('[data-tm-fin-count]').waitFor({ timeout: 10000 });
+  };
+  async function postAs(name, url, data, method = 'POST') {
+    const ctx = await browser.newContext();
+    const list = (await (await ctx.request.get(BASE + '/api/group')).json()).players;
+    await ctx.request.post(BASE + '/api/me', { data: { playerId: list.find((x) => x.name === name).id }, headers: { Origin: BASE } });
+    const r = await ctx.request.fetch(BASE + url, { method, data, headers: { Origin: BASE } });
+    const out = { status: r.status(), body: await r.text() };
+    await ctx.close();
+    return out;
+  }
+  for (const scheme of SCHEMES)
+    for (const width of [420, 390, 360, 320])
+      await check(`H the Finalize screen: players, plan, votes, winner, chooser on the winner, settings, buttons in reach (${width} ${scheme})`, async () => {
+        await stage('vote_finalize');
+        const day = await commonDate();
+        const a = await adminPage({ width, scheme, height: width === 420 ? 912 : 844 });
+        await openFinalize(a, day);
+        // Tapping a date locked nothing.
+        assert((await dash()).tournament.status === 'signup', 'nothing locked by the tap');
+        const sheet = a.page.locator('[data-tm-finalize]');
+        assert(flat(await a.page.locator('[data-tm-fin-count]').innerText()) === '10', 'ten can play');
+        const names = flat(await a.page.locator('[data-tm-fin-names]').innerText());
+        assert(['Parker', 'Rowan', 'Sage', 'Wren', 'Quinn', 'Christopher Vanderberg', 'Zoe', 'Reese', 'Vic', 'Alex'].every((n) => names.includes(n)), names);
+        assert(flat(await a.page.locator('[data-tm-fin-plan]').innerText()) === 'The plan fits 12.', await a.page.locator('[data-tm-fin-plan]').innerText());
+        assert((await a.page.locator('[data-tm-fin-over]').count()) === 0, 'no over line with 10 players');
+        assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Locked doubles 4, Americano 6, Either 0', await a.page.locator('[data-tm-fin-counts]').innerText());
+        assert(flat(await a.page.locator('[data-tm-fin-winner]').innerText()) === 'Americano wins, 6 to 4.', 'winner words');
+        assert((await a.page.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true', 'the chooser starts on the winner');
+        assert(flat(await a.page.locator('[data-format="vote"]').innerText()).includes('Americano wins'), 'the vote row names the winner');
+        assert((await a.page.locator('[data-tm-fin-override]').count()) === 0, 'no override note yet');
+        await oneLine(a.page, '[data-tm-fin-format] .tm-format-name');
+        await fits(a.page, 'dialog[open]');
+        // Finalize date and Back are both on screen without scrolling the sheet (they stay at the bottom).
+        const inView = await a.page.evaluate(() => ['[data-tm-finalize-go]', '[data-tm-finalize-back]'].map((s) => { const b = document.querySelector(s).getBoundingClientRect(); return b.top >= 0 && b.bottom <= window.innerHeight; }));
+        assert(inView.every(Boolean), `the buttons are in reach: ${inView}`);
+        await shot(a.page, `H-finalize-${width}-${scheme}`);
+        await noDash(a.page, 'the Finalize screen');
+        // Scrolled to the end: the settings rows.
+        await a.page.locator('[data-tm-fin-settings]').scrollIntoViewIfNeeded();
+        await shot(a.page, `H-finalize-settings-${width}-${scheme}`);
+        // Back locks nothing.
+        await a.page.locator('[data-tm-finalize-back]').click();
+        await a.page.locator('[data-tm-finalize]').waitFor({ state: 'detached', timeout: 5000 });
+        assert((await dash()).tournament.status === 'signup' && !(await dash()).tournament.finalDate, 'Back locked nothing');
+        await a.ctx.close();
+      });
+  await check('H the over line (14 can play, the plan fits 12): the screen shows it on two lines or fewer (the answer is stood in for: the preview has 10 names)', async () => {
+    await stage('vote_finalize');
+    const day = await commonDate();
+    const a = await adminPage({ width: 320 });
+    await a.page.route('**/api/admin/tournament/*/finalize*', async (route) => {
+      const r = await route.fetch();
+      const j = await r.json();
+      const extra = ['Extra One', 'Extra Two', 'Extra Three', 'Extra Four'];
+      j.players = [...j.players, ...extra];
+      j.over = 2;
+      j.fits = 12;
+      await route.fulfill({ response: r, json: j });
+    });
+    await openFinalize(a, day);
+    const over = flat(await a.page.locator('[data-tm-fin-over]').innerText());
+    assert(over === '2 over. They start on the waitlist once tickets open.', over);
+    await oneLine(a.page, '[data-tm-fin-plan]');
+    await fits(a.page, 'dialog[open]');
+    await shot(a.page, 'H-finalize-over-320');
+    await a.ctx.close();
+  });
+  await check('H override the winner: the note, Finalize date locks it; Vic sees the alert with only the format (no vote claim); Pay by and the price from the sheet are saved', async () => {
+    await stage('vote_finalize');
+    const day = await commonDate();
+    const a = await adminPage({ width: 390 });
+    await openFinalize(a, day);
+    await a.page.locator('[data-format="doubles"]').click();
+    assert((await a.page.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true', 'Locked doubles picked');
+    const note = flat(await a.page.locator('[data-tm-fin-override]').innerText());
+    assert(/only the format/i.test(note), note);
+    await shot(a.page, 'H-override');
+    // The price and Pay by are editable on this sheet before Finalize.
+    await a.page.locator('#tm-fin-price').fill('18');
+    await a.page.locator('[data-tm-fin-pay-time]').selectOption('1080'); // 6:00 PM
+    // The screen refreshes itself every 5 seconds: what the organizer typed on the sheet must survive it.
+    await a.page.waitForTimeout(6500);
+    assert((await a.page.locator('#tm-fin-price').inputValue()) === '18' && (await a.page.locator('[data-tm-fin-pay-time]').inputValue()) === '1080', 'the sheet kept the organizer\'s edits through a refresh');
+    assert((await a.page.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true', 'and the format pick');
+    await a.page.locator('[data-tm-finalize-go]').click();
+    await a.page.locator('[data-tm-finalize]').waitFor({ state: 'detached', timeout: 10000 });
+    await a.ctx.close();
+    const t = (await dash()).tournament;
+    assert(t.status === 'tickets' && t.finalDate === day && t.format === 'doubles' && t.formatSource === 'admin', JSON.stringify(t));
+    assert(t.ticketCents === 1800, `price ${t.ticketCents}`);
+    assert(/T23:00:00\.000Z$/.test(t.payBy), `Pay by 6:00 PM Eastern: ${t.payBy}`);
+    assert(JSON.stringify(t.votes) === JSON.stringify({ locked: 4, americano: 6, either: 0 }), 'counts kept for Alex');
+    const v = await playerPage('Vic');
+    const alert = v.page.locator('[data-format-alert]');
+    await alert.waitFor({ timeout: 15000 });
+    const words = flat(await alert.innerText());
+    assert(words.includes('is scheduled for') && words.includes('Format: Locked doubles') && !/voted/i.test(words), words);
+    assert(!/Locked doubles 4|Americano 6/.test(await v.page.evaluate(() => document.body.innerText)), 'no counts on a player screen');
+    await shot(v.page, 'H-override-alert');
+    await v.ctx.close();
+  });
+  await check('H the votes change while the sheet is open and the winner moves: Finalize locks nothing, says so, shows the new counts; then it works', async () => {
+    await stage('vote_finalize');
+    const day = await commonDate();
+    const a = await adminPage({ width: 390 });
+    await openFinalize(a, day);
+    // Three Americano voters switch to Locked doubles behind the open sheet: Locked doubles 7, Americano 3.
+    for (const n of ['Parker', 'Rowan', 'Sage']) {
+      const r = await postAs(n, '/api/tournament/signup', { tournamentId: (await dash()).tournament.id, formatVote: 'locked' }, 'PUT');
+      assert(r.status === 200, `${n}: ${r.status} ${r.body}`);
+    }
+    await a.page.locator('[data-tm-finalize-go]').click();
+    await a.page.locator('[data-tm-fin-notice]').waitFor({ timeout: 10000 });
+    const notice = flat(await a.page.locator('[data-tm-fin-notice]').innerText());
+    assert(/votes changed/i.test(notice) && /Locked doubles wins now/.test(notice), notice);
+    assert((await dash()).tournament.status === 'signup', 'nothing was locked');
+    assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Locked doubles 7, Americano 3, Either 0', 'new counts shown');
+    assert(flat(await a.page.locator('[data-tm-fin-winner]').innerText()) === 'Locked doubles wins, 7 to 3.', 'new winner shown');
+    await shot(a.page, 'H-votes-changed');
+    // The site's double-tap guard drops a second tap on the same button that comes straight after the first (it is not a bug here): a person reads the note first.
+    await a.page.waitForTimeout(800);
+    await a.page.locator('[data-tm-finalize-go]').click();
+    await a.page.locator('[data-tm-finalize]').waitFor({ state: 'detached', timeout: 10000 });
+    const t = (await dash()).tournament;
+    assert(t.status === 'tickets' && t.format === 'doubles' && t.formatSource === 'vote', JSON.stringify(t));
+    await a.ctx.close();
   });
 
   await browser.close();

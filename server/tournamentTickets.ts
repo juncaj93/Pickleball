@@ -19,7 +19,7 @@ import * as v from './validate';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { formatPrice } from '../shared/money';
 import { dayLong, MAX_SPOTS, smartPlan } from '../shared/tournament';
-import { payByLabel, salesCutoffMs, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
+import { payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
 import {
   changedOrLookAgain,
   logPlayer,
@@ -30,6 +30,7 @@ import {
   openById,
   organizerOn,
   playerTarget,
+  readPayByTime,
   salesClosed,
   lockedCount,
   freedSpots,
@@ -246,22 +247,12 @@ async function linePosition(ctx: Ctx, t: TournamentRow, playerId: string): Promi
 // The organizer
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** A Pay by time from the organizer: an exact moment from now on, no later than the start of the tournament night. */
-function readPayBy(raw: unknown, nowMs: number, startMs: number): string {
-  const iso = v.isoTime(raw, 'payBy');
-  if (!iso) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time.');
-  const ms = Date.parse(iso);
-  if (ms <= nowMs) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time that has not passed.');
-  if (ms > salesCutoffMs(startMs)) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time at least 3 hours before the tournament starts.');
-  return iso;
-}
-
 /** PUT /api/admin/tournament/:id/pay-by { payBy }: a new Pay by while tickets are open. */
 export async function setPayBy(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
   if (statusOf(t) !== 'tickets') throw new HttpError(409, 'tickets_not_open', 'Tickets are not open. Look again.');
-  const payBy = readPayBy(body.payBy, ctx.nowMs, nightOf(t, group.timezone)!.start);
+  const payBy = readPayByTime(body.payBy, ctx.nowMs, nightOf(t, group.timezone)!.start);
   changedOrLookAgain(await ctx.db.prepare("UPDATE tournaments SET pay_by = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'tickets'").bind(payBy, ctx.nowIso, t.id).run());
   await audit(ctx.db, group.id, null, 'tournament_pay_by', { tournament: t.name, payBy: payByLabel(payBy, group.timezone, t.final_date) }, ctx.nowIso);
   return { ok: true, payBy };

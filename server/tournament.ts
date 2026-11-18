@@ -23,8 +23,13 @@ import {
   isVoteSource,
   sourceOf,
   tallyVotes,
+  type FinalizeView,
+  formatName,
+  planFit,
   type TournamentFormat,
   type VoteCounts,
+  voteCountsLine,
+  winnerWords,
   type AdminTournamentView,
   cleanDays,
   dayKey,
@@ -446,14 +451,16 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
 const shownDate = (t: TournamentRow): string | null => (statusOf(t) === 'date_picked' || statusOf(t) === 'tickets' || statusOf(t) === 'canceled' ? t.final_date : null);
 
 /**
- * Zip 60: the alert at the top of Home once the date is locked, for a tournament the players' vote was open on (the vote decided it, or the
- * organizer changed it by hand after): "The Cold Open is scheduled for Thu Dec 17." and "Most players voted Americano." (a tie, or the
- * organizer's own change: just "Format: Locked doubles", no vote claim). `key` is new for every date pick (a re-pick or a reschedule shows a fresh
+ * Zip 60: the alert at the top of Home once the date is locked, for every tournament: "The Cold Open is scheduled for Thu Dec 17." and
+ * "Most players voted Americano." (only when a real vote majority decided it; a tie, the organizer's own choice or change, or a format picked when
+ * creating it: just "Format: Locked doubles", no vote claim). `key` is new for every date pick (a re-pick or a reschedule shows a fresh
  * alert) and carries the player, so a dismissed alert stays dismissed for that player only. No vote counts, ever.
  */
 function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, nowMs: number): { key: string; title: string; sub: string } | null {
-  const source = sourceOf(t.format_source);
-  if (!source || !t.final_date || (statusOf(t) !== 'tickets' && statusOf(t) !== 'date_picked')) return null;
+  // Every tournament gets it when its date is locked (Alex, pass 2); only a real vote majority says "Most players voted". A format chosen when
+  // creating it (no source), changed by hand, or decided by the tie rule shows the date and the format only.
+  const source: FormatSource = sourceOf(t.format_source) ?? 'admin';
+  if (!t.final_date || (statusOf(t) !== 'tickets' && statusOf(t) !== 'date_picked')) return null;
   if (t.final_date < todayKey(nowMs, group.timezone)) return null;
   return { key: `fmt:${t.id}:${t.date_picked_at ?? t.final_date}:${playerId}`, ...formatAlertWords(t.name, t.final_date, formatOf(t), source) };
 }
@@ -779,6 +786,16 @@ function wholeCents(v: unknown, field: string, label: string): number {
   return v as number;
 }
 
+/** A Pay by time from the organizer: an exact moment from now on, no later than 3 hours before the start of the tournament night. */
+export function readPayByTime(raw: unknown, nowMs: number, startMs: number): string {
+  const iso = v.isoTime(raw, 'payBy');
+  if (!iso) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time.');
+  const ms = Date.parse(iso);
+  if (ms <= nowMs) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time that has not passed.');
+  if (ms > salesCutoffMs(startMs)) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time at least 3 hours before the tournament starts.');
+  return iso;
+}
+
 interface Settings {
   name: string;
   dates: string[];
@@ -985,6 +1002,51 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
   return lockDate(ctx, group, t, body);
 }
 
+/** Zip 60: the votes of the players on the list who picked `date` (names in sign-up order), and the newest sign-up write they were counted from. */
+async function voteTally(ctx: Ctx, t: TournamentRow, date: string): Promise<{ names: string[]; counts: VoteCounts; stamp: string }> {
+  const all = await signupRows(ctx.db, t.id);
+  const voters = all.filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date));
+  return { names: voters.map((r) => r.display_name), counts: tallyVotes(voters.map((r) => r.format_vote)), stamp: all.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), '') };
+}
+
+/**
+ * GET /api/admin/tournament/:id/finalize?date=YYYY-MM-DD: the Finalize screen's facts for ONE date, before anything is locked: who can make it,
+ * what the plan fits, the votes of those same players and who wins (and why), the usual Pay by and the ticket price. Organizer only; reads only.
+ */
+export async function finalizeView(ctx: Ctx): Promise<FinalizeView> {
+  const group = await organizerOn(ctx);
+  const t = await openById(ctx, group);
+  const date = ctx.url.searchParams.get('date');
+  if (statusOf(t) === 'tickets') throw new HttpError(409, 'tickets_open', 'Tickets are open. Reschedule to change the date.');
+  if (!date || !storedDays(t.offered_dates).includes(date)) bad('invalid_date', 'Pick one of the dates you offered.');
+  if (date! < todayKey(ctx.nowMs, group.timezone)) bad('invalid_date', 'That date has passed. Pick another one.');
+  if (ctx.nowMs >= startMsOf(date!, NIGHT_START_MINUTES, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
+  const org = await organizerIdOf(ctx.db, group);
+  const held = playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org));
+  const tally = await voteTally(ctx, t, date!);
+  const fit = planFit(tally.names.length);
+  let votes: VoteCounts | null = null;
+  let winner: FinalizeView['winner'] = null;
+  if (isVoteSource(t.format_source) && !held) {
+    votes = tally.counts;
+    const previous = await previousFormat(ctx.db, t);
+    const d = decideFormat(tally.counts, previous);
+    winner = { format: d.format, rule: d.rule, previous: d.rule === 'tie' ? previous : null, words: winnerWords(tally.counts, d, previous) };
+  }
+  return {
+    date: date!,
+    players: tally.names,
+    fits: fit.fits,
+    over: fit.over,
+    votes,
+    winner,
+    format: formatOf(t),
+    locked: held,
+    ticketCents: t.ticket_cents,
+    payBy: defaultPayBy(date!, NIGHT_START_MINUTES, group.timezone, ctx.nowMs),
+  };
+}
+
 /**
  * The date step itself (also what the preview's Tournament test page runs, so its stages are made by the real statements). Zip 60: when the
  * players' vote decides the format, picking the date counts the votes and saves the winner in the SAME statement that locks the date: only
@@ -1012,35 +1074,59 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
   if (ctx.nowMs >= startMsOf(date as string, NIGHT_START_MINUTES, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
   // Zip 56 (Alex): picking the date opens tickets, for everyone on the list, in the same tap: Pay by starts at the night before at 7:00 PM (the
   // organizer can change it), the organizer's own $0 seat is taken when they are on the list. No other trigger.
-  const payBy = defaultPayBy(date as string, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
+  const night = startMsOf(date as string, NIGHT_START_MINUTES, group.timezone);
   const org = await organizerIdOf(ctx.db, group);
-  // Zip 60: the vote, when the players decide the format and no player holds a ticket yet.
+  const held = playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org));
+  // Zip 60 (the Finalize screen): everything the organizer may set while locking, all optional (a plain pick sends none of them and gets today's
+  // defaults): Pay by, the ticket price, and the format (a format, or "Let players vote" = take the vote's winner).
+  const payBy = body.payBy === undefined ? defaultPayBy(date as string, NIGHT_START_MINUTES, group.timezone, ctx.nowMs) : readPayByTime(body.payBy, ctx.nowMs, night);
+  const ticketCents = body.ticketCents === undefined ? t.ticket_cents : wholeCents(body.ticketCents, 'ticket', 'The ticket price');
+  if (ticketCents !== t.ticket_cents && held) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
+  const choice = body.format === undefined ? undefined : v.oneOf(body.format, 'format', FORMAT_CHOICES);
+  // The vote, when the players decide the format and no player holds a ticket yet.
   let decided: { format: TournamentFormat; source: FormatSource; counts: VoteCounts; stamp: string } | null = null;
-  if (isVoteSource(t.format_source) && !playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org))) {
-    const all = await signupRows(ctx.db, t.id);
-    const voters = all.filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date as string));
-    const counts = tallyVotes(voters.map((r) => r.format_vote));
-    const d = decideFormat(counts, await previousFormat(ctx.db, t));
+  if (isVoteSource(t.format_source) && !held) {
+    const tally = await voteTally(ctx, t, date as string);
+    const d = decideFormat(tally.counts, await previousFormat(ctx.db, t));
     // `stamp`: the newest sign-up write the count was made from; the lock lands only if no sign-up changed since ("look again" otherwise).
-    decided = { format: d.format, source: d.rule === 'majority' ? 'vote' : 'tie', counts, stamp: all.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), '') };
+    decided = { format: d.format, source: d.rule === 'majority' ? 'vote' : 'tie', counts: tally.counts, stamp: tally.stamp };
+    // The sheet showed this winner: if the votes changed while it was open and the winner moved, say so and lock nothing.
+    const seen = body.seenWinner;
+    if (seen !== undefined && seen !== d.format) {
+      throw new HttpError(409, 'votes_changed', `The votes changed. ${formatName(d.format)} wins now (${voteCountsLine(tally.counts)}). Look again, then tap Finalize.`);
+    }
+  }
+  // The result written with the lock: the vote's winner, unless the organizer picked the other format by hand (then the format is the organizer's:
+  // 'admin', and the alert never claims a vote). Picking the winner itself, or "Let players vote", changes nothing.
+  let setFormat: TournamentFormat | null = decided?.format ?? null;
+  let setSource: string | null = decided?.source ?? null;
+  if (choice === 'doubles' || choice === 'americano') {
+    const cur = decided ? decided.format : formatOf(t);
+    if (choice !== cur) {
+      if (held) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
+      setFormat = choice;
+      setSource = 'admin';
+    }
   }
   const res = await ctx.db.batch([
     ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?,
-           format = COALESCE(?, format), format_source = COALESCE(?, format_source)
-         WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ?
+           format = COALESCE(?, format), format_source = COALESCE(?, format_source), ticket_cents = ?
+         WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ? AND ticket_cents = ?
            AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)`,
       )
-      .bind(date, ctx.nowIso, payBy, ctx.nowIso, decided?.format ?? null, decided?.source ?? null, t.id, date, t.format_source ?? null, decided?.stamp ?? null, decided?.stamp ?? null),
+      .bind(date, ctx.nowIso, payBy, ctx.nowIso, setFormat, setSource, ticketCents, t.id, date, t.format_source ?? null, t.ticket_cents, decided?.stamp ?? null, decided?.stamp ?? null),
     ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
     fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
   ]);
   changedOrLookAgain(res[0]);
   await audit(ctx.db, group.id, null, 'tournament_date', { tournament: t.name, date: dayLong(date as string), day: date }, ctx.nowIso);
-  if (decided) await audit(ctx.db, group.id, null, 'tournament_format', { tournament: t.name, format: decided.format, how: decided.source, ...decided.counts }, ctx.nowIso);
-  await audit(ctx.db, group.id, null, 'tournament_tickets_opened', { tournament: t.name, date: dayLong(date as string), priceCents: t.ticket_cents, payBy: payByLabel(payBy, group.timezone, date as string) }, ctx.nowIso);
-  return { ok: true, date, payBy };
+  if (decided || setSource === 'admin') {
+    await audit(ctx.db, group.id, null, 'tournament_format', { tournament: t.name, format: setFormat, how: setSource === 'admin' ? 'admin' : decided!.source, ...(decided ? decided.counts : {}) }, ctx.nowIso);
+  }
+  await audit(ctx.db, group.id, null, 'tournament_tickets_opened', { tournament: t.name, date: dayLong(date as string), priceCents: ticketCents, payBy: payByLabel(payBy, group.timezone, date as string) }, ctx.nowIso);
+  return { ok: true, date, payBy, format: setFormat ?? formatOf(t), source: setSource ?? t.format_source ?? null };
 }
 
 /**

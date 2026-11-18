@@ -223,10 +223,11 @@ async function main() {
     await a.page.locator('[data-tm-open-dates]').click();
     await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').first().waitFor();
     await a.page.locator('[data-tm-card="dates"] [data-day="2026-12-17"]').click();
-    assert(flat(await a.page.locator('[data-tm-date-opens]').innerText()) === 'Tickets open when you pick it.', 'the date sheet line');
+    // Zip 60: the date sheet is the Finalize screen now: Finalize date locks it (tickets open at once).
+    await a.page.locator('[data-tm-finalize-go]').waitFor({ timeout: 10000 });
     await shot(a.page, 'B-date-sheet');
-    await a.page.locator('[data-tm-date-pick]').click();
-    await a.page.locator('[data-tm-date-pick]').waitFor({ state: 'detached', timeout: 10000 });
+    await a.page.locator('[data-tm-finalize-go]').click();
+    await a.page.locator('[data-tm-finalize-go]').waitFor({ state: 'detached', timeout: 10000 });
     await a.ctx.close();
     d = await dash();
     assert(d.tournament.status === 'tickets' && d.tournament.finalDate === '2026-12-17' && d.tournament.payBy === '2026-12-17T00:00:00.000Z', JSON.stringify({ s: d.tournament.status, p: d.tournament.payBy }));

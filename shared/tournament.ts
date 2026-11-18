@@ -107,7 +107,7 @@ export const DEFAULT_FORMAT_VOTE: FormatVote = 'either';
 export const isFormatVote = (v: unknown): v is FormatVote => typeof v === 'string' && (FORMAT_VOTES as readonly string[]).includes(v);
 /** The sign-up rows: the name and the short line under it (the existing words). */
 export const VOTE_ROWS: readonly { vote: FormatVote; name: string; line: string }[] = [
-  { vote: 'locked', name: 'Locked doubles', line: 'same partner all night' },
+  { vote: 'locked', name: 'Locked doubles', line: 'teams balanced by skill, same partner all night' },
   { vote: 'americano', name: 'Americano', line: 'new partner every round' },
   { vote: 'either', name: 'Either is fine', line: '' },
 ];
@@ -147,6 +147,49 @@ export function decideFormat(counts: VoteCounts, previous: TournamentFormat | nu
   if (counts.locked > counts.americano) return { format: 'doubles', rule: 'majority' };
   if (counts.americano > counts.locked) return { format: 'americano', rule: 'majority' };
   return { format: previous === null ? 'doubles' : previous === 'doubles' ? 'americano' : 'doubles', rule: 'tie' };
+}
+
+/**
+ * Zip 60, the Finalize screen: what the plan fits for the players who can make a date, by the same smart plan the cards use (the players rounded
+ * UP to an even number, plus 2 of room, at least 6, at most 12). `over`: the players beyond the most spots there are (12): they would start on the
+ * waitlist once tickets open. (Below 12 the plan always has room: the spots grow as people lock in.)
+ */
+export function planFit(players: number): { fits: number; over: number } {
+  const fits = plannedSize(players);
+  return { fits, over: Math.max(0, players - Math.max(fits, MAX_SPOTS)) };
+}
+
+/** "Americano wins, 6 to 4." or the tie rule in words, naming the last tournament's format when it was used (the Finalize screen). */
+export function winnerWords(counts: VoteCounts, d: { format: TournamentFormat; rule: 'majority' | 'tie' }, previous: TournamentFormat | null): string {
+  if (d.rule === 'majority') {
+    const hi = Math.max(counts.locked, counts.americano);
+    const lo = Math.min(counts.locked, counts.americano);
+    return `${formatName(d.format)} wins, ${hi} to ${lo}.`;
+  }
+  const start = counts.locked === 0 && counts.americano === 0 ? 'Nobody picked a side.' : `Tied ${counts.locked} to ${counts.americano}.`;
+  return previous === null
+    ? `${start} This is the first tournament, so ${formatName(d.format)}.`
+    : `${start} The last tournament was ${formatName(previous)}, so ${formatName(d.format)}.`;
+}
+
+/** What GET /api/admin/tournament/:id/finalize sends for one date: the Finalize screen's facts (organizer only). */
+export interface FinalizeView {
+  date: string;
+  /** Everyone on the list who picked this date, in sign-up order. */
+  players: string[];
+  fits: number;
+  over: number;
+  /** The votes of those same players. Null: the format was chosen by hand (no vote to count). */
+  votes: VoteCounts | null;
+  /** The vote's winner (a pure function of the votes), its rule, and the last tournament's format when the tie rule used it. Null with no vote. */
+  winner: { format: TournamentFormat; rule: 'majority' | 'tie'; previous: TournamentFormat | null; words: string } | null;
+  /** The format as it stands now (what the chooser starts on when no vote decides). */
+  format: TournamentFormat;
+  /** Players hold tickets: the format and the price stay. */
+  locked: boolean;
+  ticketCents: number;
+  /** The usual Pay by for this date (ISO). */
+  payBy: string;
 }
 
 /** "Locked 3, Americano 6, Either 2" (the organizer's card). */

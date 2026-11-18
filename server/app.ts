@@ -212,6 +212,8 @@ route('PUT', '/api/admin/tournament/:id', tournament.updateTournament);
 route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVisibility);
 route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
 route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
+// Zip 60: the Finalize screen's facts for one date (reads only).
+route('GET', '/api/admin/tournament/:id/finalize', tournament.finalizeView);
 route('POST', '/api/admin/tournament/:id/cancel', (ctx) => tournament.cancelTournament(ctx));
 // Zip 59: Hide (and Restore) a canceled tournament.
 route('POST', '/api/admin/tournament/:id/hide', tournament.hideTournament);

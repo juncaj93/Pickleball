@@ -40,8 +40,11 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 //   vote_open      sign-up open, the vote open: 3 on the list (Parker votes Locked doubles, Rowan Americano, Sage Either). View as Vic, Sign up, see
 //                  "Format you'd like"; the card says "Tournament style TBD" and "~7:30 PM"
 //   vote_majority  the date locked by the organizer's real Pick date: Americano wins 3 to 1 (Wren and Christopher Either), the alert shows for Vic
+//   vote_finalize  the Finalize screen (pass 2): all 10 names on the list and able to make the date, a 6 to 4 vote (Americano 6, Locked doubles 4,
+//                  no Either); NOT locked. As Alex, tap the date on the tournament page: the Finalize screen opens. (The "over" line needs more than 12
+//                  players, and the preview has 10 names, so it does not show here.)
 //   vote_tie       the same with Locked 1, Americano 1, Either 2: a tie, the first tournament goes to Locked doubles, the alert says just the format
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie'] as const;
+export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize'] as const;
 type Stage = (typeof TEST_STAGES)[number];
 
 /** The fixed names and their picks (Kai is not one of the preview's names, so Kai is not here). Levels in hundredths. */
@@ -129,7 +132,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
-  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie') return voteStage(ctx, group, stage);
+  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize') return voteStage(ctx, group, stage);
 
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
@@ -239,7 +242,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
 
 
 /** Zip 60: the vote stages. The date is locked by the very code the organizer's Pick date runs (lockDate), so the count and the alert are the real ones. */
-const VOTERS: Record<'vote_open' | 'vote_majority' | 'vote_tie', { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[]> = {
+const VOTERS: Record<'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize', { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[]> = {
   vote_open: [
     { name: 'Parker', level: 360, vote: 'locked' },
     { name: 'Rowan', level: 350, vote: 'americano' },
@@ -252,6 +255,18 @@ const VOTERS: Record<'vote_open' | 'vote_majority' | 'vote_tie', { name: string;
     { name: 'Wren', level: 320, vote: 'either' },
     { name: 'Christopher Vanderberg', level: 300, vote: 'either' },
   ],
+  vote_finalize: [
+    { name: 'Parker', level: 360, vote: 'americano' },
+    { name: 'Rowan', level: 350, vote: 'americano' },
+    { name: 'Sage', level: 300, vote: 'americano' },
+    { name: 'Wren', level: 320, vote: 'americano' },
+    { name: 'Quinn', level: 250, vote: 'americano' },
+    { name: 'Christopher Vanderberg', level: 300, vote: 'americano' },
+    { name: 'Zoe', level: 275, vote: 'locked' },
+    { name: 'Reese', level: 340, vote: 'locked' },
+    { name: 'Vic', level: 320, vote: 'locked' },
+    { name: 'Alex', level: 340, vote: 'locked' },
+  ],
   vote_tie: [
     { name: 'Parker', level: 360, vote: 'locked' },
     { name: 'Rowan', level: 350, vote: 'americano' },
@@ -260,7 +275,7 @@ const VOTERS: Record<'vote_open' | 'vote_majority' | 'vote_tie', { name: string;
   ],
 };
 
-async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: 'vote_open' | 'vote_majority' | 'vote_tie') {
+async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: 'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize') {
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
   const dates = testDates(todayKey(ctx.nowMs, group.timezone));
@@ -294,9 +309,9 @@ async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin
     );
   }
   await ctx.db.batch(statements);
-  if (stage !== 'vote_open') {
+  if (stage === 'vote_majority' || stage === 'vote_tie') {
     const row = await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<TournamentRow>();
     await lockDate(ctx, group, row!, { date: best });
   }
-  return { ok: true, stage, id, signedUp: n, date: stage === 'vote_open' ? null : best, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
+  return { ok: true, stage, id, signedUp: n, date: stage === 'vote_majority' || stage === 'vote_tie' ? best : null, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
 }

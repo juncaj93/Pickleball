@@ -12,6 +12,7 @@ import './tournament-admin.css';
 const STAGES = [
   // Zip 60 (🎾60.formatvote): the players vote the format. These build "The Cold Open" on Let players vote; the format above does not apply.
   { stage: 'vote_open', label: 'Format vote open', line: '3 on the list with mixed votes (Parker Locked doubles, Rowan Americano, Sage Either). View as Vic, Sign up: Format you’d like. The card says Tournament style TBD.' },
+  { stage: 'vote_finalize', label: 'Finalize screen (6 to 4 vote)', line: 'All 10 names can make the date; Americano 6, Locked doubles 4. Not locked yet: tap the date on the tournament page, see the votes, override the winner, Finalize. The over line needs more than 12 players (the preview has 10).' },
   { stage: 'vote_majority', label: 'Date locked, clear majority', line: 'Americano wins 3 to 1 (two Either). View as Vic: the alert at the top says most players voted Americano. Your card shows the counts.' },
   { stage: 'vote_tie', label: 'Date locked, tie', line: 'Locked 1, Americano 1, Either 2: a tie, so the first tournament is Locked doubles. The alert says only the format.' },
   { stage: 'signup', label: 'Sign-up open (sign-up finish)', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. View as Vic, Sign up, watch the ticket punch. Pick the format above first.' },

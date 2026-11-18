@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { playerPhone, setupGroup } from './harness';
-import { decideFormat, formatAlertWords, tallyVotes, voteCountsLine, VOTE_ROWS } from '../shared/tournament';
+import { decideFormat, formatAlertWords, planFit, tallyVotes, voteCountsLine, VOTE_ROWS, winnerWords } from '../shared/tournament';
 import { activityText } from '../shared/activity';
 
 // Zip 60 (🎾60.formatvote): the players vote the format when they sign up; the organizer's date pick decides it.
@@ -60,7 +60,7 @@ describe('the rule (a pure function)', () => {
     expect(tallyVotes(['locked', 'americano', 'americano', null, undefined, 'either', 'nonsense'])).toEqual({ locked: 1, americano: 2, either: 4 });
     expect(voteCountsLine({ locked: 3, americano: 6, either: 2 })).toBe('Locked 3, Americano 6, Either 2');
     expect(VOTE_ROWS.map((r) => [r.name, r.line])).toEqual([
-      ['Locked doubles', 'same partner all night'],
+      ['Locked doubles', 'teams balanced by skill, same partner all night'],
       ['Americano', 'new partner every round'],
       ['Either is fine', ''],
     ]);
@@ -83,7 +83,7 @@ describe('Create and Edit', () => {
     expect(d).toMatchObject({ formatPending: true, formatSource: 'vote', votes: { locked: 0, americano: 0, either: 0 } });
     expect((await card(ctx, 'Blair')) as { formatTbd?: boolean }).toMatchObject({ formatTbd: true });
   });
-  it('Locked doubles and Americano still work as before: no vote, no TBD, no alert', async () => {
+  it('Locked doubles and Americano still work as before: no vote, no TBD; the date alert shows the date and the format only', async () => {
     for (const format of ['doubles', 'americano'] as const) {
       const { ctx, tid } = await world({ format });
       expect(row(ctx, tid)).toMatchObject({ format, format_source: null });
@@ -94,7 +94,7 @@ describe('Create and Edit', () => {
       expect((await card(ctx, 'Blair')).formatTbd).toBeUndefined();
       await pick(ctx, tid);
       expect(row(ctx, tid)).toMatchObject({ format, format_source: null });
-      expect((await card(ctx, 'Blair')).formatAlert).toBeUndefined();
+      expect((await card(ctx, 'Blair')).formatAlert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: `Format: ${format === 'doubles' ? 'Locked doubles' : 'Americano'}` });
     }
   });
   it('the organizer can switch to a format by hand while the vote is open (source admin), and back to a vote', async () => {
@@ -391,6 +391,159 @@ describe('review fixes', () => {
     expect(after > before).toBe(true);
     await pick(ctx, tid);
     expect(row(ctx, tid)).toMatchObject({ final_date: DATE, format_source: 'tie' });
+  });
+});
+
+describe('pass 2: the Finalize screen (server half)', () => {
+  const fin = async (ctx: Ctx, tid: string, date = DATE) => ctx.organizer.call('GET', `/api/admin/tournament/${tid}/finalize?date=${date}`);
+  const lock = (ctx: Ctx, tid: string, body: Record<string, unknown>) => ctx.organizer.call('PUT', `/api/admin/tournament/${tid}/date`, { date: DATE, ...body });
+
+  it('the plan fit and the winner words are pure', () => {
+    expect(planFit(0)).toEqual({ fits: 6, over: 0 });
+    expect(planFit(5)).toEqual({ fits: 8, over: 0 });
+    expect(planFit(10)).toEqual({ fits: 12, over: 0 });
+    expect(planFit(12)).toEqual({ fits: 12, over: 0 });
+    expect(planFit(13)).toEqual({ fits: 12, over: 1 });
+    expect(planFit(16)).toEqual({ fits: 12, over: 4 });
+    const c = (locked: number, americano: number, either = 0) => ({ locked, americano, either });
+    expect(winnerWords(c(4, 6), decideFormat(c(4, 6), null), null)).toBe('Americano wins, 6 to 4.');
+    expect(winnerWords(c(3, 1), decideFormat(c(3, 1), 'americano'), 'americano')).toBe('Locked doubles wins, 3 to 1.');
+    expect(winnerWords(c(2, 2), decideFormat(c(2, 2), null), null)).toBe('Tied 2 to 2. This is the first tournament, so Locked doubles.');
+    expect(winnerWords(c(2, 2), decideFormat(c(2, 2), 'doubles'), 'doubles')).toBe('Tied 2 to 2. The last tournament was Locked doubles, so Americano.');
+    expect(winnerWords(c(0, 0, 4), decideFormat(c(0, 0, 4), 'americano'), 'americano')).toBe('Nobody picked a side. The last tournament was Americano, so Locked doubles.');
+    expect(JSON.stringify([winnerWords(c(2, 2), decideFormat(c(2, 2), null), null)])).not.toContain('\u2014');
+  });
+
+  it('shows who can make THAT date, what the plan fits, the votes of those same players and the winner; and writes nothing', async () => {
+    const { ctx, tid } = await world();
+    await signUp(ctx, tid, 'Blair', 'locked');
+    await signUp(ctx, tid, 'Casey', 'americano');
+    await signUp(ctx, tid, 'Devon', 'americano');
+    await signUp(ctx, tid, 'Emery', 'either');
+    await signUp(ctx, tid, 'Frankie', 'locked', [OTHER]); // cannot make DATE
+    const rowsBefore = JSON.stringify(raw(ctx).prepare('SELECT * FROM tournaments').all());
+    const res = await fin(ctx, tid);
+    expect(res.status, res.text).toBe(200);
+    expect(res.data).toMatchObject({
+      date: DATE,
+      players: ['Blair', 'Casey', 'Devon', 'Emery'],
+      fits: 6,
+      over: 0,
+      votes: { locked: 1, americano: 2, either: 1 },
+      winner: { format: 'americano', rule: 'majority', previous: null, words: 'Americano wins, 2 to 1.' },
+      format: 'doubles',
+      locked: false,
+      ticketCents: 1600,
+    });
+    expect(typeof res.data.payBy).toBe('string');
+    expect(JSON.stringify(raw(ctx).prepare('SELECT * FROM tournaments').all())).toBe(rowsBefore);
+    // The other date counts its own players.
+    const other = await fin(ctx, tid, OTHER);
+    expect(other.data.players).toEqual(['Frankie']);
+    expect(other.data.votes).toEqual({ locked: 1, americano: 0, either: 0 });
+  });
+
+  it('over: more than 12 can make the date: the extra start on the waitlist once tickets open', async () => {
+    const { ctx, tid } = await world();
+    const names: string[] = Object.keys(ctx.byName);
+    for (let i = 0; i < 10; i++) {
+      const r = await ctx.organizer.call('POST', '/api/admin/players', { name: `Extra${i}` });
+      ctx.byName[`Extra${i}`] = r.data.id;
+      names.push(`Extra${i}`);
+    }
+    for (const n of names.filter((x) => x !== 'Alex').slice(0, 14)) await signUp(ctx, tid, n, 'americano');
+    const res = await fin(ctx, tid);
+    expect(res.data).toMatchObject({ fits: 12, over: 2 });
+    expect(res.data.players).toHaveLength(14);
+  });
+
+  it('a tournament created on a format has no vote to count; the chooser starts on its format', async () => {
+    const { ctx, tid } = await world({ format: 'americano' });
+    await signUp(ctx, tid, 'Blair');
+    const res = await fin(ctx, tid);
+    expect(res.data).toMatchObject({ votes: null, winner: null, format: 'americano', players: ['Blair'] });
+  });
+
+  it('only the organizer reads it; a player, and the switch off, get nothing', async () => {
+    const { ctx, tid } = await world();
+    const blair = await playerPhone(ctx, 'Blair');
+    expect([401, 403, 404]).toContain((await blair.call('GET', `/api/admin/tournament/${tid}/finalize?date=${DATE}`)).status);
+    expect((await fin(ctx, tid, '2026-12-25')).status).toBe(400);
+    expect((await fin(ctx, tid, '2020-01-01')).status).toBe(400);
+    await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: false });
+    expect((await fin(ctx, tid)).status).toBe(403);
+  });
+
+  it('overriding the winner by hand: the format is the organizer\'s (source admin), the alert shows only the format, History says so', async () => {
+    const { ctx, tid } = await world();
+    for (const [n, v] of [['Blair', 'americano'], ['Casey', 'americano'], ['Devon', 'americano'], ['Emery', 'locked']] as const) await signUp(ctx, tid, n, v);
+    const res = await lock(ctx, tid, { format: 'doubles', seenWinner: 'americano' });
+    expect(res.status, res.text).toBe(200);
+    expect(row(ctx, tid)).toMatchObject({ format: 'doubles', format_source: 'admin', final_date: DATE });
+    const alert = (await card(ctx, 'Blair')).formatAlert;
+    expect(alert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: 'Format: Locked doubles' });
+    expect(JSON.stringify(await card(ctx, 'Blair'))).not.toMatch(/voted/);
+    const line = raw(ctx).prepare("SELECT details_json FROM admin_audit_log WHERE action = 'tournament_format'").get() as { details_json: string };
+    expect(JSON.parse(line.details_json)).toMatchObject({ format: 'doubles', how: 'admin', americano: 3, locked: 1 });
+    expect((await dash(ctx)).formatSource).toBe('admin');
+  });
+
+  it('choosing the winner itself, or Let players vote, or nothing, keeps the vote as the source', async () => {
+    for (const body of [{ format: 'americano' }, { format: 'vote' }, {}] as Record<string, unknown>[]) {
+      const { ctx, tid } = await world();
+      await signUp(ctx, tid, 'Blair', 'americano');
+      await signUp(ctx, tid, 'Casey', 'americano');
+      await signUp(ctx, tid, 'Devon', 'locked');
+      expect((await lock(ctx, tid, body)).status).toBe(200);
+      expect(row(ctx, tid)).toMatchObject({ format: 'americano', format_source: 'vote' });
+      expect((await card(ctx, 'Blair')).formatAlert.sub).toBe('Most players voted Americano.');
+    }
+  });
+
+  it('the votes changed while the sheet was open and the winner moved: nothing is locked, and it says so; then Finalize again works', async () => {
+    const { ctx, tid } = await world();
+    await signUp(ctx, tid, 'Blair', 'americano');
+    await signUp(ctx, tid, 'Casey', 'locked');
+    await signUp(ctx, tid, 'Devon', 'locked');
+    expect((await fin(ctx, tid)).data.winner.format).toBe('doubles');
+    // Two players change to Americano after the sheet opened: Americano now wins.
+    for (const n of ['Casey', 'Devon']) expect((await (await playerPhone(ctx, n)).call('PUT', '/api/tournament/signup', { tournamentId: tid, formatVote: 'americano' })).status).toBe(200);
+    const res = await lock(ctx, tid, { seenWinner: 'doubles' });
+    expect(res.status).toBe(409);
+    expect(res.data.error).toBe('votes_changed');
+    expect(res.data.message).toContain('Americano wins now');
+    expect(row(ctx, tid)).toMatchObject({ final_date: null, format_source: 'vote' });
+    // Counts that moved without moving the winner do not stop it.
+    expect((await lock(ctx, tid, { seenWinner: 'americano' })).status).toBe(200);
+    expect(row(ctx, tid)).toMatchObject({ final_date: DATE, format: 'americano', format_source: 'vote' });
+  });
+
+  it('Pay by and the ticket price from the sheet are saved with the lock; a bad Pay by is refused; the price stays once players hold tickets', async () => {
+    const { ctx, tid } = await world();
+    await signUp(ctx, tid, 'Blair', 'locked');
+    const payBy = '2026-11-11T22:00:00.000Z'; // Wed Nov 11, 5:00 PM Eastern
+    expect((await lock(ctx, tid, { payBy: '2026-10-01T00:00:00.000Z' })).status).toBe(400);
+    expect((await lock(ctx, tid, { payBy: '2026-11-12T22:00:00.000Z' })).status).toBe(400); // after the 3 hour cutoff
+    expect((await lock(ctx, tid, { ticketCents: -5 })).status).toBe(400);
+    expect(row(ctx, tid).final_date).toBeNull();
+    const ok = await lock(ctx, tid, { payBy, ticketCents: 2000 });
+    expect(ok.status, ok.text).toBe(200);
+    expect(raw(ctx).prepare('SELECT pay_by, ticket_cents FROM tournaments WHERE id = ?').get(tid)).toEqual({ pay_by: payBy, ticket_cents: 2000 });
+    // A plain pick keeps today's defaults.
+    const b = await world();
+    await signUp(b.ctx, b.tid, 'Blair', 'locked');
+    expect((await lock(b.ctx, b.tid, {})).status).toBe(200);
+    expect(raw(b.ctx).prepare('SELECT pay_by, ticket_cents FROM tournaments WHERE id = ?').get(b.tid)).toMatchObject({ pay_by: '2026-11-12T00:00:00.000Z', ticket_cents: 1600 });
+    // Players hold tickets (Lock my spot), then Reschedule: the price and the format cannot change on the next lock.
+    const lk = await (await playerPhone(b.ctx, 'Blair')).call('POST', '/api/tournament/lock', { tournamentId: b.tid, intent: 'lock', priceCents: 1600 });
+    expect(lk.status, lk.text).toBe(200);
+    await b.ctx.organizer.call('POST', `/api/admin/tournament/${b.tid}/reschedule`, {});
+    await (await playerPhone(b.ctx, 'Blair')).call('PUT', '/api/tournament/signup', { tournamentId: b.tid, dates: [DATE] });
+    const f = await fin(b.ctx, b.tid);
+    expect(f.data).toMatchObject({ locked: true, votes: null, winner: null });
+    expect((await lock(b.ctx, b.tid, { ticketCents: 900 })).status).toBe(409);
+    expect((await lock(b.ctx, b.tid, { format: 'americano' })).status).toBe(409);
+    expect((await lock(b.ctx, b.tid, { ticketCents: 1600, format: 'doubles' })).status).toBe(200);
   });
 });
 
