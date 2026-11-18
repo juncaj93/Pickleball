@@ -5705,18 +5705,18 @@ read writes anything; nothing new runs on the 5-minute clock. Times are this mac
   to the cent with both books files at zero after each step, the smart plan and the cost, the date pick opening tickets, the piece 1 upgrade,
   the 12-spot waitlist (16 harness players), races (a Lock landing mid Back out or Take off, the last spot, Hold just after a Cancel, two first
   sign-ups), Only me, the leak tests, the test page stages; tests/zip55-tournament.test.ts (51, piece 1's, following Alex's changes).
-- Browser: e2e/zip56.cjs 51 of 51 (A to K: the seed, the date pick, Lock my spot and I paid, Paid on Home, back out, the waitlist at 12 (the
+- Browser: e2e/zip56.cjs 52 of 52 in one pass on the final code (A to K: the seed, the date pick, Lock my spot and I paid, Paid on Home, back out, the waitlist at 12 (the
   answer stood in for: 10 names), Cancel or reschedule, the evens warning, every ticket screen at 390, 360 and 320 in light and dark with
   every row on one line, the leak checks, the smart plan and Booking hours note, the one-line format both formats at 390 and 320 light and
-  dark, Create with $ boxes 10 px apart, the level picked once, the fades, after the night; 50 in the full pass, the after-the-night check
-  passed alone once it read its chip in capitals); e2e/zip55.cjs 91 of 91 (piece 1, following Alex's changes; 90 in the full pass, the
+  dark, Create with $ boxes 10 px apart, the level picked once, the fades, after the night, a canceled one and the switch off for players);
+  e2e/zip55.cjs 91 of 91 (piece 1, following Alex's changes; 90 in the full pass, the
   Americano Edit check passed alone once it opened the form through the page, as the card does); e2e/zip56-off.cjs 47 of 47 (switch OFF: answers, stamps, Home HTML and pixels identical to main `beb1aad`, which equals live in
   code).
 
 ### Preview
 `pickleball-preview` (fake) only. Restore points first: Time Travel bookmark `00000166-00000000-00005127-e5fb552ffbc0b3094ca212e028b97904`
 and an SQL export (82 KB, kept outside git). Then migration 0024 (the only one pending; it had never been applied there, so the spot triggers
-went on as they are now: a cap of 12). Deployed from `0338777` (deployment `99f3221f`; before it `c950231c` and `aa3dfb62`, one at a time) to
+went on as they are now: a cap of 12). Deployed from `537b71f` (deployment `5b0b3c3d`; before it `99f3221f`, `c950231c` and `aa3dfb62`, one at a time) to
 https://claude-new-session-16mfmv.pickleball-club-9h0.pages.dev. Every Tournament test stage was run there on the real preview database, both
 formats (organizer and Zoe at 320: no page errors, nothing wider than the screen, each stage's card right), then re-seeded (the Zip 56 calm profile: the Winter Classic with the date
 picked for Everyone, so tickets are open; 8 on the list; nobody paid). Checked in a browser on the preview (390, light and dark): organizer
