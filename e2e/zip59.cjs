@@ -210,7 +210,7 @@ async function main() {
     const t = (await dash()).tournament;
     const p = await homeOf('Vic');
     await p.page.locator('.tc').first().waitFor({ timeout: 15000 });
-    const noBanner = await p.page.evaluate(() => ({ cardTop: document.querySelector('.tc').getBoundingClientRect().top, above: document.querySelector('.topbar').getBoundingClientRect().bottom }));
+    const noBanner = await p.page.evaluate(() => ({ cardTop: document.querySelector('.tc').getBoundingClientRect().top, above: (document.querySelector('[data-format-alert]') || document.querySelector('.topbar')).getBoundingClientRect().bottom }));  // Zip 60: the date alert (every tournament) sits above the card
     assert(noBanner.cardTop - noBanner.above >= 8 && noBanner.cardTop - noBanner.above <= 32, `the gap with no banner: ${JSON.stringify(noBanner)}`);
     console.log(`      gap from the header to the card with no banner: ${Math.round(noBanner.cardTop - noBanner.above)} px`);
     await shot(p.page, 'B-full');
