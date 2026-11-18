@@ -37,7 +37,10 @@ const SHOTS = path.join(ROOT, '.data', 'zip56-shots');
 
 let passed = 0;
 let failed = 0;
+// ZIP56_ONLY=<words>: run only the checks whose name has those words (to retry one check without the whole run).
+const ONLY = process.env.ZIP56_ONLY || '';
 async function check(name, fn) {
+  if (ONLY && !name.includes(ONLY)) return;
   try {
     await fn();
     passed++;
@@ -597,7 +600,8 @@ async function main() {
     await a.page.goto(`${BASE}/admin`);
     await a.page.locator('[data-tm-home="tickets"]').waitFor({ timeout: 30000 });
     assert((await a.page.locator('[data-tm-cancel-or-reschedule]').count()) === 0, 'no Cancel or reschedule on Home');
-    assert(flat(await a.page.locator('[data-tm-stage]').innerText()) === 'Tickets closed', 'the chip');
+    // The chip is drawn in capitals (innerText follows the CSS).
+    assert(flat(await a.page.locator('[data-tm-stage]').innerText()).toLowerCase() === 'tickets closed', 'the chip');
     await a.page.locator('[data-tm-tickets]').click();
     await a.page.locator('dialog[open] [data-tm-card="tickets"]').waitFor({ timeout: 10000 });
     assert((await a.page.locator('dialog[open] [data-tm-cancel-or-reschedule], dialog[open] [data-tm-pay-by-change]').count()) === 0, 'no Cancel or reschedule, no Change on the page');
