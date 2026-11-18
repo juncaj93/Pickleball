@@ -5758,3 +5758,69 @@ first." No page errors. The preview PIN is in docs/PREVIEW_FAKE_DB.md.
 Rollback: site deployment `f8e4a506-d689-4cfa-84e7-1e0da732e919` (Workers & Pages > pickleball-club > Deployments); Worker version
 `5564757b-178a-46dd-a653-0743d3b8065a` (`npx wrangler rollback 5564757b-178a-46dd-a653-0743d3b8065a --config worker/wrangler.toml`); data:
 the bookmark above. The migration is additive (old code never reads the new table or column), so a code rollback needs no database undo.
+
+## Zip 59: Tournament polish before the switch flips (🎾59.polish), Wed Nov 18, 2026
+Branch `claude/new-session-3gtdjz` (the session is named "🎾59.polish"). Built on main `ef04a71` (Zip 56 live, TOURNAMENTS OFF). Same switch,
+TOURNAMENTS, and the per-tournament Who can see it. **NO database change** (no table, no column, no migration). Preview only; NOT on live.
+
+### What changed (the brief's ten things)
+1. Slim Home card. The server sets `slim` on the player's card (`slimUntilMonth`, server/tournament.ts): until the first day of the calendar
+   month (Eastern) of the tournament date, and before a date is picked, Home shows ONE line: the name and the date ("Thu, Dec 17") or "Date
+   TBD", the same card look as the rest of Home, with a small arrow. A tap opens the full card (it stays open until the page reloads). From the
+   first of that month the full card, as before. The Canceled card is never slim. The organizer's own Home card is unchanged (question below).
+2. Tickets close the night before. Default Pay by = the night before at 7:00 PM Eastern (`defaultPayBy`; a Thursday game: Wednesday 7:00 PM).
+   If that has already passed when tickets open, 3 hours before the start (4:00 PM on the day; if that has passed too, tickets open already
+   closed). From Pay by on (`ticketPhase`): no new Lock my spot, no Join waitlist, no I paid from a player with no place. Exception, a spot
+   freed by a back out (or the organizer's Take off) after Pay by: the first PAID waitlist player gets it by itself (as before); with nobody
+   paid in line, a new buyer can Lock it. A player already in line can still Hold my spot, and an I paid already waiting stays. Three hours
+   before the start (4:00 PM) everything closes, a freed spot included. The organizer can still change Pay by (now not later than 3 hours before
+   the start) and still Mark paid until the night starts (unchanged). Unused waitlist holds still come back as credit at 10:00 PM on the night
+   (what Zip 56 does: the first screen that reads the tournament after 10:00 PM gives them back; unchanged). Player words: "Tickets closed. Pay
+   by was Wed 7:00 PM." ; "A spot opened" while one is free. No money amount changes: the new rules only refuse a tap (tests prove pots and
+   ledger rows are identical before and after a refused tap).
+   How a freed spot is counted with no new column: each Back out and Take off History line now carries `tournamentId` and `freedSpot` (set when
+   the ticket held a spot since before Pay by). Spots freed = those lines since Pay by, minus spots taken since Pay by (`freedSpots`, one small read
+   per player view, only after Pay by).
+3. Hide canceled tournaments. A Hide button on the organizer's Canceled card; Settings > Advanced > Hidden tournaments (only while Tournaments
+   is on) lists them with a Restore button, same pattern as Hidden games. One task_log row per hidden tournament (task `tournament_hidden:<id>`,
+   kind mark, no game), exactly how a hidden game is kept. Hidden: out of the organizer's Home and out of every player's Home. Never deleted.
+   A canceled tournament with an I paid still waiting cannot be hidden (that answer is on its card).
+4. and 10. Fades: the fade above the bottom bar of the sign-up and edit sheets shows only while content really hides behind the bar (the list
+   above the bar reaches lower than the bar's top), so it is gone at the end of the list and when everything fits; the sheet header of the
+   tournament sheets is now solid, so a card scrolling up under it is cut cleanly instead of showing through washed out. No fade at all over the
+   top card. (Zip 56 already had the data-more fade on the sheet bar and the Create calendar; this makes the test exact.)
+5. Focus ring: `html[data-input='pointer'] :focus-visible { outline: none !important }`, with `src/inputMode.ts` setting pointer after a tap or
+   click and keyboard after a key press. Site wide. Tab still shows every ring.
+6. Hero card: less blank space between the last text line and the button (the stub is 12 px shorter at the bottom, the button row 4 px
+   closer, the text column 4 px less at the bottom): about 14 px to 10 px at the sign-up card.
+7. Gap above the card: the yellow banner's bottom margin 18 px to 3 px, so banner to card is 15 px instead of 30. With no banner the card's
+   distance from the header is unchanged.
+8. Ticket notch: the card's fill and edge now live on `.tc::before` with a CSS mask (a circle cut out at the top of the dashed line), the card's
+   own outer shadow stays on `.tc`. The half circle is transparent: the page shows through, light and dark (checked on real pixels). All card
+   states use the same `.tc`, so the Canceled card and every ticket state have it.
+9. Ticket punch (about 1.5 s, CSS only): finishing Sign up closes the sheet at once; the card shows "Signing you up..." with a small dashed ring
+   turning in the top right corner, a hair of press, then the ring turns solid lime around a clear hole with a wave and ten dots bursting
+   out, and the line turns lime: "You're on the list". Copied from mocks/ticket-tap.mp4 (frame by frame at 12.5 fps). It plays over the save and
+   never waits on it; a save that fails stops it, shows the error and reopens the sheet. Reduced motion (the phone's setting): no ring, no
+   burst, straight to "You're on the list".
+
+### Test page stages added (preview only)
+Slim card (date next month), Full card (date this month), Tickets closed (Pay by passed), Canceled and hidden. The older stages now pick a
+date THIS month (the full card shows without a tap; the last days of a month fall back to next month's Thursday, a slim card). Sign-up open
+is the sign-up finish stage (view as Vic, open the slim line, Sign up). Canceled already shows Hide.
+
+### Known limits (from the fresh reviewer; no money is ever affected)
+- The freed-spot count is "spots freed since Pay by minus spots taken since Pay by". An organizer Mark paid (or confirming an I paid that was
+  tapped before Pay by) after Pay by also counts as a spot taken, so it can use up one freed spot early.
+- Two buyers tapping Lock at the same instant for one freed spot can both get a spot while spots are open; a buyer with only part credit holds
+  no place, so a second buyer can also start. Nobody loses money: unused credit stays on the ticket and comes back on Back out or at 10:00 PM.
+- A player already in line may still Lock or Hold after Pay by (they were on the waitlist before it).
+- Restore on a tournament canceled more than 7 days ago works, but its Canceled card does not come back to Home (the 7 day window, Zip 56).
+- Fixed after the review: a paid place in line or an I paid waiting keeps its card in the last 3 hours; a Pay by in an earlier month (a game on
+  the 1st) shows the full card from that month.
+
+### Tests and preview
+Unit: 192 files, 3485 passed, 2 skipped (new tests/zip59-polish.test.ts, 12). Browser: e2e/zip59.cjs 11 checks (390/360/320, light and dark),
+zip55 91, zip56 57 (updated for the new Pay by and this-month stages), zip55-off and zip56-off 47 each (OFF equals main).
+Preview deployed from this branch (no migration): https://claude-new-session-3gtdjz.pickleball-club-9h0.pages.dev, re-seeded with
+`npm run db:seed:preview` first. Nothing was deployed to live.
