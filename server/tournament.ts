@@ -249,6 +249,13 @@ const dateFixed = (t: TournamentRow) => (statusOf(t) === 'date_picked' || status
 export const ticketsEverOpened = (t: TournamentRow): boolean => !!t.pay_by;
 
 /**
+ * Zip 56 (review): players may hold tickets: tickets have been open while Everyone could see it. Then the price, the format and Everyone stay
+ * (Everyone with tickets open never goes back to Only me, so "on Everyone now, and tickets have been open" says it). On Only me nobody but the
+ * organizer can see it or take a ticket (their own seat is $0), so the organizer's private test keeps every setting free.
+ */
+export const playersHoldTickets = (t: TournamentRow): boolean => (formatLocked(t.status) || ticketsEverOpened(t)) && t.visibility === 'all';
+
+/**
  * The dates a player can pick now: every offered date from today on while sign-up is open (also after a Reschedule); only the picked one once
  * it is picked (and while tickets are open on it). A day that has passed is never a choice (so the list can be empty: every offered date, or
  * the picked one, has passed). `today`: the Eastern calendar day ('YYYY-MM-DD'). A canceled tournament offers none.
@@ -306,6 +313,9 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   const { org_saved: orgSaved, viewer_name: viewerName, my_signup: mySignupStatus, ...t } = row;
   // Zip 56: a canceled tournament's plain card is only for the players who were on its list, and only until its date has passed.
   if (statusOf(t) === 'canceled' && (mySignupStatus !== 'in' || datePassed(t, todayKey(ctx.nowMs, group.timezone)))) return null;
+  // Zip 56 (review): a played night's "Tickets closed" card goes from the day after its date (game day, piece 3, will say how it went). The
+  // organizer's Home still has it, and its first read after 10:00 PM gives any unused hold back.
+  if (statusOf(t) === 'tickets' && datePassed(t, todayKey(ctx.nowMs, group.timezone))) return null;
   // Every offered date has passed with none picked: hidden from every player (Alex, Zip 55 feedback), the same as none open. The organizer's
   // Home card says "Dates have passed. Add dates."; Edit settings with new dates shows it again.
   if (statusOf(t) === 'signup' && openDatesOf(t, todayKey(ctx.nowMs, group.timezone)).length === 0) return null;
@@ -337,14 +347,20 @@ async function upgradeDatePicked(ctx: Ctx, group: GroupRow, t: TournamentRow): P
   if (!night || ctx.nowMs >= night.start) return t;
   try {
     const org = await organizerIdOf(ctx.db, group);
-    await ctx.db.batch([
+    const payBy = defaultPayBy(t.final_date, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
+    // Only while the tournament is exactly as this screen read it (the stage, the date, who can see it): the answer is then this row with tickets
+    // open, so nobody is shown anything a change in between (Only me, Cancel) took away. Anything else: this screen shows what it read.
+    const [res] = await ctx.db.batch([
       ctx.db
-        .prepare("UPDATE tournaments SET status = 'tickets', pay_by = ?, updated_at = ? WHERE id = ? AND status = 'date_picked' AND final_date = ?")
-        .bind(defaultPayBy(t.final_date, NIGHT_START_MINUTES, group.timezone, ctx.nowMs), ctx.nowIso, t.id, t.final_date),
+        .prepare("UPDATE tournaments SET status = 'tickets', pay_by = ?, updated_at = ? WHERE id = ? AND status = 'date_picked' AND final_date = ? AND visibility = ?")
+        .bind(payBy, ctx.nowIso, t.id, t.final_date, t.visibility),
       ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
       fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
     ]);
-    return (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(t.id).first<TournamentRow>()) ?? t;
+    if ((res.meta?.changes ?? 0) !== 1) return t;
+    // The same History line a date pick writes now.
+    await audit(ctx.db, group.id, null, 'tournament_tickets_opened', { tournament: t.name, date: dayLong(t.final_date), priceCents: t.ticket_cents, payBy: payByLabel(payBy, group.timezone, t.final_date) }, ctx.nowIso);
+    return { ...t, status: 'tickets', pay_by: payBy, updated_at: ctx.nowIso };
   } catch {
     return t;
   }
@@ -476,12 +492,13 @@ export async function adminTournamentFor(ctx: Ctx, group: GroupRow): Promise<Adm
     id: t.id,
     name: t.name,
     format: formatOf(t),
-    // Zip 56: once tickets have been open the format stays (also after a Reschedule).
-    formatLocked: formatLocked(t.status) || ticketsEverOpened(t),
-    settingsLocked: ticketsEverOpened(t),
+    // Zip 56: once players may hold tickets (tickets open on Everyone) the format, the price and Everyone stay (also after a Reschedule).
+    formatLocked: playersHoldTickets(t),
+    settingsLocked: playersHoldTickets(t),
     payBy:
       statusOf(t) === 'tickets' ? (t.pay_by ?? null) : statusOf(t) === 'date_picked' && t.final_date ? defaultPayBy(t.final_date, NIGHT_START_MINUTES, tz, ctx.nowMs) : null,
     closed: salesClosed(t, tz, ctx.nowMs),
+    over: nightOver(t, tz, ctx.nowMs),
     tickets: tickets.map(
       (k): AdminTicketView => ({
         playerId: k.player_id,
@@ -660,10 +677,11 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   // A save that leaves the format or the 2nd place credit out keeps what the tournament has (only Create starts them at their defaults).
   if (body.format === undefined) s.format = formatOf(t);
   if (body.secondCreditCents === undefined) s.secondCreditCents = t.second_credit_cents ?? 0;
-  // The format is locked once tickets open (piece 2): a save that tries to change it then is refused. So are the price and Only me once tickets
-  // have been open at all (Zip 56), also after a Reschedule: players have paid that price, and a player who holds a ticket must always see it.
-  if (s.format !== formatOf(t) && (formatLocked(t.status) || ticketsEverOpened(t))) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
-  if (ticketsEverOpened(t)) {
+  // Once players may hold tickets (tickets open on Everyone, Zip 56), also after a Reschedule: the format, the price and Everyone stay (players
+  // have paid that price, and a player who holds a ticket must always see it). On Only me nobody else can hold one: every setting stays free.
+  const held = playersHoldTickets(t);
+  if (s.format !== formatOf(t) && held) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
+  if (held) {
     if (s.ticketCents !== t.ticket_cents) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
     if (s.visibility !== 'all') throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
   }
@@ -682,7 +700,7 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
         `UPDATE tournaments SET name = ?, ticket_cents = ?, champion_credit_cents = ?, offered_dates = ?,
            visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?
          WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))
-           AND (pay_by IS NULL OR (ticket_cents = ? AND format = ? AND ? = 'all'))`,
+           AND (pay_by IS NULL OR visibility = 'me' OR (ticket_cents = ? AND format = ? AND ? = 'all'))`,
       )
       .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, s.format, s.secondCreditCents, t.id, group.id, offer, s.ticketCents, s.format, s.visibility),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
@@ -709,11 +727,12 @@ export async function setTournamentVisibility(ctx: Ctx, body: Record<string, unk
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
   const visibility = v.oneOf(body.visibility, 'visibility', ['me', 'all'] as const);
-  // Zip 56: once tickets have been open, players hold tickets: it stays on Everyone (a player must always see a ticket they hold).
-  if (visibility === 'me' && ticketsEverOpened(t)) throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
+  // Zip 56: once tickets have been open on Everyone, players may hold tickets: it stays on Everyone (a player must always see a ticket they hold).
+  // Tickets open on Only me (the date picked on the organizer's private test): Everyone is one tap, and Only me stays free until then.
+  if (visibility === 'me' && playersHoldTickets(t)) throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
   changedOrLookAgain(
     await ctx.db
-      .prepare(`UPDATE tournaments SET visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ? WHERE id = ? ${OPEN_GUARD} AND (? = 'all' OR pay_by IS NULL)`)
+      .prepare(`UPDATE tournaments SET visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ? WHERE id = ? ${OPEN_GUARD} AND (? = 'all' OR pay_by IS NULL OR visibility = 'me')`)
       .bind(visibility, visibility, ctx.nowIso, ctx.nowIso, t.id, visibility)
       .run(),
   );
@@ -889,36 +908,38 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
   const before = await mySignup(ctx.db, t.id, playerId);
   // A second tap of Sign up (or another phone) with exactly the same answers: nothing to save, nothing to write in History.
   if (before && before.status === 'in' && JSON.stringify(storedDays(before.dates)) === JSON.stringify(dates)) return { ok: true, result: 'signed_up' };
-  const [res] = await ctx.db.batch([
+  const [, listRow] = await ctx.db.batch([
+    // The level history gets the pick only the first time (first in the batch, so the list row below reads it).
+    ctx.db
+      .prepare(
+        `INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) SELECT ?, ?, ?, ?, 'player', ? WHERE ${UNCHANGED}
+           AND NOT EXISTS (SELECT 1 FROM tournament_level_history WHERE tournament_id = ? AND player_id = ? AND set_by = 'player')`,
+      )
+      .bind(newId(), t.id, playerId, level, ctx.nowIso, ...unchangedValues(t), t.id, playerId),
+    // The list row's level is the FIRST one in the level history, read when the batch lands: two first sign-ups from two phones at once both end
+    // on the one that landed first. The organizer's level for them stays as it is.
     ctx.db
       .prepare(
         `INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at, backed_out_at)
-         SELECT ?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?, NULL WHERE ${UNCHANGED}
+         SELECT ?1, ?2, ?3, 'in',
+           COALESCE((SELECT level FROM tournament_level_history WHERE tournament_id = ?2 AND player_id = ?3 AND set_by = 'player' ORDER BY created_at, rowid LIMIT 1), ?4),
+           NULL, ?5, ?6, ?6, ?6, NULL WHERE EXISTS (SELECT 1 FROM tournaments WHERE id = ?7 AND status = ?8 AND offered_dates = ?9 AND final_date IS ?10)
          ON CONFLICT (tournament_id, player_id) DO UPDATE SET
            joined_at = CASE WHEN tournament_signups.status = 'in' THEN tournament_signups.joined_at ELSE excluded.joined_at END,
-           -- Their first level, and the organizer's level for them, stay as they are.
            status = 'in', picked_level = excluded.picked_level, dates = excluded.dates, updated_at = excluded.updated_at, backed_out_at = NULL`,
       )
-      .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ctx.nowIso, ctx.nowIso, ...unchangedValues(t)),
-    // The level history gets the pick only the first time.
-    ...(!first
-      ? [
-          ctx.db
-            .prepare(
-              `INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) SELECT ?, ?, ?, ?, 'player', ? WHERE ${UNCHANGED}
-                 AND NOT EXISTS (SELECT 1 FROM tournament_level_history WHERE tournament_id = ? AND player_id = ? AND set_by = 'player')`,
-            )
-            .bind(newId(), t.id, playerId, level, ctx.nowIso, ...unchangedValues(t), t.id, playerId),
-        ]
-      : []),
+      .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ...unchangedValues(t)),
     // Zip 56: the organizer signing up while tickets are open takes their own $0 seat at once (a spot if one is open, else first paid in line).
     ...(statusOf(t) === 'tickets' && playerId === (await organizerIdOf(ctx.db, who.group))
       ? [organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]
       : []),
   ]);
-  changedOrLookAgain(res);
-  if (!before || before.status !== 'in') await logPlayer(ctx, who.group, playerId, 'tournament_signup', { tournament: t.name, level: levelShort(level) });
-  else await logPlayer(ctx, who.group, playerId, 'tournament_signup_edited', { tournament: t.name });
+  changedOrLookAgain(listRow);
+  if (!before || before.status !== 'in') {
+    // The level as it landed (a first pick from another phone that landed just before this one wins).
+    const stored = first ? null : await mySignup(ctx.db, t.id, playerId);
+    await logPlayer(ctx, who.group, playerId, 'tournament_signup', { tournament: t.name, level: levelShort(stored?.picked_level ?? level) });
+  } else await logPlayer(ctx, who.group, playerId, 'tournament_signup_edited', { tournament: t.name });
   return { ok: true, result: 'signed_up' };
 }
 

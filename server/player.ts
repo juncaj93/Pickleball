@@ -254,7 +254,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       // Zip 56: a tournament ticket's entries name it (one small read, only for a player who has such entries), and only while the switch is on
       // for this phone: switched off, the entries say "a tournament" (review: no tournament data at all to a phone that may not see it).
       const tourOn = mineOnly.some((e) => e.tourId) && (await tournamentsFlags(ctx, group.id)).on;
-      const tourNames = await tourNamesOf(ctx.db, tourOn ? mineOnly : []);
+      const tourNames = await tourNamesOf(ctx.db, tourOn ? mineOnly : [], { everyoneOnly: true });
       credit.history = mineOnly
         .map(
           (e): CreditEntryView => ({

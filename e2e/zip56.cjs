@@ -584,6 +584,30 @@ async function main() {
         await shot(a.page, `K-create-prizes-${width}-${scheme}`);
         await a.ctx.close();
       });
+  await check('K the night is over (the answer stood in for): no Cancel or reschedule, no Pay by Change, and Vic\'s ticket has no Mark paid or Take off', async () => {
+    await stage('tickets_open');
+    const a = await newPage({ organizer: true });
+    // The clock cannot pass Dec 17 here, so the organizer's answer says the night has started and is over (what the server sends then).
+    await a.page.route('**/api/admin/dashboard', async (route) => {
+      const res = await route.fetch();
+      const data = await res.json();
+      if (data.tournament) Object.assign(data.tournament, { closed: true, over: true });
+      await route.fulfill({ response: res, json: data });
+    });
+    await a.page.goto(`${BASE}/admin`);
+    await a.page.locator('[data-tm-home="tickets"]').waitFor({ timeout: 30000 });
+    assert((await a.page.locator('[data-tm-cancel-or-reschedule]').count()) === 0, 'no Cancel or reschedule on Home');
+    assert(flat(await a.page.locator('[data-tm-stage]').innerText()) === 'Tickets closed', 'the chip');
+    await a.page.locator('[data-tm-tickets]').click();
+    await a.page.locator('dialog[open] [data-tm-card="tickets"]').waitFor({ timeout: 10000 });
+    assert((await a.page.locator('dialog[open] [data-tm-cancel-or-reschedule], dialog[open] [data-tm-pay-by-change]').count()) === 0, 'no Cancel or reschedule, no Change on the page');
+    await a.page.waitForTimeout(600);
+    await a.page.locator('dialog[open] [data-tm-ticket-row="Vic"]').click();
+    await a.page.locator('dialog[open] [data-tm-ticket-sheet="Vic"]').waitFor({ timeout: 10000 });
+    assert((await a.page.locator('dialog[open] [data-tm-ticket-mark], dialog[open] [data-tm-ticket-off]').count()) === 0, 'no Mark paid, no Take off');
+    await shot(a.page, 'K-night-over-ticket');
+    await a.ctx.close();
+  });
   await check('K a level is picked once: Vic signs up at 3.4, backs out; signing up again skips the level (it stays 3.4); Edit sign-up is dates only', async () => {
     await stage('signup');
     const id = (await dash()).tournament.id;

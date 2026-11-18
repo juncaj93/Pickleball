@@ -479,6 +479,8 @@ export interface AdminTournamentView {
   payBy?: string | null;
   /** Zip 56: the tournament night has started (ticket sales are over). */
   closed?: boolean;
+  /** Zip 56: the tournament night is over (10:00 PM on the date): played, so it cannot be canceled or moved any more. */
+  over?: boolean;
   /** Zip 56: every ticket, spots first (in the order they were taken), then the waitlist, then the rest. */
   tickets?: AdminTicketView[];
   /** Zip 56: when it was canceled (the Canceled card). */

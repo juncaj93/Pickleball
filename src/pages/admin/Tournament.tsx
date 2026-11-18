@@ -179,6 +179,10 @@ function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
           <p className="tm-home-sub">
             {statusLine(t)} · {who}
           </p>
+          {/* Alex's smart plan, a short line (it follows the players locked in; after a Reschedule the held spots count). */}
+          <p className="tm-home-sub tm-home-plan" data-tm-home-plan>
+            Plan: {t.size} players · {planTitle(t)}
+          </p>
           {datesPassed && (
             <p className="tm-home-note" data-tm-home-note>
               Dates have passed. Add dates.
@@ -186,8 +190,8 @@ function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
           )}
         </div>
       </div>
-      {/* One row of buttons for the stage (Levels live inside Edit). No date yet: Pick date and Edit. Date picked: Edit only (piece 2 adds
-          Open tickets, piece 3 the game day buttons). Edit opens the whole tournament page at the top. */}
+      {/* One row of buttons for the stage (Levels live inside Edit): Pick date and Edit (sign-up open, or rescheduled). Picking the date opens
+          tickets and the card becomes picture 29's. Edit opens the whole tournament page at the top. */}
       <div className="tm-home-actions">
         {t.status !== 'date_picked' && (
           <button type="button" className="btn" onClick={() => setOpen('dates')} data-tm-open-dates>
@@ -284,8 +288,9 @@ function TicketsCountCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView })
 }
 
 /**
- * Picture 29: the tournament on Home once the date is picked. The name and the stage, then the facts, then the stage's one button (Open tickets;
- * while tickets are open, Tickets) and Cancel or reschedule. The name opens the whole tournament page (levels, settings).
+ * Picture 29: the tournament on Home once the date is picked (which opens tickets). The name and the stage, then the facts, then Tickets and
+ * Cancel or reschedule (not once the night is over). The name opens the whole tournament page (levels, settings). A piece 1 date pick that has
+ * not become tickets yet (only while nothing could write: the read-only PIN, or its night has started) shows the date and the list only.
  */
 function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const [open, setOpen] = useState<null | 'page' | 'tickets'>(null);
@@ -309,21 +314,21 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
           <span>Date</span>
           <b data-tm-row="date">{dateRow(t)}</b>
         </div>
-        {/* Alex's smart plan: follows the players locked in (the planned size, its courts and hours). */}
-        <div className="tm-row">
-          <span>Plan</span>
-          <b data-tm-row="plan">
-            {t.size} players · {planTitle(t)}
-          </b>
-        </div>
-        {t.cost && t.status !== 'canceled' && (
-          <div className="tm-row">
-            <span>Your cost if it fills</span>
-            <b data-tm-row="cost">{costWords(t.cost.ifFillsCents)}</b>
-          </div>
-        )}
         {t.status === 'tickets' ? (
           <>
+            {/* Alex's smart plan: follows the players locked in (the planned size, its courts and hours). */}
+            <div className="tm-row">
+              <span>Plan</span>
+              <b data-tm-row="plan">
+                {t.size} players · {planTitle(t)}
+              </b>
+            </div>
+            {t.cost && (
+              <div className="tm-row">
+                <span>Your cost if it fills</span>
+                <b data-tm-row="cost">{costWords(t.cost.ifFillsCents)}</b>
+              </div>
+            )}
             <div className="tm-row">
               <span>Locked in</span>
               <b data-tm-row="locked">
@@ -342,9 +347,7 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
         ) : (
           <div className="tm-row">
             <span>Signed up</span>
-            <b data-tm-row="signed">
-              {t.signups.length} ({t.size} spots)
-            </b>
+            <b data-tm-row="signed">{t.signups.length}</b>
           </div>
         )}
         {t.status !== 'canceled' && (
@@ -375,10 +378,13 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
       ) : (
         <>
           {/* Alex: no Open tickets button. Picking the date opened them. */}
-          <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('tickets')} data-tm-tickets>
-            Tickets
-          </button>
-          <CancelOrReschedule ctx={ctx} t={t} />
+          {t.status === 'tickets' && (
+            <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('tickets')} data-tm-tickets>
+              Tickets
+            </button>
+          )}
+          {/* A night that has been played is never refunded or moved (the server refuses both), so the taps are not offered. */}
+          {!t.over && <CancelOrReschedule ctx={ctx} t={t} />}
         </>
       )}
       <TournamentPage ctx={ctx} t={t} open={open === 'page' || open === 'tickets'} focus={open === 'tickets' ? 'tickets' : undefined} onClose={() => setOpen(null)} />
@@ -607,6 +613,8 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
             </div>
           ) : (
             t.status === 'tickets' &&
+            !t.closed &&
+            t.visibility === 'all' &&
             owed > 0 &&
             !k?.organizer && (
               <button type="button" className="btn block" disabled={busy} onClick={() => void act('mark_paid', owed, `${name} marked paid`)} data-tm-ticket-mark>
@@ -614,7 +622,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
               </button>
             )
           )}
-          {s && (
+          {s && !t.closed && (
             <button type="button" className="tm-cancel-link" disabled={busy} onClick={() => setAskOff(true)} data-tm-ticket-off>
               Take {name} off the list
             </button>
@@ -996,7 +1004,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               key={v}
               type="button"
               aria-pressed={t.visibility === v}
-              // Zip 56: once tickets have been open it stays on Everyone (players hold tickets).
+              // Zip 56: once tickets have been open on Everyone it stays there (players may hold tickets).
               disabled={busy || canceled || (v === 'me' && t.settingsLocked === true)}
               onClick={() => t.visibility !== v && void save(() => api('PUT', `/api/admin/tournament/${t.id}/visibility`, { visibility: v }), v === 'all' ? 'Everyone can see it now' : 'Only you can see it now')}
               data-vis={v}
@@ -1080,9 +1088,11 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               <span>Pay by</span>
               <span className="tm-row-end">
                 <b data-tm-pay-by-row>{payByLabel(t.payBy, tz, t.finalDate)}</b>
-                <button type="button" className="tm-mini" onClick={() => setPayBy(true)} data-tm-pay-by-change>
-                  Change
-                </button>
+                {!t.closed && (
+                  <button type="button" className="tm-mini" onClick={() => setPayBy(true)} data-tm-pay-by-change>
+                    Change
+                  </button>
+                )}
               </span>
             </div>
           )}
@@ -1115,6 +1125,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
 
       {/* Zip 56: once the date is picked, Cancel or reschedule (picture 30); before it (and after a Reschedule), Cancel tournament. */}
       {!canceled &&
+        !t.over &&
         (t.status === 'date_picked' || t.status === 'tickets' ? (
           <CancelOrReschedule ctx={ctx} t={t} onDone={onClosed} />
         ) : (

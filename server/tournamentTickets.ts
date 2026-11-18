@@ -314,7 +314,10 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
     if (salesClosed(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. The tournament has started.');
     if (!signup || signup.status !== 'in') throw new HttpError(409, 'not_signed_up', `${name} is not on the list. Look again.`);
     if (k && k.claim_cents > 0) throw new HttpError(409, 'claim_waiting', `${name} tapped I paid. Answer that instead.`);
-    const price = k ? k.price_cents : playerId === (await organizerIdOf(ctx.db, group)) ? 0 : t.ticket_cents;
+    const isOrganizer = playerId === (await organizerIdOf(ctx.db, group));
+    // Review: on Only me nobody else can see it, so nobody else can hold a ticket on it (Everyone with tickets open never goes back to Only me).
+    if (t.visibility !== 'all' && !isOrganizer) throw new HttpError(409, 'only_me', 'Only you can see it. Show it to everyone first.');
+    const price = k ? k.price_cents : isOrganizer ? 0 : t.ticket_cents;
     const owed = k ? ticketOwed(money(k)) : price;
     if (owed === 0) return { ok: true, changed: false, ...answerOf(k) };
     if (shown !== null && shown !== owed) throw new HttpError(409, 'amount_changed', `${name} owes ${formatPrice(owed)} now. Look again.`);
@@ -370,7 +373,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
 /**
  * POST /api/admin/tournament/:id/reschedule: back to the date step (piece 1's screens). The list stays; every player picks their dates again
  * (their old picks are cleared: "Rescheduled. Pick your dates again"); every ticket keeps its money and its place (paid tickets stay held), and
- * anyone can back out for credit. Pick a new date, then Open tickets again.
+ * anyone can back out for credit. Picking a new date opens tickets again.
  */
 export async function rescheduleTournament(ctx: Ctx) {
   const group: GroupRow = await organizerOn(ctx);

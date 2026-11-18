@@ -102,15 +102,20 @@ function loadedRow(r: RawRow): LedgerRow {
  * Zip 56: the names (and whether canceled) of the tournaments some ledger rows paid tickets for, for the credit history's words. ONE small read,
  * and only when such rows exist (every other answer reads nothing new).
  */
-export async function tourNamesOf(db: D1Database, rows: readonly Pick<CreditRow, 'tourId'>[]): Promise<Map<string, { name: string; canceled: boolean }>> {
+export async function tourNamesOf(
+  db: D1Database,
+  rows: readonly Pick<CreditRow, 'tourId'>[],
+  opts: { everyoneOnly?: boolean } = {},
+): Promise<Map<string, { name: string; canceled: boolean }>> {
   const ids = [...new Set(rows.map((r) => r.tourId).filter((x): x is string => !!x))];
   if (ids.length === 0) return new Map();
   const { results } = await db
-    .prepare(`SELECT id, name, status FROM tournaments WHERE id IN (${ids.map(() => '?').join(', ')})`)
+    .prepare(`SELECT id, name, status, visibility FROM tournaments WHERE id IN (${ids.map(() => '?').join(', ')})`)
     .bind(...ids)
-    .all<{ id: string; name: string; status: string }>()
-    .catch(() => ({ results: [] as { id: string; name: string; status: string }[] }));
-  return new Map(results.map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled' }]));
+    .all<{ id: string; name: string; status: string; visibility: string }>()
+    .catch(() => ({ results: [] as { id: string; name: string; status: string; visibility: string }[] }));
+  // `everyoneOnly` (a player's own answer): an Only me tournament is never named (review: no tournament data to a player who may not see it).
+  return new Map(results.filter((t) => !opts.everyoneOnly || t.visibility === 'all').map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled' }]));
 }
 
 /**
