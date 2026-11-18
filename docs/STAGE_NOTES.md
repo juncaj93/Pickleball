@@ -5824,3 +5824,12 @@ Unit: 192 files, 3485 passed, 2 skipped (new tests/zip59-polish.test.ts, 12). Br
 zip55 91, zip56 57 (updated for the new Pay by and this-month stages), zip55-off and zip56-off 47 each (OFF equals main).
 Preview deployed from this branch (no migration): https://claude-new-session-3gtdjz.pickleball-club-9h0.pages.dev, re-seeded with
 `npm run db:seed:preview` first. Nothing was deployed to live.
+
+### Zip 59, after Alex's preview review (Wed Nov 18)
+- Slim card REMOVED completely (no slim line, no month rule, no Slim card stage): the full card for the whole process. The older stages are back on next month's date.
+- Waitlist: a player in line may Lock or Hold after Pay by ONLY while a freed spot exists; otherwise they stay on the list (no Hold button). The 3 hour cutoff follows the real start of the games (the plan: 7:30 PM start = 4:30 PM). The claim is one step: the freed-spot test is inside the very statements that take the spot, so two taps cannot both win a freed spot.
+- Notch: the mask is on the card itself (no pseudo element, no circle); the outer shadow is gone (it was the grey band above the card and it filled the notch). Proven on real pixels against a plain page, a gradient and the Christmas skin, light and dark, at 390/360/320.
+- The court-line grid on the card is deleted from every state.
+- Christmas skin on a preview: Settings > Feature switches > Christmas skin (Off, Just me, Everyone) now counts (a link still wins). Everyone shows on any date; Just me shows the theme at once for the organizer's own player (view as Alex). Preview only (CHRISTMAS_SKIN_PREVIEW); live is unchanged. Everyone: each phone still taps the logo to turn the theme on.
+- Level list text replaced (shared/tournament.ts) and "Not sure? Ask Alex." under it.
+- Tests: targeted unit 12 files, 323 passed; zip55 91, zip56 57, zip59 12 browser checks; zip55-off and zip56-off 47 each.
