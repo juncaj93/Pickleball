@@ -20,6 +20,7 @@ import type { GroupRow } from '../server/repo';
 vi.setConfig({ testTimeout: 180_000 });
 
 const AT = Date.parse('2026-11-18T18:30:00.000Z'); // Wed Nov 18, 2026, 1:30 PM Eastern
+const READONLY_PIN = '86420975';
 let seedSql: Promise<string> | null = null;
 const seed = () => (seedSql ??= buildSmallPreview(AT, { calm: true, zip55: true, zip60: true }).then((s) => s.sql));
 
@@ -48,7 +49,7 @@ async function world(opts: { fewer?: boolean } = {}) {
   if (opts.fewer === false) raw.raw.exec("DELETE FROM task_log WHERE session_id IS NULL AND kind = 'mark' AND task = 'speed_fewer_queries_on'");
   const c: Counted = { trips: 0, statements: 0, sql: [] };
   let oldWay = false;
-  const env: any = { DB: countingDb(tagging(raw, () => oldWay), c), PREVIEW_CALM: 'on' };
+  const env: any = { DB: countingDb(tagging(raw, () => oldWay), c), PREVIEW_CALM: 'on', ORGANIZER_READONLY_PIN: READONLY_PIN };
   const call = async (method: string, path: string, cookie = '', body?: unknown, headers: Record<string, string> = {}) => {
     const h = new Headers(headers);
     if (cookie) h.set('Cookie', cookie);
@@ -207,6 +208,27 @@ describe('the answers are the answers of the old way, byte for byte', () => {
     const old = await w.oldWayToo(() => w.screens());
     for (const k of Object.keys(fast)) expect(fast[k].text, k).toBe(old[k].text);
     expect(JSON.parse(fast['Alex Home, organizer phone'].text).tournament).toMatchObject({ onlyMe: true });
+  });
+});
+
+describe('the two look-only databases keep the old way ("Pretend it\'s..." answers every batch with nothing)', () => {
+  it('Pretend it\'s now, and the read-only PIN: the dashboard has the very tournament view the organizer gets', async () => {
+    const w = await world();
+    await w.stage('speed_check');
+    const real = JSON.parse((await w.call('GET', '/api/admin/dashboard', w.admin)).text).tournament;
+    expect(real).toMatchObject({ name: 'The Cold Open', visibility: 'all' });
+    const pretend = JSON.parse((await w.call('GET', '/api/admin/dashboard', w.admin, undefined, { 'X-Pretend-Now': new Date(AT).toISOString() })).text);
+    expect(pretend.tournament).toEqual(real);
+    const ro = (await w.call('POST', '/api/admin/login', '', { pin: READONLY_PIN })).cookie;
+    const view = JSON.parse((await w.call('GET', '/api/admin/dashboard', ro)).text);
+    expect(view.viewOnly).toBe(true);
+    expect(view.tournament).toEqual(real);
+    // A player's card under Pretend (View as) and with the read-only PIN (View as): the card the player gets.
+    const vic = JSON.parse((await w.call('GET', '/api/group', w.phones.Vic)).text).tournament;
+    expect(vic).toMatchObject({ name: 'The Cold Open' });
+    const vicId = w.players.find((p) => p.name === 'Vic')!.id;
+    expect(JSON.parse((await w.call('GET', '/api/group', w.admin, undefined, { 'X-Pretend-Now': new Date(AT).toISOString(), 'X-View-As': vicId })).text).tournament).toEqual(vic);
+    expect(JSON.parse((await w.call('GET', '/api/group', ro, undefined, { 'X-View-As': vicId })).text).tournament).toEqual(vic);
   });
 });
 

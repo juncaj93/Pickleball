@@ -23,10 +23,13 @@ import { afterGameCardForAll } from './afterGame';
 import { adminTournamentStamp, adminTourReads, playerTournamentStamp, playerTourReads, type TourReads, tournamentsFlags } from './tournament';
 import type { AdminTournamentView, PlayerTournamentView } from '../shared/tournament';
 import type { D1PreparedStatement, D1Result } from './db';
+import { isPretend } from './pretend';
 
 /**
  * Zip 62: one batch with the tournament reads added at its end (only while the switch is on), or, if that fails (a database without the
  * tournament tables), the batch exactly as before and no tournament rows (the views then read the old way). `plain` is the screen's own batch.
+ * The two look-only databases ("Pretend it's...", whose batches answer nothing at all, and the read-only PIN's) keep the old way too: their
+ * answers are exactly what they were.
  */
 async function batchWithTour<Row>(
   ctx: Ctx,
@@ -34,7 +37,7 @@ async function batchWithTour<Row>(
   first: D1PreparedStatement[],
   tour: TourReads<Row> | null,
 ): Promise<{ results: D1Result[]; pre?: ReturnType<TourReads<Row>['from']> }> {
-  if (tour) {
+  if (tour && !isPretend(ctx.db)) {
     const all = await ctx.db.batch([...first, ...tour.reads.map((r) => ctx.db.prepare(r.sql).bind(...r.values))]).catch(() => null);
     if (all && all.length === first.length + tour.reads.length) return { results: all.slice(0, first.length), pre: tour.from(all.slice(first.length)) };
   }
