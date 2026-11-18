@@ -17,6 +17,7 @@ import { isAdminPath, loadAdmin } from './adminChunk';
 import { GoPage } from './pages/GoPage';
 import { GameDayTextPage } from './pages/GameDayTextPage';
 import { watchKeyboard } from './keyboard';
+import { watchInputMode } from './inputMode';
 // Last, so its big-text rules win over the page styles above.
 import './large-text.css';
 // Even later: the Zip 7 switches' rules (all under an <html> attribute that only exists while the switch is on).
@@ -57,6 +58,8 @@ function App() {
 }
 
 watchKeyboard();
+// Zip 59: the focus ring only for the keyboard (src/inputMode.ts).
+watchInputMode();
 // Zip 12, "Load games at once" (SPEED_DIRECT_LOAD): on the plain address, both first questions leave now (only while the switch is on).
 startEarlyLoads(window.location.pathname);
 

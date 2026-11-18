@@ -14,7 +14,7 @@ import { backupToSql } from '../scripts/restore-backup.mjs';
 // 6 to 12; the waitlist starts after 12), a level is picked once. Every money proof the brief asks for, to the cent, with the books checked
 // after each step: the integrity checks (the older file and the new tournament file) read all zeros and every pot is exactly what the steps say.
 // The clock is Monday Oct 26, 2026, 12 PM Eastern (tests/harness.ts). The tournament is on Thu Nov 12 (the night: 7:00 to 10:00 PM Eastern);
-// picking it sets Pay by to Tue Nov 10, 7:00 PM.
+// picking it sets Pay by to Wed Nov 11, 7:00 PM (Zip 59: the night before).
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>> & { tid: string };
 
@@ -114,14 +114,14 @@ async function backOut(ctx: Ctx, name: string, backCents?: number) {
 }
 
 describe('the shared rules', () => {
-  it('Pay by: Tuesday 7:00 PM for a Thursday game, later fallbacks, and how it reads', () => {
+  it('Pay by: the night before at 7:00 PM (Wednesday for a Thursday game), later fallbacks, and how it reads (Zip 59: it was two days before)', () => {
     const now = Date.parse('2026-10-26T16:00:00.000Z');
-    expect(defaultPayBy(DATE, NIGHT_START_MINUTES, 'America/Detroit', now)).toBe('2026-11-11T00:00:00.000Z'); // Tue Nov 10, 7:00 PM EST
-    // Picked late (Wed Nov 11, 9 AM): the day before at 7:00 PM.
+    expect(defaultPayBy(DATE, NIGHT_START_MINUTES, 'America/Detroit', now)).toBe('2026-11-12T00:00:00.000Z'); // Wed Nov 11, 7:00 PM EST
+    // Picked on Wed Nov 11, 9 AM: still the night before at 7:00 PM.
     expect(defaultPayBy(DATE, NIGHT_START_MINUTES, 'America/Detroit', Date.parse('2026-11-11T14:00:00.000Z'))).toBe('2026-11-12T00:00:00.000Z');
-    // Picked on the day (Thu 2 PM): one hour before the night starts (6:00 PM).
-    expect(defaultPayBy(DATE, NIGHT_START_MINUTES, 'America/Detroit', Date.parse('2026-11-12T19:00:00.000Z'))).toBe('2026-11-12T23:00:00.000Z');
-    expect(payByLabel('2026-11-11T00:00:00.000Z', 'America/Detroit', DATE)).toBe('Tue 7:00 PM');
+    // Picked on the day (Thu 2 PM): three hours before the night starts (4:00 PM), the last moment anything can be claimed (Zip 59).
+    expect(defaultPayBy(DATE, NIGHT_START_MINUTES, 'America/Detroit', Date.parse('2026-11-12T19:00:00.000Z'))).toBe('2026-11-12T21:00:00.000Z');
+    expect(payByLabel('2026-11-12T00:00:00.000Z', 'America/Detroit', DATE)).toBe('Wed 7:00 PM');
     expect(payByLabel('2026-11-04T00:00:00.000Z', 'America/Detroit', DATE)).toBe('Tue, Nov 3, 7:00 PM');
     expect(evensWarning(7)).toBe('7 locked in. Need 1 more or 1 less.');
     expect(ticketsLine(6, 8)).toBe('Tickets: 6 of 8 locked in');
@@ -153,13 +153,13 @@ describe('picking the date opens tickets (Alex: no Open tickets button)', () => 
   it('Pay by is set, the price and format lock, players on the list see Lock my spot with 6 spots; the organizer on the list has the $0 seat', async () => {
     const ctx = await world({ signUp: ['Alex', 'Blair', 'Casey'] });
     const t = (await dash(ctx)).tournament;
-    expect(t).toMatchObject({ status: 'tickets', payBy: '2026-11-11T00:00:00.000Z', settingsLocked: true, formatLocked: true, closed: false, ticketCents: 1600 });
+    expect(t).toMatchObject({ status: 'tickets', payBy: '2026-11-12T00:00:00.000Z', settingsLocked: true, formatLocked: true, closed: false, ticketCents: 1600 });
     // The organizer's own seat ($0) was taken in the same tap: 1 locked in, so 6 spots (the plan for 6: 1 court, 2.5 hours).
     expect(t).toMatchObject({ size: 6, courts: 1, minutes: 150 });
     expect(t.tickets).toEqual([expect.objectContaining({ name: 'Alex', place: 'spot', priceCents: 0, organizer: true })]);
     const c = await card(ctx, 'Blair');
     expect(c.status).toBe('tickets');
-    expect(c.tickets).toEqual({ size: 6, full: false, priceCents: 1600, payBy: '2026-11-11T00:00:00.000Z', closed: false, locked: [{ name: 'Alex' }], line: [], mine: null });
+    expect(c.tickets).toEqual({ size: 6, full: false, priceCents: 1600, payBy: '2026-11-12T00:00:00.000Z', closed: false, started: false, freed: 0, locked: [{ name: 'Alex' }], line: [], mine: null });
     // The price stays once tickets are open; Only me is refused; a size or plan sent is simply ignored.
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, { ...BASE, ticketCents: 2000 })).data.message).toBe('Tickets have been sold. The price stays $16.');
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, { ...BASE, size: 10, start: 1200 })).status).toBe(200);
@@ -184,7 +184,7 @@ describe('picking the date opens tickets (Alex: no Open tickets button)', () => 
     expect(moved.status, moved.text).toBe(200);
     expect((await card(ctx, 'Blair')).tickets.payBy).toBe('2026-11-09T00:00:00.000Z');
     // Not after the night starts (7:00 PM on the day).
-    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: '2026-11-13T00:30:00.000Z' })).data.message).toBe('Pick a Pay by time before the tournament starts.');
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: '2026-11-13T00:30:00.000Z' })).data.message).toBe('Pick a Pay by time at least 3 hours before the tournament starts.');
   });
 
   it('a date picked before this change (piece 1 on live) opens tickets the first time a screen reads it, the same way', async () => {
@@ -193,8 +193,8 @@ describe('picking the date opens tickets (Alex: no Open tickets button)', () => 
     ctx.app.db.raw.prepare("UPDATE tournaments SET status = 'date_picked', final_date = ?, date_picked_at = ? WHERE id = ?").run(DATE, '2026-10-26T15:00:00.000Z', ctx.tid);
     const c = await card(ctx, 'Blair');
     expect(c).toMatchObject({ status: 'tickets', finalDate: DATE });
-    expect(c.tickets).toMatchObject({ payBy: '2026-11-11T00:00:00.000Z', locked: [{ name: 'Alex' }] });
-    expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', payBy: '2026-11-11T00:00:00.000Z' });
+    expect(c.tickets).toMatchObject({ payBy: '2026-11-12T00:00:00.000Z', locked: [{ name: 'Alex' }] });
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', payBy: '2026-11-12T00:00:00.000Z' });
     books(ctx);
   });
 });
@@ -583,7 +583,7 @@ describe('reschedule', () => {
     }
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: NEW })).status).toBe(200);
     t = (await dash(ctx)).tournament;
-    expect(t).toMatchObject({ status: 'tickets', finalDate: NEW, payBy: '2026-11-16T00:00:00.000Z' });
+    expect(t).toMatchObject({ status: 'tickets', finalDate: NEW, payBy: '2026-11-17T00:00:00.000Z' });
     expect(await spots(ctx)).toEqual(['Blair', 'Devon']);
     expect((await lock(ctx, 'Emery')).data).toMatchObject({ result: 'due', dueCents: 1600 });
     books(ctx);

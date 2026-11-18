@@ -104,7 +104,7 @@ import { guestSpotFlags, hasGuestColumns, trimGuestShares } from './guestSpot';
 import { removeGuestCore } from './guestActions';
 import { guestIn, guestOwed, headCount, seatUnits } from '../shared/guestSpot';
 import { phoneTagOf } from './phoneTag';
-import { adminTournamentFor, setTournamentsForAll, tournamentsFlags } from './tournament';
+import { adminTournamentFor, hiddenTournamentsView, setTournamentsForAll, tournamentsFlags } from './tournament';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, previewSiteFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
@@ -287,6 +287,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   // and the tournament tables are never read).
   const tour = await tournamentsFlags(ctx, group.id);
   const tourView = tour.on ? await adminTournamentFor(ctx, group) : null;
+  const hiddenTournaments = tour.on ? await hiddenTournamentsView(ctx.db, group) : null;
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -448,6 +449,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(guestSpot.forAll ? { guestSpotForAll: true as const } : {}),
     ...(tour.on ? { tournaments: true as const } : {}),
     ...(tourView ? { tournament: tourView } : {}),
+    ...(hiddenTournaments ? { hiddenTournaments } : {}),
     ...(tour.forAll ? { tournamentsForAll: true as const } : {}),
     // Preview only (PREVIEW_CALM exists only in [env.preview.vars]): the Tournament test page, while the switch is on. Never on live.
     ...(tour.on && previewSiteFor(ctx) ? { tournamentTest: true as const } : {}),

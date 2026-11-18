@@ -693,6 +693,8 @@ export interface AdminDashboard {
   tournaments?: true;
   /** Zip 55: the open tournament (signing up, or the date picked), only while the switch is on. Missing: none open, or off. */
   tournament?: AdminTournamentView;
+  /** Zip 59: canceled tournaments the organizer hid (Settings > Advanced > Hidden tournaments, each with Restore). Only while Tournaments is on. */
+  hiddenTournaments?: { id: string; name: string; finalDate: string | null; canceledAt: string | null }[];
   /** Zip 55: the Settings > Feature switches row is on (for everyone). Missing: off. */
   tournamentsForAll?: true;
   /** Zip 55, PREVIEW ONLY: this is a preview where the Tournament test page works (PREVIEW_CALM is set). Never on live. */

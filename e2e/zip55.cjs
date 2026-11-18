@@ -124,6 +124,10 @@ async function main() {
     await shift(ctx);
     if (organizer) await ctx.addCookies(adminCookies.map((c) => ({ ...c })));
     const page = await ctx.newPage();
+    // Zip 59: Home is one slim line until the month of the date; these checks test the full card, so the line is opened the moment it appears.
+    await page.addInitScript(() => {
+      new MutationObserver(() => document.querySelector('.tc-slim')?.click()).observe(document, { childList: true, subtree: true });
+    });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     return { ctx, page, errors };

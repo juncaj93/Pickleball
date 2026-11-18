@@ -379,9 +379,12 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
         </p>
       )}
       {t.status === 'canceled' ? (
-        <p className="tm-card-note" data-tm-canceled-note>
-          Every paid ticket came back as credit.
-        </p>
+        <>
+          <p className="tm-card-note" data-tm-canceled-note>
+            Every paid ticket came back as credit.
+          </p>
+          <HideCanceled ctx={ctx} t={t} />
+        </>
       ) : (
         <>
           {/* Alex: no Open tickets button. Picking the date opened them. */}
@@ -399,11 +402,27 @@ function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) 
   );
 }
 
+/** Zip 59: Hide on a canceled tournament's card (organizer only). It leaves Home and every list; Settings > Advanced > Hidden tournaments brings it back. */
+function HideCanceled({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const { busy, save } = useSave(ctx);
+  return (
+    <button
+      type="button"
+      className="btn block secondary tm-hide"
+      disabled={busy}
+      onClick={() => void save(() => api('POST', `/api/admin/tournament/${t.id}/hide`, { hidden: true }), 'Hidden. Restore it in Settings, Advanced.')}
+      data-tm-hide
+    >
+      {busy ? 'Working…' : 'Hide'}
+    </button>
+  );
+}
+
 /** Zip 56: the Pay by choices: every day from today to the tournament day, and the time (every 30 minutes, 6:00 AM to 11:30 PM). */
 const PAY_TIMES = Array.from({ length: 36 }, (_, i) => 360 + i * 30);
 const timeWords = (m: number) => `${m % 720 >= 60 ? Math.floor((m % 720) / 60) : 12}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`;
 
-/** Zip 56: a new Pay by while tickets are open (it starts on the one set when the date was picked: two days before at 7:00 PM). */
+/** Zip 56: a new Pay by while tickets are open (it starts on the one set when the date was picked: the night before at 7:00 PM). */
 function PayBySheet({ ctx, t, open, onClose }: { ctx: AdminCtx; t: AdminTournamentView; open: boolean; onClose: () => void }) {
   return (
     <Sheet calmFocus open={open} title="Pay by" onClose={onClose} className="tm-sheet-pay">

@@ -26,7 +26,11 @@ export function useMoreBelow(ref: RefObject<HTMLElement | null>, own: boolean) {
     if (!el) return;
     const scroller = own ? el : scrollParent(el);
     const update = () => {
-      const more = !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 2;
+      let more = !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 2;
+      // Zip 59: a pinned bar (not its own scroll box) fades only when content really hides behind it: the list above it reaches lower than the
+      // bar's top. At the end of the list the bar sits below it (nothing hidden), whatever rounding or an elastic bounce says about scrollTop.
+      const above = own ? null : el.previousElementSibling;
+      if (scroller && above) more = above.getBoundingClientRect().bottom - el.getBoundingClientRect().top > 2;
       el.toggleAttribute('data-more', more);
     };
     update();

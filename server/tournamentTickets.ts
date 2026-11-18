@@ -19,7 +19,7 @@ import * as v from './validate';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { formatPrice } from '../shared/money';
 import { dayLong, MAX_SPOTS } from '../shared/tournament';
-import { payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
+import { payByLabel, salesCutoffMs, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
 import {
   changedOrLookAgain,
   logPlayer,
@@ -31,6 +31,9 @@ import {
   organizerOn,
   playerTarget,
   salesClosed,
+  freedSpots,
+  heldSpotSincePayBy,
+  ticketPhase,
   statusOf,
   tournamentsFlags,
   type TournamentActor,
@@ -73,13 +76,32 @@ function lookAgainOn(err: unknown): never {
 // Players
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** A player's ticket tap: the tournament they may see, taking tickets, before the night starts, and they are on its list. */
-async function ticketsTarget(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>): Promise<{ t: TournamentRow; playerId: string }> {
+/**
+ * A player's ticket tap: the tournament they may see, taking tickets, and they are on its list.
+ * Zip 59 (`kind`): before Pay by anyone on the list may lock, join the waitlist or tap I paid. After Pay by (the night before at 7:00 PM) none
+ * of that, except finishing what was started (a player already in line holds their spot; an I paid after a Lock) and a spot freed by a back
+ * out, which a new buyer can claim (the first PAID person in line gets it by itself, so only an unclaimed one reaches a new buyer). Three
+ * hours before the start everything closes, a freed spot included.
+ */
+async function ticketsTarget(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>, kind: 'lock' | 'hold' | 'paid' | 'waitlist'): Promise<{ t: TournamentRow; playerId: string }> {
   const { t, playerId } = await playerTarget(ctx, who, body);
   if (statusOf(t) !== 'tickets') throw new HttpError(409, 'tickets_not_open', 'Tickets are not open now. Look again.');
   if (salesClosed(t, who.group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. The tournament has started.');
   const s = await mySignup(ctx.db, t.id, playerId);
   if (!s || s.status !== 'in') throw new HttpError(409, 'not_signed_up', 'You are not on the list. Sign up first.');
+  const phase = ticketPhase(t, who.group.timezone, ctx.nowMs);
+  if (phase === 'cut') throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
+  if (phase === 'after') {
+    const own = await ticketOf(ctx.db, t.id, playerId);
+    const inLine = own?.place === 'line';
+    const waitingPaid = (own?.claim_cents ?? 0) > 0;
+    // Finishing what they started: a player in line holds their spot (Hold my spot) and an I paid they already tapped stays.
+    const finishing = kind === 'hold' ? inLine : kind === 'paid' ? inLine || own?.place === 'spot' : false;
+    if (!finishing && !waitingPaid) {
+      const claimable = kind === 'lock' || kind === 'paid' ? (inLine ? 1 : await freedSpots(ctx.db, who.group.id, t)) : 0;
+      if (claimable <= 0) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. Pay by has passed.');
+    }
+  }
   return { t, playerId };
 }
 
@@ -97,8 +119,8 @@ function answerOf(k: TicketRow | null) {
  * `priceCents`: the price the screen showed (never pay a different amount than the one shown).
  */
 export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
-  const { t, playerId } = await ticketsTarget(ctx, who, body);
   const intent = body.intent === undefined ? 'lock' : v.oneOf(body.intent, 'intent', ['lock', 'hold'] as const);
+  const { t, playerId } = await ticketsTarget(ctx, who, body, intent);
   // The organizer pays the venue, never the group: their own seat is $0.
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
   const price = organizer ? 0 : t.ticket_cents;
@@ -167,7 +189,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
  * (Paid or Didn't pay on their Home card) like every I paid on the site; it holds no spot until then. A second tap changes nothing.
  */
 export async function playerTicketPaid(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
-  const { t, playerId } = await ticketsTarget(ctx, who, body);
+  const { t, playerId } = await ticketsTarget(ctx, who, body, 'paid');
   const cents = v.cents(body.cents, 'cents') ?? 0;
   const k = await ticketOf(ctx.db, t.id, playerId);
   if (!k) throw new HttpError(409, 'nothing_owed', 'There is nothing to pay. Look again.');
@@ -189,7 +211,7 @@ export async function playerTicketPaid(ctx: Ctx, who: TournamentActor, body: Rec
  * already waiting keeps the moment it was tapped). Paying to hold is the next tap (Hold my spot); unpaid they simply stay in line.
  */
 export async function playerTicketWaitlist(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
-  const { t, playerId } = await ticketsTarget(ctx, who, body);
+  const { t, playerId } = await ticketsTarget(ctx, who, body, 'waitlist');
   const k = await ticketOf(ctx.db, t.id, playerId);
   if (k && (k.place === 'line' || k.place === 'spot')) return { ok: true, result: k.place === 'spot' ? 'locked' : 'waitlist', position: await linePosition(ctx, t, playerId) };
   const tickets = await loadTickets(ctx.db, t.id);
@@ -229,7 +251,7 @@ function readPayBy(raw: unknown, nowMs: number, startMs: number): string {
   if (!iso) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time.');
   const ms = Date.parse(iso);
   if (ms <= nowMs) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time that has not passed.');
-  if (ms > startMs) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time before the tournament starts.');
+  if (ms > salesCutoffMs(startMs)) throw new HttpError(400, 'invalid_pay_by', 'Pick a Pay by time at least 3 hours before the tournament starts.');
   return iso;
 }
 
@@ -367,7 +389,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
     group.id,
     null,
     'tournament_taken_off',
-    { tournament: t.name, player: name, playerId, ...(creditCents ? { amountCents: creditCents } : {}), ...(moved.waiting ? { waitingCents: moved.waiting } : {}) },
+    { tournament: t.name, tournamentId: t.id, ...(heldSpotSincePayBy(t, k) ? { freedSpot: true } : {}), player: name, playerId, ...(creditCents ? { amountCents: creditCents } : {}), ...(moved.waiting ? { waitingCents: moved.waiting } : {}) },
     ctx.nowIso,
   );
   return { ok: true, changed: true, creditCents };

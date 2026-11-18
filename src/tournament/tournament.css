@@ -9,7 +9,8 @@
   align-items: center;
   gap: 10px;
   min-height: 86px;
-  margin-bottom: 18px;
+  /* Zip 59: the gap down to the dark card was 18 + the stack's 12 = 30 px; now about half (3 + 12 = 15 px). */
+  margin-bottom: 3px;
   padding: 12px 12px 12px 16px;
   border: 1px solid #ecd27a;
   border-radius: 16px;
@@ -74,35 +75,36 @@
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  /* The edge is drawn inside the card (not a border), so the notch below covers it: no line above the half circle. */
   border-radius: 22px;
-  background:
-    radial-gradient(120% 90% at 18% 0%, #112a1f 0%, rgb(17 42 31 / 0%) 60%),
-    linear-gradient(180deg, #0e241a 0%, #0c1f16 62%, #0b1b14 100%);
   color: #ffffff;
-  box-shadow: inset 0 0 0 1px var(--tc-line), 0 14px 30px rgb(10 24 17 / 24%), 0 2px 6px rgb(10 24 17 / 18%);
+  /* Zip 59: the card's own fill and edge are drawn on ::before so the ticket notch can be a REAL cutout (a mask, below). The soft shadow stays
+     on the card itself: an outer shadow is never painted inside the card's own box, so the half circle shows the bare page in light and dark. */
+  box-shadow: 0 14px 30px rgb(10 24 17 / 24%), 0 2px 6px rgb(10 24 17 / 18%);
 }
 :root[data-theme='dark'] .tc {
   --tc-line: #2a5a42;
-  box-shadow: inset 0 0 0 1px var(--tc-line), 0 10px 26px rgb(0 0 0 / 40%);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tc {
     --tc-line: #2a5a42;
-    box-shadow: inset 0 0 0 1px var(--tc-line), 0 10px 26px rgb(0 0 0 / 40%);
+    box-shadow: 0 10px 26px rgb(0 0 0 / 40%);
   }
 }
-/* The ticket's notch at the top of the stub line: the page color shows through. */
+/* The card itself: the deep green fill and its 1 px edge (drawn inside, so the notch cuts the edge too: no line above the half circle).
+   The notch at the top of the stub line is transparent: the mask removes a circle centered on the card's top edge. */
 .tc::before {
   content: '';
   position: absolute;
-  z-index: 2;
-  top: -8px;
-  left: calc(var(--tc-stub-w) - 7px);
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--bg);
+  z-index: -2;
+  inset: 0;
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 90% at 18% 0%, #112a1f 0%, rgb(17 42 31 / 0%) 60%),
+    linear-gradient(180deg, #0e241a 0%, #0c1f16 62%, #0b1b14 100%);
+  box-shadow: inset 0 0 0 1px var(--tc-line);
+  -webkit-mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
+  mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
 }
 /* The faint court in the top right corner. */
 .tc-court {
@@ -120,7 +122,8 @@
 }
 .tc-top {
   display: flex;
-  min-height: 118px;
+  /* Zip 59: 118 before; the blank space between the last text line and the button is about 10 px less. */
+  min-height: 106px;
 }
 .tc-stub {
   position: relative;
@@ -128,7 +131,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 0 6px;
+  padding: 14px 0 2px;
   text-align: center;
 }
 /* The dashed tear line: 6 px dashes, 4 px gaps (the mock), from under the notch to above the button. */
@@ -180,7 +183,7 @@
 .tc-main {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 17px 12px 8px 18px;
+  padding: 17px 12px 4px 18px;
   /* The format line below sizes itself to this column (cqw). */
   container-type: inline-size;
 }
@@ -219,7 +222,7 @@
 .tc-actions {
   display: flex;
   gap: 10px;
-  padding: 10px 16px 0;
+  padding: 6px 16px 0;
 }
 .tc-btn {
   flex: 1 1 0;
@@ -858,6 +861,15 @@ dialog.sheet.tm-sheet {
   max-height: min(76dvh, 92dvh);
 }
 
+/* Zip 59: the sheet's header is solid in the tournament sheets, so a card that scrolls up under it is cut cleanly by the header (never seen
+   through it, washed out). The only fade is the one above the bottom bar, and only while more content is hidden below it. */
+dialog.sheet.tm-sheet .sheet-head,
+dialog.sheet.tc-tw-overlay .sheet-head {
+  background: var(--sheet-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* Zip 55 feedback: the tournament sheets focus the sheet itself on open (no ring on the ✕ after a tap). The sheet never shows a ring. */
 .tm-calm-focus:focus,
 .tm-calm-focus:focus-visible {
@@ -1175,4 +1187,239 @@ dialog.sheet.tc-tw-overlay {
 .tc-tw-gold {
   font-weight: 750;
   color: var(--tw-gold);
+}
+
+/* ---------- Zip 59: the slim Home line (until the month of the tournament date) ---------- */
+/* One line, the same card look as the rest of Home (the surface, the thin line, 16 px corners): the name left, the date right, a small arrow. */
+.tc-slim {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.tc-slim:active {
+  background: var(--fill);
+}
+.tc-slim-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--display);
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-slim-date {
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tc-slim-go {
+  flex: 0 0 auto;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--ink-2);
+}
+
+/* ---------- Zip 59: the ticket punch (mocks/ticket-tap.mp4), about 1.5 seconds, CSS only ---------- */
+/* 0.00 to 0.50 s  "Signing you up..." and a small dashed ring turning in the ticket's top right corner.
+   0.50 to 0.70 s  the ticket dips a hair (the press).
+   0.70 s          the punch: the ring turns solid lime around a clear hole, a wave rings out, ten dots burst.
+   0.75 to 1.00 s  the line turns lime: "You're on the list".
+   1.00 to 1.50 s  the wave and the dots fade; the ring settles. The save is NOT waited on: this plays over it. */
+.tc-punching {
+  animation: tc-press 1.5s ease-out both;
+}
+@keyframes tc-press {
+  0%,
+  44% {
+    transform: none;
+  }
+  50% {
+    transform: scale(0.985);
+  }
+  62%,
+  100% {
+    transform: none;
+  }
+}
+.tc-punch {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  pointer-events: none;
+}
+.tc-punch-ring,
+.tc-punch-wave {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+.tc-punch-ring {
+  border: 2px dashed rgb(216 240 59 / 75%);
+  background: rgb(255 255 255 / 9%);
+  animation: tc-ring 1.5s ease-out both;
+}
+@keyframes tc-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1) rotate(60deg);
+  }
+  46% {
+    opacity: 1;
+    border-style: dashed;
+    background: rgb(255 255 255 / 9%);
+    box-shadow: none;
+    transform: scale(1) rotate(300deg);
+  }
+  50% {
+    border-style: solid;
+    border-color: #d8f03b;
+    background: #07140e;
+    box-shadow: 0 0 14px 2px rgb(216 240 59 / 70%);
+    transform: scale(1.35) rotate(300deg);
+  }
+  66%,
+  100% {
+    opacity: 1;
+    border-style: solid;
+    border-color: #d8f03b;
+    background: #07140e;
+    box-shadow: 0 0 9px 1px rgb(216 240 59 / 45%);
+    transform: scale(1) rotate(300deg);
+  }
+}
+.tc-punch-wave {
+  border: 2px solid rgb(216 240 59 / 55%);
+  opacity: 0;
+  animation: tc-wave 1.5s ease-out both;
+}
+@keyframes tc-wave {
+  0%,
+  46% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: scale(3);
+  }
+}
+.tc-punch-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 1px;
+  background: #d8f03b;
+  opacity: 0;
+  animation: tc-dot 1.5s ease-out both;
+}
+.tc-punch-dot:nth-child(3n + 1) {
+  background: #6ef0b0;
+}
+.tc-punch-dot:nth-child(3n + 2) {
+  background: #f1f6e4;
+  width: 3px;
+  height: 3px;
+}
+@keyframes tc-dot {
+  0%,
+  47% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  52% {
+    opacity: 1;
+  }
+  95%,
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) rotate(160deg);
+  }
+}
+/* The line under the name: "Signing you up..." then, in lime, "You're on the list". They sit in the same place. */
+.tc-punch-sub {
+  position: relative;
+  display: inline-block;
+}
+.tc-punch-a {
+  animation: tc-sub-a 1.5s linear both;
+}
+.tc-punch-b {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--tc-lime);
+  opacity: 0;
+  animation: tc-sub-b 1.5s linear both;
+}
+@keyframes tc-sub-a {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  52%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes tc-sub-b {
+  0%,
+  48% {
+    opacity: 0;
+  }
+  60%,
+  100% {
+    opacity: 1;
+  }
+}
+/* Reduced motion: no ring, no burst, no press: the card goes straight to "You're on the list". */
+@media (prefers-reduced-motion: reduce) {
+  .tc-punching {
+    animation: none;
+  }
+  .tc-punch {
+    display: none;
+  }
+  .tc-punch-a {
+    display: none;
+  }
+  .tc-punch-b {
+    position: static;
+    animation: none;
+    opacity: 1;
+  }
 }

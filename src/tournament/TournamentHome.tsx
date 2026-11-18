@@ -7,9 +7,9 @@
 //
 // This file is its own download (src/TournamentSlot.tsx loads it): a phone fetches it only when the server sends a tournament for it, so with
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
-import { type CSSProperties, type MouseEvent, type ReactNode, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
-import { dayShort, formatLine, formatName, hoursLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
+import { dayLong, dayShort, formatLine, formatName, hoursLabel, stepsFor, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
 import { payByLabel, placeWord } from '../../shared/tournamentTickets';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../lib';
@@ -64,6 +64,21 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
   const [askShow, setAskShow] = useState(false);
   const [paying, setPaying] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  // Zip 59: until the month of the tournament date the card is one slim line; a tap opens the full card (it stays open until the page reloads).
+  const [opened, setOpened] = useState(false);
+  // Zip 59: the ticket punch (about 1.5 seconds) plays over the save when sign-up finishes; it never waits on it.
+  const [punch, setPunch] = useState(false);
+  const punchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(punchTimer.current), []);
+  function startPunch() {
+    clearTimeout(punchTimer.current);
+    setPunch(true);
+    punchTimer.current = setTimeout(() => setPunch(false), PUNCH_MS);
+  }
+  function stopPunch() {
+    clearTimeout(punchTimer.current);
+    setPunch(false);
+  }
   const signed = t.me !== null;
   const k = t.tickets ?? null;
   const org = firstOf(pay.group.organizerName);
@@ -74,7 +89,8 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
     try {
       const res = await fn();
       await onChanged();
-      toast(typeof done === 'function' ? done(res) : done);
+      const said = typeof done === 'function' ? done(res) : done;
+      if (said) toast(said);
       return res ?? true;
     } catch (err) {
       toast(errorText(err), 'error');
@@ -132,19 +148,24 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
           </button>
         </div>
       )}
-      <TicketCard
-        t={t}
-        org={org}
-        busy={busy}
-        onSignUp={() => setSheet('signup')}
-        onWho={() => setSheet(t.status === 'tickets' ? 'overlay' : 'who')}
-        onOpen={t.status === 'tickets' && signed ? () => setSheet('overlay') : undefined}
-        onEdit={() => setSheet('edit')}
-        onDropOut={() => setAskOut(true)}
-        onLock={() => void lock('lock')}
-        onHold={() => void lock('hold')}
-        onJoin={() => void joinWaitlist()}
-      />
+      {t.slim && !opened ? (
+        <SlimCard t={t} onOpen={() => setOpened(true)} />
+      ) : (
+        <TicketCard
+          t={t}
+          org={org}
+          busy={busy}
+          punch={punch}
+          onSignUp={() => setSheet('signup')}
+          onWho={() => setSheet(t.status === 'tickets' ? 'overlay' : 'who')}
+          onOpen={t.status === 'tickets' && signed ? () => setSheet('overlay') : undefined}
+          onEdit={() => setSheet('edit')}
+          onDropOut={() => setAskOut(true)}
+          onLock={() => void lock('lock')}
+          onHold={() => void lock('hold')}
+          onJoin={() => void joinWaitlist()}
+        />
+      )}
       {t.status === 'tickets' && k && signed && (
         <Sheet calmFocus open={sheet === 'overlay'} title={t.name} back="Home" onClose={() => setSheet(null)} className="tc-tw-overlay">
           <Overlay
@@ -184,8 +205,21 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
         busy={busy}
         onClose={() => setSheet(null)}
         onSubmit={async (level, dates) => {
-          const ok = await run(() => api('POST', '/api/tournament/signup', { tournamentId: t.id, level, dates }), "You're on the list");
-          if (ok) setSheet(null);
+          const save = () => api('POST', '/api/tournament/signup', { tournamentId: t.id, level, dates });
+          // Reduced motion: no punch, straight to "You're on the list" (the toast and the card).
+          if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            const ok = await run(save, "You're on the list");
+            if (ok) setSheet(null);
+            return;
+          }
+          // The punch plays over the save: the sheet closes at once, the save runs at its own speed, the card shows the punch for about 1.5 s.
+          setSheet(null);
+          startPunch();
+          const ok = await run(save, '');
+          if (!ok) {
+            stopPunch();
+            setSheet('signup');
+          }
         }}
       />
       {signed && (
@@ -251,6 +285,68 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
         />
       )}
     </div>
+  );
+}
+
+/** Zip 59: the slim Home line (until the month of the tournament date): the name and the date, or "Date TBD". One tap opens the full card. */
+function SlimCard({ t, onOpen }: { t: PlayerTournamentView; onOpen: () => void }) {
+  const date = t.finalDate ? dayLong(t.finalDate) : 'Date TBD';
+  return (
+    <button type="button" className="tc-slim" onClick={onOpen} aria-label={`${t.name}, ${date}. Open`} data-tc="slim">
+      <span className="tc-slim-name" data-tc-slim-name>
+        {t.name}
+      </span>
+      <span className="tc-slim-date" data-tc-slim-date>
+        {date}
+      </span>
+      <span className="tc-slim-go" aria-hidden="true">
+        ›
+      </span>
+    </button>
+  );
+}
+
+/** Zip 59: how long the ticket punch plays (ms). The CSS (src/tournament/tournament.css, "ticket punch") runs the same 1.5 s. */
+const PUNCH_MS = 1500;
+
+/** The burst of dots: angle (degrees) and how far (px) each flies. */
+const PUNCH_DOTS: [number, number][] = [
+  [10, 30],
+  [50, 36],
+  [95, 28],
+  [140, 38],
+  [185, 30],
+  [225, 36],
+  [270, 28],
+  [315, 38],
+  [30, 20],
+  [200, 22],
+];
+
+/** Zip 59: the small ring in the ticket's top right corner: a dashed ring while it signs you up, then the punch hole with a quick burst of dots. */
+function PunchRing() {
+  return (
+    <span className="tc-punch" aria-hidden="true" data-tc-punch>
+      <span className="tc-punch-wave" />
+      <span className="tc-punch-ring" />
+      {PUNCH_DOTS.map(([a, d], i) => (
+        <span
+          key={i}
+          className="tc-punch-dot"
+          style={{ '--dx': `${Math.round(Math.cos((a * Math.PI) / 180) * d)}px`, '--dy': `${Math.round(Math.sin((a * Math.PI) / 180) * d)}px`, '--i': i } as CSSProperties}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** Zip 59: "Signing you up..." and then "You're on the list" (the green one), in the line under the name. */
+function PunchSub() {
+  return (
+    <span className="tc-punch-sub">
+      <span className="tc-punch-a">Signing you up…</span>
+      <span className="tc-punch-b">You’re on the list</span>
+    </span>
   );
 }
 
@@ -328,6 +424,8 @@ function ticketWords(t: PlayerTournamentView, s: TicketState, org: string): { ki
   switch (s) {
     case 'lock':
       // "Pay by Tue 7:00 PM" stays together: on a small phone the line breaks after the dot, never before "PM".
+      // Zip 59: after Pay by only a spot freed by a back out is open: "A spot opened".
+      if (k.freed > 0) return { kicker: 'Tickets open', sub: `${hours} · A spot opened` };
       return { kicker: 'Tickets open', sub: payBy ? `${hours} · ${`Pay by ${payBy}`.replace(/ /g, '\u00a0')}` : hours };
     case 'full':
       return { kicker: takenWords(k), sub: 'Join the waitlist in case someone drops' };
@@ -336,7 +434,8 @@ function ticketWords(t: PlayerTournamentView, s: TicketState, org: string): { ki
     case 'waiting':
       return { kicker: 'Tickets open', sub: `Paid · Waiting for ${org} to confirm` };
     case 'closed':
-      return { kicker: 'Tickets closed', sub: 'The tournament has started.' };
+      // Zip 59: closed because the night started, or because Pay by has passed (the freed-spot exception ended 3 hours before the start).
+      return { kicker: 'Tickets closed', sub: k.started ? 'The tournament has started.' : payBy ? `Pay by was ${payBy}.` : 'Tickets are closed.' };
     case 'line': {
       const where = place > 0 ? `You’re ${placeWord(place)} on the waitlist` : 'You’re on the waitlist';
       if (mine && mine.claimCents > 0) return { kicker: 'Waitlist', sub: `${where}. Waiting for ${org} to confirm your payment.` };
@@ -350,6 +449,7 @@ export function TicketCard({
   t,
   org,
   busy,
+  punch = false,
   onSignUp,
   onWho,
   onOpen,
@@ -362,6 +462,8 @@ export function TicketCard({
   t: PlayerTournamentView;
   org: string;
   busy: boolean;
+  /** Zip 59: the ticket punch is playing (sign-up just finished). */
+  punch?: boolean;
   onSignUp: () => void;
   onWho: () => void;
   /** Zip 56: tapping the card itself opens the overlay (tickets open). */
@@ -431,9 +533,10 @@ export function TicketCard({
         }
       : undefined;
     return (
-      <section className={`tc${onOpen ? ' tc-tap' : ''}`} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={s} onClick={open}>
+      <section className={`tc${onOpen ? ' tc-tap' : ''}${punch ? ' tc-punching' : ''}`} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={s} onClick={open}>
         <Court />
         <div className="tc-top">
+          {punch && <PunchRing />}
           <Stub t={t} />
           <div className="tc-main">
             <Kicker>{w.kicker}</Kicker>
@@ -443,7 +546,7 @@ export function TicketCard({
               {formatLine(t.format)}
             </p>
             <p className="tc-sub" data-tc-sub>
-              {w.sub}
+              {punch ? <PunchSub /> : w.sub}
             </p>
           </div>
         </div>
@@ -502,9 +605,10 @@ export function TicketCard({
   const now = picked ? 1 : 0;
   const state = t.status === 'rescheduled' ? 'rescheduled' : picked ? 'date' : signed ? 'listed' : 'open';
   return (
-    <section className="tc" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={state}>
+    <section className={punch ? 'tc tc-punching' : 'tc'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tc-format={t.format} data-tc={state}>
       <Court />
       <div className="tc-top">
+        {punch && <PunchRing />}
         <Stub t={t} />
         <div className="tc-main">
           <h2 className={Array.from(t.name).length >= 17 ? 'tc-title tc-title-long' : 'tc-title'}>{t.name}</h2>
@@ -513,7 +617,7 @@ export function TicketCard({
             {formatLine(t.format)}
           </p>
           <p className="tc-sub" data-tc-sub>
-            {sub}
+            {punch ? <PunchSub /> : sub}
           </p>
         </div>
       </div>

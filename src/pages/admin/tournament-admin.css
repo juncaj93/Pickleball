@@ -533,6 +533,9 @@ dialog.sheet.tm-page {
   background: var(--ok-bg);
   color: var(--ok-fg);
 }
+.tm-hide {
+  margin-top: 14px;
+}
 .tm-tix-go {
   margin-top: 14px;
 }

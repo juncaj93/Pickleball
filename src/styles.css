@@ -296,6 +296,10 @@ a {
   outline-offset: 2px;
   border-radius: 8px;
 }
+/* Zip 59: no ring after a tap or a click, anywhere (the X on a sheet got one when the sheet opened). The keyboard keeps every ring. src/inputMode.ts */
+html[data-input='pointer'] :focus-visible {
+  outline: none !important;
+}
 
 .sr-only {
   position: absolute;

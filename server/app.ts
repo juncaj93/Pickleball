@@ -213,6 +213,8 @@ route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVis
 route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
 route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
 route('POST', '/api/admin/tournament/:id/cancel', (ctx) => tournament.cancelTournament(ctx));
+// Zip 59: Hide (and Restore) a canceled tournament.
+route('POST', '/api/admin/tournament/:id/hide', tournament.hideTournament);
 // Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Pay by, the answers on one ticket, Reschedule. (Tickets open when the date is
 // picked: PUT .../date above. Alex: no Open tickets button.)
 route('PUT', '/api/admin/tournament/:id/pay-by', tickets.setPayBy);

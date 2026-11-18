@@ -16,6 +16,7 @@ import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './
 import type { AdminCtx } from '../Admin';
 import { useInstant } from '../../InstantTaps';
 import { TournamentScheduleRow } from './Tournament';
+import { dayShort } from '../../../shared/tournament';
 import '../../money-rework.css';
 
 /**
@@ -466,6 +467,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
           {ctx.d.adminR2 === true && <HiddenPlayers ctx={ctx} />}
           {ctx.d.moneyRework === true && <HiddenGames ctx={ctx} />}
+          {ctx.d.tournaments === true && <HiddenTournaments ctx={ctx} />}
           {r3 && (
             <details className="advanced" data-adv="access">
               <summary>
@@ -1854,6 +1856,54 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
         </details>
       )}
     </div>
+  );
+}
+
+/**
+ * Zip 59: Settings > Advanced > Hidden tournaments (only while Tournaments is on): the canceled tournaments you hid, each with a Restore button.
+ * Same pattern as Hidden games. Nothing about a hidden tournament is ever deleted.
+ */
+function HiddenTournaments({ ctx }: { ctx: AdminCtx }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const hidden = ctx.d.hiddenTournaments ?? [];
+  async function restore(id: string, name: string) {
+    setBusy(id);
+    try {
+      await api('POST', `/api/admin/tournament/${id}/hide`, { hidden: false });
+      await ctx.reload();
+      toast(`${name} is back`);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <details className="advanced hidden-games" data-hidden-tournaments>
+      <summary>
+        <span>
+          Hidden tournaments<span className="set-note"> · {hidden.length}</span>
+        </span>
+      </summary>
+      {hidden.length === 0 ? (
+        <p className="small muted">Nothing is hidden. Hide a canceled one from its card on Home.</p>
+      ) : (
+        <ul className="rows" aria-label="Hidden tournaments">
+          {hidden.map((h) => (
+            <li key={h.id} data-hidden-tournament={h.id}>
+              <span className="who">
+                <strong>{h.name}</strong>
+                <span className="small muted">{h.finalDate ? `${dayShort(h.finalDate)} · ` : ''}Canceled</span>
+              </span>
+              <button type="button" className="btn small secondary" disabled={busy === h.id} aria-label={`Restore ${h.name}`} onClick={() => void restore(h.id, h.name)}>
+                Restore
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }
 

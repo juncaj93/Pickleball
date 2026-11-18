@@ -37,7 +37,7 @@ import {
   type TournamentStatus,
   type Visibility,
 } from '../shared/tournament';
-import { defaultPayBy, payByLabel, startMsOf, ticketOwed } from '../shared/tournamentTickets';
+import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
@@ -143,7 +143,16 @@ const OPEN = "('signup', 'date_picked', 'tickets', 'rescheduled')";
 export const CANCELED_DAYS = 7;
 const canceledFrom = (nowMs: number) => new Date(nowMs - CANCELED_DAYS * 86_400_000).toISOString();
 /** SQL: a canceled tournament that still shows its Canceled card (?2: the cutoff). `t`: the table's alias, or '' for none. */
-const shownCanceled = (t = '') => `(${t}status = 'canceled' AND ${t}canceled_at >= ?2 AND (${t}final_date IS NOT NULL OR ${t}pay_by IS NOT NULL))`;
+const shownCanceled = (t = '') =>
+  `(${t}status = 'canceled' AND ${t}canceled_at >= ?2 AND (${t}final_date IS NOT NULL OR ${t}pay_by IS NOT NULL) AND ${notHiddenSql(t ? `${t}id` : 'tournaments.id')})`;
+
+/**
+ * Zip 59: Hide on a canceled tournament's card. One task_log row per hidden tournament (task 'tournament_hidden:<id>', kind 'mark', no game):
+ * no new table or column, exactly how a hidden game is kept. A hidden tournament is out of Home and every list for everyone; nothing about it is
+ * ever deleted (its tickets, credit and History stay), and Settings > Advanced > Hidden tournaments > Restore brings it back.
+ */
+export const hiddenTask = (tournamentId: string): string => `tournament_hidden:${tournamentId}`;
+const notHiddenSql = (idRef: string) => `NOT EXISTS (SELECT 1 FROM task_log h WHERE h.kind = 'mark' AND h.task = 'tournament_hidden:' || ${idRef})`;
 
 /** The group's open tournament, or null. Null too while the tables do not exist yet. (Create's "one at a time" and every organizer save.) */
 export async function activeTournament(db: D1Database, groupId: string): Promise<TournamentRow | null> {
@@ -294,6 +303,45 @@ export function nightOf(t: TournamentRow, tz: string): { start: number; end: num
 export const lockedCount = (tickets: readonly { place: string; signup_status: string }[]): number =>
   tickets.filter((k) => k.place === 'spot' && k.signup_status === 'in').length;
 
+/**
+ * Zip 59: where ticket sales stand for NEW activity.
+ *   open   before Pay by (the night before at 7:00 PM): tickets and the waitlist take anyone
+ *   after  Pay by has passed: no new tickets and no waitlist joins; only a spot freed by a back out can still be claimed (below)
+ *   cut    3 hours before the start: nothing more, a freed spot included
+ */
+export type TicketPhase = 'open' | 'after' | 'cut';
+export function ticketPhase(t: TournamentRow, tz: string, nowMs: number): TicketPhase {
+  const n = nightOf(t, tz);
+  if (!n) return 'open';
+  if (nowMs >= salesCutoffMs(n.start)) return 'cut';
+  if (t.pay_by && nowMs >= Date.parse(t.pay_by)) return 'after';
+  return 'open';
+}
+
+/**
+ * Zip 59: spots freed since Pay by and not claimed yet. A spot held since before Pay by that is given up after it (a back out, or taken off) counts
+ * one (the History line says so: `freedSpot`); a spot taken after Pay by uses one up (the first paid person in line gets it by itself, or a new
+ * buyer claims it). Never below 0. No column: read from the History lines and the tickets. Only worth asking after Pay by.
+ */
+export async function freedSpots(db: D1Database, groupId: string, t: TournamentRow): Promise<number> {
+  if (!t.pay_by) return 0;
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM admin_audit_log WHERE group_id = ?1 AND action IN ('tournament_back_out', 'tournament_taken_off') AND created_at >= ?2
+            AND json_extract(details_json, '$.tournamentId') = ?3 AND json_extract(details_json, '$.freedSpot') = 1) AS gone,
+         (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = ?3 AND place = 'spot' AND place_at >= ?2) AS taken`,
+    )
+    .bind(groupId, t.pay_by, t.id)
+    .first<{ gone: number; taken: number }>()
+    .catch(() => null);
+  return Math.max(0, Number(row?.gone ?? 0) - Number(row?.taken ?? 0));
+}
+
+/** Zip 59: this ticket held a spot since before Pay by (so giving it up after Pay by frees a spot that can be claimed again). */
+export const heldSpotSincePayBy = (t: TournamentRow, k: { place: string; place_at: string | null } | null): boolean =>
+  !!k && k.place === 'spot' && !!t.pay_by && !!k.place_at && k.place_at < t.pay_by;
+
 /** Ticket sales are closed: the tournament night has started. */
 export const salesClosed = (t: TournamentRow, tz: string, nowMs: number) => {
   const n = nightOf(t, tz);
@@ -344,12 +392,22 @@ async function visibleTo(ctx: Ctx, group: GroupRow, playerId: string, viewAs: bo
   return { t, onlyMe: true };
 }
 
+/**
+ * Zip 59: the slim Home line shows until the first day of the calendar month of the tournament date (Eastern); from then on the full card.
+ * No date picked yet: slim.
+ */
+export function slimUntilMonth(finalDate: string | null, nowMs: number, tz: string): boolean {
+  if (!finalDate) return true;
+  const today = todayKey(nowMs, tz);
+  return today.slice(0, 7) < finalDate.slice(0, 7);
+}
+
 /** The picked date as the screens show it: once picked, while tickets are open on it, and on a canceled tournament's card. */
 const shownDate = (t: TournamentRow): string | null => (statusOf(t) === 'date_picked' || statusOf(t) === 'tickets' || statusOf(t) === 'canceled' ? t.final_date : null);
 
 /**
  * Zip 56 (Alex, after testing piece 1): picking the date opens tickets. A tournament whose date was picked before that rule (piece 1, by the
- * organizer's own test on live) opens them the first time a screen reads it, exactly as a date pick does now: Pay by two days before at 7:00 PM,
+ * organizer's own test on live) opens them the first time a screen reads it, exactly as a date pick does now: Pay by the night before at 7:00 PM,
  * the organizer's $0 seat. Only before its night starts. A read with the read-only PIN writes nothing, so it waits for the next real reader.
  */
 async function upgradeDatePicked(ctx: Ctx, group: GroupRow, t: TournamentRow): Promise<TournamentRow> {
@@ -375,6 +433,43 @@ async function upgradeDatePicked(ctx: Ctx, group: GroupRow, t: TournamentRow): P
   } catch {
     return t;
   }
+}
+
+/** Zip 59: the canceled tournaments the organizer hid, newest first, for Settings > Advanced > Hidden tournaments (each with Restore). */
+export async function hiddenTournamentsView(db: D1Database, group: GroupRow): Promise<{ id: string; name: string; finalDate: string | null; canceledAt: string | null }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, name, final_date, canceled_at FROM tournaments WHERE group_id = ? AND status = 'canceled' AND NOT ${notHiddenSql('tournaments.id')} ORDER BY canceled_at DESC, created_at DESC LIMIT 50`,
+    )
+    .bind(group.id)
+    .all<{ id: string; name: string; final_date: string | null; canceled_at: string | null }>()
+    .catch(() => ({ results: [] as { id: string; name: string; final_date: string | null; canceled_at: string | null }[] }));
+  return results.map((r) => ({ id: r.id, name: r.name, finalDate: r.final_date, canceledAt: r.canceled_at }));
+}
+
+/**
+ * POST /api/admin/tournament/:id/hide { hidden }: Hide (or Restore) a CANCELED tournament. It only hides: nothing is deleted or refunded here.
+ * A canceled tournament with an I paid still waiting is not hidden (that answer is on its card).
+ */
+export async function hideTournament(ctx: Ctx, body: Record<string, unknown>) {
+  const group: GroupRow = await organizerOn(ctx);
+  const id = v.id(ctx.params.id, 'tournament');
+  const hidden = v.bool(body.hidden, 'hidden');
+  const t = await ctx.db.prepare("SELECT * FROM tournaments WHERE id = ? AND group_id = ?").bind(id, group.id).first<TournamentRow>().catch(() => null);
+  if (!t || t.status !== 'canceled') throw new HttpError(409, 'tournament_changed', 'Only a canceled tournament can be hidden. Look again.');
+  const was = !!(await ctx.db.prepare("SELECT 1 AS x FROM task_log WHERE kind = 'mark' AND task = ?").bind(hiddenTask(id)).first());
+  if (was === hidden) return { ok: true, changed: false, hidden };
+  if (hidden) {
+    if (await canceledClaimWaiting(ctx.db, group.id)) {
+      const waiting = await ctx.db.prepare('SELECT 1 AS x FROM tournament_tickets WHERE tournament_id = ? AND claim_cents > 0 LIMIT 1').bind(id).first();
+      if (waiting) throw new HttpError(409, 'claim_waiting', 'An I paid is still waiting. Answer it first.');
+    }
+    await ctx.db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)").bind(newId(), group.id, hiddenTask(id), ctx.nowIso).run();
+  } else {
+    await ctx.db.prepare("DELETE FROM task_log WHERE kind = 'mark' AND task = ?").bind(hiddenTask(id)).run();
+  }
+  await audit(ctx.db, group.id, null, hidden ? 'tournament_hidden' : 'tournament_restored', { tournament: t.name }, ctx.nowIso);
+  return { ok: true, changed: true, hidden };
 }
 
 /** GET /api/group `tournament`: this player's card, or null (then the answer has no `tournament` key at all). */
@@ -406,6 +501,8 @@ export async function playerTournamentFor(ctx: Ctx, group: GroupRow, playerId: s
     me: mine ? { level: mine.picked_level, dates: storedDays(mine.dates) } : null,
     ...(before ? { lockedLevel: before.first_level ?? before.picked_level } : {}),
     ...(onlyMe ? { onlyMe: true as const } : {}),
+    // Zip 59: one slim line until the month of the tournament date (and before a date is picked).
+    ...(statusOf(t) !== 'canceled' && slimUntilMonth(shownDate(t), ctx.nowMs, group.timezone) ? { slim: true as const } : {}),
   };
   // Zip 56: the plain Canceled card, with what came back to this player.
   if (statusOf(t) === 'canceled') return { ...base, canceled: await canceledMoneyOf(ctx.db, t.id, playerId) };
@@ -421,6 +518,11 @@ async function playerTicketsView(ctx: Ctx, t: TournamentRow, tickets: TicketWith
   const money = (k: TicketWithName) => ({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents });
   const own = tickets.find((k) => k.player_id === playerId) ?? null;
   const locked = lockedCount(tickets);
+  const phase = statusOf(t) === 'tickets' ? ticketPhase(t, group.timezone, ctx.nowMs) : 'open';
+  const freed = phase === 'after' ? await freedSpots(ctx.db, group.id, t) : 0;
+  const closed =
+    statusOf(t) === 'tickets' &&
+    (salesClosed(t, group.timezone, ctx.nowMs) || phase === 'cut' || (phase === 'after' && freed === 0 && own?.place !== 'line' && !((own?.claim_cents ?? 0) > 0)));
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at 12.
     size: smartPlan(locked).size,
@@ -428,7 +530,11 @@ async function playerTicketsView(ctx: Ctx, t: TournamentRow, tickets: TicketWith
     // The organizer pays the venue, never the group: their own seat is $0 (the organizer found as the site always finds them, saved or by name).
     priceCents: own ? own.price_cents : playerId === (await organizerIdOf(ctx.db, group)) ? 0 : t.ticket_cents,
     payBy: statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null,
-    closed: statusOf(t) === 'tickets' && salesClosed(t, group.timezone, ctx.nowMs),
+    // Zip 59: closed for a player who is not locked in: the night has started, 3 hours before the start, or Pay by has passed with no freed spot
+    // (a player already on the waitlist, or with an I paid waiting, can still finish what they started).
+    ...(closed ? { closed: true as const } : { closed: false as const }),
+    started: statusOf(t) === 'tickets' && salesClosed(t, group.timezone, ctx.nowMs),
+    freed,
     locked: listed.filter((k) => k.place === 'spot').map((k) => ({ name: k.display_name, ...me(k) })),
     // Alex (ship answer 5): names only. Paid or Not paid is for the organizer's screen; a player's own ticket is in `mine`.
     line: listed.filter((k) => k.place === 'line').map((k) => ({ name: k.display_name, ...me(k) })),
@@ -804,7 +910,7 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
   if (typeof date !== 'string' || !storedDays(t.offered_dates).includes(date)) bad('invalid_date', 'Pick one of the dates you offered.');
   if ((date as string) < todayKey(ctx.nowMs, group.timezone)) bad('invalid_date', 'That date has passed. Pick another one.');
   if (ctx.nowMs >= startMsOf(date as string, NIGHT_START_MINUTES, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
-  // Zip 56 (Alex): picking the date opens tickets, for everyone on the list, in the same tap: Pay by starts at two days before at 7:00 PM (the
+  // Zip 56 (Alex): picking the date opens tickets, for everyone on the list, in the same tap: Pay by starts at the night before at 7:00 PM (the
   // organizer can change it), the organizer's own $0 seat is taken when they are on the list. No other trigger.
   const payBy = defaultPayBy(date as string, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
   const org = await organizerIdOf(ctx.db, group);
@@ -1015,6 +1121,8 @@ export async function playerTournamentBackOut(ctx: Ctx, who: TournamentActor, bo
   const { waiting, cash, credit } = moved;
   await logPlayer(ctx, who.group, playerId, 'tournament_back_out', {
     tournament: t.name,
+    tournamentId: t.id,
+    ...(heldSpotSincePayBy(t, k) ? { freedSpot: true } : {}),
     ...(cash + credit > 0 ? { amountCents: cash + credit } : {}),
     ...(waiting ? { waitingCents: waiting } : {}),
   });

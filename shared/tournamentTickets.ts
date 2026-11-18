@@ -57,13 +57,19 @@ export function startMsOf(finalDate: string, startMinutes: number, tz: string): 
 /** The moment the tournament night is over (the start plus the plan's minutes), in ms. */
 export const endMsOf = (finalDate: string, startMinutes: number, minutes: number, tz: string): number => startMsOf(finalDate, startMinutes, tz) + minutes * 60_000;
 
-/** The usual Pay by: this many days before the date, at this hour (7:00 PM Eastern). Tuesday 7:00 PM for a Thursday game. */
-export const PAY_BY_DAYS_BEFORE = 2;
+/** The usual Pay by (Zip 59): the night before the tournament at 7:00 PM Eastern (Wednesday 7:00 PM for a Thursday game). */
+export const PAY_BY_DAYS_BEFORE = 1;
 export const PAY_BY_HOUR = 19;
 
+/** Zip 59: a spot freed by a back out can still be claimed until this long before the start (3 hours). After that, nothing. */
+export const FREED_CUTOFF_MS = 3 * 3_600_000;
+
+/** The last moment anyone can take or claim a ticket: 3 hours before the start of the night, in ms. */
+export const salesCutoffMs = (startMs: number): number => startMs - FREED_CUTOFF_MS;
+
 /**
- * The default Pay by for a date: two days before at 7:00 PM Eastern. If that has already passed (tickets opened late), the day before at 7:00
- * PM; if that too, one hour before the start; if even that has passed, the start itself. As an ISO time.
+ * The default Pay by for a date: the night before at 7:00 PM Eastern. If that has already passed (tickets opened late), the last moment
+ * anything can still be claimed, 3 hours before the start (which may itself have passed: then tickets open already closed). As an ISO time.
  */
 export function defaultPayBy(finalDate: string, startMinutes: number, tz: string, nowMs: number): string {
   const p = dayParts(finalDate);
@@ -72,7 +78,8 @@ export function defaultPayBy(finalDate: string, startMinutes: number, tz: string
     return zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), PAY_BY_HOUR, 0, tz);
   };
   const start = startMsOf(finalDate, startMinutes, tz);
-  const pick = [at(PAY_BY_DAYS_BEFORE), at(1), start - 3_600_000].find((ms) => ms > nowMs && ms <= start) ?? start;
+  const cutoff = salesCutoffMs(start);
+  const pick = [at(PAY_BY_DAYS_BEFORE), cutoff].find((ms) => ms > nowMs && ms <= cutoff) ?? cutoff;
   return new Date(pick).toISOString();
 }
 

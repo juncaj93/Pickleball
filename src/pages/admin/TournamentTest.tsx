@@ -10,7 +10,7 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
-  { stage: 'signup', label: 'Sign-up open', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. Pick the format above first.' },
+  { stage: 'signup', label: 'Sign-up open (sign-up finish)', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. View as Vic: open the slim line, Sign up, watch the ticket punch. Pick the format above first.' },
   // Alex: picking the date opens tickets.
   { stage: 'date_picked', label: 'Date picked, tickets open', line: '8 on the list, Sage set to 3.4, the date most can play picked. Nobody has paid yet. Vic is not on the list.' },
   // Zip 56, piece 2. The spots follow the players locked in (6 to 12); with the 10 names the waitlist (after 12) cannot be shown.
@@ -19,6 +19,11 @@ const STAGES = [
   { stage: 'odd', label: '7 locked in after Pay by', line: 'Pay by has passed with 7 locked in: Home shows the evens warning.' },
   { stage: 'canceled', label: 'Canceled', line: '6 paid, then canceled: every paid ticket is credit now. Players who were on the list see Canceled.' },
   { stage: 'rescheduled', label: 'Rescheduled', line: '6 paid, then rescheduled: tickets stay held, players pick their dates again.' },
+  // Zip 59: the polish piece. The older stages above now use a date this month (the full Home card).
+  { stage: 'slim', label: 'Slim card (date next month)', line: 'Home shows one slim line, name and date. Tap it to open the full card. View as Vic.' },
+  { stage: 'full', label: 'Full card (date this month)', line: '6 paid, the date this month: the full card as it is today. View as Vic.' },
+  { stage: 'closed', label: 'Tickets closed (Pay by passed)', line: 'Pay by passed an hour ago: no new tickets, no waitlist. View as Vic: Tickets closed.' },
+  { stage: 'hidden', label: 'Canceled and hidden', line: 'Out of Home. Settings, Advanced, Hidden tournaments lists it with Restore. Cancel above, then Hide, does the same.' },
   { stage: 'none', label: 'No tournament', line: 'Nothing open, to try Create tournament.' },
 ] as const;
 

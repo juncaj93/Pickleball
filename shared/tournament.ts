@@ -379,8 +379,15 @@ export interface PlayerTicketsView {
   priceCents: number;
   /** When ticket money is due (ISO), or null when tickets are not open right now (after a Reschedule). */
   payBy: string | null;
-  /** Ticket sales are over: the tournament night has started. */
+  /**
+   * Tickets are closed for this player (Zip 59): the night has started, it is 3 hours before the start, or Pay by has passed and no freed spot
+   * is left to claim (a player already on the waitlist, or waiting on an I paid, can still finish).
+   */
   closed: boolean;
+  /** Zip 59: the tournament night has started (the words under "Tickets closed"). */
+  started: boolean;
+  /** Zip 59: spots freed by a back out since Pay by that nobody has claimed (only counted after Pay by). */
+  freed: number;
   /** Locked in, in the order they took their spots. */
   locked: { name: string; me?: true }[];
   /** The waitlist, in the order they joined it: names only (Alex: nobody's paid status but the player's own, which is in `mine`). */
@@ -407,6 +414,11 @@ export interface PlayerTournamentView {
   me: { level: number; dates: string[] } | null;
   /** Off the list after signing up before: the level they picked first, which stays theirs (Alex: a level is picked once). */
   lockedLevel?: number;
+  /**
+   * Zip 59: Home shows ONE slim line (the name and the date, or "Date TBD") until the calendar month of the tournament date (Eastern). Set by the
+   * server (it knows the clock). Absent: the full card, as before.
+   */
+  slim?: true;
   /** Only me is on: this is the organizer's own phone (the "Only you can see this" strip). */
   onlyMe?: true;
   /** Zip 56: tickets (only once tickets have opened; piece 1's two stages send exactly what they did). */
@@ -475,7 +487,7 @@ export interface AdminTournamentView {
   backedOut: { playerId: string; name: string }[];
   /** Zip 56: tickets have been open (Pay by set): the price, the size and the format stay locked, also after a Reschedule. */
   settingsLocked?: boolean;
-  /** Zip 56: when ticket money is due (set when the date is picked: two days before at 7:00 PM; the organizer can change it). */
+  /** Zip 56: when ticket money is due (set when the date is picked: the night before at 7:00 PM; the organizer can change it). */
   payBy?: string | null;
   /** Zip 56: the tournament night has started (ticket sales are over). */
   closed?: boolean;

@@ -331,9 +331,9 @@ describe('the level list and picking the date', () => {
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: '2026-11-04' })).status).toBe(400);
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[2] })).status).toBe(200);
     const b = (await blair.call('GET', '/api/group')).data.tournament;
-    // Tickets are open: Pay by is two days before at 7:00 PM (Sun Nov 8 for Tue Nov 10); 6 spots while nobody is locked in.
+    // Tickets are open: Pay by is the night before at 7:00 PM (Mon Nov 9 for Tue Nov 10; Zip 59); 6 spots while nobody is locked in.
     expect(b).toMatchObject({ status: 'tickets', finalDate: DATES[2], openDates: [DATES[2]] });
-    expect(b.tickets).toMatchObject({ size: 6, full: false, priceCents: 1600, payBy: '2026-11-09T00:00:00.000Z', locked: [], mine: null });
+    expect(b.tickets).toMatchObject({ size: 6, full: false, priceCents: 1600, payBy: '2026-11-10T00:00:00.000Z', locked: [], mine: null });
     // A new sign-up after the date is picked: only the picked date can be picked.
     const casey = await playerPhone(ctx, 'Casey');
     expect((await casey.call('POST', '/api/tournament/signup', { tournamentId: id, level: 275, dates: [DATES[0]] })).status).toBe(409);
