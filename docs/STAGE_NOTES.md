@@ -5747,7 +5747,9 @@ first." No page errors. The preview PIN is in docs/PREVIEW_FAKE_DB.md.
 4. Site: `npm run deploy` from main, 11:09 PM, deployment `4d15fe00-7d46-4374-b795-c0310a816946` (code `3457751`, bundle
    `index-CThk62i9.js`). The guard passed every rule (loud hours had ended at 11:00 PM).
 5. Clock Worker (`pickleball-alerts-clock`, for the version 3 weekly copy), 11:10 PM, after the site: version
-   `16201e11-42db-447a-b382-ee3962455477`. Its only code change since its last deploy (Zip 50): the backup's table list and version.
+   `16201e11-42db-447a-b382-ee3962455477` (active at 100%, its every-5-minutes schedule registered). Its only code change since its last
+   deploy (Zip 50): the backup's table list and version. Its log stream could not be watched from the build machine (refused there), so no
+   run was seen live; the first version 3 weekly copy is Sunday's.
 6. After: the TOURNAMENTS switch is still OFF (no row); integrity checks all 0 (21, 8, and the tournament file's 11); the new column and
    table are there, no tickets. Public live check (pickleball-club-9h0.pages.dev; pickleball.juncaj.net does not answer from the build
    machine): page and /admin 200 with the new bundle; with `?tournaments=on` (the private link) no page errors, nothing wider than the screen,
