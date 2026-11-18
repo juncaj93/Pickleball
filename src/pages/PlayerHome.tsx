@@ -788,8 +788,15 @@ export function PlayerHome({
             {view!.moneyNotes && view!.moneyNotes.length > 0 && <MoneyNotes notes={view!.moneyNotes} />}
             {/* Zip 55 "Tournaments": the pinned ticket card (and the Only me strip), only when the server sent one for this phone. Shown on a calm preview too (it is that zip's card). */}
             {/* Zip 60: once the date is locked, the alert above the ticket card ("The Cold Open is scheduled for Thu Dec 17." and the format). The site's alert card, dismissed per player. */}
-            {view!.tournament?.formatAlert && <FormatAlertCard a={view!.tournament.formatAlert} />}
-            {view!.tournament && <TournamentSlot t={view!.tournament} onChanged={load.reload} pay={{ group: g.group, meName: g.me?.name ?? null }} />}
+            {/* Zip 63: the pay countdown comes first (the brief: at the top of Home), so the slot draws this alert right under it. */}
+            {view!.tournament && (
+              <TournamentSlot
+                t={view!.tournament}
+                onChanged={load.reload}
+                pay={{ group: g.group, meName: g.me?.name ?? null }}
+                notice={view!.tournament.formatAlert ? <FormatAlertCard a={view!.tournament.formatAlert} /> : undefined}
+              />
+            )}
             {/* Preview only (shared/previewCalm.ts): the alert cards stay hidden unless the phone opened ?alerts=all. */}
             {g.previewCalm !== true && (
             <>

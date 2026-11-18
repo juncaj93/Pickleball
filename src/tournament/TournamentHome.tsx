@@ -64,7 +64,7 @@ const dueOf = (k: PlayerTicketsView) => (k.mine ? k.mine.owedCents : k.priceCent
 /** Their place in line (1 = first), or 0. */
 const linePlace = (k: PlayerTicketsView) => k.line.findIndex((x) => x.me) + 1;
 
-export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournamentView; onChanged: () => Promise<unknown>; pay: TournamentPayInfo }) {
+export default function TournamentHome({ t, onChanged, pay, notice }: { t: PlayerTournamentView; onChanged: () => Promise<unknown>; pay: TournamentPayInfo; notice?: ReactNode }) {
   const toast = useToast();
   const [sheet, setSheet] = useState<null | 'signup' | 'edit' | 'who' | 'overlay'>(null);
   const [askOut, setAskOut] = useState(false);
@@ -144,6 +144,8 @@ export default function TournamentHome({ t, onChanged, pay }: { t: PlayerTournam
     <div className="tc-wrap stack" data-tournament={t.status}>
       {/* Zip 63: the pay countdown (mocks 08 to 13), first: only while this player can lock a spot and has not paid, from 3 days before Pay by. */}
       {k?.payBy && !k.closed && ticketStateOf(t) === 'lock' && <PayCountdownCard t={t} payBy={k.payBy} due={dueOf(k)} busy={busy} onPay={() => void lock('lock')} />}
+      {/* Zip 60's date alert, right under the countdown (PlayerHome hands it in). */}
+      {notice}
       {t.onlyMe && (
         <div className="tc-strip" role="note" data-tc-strip>
           <div className="tc-strip-text">

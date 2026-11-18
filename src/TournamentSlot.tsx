@@ -8,7 +8,7 @@
 // A card whose file is already here is drawn directly, in the same frame as the rest of Home: no placeholder first (React holds a placeholder for
 // at least 300 ms once it shows one, which was the pop-in even with the file in the cache). The file is still never part of the player download,
 // and a phone that never had a card fetches nothing.
-import { lazy, type ReactElement, Suspense, useRef } from 'react';
+import { lazy, type ReactElement, type ReactNode, Suspense, useRef } from 'react';
 import type { GroupView } from '../shared/api';
 import type { PlayerTournamentView } from '../shared/tournament';
 import { storageGet, storageRemove, storageSet } from './lib';
@@ -18,7 +18,8 @@ import './tournament-slot.css';
 /** Zip 56: the three group facts the ticket's Pay sheet reads (the site's own sheet, src/PaySheet.tsx), and the player's name for the Venmo note. */
 export type TournamentPayInfo = { group: Pick<GroupView['group'], 'organizerName' | 'venmoUrl' | 'zelleNumber'>; meName: string | null };
 
-type HomeProps = { t: PlayerTournamentView; onChanged: () => Promise<unknown>; pay: TournamentPayInfo };
+/** `notice`: Zip 63: the date alert (Zip 60), drawn right under the pay countdown and above the card. */
+type HomeProps = { t: PlayerTournamentView; onChanged: () => Promise<unknown>; pay: TournamentPayInfo; notice?: ReactNode };
 type HomeModule = { default: (p: HomeProps) => ReactElement | null };
 const Nothing = (_: HomeProps) => null;
 
@@ -71,16 +72,23 @@ const TournamentHome = lazy(async (): Promise<HomeModule> => {
   }
 });
 
-export function TournamentSlot({ t, onChanged, pay }: { t: PlayerTournamentView; onChanged: () => Promise<unknown>; pay: TournamentPayInfo }) {
+export function TournamentSlot({ t, onChanged, pay, notice }: HomeProps) {
   // Zip 62: decided once for this card, so it never switches between the two ways while it is on screen (that would start it over).
   const ready = useRef(loaded);
   if (ready.current) {
     const Home = ready.current.default;
-    return <Home t={t} onChanged={onChanged} pay={pay} />;
+    return <Home t={t} onChanged={onChanged} pay={pay} notice={notice} />;
   }
   return (
-    <Suspense fallback={<div className={`tc-shell skel${t.onlyMe ? ' tc-shell-strip' : ''}`} aria-hidden="true" data-tc-shell />}>
-      <TournamentHome t={t} onChanged={onChanged} pay={pay} />
+    <Suspense
+      fallback={
+        <>
+          {notice}
+          <div className={`tc-shell skel${t.onlyMe ? ' tc-shell-strip' : ''}`} aria-hidden="true" data-tc-shell />
+        </>
+      }
+    >
+      <TournamentHome t={t} onChanged={onChanged} pay={pay} notice={notice} />
     </Suspense>
   );
 }

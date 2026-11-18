@@ -403,9 +403,10 @@ async function main() {
           const order = await v.page.evaluate(() => {
             const a = document.querySelector('[data-pay-countdown]').getBoundingClientRect().top;
             const c = document.querySelector('.tc-hero').getBoundingClientRect().top;
-            return a < c;
+            const f = document.querySelector('[data-format-alert]');
+            return a < c && (!f || a < f.getBoundingClientRect().top);
           });
-          assert(order, 'above the card');
+          assert(order, 'first: above the date alert and the card');
           // The site's alert card keeps a title on one line from 360 px up; below that it wraps to two balanced lines (src/AlertCard.tsx).
           await oneLine(v.page, width >= 360 ? '[data-pay-countdown] .ac-title, [data-pay-countdown] .ac-btn' : '[data-pay-countdown] .ac-btn');
           await fits(v.page, '[data-pay-countdown]');
