@@ -103,3 +103,8 @@ export function CongratsCard({ c, onChanged }: { c: NonNullable<TourAwardsView['
     />
   );
 }
+
+/** The file's one door from Home (one lazy load): the ticker (`t`) or the congratulations card (`c`). */
+export default function TourAwardsPart({ t, c, onChanged }: { t?: TickerView; c?: NonNullable<TourAwardsView['congrats']>; onChanged?: () => Promise<unknown> }) {
+  return t ? <WinnersTicker t={t} /> : c ? <CongratsCard c={c} onChanged={onChanged ?? (async () => undefined)} /> : null;
+}

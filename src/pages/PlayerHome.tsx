@@ -59,8 +59,7 @@ import { navigate, rememberDirectLoad, takeEarly } from '../lib';
 import { isOrganizerPhone, preloadAdminSoon } from '../adminChunk';
 import { Medals, MedalsContext } from '../Medals';
 // Zip 58: the ticker and the congratulations card are their own small file, fetched only when a tournament has winners to show.
-const WinnersTicker = lazy(() => import('../TourAwards').then((m) => ({ default: m.WinnersTicker })));
-const CongratsCard = lazy(() => import('../TourAwards').then((m) => ({ default: m.CongratsCard })));
+const TourAwards = lazy(() => import('../TourAwards'));
 
 /** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
 function flatOfGame(g: GroupView | null | undefined, sessionId: string): number {
@@ -756,7 +755,7 @@ export function PlayerHome({
       {/* Zip 58: the slim winners ticker, the whole width of the screen, for the banner length after a tournament ends. */}
       {g && !pickName && g.tourAwards?.ticker && (
         <Suspense fallback={null}>
-          <WinnersTicker t={g.tourAwards.ticker} />
+          <TourAwards t={g.tourAwards.ticker} />
         </Suspense>
       )}
       <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`} data-sw-main={swapFrom ? '' : undefined}>
@@ -809,7 +808,7 @@ export function PlayerHome({
             {/* Zip 58: the one-time congratulations card for a tournament's winners (and Americano's runner-up), until Nice. */}
             {view!.tourAwards?.congrats && (
               <Suspense fallback={null}>
-                <CongratsCard key={view!.tourAwards.congrats.key} c={view!.tourAwards.congrats} onChanged={load.reload} />
+                <TourAwards key={view!.tourAwards.congrats.key} c={view!.tourAwards.congrats} onChanged={load.reload} />
               </Suspense>
             )}
             {/* Zip 55 "Tournaments": the pinned ticket card (and the Only me strip), only when the server sent one for this phone. Shown on a calm preview too (it is that zip's card). */}

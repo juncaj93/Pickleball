@@ -20,9 +20,8 @@ const MedalIcon = () => (
 /** `n` medals: 1 to 3 stacked, 4 and more one medal and "×n". Nothing for 0. `size`: 'top' next to the name at the top, else the game cards. */
 export function Medals({ n, size = 'card' }: { n: number; size?: 'top' | 'card' }) {
   if (!n || n < 1) return null;
-  const label = `${n} ${n === 1 ? 'medal' : 'medals'}`;
   return (
-    <span className={`md md-${size}`} role="img" aria-label={label} data-medals={n}>
+    <span className={`md md-${size}`} role="img" aria-label={`${n} medal${n > 1 ? 's' : ''}`} data-medals={n}>
       {n <= 3 ? (
         Array.from({ length: n }, (_, i) => <MedalIcon key={i} />)
       ) : (

@@ -162,12 +162,13 @@ export function SwapIcon({ size = 15 }: { size?: number }) {
   );
 }
 
-/** The name at the top; with a badge (Zip 58 medals) the badge follows the name on its line and baseline, and a long name ends in "…" before it. */
-function TitleH1({ title, badge }: { title: string; badge?: ReactNode }) {
-  if (!badge) return <h1>{title}</h1>;
-  return (
+/** The name at the top; a badge (Zip 58 medals) follows it on its line and baseline, a long name ends in "…" before it. */
+const TitleH1 = ({ title, badge }: { title: string; badge?: ReactNode }) =>
+  badge ? (
     <h1 className="has-badge">
-      <span className="h1-name">{title}</span> <span className="h1-badge">{badge}</span>
+      <span className="h1-name">{title}</span>
+      <span className="h1-badge">{badge}</span>
     </h1>
+  ) : (
+    <h1>{title}</h1>
   );
-}

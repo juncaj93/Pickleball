@@ -1129,7 +1129,7 @@ describe('ship answers (Alex, Zip 56)', () => {
     const ctx = await world({ signUp: ['Alex', 'Blair'] });
     await payCash(ctx, 'Blair');
     const file = (await ctx.organizer.call('GET', '/api/admin/backup')).data;
-    expect(file.version).toBe(4);
+    expect(file.version).toBe(5);
     const all = readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort();
     const SQL = await initSqlJs();
     // The layout from before Zip 55 (no tournament tables): the copy still builds, the tournament rows are simply left out.
@@ -1148,7 +1148,7 @@ describe('ship answers (Alex, Zip 56)', () => {
     await lock(ctx, 'Devon');
     await iPaid(ctx, 'Devon', 1600);
     const file = (await ctx.organizer.call('GET', '/api/admin/backup')).data;
-    expect(file.version).toBe(4);
+    expect(file.version).toBe(5);
     const rows = (db: { raw: { prepare: (q: string) => { all: () => unknown[] } } }, t: string) => db.raw.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all();
     for (const t of TOUR_TABLES) expect(file.tables[t], t).toEqual(rows(ctx.app.db, t));
     expect(file.tables.tournament_tickets.length).toBe(4); // Alex's $0 seat, Blair (cash), Casey (credit), Devon (I paid waiting)
