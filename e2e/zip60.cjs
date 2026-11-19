@@ -441,7 +441,9 @@ async function main() {
         const names = flat(await a.page.locator('[data-tm-fin-names]').innerText());
         assert(['Parker', 'Rowan', 'Sage', 'Wren', 'Quinn', 'Christopher Vanderberg', 'Zoe', 'Reese', 'Vic', 'Alex'].every((n) => names.includes(n)), names);
         // Zip 64 (mock 04): no plan line, no winner sentence; the votes in one line under Style; Auto names the winner.
-        assert((await a.page.locator('[data-tm-fin-plan], [data-tm-fin-winner]').count()) === 0, 'no plan or winner lines');
+        assert((await a.page.locator('[data-tm-fin-winner]').count()) === 0, 'no winner sentence');
+        // Zip 64 part 8: the plan line is back, the same count as the organizer's card (10 can play: a 12 player plan).
+        assert(flat(await a.page.locator('[data-tm-fin-plan]').innerText()) === 'Plan: 12 players · 2 courts', await a.page.locator('[data-tm-fin-plan]').innerText());
         assert((await a.page.locator('[data-tm-fin-over]').count()) === 0, 'no over line with 10 players');
         assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Doubles 4 · Americano 6 · Either 0', await a.page.locator('[data-tm-fin-counts]').innerText());
         assert((await a.page.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true', 'the chooser starts on Auto');

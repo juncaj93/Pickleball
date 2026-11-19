@@ -6300,3 +6300,29 @@ passes, and older code reads them as the organizer's own.
 2. Court cost on your card now uses the real hours from Plays (7:30 to 10:00 PM = 2.5 hours on 2 courts, $120), not the plan's hours. Right?
 3. The date alert while the style is TBD: keep "Most players voted Locked doubles." (the vote's result), or say "Tournament style TBD" there too?
 4. An odd count right at Pay by also sends the Telegram alert and shows "switched to Americano" (the brief only asks for it after a back out). OK?
+
+### Live: shipped Wed Nov 18, 2026, about 10:13 PM Eastern (Alex: "ship it", loud hours waived by Alex), no database change
+Alex's answers: banner words fine; court cost on the real hours (2.5 hours, $120 for 2 courts); keep "Most players voted X."; yes, the alert and
+card for an odd count right at Pay by.
+- Restore points first: Time Travel bookmark `0000182c-00000000-00005128-a971778e18c052a291c4976c4db2a2ce`; SQL export saved as
+  `export-20261119031456` in `pickleball-backups` (local copy deleted). Integrity checks before and after: all 0 (21, 8, 11 columns).
+- Main fast-forwarded `d1084e9` to `fff5eb0` and pushed; `npm run deploy -- --override-loud-hours` from main: deployment
+  `909c2e58-5042-4545-9aa8-2a2753cd8508` (bundle `index-B3OX5aa0.js`). No migration, no Worker deploy.
+- Public live check (pickleball-club-9h0.pages.dev, no PIN): page and /admin 200; a phone with no name gets no tournament data; organizer data 401;
+  the preview-only test route 401; with `?tournaments=on` no page errors and nothing wider than the screen at 390 light and 320 dark. No read-only
+  PIN in this session, so the organizer screens were not opened.
+- Rollback: site deployment `998a005a-1528-4a9a-b0f4-b4c001e56331` (Zip 63). No database undo needed.
+
+## Zip 64, part 8: the organizer's plan follows the players signed up (preview only, NOT shipped), Wed Nov 18, 2026
+The organizer's card said "Plan: 6 players · 1 court · 2.5 hours" with 8 signed up, because the plan counted only players locked in (paid).
+Now (`planCount` in shared/tournament.ts, the same formula and plan table): before tickets open the plan is sized from the players SIGNED UP;
+once tickets are open, from the larger of the players signed up who can make the picked date and the players locked in. 8 signed up = a 10 player
+plan, 2 courts, 7:30 to 10 PM. The same count feeds the organizer's card (plan line, "Tickets: N of M", cost), the Finalize screen's plan line
+("Plan: 10 players · 2 courts", added back under the names: the count of who can make that date, the same count the card uses once it is
+picked) and the "Call the venue" reminder (its courts follow the plan: "keep court 1" for a 1 court plan, "keep courts 1 and 2 together" for 2).
+The players' own spots ("6 of 8", Every spot is taken) still follow the players locked in, unchanged. No database change.
+- Preview calm start: 8 on the list (everyone but Vic and Reese), so the card reads "Plan: 10 players · 2 courts · 2.5 hours".
+- Tests: tests/zip64-finalize.test.ts adds 8 signed up with 0 paid (10 player plan, 2 courts, 7:30 PM, 2.5 hours; Finalize the same) and 8 signed
+  up with 3 paid (still 10; 11 locked in after late joins: 14), and the shared count. Older plan expectations updated (zip55 1, zip56 3; the
+  browser zip56 plan lines, zip60 the plan line back on Finalize). Unit full run 196 files, 3,604 passed, 2 skipped; browser zip64 83, zip56 57,
+  zip55 91, zip60 29, zip63 64, zip59 12, zip62 17, all passing. Preview deployment `0c307505`, re-seeded.
