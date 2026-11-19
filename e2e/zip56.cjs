@@ -646,9 +646,11 @@ async function main() {
     });
     await a.page.goto(`${BASE}/admin`);
     await a.page.locator('[data-tm-home="tickets"]').waitFor({ timeout: 30000 });
-    assert((await a.page.locator('[data-tm-cancel-or-reschedule]').count()) === 0, 'no Cancel or reschedule on Home');
-    // The chip is drawn in capitals (innerText follows the CSS).
-    assert(flat(await a.page.locator('[data-tm-stage]').innerText()).toLowerCase() === 'tickets closed', 'the chip');
+    await openTourCard(a.page); // Zip 66: the card loads closed
+    assert((await a.page.locator('[data-tm-tickets]').count()) === 1 && (await a.page.locator('[data-tm-cancel-or-reschedule]').count()) === 0, 'no Cancel or reschedule on Home');
+    // Zip 66: the card's pill counts the players signed up at every stage (the ticket rows say where it stands); the card opens on a tap.
+    await openTourCard(a.page);
+    assert(/^\d+ signed up$/.test(flat(await a.page.locator('[data-tm-stage]').innerText())), 'the pill');
     await a.page.locator('[data-tm-tickets]').click();
     await a.page.locator('dialog[open] [data-tm-card="tickets"]').waitFor({ timeout: 10000 });
     assert((await a.page.locator('dialog[open] [data-tm-cancel-or-reschedule], dialog[open] [data-tm-pay-by-change]').count()) === 0, 'no Cancel or reschedule, no Change on the page');
@@ -680,6 +682,8 @@ async function main() {
       await route.fulfill({ response: res, json: data });
     });
     await b.page.goto(`${BASE}/admin`);
+    await b.page.locator('[data-tm-home]').waitFor({ timeout: 30000 });
+    await openTourCard(b.page); // Zip 66: the card loads closed
     await b.page.locator('[data-tm-tickets]').waitFor({ timeout: 30000 });
     await b.page.locator('[data-tm-tickets]').click();
     await b.page.locator('dialog[open] [data-tm-card="tickets"]').waitFor({ timeout: 10000 });
@@ -716,9 +720,10 @@ async function main() {
         await shot(p.page, `K-ticket-format-${format}-${width}-${scheme}`);
         await p.ctx.close();
         const a = await adminPage({ width, scheme });
-        const al = a.page.locator('[data-tm-home="tickets"] .tm-tix-format');
+        // Zip 66: the open card's Style row names the style (mock 02).
+        const al = a.page.locator('[data-tm-home="tickets"] [data-tm-home-format]');
         await al.waitFor({ timeout: 15000 });
-        assert(flat(await al.innerText()) === want && (await oneLine(al)) === 1, 'organizer card');
+        assert(flat(await al.innerText()) === want.replace(/ \(.*$/, '') && (await oneLine(al)) === 1, 'organizer card');
         await fits(a.page, '[data-tm-home]');
         await a.ctx.close();
       });

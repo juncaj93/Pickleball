@@ -6385,3 +6385,37 @@ now does nothing unless a tournament is at its sign-up step and reads the last 3
 extra trip); I'm in stays busy across both steps and refreshes the screen if the lock fails after the date went on; the organizer's row uses the
 player card's own rules (a partial I paid still asks; fullness counts spots); the card's warnings show on the closed line; aria-controls only
 while the body is there. Kept, as notes: dates replaced on I'm in (above), the 38 px tap rows, the hidden Zip 60/64 notices until they answer.
+
+### Tests
+- Unit: new tests/zip66-admincard.test.ts (12: the copied words, the 3-month cut and the default close across a Tuesday, each sign-up's vote with
+  the counts and none for a style chosen at Create, players never get a vote or the list, played lately (the organizer, a "did not play", a
+  4-month-old game, a future or canceled game and an inactive player all left out), after the date: I'm in and Can't make it take a player off the
+  row, Pay by then the 3-hour cutoff then none, a paid or I-paid player is not asked, Only me sends nothing, `missedDate` for every ticket state).
+  tests/zip48-split.test.ts: the small shared file the organizer page preloads is now named after the new helpers (same ticket rules inside).
+  Full run: 197 files, 3,616 passed, 2 skipped, none failed (`npx vitest run`); `npx tsc -b` clean.
+- Browser: new e2e/zip66.cjs 35 of 35 (A the closed line and opening at 420/390/360/320 light and dark, the name never cut, every row one line,
+  closed again after a reload; B Votes; C Not signed up and the clipboard words; D the Edit page order, pills on one line, body font, the fold,
+  Settings rows; E the level sheet's dates; F the alert at 390/360/320 light and dark, above the ticket, no countdown the day before Pay by while
+  Parker gets his, I'm in opens the $16 Pay sheet; G the organizer's row after the date, Can't make it, no player answer carries the list or a
+  vote). Older checks updated for the closed card (each script's organizer page opens it with one tap; the Style row, the Votes words and the
+  short Plan row; Tickets opens the page where the name used to): zip55 91, zip56 57, zip59 12, zip60 29, zip63 64, zip64 83, zip62 17, all
+  passing. Switch OFF equals main `316ac36`: e2e/zip55-off.cjs 47 of 47, e2e/zip56-off.cjs 47 of 47 (main checked out with hard-linked packages).
+
+### Preview
+`pickleball-preview` (fake) only: restore point first (Time Travel bookmark `00000193-00000000-00005128-25b6e3eb03e0896654c8aaa1cf735248`), no
+migration. Deployed from this branch to https://claude-new-session-v42nwe.pickleball-club-9h0.pages.dev (deployment `bd36b18c`), re-seeded with
+`npm run db:seed:preview` (calm start = Tournament test stage zip66_start, plus last month's game Vic and Reese played). Checked there at 390,
+light and dark, no page errors: organizer Home's first screen is the Tournament test row, the tournament as one closed line, two empty games;
+opened: Votes Doubles 3 · Americano 2 · Either 3, Not signed up Vic, Reese. Vic's Home: the short ticket with Sign up. Stage missed_date: Sage's
+Home has the alert first, no countdown. Switches: every flag in live's public answer is on the preview too (23), plus Tournaments.
+
+### Live: NOT done (waiting for Alex's "ship it")
+No migration and no Worker change. To ship (quiet window, before Tue Nov 24, 8 PM, and before 🎾57): SQL export and Time Travel bookmark of
+`pickleball`, the three integrity checks, fast-forward main to this branch and push, `npm run deploy` from main, the checks again, the public live
+check. Rollback: the site deployment live before it. No database undo.
+
+### Questions for Alex
+1. Nothing stores when sign-ups close before the date is picked. The copied text says the next Tuesday at 8 PM (Tue Nov 24 now). OK, or a box to
+   set it?
+2. The Not signed up row hides when nobody is on it. OK?
+3. The canceled card got a Tickets button (its name used to open the page). OK?

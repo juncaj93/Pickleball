@@ -224,8 +224,10 @@ async function main() {
     assert(t.name === 'The Cold Open' && t.formatPending === true && t.formatSource === 'vote', JSON.stringify(t));
     await a.page.locator('.tabbar button', { hasText: 'Home' }).click();
     await a.page.locator('[data-tm-home]').first().waitFor({ timeout: 15000 });
+    // Zip 66: Home loads the card closed; open it: the Style row says Players vote.
+    await openTourCard(a.page);
     const home = flat(await a.page.locator('[data-tm-home]').first().innerText());
-    assert(home.includes('Format: players vote'), home);
+    assert(home.includes('Style Players vote'), home);
     await shot(a.page, 'A-home-vote');
     // Edit shows the vote selected, and a hand-picked format is saved as the organizer's.
     await a.page.locator('[data-tm-open-edit]').click();
@@ -355,8 +357,9 @@ async function main() {
         await v.ctx.close();
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
-        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked 1, Americano 2, Either 2', 'counts');
-        assert(flat(await a.page.locator('[data-tm-vote-how]').innerText()) === 'Decided by the most votes', 'rule');
+        // Zip 66 (mock 02): the Votes row (Doubles, not Locked) and the Style row; the "Decided by" line is gone from the card.
+        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Doubles 1 · Americano 2 · Either 2', 'counts');
+        assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Americano', 'style');
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `D-admin-${width}-${scheme}`);
         await a.ctx.close();
@@ -394,8 +397,9 @@ async function main() {
     await v.ctx.close();
     const a = await adminPage();
     await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
-    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked 1, Americano 1, Either 2', 'counts');
-    assert(flat(await a.page.locator('[data-tm-vote-how]').innerText()) === 'Decided by the tie rule', 'rule');
+    // Zip 66: the Votes row; the tie rule's pick on the Style row (the first tournament: Locked doubles).
+    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Doubles 1 · Americano 1 · Either 2', 'counts');
+    assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Locked doubles', 'style');
     await shot(a.page, 'E-tie-admin');
     await a.ctx.close();
   });
