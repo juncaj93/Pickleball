@@ -2,7 +2,7 @@
 // name, Redo the draw and Publish teams; the published teams with the venue's court numbers; the check when tickets close; Fix teams after a
 // back out; and game night (mocks 48 to 50, for Locked doubles: who won, not scores): the round's results with Confirm and Fix, the Time
 // check with one tap, Pause and Player left. Only drawn while the switch is on and a tournament has tickets open.
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDayGame, AdminDayTeam, AdminDayView, AdminTournamentView } from '../../../shared/tournament';
 import { levelShort } from '../../../shared/tournament';
 import { totalLabel } from '../../../shared/tournamentSchedule';
@@ -114,56 +114,131 @@ function DraftPrompt({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d: 
   );
 }
 
-/** "Parker 3.6 + Quinn 2.5" with the levels in the lighter weight (mock 15). */
-function PairText({ team }: { team: AdminDayTeam }) {
-  return (
-    <span className="tm-gd-pair">
-      {team.players.map((p, i) => (
-        <span key={p.id ?? i} className="tm-gd-who">
-          {i > 0 && <span className="tm-gd-plus"> + </span>}
-          <span className="tm-gd-pname">{p.name}</span>
-          {' '}
-          <span className="tm-gd-lvl">{p.level ? levelShort(p.level) : ''}</span>
-        </span>
-      ))}
-    </span>
-  );
-}
 
-/** Mock 15: DRAFT TEAMS with the count, each team's total and Swap; the note; Publish teams; Redo the draw. */
+/**
+ * Draft teams (Alex's add-on, pictures 01 to 03): each team's two players are buttons (name left, level right) with the team total on the right.
+ * Tap a player: it turns lime and the chip asks "Swap Wren with…". Tap a player on another team: the two slide into each other's places, both
+ * totals flash lime, and the swap is saved at once (the existing swap action). Tap the picked player again to unpick, or their teammate to pick
+ * the teammate instead. Redo the draw or Publish teams clears the pick. Reduced motion: no slide, the names just change places.
+ */
 function DraftCard({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d: AdminDayView }) {
   const { busy, save } = useSave(ctx);
-  const [swap, setSwap] = useState<AdminDayTeam | null>(null);
+  const [pick, setPick] = useState<string | null>(null);
+  // The teams as drawn now: the server's, or a swap already made on this screen that the server is saving.
+  const [local, setLocal] = useState<AdminDayTeam[] | null>(null);
+  const [flash, setFlash] = useState<string[]>([]);
+  const listRef = useRef<HTMLOListElement>(null);
+  const moved = useRef<{ ids: string[]; rects: Map<string, DOMRect> } | null>(null);
+  const teams = local ?? d.teams;
+  const where = (id: string) => teams.findIndex((x) => x.players.some((p) => p.id === id));
+  const pickedName = pick ? teams.flatMap((x) => x.players).find((p) => p.id === pick)?.name : null;
+  // The slide: each moved name goes from where it was to where it is now (both are real buttons; only a transform moves).
+  useLayoutEffect(() => {
+    const m = moved.current;
+    const list = listRef.current;
+    if (!m || !list) return;
+    moved.current = null;
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    for (const id of m.ids) {
+      const el = list.querySelector<HTMLElement>(`[data-tm-player="${CSS.escape(id)}"]`);
+      const before = m.rects.get(id);
+      if (!el || !before || typeof el.animate !== 'function') continue;
+      const now = el.getBoundingClientRect();
+      el.animate([{ transform: `translate(${before.left - now.left}px, ${before.top - now.top}px)` }, { transform: 'translate(0, 0)' }], { duration: 380, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
+    }
+  }, [local]);
+  function tap(id: string | null) {
+    if (!id || busy) return;
+    if (!pick) return setPick(id);
+    if (pick === id) return setPick(null);
+    const a = where(pick);
+    const b = where(id);
+    if (a === b) return setPick(id);
+    // Swap on screen first (with the slide), then save.
+    const list = listRef.current;
+    const rects = new Map<string, DOMRect>();
+    for (const pid of [pick, id]) {
+      const el = list?.querySelector<HTMLElement>(`[data-tm-player="${CSS.escape(pid)}"]`);
+      if (el) rects.set(pid, el.getBoundingClientRect());
+    }
+    moved.current = { ids: [pick, id], rects };
+    const next = teams.map((x) => ({ ...x, players: x.players.map((p) => ({ ...p })) }));
+    const pa = next[a].players.findIndex((p) => p.id === pick);
+    const pb = next[b].players.findIndex((p) => p.id === id);
+    [next[a].players[pa], next[b].players[pb]] = [next[b].players[pb], next[a].players[pa]];
+    for (const i of [a, b]) next[i].total = next[i].players.reduce((sum, p) => sum + p.level, 0);
+    setLocal(next);
+    setFlash([next[a].id, next[b].id]);
+    setTimeout(() => setFlash([]), 900);
+    const from = pick;
+    setPick(null);
+    void save(() => teamsCall(t, { action: 'swap', a: from, b: id }), '').then(() => setLocal(null));
+  }
   return (
     <>
-      <section className="tm-card tm-gd-card" aria-label="Draft teams" data-tm-draft-card={d.teams.length}>
+      <section className="tm-card tm-gd-card" aria-label="Draft teams" data-tm-draft-card={teams.length}>
         <div className="tm-card-head tm-head-line tm-gd-head">
           <h3 className="tm-label">Draft teams</h3>
-          <span className="tm-chip tm-chip-ok" data-tm-draft-count>
-            {d.lockedIn} locked in
-          </span>
+          {pickedName ? (
+            <span className="tm-chip tm-gd-pickchip" data-tm-draft-count="pick">
+              Swap {pickedName} with…
+            </span>
+          ) : (
+            <span className="tm-chip tm-chip-ok" data-tm-draft-count>
+              {d.lockedIn} locked in
+            </span>
+          )}
         </div>
-        <ol className="tm-gd-teams">
-          {d.teams.map((team, i) => (
-            <li key={team.id} className="tm-gd-team" data-tm-team={team.seat}>
+        <ol className="tm-gd-teams" ref={listRef}>
+          {teams.map((team, i) => (
+            <li key={team.id} className="tm-gd-team tm-gd-draftrow" data-tm-team={team.seat}>
               <span className="tm-gd-num">{i + 1}</span>
-              <span className="tm-gd-team-text">
-                <PairText team={team} />
+              <span className="tm-gd-two">
+                {team.players.map((p) => (
+                  <button
+                    key={p.id ?? p.name}
+                    type="button"
+                    className="tm-gd-pbtn"
+                    aria-pressed={pick === p.id}
+                    disabled={!p.id || !d.canDraft}
+                    onClick={() => tap(p.id)}
+                    data-tm-player={p.id ?? ''}
+                    data-tm-player-name={p.name}
+                  >
+                    <span className="tm-gd-pbtn-name">{p.name}</span>
+                    <span className="tm-gd-pbtn-lvl">{p.level ? levelShort(p.level) : ''}</span>
+                  </button>
+                ))}
               </span>
-              <span className="tm-gd-total" data-tm-team-total>
-                <span className="tm-gd-eq">=</span> {totalLabel(team.total)}
+              <span className={flash.includes(team.id) ? 'tm-gd-total tm-gd-flash' : 'tm-gd-total'} data-tm-team-total>
+                {totalLabel(team.total)}
               </span>
-              <button type="button" className="tm-gd-swap" disabled={busy} onClick={() => setSwap(team)} data-tm-swap={team.seat}>
-                Swap
-              </button>
             </li>
           ))}
         </ol>
       </section>
-      <button type="button" className="btn block big tm-gd-publish" disabled={busy || !d.canDraft} onClick={() => void save(() => teamsCall(t, { action: 'publish' }), 'Teams published')} data-tm-publish>
+      <button
+        type="button"
+        className="btn block big tm-gd-publish"
+        disabled={busy || !d.canDraft}
+        onClick={() => {
+          setPick(null);
+          void save(() => teamsCall(t, { action: 'publish' }), 'Teams published');
+        }}
+        data-tm-publish
+      >
         Publish teams
       </button>
-      <button type="button" className="btn block big secondary tm-gd-redo" disabled={busy || !d.canDraft} onClick={() => void save(() => teamsCall(t, { action: 'redo' }), 'New draw')} data-tm-redo>
+      <button
+        type="button"
+        className="btn block big secondary tm-gd-redo"
+        disabled={busy || !d.canDraft}
+        onClick={() => {
+          setPick(null);
+          void save(() => teamsCall(t, { action: 'redo' }), 'New draw');
+        }}
+        data-tm-redo
+      >
         Redo the draw
       </button>
       {!d.canDraft && d.why && (
@@ -171,58 +246,7 @@ function DraftCard({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d: Ad
           {d.why}
         </p>
       )}
-      <SwapSheet ctx={ctx} t={t} d={d} team={swap} onClose={() => setSwap(null)} />
     </>
-  );
-}
-
-/** Swap one of this team's players with a player on another team; each choice shows the two new totals. */
-function SwapSheet({ ctx, t, d, team, onClose }: { ctx: AdminCtx; t: AdminTournamentView; d: AdminDayView; team: AdminDayTeam | null; onClose: () => void }) {
-  const { busy, save } = useSave(ctx);
-  const [pick, setPick] = useState(0);
-  const mine = team?.players[pick] ?? null;
-  const others = useMemo(() => (team ? d.teams.filter((x) => x.id !== team.id).flatMap((x) => x.players.map((p) => ({ p, team: x }))) : []), [d.teams, team]);
-  return (
-    <Sheet calmFocus open={!!team} title="Swap" onClose={onClose} className="tm-gd-sheet">
-      {team && mine && (
-        <div className="stack" data-tm-swap-sheet>
-          <div className="segmented tm-gd-seg" role="group" aria-label="Who swaps">
-            {team.players.map((p, i) => (
-              <button key={p.id ?? i} type="button" aria-pressed={pick === i} onClick={() => setPick(i)} data-tm-swap-from={p.name}>
-                {p.name}
-              </button>
-            ))}
-          </div>
-          <ul className="tm-gd-swaplist">
-            {others.map(({ p, team: other }) => {
-              const mineAfter = team.total - mine.level + p.level;
-              const otherAfter = other.total - p.level + mine.level;
-              return (
-                <li key={p.id ?? p.name}>
-                  <button
-                    type="button"
-                    className="tm-gd-swaprow"
-                    disabled={busy || !p.id || !mine.id}
-                    onClick={async () => {
-                      const ok = await save(() => teamsCall(t, { action: 'swap', a: mine.id, b: p.id }), `${mine.name} and ${p.name} swapped`);
-                      if (ok) onClose();
-                    }}
-                    data-tm-swap-to={p.name}
-                  >
-                    <span className="tm-gd-swapname">
-                      {p.name} <span className="tm-gd-lvl">{levelShort(p.level)}</span>
-                    </span>
-                    <span className="tm-gd-swapnums">
-                      = {totalLabel(mineAfter)} and {totalLabel(otherAfter)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </Sheet>
   );
 }
 

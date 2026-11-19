@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { backupToSql, isReadOnlyDownload, TABLES, V2_TABLES, V3_TABLES } from './backup-sql.mjs';
+import { backupToSql, isReadOnlyDownload, TABLES, V2_TABLES, V3_TABLES, V4_TABLES } from './backup-sql.mjs';
 
 export { backupToSql, TABLES };
 
@@ -28,7 +28,8 @@ export function summaryLine(backup) {
     ? ` NOTE: this is an old (version 1) file: it has no ${V2_TABLES.join(', ')}, so every Feature switch, price lock, Settings > Alerts choice and organizer sign-in comes back empty (docs/RESTORE.md, Plan B, says what to redo).`
     : '';
   const noTour = backup.version < 3 ? ` NOTE: a version ${backup.version} file has no ${V3_TABLES.join(', ')}: tournaments come back empty.` : '';
-  return `Backup made ${when} Eastern (${backup.groupName}), file version ${backup.version}. Rows: ${counts}.${old}${noTour}`;
+  const noTeams = backup.version === 3 ? ` NOTE: a version 3 file has no ${V4_TABLES.join(', ')}: teams and game results come back empty.` : '';
+  return `Backup made ${when} Eastern (${backup.groupName}), file version ${backup.version}. Rows: ${counts}.${old}${noTour}${noTeams}`;
 }
 
 /** Zip 50 (Audit C F-11): a file downloaded with the read-only PIN has no PIN in it; restoring it would leave nobody able to sign in. */

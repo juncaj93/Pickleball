@@ -136,10 +136,7 @@ export const BACKUP_LEFT_OUT: Record<string, string> = {
   login_attempts: 'wrong-PIN counts: short-lived',
   rate_events: 'spam counters: short-lived',
   // Zip 56 (Alex): the four tournament tables are in the file now (version 3).
-  // Zip 57: teams and game results hold no money; Time Travel keeps them. Adding them to the file is a question for Alex (version 4 and a clock
-  // Worker deploy).
-  tournament_teams: 'Locked doubles teams of a tournament (no money; Time Travel keeps them)',
-  tournament_games: 'game night results, who won each game (no money; Time Travel keeps them)',
+  // Zip 57 (Alex): the teams and game results are in the file too (version 4).
 };
 
 const NAME = /^[a-z_][a-z0-9_]*$/;

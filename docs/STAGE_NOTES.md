@@ -6313,7 +6313,7 @@ card for an odd count right at Pay by.
   PIN in this session, so the organizer screens were not opened.
 - Rollback: site deployment `998a005a-1528-4a9a-b0f4-b4c001e56331` (Zip 63). No database undo needed.
 
-## Zip 64, part 8: the organizer's plan follows the players signed up (preview only, NOT shipped), Wed Nov 18, 2026
+## Zip 64, part 8: the organizer's plan follows the players signed up (live since Wed Nov 18, 2026, shipped with Zip 64), Wed Nov 18, 2026
 The organizer's card said "Plan: 6 players · 1 court · 2.5 hours" with 8 signed up, because the plan counted only players locked in (paid).
 Now (`planCount` in shared/tournament.ts, the same formula and plan table): before tickets open the plan is sized from the players SIGNED UP;
 once tickets are open, from the larger of the players signed up who can make the picked date and the players locked in. 8 signed up = a 10 player
@@ -6616,6 +6616,32 @@ https://claude-new-session-gfcgy1.pickleball-club-9h0.pages.dev and re-seeded (`
 screen at 390, light and dark: organizer Home shows the Tournament test row and "8 locked in. Draft the teams."; Vic's Home shows the date alert
 and the ticket (You're locked in). No page errors. Switches: every flag in live's public answer is on the preview too, plus TOURNAMENTS
 (live's organizer-only rows could not be read: no read-only PIN in this session).
+
+### Add-on (ADDON.md): Alex's answers, his preview notes, then ship
+Alex's answers: migration 0027 on live YES; a standby player swapped in during the night plays for their hold (it becomes a spot when one is
+free, and it never comes back as credit at 10 PM); teams and results in the backup file YES (version 4, with the clock Worker deploy); "Tied"
+stops the playoff until piece 4: OK; loud hours waived.
+- B. Rebased onto main `e6c3907` (Zip 66 live). 66's one-row ticket card ("Lock in · $16 | Who's in | Drop out") stays everywhere; the night on
+  Home replaces that one-row card from 30 minutes before the start. The organizer's collapsed card with tickets in its pill is unchanged.
+- C. Draft teams: tap two players to swap. Each player is its own 44 px button (name left, level right), the total on the right with no "=".
+  The Swap buttons and the Swap sheet are gone. Tap a player: lime (#d8f03b, dark text), and the chip says "Swap <name> with…". Tap a player
+  on another team: the two slide into each other's places, both totals flash lime, and the swap is saved at once with the existing swap
+  action. Tap the picked player again to unpick; tap the teammate to pick them instead; Redo the draw and Publish teams clear the pick. Long
+  names cut with "…". Reduced motion: no slide.
+- D. We won: our side of the VS card lights lime with a check badge and the button says "✓ Let's go!", the other side and button dim; about a
+  second later the card slides out left and the next game slides in; the bar says "Game 2 of 3"; Game 1 gets a green "Won" tag and the
+  highlight moves on. The real bottom banner says "Net Ninjas won Game 1" with Undo and a thin green line that drains over 5 seconds; the
+  result is sent after 5 seconds unless Undo (leaving Home or locking the phone inside the 5 seconds still sends it). "<other team> won": no
+  lime, the card just slides, the banner names them. Parker's "Did you win?" is unchanged. Reduced motion: no slide or glow.
+- E. From 🎾67: integrity-checks-tournament.sql line 49 is now "< 16"; the "6, 8, 10 and 12" words now say 6 to 16; the part 8 heading says
+  it is live since Wed Nov 18.
+- A2 in code: Player left with a standby player swapped in tries to turn their hold into a spot (only under the 16 spot cap, so the books never
+  change by more than the hold they already paid), and the 10 PM return of unused holds skips any player on a team.
+- A3: BACKUP_VERSION 4 adds tournament_teams and tournament_games (worker/backup.ts, scripts/backup-sql.mjs, scripts/restore-backup.mjs).
+- Tests added: tests/zip57-day.test.ts (the standby swap-in: never refunded, books still balance); e2e/zip57.cjs A (tap to swap at
+  420/390/360/320 light and dark, lime, the chip, unpick, the teammate, the slide, the flash, saved, Redo clears it, the ellipsis, reduced
+  motion) and C (lit, "✓ Let's go!", the slide, Game 2 of 3, the Won tag, the toast with Undo and the drain line, sent after 5 seconds, the
+  other team won with Undo, sent on leaving, reduced motion).
 
 ### Live: NOT done (the database change waits for Alex's OK)
 To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`, the three integrity checks, `npx wrangler d1 migrations list

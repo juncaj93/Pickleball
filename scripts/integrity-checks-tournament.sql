@@ -46,7 +46,7 @@ SELECT
      WHERE k.player_id = o.player_id AND (k.price_cents > 0 OR k.credit_cents + k.paid_cents + k.claim_cents > 0)) AS tour_organizer_paid
   -- An open spot while someone on the list has paid and waits in line (the line always fills every open spot).
   ,(SELECT COUNT(*) FROM tournaments t WHERE t.status IN ('signup', 'date_picked', 'tickets', 'rescheduled')
-     AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = t.id AND place = 'spot') < 12
+     AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = t.id AND place = 'spot') < 16
      AND EXISTS (SELECT 1 FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
                  WHERE k.tournament_id = t.id AND k.place = 'line' AND k.credit_cents + k.paid_cents >= k.price_cents)) AS tour_paid_line_with_open_spot
   -- Not a problem, a to-do: I paid taps on tickets still waiting for the organizer's answer.

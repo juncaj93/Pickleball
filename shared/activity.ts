@@ -338,7 +338,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} resumed the ${tourName(d)}`;
     case 'tournament_player_left':
       return typeof d.swapIn === 'string'
-        ? `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${d.swapIn} took over on ${typeof d.team === 'string' ? d.team : 'the team'}`
+        ? `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${d.swapIn} took over on ${typeof d.team === 'string' ? d.team : 'the team'}${d.holdToSpot === true ? ' (their standby hold is their spot now)' : d.holdToSpot === false ? ' (every spot is taken: their hold stays on standby)' : ''}`
         : `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${typeof d.team === 'string' ? d.team : 'the team'} sits out (${num(d.skipped)} games skipped)`;
     case 'guest_spot_on':
       return `${who} switched "Guest spot" on`;

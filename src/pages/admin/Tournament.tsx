@@ -1043,7 +1043,7 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
             {sold ? <b data-tm-ticket-locked>{formatPrice(editing!.ticketCents)}</b> : <MoneyBox id="tm-ticket" cents={ticket} onChange={setTicket} label="Each player pays" />}
           </label>
           <div className="tm-row">
-            <span>Same for 6, 8, 10 and 12 players</span>
+            <span>Same for 6 to 16 players</span>
             <b>Fixed</b>
           </div>
         </div>

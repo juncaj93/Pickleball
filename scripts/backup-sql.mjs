@@ -25,6 +25,9 @@ export const TABLES = [
   'tournament_signups',
   'tournament_level_history',
   'tournament_tickets',
+  // Version 4 (Zip 57, Alex): Locked doubles teams and game results, after the tournaments they belong to.
+  'tournament_teams',
+  'tournament_games',
 ];
 
 /** Tables only a version 2 (or later) file has (Zip 50). */
@@ -33,11 +36,14 @@ export const V2_TABLES = ['task_log', 'organizer_alerts', 'admin_sessions'];
 /** Tables only a version 3 file has (Zip 56). */
 export const V3_TABLES = ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets'];
 
-/** The file versions this reader takes: 1 (before Zip 50), 2 (before Zip 56) and 3. */
-export const VERSIONS = [1, 2, 3];
+/** Tables only a version 4 file has (Zip 57). */
+export const V4_TABLES = ['tournament_teams', 'tournament_games'];
+
+/** The file versions this reader takes: 1 (before Zip 50), 2 (before Zip 56), 3 (before Zip 57) and 4. */
+export const VERSIONS = [1, 2, 3, 4];
 
 /** A table this file's version does not have (it restores empty). */
-const notInVersion = (version, t) => (version === 1 && V2_TABLES.includes(t)) || (version < 3 && V3_TABLES.includes(t));
+const notInVersion = (version, t) => (version === 1 && V2_TABLES.includes(t)) || (version < 3 && V3_TABLES.includes(t)) || (version < 4 && V4_TABLES.includes(t));
 
 /** True when a file was downloaded with the read-only PIN: its PIN is blanked, so a restore would leave nobody able to sign in (F-11). */
 export function isReadOnlyDownload(backup) {

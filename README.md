@@ -366,7 +366,7 @@ paid; otherwise it's hidden so old records stay correct.
 ## Tournaments (Zip 55, piece 1 of 4; switch TOURNAMENTS, ships off)
 
 Once a year (no new code each year), the organizer opens Settings > Schedule > **Create tournament**: a name, the dates
-to offer, players expected (6, 8, 10 or 12) and the court plan for that size, the ticket price and the champion credit
+to offer, (since Zip 56 no players expected or court plan: the plan follows the players, 6 to 16), the ticket price and the champion credit
 (both only stored in piece 1: nothing is charged or credited yet), and **Who can see it**: Only me first, then Everyone.
 Players sign up from a ticket card pinned at the top of Home: their level, then every date that works; they can see
 who signed up (names only), edit or back out. The organizer's Home card opens the level list (each player's own pick,

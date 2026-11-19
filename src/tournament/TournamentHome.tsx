@@ -19,7 +19,7 @@ import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
 import { type DayLook, LevelList, MonthCalendar, useMoreBelow, VoteList } from './parts';
-import { DayBody, DayHero } from './GameDayView';
+import { DayBody } from './GameDayView';
 
 /** Zip 60: the format line on the cards. While the players' vote is open it is "Tournament style TBD" (no other words). */
 const formatText = (t: PlayerTournamentView): string => (t.formatTbd || t.styleTbd ? 'Tournament style TBD' : formatLine(t.format));
@@ -176,9 +176,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         </div>
       )}
       {/* Zip 57: on game night (the live window) the live view takes the ticket's place; before it the ticket stays as it is (zip 66's one row). */}
-      {t.day?.today ? (
-        <DayHero t={t} day={t.day} />
-      ) : (
+      {t.day?.today ? null : (
         <TicketCard
           t={t}
           org={org}

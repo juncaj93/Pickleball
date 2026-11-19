@@ -970,12 +970,17 @@ async function returnUnusedHolds(ctx: Ctx, group: GroupRow, t: TournamentRow, ti
   if (statusOf(t) !== 'tickets') return tickets;
   const night = nightOf(t, group.timezone);
   if (!night || ctx.nowMs < night.end) return tickets;
-  const due = tickets.filter((k) => k.place !== 'spot' && k.claim_cents === 0 && (k.credit_cents > 0 || k.paid_cents > 0));
+  // Zip 57 (Alex): a standby player who took over on a team during the night played for their hold: it never comes back as credit.
+  const onTeam = new Set(t.teams_at ? (await loadDay(ctx.db, t.id)).teams.flatMap((x) => [x.player_a, x.player_b]).filter((x): x is string => !!x) : []);
+  const due = tickets.filter((k) => k.place !== 'spot' && k.claim_cents === 0 && (k.credit_cents > 0 || k.paid_cents > 0) && !onTeam.has(k.player_id));
   if (due.length === 0) return tickets;
   if (upkeep) upkeep.tried = true;
   const endIso = new Date(night.end).toISOString();
+  const played = t.teams_at
+    ? (x: string) => ` AND NOT EXISTS (SELECT 1 FROM tournament_teams tm WHERE tm.tournament_id = ${x}.tournament_id AND (tm.player_a = ${x}.player_id OR tm.player_b = ${x}.player_id))`
+    : () => '';
   const when = (x: string) =>
-    `(${x}.place <> 'spot' AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets') AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)})`;
+    `(${x}.place <> 'spot' AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets') AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)}${played(x)})`;
   try {
     const res = await ctx.db.batch(ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId: null, why: 'unused', endedReason: 'canceled', nowIso: ctx.nowIso, when }));
     if ((res[2]?.meta?.changes ?? 0) > 0) {

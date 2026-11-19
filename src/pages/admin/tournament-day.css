@@ -468,3 +468,95 @@ span.tm-gd-team-text {
   display: flex;
   gap: 18px;
 }
+
+/* Alex's add-on (pictures 01 to 03): Draft teams with two player buttons per team; tap one (lime), tap one on another team to swap. */
+.tm-gd-draftrow {
+  align-items: center;
+  padding: 10px 0;
+}
+.tm-gd-two {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tm-gd-pbtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.02rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+.tm-gd-pbtn:disabled {
+  cursor: default;
+}
+.tm-gd-pbtn[aria-pressed='true'] {
+  background: #d8f03b;
+  border-color: #c3dc2a;
+  color: #1a2410;
+  box-shadow: 0 0 0 4px rgb(216 240 59 / 22%);
+}
+.tm-gd-pbtn-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-gd-pbtn-lvl {
+  flex: none;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.tm-gd-pbtn[aria-pressed='true'] .tm-gd-pbtn-lvl {
+  color: #3a4a12;
+}
+.tm-gd-draftrow .tm-gd-total {
+  min-width: 52px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  text-align: right;
+  font-size: 1.4rem;
+}
+.tm-gd-flash {
+  animation: tm-gd-flash 900ms ease-out;
+}
+@keyframes tm-gd-flash {
+  0%,
+  35% {
+    background: #d8f03b;
+    color: #1a2410;
+  }
+  100% {
+    background: transparent;
+  }
+}
+.tm-chip.tm-gd-pickchip {
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #d8f03b;
+  color: #1a2410;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm-gd-flash {
+    animation: none;
+  }
+}

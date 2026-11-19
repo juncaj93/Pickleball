@@ -589,3 +589,110 @@
     letter-spacing: 0.1em;
   }
 }
+
+/* Alex's add-on (picture 04): We won lights our side lime with a check, the button says "✓ Let's go!", the rest dims; then the card slides
+   out to the left and the next game slides in from the right. Reduced motion: no slide, no glow (the site's global rule and the block below). */
+.tc-gd-side-a {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  border-radius: 14px;
+  transition:
+    background 220ms var(--ease),
+    box-shadow 220ms var(--ease);
+}
+.tc-gd-vs-lit .tc-gd-side-a {
+  padding: 6px 10px;
+  margin: -6px -10px;
+  background: #d8f03b;
+  box-shadow: 0 0 22px rgb(216 240 59 / 55%);
+}
+.tc-gd-vs-big.tc-gd-vs-lit .tc-gd-side-a .tc-gd-tn > b,
+.tc-gd-vs-big.tc-gd-vs-lit .tc-gd-side-a .tc-gd-tn > span {
+  color: #1a2410;
+}
+.tc-gd-vs-lit > .tc-gd-tn:last-child,
+.tc-gd-vs-lit .tc-gd-vs-mark {
+  opacity: 0.4;
+}
+.tc-gd-litcheck {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1a2410;
+}
+.tc-gd-litcheck svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #d8f03b;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tc-gd-next-lit .tc-gd-theywon {
+  opacity: 0.35;
+}
+.tc-gd-next-lit .tc-gd-wewon:disabled {
+  opacity: 1;
+}
+.tc-gd-slide {
+  position: relative;
+  overflow: hidden;
+  margin: -14px;
+  padding: 14px;
+}
+.tc-gd-slide-out {
+  position: absolute;
+  inset: 14px 14px auto;
+  animation: tc-gd-out 380ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  pointer-events: none;
+}
+.tc-gd-slide-in {
+  animation: tc-gd-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes tc-gd-out {
+  to {
+    transform: translateX(-110%);
+    opacity: 0;
+  }
+}
+@keyframes tc-gd-in {
+  from {
+    transform: translateX(110%);
+  }
+}
+.tc-gd-bar > span {
+  transition: width 500ms var(--ease);
+}
+.tc-gd-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 9px;
+  border-radius: 99px;
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+.tc-gd-tag-won {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-gd-slide-out {
+    display: none;
+  }
+  .tc-gd-slide-in {
+    animation: none;
+  }
+  .tc-gd-vs-lit .tc-gd-side-a {
+    box-shadow: none;
+  }
+}

@@ -480,3 +480,32 @@ describe("zip 57: Alex's PM notes (team names by the players, the live window, n
     }
   });
 });
+
+describe("zip 57 add-on: a standby player swapped in during the night plays for their hold (Alex's answer 2)", () => {
+  it('16 locked in and Kai paid on standby: Kai takes over, and the hold never comes back as credit at the end of the night', async () => {
+    const ctx = await world(16, { start: 19 * 60, minutes: 180, passPayBy: false });
+    const kai = 'Rory';
+    expect((await (await playerPhone(ctx, kai)).call('POST', '/api/tournament/signup', { tournamentId: ctx.tid, level: 300, dates: [DATE] })).status).toBe(200);
+    expect((await (await playerPhone(ctx, kai)).call('POST', '/api/tournament/waitlist', { tournamentId: ctx.tid })).status).toBe(200);
+    const seen = Number((ctx.app.db.raw.prepare("SELECT COALESCE(SUM(CASE kind WHEN 'kept' THEN amount_cents WHEN 'used' THEN -amount_cents ELSE -(amount_cents - five_cents) END), 0) AS c FROM credit_ledger WHERE player_id = ? AND ended_at IS NULL").get(ctx.byName[kai]) as { c: number }).c);
+    expect((await ctx.organizer.call('POST', `/api/admin/players/${ctx.byName[kai]}/credit-adjust`, { direction: 'add', cents: 1600, reason: 'Test credit', seen })).status).toBe(200);
+    const hold = await (await playerPhone(ctx, kai)).call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'hold', priceCents: 1600 });
+    expect(hold.data.result, hold.text).toBe('held');
+    ctx.app.now = PAY_BY_MS + 60_000;
+    await draftAndPublish(ctx);
+    ctx.app.now = START_MS - 30 * 60_000 + 60_000;
+    const d = (await dash(ctx)).day;
+    expect(d.spares.map((x: any) => x.name)).toContain(kai);
+    const leaving = d.teams[0].players[0];
+    const r = await games(ctx, { action: 'left', playerId: leaving.id, swapIn: ctx.byName[kai] });
+    expect(r.status, r.text).toBe(200);
+    expect(r.data.holdToSpot).toBe(false); // every spot is taken: the hold stays on standby, but it is theirs
+    expect((await dash(ctx)).day.teams[0].players.map((p: any) => p.name)).toContain(kai);
+    const before = moneyRows(ctx);
+    // After the night: the first screen that reads it gives unused holds back. Kai played: nothing comes back.
+    ctx.app.now = START_MS + 4 * 3_600_000;
+    await dash(ctx);
+    expect(moneyRows(ctx)).toBe(before);
+    books(ctx);
+  });
+});

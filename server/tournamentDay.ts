@@ -24,6 +24,7 @@ import {
   type PlayerDayGame,
   type PlayerDayView,
   type TournamentFormat,
+  MAX_SPOTS,
 } from '../shared/tournament';
 import { about, clockLabel, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES } from '../shared/tournamentPlan';
 import {
@@ -907,6 +908,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     const view = adminDayView(t, 'doubles', all.signups, all.tickets, day, group.timezone, ctx.nowMs);
     if (!view.spares.some((s) => s.id === swapIn)) bad('tournament_changed', 'They cannot swap in. Look again.');
     const [a, b] = team!.player_a === playerId ? [swapIn, team!.player_b] : [team!.player_a, swapIn];
+    const standby = view.spares.find((x) => x.id === swapIn)?.standby === true;
     const res = await ctx.db
       .prepare(
         'UPDATE tournament_teams SET player_a = ?, player_b = ?, changed_at = ?, updated_at = ? WHERE id = ? AND updated_at = ? AND NOT EXISTS (SELECT 1 FROM tournament_teams o WHERE o.tournament_id = ? AND (o.player_a = ? OR o.player_b = ?))',
@@ -914,8 +916,30 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
       .bind(a, b, nowIso, nowIso, team!.id, team!.updated_at, t.id, swapIn, swapIn)
       .run();
     if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
-    await audit(ctx.db, group.id, null, 'tournament_player_left', { tournament: t.name, player: names.get(playerId) ?? 'A player', swapIn: names.get(swapIn) ?? 'a player', team: team!.name }, nowIso);
-    return { ok: true };
+    // Alex: a paid standby player who takes over plays for their hold, so it becomes their spot (it no longer comes back as credit at the end of the
+    // night). No money moves: the hold is already paid in full (a spot needs that, the ticket's own check), only its place changes. At the 16-spot
+    // cap the hold stays on standby (the cap trigger would refuse it).
+    let spot = false;
+    if (standby) {
+      const up = await ctx.db
+        .prepare(
+          `UPDATE tournament_tickets SET place = 'spot', place_at = ?, updated_at = ? WHERE tournament_id = ? AND player_id = ? AND place = 'line'
+             AND credit_cents + paid_cents >= price_cents AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = ? AND place = 'spot') < ${MAX_SPOTS}`,
+        )
+        .bind(nowIso, nowIso, t.id, swapIn, t.id)
+        .run()
+        .catch(() => ({ meta: { changes: 0 } }));
+      spot = (up.meta?.changes ?? 0) === 1;
+    }
+    await audit(
+      ctx.db,
+      group.id,
+      null,
+      'tournament_player_left',
+      { tournament: t.name, player: names.get(playerId) ?? 'A player', swapIn: names.get(swapIn) ?? 'a player', team: team!.name, ...(standby ? { holdToSpot: spot } : {}) },
+      nowIso,
+    );
+    return { ok: true, holdToSpot: spot };
   }
   // The team sits out: its games still to play are skipped (they count for nobody), its played games stay.
   const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs);

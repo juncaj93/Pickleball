@@ -1726,6 +1726,26 @@ body:has(.tabbar) .pop {
   cursor: pointer;
 }
 /* "Game on!": the pickleball pops in, no circle behind it. */
+/* Zip 57 (the tournament's We won): a thin green line along the foot of the banner that drains over the Undo window. */
+.pop .toast-drain {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 2px;
+  background: #3fd68a;
+  transform-origin: left center;
+  animation: toast-drain var(--drain-ms, 5000ms) linear var(--drain-delay, 0ms) forwards;
+}
+@keyframes toast-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
 .pop.pop-ball .toast-icon {
   background: none;
   width: 26px;

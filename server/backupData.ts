@@ -10,6 +10,9 @@
 //
 // Version 3 (Zip 56, Alex): the four tournament tables too (tournaments, sign-ups, the level history and the tickets, which hold cash the
 // organizer confirmed). A version 1 or 2 file still restores: the tournament tables come back empty, as they always did.
+//
+// Version 4 (Zip 57, Alex): the teams and the game results too (tournament_teams, tournament_games). A version 1 to 3 file still restores: those
+// two come back empty.
 import type { D1Database } from './db';
 
 export const BACKUP_TABLES = [
@@ -32,6 +35,9 @@ export const BACKUP_TABLES = [
   'tournament_signups',
   'tournament_level_history',
   'tournament_tickets',
+  // Version 4 (Zip 57, Alex): the Locked doubles teams and the game results, after the tournaments they belong to.
+  'tournament_teams',
+  'tournament_games',
 ] as const;
 
 /**
@@ -49,11 +55,11 @@ export const backupWhere = (t: string): string => (BACKUP_WHERE as Record<string
  * The file's version: 2 since Zip 50 (task_log, organizer_alerts and admin_sessions added), 3 since Zip 56 (the four tournament tables).
  * The reader takes 1, 2 and 3.
  */
-export const BACKUP_VERSION = 3;
+export const BACKUP_VERSION = 4;
 
 export interface BackupObject {
   format: 'pickleball-backup';
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   createdAt: string;
   groupName: string;
   tables: Record<string, Record<string, unknown>[]>;
