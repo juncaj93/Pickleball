@@ -6643,6 +6643,13 @@ stops the playoff until piece 4: OK; loud hours waived.
   motion) and C (lit, "✓ Let's go!", the slide, Game 2 of 3, the Won tag, the toast with Undo and the drain line, sent after 5 seconds, the
   other team won with Undo, sent on leaving, reduced motion).
 
+- Same answers as main with the switch ON (e2e/zip62-same.cjs, main `e6c3907`, 27 saved worlds, 2,511 answers): once the new fields
+  (`day`, `chosenCourts`, `closeCheck`), the change stamps that now also hash teams and games, and the two new empty tables in the demo copy
+  are set aside, 2,506 are identical. The other 5 are one fake world (a 6 player tournament finalized before Zip 57): main plans 1 court
+  there, this branch reads the tournament's saved courts (2, Create's placeholder), so the organizer's court cost shows 2 courts until "Use 1
+  court". Live checked read only before shipping: its one open tournament is not finalized, and its finalized ones are canceled and sized 10
+  and 12 (2 courts either way), so no live answer changes.
+
 ### Live: NOT done (the database change waits for Alex's OK)
 To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`, the three integrity checks, `npx wrangler d1 migrations list
 pickleball --remote` (must list only 0027), `npm run db:migrate:remote`, fast-forward main to this branch and push, `npm run deploy` from main,
