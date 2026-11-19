@@ -21,7 +21,8 @@ import { seatDotsForAll } from './seatDots';
 import { gameDayCardForAll } from './gameDay';
 import { afterGameCardForAll } from './afterGame';
 import { adminTournamentStamp, adminTourReads, playerTournamentStamp, playerTourReads, type TourReads, tournamentsFlags } from './tournament';
-import type { AdminTournamentView, PlayerTournamentView } from '../shared/tournament';
+import { playerAwardsFor } from './tournamentEnd';
+import type { AdminTournamentView, PlayerTournamentView, TourAwardsView } from '../shared/tournament';
 import type { D1PreparedStatement, D1Result } from './db';
 import { isPretend } from './pretend';
 
@@ -71,7 +72,11 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
  * that card instead of reading and building it a second time. While the switch is on for this phone and a name is picked, the card's reads go
  * in the stamp's own batch: no trip of their own.
  */
-export async function changeStampAndTour(ctx: Ctx, group: GroupRow, playerId: string | null): Promise<{ stamp: string; tour?: PlayerTournamentView | null }> {
+export async function changeStampAndTour(
+  ctx: Ctx,
+  group: GroupRow,
+  playerId: string | null,
+): Promise<{ stamp: string; tour?: PlayerTournamentView | null; awards?: TourAwardsView | null }> {
   const me = playerId ?? '';
   const upcomingFrom = new Date(ctx.nowMs - 36 * 3_600_000).toISOString();
   const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
@@ -114,6 +119,7 @@ export async function changeStampAndTour(ctx: Ctx, group: GroupRow, playerId: st
   const [sessions, roster, mine, ledger, requests, players, self] = results;
   // Built once (last, where it always was): the stamp's part here, and the same card for GET /api/group.
   let tourView: PlayerTournamentView | null | undefined;
+  let awardsView: TourAwardsView | null | undefined;
   const part = (r: { results: unknown[] }) => JSON.stringify(r.results);
   const raw = [
     part(sessions),
@@ -175,8 +181,15 @@ export async function changeStampAndTour(ctx: Ctx, group: GroupRow, playerId: st
       tourView = t.view;
       return t.part ? [t.part] : [];
     })()),
+    // Zip 58: after a tournament ends, the ticker, the congratulations card and medals (a segment only while there is something to show).
+    ...(await (async () => {
+      if (!tour) return [];
+      const a = await playerAwardsFor(ctx, group, playerId, false, pre?.awards).catch(() => undefined);
+      awardsView = a;
+      return a ? [`awards:${JSON.stringify(a)}`] : [];
+    })()),
   ].join('|');
-  return { stamp: (await sha256(raw)).slice(0, 16), ...(tourView !== undefined ? { tour: tourView } : {}) };
+  return { stamp: (await sha256(raw)).slice(0, 16), ...(tourView !== undefined ? { tour: tourView } : {}), ...(awardsView !== undefined ? { awards: awardsView } : {}) };
 }
 
 /**

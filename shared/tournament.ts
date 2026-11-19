@@ -931,6 +931,86 @@ export interface AdminRoundsView {
   byPercent: boolean;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 58 (🎾58.tourney4): End tournament, the awards, the winners banner, medals and the saved results (server/tournamentEnd.ts).
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** How long the winners banner stays up, in weeks (Edit awards: 1 to 4; 1 to start). */
+export const BANNER_WEEKS = [1, 2, 3, 4] as const;
+export const DEFAULT_BANNER_WEEKS = 1;
+export const bannerLabel = (weeks: number): string => (weeks === 1 ? '1 week' : `${weeks} weeks`);
+
+/** A winner the End card shows: a team (Locked doubles, `key` its seat) or a player (Americano, `key` the player). */
+export interface AwardPick {
+  key: string;
+  name: string;
+  players?: string[];
+}
+
+/** Zip 58 (pictures 37, 41 to 43): the organizer's End tournament card, once the Final (or the last round) is in. */
+export interface AdminEndView {
+  format: TournamentFormat;
+  /** The slim bar's words ("Final", "Round 6 of 6"). */
+  hero: string;
+  /** The big green card: "Final is done" / "Net Ninjas won" / "Vic + Wren beat Kitchen Crew (Rowan + Zoe)." */
+  done: { kicker: string; title: string; sub: string };
+  /** Locked doubles: the winning team (each gets a medal and the credit). Americano: 1st place (medal and credit). */
+  first: AwardPick;
+  /** Americano: 2nd place (credit, no medal). */
+  second: AwardPick | null;
+  /** Locked doubles: the 3rd place team (shown only: no medal, no credit, no banner). */
+  third: AwardPick | null;
+  championCents: number;
+  secondCents: number;
+  weeks: number;
+  /** Who Change can pick: every team (Locked doubles) or every player in table order (Americano). */
+  choices: AwardPick[];
+  /** The organizer is a winner: a medal, but no credit (the organizer pays the venue and never holds credit). */
+  noCredit?: string;
+  /** Why it cannot end yet (an I paid still waits for the organizer's answer). */
+  blocked?: string;
+  /** What the card showed, sent back with Confirm (a change in between is caught). */
+  seen: string;
+}
+
+/** Zip 58: the slim winners ticker at the top of a player's Home, for the banner length after End tournament (pictures 38 to 40). */
+export interface TickerView {
+  key: string;
+  name: string;
+  format: TournamentFormat;
+  /** Locked doubles: the team and both winners. */
+  champions?: { team: string; players: { name: string; medals: number }[] };
+  /** Americano: the winner, then the runner-up. */
+  winner?: { name: string; medals: number };
+  runnerUp?: { name: string; medals: number };
+}
+
+/** Zip 58: what a player's Home gets after a tournament ends (GET /api/group `tourAwards`). Left out when there is nothing. */
+export interface TourAwardsView {
+  ticker?: TickerView;
+  /** The one-time congratulations card (a winner, or the Americano runner-up), until Nice. */
+  congrats?: { key: string; tournamentId: string; title: string; sub: string };
+  /** Gold medals per player name (only players with at least one), for the name at the top and the game cards. */
+  medals?: Record<string, number>;
+}
+
+/** Zip 58 (picture 46): History > Tournaments. */
+export interface TournamentHistoryView {
+  tournaments: { id: string; name: string; date: string | null; format: TournamentFormat; players: number; first: { name: string; players?: string[] } | null; second: { name: string } | null }[];
+  wins: { name: string; wins: number; played: number; medals: number }[];
+}
+
+/** Zip 58 (picture 47): the admin Players sheet's TOURNAMENTS card (read only; levels are never shown to players). */
+export interface PlayerTournamentsView {
+  played: number;
+  won: number;
+  runnerUp: number;
+  rows: { name: string; date: string | null; finish: string }[];
+}
+
+/** "1st", "2nd", "3rd", "4th". */
+export const placeWord = (n: number): string => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+
 /** Zip 56: one ticket on the organizer's tournament page and Home cards (the organizer sees everyone's money). */
 export interface AdminTicketView {
   playerId: string;
@@ -1029,6 +1109,8 @@ export interface AdminTournamentView {
   day?: AdminDayView;
   /** Zip 61: the Americano night (once tickets close on Americano). */
   rounds?: AdminRoundsView;
+  /** Zip 58: End tournament (once the Final, or the last round, is in). */
+  end?: AdminEndView;
 }
 
 /**

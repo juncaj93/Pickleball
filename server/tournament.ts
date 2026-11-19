@@ -66,6 +66,7 @@ import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
 import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, tiesSqlFor, type GameRow, type TeamRow, type TieRow } from './tournamentDay';
 import { adminRoundsView, americanoStarted, playerRoundsView } from './americanoDay';
 import { fitWords, nightPlan } from '../shared/tournamentPlan';
+import { adminEndView, type AwardsPre, awardsFrom, awardsReads } from './tournamentEnd';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
@@ -305,6 +306,8 @@ export interface TourPre<Row> {
   recent?: { id: string; display_name: string }[];
   /** Zip 57: the teams and games of the picked tournament (empty before any draft). Zip 58: and the ties' answers. */
   day?: DayRows;
+  /** Zip 58: a player's screen: the winners banners up now, their winners, and every medal (server/tournamentEnd.ts). */
+  awards?: AwardsPre;
 }
 
 /** The reads (for the screen's batch) and how to read their answers back. Only while the switch is on for the request. */
@@ -369,6 +372,8 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
     { sql: teamsSqlFor(pick), values },
     { sql: gamesSqlFor(pick), values },
     { sql: tiesSqlFor(pick), values },
+    // Zip 58: after a tournament ends, the ticker, the congratulations card and medals (three small reads, in this same trip).
+    ...awardsReads(group.id, ctx.nowMs),
   ];
   return {
     reads,
@@ -384,6 +389,7 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
         freed: freed ? Math.max(0, Number(freed.gone ?? 0) - Number(freed.taken ?? 0)) : 0,
         canceledMoney: money ? { backCents: money.back ?? 0, claimCents: money.claim ?? 0 } : null,
         day: { teams: rows(6), games: rows(7), ties: rows(8) as TieRow[] },
+        awards: awardsFrom(res.slice(9, 12)),
       };
     },
   };
@@ -1105,6 +1111,11 @@ export async function adminTournamentFor(
     ...(dayRows ? { day: adminDayView(ts, shownFormat, rows, tickets, dayRows, tz, ctx.nowMs) } : {}),
     // Zip 61: the Americano night (once tickets close on Americano): the rounds, the scores, the Time check, Player left.
     ...(dayRows && decided && shownFormat === 'americano' ? { rounds: adminRoundsView(ts, rows, tickets, dayRows.games, tz, ctx.nowMs) } : {}),
+    // Zip 58: End tournament, once the Final (or the last round) is in.
+    ...(() => {
+      const end = dayRows && decided ? adminEndView(ts, shownFormat, rows, tickets, dayRows, tz, ctx.nowMs, orgId ?? null) : null;
+      return end ? { end } : {};
+    })(),
     ticketCents: t.ticket_cents,
     championCreditCents: t.champion_credit_cents,
     secondCreditCents: t.second_credit_cents ?? 0,

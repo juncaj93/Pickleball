@@ -1,3 +1,4 @@
+import { awardSeen, playerAwardsFor } from './tournamentEnd';
 import type { CreditEntryView, GroupView, PlayerSessionView } from '../shared/api';
 import { DROP_CHANGED, DROP_CHANGED_MESSAGE, dropQuote, quoteOfBody } from '../shared/dropQuote';
 import { claimShares, extendedTimeFor, extRowsOf, followSeat, hasViaShares, myExtShares, playerExtensionPaid, playerExtensionSeen, seatIdOf, undoClaimAt } from './extension';
@@ -185,7 +186,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const { group, playerId: meId, viewAsName } = await viewer(ctx);
   // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
   // Zip 62: it also brings the tournament card it built for this phone (its reads rode in the stamp's own trip), so it is not built twice.
-  const { stamp: version, tour: stampTour } = await changeStampAndTour(ctx, group, meId);
+  const { stamp: version, tour: stampTour, awards: stampAwards } = await changeStampAndTour(ctx, group, meId);
   await ensureSessions(ctx.db, group, ctx.nowMs);
   // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off).
   // Their own player's reads only when there is one (and it is not the organizer's own, who has no credit).
@@ -219,6 +220,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   // Zip 62: the card the stamp built for this same player (not View as, which decides Only me on its own), else built here as before.
   const tournament =
     stampTour !== undefined && !viewAsName && (me?.id ?? null) === meId ? stampTour : await playerTournamentFor(ctx, group, me?.id ?? null, !!viewAsName);
+  // Zip 58: after a tournament ends: the ticker, the congratulations card and medals (the stamp built it in its own trip; View as builds its own).
+  const tourAwards =
+    stampAwards !== undefined && !viewAsName && (me?.id ?? null) === meId ? stampAwards : await playerAwardsFor(ctx, group, me?.id ?? null, !!viewAsName).catch(() => null);
   const timeShift = await timeShiftFor(ctx, group.id);
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
@@ -392,6 +396,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     feeNotices,
     ...(moneyNotes.length ? { moneyNotes } : {}),
     ...(tournament ? { tournament } : {}),
+    ...(tourAwards ? { tourAwards } : {}),
     sessions: upcoming,
     owed,
     payDue,
@@ -487,6 +492,11 @@ export async function tournamentBackOut(ctx: Ctx, body: Record<string, unknown>)
 /** Zip 57 (server/tournamentDay.ts): POST /api/tournament/game { tournamentId, num, action }: We won, the other team won, Confirm, No we won, Undo. */
 export async function tournamentGame(ctx: Ctx, body: Record<string, unknown>) {
   return playerGameAction(ctx, await viewer(ctx), body);
+}
+
+/** Zip 58: POST /api/tournament/award-seen { tournamentId }: Nice on the congratulations card. */
+export async function tournamentAwardSeen(ctx: Ctx, body: Record<string, unknown>) {
+  return awardSeen(ctx, await viewer(ctx), body);
 }
 
 /** Zip 58: POST /api/tournament/spin { tournamentId, key }: a player of the team with the best record outside a three-way tie spins the wheel. */

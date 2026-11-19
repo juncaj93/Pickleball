@@ -58,12 +58,14 @@ export interface CreditRow {
 }
 
 /** Zip 56: why a ticket's cash came back as credit: they backed out, the organizer took them off, it was canceled, or it never got a spot. */
-export type TourWhy = 'back' | 'off' | 'cancel' | 'unused';
+export type TourWhy = 'back' | 'off' | 'cancel' | 'unused' | 'champion' | 'second';
 
 /** Zip 56: a ticket's money in the player's words: "the Winter Classic" and why it came back. */
 function tourText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'tournamentName' | 'tourWhy' | 'tourCanceled'>, money: string): string {
   const name = e.tournamentName ? `the ${e.tournamentName}` : 'a tournament';
   if (e.kind === 'used') return `${money} used for ${name}`;
+  // Zip 58: an award ("$14 Tournament champion, The Cold Open").
+  if (e.tourWhy === 'champion' || e.tourWhy === 'second') return `${money} Tournament ${e.tourWhy === 'champion' ? 'champion' : '2nd place'}${e.tournamentName ? `, ${e.tournamentName}` : ''}`;
   const why = e.tourWhy === 'back' ? 'you backed out' : e.tourWhy === 'off' ? 'taken off the list' : e.tourWhy === 'cancel' ? 'canceled' : 'no spot opened';
   return `${money} back from ${name} (${why})`;
 }

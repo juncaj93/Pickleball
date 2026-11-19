@@ -236,6 +236,16 @@ function tableOf(f: AmFacts) {
   );
 }
 
+/**
+ * Zip 58: how an Americano night ended (End tournament): every game is in (a score that counts, or not played), and the points table (win
+ * percentage when game counts differ, then total points). 1st place gets the champion credit and a medal, 2nd place the 2nd place credit.
+ */
+export function americanoOutcome(t: TournamentRow, signups: readonly SignupRow[], tickets: readonly TicketWithName[], rows: readonly GameRow[], tz: string, nowMs: number) {
+  const f = amFacts(t, signups, tickets, rows, tz, nowMs);
+  const table = tableOf(f);
+  return { ready: f.stored && f.games.length > 0 && f.games.every(decided), table, names: f.names, gone: f.gone, rounds: f.rounds };
+}
+
 /** The pair with the player who entered the score first ("Vic says ... for Vic + Parker"). */
 const claimerFirst = (p: readonly string[], by: string | null): string[] => (by && p[1] === by ? [p[1], p[0]] : [...p]);
 const nameOf = (f: AmFacts, id: string) => f.names.get(id) ?? 'A player';

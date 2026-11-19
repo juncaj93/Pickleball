@@ -1156,6 +1156,94 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Zip 58: how a Locked doubles night ended (End tournament)
+// ---------------------------------------------------------------------------------------------------------------------
+
+export interface DoublesOutcome {
+  /** The Final has a result that counts (or was a walkover): the organizer can end the tournament. */
+  ready: boolean;
+  champion: number | null;
+  runnerUp: number | null;
+  /** The 3rd place game's winner (or, with no such game, the next place), and 4th. */
+  third: number | null;
+  fourth: number | null;
+  /** Every team in finishing order (teams that left during pool play last). */
+  order: number[];
+  /** Each team's record over every game of the night (pool, tie, playoff). */
+  record: Map<number, { wins: number; losses: number }>;
+  /** Teams that left during pool play (no finish). */
+  out: Set<number>;
+  teams: TeamRow[];
+}
+
+export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowMs: number): DoublesOutcome {
+  const f = facts(t, rows.teams, rows.games, tz, nowMs, rows.ties ?? []);
+  const fin = f.games.find((g) => g.stage === 'final');
+  const fr = fin ? f.resolved.get(fin.num) : undefined;
+  const fres = fin ? f.results.get(fin.num) : undefined;
+  let champion: number | null = null;
+  let runnerUp: number | null = null;
+  if (fin && fres?.winner && fr?.a && fr?.b) {
+    champion = fres.winner === 'a' ? fr.a : fr.b;
+    runnerUp = champion === fr.a ? fr.b : fr.a;
+  } else if (fin && fres?.skipped && fr) {
+    // A walkover: the one team still there wins it.
+    const still = [fr.a, fr.b].filter((x): x is number => x !== null && !rows.teams.find((tm) => tm.seat === x)?.out_at);
+    if (still.length === 1) champion = still[0];
+  }
+  const third = f.games.find((g) => g.stage === 'third');
+  const tr = third ? f.resolved.get(third.num) : undefined;
+  const tres = third ? f.results.get(third.num) : undefined;
+  let p3: number | null = null;
+  let p4: number | null = null;
+  if (third && tres?.winner && tr?.a && tr?.b) {
+    p3 = tres.winner === 'a' ? tr.a : tr.b;
+    p4 = p3 === tr.a ? tr.b : tr.a;
+  }
+  const record = new Map<number, { wins: number; losses: number }>(rows.teams.map((x) => [x.seat, { wins: 0, losses: 0 }]));
+  for (const g of f.games) {
+    const r = f.resolved.get(g.num);
+    const res = f.results.get(g.num);
+    if (!r?.a || !r?.b || !res?.winner) continue;
+    const win = res.winner === 'a' ? r.a : r.b;
+    const lose = win === r.a ? r.b : r.a;
+    record.get(win)!.wins++;
+    record.get(lose)!.losses++;
+  }
+  // The rest in table order: with pools, 3rd of each pool, then 4th, ... (better record first); a semifinal loser with no 3rd place game is 3rd.
+  const placed = [champion, runnerUp, p3, p4].filter((x): x is number => x !== null);
+  const semiLosers = f.games
+    .filter((g) => g.stage === 'semi')
+    .map((g) => {
+      const r = f.resolved.get(g.num);
+      const res = f.results.get(g.num);
+      return r?.a && r?.b && res?.winner ? (res.winner === 'a' ? r.b : r.a) : null;
+    })
+    .filter((x): x is number => x !== null && !placed.includes(x));
+  const tables = groupsOf(rows.teams.length).map((grp) => groupTable(rows.teams.length, f.games.map(asPlanned), f.results, f.out, f.records, (grp.pool ?? 'P') as GroupKey).rows);
+  const rest: number[] = [];
+  for (let rank = 1; rank <= Math.max(0, ...tables.map((x) => x.length)); rank++) {
+    const atRank = tables
+      .map((x) => x[rank - 1])
+      .filter((x) => !!x)
+      .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.seat - b.seat);
+    for (const r of atRank) if (!placed.includes(r.seat) && !semiLosers.includes(r.seat) && !f.out.has(r.seat) && !rest.includes(r.seat)) rest.push(r.seat);
+  }
+  const order = [...placed, ...semiLosers, ...rest, ...[...f.out].filter((x) => !placed.includes(x))];
+  return {
+    ready: champion !== null,
+    champion,
+    runnerUp,
+    third: p3 ?? semiLosers[0] ?? null,
+    fourth: p4 ?? semiLosers[1] ?? null,
+    order,
+    record,
+    out: f.out,
+    teams: rows.teams,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Zip 58: the wheel and the organizer's picks
 // ---------------------------------------------------------------------------------------------------------------------
 

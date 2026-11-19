@@ -1,6 +1,6 @@
 import type { LateFeeKind } from './lateFees';
 import type { ActingRow } from './actingForOthers';
-import type { AdminTournamentView, PlayerTournamentView } from './tournament';
+import type { AdminTournamentView, PlayerTournamentView, PlayerTournamentsView, TourAwardsView } from './tournament';
 // Shapes of the JSON the API returns. Shared by server and browser.
 import type { CreditReason } from './credit';
 import type { GroupSettings } from './settings';
@@ -144,7 +144,7 @@ export interface CreditEntryView {
   balanceAfterCents?: number;
   /** Zip 56, a tournament ticket (reason 'tournament'): the tournament's name, why its cash came back, and whether it was canceled. Missing on every other entry. */
   tournamentName?: string;
-  tourWhy?: 'back' | 'off' | 'cancel' | 'unused' | null;
+  tourWhy?: 'back' | 'off' | 'cancel' | 'unused' | 'champion' | 'second' | null;
   tourCanceled?: true;
 }
 
@@ -274,6 +274,9 @@ export interface GroupView {
   /** Zip 55 "Tournaments" (server/tournament.ts): the pinned ticket card. Only while the switch is on and the tournament is visible to this player
    *  (Everyone, or Only me on the organizer's own signed-in phone). Missing otherwise: a player gets nothing about an Only me tournament. */
   tournament?: PlayerTournamentView;
+  /** Zip 58: after a tournament ends: the winners ticker, the one-time congratulations card, and medals by name. Only while the switch is on and
+   *  there is something to show (left out otherwise: the answer is exactly as before). */
+  tourAwards?: TourAwardsView;
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -523,6 +526,8 @@ export interface PlayerSummary {
   allTime: { played: number; spentCents: number };
   /** This is the organizer: Spent is Money Totals "Your cost so far" (membership + court - what players paid). */
   organizer: boolean;
+  /** Zip 58 (picture 47): the TOURNAMENTS card (only while the switch is on and the player finished at least one tournament). */
+  tournaments?: PlayerTournamentsView;
 }
 
 /** One line in History > Activity. */

@@ -340,6 +340,19 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return typeof d.swapIn === 'string'
         ? `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${d.swapIn} took over on ${typeof d.team === 'string' ? d.team : 'the team'}${d.holdToSpot === true ? ' (their standby hold is their spot now)' : d.holdToSpot === false ? ' (every spot is taken: their hold stays on standby)' : ''}`
         : `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${typeof d.team === 'string' ? d.team : 'the team'} sits out (${num(d.skipped)} games skipped)`;
+    // Zip 58 "Tournaments" piece 4 (server/tournamentDay.ts, server/tournamentEnd.ts): the wheel, the organizer's picks, the awards, the end.
+    case 'tournament_wheel':
+      return `${d.by === 'organizer' ? who : 'A player'} spun the wheel for the ${tourName(d)} tie (${typeof d.tied === 'string' ? d.tied : 'three teams'}): ${typeof d.bye === 'string' ? d.bye : 'a team'} got the bye`;
+    case 'tournament_wheel_spun':
+      return `${player} spun the wheel (${tourName(d)})`;
+    case 'tournament_tie_pick':
+      return `${who} picked ${typeof d.team === 'string' ? d.team : 'a team'} for place ${num(d.place)} in the ${tourName(d)} tie`;
+    case 'tournament_awards':
+      return `${who} edited the ${tourName(d)} awards${typeof d.words === 'string' && d.words ? ` (${d.words})` : ''}`;
+    case 'tournament_ended':
+      return `${who} confirmed the winners and ended the ${tourName(d)}${typeof d.words === 'string' && d.words ? `: ${d.words}` : ''}`;
+    case 'tournament_award_seen':
+      return `${player} saw their ${tourName(d)} award`;
     case 'guest_spot_on':
       return `${who} switched "Guest spot" on`;
     case 'guest_spot_off':

@@ -1,3 +1,4 @@
+import { playerTournamentsFor } from './tournamentEnd';
 import type { Ctx } from './context';
 import type { D1Database } from './db';
 import { requireAdmin } from './auth';
@@ -108,9 +109,12 @@ export async function playerSummary(ctx: Ctx): Promise<PlayerSummary> {
     monthSpent = (await spentByPlayer(ctx.db, group.id, organizerId, range, matchTotals)).get(id) ?? 0;
     allSpent = (await spentByPlayer(ctx.db, group.id, organizerId, undefined, matchTotals)).get(id) ?? 0;
   }
+  // Zip 58: the TOURNAMENTS card (switch on, at least one finished tournament; read only).
+  const tournaments = await playerTournamentsFor(ctx, group.id, id).catch(() => null);
   return {
     month: { label: `${MONTHS[now.month - 1]} ${now.year}`, played: monthPlayed, spentCents: monthSpent },
     allTime: { played: allPlayed, spentCents: allSpent },
     organizer: id === organizerId,
+    ...(tournaments ? { tournaments } : {}),
   };
 }

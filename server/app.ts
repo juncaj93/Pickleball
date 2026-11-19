@@ -10,6 +10,7 @@ import * as tournament from './tournament';
 import * as tickets from './tournamentTickets';
 import { poolsLook, tournamentTestStage } from './tournamentTest';
 import * as tournamentDay from './tournamentDay';
+import * as tournamentEnd from './tournamentEnd';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
@@ -83,6 +84,7 @@ route('POST', '/api/tournament/game', player.tournamentGame);
 route('POST', '/api/tournament/team-name', player.tournamentTeamName);
 // Zip 58 (server/tournamentDay.ts): Tournaments, piece 4. The team with the best record outside a three-way tie spins the wheel.
 route('POST', '/api/tournament/spin', player.tournamentSpin);
+route('POST', '/api/tournament/award-seen', player.tournamentAwardSeen);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
@@ -233,6 +235,9 @@ route('POST', '/api/admin/tournament/:id/reschedule', (ctx) => tickets.reschedul
 // Player left.
 route('POST', '/api/admin/tournament/:id/teams', tournamentDay.teamsAction);
 route('POST', '/api/admin/tournament/:id/games', tournamentDay.gamesAction);
+// Zip 58 (server/tournamentEnd.ts): Tournaments, piece 4. Edit awards and Confirm winners and end; History > Tournaments.
+route('POST', '/api/admin/tournament/:id/awards', tournamentEnd.awardsAction);
+route('GET', '/api/admin/tournament-history', tournamentEnd.tournamentHistory);
 // Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever PREVIEW_CALM is not on (live),
 // after the usual organizer sign-in check.
 route('POST', '/api/admin/tournament-test', tournamentTestStage);

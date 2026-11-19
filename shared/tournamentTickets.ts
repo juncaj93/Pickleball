@@ -43,10 +43,13 @@ export const TOUR_BACK_WHYS: readonly TourBackWhy[] = ['back', 'off', 'cancel', 
 /** The ledger's reason for cash that came back as credit: 'tour:<tournament id>:<why>'. */
 export const tourBackReason = (tournamentId: string, why: TourBackWhy): string => `tour:${tournamentId}:${why}`;
 
-/** A ledger reason read back: the tournament and, for money that came back, why. Null for anything that is not a ticket's. */
-export function tourOfReason(reason: string | null | undefined): { tournamentId: string; why: TourBackWhy | null } | null {
-  const m = /^tour:([0-9a-f-]{36})(?::(back|off|cancel|unused))?$/.exec(reason ?? '');
-  return m ? { tournamentId: m[1], why: (m[2] as TourBackWhy | undefined) ?? null } : null;
+/** Zip 58: an award's credit (End tournament): the champion credit, or Americano's 2nd place credit. Reason 'tour:<tournament id>:<award>'. */
+export type TourAward = 'champion' | 'second';
+
+/** A ledger reason read back: the tournament and, for money that came back (or an award, Zip 58), why. Null for anything that is not a ticket's. */
+export function tourOfReason(reason: string | null | undefined): { tournamentId: string; why: TourBackWhy | TourAward | null } | null {
+  const m = /^tour:([0-9a-f-]{36})(?::(back|off|cancel|unused|champion|second))?$/.exec(reason ?? '');
+  return m ? { tournamentId: m[1], why: (m[2] as TourBackWhy | TourAward | undefined) ?? null } : null;
 }
 
 /** The moment the tournament night starts (its date at the plan's start, Eastern), in ms. */
