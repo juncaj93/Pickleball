@@ -91,14 +91,19 @@ export const COURT_BOOKED_MARK = 'court_booked';
  * "sessionId:mark", and when each court was marked booked. Display only:
  * never breaks Home.
  */
+/** loadMarks' one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const marksRead = (groupId: string, nowMs: number) => ({
+  sql: `SELECT t.session_id, t.task, t.at FROM task_log t JOIN sessions s ON s.id = t.session_id
+         WHERE t.group_id = ? AND t.kind = 'mark' AND s.ends_at > ?`,
+  values: [groupId, new Date(nowMs - FAILED_KEEP_MS).toISOString()] as unknown[],
+});
+
 export async function loadMarks(db: D1Database, groupId: string, nowMs: number): Promise<{ marks: string[]; courtBookedAt: Record<string, string> }> {
   try {
+    const q = marksRead(groupId, nowMs);
     const { results } = await db
-      .prepare(
-        `SELECT t.session_id, t.task, t.at FROM task_log t JOIN sessions s ON s.id = t.session_id
-         WHERE t.group_id = ? AND t.kind = 'mark' AND s.ends_at > ?`,
-      )
-      .bind(groupId, new Date(nowMs - FAILED_KEEP_MS).toISOString())
+      .prepare(q.sql)
+      .bind(...q.values)
       .all<{ session_id: string; task: string; at: string }>();
     const courtBookedAt: Record<string, string> = {};
     for (const r of results) if (r.task === COURT_BOOKED_MARK) courtBookedAt[r.session_id] = r.at;
@@ -139,8 +144,12 @@ export async function resetTasksForNewDay(db: D1Database, sessionId: string): Pr
 }
 
 /** Settings > Alerts > Smart alerts. On unless switched off. */
+/** smartAlertsOn's one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const smartAlertsOffRead = (groupId: string) => ({ sql: "SELECT 1 AS x FROM task_log WHERE group_id = ? AND kind = 'off' LIMIT 1", values: [groupId] as unknown[] });
+
 export async function smartAlertsOn(db: D1Database, groupId: string): Promise<boolean> {
-  const off = await db.prepare("SELECT 1 AS x FROM task_log WHERE group_id = ? AND kind = 'off' LIMIT 1").bind(groupId).first();
+  const q = smartAlertsOffRead(groupId);
+  const off = await db.prepare(q.sql).bind(...q.values).first();
   return !off;
 }
 

@@ -138,8 +138,9 @@ describe('the switch on costs no database trip (Fewer database trips on, as live
       w.setSwitch(false);
       const off = tripsOf(await w.screens());
       noMore(on, off);
-      // And the numbers themselves are small: each 5-second check is one trip after the sign-in (or name) and switch reads.
-      expect(on['admin check']).toBe(3);
+      // And the numbers themselves are small: each 5-second check is one trip after the sign-in (or name) and switch reads. Zip 68: the
+      // organizer's sign-in check and the switch rows share one trip, so its check is 2.
+      expect(on['admin check']).toBe(2);
       expect(on['Parker check']).toBe(4);
       expect(on['Vic check']).toBe(4);
     });

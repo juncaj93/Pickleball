@@ -69,9 +69,16 @@ export async function venueAlertFlags(ctx: Ctx, groupId: string): Promise<{ on: 
  * The moment this request's switch went on: the Settings row's own time (it is "on for everyone" from then), else the moment this phone first opened the
  * private link (sent by the phone), never later than now. A phone that sent nothing readable starts now: no old charge day can show.
  */
+/** Zip 68: the two reads venueAlertsNow makes before it knows which games to load, word for word (the dashboard sends them in its shared trip). */
+export const venueAlertReads = (groupId: string, rowOn: boolean) => [
+  ...(rowOn ? [{ kind: 'first' as const, sql: "SELECT at FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark' LIMIT 1", values: [groupId, VENUE_ALERT.task] as unknown[] }] : []),
+  { kind: 'all' as const, sql: "SELECT task, detail FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?", values: [groupId, `${PAID_PREFIX}%`] as unknown[] },
+];
+
 async function onSince(ctx: Ctx, groupId: string, rowOn: boolean): Promise<number> {
   if (rowOn) {
-    const row = await ctx.db.prepare("SELECT at FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark' LIMIT 1").bind(groupId, VENUE_ALERT.task).first<{ at: string }>();
+    const q = venueAlertReads(groupId, true)[0];
+    const row = await ctx.db.prepare(q.sql).bind(...q.values).first<{ at: string }>();
     const t = row ? Date.parse(row.at) : NaN;
     if (Number.isFinite(t)) return t;
   }
@@ -81,9 +88,10 @@ async function onSince(ctx: Ctx, groupId: string, rowOn: boolean): Promise<numbe
 
 /** Which "court:2026-11" style charges are already marked paid. */
 async function paidRows(db: D1Database, groupId: string): Promise<{ keys: Set<string>; courtThrough: string | null; courtDates: string[] }> {
+  const q = venueAlertReads(groupId, false)[0];
   const { results } = await db
-    .prepare("SELECT task, detail FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?")
-    .bind(groupId, `${PAID_PREFIX}%`)
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<{ task: string; detail: string | null }>();
   let courtThrough: string | null = null;
   const courtDates: string[] = [];

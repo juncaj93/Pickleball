@@ -4,6 +4,7 @@ import { withCardCleanup } from './zip10';
 import { newId, randomToken, sha256, timingSafeEqual, verifyPin } from './crypto';
 import { HttpError } from './http';
 import { type GroupRow, getGroup } from './repo';
+import { asFewer } from './speed';
 import {
   isWrite,
   readOnlyPin,
@@ -153,14 +154,17 @@ export async function startAdminSession(ctx: Ctx, groupId: string, viewOnly = fa
 export async function requireAdmin(ctx: Ctx): Promise<GroupRow> {
   const token = ctx.cookies[ADMIN_COOKIE];
   if (!token) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
-  const row = await ctx.db
+  const check = ctx.db
     .prepare(
       `SELECT g.*, a.id AS admin_session_id FROM admin_sessions a JOIN groups g ON g.id = a.group_id
        WHERE a.token_hash = ? AND a.expires_at > ?`,
     )
     // Real time, even while pretending it's another time.
-    .bind(await sha256(token), ctx.realNowIso)
-    .first<GroupRow & { admin_session_id: string }>();
+    .bind(await sha256(token), ctx.realNowIso);
+  // Zip 68: with "Fewer database trips" on or deciding, the switch rows every organizer screen reads next ride in this same trip
+  // (server/speed.ts firstWithSwitches). Off, or no such database: the check alone, exactly as before.
+  const fewer = asFewer(ctx.db);
+  const row = await (fewer ? fewer.firstWithSwitches<GroupRow & { admin_session_id: string }>(check) : check.first<GroupRow & { admin_session_id: string }>());
   if (!row) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
   const { admin_session_id: sessionId, ...group } = row;
   // A read-only sign-in (server/viewOnly.ts): the stored row and the cookie must agree, it only lives while the secret is set,

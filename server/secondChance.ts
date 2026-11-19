@@ -129,11 +129,28 @@ interface MarkRow {
 
 const SC_TASKS = Object.values(SC);
 
+/** marksFor's one read, word for word. */
+const marksForRead = (groupId: string, ids: string[]) => ({
+  sql: `SELECT session_id, task, kind, detail, at FROM task_log WHERE group_id = ? AND task IN (${SC_TASKS.map(() => '?').join(',')}) AND session_id IN (${ids.map(() => '?').join(',')})`,
+  values: [groupId, ...SC_TASKS, ...ids] as unknown[],
+});
+
+/**
+ * Zip 68: secondChanceView's marks read for these games, word for word, so the dashboard can send it in a shared trip. Null when it reads
+ * nothing (no game near now), and on "Pretend it's noon", whose clock comes from a read of its own (look-only: nothing is sent early there).
+ */
+export function secondChanceMarksRead(ctx: Ctx, groupId: string, sessions: readonly SessionRow[]): { sql: string; values: unknown[] } | null {
+  if (pretendNoon(ctx)) return null;
+  const ids = sessions.filter((s) => near(s, ctx.nowMs)).map((s) => s.id);
+  return ids.length ? marksForRead(groupId, ids) : null;
+}
+
 async function marksFor(db: D1Database, groupId: string, ids: string[]): Promise<MarkRow[]> {
   if (ids.length === 0) return [];
+  const q = marksForRead(groupId, ids);
   const { results } = await db
-    .prepare(`SELECT session_id, task, kind, detail, at FROM task_log WHERE group_id = ? AND task IN (${SC_TASKS.map(() => '?').join(',')}) AND session_id IN (${ids.map(() => '?').join(',')})`)
-    .bind(groupId, ...SC_TASKS, ...ids)
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<MarkRow>();
   return results;
 }

@@ -204,38 +204,50 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
 }
 
 /**
+ * Zip 68: the organizer fingerprint's reads, word for word (withMarks: the "Do this now" taps; withTime: the "Still in" answers). The dashboard
+ * lists them (and the tournament reads below) in its own shared trip, so the fingerprint's batch is answered from it: no trip of its own.
+ */
+export function adminStampReads(group: GroupRow, nowMs: number, withMarks = true, withTime = withMarks): { sql: string; values: unknown[] }[] {
+  const pastFrom = new Date(nowMs - PAST_MS).toISOString();
+  return [
+    {
+      sql: `SELECT id, status, starts_at, ends_at, court_state, booking_status, cancel_reason, cancellation_deadline_at, admin_decision, finalized_at, final_price_cents, final_played_count,
+                is_extra, note, shown_early, holiday_hours_ok_at, day_before_done_at, last_call_done_at, court_cost_cents, updated_at
+         FROM sessions WHERE group_id = ? AND ends_at > ? ORDER BY starts_at`,
+      values: [group.id, pastFrom],
+    },
+    {
+      sql: `SELECT sp.session_id, sp.player_id, sp.status, sp.claim_seq, sp.confirm_seq, sp.attendance_confirmed_at, sp.promoted_at,
+                sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at, sp.late_drop_done_at${withTime ? ', sp.time_confirmed' : ''}
+         FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+         WHERE s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id, sp.player_id`,
+      values: [group.id, pastFrom],
+    },
+    { sql: 'SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(ended_at) AS e, MAX(ended_at) AS m FROM credit_ledger WHERE group_id = ?', values: [group.id] },
+    { sql: 'SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(resolved_at) AS r, MAX(resolved_at) AS m FROM refund_requests WHERE group_id = ?', values: [group.id] },
+    { sql: 'SELECT id, display_name, is_active, is_regular FROM players WHERE group_id = ? ORDER BY id', values: [group.id] },
+    { sql: 'SELECT MAX(created_at) AS last FROM admin_audit_log WHERE group_id = ?', values: [group.id] },
+    // The "Do this now" taps. Everything else still works if that table is missing.
+    ...(withMarks ? [{ sql: "SELECT session_id, task FROM task_log WHERE group_id = ? AND kind = 'mark' ORDER BY session_id, task", values: [group.id] }] : []),
+  ];
+}
+
+/** Zip 68: every read of the organizer fingerprint's one trip (its own and, while the switch is on, the tournament view's), for a prefetch list. */
+export async function adminStampTripReads(ctx: Ctx, group: GroupRow): Promise<{ kind: 'all'; sql: string; values: unknown[] }[]> {
+  const tour = (await tournamentsFlags(ctx, group.id)).on ? adminTourReads(group, ctx.nowMs) : null;
+  return [...adminStampReads(group, ctx.nowMs), ...(tour ? tour.reads : [])].map((r) => ({ kind: 'all' as const, ...r }));
+}
+
+/**
  * adminChangeStamp, and (Zip 62) the tournament view it built on the way (`tour`, only while the switch is on and built without an error), so
  * the dashboard sends that view instead of reading and building it a second time. Its reads go in the stamp's own batch: no trip of their own.
  */
 export async function adminChangeStampAndTour(ctx: Ctx, group: GroupRow): Promise<{ stamp: string; tour?: AdminTournamentView | null }> {
-  const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
   // Zip 62: while the switch is on for this phone, the tournament view's reads ride in this same trip (off: none, the batch is exactly main's).
   // The switch question is answered from the switch rows the sign-in check already read (no trip).
   const tour = (await tournamentsFlags(ctx, group.id)).on ? adminTourReads(group, ctx.nowMs) : null;
   // withTime: the "Still in" answers (migration 0016). Both extras are left out, one at a time, if missing.
-  const queries = (withMarks: boolean, withTime = withMarks) => [
-    ctx.db
-      .prepare(
-        `SELECT id, status, starts_at, ends_at, court_state, booking_status, cancel_reason, cancellation_deadline_at, admin_decision, finalized_at, final_price_cents, final_played_count,
-                is_extra, note, shown_early, holiday_hours_ok_at, day_before_done_at, last_call_done_at, court_cost_cents, updated_at
-         FROM sessions WHERE group_id = ? AND ends_at > ? ORDER BY starts_at`,
-      )
-      .bind(group.id, pastFrom),
-    ctx.db
-      .prepare(
-        `SELECT sp.session_id, sp.player_id, sp.status, sp.claim_seq, sp.confirm_seq, sp.attendance_confirmed_at, sp.promoted_at,
-                sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at, sp.late_drop_done_at${withTime ? ', sp.time_confirmed' : ''}
-         FROM session_players sp JOIN sessions s ON s.id = sp.session_id
-         WHERE s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id, sp.player_id`,
-      )
-      .bind(group.id, pastFrom),
-    ctx.db.prepare('SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(ended_at) AS e, MAX(ended_at) AS m FROM credit_ledger WHERE group_id = ?').bind(group.id),
-    ctx.db.prepare('SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(resolved_at) AS r, MAX(resolved_at) AS m FROM refund_requests WHERE group_id = ?').bind(group.id),
-    ctx.db.prepare('SELECT id, display_name, is_active, is_regular FROM players WHERE group_id = ? ORDER BY id').bind(group.id),
-    ctx.db.prepare('SELECT MAX(created_at) AS last FROM admin_audit_log WHERE group_id = ?').bind(group.id),
-    // The "Do this now" taps. Everything else still works if that table is missing.
-    ...(withMarks ? [ctx.db.prepare("SELECT session_id, task FROM task_log WHERE group_id = ? AND kind = 'mark' ORDER BY session_id, task").bind(group.id)] : []),
-  ];
+  const queries = (withMarks: boolean, withTime = withMarks) => adminStampReads(group, ctx.nowMs, withMarks, withTime).map((r) => ctx.db.prepare(r.sql).bind(...r.values));
   const { results, pre } = await batchWithTour(
     ctx,
     () =>

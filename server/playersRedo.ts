@@ -35,14 +35,25 @@ export function monthRange(year: number, month: number, tz: string): { from: str
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 /** Games played, per player, with the old list's rule, optionally only for games that start inside `range`. */
-export async function playedCounts(db: D1Database, groupId: string, nowIso: string, range?: { from: string; to: string }): Promise<Map<string, number>> {
-  const { results } = await db
-    .prepare(
-      `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+/** playedCounts' one read, word for word (Zip 68: the dashboard sends this month's in its shared trip). */
+export const playedCountsRead = (groupId: string, nowIso: string, range?: { from: string; to: string }) => ({
+  sql: `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
        WHERE s.group_id = ? AND sp.status = 'confirmed' AND s.status <> 'canceled' AND s.ends_at <= ? AND (sp.played IS NULL OR sp.played = 1)
        AND s.starts_at >= ? AND s.starts_at < ? GROUP BY sp.player_id`,
-    )
-    .bind(groupId, nowIso, range?.from ?? '0000', range?.to ?? '9999')
+  values: [groupId, nowIso, range?.from ?? '0000', range?.to ?? '9999'] as unknown[],
+});
+
+/** monthPlayedCounts' one read (this month, Eastern). */
+export const monthPlayedRead = (group: Pick<GroupRow, 'id' | 'timezone'>, nowMs: number, nowIso: string) => {
+  const p = localParts(nowMs, group.timezone);
+  return playedCountsRead(group.id, nowIso, monthRange(p.year, p.month, group.timezone));
+};
+
+export async function playedCounts(db: D1Database, groupId: string, nowIso: string, range?: { from: string; to: string }): Promise<Map<string, number>> {
+  const q = playedCountsRead(groupId, nowIso, range);
+  const { results } = await db
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<{ id: string; n: number }>();
   return new Map(results.map((r) => [r.id, Number(r.n)]));
 }

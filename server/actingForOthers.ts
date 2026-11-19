@@ -44,14 +44,18 @@ export async function actingOthersFlags(ctx: Ctx, groupId: string): Promise<{ on
  * is on. The index from migration 0018 holds only the lines that have a code, so the read touches those lines and nothing else. A database
  * without the column (before 0018) reads nothing.
  */
-export async function taggedLines(db: D1Database, groupId: string, nowMs: number): Promise<TaggedLine[]> {
-  const since = new Date(nowMs - LOOKBACK_DAYS * 86_400_000).toISOString();
-  const res = await db
-    .prepare(
-      `SELECT id, device_tag, actor_label, action, details_json, created_at FROM admin_audit_log
+/** taggedLines' one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const taggedLinesRead = (groupId: string, nowMs: number) => ({
+  sql: `SELECT id, device_tag, actor_label, action, details_json, created_at FROM admin_audit_log
        WHERE group_id = ? AND device_tag IS NOT NULL AND created_at > ? ORDER BY created_at, rowid`,
-    )
-    .bind(groupId, since)
+  values: [groupId, new Date(nowMs - LOOKBACK_DAYS * 86_400_000).toISOString()] as unknown[],
+});
+
+export async function taggedLines(db: D1Database, groupId: string, nowMs: number): Promise<TaggedLine[]> {
+  const q = taggedLinesRead(groupId, nowMs);
+  const res = await db
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<{ id: string; device_tag: string; actor_label: string; action: string; details_json: string; created_at: string }>()
     .catch(() => null);
   if (!res) return [];

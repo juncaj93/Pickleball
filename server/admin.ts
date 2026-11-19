@@ -1,14 +1,14 @@
 import { readOnlyPin, viewOnlyCookie } from './viewOnly';
 import { lastCallFor, lastCallForAll, setLastCallForAll } from './lastCall';
 import { backupObject } from './backupData';
-import { alertsView } from './alerts';
+import { alertRowRead, alertsView } from './alerts';
 import type { ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents, formatPrice } from '../shared/money';
 import { usableFor } from './creditActions';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { MONEY_STATE, reopenBlockers, reopenBlockersRead, sqlText } from './finalize';
 import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenAdminFlags, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenAdminForAll, setLastScreenForAll } from './speed';
-import { pendingRequestViews } from './creditActions';
+import { pendingRequestViews, requestPlayersRead } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../shared/time';
 import { adminLogin, adminLogout, checkCurrentPinCounted, hashGroupWord, markKnownOrganizerPhone, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
@@ -22,7 +22,7 @@ import { adjustReasonColumn, cleanReason, planAdjust, signedPrice } from '../sha
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
 import { setPayAlwaysForAll, payAlwaysForAll } from './payAlways';
 import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
-import { adminHiddenPlayerIds, adminR2For, adminR2ForAll, setAdminHiddenPlayer, setAdminR2ForAll } from './adminR2';
+import { adminHiddenPlayerIds, adminHiddenPlayersRead, adminR2For, adminR2ForAll, setAdminHiddenPlayer, setAdminR2ForAll } from './adminR2';
 import { adminR2Allowed } from '../shared/adminR2';
 import { adminR3For, adminR3ForAll, setAdminR3ForAll, spentByPlayer } from './adminR3';
 import { payNoteForAll, setPayNoteForAll } from './payNote';
@@ -34,7 +34,7 @@ import { FEE_KEPT, feeSplitOf, feeSplitPrice, lateFeeKind, lateFeePriceCents, ty
 import { lateFeeSplitFor, lateFeeSplitForAll, lateFeeSplitSwitch, setLateFeeSplitForAll } from './lateFeeSplit';
 import { hiddenGameIds, hiddenGameIdsRead, setHiddenFromPlayers } from './hideGame';
 import { instantTapsFor, instantTapsForAll, setInstantTapsForAll } from './instantTaps';
-import { adminHiddenGameIds, moneyReworkFor, moneyReworkForAll, sessionHasMoney, setAdminHiddenGame, setMoneyReworkForAll } from './moneyRework';
+import { adminHiddenGameIds, adminHiddenGamesRead, moneyReworkFor, moneyReworkForAll, sessionHasMoney, setAdminHiddenGame, setMoneyReworkForAll } from './moneyRework';
 import { HAS_MONEY_MESSAGE } from '../shared/moneyRework';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
@@ -65,14 +65,15 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf, tourNamesRead } from './credit';
+import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf, tourNamesRead, ledgerRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
-import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
-import { adminChangeStamp, adminChangeStampAndTour } from './stamp';
+import { loadMarks, marksRead, recordCourtBooked, resetTasksForNewDay, smartAlertsOffRead } from './tasks';
+import { adminChangeStamp, adminChangeStampAndTour, adminStampTripReads } from './stamp';
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 import { everyoneSettingsOf, flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
+import { cancelChargesRead, hiddenSessionsRead, plannedStartsRead, rostersRead, sessionsRead } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
@@ -91,11 +92,11 @@ import { christmasSkinMode, markPreviewOff, setChristmasSkinMode } from './chris
 import { parseMode } from '../shared/christmasSkin';
 import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
-import { markVenuePaid, setVenueAlertForAll, venueAlertFlags, venueAlertsNow } from './venueAlert';
+import { markVenuePaid, setVenueAlertForAll, venueAlertFlags, venueAlertReads, venueAlertsNow } from './venueAlert';
 import { venueDaysChangedAt, venueDaysHistoryOf, venueDaysOf, normalizeVenueDays, MEMBERSHIP_DAY_MAX, COURT_DAY_MAX, COURT_LAST_DAY, VENUE_HISTORY_MAX, type VenueDaysSpan } from '../shared/venueAlert';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { cheaperFixFlags, cheaperFixFor, setCheaperFixForAll } from './cheaperFix';
-import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
+import { actingOthersFlags, actingOthersPicture, setActingOthersForAll, taggedLinesRead } from './actingForOthers';
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
 import { setTapGuardFixForAll, tapGuardFixFlags } from './tapGuardFix';
@@ -107,10 +108,10 @@ import { phoneTagOf } from './phoneTag';
 import { adminTournamentFor, hiddenTournamentsRead, hiddenTournamentsView, setTournamentsForAll, tournamentsFlags } from './tournament';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
-import { previewCalmFor, previewSiteFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
+import { previewCalmFor, previewSiteFor, secondChanceAction, secondChanceFlags, secondChanceMarksRead, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
-import { monthPlayedCounts } from './playersRedo';
+import { monthPlayedCounts, monthPlayedRead } from './playersRedo';
 import type { Zip13Switch } from '../shared/zip13';
 import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
 import { NIGHT_START_MINUTES } from '../shared/tournament';
@@ -148,18 +149,83 @@ const playedCountRead = (groupId: string, nowIso: string): ReadSpec => ({
   values: [groupId, nowIso],
 });
 
+/**
+ * Zip 68 (🎾68.speed): every read the dashboard makes that depends only on the group, the clock and the switch rows, word for word, so ONE trip
+ * answers them all. Only while "Fewer database trips" is on for this request (`fewer.isFast()`): the flags asked here are then answered from
+ * the switch rows already read (no trip), and with it off nothing here runs, so the trips are exactly main's. A read listed here that the
+ * screen does not ask costs only its share of the one trip; one the screen asks that is not listed (or after a write) goes to the database
+ * on its own, as before. The answers are the database's own, so the screen is byte for byte the same either way.
+ */
+async function dashboardReads(ctx: Ctx, group: GroupRow, tourOn: boolean): Promise<{ kind: 'first' | 'all'; sql: string; values: unknown[] }[]> {
+  const all = (r: ReadSpec) => ({ kind: 'all' as const, ...r });
+  const first = (r: ReadSpec) => ({ kind: 'first' as const, ...r });
+  const adminR2 = await adminR2For(ctx, group.id);
+  const adminR3 = await adminR3For(ctx, group.id);
+  const moneyRework = await moneyReworkFor(ctx, group.id);
+  const venue = await venueAlertFlags(ctx, group.id);
+  const acting = await actingOthersFlags(ctx, group.id);
+  const redo = await zip13Flags(ctx, group.id, 'playersRedo');
+  const saved = organizerPlayerRead(group);
+  return [
+    { kind: 'all', ...playersRead(group.id) },
+    ...moneyPictureFirstReads(group, ctx.nowMs),
+    ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : []),
+    { kind: 'all', ...hiddenGameIdsRead(group.id) },
+    { kind: 'all', ...sessionStartsRead(group.id) },
+    { kind: 'all', ...recentAuditRead(group.id) },
+    { kind: 'all', ...lateDropsRead(group.id) },
+    { kind: 'all', ...playedCountRead(group.id, ctx.nowIso) },
+    // Asked again further down: the cash out requests, and the motion rows (organizer twice, player twice).
+    { kind: 'all', ...pendingRequestsRead(group.id) },
+    { kind: 'first', ...motionSettingRead(group.id, 'admin') },
+    { kind: 'first', ...motionSettingRead(group.id, 'admin') },
+    { kind: 'first', ...motionSettingRead(group.id, 'player') },
+    { kind: 'first', ...motionSettingRead(group.id, 'player') },
+    ...(tourOn ? [{ kind: 'all' as const, ...hiddenTournamentsRead(group) }, { kind: 'all' as const, ...tourNamesRead(group.id) }] : []),
+    // Zip 68: the rest of the screen's reads, in the order the screen asks them.
+    ...(adminR2 ? [all(adminHiddenPlayersRead(group.id))] : []),
+    // Players "Spent" (round 3): every game, every seat, and the credit pot a second time (the money picture asks it first).
+    ...(adminR3 ? [all(sessionsRead(group.id, '0000')), all(rostersRead(group.id, '0000')), all(ledgerRead(group.id))] : []),
+    all(cancelChargesRead(group.id)),
+    ...(moneyRework ? [all(adminHiddenGamesRead(group.id))] : []),
+    ...(venue.on ? venueAlertReads(group.id, venue.forAll) : []),
+    ...(acting.on ? [all(taggedLinesRead(group.id, ctx.nowMs))] : []),
+    ...(redo.on ? [all(monthPlayedRead(group, ctx.nowMs, ctx.nowIso))] : []),
+    all(hiddenSessionsRead(group, ctx.nowMs)),
+    // The cash out cards' names (only asked when a request is pending).
+    all(requestPlayersRead(group.id)),
+    ...(saved ? [first(saved)] : []),
+    // No saved organizer player: organizerIdOf and organizerPlayer each find them by the name in Settings, over every player.
+    ...(!group.organizer_player_id && (group.organizer_name ?? '').trim() ? [all(playersRead(group.id)), all(playersRead(group.id))] : []),
+    all(marksRead(group.id, ctx.nowMs)),
+    first(alertRowRead(group.id)),
+    first(smartAlertsOffRead(group.id)),
+    ...(moneyRework ? [all(allGamesNewestFirstRead(group.id)), all(gameMonthCountsRead(group.id))] : []),
+  ];
+}
+
 export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const group = await requireAdmin(ctx);
-  // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
-  // Zip 62: it also brings the tournament view it built (its reads rode in the stamp's own trip), so the view is not read and built twice.
-  const { stamp: version, tour: stampTour } = await adminChangeStampAndTour(ctx, group);
-  await ensureSessions(ctx.db, group, ctx.nowMs);
   // Zip 55 "Tournaments" (server/tournament.ts): Create tournament, the Home card and the level list, only while on (off: this answer is exactly main's
   // and the tournament tables are never read). Zip 62: asked here (the switch rows are already read: no trip) so the Hidden tournaments list
   // can join the shared trip just below.
   const tour = await tournamentsFlags(ctx, group.id);
-  // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off).
-  await fewerDb(ctx)?.prefetch([
+  // Zip 68: with "Fewer database trips" on, the fingerprint's reads, the upkeep's read (next weeks' games) and every read of the screen below
+  // that does not wait on another, in ONE trip (dashboardReads). The fingerprint's batch and ensureSessions are then answered from it. If
+  // the upkeep writes (a new week's games), everything kept is forgotten and the prefetch below reads the screen's reads again.
+  const fewer = fewerDb(ctx);
+  const screenReads = fewer?.isFast() ? await dashboardReads(ctx, group, tour.on) : null;
+  if (fewer && screenReads) {
+    const upkeep = plannedStartsRead(group, ctx.nowMs);
+    await fewer.prefetch([...(await adminStampTripReads(ctx, group)), ...(upkeep ? [{ kind: 'all' as const, ...upkeep }] : []), ...screenReads]);
+  }
+  // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
+  // Zip 62: it also brings the tournament view it built (its reads rode in the stamp's own trip), so the view is not read and built twice.
+  const { stamp: version, tour: stampTour } = await adminChangeStampAndTour(ctx, group);
+  await ensureSessions(ctx.db, group, ctx.nowMs);
+  // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off). Zip 68:
+  // already sent above, so this sends nothing (unless the upkeep wrote in between).
+  await fewerDb(ctx)?.prefetch(screenReads ?? [
     { kind: 'all', ...playersRead(group.id) },
     ...moneyPictureFirstReads(group, ctx.nowMs),
     ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : []),
@@ -244,7 +310,15 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     .filter((p) => p.playerId !== organizerId);
   const blockers = new Map<string, { spent: string[]; requested: string[] }>();
   // SPEED_FEWER_QUERIES (server/speed.ts): one trip for every finalized game's check instead of one each (nothing when it is off).
-  await fewerDb(ctx)?.prefetch(sessions.filter((s) => s.finalized_at).map((s) => ({ kind: 'all' as const, ...reopenBlockersRead(s.id) })));
+  // Zip 68: in the same trip, each hidden game's players (Settings > Advanced > Hidden games, one read per game further down) and the Second
+  // Chance marks of the games near now (only while those are on; the flags are answered from the switch rows, no trip).
+  const laterReads = fewerDb(ctx)?.isFast()
+    ? [
+        ...(moneyRework ? [...markedHidden].map((id) => ({ kind: 'all' as const, ...rosterRead(id) })) : []),
+        ...((await secondChanceFlags(ctx, group.id)).on ? [secondChanceMarksRead(ctx, group.id, sessions)].filter((r): r is ReadSpec => r !== null).map((r) => ({ kind: 'all' as const, ...r })) : []),
+      ]
+    : [];
+  await fewerDb(ctx)?.prefetch([...sessions.filter((s) => s.finalized_at).map((s) => ({ kind: 'all' as const, ...reopenBlockersRead(s.id) })), ...laterReads]);
   for (const s of sessions) if (s.finalized_at) blockers.set(s.id, await reopenBlockers(ctx, s.id));
   const recent = recentAuditRead(group.id);
   const { results: auditRows } = await ctx.db
@@ -2365,11 +2439,16 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
 }
 
 /** The organizer's own player record: the saved one, else a player with their name. */
+/** organizerPlayer's first read, word for word (Zip 68: the dashboard sends it in its shared trip). Null when no player is saved. */
+const organizerPlayerRead = (group: Pick<GroupRow, 'id' | 'organizer_player_id'>): ReadSpec | null =>
+  group.organizer_player_id ? { sql: 'SELECT id, display_name FROM players WHERE id = ? AND group_id = ?', values: [group.organizer_player_id, group.id] } : null;
+
 export async function organizerPlayer(ctx: Ctx, group: GroupRow, create: boolean): Promise<{ id: string; name: string } | null> {
-  if (group.organizer_player_id) {
+  const saved = organizerPlayerRead(group);
+  if (saved) {
     const p = await ctx.db
-      .prepare('SELECT id, display_name FROM players WHERE id = ? AND group_id = ?')
-      .bind(group.organizer_player_id, group.id)
+      .prepare(saved.sql)
+      .bind(...saved.values)
       .first<{ id: string; display_name: string }>();
     if (p) return { id: p.id, name: p.display_name };
   }
@@ -2502,14 +2581,19 @@ export async function setInstantTaps(ctx: Ctx, body: Record<string, unknown>) {
  * last 90 days the dashboard carries. A game counts when Money lists it: canceled, or a court booked, or somebody in; games before the first
  * session date and games hidden from the lists are left out.
  */
-async function gameMonthCounts(ctx: Ctx, group: GroupRow, hidden: Set<string>): Promise<Record<string, number>> {
-  const { results } = await ctx.db
-    .prepare(
-      `SELECT s.id, s.starts_at, s.status, s.booking_status, s.shown_early,
+/** gameMonthCounts' one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+const gameMonthCountsRead = (groupId: string): ReadSpec => ({
+  sql: `SELECT s.id, s.starts_at, s.status, s.booking_status, s.shown_early,
               (SELECT COUNT(*) FROM session_players sp WHERE sp.session_id = s.id AND sp.status = 'confirmed') AS n
        FROM sessions s WHERE s.group_id = ?`,
-    )
-    .bind(group.id)
+  values: [groupId],
+});
+
+async function gameMonthCounts(ctx: Ctx, group: GroupRow, hidden: Set<string>): Promise<Record<string, number>> {
+  const q = gameMonthCountsRead(group.id);
+  const { results } = await ctx.db
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<{ id: string; starts_at: string; status: string; booking_status: string; shown_early: number; n: number }>();
   const from = visibleFrom(group);
   const out: Record<string, number> = {};
@@ -2573,11 +2657,15 @@ export async function monthGames(ctx: Ctx): Promise<{ month: string; sessions: A
  * The games the organizer hid from their own lists, for Settings > Advanced > Hidden games. Read from the games themselves (not the
  * 90-day dashboard window), so an old hidden game can always be restored. A short label says what the game was.
  */
+/** hiddenGamesView's games read, word for word (Zip 68: the dashboard sends it in its shared trip, and each hidden game's roster in a later one). */
+const allGamesNewestFirstRead = (groupId: string): ReadSpec => ({ sql: 'SELECT * FROM sessions WHERE group_id = ? ORDER BY starts_at DESC', values: [groupId] });
+
 async function hiddenGamesView(ctx: Ctx, groupId: string, hidden: Set<string>, creditSessionIds: Set<string>, charges: Map<string, number>): Promise<NonNullable<AdminDashboard['hiddenGames']>> {
   if (hidden.size === 0) return [];
+  const q = allGamesNewestFirstRead(groupId);
   const { results } = await ctx.db
-    .prepare('SELECT * FROM sessions WHERE group_id = ? ORDER BY starts_at DESC')
-    .bind(groupId)
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<SessionRow>();
   const out: NonNullable<AdminDashboard['hiddenGames']> = [];
   for (const r of results) {

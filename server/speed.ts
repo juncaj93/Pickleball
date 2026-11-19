@@ -77,6 +77,22 @@ export interface FewerQueriesDb extends D1Database {
    * it (first() or all()), so the kept answer is exactly what that call gets.
    */
   prefetch(reads: { kind: 'first' | 'all'; sql: string; values: unknown[] }[]): Promise<void>;
+  /**
+   * Zip 68: true while the switch is on for this request (prefetch does something). A screen asks this before it works out flags early for
+   * a prefetch list, so with the switch off nothing is asked that main does not ask.
+   */
+  isFast(): boolean;
+  /**
+   * Zip 68: reads that ride in the NEXT prefetch's trip (whoever sends it), instead of a trip of their own later. Only while the switch is on;
+   * a read the screen never asks costs only its share of that one trip. Kept until that prefetch (or the answer is sent).
+   */
+  alsoNext(reads: { kind: 'first' | 'all'; sql: string; values: unknown[] }[]): void;
+  /**
+   * Zip 68: `stmt.first()` (the sign-in check) and the read of every switch row in ONE trip, while the switch is on or still being decided
+   * and the switch rows are not read yet. The switch rows are then used by the first switch question, exactly as if it had read them itself
+   * (unless something wrote in between: then it reads them again, as before). Anything else (off, look-only, a failed batch): stmt.first().
+   */
+  firstWithSwitches<T = Record<string, unknown>>(stmt: D1PreparedStatement): Promise<T | null>;
 }
 
 /**
@@ -104,9 +120,15 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
   const memo = new Map<string, unknown[]>();
   // Goes up on every write: an answer that set off before a write is never kept (or used for the switches) after it.
   let generation = 0;
+  // Zip 68: the switch rows read together with the sign-in check (firstWithSwitches), waiting for the first switch question. Only good for
+  // the generation it was read in (a write after it means the question reads them again, as before).
+  let primed: { rows: { group_id: string; task: string }[]; generation: number } | null = null;
+  // Zip 68: reads waiting to ride in the next prefetch's trip (alsoNext).
+  let queued: { kind: 'first' | 'all'; sql: string; values: unknown[] }[] = [];
   const forget = () => {
     generation++;
     known = null;
+    primed = null;
     memo.clear();
   };
   const keyOf = (kind: string, sql: string, values: unknown[]) => `${kind}\u0000${sql}\u0000${JSON.stringify(values)}`;
@@ -153,11 +175,16 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
       if (this.values.length === 2 && (this.sql === SWITCH_READ || norm(this.sql) === SWITCH_READ_NORM)) {
         const [groupId, task] = this.values as [string, string];
         if (!known) {
+          // Zip 68: read already, in the sign-in check's trip (and nothing wrote since): the same rows, no trip.
+          const early = primed && primed.generation === generation ? primed.rows : null;
+          primed = null;
           const startedAt = generation;
-          const rows = await inner
-            .prepare(ALL_SWITCHES_READ)
-            .all<{ group_id: string; task: string }>()
-            .catch(() => null);
+          const rows = early
+            ? { results: early }
+            : await inner
+                .prepare(ALL_SWITCHES_READ)
+                .all<{ group_id: string; task: string }>()
+                .catch(() => null);
           // A failed read (no task_log table yet), or something wrote while it was being read: ask the question itself, as today.
           if (!rows || generation !== startedAt || (state as string) === 'plain') {
             if (state === 'decide') state = 'plain';
@@ -230,9 +257,26 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
     finish: () => {
       state = 'plain';
       speedKnown = null;
+      queued = [];
       forget();
     },
-    prefetch: async (reads) => {
+    isFast: () => state === 'fast' && !lookOnly,
+    alsoNext: (reads) => {
+      if (state === 'fast' && !lookOnly) queued.push(...reads);
+    },
+    firstWithSwitches: async <T>(stmt: D1PreparedStatement): Promise<T | null> => {
+      if (state === 'plain' || lookOnly || known || primed || !(stmt instanceof Stmt) || !stmt.read) return stmt.first<T>();
+      const startedAt = generation;
+      const results = await inner.batch([stmt.inner, inner.prepare(ALL_SWITCHES_READ)]).catch(() => null);
+      // A failed batch (no task_log table yet): the check on its own, and the switch rows later on their own, exactly as before.
+      if (!results || results.length !== 2) return stmt.first<T>();
+      if (generation === startedAt && (state as string) !== 'plain') primed = { rows: (results[1].results ?? []) as { group_id: string; task: string }[], generation };
+      return ((results[0].results ?? [])[0] ?? null) as T | null;
+    },
+    prefetch: async (asked) => {
+      // Zip 68: the reads waiting for this trip (alsoNext) ride along.
+      const reads = queued.length ? [...asked, ...queued] : asked;
+      queued = [];
       // Not on a look-only database ("Pretend it's...", the read-only PIN): their batches are not plain reads (server/pretend.ts).
       if (state !== 'fast' || lookOnly) return;
       // One entry per distinct read; `uses`: how many times the screen will ask it (listed that many times).

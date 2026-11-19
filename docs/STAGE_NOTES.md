@@ -6933,3 +6933,72 @@ here): dashboard main 1,198 to 1,207 ms / branch 1,121 to 1,132 ms; version main
 - After, read only (no name picked, nothing written, no live data touched): /, /admin, /api/status and /api/group answer 200; Home at 390 light
   and dark: no page errors, only GET requests, nothing wider than the screen; the Tournament test and History addresses answer 401 without the PIN.
 - The preview address `zip58-speed-main` (main's code, the fake database) was only for the timing; it can be ignored.
+
+## Zip 68: Make the organizer's Home fast (🎾68.speed), Thu Nov 19, 2026
+Branch `claude/new-session-0k1imm` (the session is named "🎾68.speed"; the build system pins the branch name). Built on main `40d0f32` (Zips 57,
+58, 61, 66 live; main equals live). **NO database change** (no table, column, index or migration). **Nothing looks or behaves differently**: no
+money, ticket, credit or tournament rule is touched; only how many times the server goes to the database while building the organizer's Home.
+
+### Measured first (before any change)
+How: (1) the real server code on local copies of the preview's fake worlds (the calm one, and the full one with three months of finalized
+games, money and a cash out pending), with "Fewer database trips" on as on live, counting every trip and listing it (`scripts/zip68-admin-speed.ts`,
+`SEQ=1`); (2) main's code deployed as the preview address `zip68-before` and timed from this machine (Cloudflare serves it from Chicago, like
+Alex's phone), median of 15 to 21 calls (`e2e/zip68-time.cjs`); (3) a real browser on that preview, on 4G and with a warm cache
+(`admin-net.cjs`, scratch); (4) Cloudflare's own numbers for live (read only, no player data).
+- The 73 trips in the brief are the count with "Fewer database trips" OFF. Live has it ON: the dashboard made 33 trips (calm world) or 26 (full
+  world; 30 with Venue alert, Acting for others, Second Chance and hidden games on), all one after another; the 5-second check made 3.
+- On Cloudflare (main's code): dashboard 1.18 to 1.30 s at tickets open, all locked in, game day and game night; the check 128 to 140 ms.
+- Where the trips came from: 1 sign-in check, 1 read of the switch rows, 1 fingerprint batch, 1 "next weeks' games" check, 1 shared prefetch,
+  1 money picture, then about 17 single reads one after another (hidden players, Spent's three reads, venue charges, hidden games, the venue
+  card, Acting for others, this month's games, hidden early games, the organizer's player, the Do this now marks, the alert settings, the
+  smart alerts row, the organizer motion row a second time, Second Chance marks, every game for Hidden games, the month counts), then one read
+  PER HIDDEN GAME (10 on the calm preview), and one batch per finalized game check. No slow query: D1's own time is 0.3 ms per query (live,
+  Nov 12 to 19); every trip costs about 35 to 40 ms of travel, so the count is the time.
+- Live, Nov 17 to 19 (all requests, not only the organizer's; Cloudflare does not split by address): typical 0.3 s, slowest 10% about 1.1 s,
+  slowest 1% about 2.9 s (4.7 s in the busiest hour). The browser on 4G: after any deploy (new file names, nothing cached) the page spends
+  about 2 s downloading its code, then waits 1.2 s for the dashboard: 3.3 s and more. With a warm cache, 1.4 s, almost all of it the dashboard.
+  That is the "sometimes 3 to 4 seconds": the first open after a deploy, or a slower network moment multiplied by 33 trips in a row.
+
+### What changed
+1. `server/speed.ts`: three small pieces on the "Fewer database trips" wrapper. `firstWithSwitches`: the organizer sign-in check and the
+   read of every switch row in ONE trip (the first switch question then uses those rows; a write in between, a failed batch, the switch off
+   after deciding, or a look-only database fall back to exactly the old reads). `alsoNext`: reads that ride in the next shared trip.
+   `isFast`: whether the shared trips are on for this request.
+2. `server/auth.ts` `requireAdmin`: uses `firstWithSwitches` (every organizer call saves one trip, the 5-second check included).
+3. `server/admin.ts` `dashboard`: with the switch on, ONE shared trip carries the fingerprint's reads, the "next weeks' games" check and every
+   read of the screen that does not wait on another (`dashboardReads`, the same reads in the order the screen asks them); the existing finalized
+   game check trip also carries each hidden game's players and the Second Chance marks. The answers are the database's own; a read the screen
+   asks that was not sent early (or any read after a write, like the weekly upkeep adding a game) goes to the database on its own, as before.
+4. Each read the list names is now written once, as an exported read (`plannedStartsRead`, `cancelChargesRead`, `hiddenSessionsRead`,
+   `adminHiddenPlayersRead`, `adminHiddenGamesRead`, `venueAlertReads`, `taggedLinesRead`, `playedCountsRead`/`monthPlayedRead`, `marksRead`,
+   `smartAlertsOffRead`, `alertRowRead`, `requestPlayersRead`, `secondChanceMarksRead`, `adminStampReads`), used by its own function too, so
+   the list can never drift from the real query (a drift would only cost a trip, never change an answer).
+5. Not changed: the player screens, every tap, the clock, the 5-second check's own work, the payload (same bytes).
+
+### After (same worlds, same preview database)
+| | Before (main) | After |
+|---|---|---|
+| Dashboard trips (calm, every Tournament test stage) | 33 (35 on a first read) | 4 (7 on a first read that does upkeep) |
+| Dashboard trips (full world; extras on) | 26; 30 | 4; 4 |
+| 5-second check trips | 3 | 2 |
+| Dashboard on Cloudflare, median (tickets open, all locked, game day, game night) | 1,268 / 1,283 / 1,257 / 1,300 ms | 182 / 182 / 176 / 241 ms |
+| 5-second check on Cloudflare, median | 140 / 132 / 129 / 139 ms | 99 / 99 / 91 / 105 ms |
+| Dashboard bytes | 65 KB | the same bytes |
+The network part alone (a static file from here) is 40 to 51 ms, so the dashboard's server time went from about 1.2 s to about 0.15 s. First
+call on a fresh deployment (cold): 1.29 s before, 0.19 s after.
+
+### Same answers proof
+- `e2e/zip68-same.cjs` (by hand, needs a main checkout): main's code and this code on 65 saved fake worlds (`scripts/zip68-states.ts`: the calm
+  world at all 50 Tournament test stages, the full world at 7 stages, switch off (calm and full), extra switches with hidden games (one with money), the weekly
+  upkeep adding a game mid-dashboard, the organizer found by name), 93 answers each (dashboard and check twice, History, Money, View as data, a
+  phone with no name, every name's Home and check, the organizer's own phone, View as, Pretend it's at two moments, the read-only PIN):
+  **65 of 65 the same, byte for byte; no answer makes more trips than main's**.
+- On Cloudflare (`e2e/zip68-cf-same.cjs`): main's preview and this branch's, same fake database, 10 stages: dashboard and check byte for byte
+  the same apart from the moment each was made ("now").
+- Screens: organizer Home at 390 px, light and dark, from both previews: pixel-identical screenshots (same image fingerprint).
+
+### Tests
+- `tests/zip68-speed.test.ts` (10): at most 4 dashboard trips and 2 check trips at 7 stages on both worlds, fast answers byte for byte the
+  plain ones, the rare paths, the upkeep write, refused sign-ins unchanged, and the wrapper pieces (one trip, a write in between, a failed batch,
+  switch off adds nothing, alsoNext).
+- `tests/zip62-speed.test.ts`: the organizer check is now 2 trips (was pinned at 3).

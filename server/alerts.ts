@@ -42,8 +42,12 @@ export interface AlertRow {
   last_error: string | null;
 }
 
+/** alertRow's one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const alertRowRead = (groupId: string) => ({ sql: 'SELECT * FROM organizer_alerts WHERE group_id = ?', values: [groupId] as unknown[] });
+
 async function alertRow(db: D1Database, groupId: string): Promise<AlertRow | null> {
-  return db.prepare('SELECT * FROM organizer_alerts WHERE group_id = ?').bind(groupId).first<AlertRow>();
+  const q = alertRowRead(groupId);
+  return db.prepare(q.sql).bind(...q.values).first<AlertRow>();
 }
 
 /** The organizer's switches, read fresh. */

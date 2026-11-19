@@ -49,11 +49,15 @@ export async function moneyReworkFor(ctx: Ctx, groupId: string): Promise<boolean
 export const HIDDEN_GAME_TASK = 'admin_hidden_game';
 
 /** The games the organizer hid from their own lists, as ids. */
+/** adminHiddenGameIds' one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const adminHiddenGamesRead = (groupId: string) => ({ sql: "SELECT session_id FROM task_log WHERE group_id = ? AND task = ? AND kind = 'mark' AND session_id IS NOT NULL", values: [groupId, HIDDEN_GAME_TASK] as unknown[] });
+
 export async function adminHiddenGameIds(db: D1Database, groupId: string): Promise<Set<string>> {
   try {
+    const q = adminHiddenGamesRead(groupId);
     const { results } = await db
-      .prepare("SELECT session_id FROM task_log WHERE group_id = ? AND task = ? AND kind = 'mark' AND session_id IS NOT NULL")
-      .bind(groupId, HIDDEN_GAME_TASK)
+      .prepare(q.sql)
+      .bind(...q.values)
       .all<{ session_id: string }>();
     return new Set(results.map((r) => r.session_id));
   } catch {

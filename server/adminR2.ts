@@ -47,11 +47,15 @@ export async function adminR2For(ctx: Ctx, groupId: string): Promise<boolean> {
 const HIDDEN_PREFIX = 'admin_hidden_player:';
 
 /** The ids of the players the organizer hid. */
+/** adminHiddenPlayerIds' one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const adminHiddenPlayersRead = (groupId: string) => ({ sql: "SELECT task FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?", values: [groupId, `${HIDDEN_PREFIX}%`] as unknown[] });
+
 export async function adminHiddenPlayerIds(db: D1Database, groupId: string): Promise<Set<string>> {
   try {
+    const q = adminHiddenPlayersRead(groupId);
     const { results } = await db
-      .prepare("SELECT task FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task LIKE ?")
-      .bind(groupId, `${HIDDEN_PREFIX}%`)
+      .prepare(q.sql)
+      .bind(...q.values)
       .all<{ task: string }>();
     return new Set(results.map((r) => r.task.slice(HIDDEN_PREFIX.length)));
   } catch {

@@ -240,11 +240,15 @@ export async function refundCreditBalance(ctx: Ctx, body: Record<string, unknown
   return { ok: true, changed: true };
 }
 
+/** pendingRequestViews' names read, word for word (Zip 68: the dashboard sends it in its shared trip; it is only asked when a request is pending). */
+export const requestPlayersRead = (groupId: string) => ({ sql: 'SELECT id, display_name, venmo_handle FROM players WHERE group_id = ?', values: [groupId] as unknown[] });
+
 /** The organizer's Home cards: every pending request with the player's saved Venmo. */
 export async function pendingRequestViews(ctx: Ctx, group: GroupRow) {
   const reqs = await loadPendingRequests(ctx.db, group.id);
   if (reqs.length === 0) return [];
-  const { results } = await ctx.db.prepare('SELECT id, display_name, venmo_handle FROM players WHERE group_id = ?').bind(group.id).all<{ id: string; display_name: string; venmo_handle: string | null }>();
+  const q = requestPlayersRead(group.id);
+  const { results } = await ctx.db.prepare(q.sql).bind(...q.values).all<{ id: string; display_name: string; venmo_handle: string | null }>();
   const byId = new Map(results.map((p) => [p.id, p]));
   return reqs.map((r) => ({ id: r.id, playerId: r.player_id, name: byId.get(r.player_id)?.display_name ?? '?', cents: r.amount_cents, createdAt: r.created_at, venmo: byId.get(r.player_id)?.venmo_handle ?? null }));
 }

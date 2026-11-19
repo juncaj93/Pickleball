@@ -362,12 +362,23 @@ export async function getSession(db: D1Database, groupId: string, sessionId: str
  * its old slot, and a new usual time in Settings only shapes games that
  * don't exist yet.
  */
-export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: number): Promise<number> {
+/** The games ensureSessions would plan (inside the rolling horizon, from the first session date). */
+function plannedSlots(group: GroupRow, nowMs: number) {
   const settings = settingsOf(group);
   const firstStart = visibleFrom(group);
-  const planned = planSessions(nowMs, group.timezone, settings.horizonWeeks, settings.defaultStartMinutes, settings.defaultEndMinutes).filter(
-    (p) => p.startsAt >= firstStart,
-  );
+  return planSessions(nowMs, group.timezone, settings.horizonWeeks, settings.defaultStartMinutes, settings.defaultEndMinutes).filter((p) => p.startsAt >= firstStart);
+}
+
+/** ensureSessions' one read, word for word (Zip 68: the dashboard sends it in its shared trip). Null when nothing is planned (no read). */
+export function plannedStartsRead(group: GroupRow, nowMs: number): ReadSpec | null {
+  const planned = plannedSlots(group, nowMs);
+  if (planned.length === 0) return null;
+  return { sql: 'SELECT planned_starts_at FROM sessions WHERE group_id = ? AND planned_starts_at >= ?', values: [group.id, new Date(Date.parse(planned[0].startsAt) - 86_400_000).toISOString()] };
+}
+
+export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: number): Promise<number> {
+  const settings = settingsOf(group);
+  const planned = plannedSlots(group, nowMs);
   if (planned.length === 0) return 0;
   // A regular game already planned for that calendar day, at whatever time, counts: changing the usual
   // time in Settings must never add a second game next to an existing one.
@@ -375,9 +386,10 @@ export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: num
     const p = localParts(Date.parse(iso), group.timezone);
     return `${p.year}-${p.month}-${p.day}`;
   };
+  const r = plannedStartsRead(group, nowMs)!;
   const { results } = await db
-    .prepare('SELECT planned_starts_at FROM sessions WHERE group_id = ? AND planned_starts_at >= ?')
-    .bind(group.id, new Date(Date.parse(planned[0].startsAt) - 86_400_000).toISOString())
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<{ planned_starts_at: string }>();
   const existing = new Set(results.map((r) => dayOf(r.planned_starts_at)));
   const missing = planned.filter((p) => !existing.has(dayOf(p.startsAt)));
@@ -599,10 +611,17 @@ export async function audit(
  * (action 'charge_edited', Money page rework); the latest entry wins, so canceling
  * again after a reopen, or editing the charge, replaces it. Only amounts above $0.
  */
+/** loadCancelCharges' one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const cancelChargesRead = (groupId: string): ReadSpec => ({
+  sql: "SELECT session_id, details_json FROM admin_audit_log WHERE group_id = ? AND action IN ('session_canceled', 'charge_edited') AND session_id IS NOT NULL ORDER BY created_at, rowid",
+  values: [groupId],
+});
+
 export async function loadCancelCharges(db: D1Database, groupId: string): Promise<Map<string, number>> {
+  const q = cancelChargesRead(groupId);
   const { results } = await db
-    .prepare("SELECT session_id, details_json FROM admin_audit_log WHERE group_id = ? AND action IN ('session_canceled', 'charge_edited') AND session_id IS NOT NULL ORDER BY created_at, rowid")
-    .bind(groupId)
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<{ session_id: string; details_json: string }>();
   const out = new Map<string, number>();
   for (const r of results) {
@@ -620,11 +639,17 @@ export async function loadCancelCharges(db: D1Database, groupId: string): Promis
 }
 
 /** Sessions before the first session date that the organizer could still show. */
+/** loadHiddenSessions' one read, word for word (Zip 68: the dashboard sends it in its shared trip). */
+export const hiddenSessionsRead = (group: Pick<GroupRow, 'id' | 'first_session_date' | 'timezone'>, nowMs: number): ReadSpec => ({
+  sql: 'SELECT * FROM sessions WHERE group_id = ? AND starts_at < ? AND starts_at > ? AND shown_early = 0 ORDER BY starts_at',
+  values: [group.id, visibleFrom(group), new Date(nowMs).toISOString()],
+});
+
 export async function loadHiddenSessions(db: D1Database, group: GroupRow, nowMs: number): Promise<SessionRow[]> {
-  const from = visibleFrom(group);
+  const q = hiddenSessionsRead(group, nowMs);
   const { results } = await db
-    .prepare('SELECT * FROM sessions WHERE group_id = ? AND starts_at < ? AND starts_at > ? AND shown_early = 0 ORDER BY starts_at')
-    .bind(group.id, from, new Date(nowMs).toISOString())
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<SessionRow>();
   return results;
 }
