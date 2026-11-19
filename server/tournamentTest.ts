@@ -12,6 +12,7 @@ import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_M
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { defaultPayBy, tourReason } from '../shared/tournamentTickets';
 import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
+import { endPlan, type EndRow, readNight, writeEnd } from './tournamentEnd';
 
 // Zip 55, PREVIEW ONLY: the "Tournament test" page's server half. POST /api/admin/tournament-test { stage } puts the fake tournament back to a
 // stage, using only the preview's fixed fake names (docs/PREVIEW_FAKE_DB.md), and turns the Tournaments row on (a re-seed from another branch
@@ -103,10 +104,25 @@ const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[
 //   am_standings  rounds 1 to 5 in, Round 6 on: the table after Round 5
 //   am_switched   Locked doubles with 9 locked in (Reese did not pay) after Pay by, two days from now: the first screen that reads it switches to
 //                 Americano (zip 64): players see "Tournament style is now Americano." and their new rounds
-export const AM_STAGES = ['am_round3', 'am_before', 'am_round1', 'am_break', 'am_standings', 'am_switched'] as const;
+//   am_done       every round in (Vic wins every game he plays): the organizer's End tournament card (picture 37)
+export const AM_STAGES = ['am_round3', 'am_before', 'am_round1', 'am_break', 'am_standings', 'am_switched', 'am_done'] as const;
+// Zip 58 (🎾58.tourney4): ties, the Final, End tournament and the records. "The Cold Open", Locked doubles, the brief's four teams (zip 57's
+// stage: Net Ninjas Vic and Wren, Third Shot Gang Parker and Quinn, Kitchen Crew Rowan and Zoe, Dill With It Sage and Christopher), tonight,
+// started 100 minutes ago, courts 1 and 2. Every pool game in, as the players' Confirm writes it.
+//   tie3        Kitchen Crew 3-0; Net Ninjas, Third Shot Gang and Dill With It each beat one of the others (1-2): tied for the final (picture
+//               20). Kitchen Crew spins (view as Rowan or Zoe), or the organizer does on Home. Then Game A and Game B (picture 21).
+//   final_on    Net Ninjas 3-0, Third Shot Gang 2-1, Kitchen Crew 1-2, Dill With It 0-3: the Final (Net Ninjas vs Third Shot Gang) and 3rd place
+//               (Kitchen Crew vs Dill With It) on now (picture 22). View as Vic: We won; then confirm it on Home (or as Parker).
+//   final_done  the same with both games in (Net Ninjas won the Final, Dill With It 3rd place): Home shows End tournament (picture 43).
+//   ended       final_done, then Confirm winners and end, the real code: the ticker, medals and credit (Vic and Wren get $14 each; pictures 38, 40).
+//   history     ended, plus two older finished Americano nights (Summer Slam: Vic 1st, Parker 2nd; Spring Fling: Parker 1st, Vic 2nd): History >
+//               Tournaments, the Players sheet's TOURNAMENTS card (pictures 46, 47), Vic with two medals.
+export const ZIP58_STAGES = ['tie3', 'final_on', 'final_done', 'ended', 'history'] as const;
+type Zip58Stage = (typeof ZIP58_STAGES)[number];
+const isZip58Stage = (s: string): s is Zip58Stage => (ZIP58_STAGES as readonly string[]).includes(s);
 type AmStage = (typeof AM_STAGES)[number];
 const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
+export const TEST_STAGES = [...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -259,6 +275,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip58Stage(stage)) return zip58Stage(ctx, group, stage);
   if (isDayStage(stage)) return dayStage(ctx, group, stage);
   if (isAmStage(stage)) return americanoStage(ctx, group, stage);
   if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date') return voteStage(ctx, group, stage);
@@ -534,7 +551,7 @@ const DAY_TEAMS: { name: string; a: string; b: string; la: number; lb: number }[
   { name: 'Dill With It', a: 'Sage', b: 'Christopher Vanderberg', la: 340, lb: 300 },
 ];
 
-async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: DayStage) {
+async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: DayStage, win?: (a: number, b: number) => number) {
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
   const tz = group.timezone;
@@ -604,7 +621,13 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
       games.map((g, i) =>
         ctx.db
           .prepare("UPDATE tournament_games SET winner = ?, result_at = ?, result_by = 'players', updated_at = ? WHERE tournament_id = ? AND num = ?")
-          .bind(Number(g.slot_a.slice(1)) < Number(g.slot_b.slice(1)) ? 'a' : 'b', iso(90 - i * 12), iso(90 - i * 12), id, g.num),
+          .bind(
+            (win ? win(Number(g.slot_a.slice(1)), Number(g.slot_b.slice(1))) === Number(g.slot_a.slice(1)) : Number(g.slot_a.slice(1)) < Number(g.slot_b.slice(1))) ? 'a' : 'b',
+            iso(90 - i * 12),
+            iso(90 - i * 12),
+            id,
+            g.num,
+          ),
       ),
     );
   }
@@ -727,7 +750,7 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
   const later = stage === 'am_before' || stage === 'am_switched';
   const date = later ? dayAfter(ctx.nowMs + 86_400_000, tz) : todayKey(ctx.nowMs, tz);
   // Rounds played before now: 0 (Round 1), 2 (Round 3), 3 (Round 4), 5 (Round 6); each round 23 minutes, plus a few minutes into the next one.
-  const done = stage === 'am_round3' ? 2 : stage === 'am_break' ? 3 : stage === 'am_standings' ? 5 : 0;
+  const done = stage === 'am_round3' ? 2 : stage === 'am_break' ? 3 : stage === 'am_standings' ? 5 : stage === 'am_done' ? 6 : 0;
   const ago = later ? 0 : done * 23 + (done ? 6 : 1);
   const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
   const switched = stage === 'am_switched';
@@ -793,7 +816,8 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
     .filter((g) => g.round <= done)
     .map((g) => {
       const lose = 3 + ((g.num * 5) % 7);
-      const aWins = g.num % 3 !== 0;
+      // Zip 58 (am_done): Vic's side wins every game he plays (the End card's "Vic finished first").
+      const aWins = stage === 'am_done' && vic && [...g.a, ...g.b].includes(vic) ? g.a.includes(vic) : g.num % 3 !== 0;
       const when = new Date(startMs + (g.round * 23 - 2) * 60_000).toISOString();
       // Round 3: the other court's Round 2 score still waits for a Yes (entered 8 minutes ago: late on the organizer's card).
       const waiting = stage === 'am_round3' && g.round === 2 && !(vic && [...g.a, ...g.b].includes(vic));
@@ -808,4 +832,82 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
     });
   await ctx.db.batch([...rows, ...scores]);
   return { ok: true, stage, id, date, signedUp: n };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 58: ties, the Final, End tournament and the records (see ZIP58_STAGES above). Seats: 1 Net Ninjas, 2 Third Shot Gang, 3 Kitchen Crew,
+// 4 Dill With It (zip 57's DAY_TEAMS).
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** tie3: Kitchen Crew (3) beats everyone; Net Ninjas (1) beats Dill With It (4), Dill With It beats Third Shot Gang (2), Third Shot Gang beats Net Ninjas. */
+const TIE3 = (a: number, b: number) => (a === 3 || b === 3 ? 3 : [a, b].sort().join() === '1,4' ? 1 : [a, b].sort().join() === '2,4' ? 4 : 2);
+/** final_on: Net Ninjas 3-0, Third Shot Gang 2-1, Kitchen Crew 1-2, Dill With It 0-3 (picture 22's games for Vic). */
+const ORDER = [1, 2, 3, 4];
+const BY_ORDER = (a: number, b: number) => (ORDER.indexOf(a) < ORDER.indexOf(b) ? a : b);
+
+async function zip58Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip58Stage) {
+  const made = await dayStage(ctx, group, 'pools_done', stage === 'tie3' ? TIE3 : BY_ORDER);
+  const id = made.id!;
+  if (stage === 'tie3' || stage === 'final_on') return { ...made, stage };
+  // The Final (Net Ninjas beat Third Shot Gang) and 3rd place (Dill With It beat Kitchen Crew), as the players' Confirm writes them.
+  const iso = (minsAgo: number) => new Date(ctx.nowMs - minsAgo * 60_000).toISOString();
+  const day = (await ctx.db.prepare("SELECT num, stage FROM tournament_games WHERE tournament_id = ? AND stage IN ('final', 'third')").bind(id).all<{ num: number; stage: string }>()).results;
+  await ctx.db.batch(
+    day.map((g) =>
+      ctx.db
+        .prepare("UPDATE tournament_games SET winner = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
+        .bind(g.stage === 'final' ? 'a' : 'b', iso(4), g.stage === 'final' ? 1 : 3, g.stage === 'final' ? 2 : 4, iso(4), id, g.num),
+    ),
+  );
+  if (stage === 'final_done') return { ...made, stage };
+  // Confirm winners and end, by the real code (the awards as the card shows them: $14 each, a medal each, 1 week).
+  const t = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<EndRow>())!;
+  const night = await readNight(ctx, t);
+  const plan = endPlan(t, 'doubles', night.signups, night.tickets, night.day, group.timezone, ctx.nowMs, await organizerIdOf(ctx.db, group));
+  if (!plan) throw new HttpError(500, 'stage_failed', 'The Final is not in.');
+  await writeEnd(ctx, group, t, night, plan);
+  if (stage === 'ended') return { ...made, stage };
+  // history: two older finished Americano nights (no money: the credit of a night long gone is not made up), their results and medals.
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const past = (days: number) => todayKeyMinus(ctx.nowMs, group.timezone, days);
+  const old = [
+    { name: 'Summer Slam', date: past(129), names: ['Vic', 'Parker', 'Rowan', 'Sage', 'Wren', 'Quinn', 'Zoe', 'Christopher Vanderberg', 'Reese', 'Alex'] },
+    { name: 'Spring Fling', date: past(227), names: ['Parker', 'Vic', 'Rowan', 'Sage', 'Wren', 'Quinn', 'Zoe', 'Reese'] },
+  ];
+  const statements = [];
+  for (const o of old) {
+    const tid = newId();
+    const at = `${o.date}T23:00:00.000Z`;
+    statements.push(
+      ctx.db
+        .prepare(
+          `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date, status,
+             visibility, created_at, updated_at, format, second_credit_cents, ended_at, end_key, banner_until)
+           VALUES (?, ?, ?, ${STORED_PLAN.size}, 2, 150, 1170, 1600, 1400, ?, ?, 'ended', 'all', ?, ?, 'americano', 700, ?, ?, ?)`,
+        )
+        .bind(tid, group.id, o.name, JSON.stringify([o.date]), o.date, at, at, at, newId(), at),
+    );
+    o.names.forEach((name, i) => {
+      const pid = idOf.get(name);
+      if (!pid) return;
+      statements.push(
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_results (id, tournament_id, player_id, finish, wins, losses, points, picked_level, approved_level, medal, award, credit_cents, seen_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 300, NULL, ?, ?, 0, ?, ?)`,
+          )
+          .bind(newId(), tid, pid, i + 1, Math.max(0, 5 - i), Math.min(5, i), 60 - i * 4, i === 0 ? 1 : 0, i === 0 ? 'champion' : i === 1 ? 'second' : null, at, at),
+      );
+    });
+  }
+  await ctx.db.batch(statements);
+  return { ...made, stage };
+}
+
+/** The Eastern calendar day `days` before today, 'YYYY-MM-DD'. */
+function todayKeyMinus(nowMs: number, tz: string, days: number): string {
+  const p = dayParts(todayKey(nowMs, tz));
+  const d = new Date(Date.UTC(p.year, p.month - 1, p.day - days));
+  return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
 }

@@ -10,6 +10,14 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 58 (🎾58.tourney4): ties, the Final, End tournament and the records. "The Cold Open", Locked doubles, the four teams (Net Ninjas Vic and
+  // Wren, Third Shot Gang Parker and Quinn, Kitchen Crew Rowan and Zoe, Dill With It Sage and Christopher), tonight. The format above does not apply.
+  { stage: 'tie3', label: 'Tie among three teams (start here)', line: 'Kitchen Crew 3-0, the other three 1-2 in a circle. Home: the wheel, tap it to spin (or view as Rowan). Then Game A and Game B to 5. View as Vic: Tied for the final, then Playoff.' },
+  { stage: 'final_on', label: 'Final', line: 'The Final (Net Ninjas vs Third Shot Gang) and 3rd place on court 2. View as Vic: We won and Also now · Court 2 · 3rd place. Then confirm it on Home.' },
+  { stage: 'final_done', label: 'Final done: End tournament', line: 'Net Ninjas won the Final, Dill With It 3rd place. Home: Final is done, End tournament, Edit awards, Confirm winners and end.' },
+  { stage: 'ended', label: 'Tournament ended', line: 'Ended by the real Confirm: Vic and Wren each have $14 credit and a medal. View as Vic: the ticker, You won The Cold Open, the medal by the name.' },
+  { stage: 'history', label: 'History with tournaments', line: 'Ended, plus Summer Slam and Spring Fling. History > Tournaments; Players > Vic: TOURNAMENTS. Vic has two medals.' },
+  { stage: 'am_done', label: 'Americano: last round in', line: 'Every round in, Vic first. Home: Round 6 is done, End tournament with 1st and 2nd place, Edit awards.' },
   // Zip 61 (🎾61.americano): the Americano night. "The Cold Open", Americano, all 10 names locked in, courts 1 and 2, 2.5 hours (6 rounds to 11,
   // 2 sit each round). Vic plays Rounds 1 to 3, sits Round 4, plays 5 and 6. The format above does not apply.
   { stage: 'am_round3', label: 'Americano: Round 3 (start here)', line: 'Tonight, Round 3 on both courts; a Round 2 score still waits for a Yes (Home: Confirm). View as Vic: Enter score, Submit (the motion, Undo). Then view as one of Vic’s opponents: Is this right?' },

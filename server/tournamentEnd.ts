@@ -47,7 +47,7 @@ import { VIEW_ONLY_COOKIE_PREFIX } from './viewOnly';
 /** The ledger reason of an award. */
 export const awardReason = (tournamentId: string, award: 'champion' | 'second'): string => `tour:${tournamentId}:${award}`;
 
-type EndRow = TournamentRow & { banner_weeks?: number | null; award_pick?: string | null; end_key?: string | null; ended_at?: string | null; banner_until?: string | null };
+export type EndRow = TournamentRow & { banner_weeks?: number | null; award_pick?: string | null; end_key?: string | null; ended_at?: string | null; banner_until?: string | null };
 
 function pickOf(t: EndRow): { first?: string; second?: string } {
   try {
@@ -76,7 +76,7 @@ interface ResultRow {
 }
 
 /** What End tournament will do, worked out from the night as it stands: the card, and the rows Confirm writes. */
-interface EndPlan {
+export interface EndPlan {
   view: AdminEndView;
   results: ResultRow[];
 }
@@ -209,7 +209,7 @@ function cents(raw: unknown, label: string): number {
 }
 
 /** Everything End tournament needs, read fresh for a write. */
-async function readNight(ctx: Ctx, t: TournamentRow) {
+export async function readNight(ctx: Ctx, t: TournamentRow) {
   const db = ctx.db;
   const [s] = await db.batch([
     db.prepare(`SELECT s.*, p.display_name, p.is_active, NULL AS first_level FROM tournament_signups s JOIN players p ON p.id = s.player_id WHERE s.tournament_id = ? ORDER BY s.joined_at, s.rowid`).bind(t.id),
@@ -267,6 +267,17 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
   // end: exactly what the card showed, nothing waiting.
   if (view.blocked) bad('claim_waiting', view.blocked);
   if (body.seen !== view.seen) bad('tournament_changed', 'This just changed. Look again.');
+  return writeEnd(ctx, group, t, night, plan!);
+}
+
+/**
+ * Confirm winners and end: ONE all-or-nothing batch. The tournament takes a fresh random end key and becomes 'ended'; every other row (the
+ * saved results, the award credit, unused standby holds back as credit) is written only by the batch whose key landed, so a double tap or a
+ * retry writes nothing more. Also used by the preview's Tournament test page ("Tournament ended"), so it runs exactly this code.
+ */
+export async function writeEnd(ctx: Ctx, group: GroupRow, t: EndRow, night: Awaited<ReturnType<typeof readNight>>, plan: EndPlan) {
+  const view = plan.view;
+  const nowIso = ctx.nowIso;
   const key = newId();
   const weeks = view.weeks;
   const until = new Date(ctx.nowMs + weeks * 7 * 86_400_000).toISOString();
@@ -278,7 +289,7 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
     ? (x: string) => ` AND NOT EXISTS (SELECT 1 FROM tournament_teams tm WHERE tm.tournament_id = ${x}.tournament_id AND (tm.player_a = ${x}.player_id OR tm.player_b = ${x}.player_id))`
     : () => '';
   const when = (x: string) => `(${x}.place <> 'spot' AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.end_key = ${sqlText(key)})${played(x)})`;
-  const awards = plan!.results.filter((r) => r.award && r.creditCents > 0);
+  const awards = plan.results.filter((r) => r.award && r.creditCents > 0);
   const statements = [
     ctx.db
       .prepare(
@@ -287,7 +298,7 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
            AND award_pick IS ?`,
       )
       .bind(nowIso, key, until, nowIso, t.id, view.championCents, view.secondCents, DEFAULT_BANNER_WEEKS, weeks, t.award_pick ?? null),
-    ...plan!.results.map((r) =>
+    ...plan.results.map((r) =>
       ctx.db
         .prepare(
           `INSERT INTO tournament_results (id, tournament_id, player_id, finish, wins, losses, points, team_name, partner_id, picked_level, approved_level, medal, award, credit_cents, created_at)
