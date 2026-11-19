@@ -271,13 +271,14 @@ async function main() {
   const STATES = [
     ['zip64_start', 'Vic', 'open', 'Sign up'],
     ['zip64_start', 'Parker', 'listed', 'See who’s signed up'],
-    ['vote_majority', 'Parker', 'lock', 'Lock my spot · $16'],
-    ['tickets_open', 'Parker', 'in', 'See who’s in'],
-    ['late_open', 'Vic', 'lock', 'Lock my spot · $16'],
-    ['late_cut', 'Vic', 'closed', 'See who’s in'],
+    // Zip 66b (pictures A1, A2): tickets open, one row: Lock in · $16 (or the state's words), Who's in, Drop out.
+    ['vote_majority', 'Parker', 'lock', 'Lock in · $16'],
+    ['tickets_open', 'Parker', 'in', 'Who’s in'],
+    ['late_open', 'Vic', 'lock', 'Lock in · $16'],
+    ['late_cut', 'Vic', 'closed', 'Who’s in'],
     ['canceled', 'Parker', 'canceled', null],
     ['rescheduled', 'Parker', 'rescheduled', 'See who’s signed up'],
-    ['style_odd', 'Parker', 'in', 'See who’s in'],
+    ['style_odd', 'Parker', 'in', 'Who’s in'],
   ];
   let lastStage = '';
   for (const [st, who, data, btn] of STATES)
@@ -295,7 +296,7 @@ async function main() {
           assert(box.h >= 140 && box.h <= 192, `height ${box.h}`);
           assert(!box.titleCut, 'the name is not cut');
           if (btn) assert(flat(await c.locator('.tc-bar .tc-btn').first().innerText()) === btn, await c.locator('.tc-bar').innerText());
-          const cut = await c.evaluate((e) => [...e.querySelectorAll('.tc-btn, .tc-aside')].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent));
+          const cut = await c.evaluate((e) => [...e.querySelectorAll('.tc-btn, .tc-aside, .tc-state, .tc-link')].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent));
           assert(cut.length === 0, `cut words: ${cut}`);
           await oneLine(v.page, ONE);
           await fits(v.page, '.tc-short');
@@ -346,7 +347,8 @@ async function main() {
   await check("D Who's in: the round X at the top right, no Home back link", async () => {
     await stage('tickets_open');
     const v = await vicCard({ who: 'Parker' });
-    await v.page.locator('.tc-short .tc-title').click();
+    // Zip 66b: the card's gray Who's in opens it (the card itself is not a tap).
+    await v.page.locator('.tc-short [data-tc-who]').click();
     const sheet = v.page.locator('dialog[open].tc-tw-overlay');
     await sheet.waitFor({ timeout: 10000 });
     assert((await sheet.locator('[data-sheet-back]').count()) === 0, 'no back link');
@@ -531,7 +533,8 @@ async function main() {
     const v = await vicCard();
     const late = v.page.locator('[data-pay-countdown="late"]');
     await late.waitFor({ timeout: 10000 });
-    assert(flat(await v.page.locator('.tc-short .tc-aside').innerText()) === 'Still open', await v.page.locator('.tc-short .tc-aside').innerText());
+    // Zip 66b: no "Still open" words on the card any more (the late alert says it); Lock in stays on the row.
+    assert(flat(await v.page.locator('.tc-short [data-tc-lock]').innerText()) === 'Lock in · $16', 'Lock in');
     await late.locator('[data-pay-countdown-btn]').click();
     await v.page.locator('dialog[open]', { hasText: '$16' }).waitFor({ timeout: 10000 });
     await shot(v.page, 'H-late-pay');
@@ -541,7 +544,8 @@ async function main() {
     await stage('late_cut');
     const v = await vicCard();
     assert((await v.page.locator('[data-pay-countdown]').count()) === 0, 'no countdown');
-    assert(flat(await v.page.locator('.tc-short .tc-aside').innerText()) === 'Tickets closed', 'aside');
+    // Zip 66b: the state's words in the lime spot.
+    assert(flat(await v.page.locator('.tc-short .tc-state').innerText()) === 'Tickets closed', 'the row words');
     await v.ctx.close();
     const t = JSON.parse((await answerOf('Vic')).text).tournament;
     const r = await postAs('Vic', '/api/tournament/lock', { tournamentId: t.id, intent: 'lock', priceCents: 1600 });

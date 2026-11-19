@@ -747,22 +747,6 @@ dialog.sheet.tm-page {
   }
 }
 
-/* ---------- Zip 63 (mock 14): "THE COLD OPEN · TICKETS", the unpaid chip, three rows and Remind all unpaid ---------- */
-.tm-remind {
-  padding: 0 16px 14px;
-}
-.tm-remind-head {
-  min-height: 42px;
-  margin: 0 -16px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--line);
-}
-.tm-remind-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .tm-chip.tm-chip-unpaid {
   flex: 0 0 auto;
   min-height: 25px;
@@ -780,25 +764,6 @@ dialog.sheet.tm-page {
     color: #f2c25c;
   }
 }
-.tm-remind .tm-rows {
-  margin-top: 2px;
-}
-.tm-remind .tm-row {
-  min-height: 44px;
-}
-.tm-remind-btn {
-  margin-top: 14px;
-  min-height: 54px;
-  text-decoration: none;
-}
-/* Mock 14 draws Remind all unpaid in the site's green (the color cleanup's texting purple would win otherwise). */
-a.btn.tm-remind-btn,
-:root[data-color-cleanup] a.btn.tm-remind-btn[href^='sms:'] {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-ink);
-}
-
 /* Zip 64 (🎾64.finalize, mock 03): the heat map. Each date still to pick is shaded by how many can play (Tournament.tsx sets the colors from
    shared/tournament.ts HEAT_RAMP): brightest green = the most, palest = the fewest. One text color across each ramp, so the steps read evenly:
    dark ink on the light ramp, white on the dark one. The count stays in each tile. */
@@ -1379,4 +1344,18 @@ a.btn.tm-remind-btn,
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* ---------- Zip 66b (pictures A3, A4): the tickets folded into the card ---------- */
+a.tm-hc-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+.tm-hc-nonum {
+  margin: -4px 0 10px;
+  font-size: 0.88rem;
+  color: var(--ink-2);
 }

@@ -442,7 +442,7 @@ async function main() {
           await v.page.locator(who === 'Parker' ? '.tc[data-tc="lock"]' : '.tc[data-tc="date"]').waitFor({ timeout: 15000 });
           const card = flat(await v.page.locator('.tc').innerText());
           // Zip 64: once the date is set the style says TBD until Pay by; Zoe (not on the list) has the one Sign up.
-          assert(who === 'Parker' ? card.includes('Lock my spot · $16') : card.includes('Sign up') && card.includes('Tournament style TBD'), card);
+          assert(who === 'Parker' ? card.includes('Lock in · $16') : card.includes('Sign up') && card.includes('Tournament style TBD'), card);
           const [y, m, dd] = finalDay.split('-').map(Number);
           const wd = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(Date.UTC(y, m - 1, dd)).getUTCDay()];
           assert(card.includes(wd) && card.includes(String(dd)), `${card} (${finalDay})`);
@@ -466,21 +466,16 @@ async function main() {
     await z.page.locator('.tc[data-tc="lock"] [data-tc-lock]').waitFor({ timeout: 10000 });
     await z.ctx.close();
     const parkerDates = (await dash()).tournament.signups.find((s) => s.name === 'Parker').dates.join();
-    // Zip 63: tickets are open, so Edit sign-up and Drop out are in the card's overlay (a tap on the card).
+    // Zip 66b: tickets are open: the card's one row is Lock in, Who's in and Drop out. Edit sign-up is gone once tickets are open (only the
+    // picked date can be picked, so there is nothing to edit); the Who's in sheet is the list.
     const p = await playerPage('Parker');
-    await p.page.locator('.tc-short .tc-title').first().click();
-    await p.page.locator('dialog[open] [data-tc-edit]').waitFor({ timeout: 10000 });
-    // The site drops a tap that comes right after the last one (its double-tap guard): a pause, as a person makes.
-    await p.page.waitForTimeout(700);
-    await p.page.locator('dialog[open] [data-tc-edit]').click();
-    await p.page.locator('dialog[open] [data-tm-save]').waitFor();
-    assert((await p.page.locator('dialog[open] [data-tm-change]').count()) === 0, 'no level row (Alex)');
+    assert((await p.page.locator('.tc-short [data-tc-edit]').count()) === 0, 'no Edit on the card');
+    await p.page.locator('.tc-short [data-tc-who]').click();
+    await p.page.locator('dialog[open] [data-tw-in]').waitFor({ timeout: 10000 });
+    assert((await p.page.locator('dialog[open] [data-tc-edit]').count()) === 0, 'no Edit in the sheet');
     await p.ctx.close();
     const q = await playerPage('Quinn');
-    await q.page.locator('.tc-short .tc-title').first().click();
-    await q.page.locator('dialog[open] [data-tc-drop]').waitFor({ timeout: 10000 });
-    await q.page.waitForTimeout(700);
-    await q.page.locator('dialog[open] [data-tc-drop]').click();
+    await q.page.locator('.tc-short [data-tc-drop]').click();
     await q.page.locator('dialog[open] [data-confirm-go]').click();
     await q.page.locator('.tc [data-tc-signup]').waitFor({ timeout: 10000 });
     await q.ctx.close();

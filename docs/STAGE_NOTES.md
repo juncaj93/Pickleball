@@ -6419,3 +6419,35 @@ check. Rollback: the site deployment live before it. No database undo.
    set it?
 2. The Not signed up row hides when nobody is on it. OK?
 3. The canceled card got a Tickets button (its name used to open the page). OK?
+
+### Zip 66 add-on (66b, Alex approved Nov 19, 8 AM): one row on the ticket, the tickets folded into the organizer's card. Preview only, NOT shipped
+A. The player's ticket (pictures A1, A2). Once tickets are open the card's bottom row is ONE line in every state: on the left the lime button
+   ("Lock in · $16", or "Join standby" with every spot taken) or the state's short words centered in its place ("Locked in" in lime, "Spot held",
+   "2nd on standby", "Tickets closed", "Started"); then the gray "Who's in" (the Who's in sheet); then an underlined "Drop out" (the existing Back
+   out? confirm and credit rules), shown wherever Drop out worked before (not once tickets are closed or the night has started). No Pay by on the
+   card (the countdown alert says it). Tapping the card does nothing in any state (the tap-to-open overlay and its pointer style are gone). Measured
+   at 420, 390, 360 and 320, light and dark: one line, no cut word. The row's rules are scoped to `.tc-bar-row`, so the before-tickets bar ("See
+   who's signed up", Edit, Drop out) is unchanged.
+   What moved out of the old tap overlay: the card copy and its Lock my spot / Join standby (on the card's row already), Drop out (on the row),
+   "You're locked in" (the row's Locked in). Into the Who's in sheet: on standby the place in line, "Hold my spot · $16" and "Just keep me on the
+   list", and "Your spot is held". Gone: "Edit sign-up" once tickets are open (only the picked date can be picked then, and the level is the
+   organizer's, so there was nothing left to edit; before tickets it stays on the card).
+B. The organizer's card (pictures A3, A4). The separate "<NAME> · TICKETS" card (Paid, Not paid yet, Pay by, Remind all unpaid) and the "Tickets:
+   6 of 8 locked in" card are gone from Home. The closed line's pill: "8 signed up" before tickets; once tickets are open "3 unpaid" in the amber
+   unpaid chip while anyone who can make the date has not paid (the old card's rule: before Pay by, spots left), else "7 locked in" in green.
+   Open: under Locked in, "Not paid yet 3" (no arrow, hidden at 0); tap: the soft gray box with the names, "No number for Reese" when a number is
+   missing, and "Remind all unpaid", which opens Messages with every unpaid number and the same ready text as before. Tap again to close; starts
+   closed. No Paid row; Pay by stays on the Ticket row ("$16 · pay by Wed 7:00 PM").
+Tests: e2e/zip66.cjs adds H (the row for Lock in and Locked in at 420/390/360/320 light and dark, one line, nothing cut, no Pay by, Locked in
+centered; the card is not a tap; Who's in opens the list; Drop out opens Back out?; 3 hours before the start "Tickets closed" and no Drop out) and
+I (no separate tickets card, the amber "3 unpaid" pill, Not paid yet under Locked in, the names, the Messages link with the numbers and the words,
+"No number for Reese", "10 locked in" in green when all paid, "8 signed up" before tickets). Older browser checks updated: zip55 (Lock in; Edit
+sign-up gone after tickets open; Drop out on the card), zip56 (the row words; Who's in opens the sheet; Lock in on the card; the pill and Not paid
+yet instead of the tickets card; Tickets on the tournament card), zip59 (no "Still open" words; Who's in opens the sheet), zip63 (the row; no Pay by;
+Who's in; standby choices in the sheet; Remind all unpaid inside the card), zip64 (the row's first button per state; Who's in opens the sheet).
+Review (a fresh reviewer read the add-on's app code): nothing blocking. Fixed: a longer label ("Lock in · $16.50", "10th on standby") was cut at
+360 and 320; it is now set a little smaller (`tc-long`), and e2e/zip66.cjs H checks Join standby, 10th on standby, Spot held and a price with cents
+at all four widths. Dead code from the old overlay and the old tickets card removed (TicketCard's Hold handler; .tc-tap, .tc-actions, .tc-links,
+.tc-row-link, .tc-under, .tm-remind*). Kept, as notes for Alex: on standby, Hold my spot now sits in the Who's in sheet (the card says "2nd on
+standby"); "A spot opened" and "Still open" are no longer on the card (the late countdown says it); Who's in opens a sheet titled with the
+tournament's name (its list is headed Who's in); Drop out is no longer offered once the night has started (the server refused it then anyway).

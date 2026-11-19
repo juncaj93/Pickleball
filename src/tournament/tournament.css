@@ -195,11 +195,6 @@
   line-height: 1.36;
   color: var(--tc-sub);
 }
-.tc-actions {
-  display: flex;
-  gap: 10px;
-  padding: 6px 16px 0;
-}
 .tc-btn {
   flex: 1 1 0;
   min-width: 0;
@@ -241,13 +236,6 @@
   background: rgb(255 255 255 / 12%);
   color: #ffffff;
 }
-/* Edit sign-up and Drop out, and the steps under them, as pictures 07 to 12 draw them on every state (picture 08 shows states 1 to 5). */
-.tc-links {
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  padding: 3px 16px 0;
-}
 .tc-link {
   min-height: 30px;
   padding: 2px 2px;
@@ -268,9 +256,6 @@
   /* Doubles has 5 steps, Americano 4 (no Teams); the card sets --tc-steps. */
   grid-template-columns: repeat(var(--tc-steps, 5), minmax(0, 1fr));
   margin: 10px 16px 0;
-}
-.tc-links + .tc-track {
-  margin-top: 3px;
 }
 .tc-track {
   padding: 10px 0 14px;
@@ -970,15 +955,6 @@ dialog.sheet.tc-tw-overlay .sheet-head {
 .tc-canceled .tc-top {
   padding-bottom: 12px;
 }
-/* The ticket states' two buttons: the lime one (Lock my spot, Join waitlist, Hold my spot) and See who's in, 55 and 45 (pictures 07, 08). */
-.tc-actions.tc-split {
-  display: grid;
-  grid-template-columns: 11fr 9fr;
-}
-/* Tickets open: the card itself opens the overlay (mock 09). */
-.tc-tap {
-  cursor: pointer;
-}
 /* The overlay's one line under the name: "You're locked in" with Drop out (mock 11), "You're first on the waitlist" (mock 12). */
 /* Measured at 420 wide (pictures 11 and 12): the 40 px ball or number 13 px under the text above, the steps 10 px under it, the two choices 10 px. */
 .tc-row {
@@ -1001,11 +977,6 @@ dialog.sheet.tc-tw-overlay .sheet-head {
 }
 .tc-row-lime {
   color: #f6d56a;
-}
-.tc-row-link {
-  flex: 0 0 auto;
-  margin-right: -2px;
-  font-size: 0.865rem;
 }
 .tc-row .tc-tw-num {
   border-color: rgb(255 255 255 / 40%);
@@ -1105,10 +1076,6 @@ dialog.sheet.tc-tw-overlay {
   --tw-gold: #8a6410;
   --tw-ring: #d5aa3e;
   gap: 12px;
-}
-/* Lock my spot in the overlay sits 1 px higher than on Home (picture 09). */
-.tc-tw .tc-actions {
-  padding-top: 9px;
 }
 :root[data-theme='dark'] .tc-tw {
   --tw-gold: #f6d56a;
@@ -1499,10 +1466,6 @@ dialog.sheet.tc-tw-overlay {
 .tc-hero[data-tc-format='tbd'] .tc-format {
   color: var(--tc-sub);
 }
-.tc-hero .tc-actions {
-  padding: 0;
-  margin-top: 14px;
-}
 .tc-hero .tc-btn {
   min-height: 48px;
   border-radius: 16px;
@@ -1520,18 +1483,8 @@ dialog.sheet.tc-tw-overlay {
   text-align: center;
   color: var(--tc-sub);
 }
-.tc-hero .tc-links {
-  padding: 2px 0 0;
-}
 .tc-hero .tc-punch-sub {
   text-align: left;
-}
-/* The overlay's copy of the card: the line under the format (mocks 11 and 12 keep it short). */
-.tc-under {
-  margin: 4px 0 0;
-  font-size: 0.94rem;
-  line-height: 1.3;
-  color: var(--tc-sub);
 }
 .tc-overlay .tc-row,
 .tc-overlay .tc-choices {
@@ -1793,4 +1746,80 @@ dialog.sheet.tc-tw-overlay {
     padding: 0 10px;
     font-size: 1rem;
   }
+}
+
+/* ---------- Zip 66b (pictures A1, A2): tickets open, ONE row: the lime button (or the state's words in its place), Who's in, Drop out ---------- */
+/* Measured at 420 wide: the lime button 47 px tall and grows to fill; the gray Who's in 40 px tall, sized to its words; Drop out plain words. */
+.tc-bar-row .tc-lime {
+  min-width: 0;
+}
+.tc-bar-row .tc-state {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 48px;
+  font-size: 1.12rem;
+  font-weight: 750;
+  color: var(--tc-sub);
+  white-space: nowrap;
+}
+.tc-bar-row .tc-state-lime {
+  color: var(--tc-lime);
+}
+.tc-bar-row .tc-gray {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 1rem;
+  font-weight: 750;
+}
+.tc-bar-row .tc-row-drop {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 4px;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+@media (max-width: 419px) {
+  .tc-bar-row .tc-gray {
+    padding: 0 11px;
+    font-size: 0.95rem;
+  }
+  .tc-bar-row .tc-row-drop {
+    font-size: 0.9rem;
+  }
+}
+@media (max-width: 359px) {
+  .tc-bar-row .tc-lime:not(.tc-wide),
+  .tc-bar-row .tc-state {
+    padding: 0 8px;
+    font-size: 0.98rem;
+  }
+  .tc-bar-row .tc-gray {
+    padding: 0 10px;
+    font-size: 0.86rem;
+  }
+  .tc-bar-row .tc-row-drop {
+    padding: 0 2px;
+    font-size: 0.82rem;
+  }
+}
+/* A longer label ("Lock in · $16.50", "10th on standby"): a little smaller, never cut. */
+@media (max-width: 419px) {
+  .tc-bar-row .tc-long {
+    font-size: 0.96rem;
+  }
+}
+@media (max-width: 359px) {
+  .tc-bar-row .tc-lime.tc-long,
+  .tc-bar-row .tc-state.tc-long {
+    padding: 0 4px;
+    font-size: 0.84rem;
+  }
+}
+/* The Who's in sheet on standby: the place in line and the choices, without the old card copy around them. */
+.tc-standby {
+  padding-bottom: 14px;
 }

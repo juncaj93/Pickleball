@@ -12,6 +12,8 @@
  *   E  the level sheet's "Signed up for" dates (mock 05)
  *   F  the in-or-out alert (picture 10): above the ticket, no pay countdown, I'm in opens the Pay sheet, Can't make it takes them off
  *   G  the organizer's Not signed up row lists the players who missed the date, until they answer
+ *   H  66b: the player's ticket is one row (Lock in, Who's in, Drop out) at 420/390/360/320 light and dark; the card is not a tap
+ *   I  66b: the tickets folded into the organizer's card: the pill, Not paid yet, Remind all unpaid
  * Screenshots: .data/zip66-shots (not in git).
  */
 const { spawn, spawnSync } = require('node:child_process');
@@ -494,6 +496,130 @@ async function main() {
       const a = await answerOf(who);
       assert(!/notSignedUp|"votes"|"vote"/.test(a.text), `${who}'s answer`);
     }
+  });
+
+  // ---------------------------------------------------------------- H  66b: the player's ticket, one row (pictures A1, A2)
+  await stage('tickets_open');
+  const ROW = { Vic: 'Lock in · $16', Parker: 'Locked in' };
+  for (const who of ['Vic', 'Parker'])
+    for (const width of WIDTHS)
+      for (const scheme of SCHEMES)
+        await check(`H ${who} ${width} ${scheme}: one row "${ROW[who]}", "Who's in", "Drop out" on one line, nothing cut, no Pay by on the card`, async () => {
+          const v = await vicCard({ who, width, scheme });
+          const bar = v.page.locator('.tc-short .tc-bar');
+          const parts = (await bar.locator(':scope > *').allInnerTexts()).map(flat);
+          assert(JSON.stringify(parts) === JSON.stringify([ROW[who], 'Who’s in', 'Drop out']), JSON.stringify(parts));
+          const geo = await bar.evaluate((b) => {
+            const bb = b.getBoundingClientRect();
+            return [...b.children].map((e) => {
+              const r = e.getBoundingClientRect();
+              return { mid: Math.round(r.top + r.height / 2), right: r.right, max: bb.right, cut: e.scrollWidth > e.clientWidth + 1 };
+            });
+          });
+          assert(new Set(geo.map((g) => Math.abs(g.mid - geo[0].mid) <= 3)).size === 1 && geo.every((g) => !g.cut && g.right <= g.max + 1), JSON.stringify(geo));
+          await oneLine(v.page, '.tc-short .tc-bar');
+          assert(!/Pay by/.test(await v.page.locator('.tc-short').innerText()), 'no Pay by on the card');
+          if (who === 'Parker') {
+            const c = await bar.locator('.tc-state').evaluate((el) => [getComputedStyle(el).justifyContent, getComputedStyle(el).color]);
+            assert(c[0] === 'center', `Locked in centered: ${c}`);
+          }
+          if (width === 420 || width === 320) await shot(v.page, `H-row-${who}-${width}-${scheme}`);
+          await v.ctx.close();
+        });
+  // The reviewer's states, stood in on Vic's answer (the preview's 10 names cannot fill 16 spots): every spot taken, 10th on standby, a held
+  // standby spot, and a price with cents. One row, nothing cut, at every width.
+  const STANDS = {
+    'Join standby': (k) => { k.full = true; k.mine = null; },
+    '10th on standby': (k) => { k.full = true; k.line = Array.from({ length: 10 }, (_, i) => ({ name: `P${i}`, ...(i === 9 ? { me: true } : {}) })); k.mine = { place: 'line', creditCents: 0, paidCents: 0, claimCents: 0, owedCents: 1600 }; },
+    'Spot held': (k) => { k.full = true; k.line = [{ name: 'Vic', me: true }]; k.mine = { place: 'line', creditCents: 0, paidCents: 1600, claimCents: 0, owedCents: 0 }; },
+    'Lock in · $16.50': (k) => { k.priceCents = 1650; },
+  };
+  for (const [label, fn] of Object.entries(STANDS))
+    for (const width of WIDTHS)
+      await check(`H stood in, ${label} at ${width}: one row, nothing cut`, async () => {
+        const v = await newPage({ width, scheme: width === 320 ? 'dark' : 'light' });
+        await v.page.route('**/api/group', async (route) => {
+          const res = await route.fetch();
+          const j = await res.json();
+          if (j.tournament && j.tournament.tickets) fn(j.tournament.tickets);
+          await route.fulfill({ response: res, json: j });
+        });
+        await v.page.goto(`${BASE}/?as=Vic`);
+        await v.page.locator('.tc-short .tc-bar').waitFor({ timeout: 30000 });
+        await v.page.waitForTimeout(500);
+        const parts = await v.page.locator('.tc-short .tc-bar > *').evaluateAll((els) => els.map((e) => ({ t: e.textContent, cut: e.scrollWidth > e.clientWidth + 1, mid: Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2) })));
+        assert(parts[0].t === label && parts[1].t === 'Who’s in' && parts.every((p) => !p.cut) && parts.every((p) => Math.abs(p.mid - parts[0].mid) <= 3), JSON.stringify(parts));
+        await v.ctx.close();
+      });
+  await check("H the card itself is not a tap; Who's in opens the Who's in list; Drop out opens the Back out confirm", async () => {
+    const v = await vicCard({ who: 'Vic' });
+    await v.page.locator('.tc-short .tc-title').click();
+    await v.page.waitForTimeout(500);
+    assert((await v.page.locator('dialog[open]').count()) === 0, 'a tap on the card opens nothing');
+    assert((await v.page.locator('.tc-short').evaluate((el) => getComputedStyle(el).cursor)) !== 'pointer', 'no tap style');
+    await v.page.locator('.tc-short [data-tc-who]').click();
+    await v.page.locator('dialog[open] [data-tw-in]').waitFor({ timeout: 10000 });
+    assert((await v.page.locator('dialog[open] [data-tc-lock], dialog[open] [data-tc-edit], dialog[open] .tc-kicker').count()) === 0, 'the sheet is the list (no card copy, no buttons)');
+    await v.page.keyboard.press('Escape');
+    await v.page.waitForTimeout(500);
+    await v.page.locator('.tc-short [data-tc-drop]').click();
+    await v.page.locator('[data-tm-backout-text]').waitFor({ timeout: 10000 });
+    await v.ctx.close();
+  });
+  await check('H 3 hours before the start: "Tickets closed" in the lime spot, Who\'s in, no Drop out', async () => {
+    await stage('late_cut');
+    const v = await vicCard({ who: 'Vic', width: 320 });
+    const parts = (await v.page.locator('.tc-short .tc-bar > *').allInnerTexts()).map(flat);
+    assert(JSON.stringify(parts) === JSON.stringify(['Tickets closed', 'Who’s in']), JSON.stringify(parts));
+    await v.ctx.close();
+  });
+
+  // ---------------------------------------------------------------- I  66b: the tickets folded into the organizer's card (pictures A3, A4)
+  for (const scheme of SCHEMES)
+    await check(`I ${scheme}: no separate tickets card; the pill "3 unpaid" (amber); Not paid yet 3 under Locked in; tap: names, Remind all unpaid, No number for Reese`, async () => {
+      await stage('tickets_open');
+      const a = await adminPage({ width: 390, scheme });
+      await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+      assert((await a.page.locator('.tm-remind, [data-tickets-open], [data-tm-unpaid-chip]').count()) === 0, 'no separate tickets card');
+      const pill = a.page.locator('[data-tm-stage]');
+      assert(flat(await pill.innerText()) === '3 unpaid' && (await pill.getAttribute('class')).includes('tm-chip-unpaid'), await pill.innerText());
+      await shot(a.page, `I-closed-${scheme}`);
+      await openCard(a.page);
+      const labels = (await a.page.locator('[data-tm-home-body] .tm-rows > .tm-row > span:first-child').allInnerTexts()).map(flat);
+      const at = labels.indexOf('Locked in');
+      assert(at >= 0 && labels[at + 1] === 'Not paid yet' && !labels.includes('Paid'), JSON.stringify(labels));
+      assert(flat(await a.page.locator('[data-tm-row-unpaid]').innerText()) === '3', 'count');
+      assert(/pay by/.test(flat(await a.page.locator('[data-tm-row="ticket"]').innerText())), 'Pay by stays in the Ticket row');
+      await a.page.locator('[data-tm-unpaid-toggle]').click();
+      const box = a.page.locator('[data-tm-unpaid-box]');
+      await box.waitFor();
+      assert(flat(await box.locator('[data-tm-unpaid-names]').innerText()) === 'Vic, Zoe, Reese', await box.innerText());
+      assert(flat(await box.locator('[data-tm-remind-missing]').innerText()) === 'No number for Reese', 'missing number');
+      const href = await box.locator('[data-tm-remind-btn]').getAttribute('href');
+      const digits = href.replace(/\D/g, '');
+      assert(/^sms:/.test(href) && digits.includes('3135550101') && digits.includes('3135550103') && decodeURIComponent(href).includes('please pay for Winter Classic'), href);
+      await fits(a.page, '[data-tm-home]');
+      await shot(a.page, `I-open-${scheme}`);
+      await tapGap(a.page);
+      await a.page.locator('[data-tm-unpaid-toggle]').click();
+      await a.page.waitForTimeout(200);
+      assert((await box.count()) === 0, 'tap again closes');
+      await a.ctx.close();
+    });
+  await check('I everyone paid: the pill "10 locked in" (green), no Not paid yet row; before tickets: "8 signed up"', async () => {
+    await stage('all_locked');
+    let a = await adminPage({ width: 390 });
+    await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+    let pill = a.page.locator('[data-tm-stage]');
+    assert(flat(await pill.innerText()) === '10 locked in' && (await pill.getAttribute('class')).includes('tm-chip-ok'), await pill.innerText());
+    await openCard(a.page);
+    assert((await a.page.locator('[data-tm-unpaid-toggle]').count()) === 0, 'hidden at 0');
+    await a.ctx.close();
+    await stage('zip66_start');
+    a = await adminPage({ width: 390 });
+    await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+    assert(flat(await a.page.locator('[data-tm-stage]').innerText()) === '8 signed up', 'before tickets');
+    await a.ctx.close();
   });
 
   await browser.close();

@@ -210,8 +210,9 @@ async function main() {
   let d = await dash();
 
   // Zip 63: the card's one look has no See who's in, Edit sign-up or Drop out while tickets are open: a tap on the card opens the overlay, which has them.
+  // Zip 66b: the card is not a tap any more; its gray Who's in opens the same sheet (the Who's in list, and on standby the choices).
   async function openOverlay(page) {
-    await page.locator('.tc-short .tc-title').first().click();
+    await page.locator('.tc-short [data-tc-who]').first().click();
     await page.locator('dialog[open] [data-tw]').waitFor({ timeout: 10000 });
   }
   async function tapLink(page, attr) {
@@ -260,8 +261,8 @@ async function main() {
     const h = await adminPage();
     await h.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
     assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === `0/${d.tournament.size}`, 'the Home line');
-    // Zip 63: while players who can make the date have not paid, the count's card is mock 14's Remind all unpaid card (same data attribute).
-    assert(flat(await h.page.locator('[data-tm-row="paid"]').innerText()) === '0', 'Paid 0');
+    // Zip 66b: the tickets card is folded into the tournament card: its pill says who has not paid, and the Not paid yet row counts them.
+    assert(/^\d+ unpaid$/.test(flat(await h.page.locator('[data-tm-stage]').innerText())) && (await h.page.locator('[data-tm-row-unpaid]').count()) === 1, 'unpaid pill and row');
     await shot(h.page, 'B-admin-tickets-open');
     assert(h.errors.length === 0, h.errors.join(' | '));
     await h.ctx.close();
@@ -276,7 +277,8 @@ async function main() {
     // Nobody locked in yet: the plan is 6 players, 2.5 hours (Alex's smart plan); players see its hours.
     // Zip 63: the card's one look (top line, name, format, balls, Lock my spot, Pay by): the hours and See who's in live in the overlay now.
     // Zip 64: the short ticket (the stub first, then TOURNAMENT); Lock my spot with Pay by on the bar.
-    assert(words.includes('TOURNAMENT') && words.includes('Lock my spot · $16') && /Pay by \d+\/\d+$/.test(words), words);
+    // Zip 66b (picture A1): one row, Lock in · $16, Who's in, Drop out; no Pay by on the card.
+    assert(words.includes('TOURNAMENT') && words.endsWith('Lock in · $16 Who’s in Drop out') && !/Pay by/.test(words), words);
     await card.locator('[data-tc-lock]').click();
     const pay = p.page.locator('[data-pay-sheet]');
     await pay.waitFor({ timeout: 10000 });
@@ -285,7 +287,7 @@ async function main() {
     await shot(p.page, 'C-pay-sheet');
     await p.page.locator('[data-sheet-paid]').click();
     // Zip 63 (Alex, the trust rule): after I paid the player sees "You're locked in" at once; Alex still confirms or undoes it on Home.
-    await p.page.locator('.tc').filter({ hasText: 'You’re locked in' }).waitFor({ timeout: 10000 });
+    await p.page.locator('.tc .tc-state', { hasText: 'Locked in' }).waitFor({ timeout: 10000 });
     assert(!/confirm|waiting/i.test(flat(await p.page.locator('.tc').first().innerText())), 'no waiting words');
     assert(p.errors.length === 0, p.errors.join(' | '));
     await p.ctx.close();
@@ -306,11 +308,10 @@ async function main() {
     await a.ctx.close();
     const p = await playerPage('Parker');
     const words = flat(await p.page.locator('.tc').first().innerText());
-    // Zip 63: the card's one look: See who's in and "You're locked in" at the bottom; the hours and Drop out are in the overlay.
-    assert(words.includes('See who’s in') && words.endsWith('You’re locked in'), words);
+    // Zip 66b (picture A2): Locked in, Who's in, Drop out on one row; Who's in opens the list with Parker's own row Locked in.
+    assert(words.endsWith('Locked in Who’s in Drop out'), words);
     await openOverlay(p.page);
-    const over = flat(await sheetOpen(p.page).innerText());
-    assert(over.includes('2.5 hours') && over.includes('You’re locked in') && over.includes('Drop out'), over);
+    assert(flat(await sheetOpen(p.page).locator('[data-tw-row="me"]').innerText()).endsWith('Locked in'), 'his row');
     await shot(p.page, 'D-parker-locked-in');
     await p.ctx.close();
   });
@@ -458,7 +459,10 @@ async function main() {
         // Zip 63 round 2 (Alex's mocks): everyone on the card, no count, no Open spot rows; only Vic's own row has words.
         assert(!/6 of 8|Open spot/i.test(rows) && rows.includes('Christopher Vanderberg') && rows.includes('Pay to lock in'), rows);
         await shot(p.page, `I-overlay09-${width}-${scheme}`);
-        await p.page.locator('dialog[open] [data-tc-lock]').click();
+        // Zip 66b: Lock in is on the card's row now (the sheet is the list).
+        await p.page.keyboard.press('Escape');
+        await p.page.waitForTimeout(600);
+        await p.page.locator('.tc-short [data-tc-lock]').click();
         await p.page.locator('[data-pay-sheet]').waitFor({ timeout: 10000 });
         await p.page.waitForTimeout(300);
         await fits(p.page, 'dialog[open]');
@@ -484,15 +488,16 @@ async function main() {
         assert(v.errors.length === 0, v.errors.join(' | '));
         await v.ctx.close();
         const z = await playerPage('Zoe', { width, scheme });
+        // Zip 66b (picture A2): Locked in, Who's in and Drop out on the card's one row; the sheet is the list.
+        const row = await z.page.evaluate(() => {
+          const r = document.querySelector('.tc-short .tc-bar').getBoundingClientRect();
+          return { h: r.height, items: [...document.querySelectorAll('.tc-short .tc-bar > *')].map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)) };
+        });
         await openOverlay(z.page);
-        await z.page.locator('dialog[open] [data-tc-locked]').waitFor({ timeout: 10000 });
+        await z.page.locator('dialog[open] [data-tw-in]').waitFor({ timeout: 10000 });
         await z.page.waitForTimeout(300);
         await fits(z.page, 'dialog[open] .tc-tw');
         await oneLineRows(z.page, 'dialog[open] .tc-tw-rows li');
-        const row = await z.page.evaluate(() => {
-          const r = document.querySelector('dialog[open] [data-tc-locked]').getBoundingClientRect();
-          return { h: r.height, items: [...document.querySelectorAll('dialog[open] [data-tc-locked] > *')].map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)) };
-        });
         assert(row.h < 70 && Math.max(...row.items) - Math.min(...row.items) <= 3, `the locked-in row is one line: ${JSON.stringify(row)}`);
         await shot(z.page, `I-overlay11-${width}-${scheme}`);
         assert(z.errors.length === 0, z.errors.join(' | '));
@@ -506,7 +511,8 @@ async function main() {
         await a.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
         await fits(a.page, 'main');
         await shot(a.page, `I-admin-home-${width}-${scheme}`);
-        await a.page.locator('[data-tickets-open]').click();
+        // Zip 66b: the count card is folded into the tournament card; its Tickets button opens the page.
+        await a.page.locator('[data-tm-tickets]').click();
         await a.page.locator('dialog[open] [data-tm-card="tickets"]').waitFor({ timeout: 10000 });
         await a.page.waitForTimeout(300);
         await fits(a.page, 'dialog[open]');
@@ -648,9 +654,8 @@ async function main() {
     await a.page.locator('[data-tm-home="tickets"]').waitFor({ timeout: 30000 });
     await openTourCard(a.page); // Zip 66: the card loads closed
     assert((await a.page.locator('[data-tm-tickets]').count()) === 1 && (await a.page.locator('[data-tm-cancel-or-reschedule]').count()) === 0, 'no Cancel or reschedule on Home');
-    // Zip 66: the card's pill counts the players signed up at every stage (the ticket rows say where it stands); the card opens on a tap.
-    await openTourCard(a.page);
-    assert(/^\d+ signed up$/.test(flat(await a.page.locator('[data-tm-stage]').innerText())), 'the pill');
+    // Zip 66b: once tickets are open the pill says who has not paid, or how many are locked in (no unpaid once the night has started).
+    assert(/^\d+ locked in$/.test(flat(await a.page.locator('[data-tm-stage]').innerText())), 'the pill');
     await a.page.locator('[data-tm-tickets]').click();
     await a.page.locator('dialog[open] [data-tm-card="tickets"]').waitFor({ timeout: 10000 });
     assert((await a.page.locator('dialog[open] [data-tm-cancel-or-reschedule], dialog[open] [data-tm-pay-by-change]').count()) === 0, 'no Cancel or reschedule, no Change on the page');
@@ -712,10 +717,9 @@ async function main() {
         await line.waitFor({ timeout: 15000 });
         assert(flat(await line.innerText()) === tbd && (await oneLine(line)) === 1, `card: ${flat(await line.innerText())}`);
         await p.page.waitForTimeout(600);
+        // Zip 66b: Who's in opens the list (no card copy in the sheet any more).
         await openOverlay(p.page);
-        const inSheet = p.page.locator('dialog[open] .tc [data-tc-format-name]').first();
-        await inSheet.waitFor({ timeout: 10000 });
-        assert(flat(await inSheet.innerText()) === tbd && (await oneLine(inSheet)) === 1, 'Who\'s in');
+        await p.page.locator('dialog[open] [data-tw-in]').waitFor({ timeout: 10000 });
         await fits(p.page, 'dialog[open]');
         await shot(p.page, `K-ticket-format-${format}-${width}-${scheme}`);
         await p.ctx.close();

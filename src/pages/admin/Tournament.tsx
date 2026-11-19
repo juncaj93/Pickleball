@@ -38,7 +38,7 @@ import {
   type TournamentSignupView,
 } from '../../../shared/tournament';
 import { formatPrice, parseDollars } from '../../../shared/money';
-import { evensWarning, payByAt, payByDays, payByLabel, payByParts, ticketsLine, tournamentRemindText } from '../../../shared/tournamentTickets';
+import { evensWarning, payByAt, payByDays, payByLabel, payByParts, tournamentRemindText } from '../../../shared/tournamentTickets';
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
 import { AlertCard } from '../../AlertCard';
@@ -170,8 +170,7 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
       {claims.map((k) => (
         <TicketClaimCard key={k.playerId} ctx={ctx} t={t} k={k} />
       ))}
-      {/* Zip 63: while anyone who can make the date has not paid, mock 14's card (Remind all unpaid) takes the count card's place. */}
-      {t.status === 'tickets' && (unpaidOf(t, ctx.d.now).length > 0 ? <RemindUnpaidCard ctx={ctx} t={t} /> : <TicketsCountCard ctx={ctx} t={t} />)}
+      {/* Zip 66b: the tickets card (Paid, Not paid yet, Remind all unpaid) and the count card are folded into the card below. */}
       {/* Zip 66: one card for every stage, starting closed (mocks 01 and 02). */}
       <HomeCard ctx={ctx} t={t} />
     </>
@@ -239,6 +238,35 @@ function MissingBox({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   );
 }
 
+/**
+ * Zip 66b (picture A4): who still has to pay, in the soft box under the Not paid yet row, and Remind all unpaid, which works exactly like the old
+ * tickets card's (Zip 63, mock 14): it opens Messages with every unpaid person's number and a ready text; the organizer taps Send. The site never
+ * sends a text. "No number for <name>" when a number is missing.
+ */
+function UnpaidBox({ ctx, t, unpaid }: { ctx: AdminCtx; t: AdminTournamentView; unpaid: TournamentSignupView[] }) {
+  const now = useNow(60_000);
+  const tz = ctx.d.group.timezone;
+  const phoneOf = new Map(ctx.d.players.map((p) => [p.id, p.phone]));
+  const phones = unpaid.map((s) => phoneOf.get(s.playerId)).filter((p): p is string => !!p);
+  const missing = unpaid.filter((s) => !phoneOf.get(s.playerId)).map((s) => s.name);
+  const body = tournamentRemindText(t.name, t.payBy!, t.finalDate!, now, tz, siteAddress(ctx.d.group.playerLink));
+  return (
+    <div className="tm-hc-box tm-hc-missing" data-tm-unpaid-box data-tm-remind={unpaid.length}>
+      <p className="tm-hc-names" data-tm-unpaid-names>
+        {unpaid.map((p) => p.name).join(', ')}
+      </p>
+      {missing.length > 0 && (
+        <p className="tm-hc-nonum" data-tm-remind-missing>
+          No number for {missing.join(', ')}
+        </p>
+      )}
+      <a className="tm-hc-copy" href={smsHref(phones.length ? phones : null, body, isIOS)} data-tm-remind-btn>
+        Remind all unpaid
+      </a>
+    </div>
+  );
+}
+
 /** Zip 66: a row that opens a soft box under it (Votes, Not signed up). No arrow; tap again to close. */
 function TapRow({ label, value, open, onTap, data, valueData, fit }: { label: string; value: ReactNode; open: boolean; onTap: () => void; data: string; valueData?: string; fit?: boolean }) {
   return (
@@ -267,6 +295,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const [open, setOpen] = useState(false);
   const [showVotes, setShowVotes] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
+  const [showUnpaid, setShowUnpaid] = useState(false);
   const [page, setPage] = useState<null | 'dates' | 'edit' | 'tickets'>(null);
   const tz = ctx.d.group.timezone;
   const canceled = t.status === 'canceled';
@@ -279,6 +308,16 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const locked = lockedOf(t).length;
   const line = lineOf(t);
   const bodyId = `tm-hc-body-${t.id}`;
+  // Zip 66b: who can make the date and has not paid (only while a spot can still be bought: tickets open, before Pay by, spots left).
+  const unpaid = unpaidOf(t, ctx.d.now);
+  // The pill (picture A3): "8 signed up" before tickets; once they are open "3 unpaid" (amber) while anyone has not paid, else "7 locked in".
+  const pill = canceled
+    ? { words: 'Canceled', cls: 'tm-chip tm-hc-pill' }
+    : t.status === 'tickets'
+      ? unpaid.length > 0
+        ? { words: `${unpaid.length} unpaid`, cls: 'tm-chip tm-chip-unpaid tm-hc-pill' }
+        : { words: `${locked} locked in`, cls: 'tm-chip tm-chip-ok tm-hc-pill' }
+      : { words: `${t.signups.length} signed up`, cls: 'tm-chip tm-chip-ok tm-hc-pill' };
   return (
     <section className={open ? 'tm-hc tm-hc-open' : 'tm-hc'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={ticketsStage ? t.status : true} data-tm-open={open}>
       <h2 className="tm-hc-head">
@@ -287,8 +326,8 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
             <Pickleball />
           </span>
           <span className="tm-hc-name">{t.name}</span>
-          <span className={canceled ? 'tm-chip tm-hc-pill' : 'tm-chip tm-chip-ok tm-hc-pill'} data-tm-stage>
-            {canceled ? 'Canceled' : `${t.signups.length} signed up`}
+          <span className={pill.cls} data-tm-stage data-tickets-card={t.status === 'tickets' ? `${locked}/${t.size}` : undefined}>
+            {pill.words}
           </span>
           <span className="tm-hc-chev" aria-hidden="true">
             <ChevronIcon />
@@ -363,6 +402,13 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
                     {locked} of {t.size}
                   </b>
                 </div>
+                {/* Zip 66b (picture A4): Not paid yet, hidden at 0; tap: the names and Remind all unpaid. */}
+                {unpaid.length > 0 && (
+                  <>
+                    <TapRow label="Not paid yet" value={unpaid.length} open={showUnpaid} onTap={() => setShowUnpaid((v) => !v)} data="data-tm-unpaid-toggle" valueData="data-tm-row-unpaid" />
+                    {showUnpaid && <UnpaidBox ctx={ctx} t={t} unpaid={unpaid} />}
+                  </>
+                )}
                 {line.length > 0 && (
                   <div className="tm-row">
                     <span>Standby</span>
@@ -509,82 +555,6 @@ export function unpaidOf(t: AdminTournamentView, nowIso: string): TournamentSign
     if (!s.dates.includes(t.finalDate!)) return false;
     return !k || (k.place !== 'spot' && !ticketIsPaid(k) && k.claimCents === 0);
   });
-}
-
-/**
- * Zip 63 (mock 14): "THE COLD OPEN · TICKETS" with the unpaid count as a small chip, Paid, Not paid yet, Pay by, and Remind all unpaid, which
- * works exactly like the game money one (src/pages/admin/MoneyTab.tsx): it opens Messages with every unpaid person's number and a ready text;
- * the organizer taps Send. The site never sends a text. Hidden when everyone has paid (the count card shows instead).
- */
-function RemindUnpaidCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
-  const now = useNow(60_000);
-  const tz = ctx.d.group.timezone;
-  const unpaid = unpaidOf(t, ctx.d.now);
-  const paid = (t.tickets ?? []).filter((k) => !k.out && !k.organizer && ticketIsPaid(k)).length;
-  const phoneOf = new Map(ctx.d.players.map((p) => [p.id, p.phone]));
-  const phones = unpaid.map((s) => phoneOf.get(s.playerId)).filter((p): p is string => !!p);
-  const missing = unpaid.filter((s) => !phoneOf.get(s.playerId)).map((s) => s.name);
-  const body = tournamentRemindText(t.name, t.payBy!, t.finalDate!, now, tz, siteAddress(ctx.d.group.playerLink));
-  return (
-    <section className="tm-card tm-remind" aria-label={`${t.name} tickets, ${unpaid.length} unpaid`} data-tm-remind={unpaid.length} data-tickets-card={`${lockedOf(t).length}/${t.size}`}>
-      <div className="tm-card-head tm-remind-head">
-        <h3 className="tm-label tm-remind-label">{t.name} · Tickets</h3>
-        <span className="tm-chip tm-chip-unpaid" data-tm-unpaid-chip>
-          {unpaid.length} unpaid
-        </span>
-      </div>
-      <div className="tm-rows">
-        <div className="tm-row">
-          <span>Paid</span>
-          <b data-tm-row="paid">{paid}</b>
-        </div>
-        <div className="tm-row">
-          <span>Not paid yet</span>
-          <b data-tm-row="unpaid">{unpaid.length}</b>
-        </div>
-        <div className="tm-row">
-          <span>Pay by</span>
-          <b data-tm-row="payby">{payByLabel(t.payBy!, tz, t.finalDate)}</b>
-        </div>
-      </div>
-      {missing.length > 0 && (
-        <p className="tm-card-note" data-tm-remind-missing>
-          No number for {missing.join(', ')}
-        </p>
-      )}
-      <a className="btn block big tm-remind-btn" href={smsHref(phones.length ? phones : null, body, isIOS)} data-tm-remind-btn>
-        Remind all unpaid
-      </a>
-    </section>
-  );
-}
-
-/** Zip 56: "Tickets: 6 of 8 locked in" (the site's own alert card), while tickets are open. Tickets opens the list on the tournament page. */
-function TicketsCountCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
-  const [open, setOpen] = useState(false);
-  const locked = lockedOf(t).length;
-  const full = locked >= t.size;
-  const line = lineOf(t);
-  const sub = line.length ? `${line.length} on standby (${line.filter(ticketIsPaid).length} paid)` : undefined;
-  return (
-    <>
-      <AlertCard
-        tone={full ? 'green' : 'blue'}
-        icon={full ? 'ok' : 'person'}
-        label={ticketsLine(locked, t.size)}
-        titleAs="h3"
-        data={{ 'data-tickets-card': `${locked}/${t.size}` }}
-        title={ticketsLine(locked, t.size)}
-        sub={sub}
-        action={
-          <button className="ac-btn" onClick={() => setOpen(true)} data-tickets-open>
-            Tickets
-          </button>
-        }
-      />
-      <TournamentPage ctx={ctx} t={t} open={open} focus="tickets" onClose={() => setOpen(false)} />
-    </>
-  );
 }
 
 /** Zip 59: Hide on a canceled tournament's card (organizer only). It leaves Home and every list; Settings > Advanced > Hidden tournaments brings it back. */

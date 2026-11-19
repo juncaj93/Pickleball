@@ -208,7 +208,7 @@ async function main() {
     await v.page.locator('.tc-short').first().waitFor({ timeout: 20000 });
     return v;
   }
-  const cardOneLine = async (page) => oneLine(page, '.tc-short .tc-kicker, .tc-short .tc-format, .tc-short .tc-btn, .tc-aside, .tc-short .tc-link');
+  const cardOneLine = async (page) => oneLine(page, '.tc-short .tc-kicker, .tc-short .tc-format, .tc-short .tc-btn, .tc-aside, .tc-short .tc-state, .tc-short .tc-link');
   /** Every ball's top: one row means one top. */
   const ballRow = (page) =>
     page.evaluate(() => {
@@ -237,17 +237,17 @@ async function main() {
         assert(flat(await card.locator('.tc-kicker').innerText()) === 'TOURNAMENT', await card.locator('.tc-kicker').innerText());
         assert(flat(await card.locator('.tc-stub').innerText()) === 'THU 17 DEC 7:30 PM', await card.locator('.tc-stub').innerText());
         assert(flat(await card.locator('.tc-title').innerText()) === 'Winter Classic', 'the real name');
-        assert(flat(await card.locator('[data-tc-lock]').innerText()) === 'Lock my spot · $16', 'the lime button');
-        const foot = card.locator('.tc-aside');
-        assert(flat(await foot.innerText()) === 'Pay by 12/16', await foot.innerText());
-        const style = await foot.evaluate((e) => ({ tag: e.tagName, deco: getComputedStyle(e).textDecorationLine, links: e.querySelectorAll('a,button').length }));
-        assert(style.tag === 'SPAN' && style.deco === 'none' && style.links === 0, `Pay by is plain text: ${JSON.stringify(style)}`);
+        // Zip 66b (picture A1): one row, Lock in · $16, Who's in, Drop out; no Pay by on the card (the countdown alert says it).
+        assert(flat(await card.locator('[data-tc-lock]').innerText()) === 'Lock in · $16', 'the lime button');
+        const parts = (await card.locator('.tc-bar > *').allInnerTexts()).map(flat);
+        assert(JSON.stringify(parts) === JSON.stringify(['Lock in · $16', 'Who’s in', 'Drop out']), JSON.stringify(parts));
+        assert(!/Pay by/.test(await card.innerText()), 'no Pay by on the card');
         const row = await ballRow(v.page);
         assert(row.n === 9 && row.gold === 6, `9 balls (who can make the date), 6 gold: ${JSON.stringify(row)}`);
         assert(row.tops.length === 1, `one row: ${row.tops}`);
         const gold = await card.locator('.tc-ball').evaluateAll((els) => els.map((e) => e.dataset.tb).join(','));
         assert(gold === 'gold,gold,gold,gold,gold,gold,ball,ball,ball', `gold fills from the left: ${gold}`);
-        assert((await card.locator('.tc-track, .dot, [data-tc-who], [data-tc-edit], [data-tc-drop]').count()) === 0, 'no steps, empty rings, See who is in or links on the mock card');
+        assert((await card.locator('.tc-track, .dot, [data-tc-edit]').count()) === 0, 'no steps, empty rings or Edit on the card');
         assert(!/\d+ of \d+|paid/i.test(flat(await card.innerText())), 'no counts on the card');
         await cardOneLine(v.page);
         await fits(v.page, '.tc-short');
@@ -362,7 +362,7 @@ async function main() {
     assert(peakScale >= 1.15, `it pops (the site's m-ball-pop, up to 1.3x): peak ${peakScale}`);
     assert(peakBlur >= 12, `it glows (a big soft gold glow first): peak blur ${peakBlur}px`);
     assert(last.gold && !last.fresh && last.scale === 1 && last.blur === 0, `then the steady ring: ${JSON.stringify(last)}`);
-    assert(flat(await v.page.locator('.tc-aside').innerText()) === 'You’re locked in', 'You\'re locked in');
+    assert(flat(await v.page.locator('.tc-short .tc-state').innerText()) === 'Locked in', 'Locked in (Zip 66b)');
     console.log(`      C2: gold ${firstGold.t - tapAt} ms after the I paid tap (the save's round trip), ${popped.length} animated frames, peak scale ${peakScale}, peak glow ${peakBlur}px, steady at +${last.t - tapAt} ms`);
     await v.ctx.close();
   });
@@ -375,7 +375,8 @@ async function main() {
         for (const who of ['Vic', 'Parker']) {
           const v = await vicCard({ who, width, scheme });
           const cardGold = await v.page.locator('.tc-short .tc-ball').evaluateAll((els) => els.map((e) => e.dataset.tb));
-          await v.page.locator('.tc-short .tc-title').first().click();
+          // Zip 66b: the card's gray Who's in opens the list (the card itself is not a tap).
+          await v.page.locator('.tc-short [data-tc-who]').first().click();
           const list = v.page.locator('dialog[open] [data-tw-in]');
           await list.waitFor({ timeout: 10000 });
           const rows = await list.locator('li').evaluateAll((els) =>
@@ -422,23 +423,20 @@ async function main() {
     assert(flat(await p.page.locator('.tc-bar').innerText()) === 'See who’s signed up Edit Drop out', await p.page.locator('.tc-bar').innerText());
     await p.ctx.close();
   });
-  await check('D tickets open: tapping the card opens the overlay with Edit sign-up and Drop out (they left the Home card)', async () => {
+  await check("D tickets open (Zip 66b): a tap on the card opens nothing; Who's in opens the list; Drop out is on the card's row", async () => {
     await stage('tickets_open');
     const v = await vicCard({});
-    // Vic is on the list with no ticket at tickets_open: Lock my spot.
+    // Vic is on the list with no ticket at tickets_open: Lock in.
     await v.page.locator('.tc-short [data-tc-lock]').waitFor({ timeout: 20000 });
     await v.page.locator('.tc-short .tc-title').click();
+    await v.page.waitForTimeout(500);
+    assert((await v.page.locator('dialog[open]').count()) === 0, 'the card is not a tap');
+    assert((await v.page.locator('.tc-short [data-tc-drop]').count()) === 1 && (await v.page.locator('.tc-short [data-tc-edit]').count()) === 0, 'Drop out on the row, no Edit');
+    await v.page.locator('.tc-short [data-tc-who]').click();
     const sheet = v.page.locator('dialog[open]');
-    await sheet.locator('[data-tw]').waitFor({ timeout: 10000 });
-    assert((await sheet.locator('[data-tc-edit]').count()) === 1 && (await sheet.locator('[data-tc-drop]').count()) === 1, 'the two links in the overlay');
-    await fits(v.page, 'dialog[open] .tc-hero');
-    await shot(v.page, 'D-overlay');
-    // Edit sign-up from the overlay opens Edit my sign-up (closing the overlay must not close it again).
-    await v.page.waitForTimeout(700);
-    await sheet.locator('[data-tc-edit]').click();
-    await v.page.locator('dialog[open] [data-tm-save]').waitFor({ timeout: 10000 });
-    await v.page.waitForTimeout(600);
-    assert((await v.page.locator('dialog[open] [data-tm-save]').count()) === 1, 'Edit my sign-up stays open');
+    await sheet.locator('[data-tw-in]').waitFor({ timeout: 10000 });
+    await fits(v.page, 'dialog[open] .tc-tw');
+    await shot(v.page, 'D-whos-in');
     await v.ctx.close();
   });
 
@@ -468,11 +466,12 @@ async function main() {
         assert(flat(await v.page.locator('.tc-short [data-tc-join]').innerText()) === 'Join standby', 'Join standby');
         const row = await ballRow(v.page);
         assert(row.n === 16 && row.gold === 16 && row.tops.length === 1, JSON.stringify(row));
-        assert(flat(await v.page.locator('.tc-aside').innerText()) === 'Pay by 12/16', 'Pay by under Join standby (mock 15)');
+        // Zip 66b: one row, Join standby, Who's in, Drop out (no Pay by on the card).
+        assert(JSON.stringify((await v.page.locator('.tc-short .tc-bar > *').allInnerTexts()).map(flat)) === JSON.stringify(['Join standby', 'Who’s in', 'Drop out']), 'the row');
         await cardOneLine(v.page);
         await fits(v.page, '.tc-short');
         await shot(v.page, `E-standby-${width}-${scheme}`);
-        await v.page.locator('.tc-short .tc-title').click();
+        await v.page.locator('.tc-short [data-tc-who]').click();
         const sheet = v.page.locator('dialog[open]');
         await sheet.locator('[data-tw]').waitFor({ timeout: 10000 });
         const words = flat(await sheet.innerText());
@@ -540,7 +539,7 @@ async function main() {
     await sheet.getByRole('button', { name: /I paid/ }).click();
     await v.page.locator('[data-pay-countdown]').waitFor({ state: 'detached', timeout: 10000 });
     // Round 2 (Alex, the trust rule): after I paid, "You're locked in" at once, a gold ball, no waiting words anywhere on the page.
-    await v.page.locator('.tc-aside', { hasText: 'You’re locked in' }).waitFor({ timeout: 10000 });
+    await v.page.locator('.tc-short .tc-state', { hasText: 'Locked in' }).waitFor({ timeout: 10000 });
     assert((await v.page.locator('.tc-short .tc-gold').count()) === 7, 'the 7th ball is gold');
     assert(!/confirm|waiting/i.test(flat(await v.page.locator('body').innerText())), 'no waiting words');
     await v.ctx.close();
@@ -577,35 +576,34 @@ async function main() {
     await v.ctx.close();
   });
 
-  // ---------------------------------------------------------------- G  Remind all unpaid
+  // ---------------------------------------------------------------- G  Remind all unpaid (Zip 66b: folded into the tournament card, picture A4)
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`G Remind all unpaid (mock 14): the chip, Paid 6, Not paid yet 3, Pay by, Messages with the numbers (${width} ${scheme})`, async () => {
+      await check(`G Remind all unpaid (66b): the pill 3 unpaid, Not paid yet 3, the names, Messages with the numbers (${width} ${scheme})`, async () => {
         await stage('tickets_open');
         const a = await adminPage({ width, scheme });
-        const card = a.page.locator('[data-tm-remind]');
-        await card.waitFor({ timeout: 15000 });
-        assert(flat(await card.locator('.tm-remind-label').innerText()) === 'WINTER CLASSIC · TICKETS', await card.locator('.tm-remind-label').innerText());
-        assert(flat(await card.locator('[data-tm-unpaid-chip]').innerText()) === '3 UNPAID', await card.locator('[data-tm-unpaid-chip]').innerText());
-        assert(flat(await card.locator('[data-tm-row="paid"]').innerText()) === '6' && flat(await card.locator('[data-tm-row="unpaid"]').innerText()) === '3', 'the rows');
-        assert(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) 7:00\sPM$/.test(flat(await card.locator('[data-tm-row="payby"]').innerText())), 'Pay by');
-        const href = await card.locator('[data-tm-remind-btn]').getAttribute('href');
+        assert((await a.page.locator('.tm-remind').count()) === 0, 'no separate tickets card');
+        assert(flat(await a.page.locator('[data-tm-stage]').innerText()) === '3 unpaid', await a.page.locator('[data-tm-stage]').innerText());
+        assert(flat(await a.page.locator('[data-tm-row-unpaid]').innerText()) === '3', 'Not paid yet 3');
+        assert(/pay by (Mon|Tue|Wed|Thu|Fri|Sat|Sun) 7:00\sPM$/.test(flat(await a.page.locator('[data-tm-row="ticket"]').innerText())), 'Pay by on the Ticket row');
+        await a.page.locator('[data-tm-unpaid-toggle]').click();
+        const box = a.page.locator('[data-tm-unpaid-box]');
+        await box.waitFor({ timeout: 10000 });
+        const href = await box.locator('[data-tm-remind-btn]').getAttribute('href');
         assert(/^sms:/.test(href), href);
         const body = decodeURIComponent(href.split('body=')[1] || '');
         assert(/^Hey, please pay for Winter Classic by \w+ so the courts are locked in for \w+/.test(body), body);
-        const bg = await card.locator('[data-tm-remind-btn]').evaluate((e) => getComputedStyle(e).backgroundColor);
-        assert(bg === (scheme === 'dark' ? 'rgb(35, 122, 82)' : 'rgb(30, 106, 72)'), `the mock's green: ${bg}`);
-        await oneLine(a.page, '[data-tm-remind] .tm-row, [data-tm-remind] .tm-remind-head, [data-tm-remind-btn]');
-        await fits(a.page, '[data-tm-remind]');
+        await oneLine(a.page, '[data-tm-home-body] .tm-row, [data-tm-remind-btn]');
+        await fits(a.page, '[data-tm-home]');
         await shot(a.page, `G-remind-${width}-${scheme}`);
         await a.ctx.close();
       });
-  await check('G hidden when everyone has paid (the count card instead)', async () => {
+  await check('G everyone paid: no Not paid yet row, the pill says locked in', async () => {
     await stage('all_locked');
     const a = await adminPage({});
     await a.page.locator('[data-tm-home]').first().waitFor({ timeout: 15000 });
-    assert((await a.page.locator('[data-tm-remind]').count()) === 0, 'no remind card');
-    assert((await a.page.locator('[data-tickets-card]').count()) === 1, 'the count card');
+    assert((await a.page.locator('[data-tm-unpaid-toggle]').count()) === 0, 'no Not paid yet row');
+    assert(/^\d+ locked in$/.test(flat(await a.page.locator('[data-tm-stage]').innerText())), 'the pill');
     await a.ctx.close();
   });
 

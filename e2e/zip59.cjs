@@ -263,7 +263,8 @@ async function main() {
     await stage('closed');
     const p0 = await homeOf('Vic');
     await p0.page.locator('.tc-short [data-tc-lock]').waitFor({ timeout: 15000 });
-    assert(flat(await p0.page.locator('.tc-short .tc-aside').innerText()) === 'Still open', 'Still open');
+    // Zip 66b: no Pay by or "Still open" words on the card any more (the countdown alert says it is late); Lock in is still there.
+    assert(flat(await p0.page.locator('.tc-short [data-tc-lock]').innerText()) === 'Lock in · $16', 'Lock in');
     await p0.ctx.close();
     await stage('late_cut');
     const id = (await dash()).tournament.id;
@@ -411,8 +412,8 @@ async function main() {
     await stage('tickets_open');
     const p = await homeOf('Vic');
     await p.page.locator('.tc-short .tc-title').first().waitFor({ timeout: 15000 });
-    // A tap opens the sheet (Zip 63: a tap on the card opens its overlay); the browser puts its focus on the first button, the X.
-    await p.page.locator('.tc-short .tc-title').first().tap();
+    // A tap opens the sheet (Zip 66b: the card's Who's in opens it); the browser puts its focus on the first button, the X.
+    await p.page.locator('.tc-short [data-tc-who]').first().tap();
     await p.page.locator('dialog[open]').waitFor({ timeout: 10000 });
     await p.page.waitForTimeout(400);
     let ring = await p.page.evaluate(() => { const a = document.activeElement; return { tag: a && a.tagName, cls: a && a.className, style: a && getComputedStyle(a).outlineStyle, input: document.documentElement.getAttribute('data-input') }; });
