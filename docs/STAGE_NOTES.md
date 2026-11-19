@@ -6803,3 +6803,50 @@ database change: migration `0029_tournament_end`.** Applied to the fake preview 
 - One unique index on `credit_ledger`: at most one award row per player and reason 'tour:<id>:champion' / ':second'.
 - Undo (only to remove piece 4's data, after an export): the index, the two tables, the five columns (in the migration's last comment). Old code
   never reads any of it and never writes 'tie' or 5: a code rollback needs no database step.
+
+### What it does (the brief's twelve things)
+1. Ties for a playoff place, every structure (round robin to the Final, pools to the semifinals, 6 to 16): standings now split teams level on wins
+   by head to head again inside any part still level, so two tied teams are always settled by the game they played. Three in a circle: the wheel.
+   A tie only counts when its places lead to different games (shared/tournamentSchedule.ts placeClasses; 1st and 2nd level before a Final between
+   1st and 2nd is no tie). Shape 'ab' (it decides the top place, or every place): Game A (the two not picked), then Game B (A's winner against the
+   bye team); order winner of B, loser of B, loser of A. Shape 'a' (two of the three go on to the same game): Game A only; the bye team and A's
+   winner go on. Both to 5, in the first playoff round, on the first free court; the semis, the Final and 3rd place then fill in by themselves.
+   The team with the best record outside the tie (same group) spins on their phone; none (a whole pool tied): the organizer. The organizer can
+   always spin too (a phone may be dead). Four or more tied (or two that never played): the organizer taps one team per place until the places
+   left lead to the same game. A team that left: before the spin it drops out of the tie (head to head among the rest); after the spin the tie
+   stays and its game is a walkover. A pool result fixed after the spin sets the tie's games aside (kept; they come back if the tie does).
+2. The wheel (src/tournament/parts.tsx Wheel, shared by both screens): three slices, the arrow on the rim at the top, the server's answer (crypto
+   random) stored in tournament_ties, about 4 seconds clockwise slowing down, the winning slice lit and the others dimmed; reduced motion: no spin.
+   Phones that did not see the spin play it once (spun in the last 3 minutes); a reload shows the same answer, no spin.
+3. The Final and 3rd place: unchanged (57's). Added: "Also now · Court 2 · 3rd place" under a finalist's Final card; the Playoff card during a
+   tie (Game A, Game B, then the games it feeds: "Winner of B vs Kitchen Crew", "Losers of A and B", "Same time as the final").
+4. End tournament (organizer Home, once the Final or every Americano round is in): the slim bar, "Final is done / Net Ninjas won / Vic + Wren beat
+   Kitchen Crew (Rowan + Zoe)." (Americano: "Round 6 is done / Vic finished first / Parker was second."), then the End tournament card (rows, Edit
+   awards, Confirm winners and end). It replaces the round results, Pause and Player left. An I paid still waiting blocks it (the card says so).
+5. Credit: one credit_ledger 'kept' row per award, no game, reason 'tour:<id>:champion' or ':second' (shared/credit.ts: "$14 Tournament champion,
+   The Cold Open"). Granted once: one batch, every write guarded on a fresh end key; the unique index refuses a second award row. $0 skips it.
+   The organizer gets the medal, never credit (the site's rule: the organizer holds no credit); the card says "Alex: medal only".
+6. Medals (src/Medals.tsx, the main download): next to the name at the top of Home and after names on game cards; 1 to 3 stacked, from 4 one medal
+   and "×N". Permanent, counted across tournaments everyone could see. The ticker and the congratulations card are their own small file.
+7. Saved for later (tournament_results): finish, record, Americano points, team and partner, the picked and approved level (organizer only).
+8. Ticker (full width, slim, runs right to left, still with reduced motion) for the banner length; the congratulations card with Nice, once.
+9. Edit awards: Change (teams, or 1st and 2nd), the credit amounts (whole dollars, $0 allowed), banner 1 to 4 weeks, Save.
+10. 3rd place after a tie: the losers of A and B (a round robin's P3 and P4 come from the tie's order). One court: no 3rd place game (57's rule).
+11. History > Tournaments (third chip, only while the switch is on): Tournament history and Wins by player; hidden tournaments stay out.
+12. Hide and restore: unchanged (only canceled tournaments can be hidden; History lists ended ones only, and filters hidden ones too).
+After End: status 'ended'. openById and playerTarget find nothing open, so every organizer tap and every player tap on its games, teams, results
+and tickets answers "look again" / "not open"; the result writes also check the tournament is still open when they land. Unused standby holds come
+back as credit at End (as they would at 10 PM). Home has no tournament card, no live view and no "Show future games" any more.
+
+### Where it differs from the brief (the code is the truth)
+- Picture 21 shows no big card for a team in Game A; it has one (the VS card with We won), between The wheel picked and Playoff, or nobody in the
+  game could report it. Picture 20's card says the same "<team>: spin the wheel" on every phone; it is a button only on the spinning team's phones
+  (and on the organizer's Home, where the organizer can always spin).
+- With two of three going on to the same Final (shape 'a') there is no Game B (it would be a repeat of the Final). In pools, where 1st and 2nd go
+  to different semifinals, a whole pool tied plays A and B (B decides 1st and 2nd).
+- A five-way tie (round robin of 5, everyone 2-2) takes the organizer 4 taps (1st and 2nd share the Final, 3rd and 4th the 3rd place game, 5th is
+  out, so it is picked down to the last two).
+- Game A says "To 5. Loser is out." as picture 21 draws it, also where A's loser still plays the 3rd place game.
+- Kai is not one of the preview's names (the seed refuses any other); the stages use the 10 fixed names.
+- tournament_ties and tournament_results are not in the backup file yet (a question below); the award credit is (credit_ledger).
+- The branch is `claude/new-session-831vmx` (pinned by the build system), not "🎾58.tourney4". No PR was opened (none asked for).
