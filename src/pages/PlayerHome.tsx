@@ -283,6 +283,8 @@ export function PlayerHome({
   useRefreshOnReturn(refreshOnReturn);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  // Zip 57 (Alex's PM): during a tournament's live window the week's game cards fold into "Show future games" (folded until it ends).
+  const [futureOpen, setFutureOpen] = useState(false);
   // "Home collapse" (HOME_COLLAPSE): the later games' one button. Closed on every page load, never remembered.
   const [laterOpen, setLaterOpen] = useState(false);
   // Show fewer tapped on a list that a shared link opened: the link's game no longer holds it open.
@@ -870,6 +872,14 @@ export function PlayerHome({
             {g.previewCalm === true && view!.payDue.length > 0 && (nudge || (g.afterGameCard === true && view!.payDue.every((o) => !!o.more))) && <PayCard g={view!} onChanged={load.reload} enter={live} />}
             {g.previewCalm === true && g.afterGameCard === true && <AfterGameCard g={view!} />}
             {g.previewCalm === true && g.extension && <ExtensionAlerts g={view!} onChanged={load.reload} />}
+            {/* Zip 57: the tournament's live window: the week's game cards fold into one button, opened and folded in place. */}
+            {view!.tournament?.day?.today === true && (
+              <button type="button" className="btn ghost block" data-future-toggle aria-expanded={futureOpen} onClick={() => setFutureOpen((v) => !v)}>
+                {futureOpen ? 'Hide future games' : 'Show future games'}
+              </button>
+            )}
+            {(view!.tournament?.day?.today !== true || futureOpen) && (
+            <>
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className={`schedule${g.playerFix1 ? ' pf1' : ''}`}>
               {/* Nothing to list (My games with no games): the switch still has a line of its own. */}
@@ -939,6 +949,8 @@ export function PlayerHome({
                     {showAll ? 'Show fewer' : `More sessions (${filtered.length - SHOW_FIRST})`}
                   </button>
                 )}
+            </>
+            )}
             {/* The end of the page: just a thin line and a little space. */}
             <div className="page-end" aria-hidden="true" />
             {/* Zip 18: the "Go to Admin" pill that was here is gone; the title (Alex + swap icon) at the top replaces it. */}

@@ -294,3 +294,11 @@ View as Vic: the amber pay countdown first, then the card; organizer Home: Remin
 tournament). The other countdown moments are one tap each on the Tournament test page, and its "Ball look" links draw 3 to 16 balls on Vic's
 card (look only, this phone; the 10 names cannot make 12 to 16).
 
+
+Zip 57 (🎾57.tourney3, teams and game day): `npm run db:seed:preview` now opens on game night with no teams yet: "The Cold Open", Locked
+doubles, 8 locked in (Net Ninjas Vic and Wren, Dill With It Sage and Christopher Vanderberg, Kitchen Crew Rowan and Zoe, Third Shot Gang
+Parker and Quinn; Alex and Reese not playing), tonight, started 10 minutes before the seed, courts 1 and 2. Organizer Home: "8 locked in.
+Draft the teams." The night is relative to the seed, so a later visit taps Tournament test > "Game night, no teams yet" first (it puts the
+night back to "started 10 minutes ago"). The other stages: Teams drafted, Teams published (two days before), Game 1, Mid-tournament (running
+behind), All pool games done, Player backed out (odd count). 12 players cannot be made with the 10 names: the test page's "Pools look (12
+players)" link draws the 12 players night as Vic from made-up rows (look only; the 6th team is "Kai + Guest").

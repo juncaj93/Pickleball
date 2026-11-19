@@ -1358,4 +1358,34 @@ a.tm-hc-copy {
   margin: -4px 0 10px;
   font-size: 0.88rem;
   color: var(--ink-2);
+/* Zip 57 (mocks 60 and 61): the Courts row (1 | 2) and the one line under the rows: the accent color when it fits, amber when it is too tight. */
+.tm-fin-courts {
+  flex: none;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  width: 120px;
+}
+.tm-fin-courts button {
+  min-height: 44px;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.tm-fin-fit {
+  margin: 2px 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--accent-text);
+}
+.tm-fin-fit.tm-fin-tight {
+  color: #9a5c06;
+}
+:root[data-theme='dark'] .tm-fin-fit.tm-fin-tight {
+  color: #f0b54a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tm-fin-fit.tm-fin-tight {
+    color: #f0b54a;
+  }
 }

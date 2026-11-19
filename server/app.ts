@@ -8,7 +8,8 @@ import * as guest from './guestActions';
 import * as playersRedo from './playersRedo';
 import * as tournament from './tournament';
 import * as tickets from './tournamentTickets';
-import { tournamentTestStage } from './tournamentTest';
+import { poolsLook, tournamentTestStage } from './tournamentTest';
+import * as tournamentDay from './tournamentDay';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
@@ -77,6 +78,9 @@ route('POST', '/api/tournament/back-out', player.tournamentBackOut);
 route('POST', '/api/tournament/lock', player.tournamentLock);
 route('POST', '/api/tournament/paid', player.tournamentPaid);
 route('POST', '/api/tournament/waitlist', player.tournamentWaitlist);
+// Zip 57 (server/tournamentDay.ts): Tournaments, piece 3. A player's result on game night.
+route('POST', '/api/tournament/game', player.tournamentGame);
+route('POST', '/api/tournament/team-name', player.tournamentTeamName);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
@@ -223,9 +227,15 @@ route('POST', '/api/admin/tournament/:id/hide', tournament.hideTournament);
 route('PUT', '/api/admin/tournament/:id/pay-by', tickets.setPayBy);
 route('POST', '/api/admin/tournament/:id/ticket', tickets.adminTicket);
 route('POST', '/api/admin/tournament/:id/reschedule', (ctx) => tickets.rescheduleTournament(ctx));
+// Zip 57 (server/tournamentDay.ts): Tournaments, piece 3. Draft, swap, name and publish teams, the courts' numbers; results, Time check, Pause,
+// Player left.
+route('POST', '/api/admin/tournament/:id/teams', tournamentDay.teamsAction);
+route('POST', '/api/admin/tournament/:id/games', tournamentDay.gamesAction);
 // Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever PREVIEW_CALM is not on (live),
 // after the usual organizer sign-in check.
 route('POST', '/api/admin/tournament-test', tournamentTestStage);
+// Zip 57, PREVIEW ONLY: the 12 players pools look (mock 51), drawn from made-up rows; Not found on live.
+route('GET', '/api/tournament/pools-look', poolsLook);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));

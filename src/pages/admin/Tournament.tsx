@@ -38,7 +38,7 @@ import {
   type TournamentSignupView,
 } from '../../../shared/tournament';
 import { formatPrice, parseDollars } from '../../../shared/money';
-import { evensWarning, payByAt, payByDays, payByLabel, payByParts, tournamentRemindText } from '../../../shared/tournamentTickets';
+import { evensWarning, payByAt, payByDays, payByLabel, payByParts, salesCutoffMs, startMsOf, tournamentRemindText } from '../../../shared/tournamentTickets';
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
 import { AlertCard } from '../../AlertCard';
@@ -47,6 +47,8 @@ import { api, ApiError, copyText, isIOS, storageGet, storageRemove, storageSet, 
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../../ui';
 import { type DayLook, LevelList, MonthCalendar } from '../../tournament/parts';
 import type { AdminCtx } from '../Admin';
+import { TournamentDayCards } from './TournamentDay';
+import { fitWords, nightPlan } from '../../../shared/tournamentPlan';
 import './tournament-admin.css';
 
 const todayKeyOf = (nowIso: string, tz: string) => {
@@ -164,7 +166,9 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
   return (
     <>
       {/* Zip 64: the style cards (an odd switch; switch back?) and the venue reminder after Finalize, first. */}
-      {t.oddSwitch && <OddSwitchCard t={t} k={t.oddSwitch.key} />}
+      {/* Zip 57: the plan check when tickets close, Draft teams, the published teams and game night. */}
+      {t.status === 'tickets' && <TournamentDayCards ctx={ctx} t={t} />}
+      {t.oddSwitch && <OddSwitchCard ctx={ctx} t={t} k={t.oddSwitch.key} />}
       {t.switchBack && <SwitchBackCard ctx={ctx} t={t} k={t.switchBack.key} />}
       <VenueAlertCard t={t} />
       {claims.map((k) => (
@@ -1437,6 +1441,8 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
   // Zip 64: "Plays", the real start and end (7:30 PM to 10:00 PM to start).
   const [start, setStart] = useState(19 * 60 + 30);
   const [end, setEnd] = useState(22 * 60);
+  // Zip 57: the Courts row (1 or 2, from the tournament's courts field: 2 to start).
+  const [courts, setCourts] = useState<1 | 2>(2);
   const [touched, setTouched] = useState({ pay: false });
   /** Read the facts for this date. `keep`: after a "votes changed" answer the organizer's own edits stay. */
   async function load(keep: boolean) {
@@ -1451,6 +1457,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         setPayMinutes(p.minutes);
         setStart(v.start);
         setEnd(v.start + v.minutes);
+        setCourts(v.courts === 1 ? 1 : 2);
       } else if (!v.winner && choice === 'vote') setChoice(v.format);
     } catch (err) {
       setFailed(errText(err));
@@ -1487,6 +1494,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         format: choice ?? undefined,
         start,
         minutes: end - start,
+        courts,
         ...(touched.pay ? { payBy: payIso } : {}),
         ...(winner ? { seenWinner: winner.format } : {}),
       });
@@ -1518,6 +1526,12 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
     { key: 'americano', name: 'Americano' },
   ];
   const picked = choice === 'doubles' || choice === 'americano' ? choice : 'vote';
+  // Zip 57 (mocks 60 and 61): the game plan for the players who can make this date, the courts and the hours (shared/tournamentPlan.ts, the one
+  // source). Never blocks Finalize.
+  const fit =
+    view.players.length >= 6
+      ? fitWords(nightPlan(view.players.length, courts, end - start, picked === 'vote' ? autoFormat : picked), start)
+      : { fits: false, text: `${view.players.length} can play. A tournament needs at least 6.` };
   return (
     <div className="stack tm-finalize tm-fin1" data-tm-finalize={day}>
       <section className="tm-fin-who" aria-label="Players for this date" data-tm-fin-players>
@@ -1525,10 +1539,6 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
           <b data-tm-fin-count>{view.players.length}</b> can play {dayWords(day)}
         </p>
         {view.players.length > 0 && <p className="tm-fin-names" data-tm-fin-names>{view.players.join(', ')}</p>}
-        {/* Zip 64 part 8: the plan for this date's count (the same count as the organizer's card and the venue reminder). */}
-        <p className="tm-card-note tm-fin-plan" data-tm-fin-plan>
-          Plan: {view.fits} players · {view.courts} {view.courts === 1 ? 'court' : 'courts'}
-        </p>
         {view.over > 0 && (
           <p className="tm-card-note tm-fin-over" data-tm-fin-over>
             {view.over} over the {MAX_SPOTS} spots. Once {MAX_SPOTS} are locked in, the rest can join standby.
@@ -1583,6 +1593,16 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
             </select>
           </span>
         </div>
+        <div className="tm-fin-row" role="group" aria-label="Courts">
+          <span className="tm-fin-row-label">Courts</span>
+          <span className="segmented tm-fin-courts">
+            {([1, 2] as const).map((c) => (
+              <button key={c} type="button" aria-pressed={courts === c} disabled={busy} onClick={() => setCourts(c)} data-tm-fin-courts={c}>
+                {c}
+              </button>
+            ))}
+          </span>
+        </div>
         <div className="tm-fin-row" role="group" aria-label="Pay by">
           <span className="tm-fin-row-label">Pay by</span>
           <span className="tm-fin-boxes">
@@ -1621,6 +1641,11 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
           </span>
         </div>
       </div>
+      {fit && (
+        <p className={fit.fits ? 'tm-fin-fit' : 'tm-fin-fit tm-fin-tight'} role="status" data-tm-fin-fit={fit.fits ? 'fits' : 'tight'}>
+          {fit.text}
+        </p>
+      )}
       {notice && (
         <p className="tm-card-note tm-fin-notice" role="status" data-tm-fin-notice>
           {notice}
@@ -1664,10 +1689,22 @@ function useStyleSeen(key: string): [boolean, () => void] {
   ];
 }
 
-/** Zip 64 (rule c): "The Cold Open switched to Americano (odd number of players)." The site's alert card, with an X. */
-function OddSwitchCard({ t, k }: { t: AdminTournamentView; k: string }) {
+/**
+ * Zip 64 (rule c): "The Cold Open switched to Americano (odd number of players)." The site's alert card, with an X. Zip 57: "Copy text for the
+ * group" on it (who backed out, the date, the price, the last moment to join, the site's link), so one more player can make it even again.
+ */
+function OddSwitchCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k: string }) {
   const [seen, hide] = useStyleSeen(k);
+  const toast = useToast();
   if (seen) return null;
+  const tz = ctx.d.group.timezone;
+  const who = t.backedOut[0]?.name ?? null;
+  const cutoff = t.finalDate ? payByLabel(new Date(salesCutoffMs(startMsOf(t.finalDate, t.start, tz))).toISOString(), tz, t.finalDate) : null;
+  const text = [
+    who ? `${who} backed out of ${t.name}.` : `A spot opened in ${t.name}.`,
+    `One spot is open${t.finalDate ? ` on ${dayWords(t.finalDate)}` : ''}: ${formatPrice(t.ticketCents)}${cutoff ? `, pay by ${cutoff}` : ''}.`,
+    siteAddress(ctx.d.group.playerLink),
+  ].join(' ');
   return (
     <AlertCard
       as="section"
@@ -1679,6 +1716,23 @@ function OddSwitchCard({ t, k }: { t: AdminTournamentView; k: string }) {
       data={{ 'data-tm-odd-switch': true }}
       xLabel="Close"
       onX={hide}
+      action={
+        <button
+          type="button"
+          className="ac-btn"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(text);
+              toast('Copied. Paste it in the group text.');
+            } catch {
+              toast(text);
+            }
+          }}
+          data-tm-copy-text={text}
+        >
+          Copy text for the group
+        </button>
+      }
     />
   );
 }

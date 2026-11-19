@@ -107,6 +107,7 @@ describe('read-only organizer PIN (Zip 8)', () => {
       if (r.path === '/api/cal/:param') expect(res.status).toBe(404); // retired feed: always Not found
       else if (r.path === '/api/admin/month-games') expect([200, 409], url).toContain(res.status); // 409 = Money rework switch off here
       else if (r.path === '/api/admin/tournament/:param/finalize') expect(res.status, url).toBe(403); // Zip 60: Tournaments is switched off here (the next test has it on)
+      else if (r.path === '/api/tournament/pools-look') expect(res.status, url).toBe(404); // Zip 57: preview only (Not found anywhere else)
       else expect(res.status, url).toBe(200);
     }
     await ctx.app.settle();

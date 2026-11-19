@@ -415,7 +415,8 @@ async function main() {
         assert(/^Finalize (Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} \d+/.test(text), text.slice(0, 60));
         assert(/8 can play/.test(text), text.slice(0, 120));
         // Part 8: the plan line, the same count as the organizer's card (8 can play: a 10 player plan).
-        assert(flat(await sheet.locator('[data-tm-fin-plan]').innerText()) === 'Plan: 10 players · 2 courts', await sheet.locator('[data-tm-fin-plan]').innerText());
+        // Zip 57: the plan line became the Fits / Too tight line under the rows (mocks 60 and 61).
+        assert(/^Fits 8 players\. /.test(flat(await sheet.locator('[data-tm-fin-fit]').innerText())), await sheet.locator('[data-tm-fin-fit]').innerText());
         assert(/STYLE|Style/.test(text) && /Auto/.test(text) && /Doubles/.test(text) && /Americano/.test(text), 'the three styles');
         assert(/Votes: Doubles 3 · Americano 2 · Either 3/.test(text), `votes: ${text}`);
         assert(!/plan fits|Nobody picked|Ticket price/.test(text), 'removed lines');

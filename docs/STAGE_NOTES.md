@@ -6477,3 +6477,149 @@ dark, the organizer's pill "3 unpaid", no tickets card, Not paid yet: Vic, Zoe, 
   answered by the fake preview in the browser (nothing sent to live): organizer Home's card closed on load with its pill ("8 signed up";
   "3 unpaid" with tickets open), Vic's ticket row "Lock in · $16 | Who's in | Drop out" on one line with nothing cut at 420, 390, 360 and
   320, light and dark; no page errors.
+## Zip 57: Tournaments, piece 3: teams, the schedule, game day, standings (🎾57.tourney3), Thu Nov 19, 2026
+Branch `claude/new-session-gfcgy1` (the session is named "🎾57.tourney3"; the build system pins the branch name). Built on main `316ac36` (Zip 64
+and its part 8 live). Same switch, TOURNAMENTS, and the per-tournament Who can see it. **Database change: migration `0027_tournament_games`**
+(two NEW tables, three NEW nullable columns; nothing existing changed). Applied to the fake preview database only. **NOT on live: the brief says
+show Alex the change first.** No money moves anywhere in this piece. Piece 4 (ties, the wheel, End tournament, medals, credit) is NOT built.
+
+### The database change (for Alex's OK)
+- `ALTER TABLE tournaments ADD COLUMN teams_at TEXT;` (teams published), `court_numbers TEXT` (the venue's numbers, `[9,10]`), `paused_at TEXT`.
+- `tournament_teams`: one row per Locked doubles team (seat 1 to 8, name, the two players with ON DELETE SET NULL, pool A or B, out_at when a team
+  sits out during the night, changed_at when a partner changed after publishing). Foreign key to the tournament ON DELETE CASCADE.
+- `tournament_games`: one row per game, made at Publish (round, court 1 or 2, stage pool / semi / final / third, pool, who plays as slots: 'T3' a
+  team, 'A1' a place in a pool, 'W12' the winner of a game; play_to 11 / 9 / 7; claim (a team's We won), disputed_at, winner, result_by,
+  skipped; seat_a and seat_b, the teams a result was given for). ON DELETE CASCADE.
+- Undo (only to remove piece 3's data): `DROP TABLE tournament_games; DROP TABLE tournament_teams;` and the three `ALTER TABLE tournaments DROP
+  COLUMN`. Code from before Zip 57 never reads any of it: a code rollback needs no database step.
+
+### What it does
+1. The game plan (shared/tournamentPlan.ts), the single source of truth from the zip's GAME_PLAN_TABLE.md: one pure function (players, courts,
+   court minutes, style) gives the rounds, the length of pool or round robin games (11, 9 or 7: the longest that fits in the court time minus 10
+   minutes; playoffs always to 11), the minutes used and whether it fits; Americano by its own rule (everyone at least 4 games). Every row of the
+   table is a unit test (96 cells). The starting suggestion (`suggestedPlan`, shared/tournament.ts) now covers 6 to 16: 14 and 16 are 2 courts,
+   3 hours, 7:00 PM (PLANS, smartPlan and the plan line read it; the old "14 and 16 stay the 12-player plan" is gone).
+2. Finalize (mocks 60 and 61): a Courts row (1 | 2, saved in the existing `courts` field, 2 to start) under Plays, and one line under the rows:
+   "Fits 12 players. Pool games to 11, done about 8:55 PM." (accent) or "Too tight for 12 players on 1 court. Use 2 courts or add court time."
+   (amber). The count is who can make that date; under 6 it says so. Finalize is never blocked. Zip 64 part 8's "Plan:" line on the sheet gave
+   way to this line (it fits the one Air screen: checked at 420 x 912). After Finalize the organizer card's Plan line, its cost and the "Call the
+   venue" card use the chosen courts and the real hours.
+3. When tickets close (Pay by), with the players really locked in: an amber card when it no longer fits, when a court is no longer needed (7 or
+   fewer on 2 courts) or under 6 ("Cancel or reschedule?"; the buttons are on the tournament card below).
+4. Draft teams (mock 15; Locked doubles, an even count of 6 to 16, after Pay by): strongest paired with weakest, each team's total, Swap (pick
+   one of the team's two, then anyone on another team: both new totals shown), tap a team to rename it, Redo the draw (another pairing at most
+   0.2 worse than the best one found), Publish teams. Publish balances the pools by team total (A, B, B, A ...), makes every game, and players
+   see their partner and team only then. After publishing, before any result: Edit teams (back to the draft); a back out or a late join that
+   leaves the teams out of step shows "Teams need a change." with Pair them (left-over players paired by closest level, published again; both
+   players get "Your new partner is ..."); a whole team leaving gives one fewer team (byes). The courts' numbers (the site's court map) on the
+   published card.
+5. The schedule (shared/tournamentSchedule.ts `schedule`, pure, every size tested): 6 players: 3 games one at a time then the Final; 8: round
+   robin in 3 rounds on 2 courts (courts swap each round) then Final and 3rd place; 10: 5 rounds, one team sits each round (each exactly once);
+   12: two pools of 3, semifinals (pool winner vs the other pool's runner-up), Final and 3rd place; 14: Pool A of 4 and Pool B of 3, 5 rounds
+   (Pool A uses both courts when Pool B is done); 16: two pools of 4, one game per pool per round, 6 rounds. On 1 court every game is one after
+   another (the pools take turns), with no 3rd place game.
+6. Game night, players (mocks 16 to 19, 51 to 53): before the night, under the ticket: Your team, Your games (each with its court, tappable to
+   the court map once the courts are set; the Final "If you finish in the top 2"), All teams; with pools, Pool A and Pool B (where each team
+   plays round 1, or Sits) and The night's times (shifted by the real start). On the night the short card (the name, "Game 1 of 3" or "Pool play
+   · Round 1 of 3", a slim bar) takes the ticket's place; Game 1 "Begins at 7:30 PM" with We won and "<other team> won"; We won collapses to
+   "<team> won Game 1" with Undo for 5 seconds, then it is sent and counts at once; the other team gets "Did you win?" (Yes, they won / No, we
+   won); Up next; the Time check; Your games (done gray on green, next on blue); Standings (wins, then head to head) or the pools; Currently
+   playing. Only their own games; names only (no levels: a question below).
+7. Game night, the organizer (mocks 48 to 50, for Locked doubles: who won, no scores): the round's results (Done, Waiting with Confirm,
+   Disputed, Playing with Set), Fix any game (a winner, or clear it), All games, the Time check with one tap ("Play to 9 from Round 2"), Pause
+   (players see "Paused"), Player left (swap in a player locked in on no team or a paid standby player; or the team sits out its later games).
+8. Time check (smart timing): rounds of 23 / 19 / 16 minutes; a round that ended late pushes the rest; when the night would end after the courts
+   close minus 10 minutes it suggests games to 9 from the latest round that is enough, else to 7, else to 7 from the first round that can change
+   ("That still runs about 9 minutes over."). A round with a result is never changed; playoffs never are. Players see the words once applied.
+9. A back out after publishing that makes the count odd: zip 64's own switch to Americano (its Telegram, History line and amber card); its card
+   now has "Copy text for the group" (who backed out, the date, $16, pay by 3 hours before the start, the site's address). An Americano night
+   shows no teams (zip 61 builds that night).
+
+### Where it differs from the brief (the code is the truth)
+- Mocks 16 to 19 draw the old tall ticket with steps; the brief says the zip 64 short ticket stays as it is, so before the night "Your team" is
+  its own small dark card under the ticket, and on the night the short game card replaces the ticket.
+- Mock 60's "Pool games to 9, done about 9:30 PM" for 12 players on 2 courts, 7 to 10 PM: the table (the single source of truth) says to 11,
+  115 minutes, so the line says "Pool games to 11, done about 8:55 PM". The 12-player clock in the brief (semis 8:45, final 9:10 from 7:30) is
+  rounded the same way from the table (8:40 and 9:05).
+- Mocks 48 to 50 are drawn for Americano scores; for Locked doubles they show who won (scores are not kept in piece 3).
+- All teams leaves out the levels mock 16 draws: a player's answer has never carried another player's level (question below).
+- Two left-over players are paired with one tap (Pair them) instead of by themselves: a screen that only reads never writes (the site's rule
+  since Zip 62); both players get the "new partner" note.
+- Results open 15 minutes before the start. "Currently playing" labels other teams' games by round ("Round 1 · Court 10").
+- A player swapped in from standby keeps their hold as it is (no money moves in this piece), so the existing rule gives it back as credit at
+  10:00 PM; question below.
+- Teams and games are not in the backup file (no money in them; Time Travel keeps them); question below.
+- Part 8 of the brief (deadlines, Switch to Americano now, the notice) is zip 64's switch, reused as the brief's update says.
+
+### Alex's PM notes during the build (these win over the brief and the pictures)
+1. The short ticket (zip 64) stays; no step strip, no court lines. Court numbers are the tournament's real booked courts (the organizer sets them on
+   the published card; until then Court 1 and Court 2; the test stages use 1 and 2). Names, team names, levels, records and numbers use the body
+   font everywhere. Draft teams is pairs only: players, levels, the total, Swap, Publish teams, Redo the draw (no names, no explanation line).
+2. Team names: Publish gives each team a fun name from a list of 24 (no two alike in a tournament). On Home a player's "Your team" card shows the
+   name big, the two players under it, and a round pencil (the name becomes a box with Save name) and a round dice (a new suggestion nobody else
+   has). Either partner, the last save wins, the partner sees it at once; at most 24 letters; until Game 1 starts, then the pencil and the dice
+   are gone (no words about it). The organizer renames any team any time (a pencil on the published team list, and a Teams sheet on game night).
+   Every team name shows its two players under it, smaller and grey (the big card puts the two teams side by side with VS, Your games,
+   Standings, the pools, Currently playing, the organizer's results and Fix sheet, History lines). The name is the `name` column of
+   `tournament_teams` (in 0027, nothing more).
+3. The night lives on Home: from 30 minutes before the start the live view takes the ticket's place (the slim name / "Game 1 of 3" bar, one big
+   card: the game now with We won / "<team> won", or Up next with the court; then Standings, Currently playing, Your games), and the week's game
+   cards fold into one "Show future games" button (the site's ghost button; tap to open in place, tap again to fold). Piece 4 has End
+   tournament; until then the window ends 6 hours after the night ends. The organizer's game-day controls are at the top of admin Home in the
+   same window. "Did you win?" is a sheet over Home.
+4. Odd counts and switching are zip 64's (switch at Pay by, Switch back, standby only after 16), reused.
+5. Players never get a level: not the organizer's ratings, not anyone else's (a test walks every key of every player's tournament answer; only
+   their own pick, as before, is in `me.level`).
+
+### Review
+A fresh independent reviewer (no part in the build) read the whole change: no leak of hidden data, no money path, the preview-only routes do
+nothing on live, the schedule and plan match the table. Its real findings, all in the playoffs and in stale taps, are fixed with a test each:
+- A result keeps the two teams it was given for (`seat_a`, `seat_b` on the game, added to 0027 before it ever shipped; the same two columns
+  added to the preview database, which already had 0027): fixing a pool game later never moves a played semifinal or Final to other teams.
+- A team that leaves after pool play keeps its place; a playoff it can no longer play is a walkover (the other team goes on), and a game one
+  side of which can never be filled counts as not played, so nothing waits forever. A team that leaves during pool play drops to the bottom.
+- The organizer's Confirm, Fix and Clear send what the screen showed; a change in between does nothing ("This just changed. Look again.").
+- A We won still in its 5 seconds is sent if the card goes away; both teams agreeing never shows an error; no results once the style is
+  Americano; a spare cannot be swapped onto two teams; Pair them keeps names unique and earlier partner notes; the Time check never counts a
+  round with a result as one that can change; a database before 0027 says "Teams are not set up on this site yet."; no second Semifinal row.
+- Tournaments finalized before this zip hold 2 courts (Create's placeholder): the plan check card now has "Use 1 court" (or "Use 2 courts"
+  when 1 is too tight), before the teams are published.
+
+### Questions for Alex
+1. The database change above (two new tables, three new nullable columns): OK to apply on live with the deploy?
+2. (Answered by Alex's PM: players never see levels.)
+3. A standby player swapped in during the night: should their paid hold become a spot (it would no longer come back as credit at 10 PM)?
+4. Teams and results in the backup file too (version 4; the clock Worker would need a deploy)?
+5. A tie that decides a playoff place shows "Tied" and stops (piece 4 settles it). OK until then?
+
+### Tests
+- Unit: tests/zip57-plan.test.ts (101: every cell of the game plan table, both styles, the suggestion for 6 to 16, the Finalize words),
+  tests/zip57-schedule.test.ts (29: the schedule for 3 to 8 teams on 1 and 2 courts, back to back, the draft and Redo, pools, standings with
+  head to head and Tied, the playoffs, walkovers and frozen teams, the Time check), tests/zip57-day.test.ts (29, on the real server code:
+  Finalize's Courts, the close check, draft / swap / rename / publish, every size 6 to 16 odd and even, back outs after publishing, We won /
+  Confirm / No we won / Fix / Undo, the 15 minute rule, the Time check and Apply, Pause, Player left, switched off sends nothing, a player on
+  no team, and the review fixes). Older tests updated where this zip changes the rule on purpose: zip56 (2: the courts after Finalize),
+  zip48-split (the shared server file's new name), backup-zip19 and zip50-backup (teams and games listed as left out), readonly-pin (the
+  preview-only pools look). `npx tsc -b` clean.
+- Browser: e2e/zip57.cjs 18 of 18 (draft at 390/360/320 light and dark, before the night, Game 1 with We won and Undo then Parker's confirm,
+  the organizer's night with Fix, Apply, Player left and Pause, the pools look, Finalize's Courts and fit line at 420 x 912, the odd back out
+  with Copy text, switched off). Older ones: zip55 91, zip56 57, zip59 12, zip60 29 and zip64 83 (both follow the Finalize line), zip62 17,
+  zip63 64. Switch OFF equals main `316ac36`: e2e/zip55-off.cjs and e2e/zip56-off.cjs 47 of 47 each, with main in its own folder and its own
+  install (with a linked install in the second folder the Home pixels differ on this machine even branch against itself; main against main
+  and branch against main with a real install are identical).
+
+### Preview
+`pickleball-preview` (fake) only: restore points first (Time Travel bookmark `0000018f-00000000-00005128-af70f2d664b6e77d12a922813b87df5b`, SQL
+export 84 KB kept outside git), then `0027_tournament_games` (the only one pending), then the two seat columns added by hand after the review
+(`ALTER TABLE tournament_games ADD COLUMN seat_a INTEGER; ... seat_b INTEGER;`, the same as 0027 now holds). Deployed from this branch to
+https://claude-new-session-gfcgy1.pickleball-club-9h0.pages.dev and re-seeded (`npm run db:seed:preview`: game night, no teams yet). First
+screen at 390, light and dark: organizer Home shows the Tournament test row and "8 locked in. Draft the teams."; Vic's Home shows the date alert
+and the ticket (You're locked in). No page errors. Switches: every flag in live's public answer is on the preview too, plus TOURNAMENTS
+(live's organizer-only rows could not be read: no read-only PIN in this session).
+
+### Live: NOT done (the database change waits for Alex's OK)
+To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`, the three integrity checks, `npx wrangler d1 migrations list
+pickleball --remote` (must list only 0027), `npm run db:migrate:remote`, fast-forward main to this branch and push, `npm run deploy` from main,
+the checks again, the public live check. Rollback: the Zip 64 deployment live now; the new tables and columns can stay (old code never reads
+them). Tournaments finalized before this zip read 2 courts after the deploy (Create's placeholder); the plan check card's "Use 1 court" fixes it
+before the teams are published.

@@ -127,7 +127,7 @@ describe('Zip 48: the player download', () => {
 
   it('names no organizer file and holds no organizer screen', () => {
     const page = read(split, 'index.html');
-    expect(page).not.toMatch(/AdminEntry|zip11-/);
+    expect(page).not.toMatch(/AdminEntry|zip11-|tournamentSchedule-/);
     const script = read(split, `assets/${asset(split, /^index-.*\.js$/)}`);
     const admin = read(split, `assets/${asset(split, /^AdminEntry-.*\.js$/)}`);
     // Words only the organizer screens draw: in the organizer file, not in the player file.
@@ -151,7 +151,9 @@ describe('Zip 48: /admin', () => {
     expect(added.map((l) => l.trim())).toEqual([
       '<!-- Zip 48: /admin only. The organizer files, started at once (vite.config.ts, adminPage). -->',
       `<link rel="modulepreload" crossorigin href="/assets/${js}">`,
-      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^zip11-.*\.js$/)}">`,
+      // The server code the organizer file and View as's copy share (named zip11 until Zip 57; the build now names the same shared file after
+      // shared/tournamentSchedule.ts, one of the modules in it).
+      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^(zip11|tournamentSchedule)-.*\.js$/)}">`,
       // Zip 56: the ticket rules (shared/tournamentTickets.ts), shared by the organizer file, the player's tournament file and View as's copy of
       // the server, so the build keeps them in one small file of their own (no style). Zip 66: that file also holds the new shared helpers
       // (shared/tournamentNudge.ts), so the build names it after them.

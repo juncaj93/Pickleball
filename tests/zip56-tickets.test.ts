@@ -159,8 +159,9 @@ describe('picking the date opens tickets (Alex: no Open tickets button)', () => 
     const t = (await dash(ctx)).tournament;
     // Zip 64: the style is free until the night starts (formatLocked only then); the price and Everyone still lock.
     expect(t).toMatchObject({ status: 'tickets', payBy: '2026-11-12T00:00:00.000Z', settingsLocked: true, formatLocked: false, closed: false, ticketCents: 1600 });
-    // The organizer's own seat ($0) was taken in the same tap: 1 locked in, so 6 spots (the plan for 6: 1 court, 2.5 hours).
-    expect(t).toMatchObject({ size: 6, courts: 1, minutes: 150 });
+    // The organizer's own seat ($0) was taken in the same tap: 1 locked in, so 6 spots. Zip 57: once the date is finalized the courts are the
+    // ones chosen on Finalize (2 to start), with the real hours.
+    expect(t).toMatchObject({ size: 6, courts: 2, minutes: 150 });
     expect(t.tickets).toEqual([expect.objectContaining({ name: 'Alex', place: 'spot', priceCents: 0, organizer: true })]);
     const c = await card(ctx, 'Blair');
     expect(c.status).toBe('tickets');
@@ -238,8 +239,8 @@ describe('the smart plan on the organizer\'s screens', () => {
 
   it("Americano's credits are 1st plus 2nd place", async () => {
     const ctx = await world({ signUp: ['Alex', 'Blair'], format: 'americano' });
-    // $60 court - 5 x $16 + ($14 + $7) = $1.
-    expect((await dash(ctx)).tournament.cost).toMatchObject({ ifFillsCents: 100 });
+    // Zip 57: the courts chosen on Finalize (2 to start) for the real hours (2.5): $120 court - 5 x $16 + ($14 + $7) = $61.
+    expect((await dash(ctx)).tournament.cost).toMatchObject({ ifFillsCents: 6100 });
   });
 });
 

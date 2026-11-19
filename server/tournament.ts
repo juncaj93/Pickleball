@@ -63,6 +63,8 @@ import {
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
+import { adminDayView, courtNumbersOf, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, type GameRow, type TeamRow } from './tournamentDay';
+import { fitWords, nightPlan } from '../shared/tournamentPlan';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
@@ -136,9 +138,13 @@ export interface TournamentRow {
   pay_by?: string | null;
   /** Zip 60 (migration 0025): how the format was set ('vote', 'tie', 'admin', or NULL for the organizer's own choice). Missing before 0025. */
   format_source?: string | null;
+  /** Zip 57 (migration 0027): teams published, the venue's court numbers (JSON), game day paused. Missing before 0027. */
+  teams_at?: string | null;
+  court_numbers?: string | null;
+  paused_at?: string | null;
 }
 
-interface SignupRow {
+export interface SignupRow {
   id: string;
   tournament_id: string;
   player_id: string;
@@ -296,6 +302,8 @@ export interface TourPre<Row> {
   canceledMoney?: { backCents: number; claimCents: number } | null;
   /** Zip 66, the organizer's card: the active players who played a game in the last 3 months (recentPlayersRead). */
   recent?: { id: string; display_name: string }[];
+  /** Zip 57: the teams and games of the picked tournament (empty before any draft). */
+  day?: { teams: TeamRow[]; games: GameRow[] };
 }
 
 /** The reads (for the screen's batch) and how to read their answers back. Only while the switch is on for the request. */
@@ -356,6 +364,9 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
        FROM (SELECT t.id FROM tournaments t WHERE t.id = ${pick} AND t.status = 'canceled') c`,
       values: [...values, playerId],
     },
+    // Zip 57: the teams and games (published teams only reach a player; the view decides).
+    { sql: teamsSqlFor(pick), values },
+    { sql: gamesSqlFor(pick), values },
   ];
   return {
     reads,
@@ -370,6 +381,7 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
         org: org.from(rows(3)),
         freed: freed ? Math.max(0, Number(freed.gone ?? 0) - Number(freed.taken ?? 0)) : 0,
         canceledMoney: money ? { backCents: money.back ?? 0, claimCents: money.claim ?? 0 } : null,
+        day: { teams: rows(6), games: rows(7) },
       };
     },
   };
@@ -399,11 +411,19 @@ export function adminTourReads(group: GroupRow, nowMs: number): TourReads<ShownR
   const pick = `(SELECT id FROM tournaments WHERE ${SHOWN_WHERE})`;
   const org = orgReads(group);
   return {
-    // Zip 66: the players who played lately ride in the same trip (one more small read in the batch, no trip of its own).
-    reads: [{ sql: SHOWN_SQL, values }, { sql: signupsSqlFor(pick), values }, { sql: ticketsSqlFor(pick), values }, org.read, recentPlayersRead(group.id, nowMs)],
+    // Zip 66: the players who played lately ride in the same trip (one more small read in the batch, no trip of its own). Zip 57: the teams and games.
+    reads: [
+      { sql: SHOWN_SQL, values },
+      { sql: signupsSqlFor(pick), values },
+      { sql: ticketsSqlFor(pick), values },
+      org.read,
+      recentPlayersRead(group.id, nowMs),
+      { sql: teamsSqlFor(pick), values },
+      { sql: gamesSqlFor(pick), values },
+    ],
     from: (res) => {
       const rows = (i: number) => (res[i]?.results ?? []) as never[];
-      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)), recent: rows(4) };
+      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)), recent: rows(4), day: { teams: rows(5), games: rows(6) } };
     },
   };
 }
@@ -860,7 +880,12 @@ export async function playerTournamentFor(
   if (statusOf(t) === 'canceled') return { ...base, canceled: (readTickets && pre?.canceledMoney) || (await canceledMoneyOf(ctx.db, t.id, playerId)) };
   // Piece 1's stage (tickets never opened) sends what it did.
   if (!ticketsEverOpened(t)) return base;
-  return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf, readTickets ? pre?.freed : undefined) };
+  // Zip 57: the teams and game day, once the organizer published the teams, while the style is Locked doubles (an Americano night has no teams).
+  const dayView =
+    statusOf(t2) === 'tickets' && t2.teams_at && t2.final_date && base.format === 'doubles'
+      ? playerDayView(t2, all, readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id), playerId, group.timezone, ctx.nowMs)
+      : null;
+  return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf, readTickets ? pre?.freed : undefined), ...(dayView ? { day: dayView } : {}) };
 }
 
 /** Zip 56: the ticket part of one player's card: names only for everyone else, their own money only. */
@@ -887,7 +912,7 @@ async function playerTicketsView(
   const holding = !!own && (own.place === 'spot' || own.claim_cents > 0 || (own.place === 'line' && own.credit_cents + own.paid_cents >= own.price_cents));
   const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && lockedInCount(tickets) >= MAX_SPOTS))));
   return {
-    // The spots players see: the planned size (Alex's smart plan); every spot is taken only at 12.
+    // The spots players see: the planned size (Alex's smart plan); every spot is taken only at the cap (16, Zip 63).
     size: smartPlan(locked).size,
     full: locked >= MAX_SPOTS,
     // The organizer pays the venue, never the group: their own seat is $0 (the organizer found as the site always finds them, saved or by name).
@@ -1002,6 +1027,19 @@ export async function adminTournamentFor(
   );
   const paidNow = locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).length;
   const prize = prizeCentsOf(formatOf(ts), t.champion_credit_cents, t.second_credit_cents ?? 0);
+  // Zip 57: once the date is finalized the plan line, the cost and the venue card use the courts the organizer chose there (and the real hours).
+  const courts = real ? (t.courts === 1 ? 1 : 2) : plan.courts;
+  const shownFormat: TournamentFormat = decided && !salesClosed(t, tz, ctx.nowMs) ? styleAtClose(formatOf(ts), nIn) : formatOf(ts);
+  // Zip 57: the check when tickets close, with the players really locked in (amber): under 6, too tight, or a court no longer needed.
+  let closeCheck: AdminTournamentView['closeCheck'] = null;
+  if (decided && real && statusOf(t) === 'tickets' && !nightOver(t, tz, ctx.nowMs)) {
+    const fit = nightPlan(nIn, courts, real.minutes, shownFormat);
+    const nums = courtNumbersOf(t);
+    if (nIn < 6) closeCheck = { kind: 'few', text: `Only ${nIn} locked in. Cancel or reschedule?` };
+    else if (!fit.fits) closeCheck = { kind: 'tight', text: fitWords(fit, real.start).text };
+    else if (courts === 2 && nIn <= 7) closeCheck = { kind: 'extra_court', text: `${nIn} locked in: 1 court is enough. Call the venue to cancel court ${nums?.[1] ?? 2}.` };
+  }
+  const dayRows = statusOf(t) === 'tickets' && t.final_date ? (readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id)) : null;
   const pending = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
   const voters = rows.filter((r) => r.status === 'in' && (!t.final_date || storedDays(r.dates).includes(t.final_date)));
   const votesSent = !!sourceOf(ts.format_source);
@@ -1010,7 +1048,7 @@ export async function adminTournamentFor(
   return {
     id: t.id,
     name: t.name,
-    format: decided && !salesClosed(t, tz, ctx.nowMs) ? styleAtClose(formatOf(ts), nIn) : formatOf(ts),
+    format: shownFormat,
     // Zip 64: the style can change until the tournament starts (Finalize or Edit); only the night starting (or a cancel) locks it.
     formatLocked: statusOf(t) === 'canceled' || salesClosed(t, tz, ctx.nowMs),
     startSet: !!real,
@@ -1046,11 +1084,14 @@ export async function adminTournamentFor(
     status: statusOf(t),
     visibility: t.visibility === 'all' ? 'all' : 'me',
     size: plan.size,
-    courts: plan.courts,
+    courts,
     minutes: real ? real.minutes : plan.minutes,
     start: real ? real.start : plan.start,
-    // Zip 64: once the date is finalized the court bill follows the real hours ("Plays"), on the plan's courts.
-    cost: { ...organizerCost(real ? { ...plan, minutes: real.minutes } : plan, t.ticket_cents, prize, paidNow), paidNow },
+    // Zip 64: once the date is finalized the court bill follows the real hours ("Plays"); Zip 57: on the courts chosen there.
+    cost: { ...organizerCost(real ? { ...plan, courts, minutes: real.minutes } : plan, t.ticket_cents, prize, paidNow), paidNow },
+    ...(real ? { chosenCourts: courts } : {}),
+    closeCheck,
+    ...(dayRows ? { day: adminDayView(ts, shownFormat, rows, tickets, dayRows, tz, ctx.nowMs) } : {}),
     ticketCents: t.ticket_cents,
     championCreditCents: t.champion_credit_cents,
     secondCreditCents: t.second_credit_cents ?? 0,
@@ -1491,7 +1532,8 @@ export async function finalizeView(ctx: Ctx): Promise<FinalizeView> {
     players: tally.names,
     fits: fit.fits,
     over: fit.over,
-    courts: smartPlan(fit.fits).courts,
+    // Zip 57: the Courts row starts on the tournament's courts field (2 until the organizer picks 1 on Finalize).
+    courts: t.courts === 1 ? 1 : 2,
     votes,
     winner,
     format: formatOf(t),
@@ -1549,6 +1591,9 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
   // Zip 64: the real start and end ("Plays" on the Finalize screen), saved in the existing start_minutes and minutes columns.
   const plays = readPlays(body, t);
   if (ctx.nowMs >= startMsOf(date as string, plays.start, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
+  // Zip 57: the Courts row (1 or 2), saved in the tournament's existing courts field. Left out: kept as it is.
+  if (body.courts !== undefined && body.courts !== 1 && body.courts !== 2) bad('invalid_courts', 'Pick 1 or 2 courts.');
+  const courts = body.courts === 1 ? 1 : body.courts === 2 ? 2 : t.courts === 1 ? 1 : 2;
   // Zip 56 (Alex): picking the date opens tickets, for everyone on the list, in the same tap: Pay by starts at the night before at 7:00 PM (the
   // organizer can change it), the organizer's own $0 seat is taken when they are on the list. No other trigger.
   const night = startMsOf(date as string, plays.start, group.timezone);
@@ -1589,7 +1634,7 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
     ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?,
-           format = COALESCE(?, format), format_source = COALESCE(?, format_source), ticket_cents = ?, start_minutes = ${plays.start}, minutes = ${plays.minutes}
+           format = COALESCE(?, format), format_source = COALESCE(?, format_source), ticket_cents = ?, start_minutes = ${plays.start}, minutes = ${plays.minutes}, courts = ${courts}
          WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ? AND ticket_cents = ?
            AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)`,
       )
@@ -1607,10 +1652,10 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
     group.id,
     null,
     'tournament_tickets_opened',
-    { tournament: t.name, date: dayLong(date as string), priceCents: ticketCents, payBy: payByLabel(payBy, group.timezone, date as string), plays: planRange(plays.start, plays.minutes) },
+    { tournament: t.name, date: dayLong(date as string), priceCents: ticketCents, payBy: payByLabel(payBy, group.timezone, date as string), plays: planRange(plays.start, plays.minutes), courts },
     ctx.nowIso,
   );
-  return { ok: true, date, payBy, format: setFormat ?? formatOf(t), source: setSource ?? t.format_source ?? null, start: plays.start, minutes: plays.minutes };
+  return { ok: true, date, payBy, format: setFormat ?? formatOf(t), source: setSource ?? t.format_source ?? null, start: plays.start, minutes: plays.minutes, courts };
 }
 
 /**
@@ -1861,6 +1906,9 @@ export interface TournamentTables {
   tournament_level_history: Record<string, unknown>[];
   /** Zip 56: the tickets (missing from an older server's answer). */
   tournament_tickets?: Record<string, unknown>[];
+  /** Zip 57: the teams and games (missing from an older server's answer, or a database before 0027). */
+  tournament_teams?: Record<string, unknown>[];
+  tournament_games?: Record<string, unknown>[];
 }
 
 export async function tournamentTablesFor(db: D1Database, groupId: string): Promise<TournamentTables | null> {
@@ -1870,6 +1918,14 @@ export async function tournamentTablesFor(db: D1Database, groupId: string): Prom
     .bind(groupId)
     .all<Record<string, unknown>>()
     .then((r) => r.results)
+    .catch(() => null);
+  // Zip 57: the teams and games (a database before 0027 has neither: left out, as before).
+  const day = await db
+    .batch([
+      db.prepare('SELECT x.* FROM tournament_teams x JOIN tournaments t ON t.id = x.tournament_id WHERE t.group_id = ? ORDER BY x.created_at, x.id').bind(groupId),
+      db.prepare('SELECT g.* FROM tournament_games g JOIN tournaments t ON t.id = g.tournament_id WHERE t.group_id = ? ORDER BY g.tournament_id, g.num').bind(groupId),
+    ])
+    .then(([x, g]) => ({ teams: x.results as Record<string, unknown>[], games: g.results as Record<string, unknown>[] }))
     .catch(() => null);
   try {
     const [a, b, c] = await db.batch([
@@ -1882,6 +1938,7 @@ export async function tournamentTablesFor(db: D1Database, groupId: string): Prom
       tournament_signups: b.results as Record<string, unknown>[],
       tournament_level_history: c.results as Record<string, unknown>[],
       ...(tickets ? { tournament_tickets: tickets } : {}),
+      ...(day ? { tournament_teams: day.teams, tournament_games: day.games } : {}),
     };
   } catch {
     return null;

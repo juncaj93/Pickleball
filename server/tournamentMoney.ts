@@ -63,8 +63,8 @@ export const offList = (x: string): string =>
 export const tournamentCanceled = (x: string): string => `EXISTS (SELECT 1 FROM tournaments t WHERE t.id = ${x}.tournament_id AND t.status = 'canceled')`;
 
 /**
- * Every open spot goes to the first PAID people in line, in the order they joined it (only people still on the list). Never more than 12
- * spots (Alex: the spots follow the players locked in, and the waitlist starts after 12: the LIMIT, and the database's own cap trigger behind
+ * Every open spot goes to the first PAID people in line, in the order they joined it (only people still on the list). Never more than 16
+ * spots (Alex: the spots follow the players locked in, and standby starts after the cap of 16 (Zip 63): the LIMIT, and the database's own cap trigger behind
  * it). Runs after every change that can open a spot or pay a ticket in line.
  */
 export function fillSpotsStatement(db: D1Database, tournamentId: string, nowIso: string): D1PreparedStatement {

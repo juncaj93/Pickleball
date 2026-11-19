@@ -10,6 +10,15 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 57 (🎾57.tourney3): teams and game day. "The Cold Open", Locked doubles, 8 locked in: Net Ninjas (Vic, Wren), Dill With It (Sage,
+  // Christopher), Kitchen Crew (Rowan, Zoe), Third Shot Gang (Parker, Quinn); courts 1 and 2. The format above does not apply.
+  { stage: 'day_ready', label: 'Game night, no teams yet (start here)', line: 'Tonight, started 10 minutes ago, 8 locked in. Home: Draft teams, then Publish teams. View as Vic: Game 1 with We won. View as Parker: Confirm.' },
+  { stage: 'teams_drafted', label: 'Teams drafted', line: 'The four teams drafted, not published (mock 15). Swap, rename a team, Redo the draw, Publish teams.' },
+  { stage: 'teams_published', label: 'Teams published (two days before)', line: 'Published, the night two days from now. View as Vic: Your team, Your games with courts, All teams (mock 16).' },
+  { stage: 'game1', label: 'Game 1', line: 'Tonight, started a minute ago, no results. View as Vic: Game 1 with We won and Third Shot Gang won (mock 17).' },
+  { stage: 'mid', label: 'Mid-tournament (running behind)', line: 'Started 45 minutes ago, 7:30 to 9:30 PM. Vic said Net Ninjas won Game 1; view as Parker to confirm (mock 19). Home: the Time check with one tap (mock 48).' },
+  { stage: 'pools_done', label: 'All pool games done', line: 'Every round robin game in: final standings; the Final and the 3rd place game are set.' },
+  { stage: 'backed_out', label: 'Player backed out (odd count)', line: 'Teams published, then Zoe backed out after Pay by: 7 locked in. Home: switched to Americano with Copy text for the group. Players: Tournament style is now Americano, no teams.' },
   // Zip 66 (🎾66.admincard): the organizer's card (one closed line, Votes, Not signed up) and the in-or-out alert.
   { stage: 'zip66_start', label: 'Start: the card, Votes, Not signed up', line: 'The Cold Open, the vote open, 8 on the list (Vic and Reese are not). Home: the card is one closed line. Tap it open, tap Votes, tap Not signed up, Copy reminder text. Edit: Plan, Levels (a pencil shows the dates), Pick the date (folded), Settings.' },
   { stage: 'missed_date', label: 'Date picked, Sage missed it', line: 'Finalized on a date Sage did not pick. View as Sage: The Cold Open is that day, Can you make it? I’m in opens the pay sheet; Can’t make it takes her off. Home: Not signed up lists Sage.' },
@@ -186,6 +195,16 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
           </a>
         </div>
         <p className="tm-card-note">Look only, as Vic on that page: the card draws that many balls with that many gold. Start from a Tickets open stage. Any other link shows the real card.</p>
+      </section>
+      {/* Zip 57: 12 players cannot be made with the 10 names: this draws the 12 players pools night as Vic (look only, that page). */}
+      <section className="tm-card" aria-label="Pools look" data-tm-test-pools>
+        <div className="tm-card-head">
+          <h3 className="tm-label">12 players pools</h3>
+        </div>
+        <a className="btn secondary block" href="/?as=Vic&poolslook=12" data-tm-test-pools-link>
+          Pools look (12 players)
+        </a>
+        <p className="tm-card-note">Look only, as Vic: two pools of 3, Court 9 and Court 10 or Sits, The night. Start from a Game night stage. The 6th team is Kai + Guest (no 12th name on the preview).</p>
       </section>
       <section className="tm-card" aria-label="View as">
         <div className="tm-card-head">

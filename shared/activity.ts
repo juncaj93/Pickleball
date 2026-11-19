@@ -309,6 +309,37 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} rescheduled the ${tourName(d)}${typeof d.date === 'string' ? ` (was ${d.date})` : ''}${num(d.held) > 0 ? `, ${d.held} ${d.held === 1 ? 'ticket' : 'tickets'} held` : ''}`;
     case 'tournament_holds_returned':
       return `${num(d.count)} unused ${tourName(d)} ${d.count === 1 ? 'hold' : 'holds'} came back as credit (${cents(d.amountCents)})`;
+    // Zip 57 "Tournaments" piece 3 (server/tournamentDay.ts): teams and game night. Team names with their two players; no levels, no money.
+    case 'tournament_teams_drafted':
+      return `${who} ${d.redo === true ? 'drew the teams again' : 'drafted the teams'} for the ${tourName(d)} (${num(d.teams)} teams)`;
+    case 'tournament_teams_published':
+      return `${who} published the teams for the ${tourName(d)} (${num(d.teams)} teams, ${num(d.games)} games)`;
+    case 'tournament_teams_unpublished':
+      return `${who} took the ${tourName(d)} teams back to the draft`;
+    case 'tournament_teams_swapped':
+      return `${who} swapped ${typeof d.players === 'string' ? d.players : 'two players'} in the ${tourName(d)} teams`;
+    case 'tournament_teams_fixed':
+      return `${who} paired the left-over players for the ${tourName(d)}${typeof d.paired === 'string' && d.paired ? ` (${d.paired})` : ''}`;
+    case 'tournament_team_named':
+      return `${typeof d.player === 'string' ? d.player : who} named a ${tourName(d)} team ${typeof d.team === 'string' ? `"${d.team}"` : ''}${typeof d.players === 'string' ? ` (${d.players})` : ''}${typeof d.was === 'string' ? ` (was ${d.was})` : ''}`;
+    case 'tournament_courts':
+      return typeof d.count === 'number' ? `${who} planned the ${tourName(d)} on ${d.count} ${d.count === 1 ? 'court' : 'courts'}` : `${who} set the ${tourName(d)} courts to ${typeof d.courts === 'string' ? d.courts : '?'}`;
+    case 'tournament_result':
+      return d.by === 'player'
+        ? `${player}: ${typeof d.result === 'string' ? d.result : 'a result'} (${tourName(d)}, game ${num(d.game)})`
+        : typeof d.winner === 'string'
+          ? `${who} set ${d.winner}${typeof d.winnerPlayers === 'string' ? ` (${d.winnerPlayers})` : ''} as the winner of ${tourName(d)} game ${num(d.game)}`
+          : `${who} cleared the result of ${tourName(d)} game ${num(d.game)}`;
+    case 'tournament_time_check':
+      return `${who} set ${tourName(d)} pool games to ${num(d.to)} from round ${num(d.round)}`;
+    case 'tournament_paused':
+      return `${who} paused the ${tourName(d)}`;
+    case 'tournament_resumed':
+      return `${who} resumed the ${tourName(d)}`;
+    case 'tournament_player_left':
+      return typeof d.swapIn === 'string'
+        ? `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${d.swapIn} took over on ${typeof d.team === 'string' ? d.team : 'the team'}`
+        : `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${typeof d.team === 'string' ? d.team : 'the team'} sits out (${num(d.skipped)} games skipped)`;
     case 'guest_spot_on':
       return `${who} switched "Guest spot" on`;
     case 'guest_spot_off':

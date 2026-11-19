@@ -3,7 +3,8 @@
 // (src/lib.ts reads shared/tournament.ts for the switch) stays exactly what it was, and only the tournament screens fetch this.
 //
 // The rules (the brief, Zip 56):
-//  - Spots = the players expected (6, 8, 10 or 12). The ticket is the tournament's flat price ($16 to start), the same for every size.
+//  - Spots follow the players locked in (6 to 16; the hidden cap is 16 since Zip 63). The ticket is the tournament's flat price ($16 to start),
+//    the same for every size.
 //  - Lock my spot uses the player's credit at once (the site's rule at I'm in); the rest is paid on the site's own Pay sheet (Venmo, I paid).
 //    Only CONFIRMED money counts as paid (credit, or cash the organizer confirmed): an I paid waits for the organizer and holds no spot.
 //  - A spot belongs to a ticket paid in full. When every spot is taken, players join the waitlist; a waitlist player may pay to hold.

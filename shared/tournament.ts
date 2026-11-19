@@ -1,6 +1,6 @@
 // Zip 55 (Nov 2026): TOURNAMENTS ("Tournaments"), ships OFF. A doubles tournament, built in 4 pieces; this is PIECE 1:
-//   1. the organizer creates a tournament (Settings > Schedule > Create tournament): name, the dates to offer, players expected (6, 8, 10
-//      or 12), the court plan for that size, the ticket price and the champion credit (both only STORED in piece 1), and who can see it;
+//   1. the organizer creates a tournament (Settings > Schedule > Create tournament): name, the dates to offer (Zip 56 dropped the players
+//      expected and the court plan: the plan follows the players, 6 to 16), the ticket price and the champion credit (both only STORED in piece 1), and who can see it;
 //   2. players sign up from a pinned ticket card on Home: their level, then every date that works; they can edit or back out;
 //   3. the organizer sees the level list (each player's pick, can change it) and how many can make each date, and picks the date.
 // Piece 2 (tickets, waitlist), piece 3 (teams, game day, End tournament) and piece 4 (tie wheel, final) come later. No money moves here.
@@ -62,7 +62,7 @@ export const levelShort = (v: number): string => levelOf(v)?.short ?? (v / 100).
 // Sizes and court plans (the approved pictures 01, 02 and 03). The plan sets the court time; the ticket is the same for every size.
 // ---------------------------------------------------------------------------------------------------------------------
 
-export const SIZES = [6, 8, 10, 12] as const;
+export const SIZES = [6, 8, 10, 12, 14, 16] as const;
 export type Size = (typeof SIZES)[number];
 export const isSize = (v: unknown): v is Size => typeof v === 'number' && (SIZES as readonly number[]).includes(v);
 
@@ -192,7 +192,7 @@ export interface FinalizeView {
   ticketCents: number;
   /** The usual Pay by for this date (ISO). */
   payBy: string;
-  /** Zip 64 part 8: the plan's courts for this date's count (the plan line "Plan: 10 players · 2 courts"). */
+  /** Zip 57: the Courts row starts on this (the tournament's courts field: 2 until the organizer picks 1). */
   courts: number;
   /** Zip 64: "Plays" starts on these: the start (minutes after midnight Eastern) and the length in minutes (7:30 PM to 10:00 PM). */
   start: number;
@@ -282,10 +282,24 @@ export const PLANS: Record<Size, readonly Plan[]> = {
     plan(2, 120, 20 * 60, 'Very tight. No time for a tiebreak.'),
   ],
   12: [
-    plan(2, 180, 19 * 60, 'Everyone plays everyone. Call the venue to hold 2 courts.', true),
-    plan(2, 120, 20 * 60, 'Two groups of 3. Each group winner plays the final.'),
+    plan(2, 180, 19 * 60, 'Two pools of 3, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true),
+    plan(2, 120, 20 * 60, 'Two pools of 3 with games to 9. Tight.'),
   ],
+  // Zip 57 (mocks 52 and 53, the game plan table): 14 and 16 have their own plan, 2 courts for 3 hours from 7:00 PM.
+  14: [plan(2, 180, 19 * 60, 'Pool A of 4 and Pool B of 3, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true)],
+  16: [plan(2, 180, 19 * 60, 'Two pools of 4 with pool games to 9, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true)],
 };
+
+/**
+ * Zip 57: the game plan table's STARTING SUGGESTION (the organizer card's "Plan:" line until Finalize sets the real courts and hours): 6 and 7 = 1
+ * court 2.5 hours, 8 = 2 courts 2 hours, 9 to 11 = 2 courts 2.5 hours, 12 to 16 = 2 courts 3 hours; 7:30 PM, 7:00 PM for 3 hours. The one place
+ * these numbers live (shared/tournamentPlan.ts re-exports it; PLANS' best plans match it, tests/zip57-plan.test.ts checks).
+ */
+export function suggestedPlan(players: number): { courts: number; minutes: number; start: number } {
+  const n = Math.min(MAX_SPOTS, Math.max(6, players));
+  const [courts, minutes] = n <= 7 ? [1, 150] : n === 8 ? [2, 120] : n <= 11 ? [2, 150] : [2, 180];
+  return { courts, minutes, start: minutes >= 180 ? 19 * 60 : 19 * 60 + 30 };
+}
 
 /** 2.5 and 3 hour plans only count while Booking hours is ON for everyone (SITE_RULES, Zip 24): the same gate the 2.5 and 3 hour prices use. */
 export const planAllowed = (p: Pick<Plan, 'minutes'>, longGames: boolean): boolean => p.minutes <= 120 || longGames;
@@ -308,7 +322,7 @@ export function findPlan(size: Size, courts: number, minutes: number, start: num
 /** The most spots there are (Zip 63: a hidden cap of 16; it was 12): players lock in until 16 are in, then standby starts. Players never see the
  *  number; the database triggers (migration 0026) refuse a 17th spot whatever code path writes it. */
 export const MAX_SPOTS = 16;
-/** Zip 63: the largest court plan (PLANS stops at 12 players). From 13 to 16 locked in the plan stays the 12-player plan (2 courts, 3 hours). */
+/** The size Create stores in the old NOT NULL size column (no screen reads it). Zip 57: 14 and 16 have plans of their own now. */
 export const PLAN_MAX: Size = 12;
 /** A court for an hour (SITE_RULES: $48 for 2 hours, $60 for 2.5, $72 for 3). */
 export const COURT_CENTS_PER_HOUR = 24_00;
@@ -345,13 +359,13 @@ export function planCount(o: { signedUp: number; going: number; locked: number; 
   return Math.max(o.ticketsOpen ? o.going : o.signedUp, o.locked);
 }
 
-/** The plan for the players locked in: 6 = 1 court 2.5 hours, 8 = 2 courts 2 hours, 10 = 2 courts 2.5 hours, 12 = 2 courts 3 hours. */
+/**
+ * The plan for a count (the planned size: 6 = 1 court 2.5 hours, 8 = 2 courts 2 hours, 10 = 2 courts 2.5 hours, 12, 14 and 16 = 2 courts 3 hours).
+ * Zip 57: from the game plan table's suggestion (suggestedPlan), so 14 and 16 say "2 courts · 3 hours" from the same one source.
+ */
 export function smartPlan(locked: number): SmartPlan {
   const size = plannedSize(locked);
-  // Zip 63: 14 and 16 have no court plan of their own: the courts and hours stay the 12-player plan's.
-  const courts = PLANS[Math.min(size, PLAN_MAX) as Size];
-  const p = courts.find((x) => x.best) ?? courts[0];
-  return { size, courts: p.courts, minutes: p.minutes, start: p.start };
+  return { size, ...suggestedPlan(size) };
 }
 
 /** The court bill for a plan: courts x hours x $24. */
@@ -604,6 +618,144 @@ export interface PlayerTournamentView {
   tickets?: PlayerTicketsView;
   /** Zip 56: the canceled tournament's plain card (only for players who were on the list): what came back to this player. */
   canceled?: { backCents: number; claimCents: number };
+  /** Zip 57: Locked doubles teams and game day, once the organizer published the teams (and the style is Locked doubles). */
+  day?: PlayerDayView;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 57 (🎾57.tourney3): teams and game day (server/tournamentDay.ts). Names only for everyone else; a player sees only their own games (plus
+// the games being played now, by team name), the standings and the night's times.
+// ---------------------------------------------------------------------------------------------------------------------
+
+export type DayStage = 'pool' | 'semi' | 'final' | 'third';
+
+/** One of this player's games (mocks 16 to 18). */
+export interface PlayerDayGame {
+  num: number;
+  /** "Game 1", "Semifinal", "Final", "3rd place". */
+  label: string;
+  stage: DayStage;
+  round: number;
+  /** The venue's court number (or 1 and 2 until the organizer sets them). Null: not known yet (a playoff not decided). */
+  court: number | null;
+  /** The other team's name and players, or null while a playoff is not decided ("If you finish in the top 2"). */
+  opponent: { name: string; players: string[] } | null;
+  /** While the other team is not known: what decides it. */
+  pending?: string;
+  /** done (a result counts), next (the first one not done), later. */
+  state: 'done' | 'next' | 'later';
+  /** Their team won it (done games only). */
+  won?: boolean;
+  /** Played to this (the Time check can make pool games shorter). */
+  playTo: number;
+  /** This team said it won and the other team has not confirmed (Undo is still possible). */
+  claimed?: boolean;
+  /** The other team said it won: this player is asked to confirm. */
+  askConfirm?: boolean;
+  /** The other team said "No, we won": the organizer decides. */
+  disputed?: boolean;
+  /** Never played (a team left). */
+  skipped?: boolean;
+  /** Its round is being played now: We won and "<other team> won" show on it. */
+  onNow?: boolean;
+}
+
+export interface PlayerDayView {
+  /** Their own team (null: not on a team, e.g. not locked in). `canRename`: either partner can type a name or roll the dice (until Game 1). */
+  team: { name: string; players: string[]; seat: number; canRename?: true } | null;
+  /** Every team (All teams), names and players only, in seat order. */
+  teams: { name: string; players: string[]; me?: true; out?: true }[];
+  /** Two pools (12 players and up). */
+  pools: boolean;
+  /** Their games in order (pool games, then the playoff games they may reach). */
+  games: PlayerDayGame[];
+  /** The night has started (results can be given). */
+  started: boolean;
+  /** The live window (from 30 minutes before the start through the night): the live view replaces the ticket at the top of Home, and the
+   *  week's game cards below fold into "Show future games". */
+  today: boolean;
+  /** "7:30 PM": when game 1 begins. */
+  beginsAt: string;
+  /** The organizer set the venue's court numbers: a court opens the court map. */
+  courtsSet: boolean;
+  /** The header: "Game 2 of 3", "Final", "Pool play · Round 1 of 3", "Done". And the bar (0 to 1). */
+  progress: { label: string; done: number; total: number };
+  /** Games being played now that are not theirs. */
+  live: { round: number; court: number | null; a: { name: string; players: string[] }; b: { name: string; players: string[] } }[];
+  /** Standings: one group, or Pool A and Pool B. Each row: record, theirs, a tie, and (pools) where the team plays this round. */
+  standings: { pool: 'A' | 'B' | null; rows: { rank: number; name: string; players: string[]; record: string; me?: true; tied?: true; out?: true; where?: string }[] }[];
+  /** The night's times (pools): pool play, semifinals, Final and 3rd place, shifted by the real start and the rounds' lengths. */
+  night: { label: string; time: string }[];
+  /** The Time check banner (only when shorter games are in force or suggested). */
+  timeNote?: string;
+  /** The organizer paused game day. */
+  paused?: true;
+  /** A partner changed after the teams were published: a one-time note ("Your new partner is Rowan."). */
+  partnerNote?: { key: string; text: string };
+}
+
+/** Zip 57: one team on the organizer's screens (levels shown to the organizer only). */
+export interface AdminDayTeam {
+  id: string;
+  seat: number;
+  name: string;
+  players: { id: string | null; name: string; level: number; gone?: true }[];
+  total: number;
+  pool: 'A' | 'B' | null;
+  out: boolean;
+}
+
+/** Zip 57: one game on the organizer's screens. */
+export interface AdminDayGame {
+  num: number;
+  round: number;
+  court: number;
+  courtNumber: number | null;
+  stage: DayStage;
+  pool: 'A' | 'B' | null;
+  a: { seat: number; name: string; players: string[] } | null;
+  b: { seat: number; name: string; players: string[] } | null;
+  /** What decides an empty side ("1st of Pool A", "Tied"). */
+  waitA?: string;
+  waitB?: string;
+  playTo: number;
+  winner: 'a' | 'b' | null;
+  claim: 'a' | 'b' | null;
+  disputed: boolean;
+  skipped: boolean;
+  resultBy: string | null;
+}
+
+/** Zip 57: the organizer's teams and game day (AdminTournamentView.day). */
+export interface AdminDayView {
+  /** none: no teams yet; draft: drafted, not published; published. */
+  phase: 'none' | 'draft' | 'published';
+  /** Draft teams can be tapped now, or why not. */
+  canDraft: boolean;
+  why?: string;
+  /** Players locked in (the draft's pool). */
+  lockedIn: number;
+  teams: AdminDayTeam[];
+  courtNumbers: number[] | null;
+  courts: number;
+  games: AdminDayGame[];
+  /** The plan the games follow (length of pool games, rounds, fits). */
+  plan: { gameTo: number; rounds: number; fits: boolean; minutesUsed: number } | null;
+  /** The round being played (null: not started, or over). */
+  round: number | null;
+  /** Some game has a result (the teams then stay; a player leaving is "Player left"). */
+  anyResult: boolean;
+  started: boolean;
+  over: boolean;
+  paused: boolean;
+  /** Time check: the words and what Apply does. */
+  timeCheck?: { text: string; fromRound: number; to: number; key: string } | null;
+  /** Shorter games already in force (the players' banner). */
+  timeNote?: string;
+  /** After publishing: the teams no longer match the players locked in (a back out, a late join). */
+  fix?: { gone: string[]; spare: string[]; text: string } | null;
+  /** Swap in candidates for "Player left": locked in but on no team, then paid standby. */
+  spares: { id: string; name: string; standby: boolean }[];
 }
 
 /** Zip 56: one ticket on the organizer's tournament page and Home cards (the organizer sees everyone's money). */
@@ -696,6 +848,12 @@ export interface AdminTournamentView {
   switchBack?: { key: string } | null;
   /** Zip 66: the "Not signed up" row (shared/tournamentNudge.ts). Left out when it does not apply (tickets closed, canceled). */
   notSignedUp?: NotSignedUpView;
+  /** Zip 57: the courts and hours the organizer chose on Finalize (the plan line and the venue card use them once the date is finalized). */
+  chosenCourts?: number;
+  /** Zip 57: the check when tickets close, with the players actually locked in (amber): too tight, a court no longer needed, under 6. */
+  closeCheck?: { kind: 'tight' | 'extra_court' | 'few'; text: string } | null;
+  /** Zip 57: teams and game day (Locked doubles). */
+  day?: AdminDayView;
 }
 
 /**

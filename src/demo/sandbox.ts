@@ -106,6 +106,9 @@ export async function createSandbox(SQL: SqlJsStatic, backup: unknown, migration
   if (extras?.tournaments) for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history'] as const) copyRows(db, t, extras.tournaments[t]);
   // Zip 56: the tickets (an older server sends none).
   if (extras?.tournaments?.tournament_tickets) copyRows(db, 'tournament_tickets', extras.tournaments.tournament_tickets);
+  // Zip 57: the teams, then the games (an older server sends neither).
+  if (extras?.tournaments?.tournament_teams) copyRows(db, 'tournament_teams', extras.tournaments.tournament_teams);
+  if (extras?.tournaments?.tournament_games) copyRows(db, 'tournament_games', extras.tournaments.tournament_games);
   const group = db.exec('SELECT id FROM groups LIMIT 1')[0]?.values[0]?.[0];
   const token = randomToken();
   db.run('INSERT INTO admin_sessions (id, group_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)', [

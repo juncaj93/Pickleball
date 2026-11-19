@@ -136,6 +136,7 @@ import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup, tournamentsFlags } from './tournament';
 import { playerTicketLock, playerTicketPaid, playerTicketWaitlist } from './tournamentTickets';
+import { playerGameAction, playerTeamName } from './tournamentDay';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
 import { refuseOverLimit, unpaidNudgeFor } from './unpaidNudge';
@@ -481,6 +482,16 @@ export async function tournamentEdit(ctx: Ctx, body: Record<string, unknown>) {
 /** Zip 55: POST /api/tournament/back-out { tournamentId }. Zip 56: with a ticket, its money comes back as credit (server/tournament.ts). */
 export async function tournamentBackOut(ctx: Ctx, body: Record<string, unknown>) {
   return playerTournamentBackOut(ctx, await viewer(ctx), body);
+}
+
+/** Zip 57 (server/tournamentDay.ts): POST /api/tournament/game { tournamentId, num, action }: We won, the other team won, Confirm, No we won, Undo. */
+export async function tournamentGame(ctx: Ctx, body: Record<string, unknown>) {
+  return playerGameAction(ctx, await viewer(ctx), body);
+}
+
+/** Zip 57: POST /api/tournament/team-name { tournamentId, name? }: a partner names the team (or rolls the dice), until Game 1. */
+export async function tournamentTeamName(ctx: Ctx, body: Record<string, unknown>) {
+  return playerTeamName(ctx, await viewer(ctx), body);
 }
 
 /** Zip 56 (server/tournamentTickets.ts): POST /api/tournament/lock { tournamentId, intent, priceCents }: Lock my spot / Hold my spot. */

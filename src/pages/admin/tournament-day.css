@@ -1,0 +1,470 @@
+/* Zip 57 (🎾57.tourney3): the organizer's teams and game night (src/pages/admin/TournamentDay.tsx; mocks 15, 48, 49, 50). Built on the site's own
+   tokens, so light and dark follow every other organizer screen. Everything is prefixed tm-gd- (tests/zip48-split.test.ts: tournament rules only
+   name the tournament's own classes). */
+
+.tm-gd-card {
+  padding-bottom: 6px;
+}
+.tm-gd-head {
+  margin-bottom: 0;
+}
+
+/* Mock 15: the draft rows. Number, the pair (names, the levels lighter), "= 6.1", Swap. */
+.tm-gd-teams {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tm-gd-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: 8px 0;
+}
+.tm-gd-team + .tm-gd-team {
+  border-top: 1.5px dashed var(--line);
+}
+.tm-gd-num {
+  flex: none;
+  width: 22px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.tm-gd-team-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+span.tm-gd-team-text {
+  cursor: default;
+}
+.tm-gd-tname {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-text);
+}
+.tm-gd-poolmark {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.tm-gd-pair {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+.tm-gd-who {
+  overflow-wrap: anywhere;
+}
+.tm-gd-pname {
+  color: var(--ink);
+}
+.tm-gd-lvl {
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 0.94em;
+  font-variant-numeric: tabular-nums;
+}
+.tm-gd-plus {
+  color: var(--ink);
+}
+.tm-gd-total {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--body);
+  font-size: 1.22rem;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tm-gd-eq {
+  font-family: var(--body);
+  font-size: 0.86em;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.tm-gd-swap {
+  flex: none;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tm-gd-swap:active:not(:disabled) {
+  background: var(--fill-press);
+}
+.tm-gd-swap:disabled {
+  opacity: 0.55;
+}
+.tm-gd-note {
+  margin: 2px 4px 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.tm-gd-publish {
+  margin-top: 2px;
+}
+
+/* The swap and rename sheets. */
+.tm-gd-seg button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-gd-swaplist,
+.tm-gd-who-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tm-gd-swaprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-gd-swapname {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-gd-swapnums {
+  flex: none;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The published card: the venue's court numbers. */
+.tm-gd-courts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.tm-gd-edit {
+  margin: 12px 0 10px;
+}
+
+/* Game night: the short card on top (the name, the round, a slim bar). */
+.tm-gd-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 18px 18px;
+  border: 1px solid #234a36;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #183b2b, #10291d);
+  color: #ffffff;
+}
+.tm-gd-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.tm-gd-hero-name {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--body);
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+.tm-gd-hero-kicker {
+  flex: none;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ball);
+  white-space: nowrap;
+}
+.tm-gd-bar {
+  display: block;
+  height: 7px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 14%);
+  overflow: hidden;
+}
+.tm-gd-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ball);
+}
+
+/* The Time check (mock 48): amber, one bold line, one tap. */
+.tm-gd-tc {
+  margin: 0;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.tm-gd-tc-title {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+.tm-gd-tc-sub {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.tm-gd-tc-note {
+  font-size: 1rem;
+  line-height: 1.45;
+}
+.tm-gd-tc-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+.tm-gd-tc-actions .btn {
+  min-height: 54px;
+  line-height: 1.2;
+}
+
+/* The round's results. */
+.tm-gd-results {
+  list-style: none;
+  margin: 0 -16px;
+  padding: 0;
+}
+.tm-gd-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 10px 16px;
+}
+.tm-gd-result + .tm-gd-result {
+  border-top: 1.5px dashed var(--line);
+}
+.tm-gd-result.tm-gd-waiting,
+.tm-gd-result.tm-gd-disputed {
+  background: var(--info-bg);
+}
+.tm-gd-court {
+  flex: none;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+}
+.tm-gd-court b {
+  font-family: var(--body);
+  font-size: 1rem;
+}
+.tm-gd-court span {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.tm-gd-result-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tm-gd-confirm {
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+}
+.tm-gd-all {
+  display: block;
+  margin: 6px 0 4px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.tm-gd-sheet .tm-gd-results {
+  margin: 0;
+}
+.tm-gd-pair-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* Fix and Player left sheets. */
+.tm-gd-pick,
+.tm-gd-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-gd-pick[aria-pressed='true'],
+.tm-gd-option[aria-pressed='true'] {
+  border-color: var(--ok-edge);
+  background: var(--accent-soft);
+}
+.tm-gd-pick-name {
+  min-width: 0;
+  font-family: var(--body);
+  font-size: 1.14rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.tm-gd-pick-mark,
+.tm-gd-option-mark {
+  flex: none;
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: var(--fill);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.tm-gd-pick[aria-pressed='true'] .tm-gd-pick-mark,
+.tm-gd-option[aria-pressed='true'] .tm-gd-option-mark {
+  background: none;
+  color: var(--accent-text);
+}
+.tm-gd-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.tm-gd-option-text b {
+  font-family: var(--body);
+  font-size: 1.14rem;
+}
+.tm-gd-option-text span {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+@media (max-width: 359px) {
+  .tm-gd-pair {
+    font-size: 0.98rem;
+  }
+  .tm-gd-swap {
+    min-width: 58px;
+    padding: 0 10px;
+  }
+  .tm-gd-court {
+    width: 78px;
+  }
+}
+
+/* Alex's PM: a team's players under its name (smaller, grey), the pencil on each published team, a result's two sides. */
+.tm-gd-tplayers {
+  font-size: 0.92rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.tm-gd-team-pub .tm-gd-tname {
+  font-size: 1.06rem;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.tm-gd-pencil {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink);
+  cursor: pointer;
+}
+.tm-gd-pencil svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+.tm-gd-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tm-gd-side > b {
+  font-size: 1.02rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.tm-gd-side > span {
+  font-size: 0.86rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.tm-gd-word {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.tm-gd-links {
+  display: flex;
+  gap: 18px;
+}

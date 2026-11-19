@@ -711,13 +711,13 @@ export async function buildSmallPreview(
     if (!opts.zip60) throw new Error('zip63 builds on the zip60 profile');
     w.env.PREVIEW_CALM = 'on';
     try {
-      // Zip 64 (🎾64.finalize): the calm start is the short ticket and Finalize scene (The Cold Open, the vote open, 9 on the list, Vic not).
-      // Zip 66 (🎾66.admincard): the same scene, named for this zip (the card starts as one closed line).
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip66_start' });
+      // Zip 57 (🎾57.tourney3): the calm start is game night with no teams yet (The Cold Open, Locked doubles, 8 locked in, tonight, started 10
+      // minutes before the seed): organizer Home says "8 locked in. Draft the teams." (Zip 64's start is one tap away on the Tournament test page.)
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'day_ready' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 66 card (on): the organizer card starts as one closed line (Not signed up: Vic and Reese, who played last month). Zip 64 Finalize (on): "The Cold Open", Everyone, the vote open, 8 on the list (everyone but Vic and Reese; the plan on the organizer card: 10 players, 2 courts, 2.5 hours), all able to make the third Thursday of next month. Vic sees the short ticket with Sign up; Parker the signed-up ticket; organizer Home has the tournament card (Pick the date: the heat map, then the one-screen Finalize). Every other moment is one tap away on the Tournament test page');
+    summary.push('Zip 57 game day (on): "The Cold Open", Locked doubles, 8 locked in (Net Ninjas Vic and Wren, Dill With It Sage and Christopher, Kitchen Crew Rowan and Zoe, Third Shot Gang Parker and Quinn), tonight, started 10 minutes before the seed, courts 1 and 2; organizer Home: Draft teams. The Tournament test page puts it back to tonight (Game night, no teams yet) or any other stage');
   }
 
   await refresh();

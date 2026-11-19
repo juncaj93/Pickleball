@@ -3,7 +3,8 @@ import { HttpError } from './http';
 import { newId } from './crypto';
 import { requireAdmin } from './auth';
 import * as v from './validate';
-import { hiddenTask, lockDate, setTournamentsForAll, todayKey, type TournamentRow } from './tournament';
+import { hiddenTask, lockDate, setTournamentsForAll, type SignupRow, todayKey, type TournamentRow } from './tournament';
+import { gamesFor, type GameRow, playerDayView, type TeamRow, writeTeamsAndGames } from './tournamentDay';
 import { previewSiteFor } from './secondChance';
 import { organizerIdOf } from './repo';
 import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
@@ -20,7 +21,7 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 //   date_picked  the same with 8 on the list, Sage's level set to 3.4, and the date most of them can make picked. Since Alex's changes, picking
 //                the date opens tickets ($16, Pay by the night before at 7:00 PM): nobody has paid yet (Alex is not on the list, so no $0 seat)
 // Zip 56 (piece 2), each from the date picked above, tickets open. The spots follow the players locked in (the smart plan: 6 to 12), so with
-// the preview's 10 names the 12 spots never fill: no stage can show the waitlist (it starts after 12; no new names are allowed).
+// the preview's 10 names the 16 spots (the cap since Zip 63) never fill: no stage can show standby (it starts after 16; no new names are allowed).
 //   tickets_open   6 locked in (Parker, Rowan, Sage, Christopher, Wren, Quinn: Venmo confirmed, Sage with credit), "6 of 8"; Vic, Zoe and
 //                  Reese on the list with no ticket: Vic sees Lock my spot ($16), the pictures' 07 to 10
 //   all_locked     all 10 names locked in (Alex's own $0 seat and 9 paid), "10 of 12"; Vic sees You're in
@@ -74,7 +75,22 @@ export const STYLE_STAGES = ['style_even', 'style_odd', 'style_back', 'late_open
 //                  Sage: "The Cold Open is <day>" / "Can you make it?" with I'm in · $16 and Can't make it, and no pay countdown. Organizer Home:
 //                  Not signed up lists Sage.
 export const ZIP66_STAGES = ['zip66_start', 'missed_date'] as const;
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
+// Zip 57 (🎾57.tourney3): teams and game day. "The Cold Open", Locked doubles, 8 locked in (the brief's four teams: Net Ninjas Vic and Wren,
+// Dill With It Sage and Christopher, Kitchen Crew Rowan and Zoe, Third Shot Gang Parker and Quinn), Pay by passed, courts 1 and 2.
+//   day_ready        TODAY, the night started 10 minutes ago, no teams yet: Home says "8 locked in. Draft the teams." (the calm start)
+//   teams_drafted    the same with the four teams drafted (mock 15), not published: Publish teams or Redo the draw
+//   teams_published  published, the night two days from now: Vic sees Your team, Your games, All teams (mock 16)
+//   game1            published, the night started a minute ago, no results: Vic sees Game 1 with We won (mock 17)
+//   mid              started 45 minutes ago (7:30 to 9:30 PM): Vic said Net Ninjas won Game 1 (Parker is asked to confirm), Kitchen Crew vs Dill With
+//                    It still playing, the night behind: the Time check on Home (mocks 18, 19, 48)
+//   pools_done       every round robin game in: standings final, the Final and the 3rd place game set
+//   backed_out       published before the night, then Zoe backed out after Pay by: 7 locked in, the style switched to Americano (the amber card
+//                    with Copy text for the group); players see "Tournament style is now Americano." and no teams
+// The 12 players pools look (mock 51) cannot be made with the 10 names: GET /api/tournament/pools-look draws it (look only, a preview link).
+export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out'] as const;
+type DayStage = (typeof DAY_STAGES)[number];
+const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[]).includes(s);
+export const TEST_STAGES = [...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -227,6 +243,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isDayStage(stage)) return dayStage(ctx, group, stage);
   if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date') return voteStage(ctx, group, stage);
 
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
@@ -484,4 +501,193 @@ async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin
     await lockDate(ctx, group, row!, { date: best });
   }
   return { ok: true, stage, id, signedUp: n, date: locks ? best : null, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 57: the game day stages (see DAY_STAGES above). Teams and games are written the way Publish writes them (tournamentDay.ts), results the way
+// the players' and the organizer's taps write them.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The brief's four teams, in seat order (seat 1 plays seat 2 in round 1: Net Ninjas vs Third Shot Gang, as mocks 16 and 17 draw it). */
+const DAY_TEAMS: { name: string; a: string; b: string; la: number; lb: number }[] = [
+  { name: 'Net Ninjas', a: 'Vic', b: 'Wren', la: 320, lb: 320 },
+  { name: 'Third Shot Gang', a: 'Parker', b: 'Quinn', la: 360, lb: 250 },
+  { name: 'Kitchen Crew', a: 'Rowan', b: 'Zoe', la: 350, lb: 275 },
+  { name: 'Dill With It', a: 'Sage', b: 'Christopher Vanderberg', la: 340, lb: 300 },
+];
+
+async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: DayStage) {
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const tz = group.timezone;
+  const nowLocal = localParts(ctx.nowMs, tz);
+  const nowMin = nowLocal.hour * 60 + nowLocal.minute;
+  const today = todayKey(ctx.nowMs, tz);
+  const later = stage === 'teams_published' || stage === 'backed_out';
+  const date = later ? dayAfter(ctx.nowMs + 86_400_000, tz) : today;
+  // The night: started 10 minutes ago (45 for mid, a minute for game1), on the 5 minutes; 7:30 PM two days from now for the later ones.
+  const ago = stage === 'mid' ? 45 : stage === 'game1' ? 1 : stage === 'pools_done' ? 100 : 10;
+  const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
+  // The whole plan (2.5 hours; 2 hours for mid, so the Time check shows), also when that runs past midnight (a late test).
+  const minutes = stage === 'mid' ? 120 : 150;
+  const id = newId();
+  const t0 = ctx.nowMs - 3 * 86_400_000;
+  const at = (m: number) => new Date(t0 + m * 60_000).toISOString();
+  const payBy = new Date(ctx.nowMs - 3_600_000).toISOString();
+  const published = stage !== 'day_ready' && stage !== 'teams_drafted';
+  const statements = [
+    ctx.db
+      .prepare(
+        `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
+           status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, pay_by, format_source, teams_at, court_numbers)
+         VALUES (?, ?, 'The Cold Open', ${STORED_PLAN.size}, 2, ?, ?, 1600, 1400, ?, ?, 'tickets', 'all', ?, ?, ?, ?, 'doubles', 700, ?, NULL, ?, '[1,2]')`,
+      )
+      .bind(id, group.id, minutes, start, JSON.stringify([date]), date, at(0), ctx.nowIso, at(5), at(1), payBy, published ? at(400) : null),
+  ];
+  let n = 0;
+  for (const team of DAY_TEAMS) {
+    for (const [name, level] of [
+      [team.a, team.la],
+      [team.b, team.lb],
+    ] as [string, number][]) {
+      const pid = idOf.get(name);
+      if (!pid) continue;
+      n++;
+      statements.push(
+        ctx.db
+          .prepare(`INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at) VALUES (?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?)`)
+          .bind(newId(), id, pid, level, JSON.stringify([date]), at(10 + n * 7), at(10 + n * 7), at(10 + n * 7)),
+        ctx.db.prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, ?, 'player', ?)").bind(newId(), id, pid, level, at(10 + n * 7)),
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, credit_cents, paid_cents, paid_at, created_at, updated_at)
+             VALUES (?, ?, ?, 'spot', ?, 1600, 0, 1600, ?, ?, ?)`,
+          )
+          .bind(newId(), id, pid, at(200 + n * 11), at(200 + n * 11), at(200 + n * 11), at(200 + n * 11)),
+      );
+    }
+  }
+  await ctx.db.batch(statements);
+  if (stage === 'day_ready') return { ok: true, stage, id, date };
+  const row = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<TournamentRow>())!;
+  const teams = DAY_TEAMS.map((x) => ({ id: newId(), name: x.name, a: idOf.get(x.a) ?? null, b: idOf.get(x.b) ?? null, pool: null, changed: false, out: null }));
+  const plan = gamesFor(row, teams.length);
+  // Draft (not published): the same rows Draft teams writes. Published: the same rows Publish writes, games and all.
+  await ctx.db.batch(writeTeamsAndGames(ctx.db, row, teams, published ? plan.games : null, plan.playTo, ctx.nowIso, '1 = 1', []));
+  const iso = (minsAgo: number) => new Date(ctx.nowMs - minsAgo * 60_000).toISOString();
+  if (stage === 'mid') {
+    // Game 1 (Net Ninjas, seat 1, side a): Vic's We won 2 minutes ago, not confirmed yet.
+    await ctx.db.prepare("UPDATE tournament_games SET claim = 'a', claim_at = ?, updated_at = ? WHERE tournament_id = ? AND num = 1").bind(iso(2), iso(2), id).run();
+  }
+  if (stage === 'pools_done') {
+    // Every round robin game in, as the players' Confirm writes it: seat 1 wins everything, seat 2 beats 3 and 4, seat 3 beats 4.
+    const games = (await ctx.db.prepare("SELECT num, slot_a, slot_b FROM tournament_games WHERE tournament_id = ? AND stage = 'pool' ORDER BY num").bind(id).all<{ num: number; slot_a: string; slot_b: string }>()).results;
+    await ctx.db.batch(
+      games.map((g, i) =>
+        ctx.db
+          .prepare("UPDATE tournament_games SET winner = ?, result_at = ?, result_by = 'players', updated_at = ? WHERE tournament_id = ? AND num = ?")
+          .bind(Number(g.slot_a.slice(1)) < Number(g.slot_b.slice(1)) ? 'a' : 'b', iso(90 - i * 12), iso(90 - i * 12), id, g.num),
+      ),
+    );
+  }
+  if (stage === 'backed_out') {
+    // Zoe backs out after Pay by (the real back out's rows: off the list, the ticket's cash back as one credit entry): 7 locked in. The first
+    // screen that reads it switches the style to Americano (zip 64), as it would on the night.
+    const zoe = idOf.get('Zoe');
+    if (zoe) {
+      const outAt = iso(20);
+      await ctx.db.batch([
+        ctx.db.prepare("UPDATE tournament_signups SET status = 'out', backed_out_at = ?, updated_at = ? WHERE tournament_id = ? AND player_id = ?").bind(outAt, outAt, id, zoe),
+        ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: id, playerId: zoe, why: 'back', endedReason: 'dropped', nowIso: outAt, when: () => '1 = 1' }),
+        ctx.db
+          .prepare("INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at) VALUES (?, ?, NULL, 'Zoe', 'tournament_back_out', ?, ?)")
+          .bind(newId(), group.id, JSON.stringify({ tournament: 'The Cold Open', tournamentId: id, freedSpot: true, player: 'Zoe', playerId: zoe }), outAt),
+      ]);
+    }
+  }
+  return { ok: true, stage, id, date, signedUp: n };
+}
+
+/**
+ * Zip 57, PREVIEW ONLY: GET /api/tournament/pools-look: the 12 players pools night (mock 51) as Vic would see it at round 1, drawn from made-up
+ * rows by the real view code (server/tournamentDay.ts playerDayView). The preview has 10 names, so the 6th team is "Kai + Guest". Writes nothing;
+ * Not found anywhere but a preview.
+ */
+export async function poolsLook(ctx: Ctx) {
+  if (!previewSiteFor(ctx)) throw new HttpError(404, 'not_found', 'Not found.');
+  const tz = 'America/Detroit';
+  const nowLocal = localParts(ctx.nowMs, tz);
+  const start = Math.max(0, Math.floor((nowLocal.hour * 60 + nowLocal.minute - 5) / 5) * 5);
+  const pairs: [string, string, string][] = [
+    ['Net Ninjas', 'Vic', 'Wren'],
+    ['Third Shot Gang', 'Parker', 'Quinn'],
+    ['Kitchen Crew', 'Rowan', 'Zoe'],
+    ['Dill With It', 'Sage', 'Christopher'],
+    ['Dink Dynasty', 'Reese', 'Alex'],
+    ['Lob Stars', 'Kai', 'Guest'],
+  ];
+  const t = {
+    id: 'look',
+    group_id: 'look',
+    name: 'The Cold Open',
+    size: 12,
+    courts: 2,
+    minutes: 150,
+    start_minutes: start,
+    ticket_cents: 1600,
+    champion_credit_cents: 1400,
+    offered_dates: '[]',
+    final_date: todayKey(ctx.nowMs, tz),
+    status: 'tickets',
+    visibility: 'all',
+    created_at: ctx.nowIso,
+    updated_at: ctx.nowIso,
+    date_picked_at: ctx.nowIso,
+    shown_at: ctx.nowIso,
+    canceled_at: null,
+    format: 'doubles',
+    second_credit_cents: 0,
+    pay_by: ctx.nowIso,
+    teams_at: ctx.nowIso,
+    court_numbers: '[1,2]',
+    paused_at: null,
+  } as TournamentRow;
+  const signups = pairs.flatMap(([, a, b]) => [a, b]).map((name) => ({ player_id: `p-${name}`, display_name: name }) as unknown as SignupRow);
+  const teams: TeamRow[] = pairs.map(([name, a, b], i) => ({
+    id: `team-${i}`,
+    tournament_id: 'look',
+    seat: i + 1,
+    name,
+    player_a: `p-${a}`,
+    player_b: `p-${b}`,
+    pool: i < 3 ? 'A' : 'B',
+    out_at: null,
+    changed_at: null,
+    created_at: ctx.nowIso,
+    updated_at: ctx.nowIso,
+  }));
+  const plan = gamesFor(t, 6);
+  const games: GameRow[] = plan.games.map((g) => ({
+    id: `g-${g.num}`,
+    tournament_id: 'look',
+    num: g.num,
+    round: g.round,
+    court: g.court,
+    stage: g.stage,
+    pool: g.pool,
+    slot_a: g.a,
+    slot_b: g.b,
+    play_to: g.stage === 'pool' ? plan.playTo : 11,
+    claim: null,
+    claim_at: null,
+    disputed_at: null,
+    winner: null,
+    result_at: null,
+    result_by: null,
+    skipped: 0,
+    created_at: ctx.nowIso,
+    updated_at: ctx.nowIso,
+  }));
+  return { day: playerDayView(t, signups, { teams, games }, 'p-Vic', tz, ctx.nowMs) };
 }

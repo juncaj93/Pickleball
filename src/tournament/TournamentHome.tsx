@@ -19,6 +19,7 @@ import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
 import { type DayLook, LevelList, MonthCalendar, useMoreBelow, VoteList } from './parts';
+import { DayBody, DayHero } from './GameDayView';
 
 /** Zip 60: the format line on the cards. While the players' vote is open it is "Tournament style TBD" (no other words). */
 const formatText = (t: PlayerTournamentView): string => (t.formatTbd || t.styleTbd ? 'Tournament style TBD' : formatLine(t.format));
@@ -41,7 +42,20 @@ const dueOf = (k: PlayerTicketsView) => (k.mine ? k.mine.owedCents : k.priceCent
 /** Their place in line (1 = first), or 0. */
 const linePlace = (k: PlayerTicketsView) => k.line.findIndex((x) => x.me) + 1;
 
-export default function TournamentHome({ t, onChanged, pay, notice }: { t: PlayerTournamentView; onChanged: () => Promise<unknown>; pay: TournamentPayInfo; notice?: ReactNode }) {
+/** Zip 57, PREVIEW BUILDS ONLY: the 12 players pools look (?poolslook=12): the night drawn from made-up rows by the server (look only). */
+function usePoolsLook(): PlayerTournamentView['day'] | null {
+  const [day, setDay] = useState<PlayerTournamentView['day'] | null>(null);
+  const want = __PREVIEW_BUILD__ && typeof location !== 'undefined' && new URLSearchParams(location.search).get('poolslook') === '12';
+  useEffect(() => {
+    if (!want) return;
+    api<{ day: NonNullable<PlayerTournamentView['day']> }>('GET', '/api/tournament/pools-look').then((r) => setDay(r.day), () => setDay(null));
+  }, [want]);
+  return want ? day : null;
+}
+
+export default function TournamentHome({ t: real, onChanged, pay, notice }: { t: PlayerTournamentView; onChanged: () => Promise<unknown>; pay: TournamentPayInfo; notice?: ReactNode }) {
+  const look = usePoolsLook();
+  const t = look ? { ...real, day: look } : real;
   const toast = useToast();
   const [sheet, setSheet] = useState<null | 'signup' | 'edit' | 'who' | 'overlay'>(null);
   const [askOut, setAskOut] = useState(false);
@@ -161,19 +175,26 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
           </button>
         </div>
       )}
-      <TicketCard
-        t={t}
-        org={org}
-        busy={busy}
-        punch={punch}
-        onSignUp={() => setSheet('signup')}
-        onWho={() => setSheet(t.status === 'tickets' ? 'overlay' : 'who')}
-        onEdit={() => setSheet('edit')}
-        onDropOut={() => setAskOut(true)}
-        onLock={() => void lock('lock')}
-        onHold={() => void lock('hold')}
-        onJoin={() => void joinWaitlist()}
-      />
+      {/* Zip 57: on game night (the live window) the live view takes the ticket's place; before it the ticket stays as it is (zip 66's one row). */}
+      {t.day?.today ? (
+        <DayHero t={t} day={t.day} />
+      ) : (
+        <TicketCard
+          t={t}
+          org={org}
+          busy={busy}
+          punch={punch}
+          onSignUp={() => setSheet('signup')}
+          onWho={() => setSheet(t.status === 'tickets' ? 'overlay' : 'who')}
+          onEdit={() => setSheet('edit')}
+          onDropOut={() => setAskOut(true)}
+          onLock={() => void lock('lock')}
+          onHold={() => void lock('hold')}
+          onJoin={() => void joinWaitlist()}
+        />
+      )}
+      {/* Zip 57: Your team, Your games, All teams or the pools; on game night the one big card, Standings and Currently playing. */}
+      {t.day && <DayBody t={t} day={t.day} org={org} onChanged={onChanged} />}
       {t.status === 'tickets' && k && signed && (
         <Sheet calmFocus open={sheet === 'overlay'} title={t.name} onClose={() => setSheet((cur) => (cur === 'overlay' ? null : cur))} className="tc-tw-overlay">
           <Overlay

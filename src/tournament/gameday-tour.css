@@ -1,0 +1,591 @@
+/* Zip 57 (🎾57.tourney3): the player's teams and game night (src/tournament/GameDayView.tsx; mocks 16 to 19, 51 to 53). The site's tokens, so
+   light and dark follow Home. Every rule names a tc-gd- class (tests/zip48-split.test.ts: tournament rules only name the tournament's own
+   classes). */
+
+.tc-gd {
+  --tc-gd-done: #e3f3ea;
+  --tc-gd-next: #e5ecfa;
+  --tc-gd-me: #e3f0e7;
+  gap: 14px;
+}
+:root[data-theme='dark'] .tc-gd {
+  --tc-gd-done: #1a3125;
+  --tc-gd-next: #1f3b2c;
+  --tc-gd-me: #1d3628;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tc-gd {
+    --tc-gd-done: #1a3125;
+    --tc-gd-next: #1f3b2c;
+    --tc-gd-me: #1d3628;
+  }
+}
+
+/* The short card on game night: the ticket's dark green, the name, the lime "GAME 1 OF 3", a slim bar. */
+.tc-gd-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 18px 20px;
+  border-radius: 22px;
+  color: #ffffff;
+  background:
+    radial-gradient(120% 90% at 18% 0%, #163a2a 0%, rgb(22 58 42 / 0%) 60%),
+    linear-gradient(180deg, #11291e 0%, #0d2118 100%);
+  box-shadow: inset 0 0 0 1px #24503a;
+}
+.tc-gd-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.tc-gd-hero-name {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--body);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #ffffff;
+}
+.tc-gd-kicker {
+  flex: none;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #d8f03b;
+  white-space: nowrap;
+}
+.tc-gd-bar {
+  display: block;
+  height: 7px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 13%);
+  overflow: hidden;
+}
+.tc-gd-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #d8f03b;
+}
+
+/* Up next (mock 17): the bright green card, We won in lime, the other team's button in clear white. */
+.tc-gd-next {
+  padding: 18px 16px 16px;
+  border-radius: 22px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2b8c5b 0%, #1f6d47 100%);
+  box-shadow:
+    0 0 0 1px rgb(110 240 176 / 18%),
+    0 10px 30px rgb(43 140 91 / 28%);
+}
+.tc-gd-next-kicker {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #d8f03b;
+}
+.tc-gd-next-title {
+  margin: 6px 0 0;
+  font-family: var(--body);
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #ffffff;
+}
+.tc-gd-next-sub {
+  margin: 4px 0 0;
+  font-size: 1.06rem;
+  color: rgb(255 255 255 / 88%);
+}
+.tc-gd-next-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.tc-gd-wewon,
+.tc-gd-theywon {
+  min-height: 52px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 16px;
+  font: inherit;
+  font-family: var(--body);
+  font-size: 1.12rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tc-gd-wewon {
+  background: #d8f03b;
+  color: #1a2410;
+}
+.tc-gd-theywon {
+  background: rgb(255 255 255 / 18%);
+  color: #ffffff;
+}
+.tc-gd-wewon:disabled,
+.tc-gd-theywon:disabled {
+  opacity: 0.6;
+}
+
+/* "Net Ninjas won Game 1" with Undo (mock 18). */
+.tc-gd-won {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px 14px 16px;
+  border-radius: 20px;
+  background: var(--tc-gd-me);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.tc-gd-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.tc-gd-check svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tc-gd-won-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tc-gd-won-text b {
+  font-family: var(--body);
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+.tc-gd-won-text span {
+  color: var(--ink-2);
+}
+.tc-gd-undo {
+  flex: none;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* The Time check (amber, one or two lines). */
+.tc-gd-tc {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+.tc-gd-paused,
+.tc-gd-note,
+.tc-gd-ask {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: var(--info-bg);
+  color: var(--info-fg);
+  font-weight: 600;
+}
+.tc-gd-x,
+.tc-gd-ask-btn {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+.tc-gd-ask-btn {
+  padding: 0 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  background: var(--surface);
+}
+
+/* The white cards (Your games, Standings, Pools, Currently playing, The night, All teams). */
+.tc-gd-card {
+  padding: 0;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+.tc-gd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.tc-gd-label {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.tc-gd-card > .tc-gd-label {
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.tc-gd-head .tc-gd-label {
+  padding: 0;
+  border: 0;
+}
+.tc-gd-chip {
+  flex: none;
+  padding: 3px 11px;
+  border-radius: 99px;
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tc-gd-chip-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.tc-gd-chip-empty {
+  width: 38px;
+  height: 10px;
+  padding: 0;
+}
+.tc-gd-live {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.tc-gd-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tc-gd-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 12px 16px;
+}
+.tc-gd-row + .tc-gd-row {
+  border-top: 1.5px dashed var(--line);
+}
+.tc-gd-game.tc-gd-s-done {
+  background: var(--tc-gd-done);
+}
+.tc-gd-game.tc-gd-s-done .tc-gd-main b,
+.tc-gd-game.tc-gd-s-done .tc-gd-left b {
+  color: var(--ink-2);
+}
+.tc-gd-game.tc-gd-s-next {
+  background: var(--tc-gd-next);
+}
+.tc-gd-left {
+  flex: none;
+  width: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.tc-gd-left b {
+  font-family: var(--body);
+  font-size: 1.02rem;
+}
+.tc-gd-court {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.tc-gd-court-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.tc-gd-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tc-gd-main b {
+  font-family: var(--body);
+  font-size: 1.18rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.tc-gd-main span {
+  color: var(--ink-2);
+  font-size: 0.98rem;
+}
+.tc-gd-tick {
+  color: var(--accent-text);
+}
+
+/* Standings and pools: rank, name, record, a chip. */
+.tc-gd-stand.tc-gd-me,
+.tc-gd-teamrow.tc-gd-me {
+  background: var(--tc-gd-me);
+}
+.tc-gd-rank {
+  flex: none;
+  width: 18px;
+  color: var(--ink-2);
+  font-size: 1.02rem;
+  font-variant-numeric: tabular-nums;
+}
+.tc-gd-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.12rem;
+}
+.tc-gd-rec {
+  flex: none;
+  font-family: var(--body);
+  font-size: 1.18rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.tc-gd-you {
+  flex: none;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+/* The night's times. */
+.tc-gd-time {
+  justify-content: space-between;
+  min-height: 52px;
+  font-size: 1.02rem;
+}
+.tc-gd-time b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A team's name with its two players under it (every place a team name shows: Alex's PM). Body font for names and numbers. */
+.tc-gd-tn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tc-gd-tn > b {
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.tc-gd-tn > span {
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.tc-gd-tn-big > b {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+.tc-gd-tn-big > span {
+  font-size: 1rem;
+}
+
+/* Two teams side by side with VS between them. */
+.tc-gd-vs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.tc-gd-vs > .tc-gd-tn:last-child {
+  text-align: right;
+  align-items: flex-end;
+}
+.tc-gd-vs-mark {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--ink-2);
+}
+.tc-gd-vs-big {
+  margin-top: 10px;
+}
+.tc-gd-vs-big .tc-gd-tn > b {
+  font-size: 1.22rem;
+  color: #ffffff;
+}
+.tc-gd-vs-big .tc-gd-tn > span {
+  font-size: 0.95rem;
+  color: rgb(255 255 255 / 82%);
+}
+.tc-gd-vs-big .tc-gd-vs-mark {
+  color: #d8f03b;
+}
+
+/* Your team (Alex's PM): the name big, the players under it, a round pencil and a round dice on the right. */
+.tc-gd-yourteam .tc-gd-label {
+  padding: 16px 16px 0;
+  border: 0;
+}
+.tc-gd-yt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px 16px;
+}
+.tc-gd-yt-row > .tc-gd-tn {
+  flex: 1 1 auto;
+}
+.tc-gd-yt-btns {
+  flex: none;
+  display: flex;
+  gap: 8px;
+}
+.tc-gd-round {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink);
+  cursor: pointer;
+}
+.tc-gd-round:active:not(:disabled) {
+  background: var(--fill-press);
+}
+.tc-gd-round svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+.tc-gd-round svg circle {
+  fill: currentColor;
+  stroke: none;
+}
+.tc-gd-yt-edit {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px 16px;
+}
+.tc-gd-yt-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 46px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--sheet-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.tc-gd-yt-save {
+  flex: none;
+  min-height: 46px;
+  white-space: nowrap;
+}
+
+/* The other team's sheet (mock 19). */
+.tc-gd-ask-text {
+  margin: 4px 0 6px;
+  font-size: 1.1rem;
+  line-height: 1.4;
+}
+.tc-gd-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.tc-gd-two .btn {
+  min-width: 0;
+  white-space: nowrap;
+}
+.btn.tc-gd-no {
+  background: transparent;
+  color: var(--danger-fg);
+  box-shadow: inset 0 0 0 1.5px var(--danger-fg);
+}
+
+@media (max-width: 359px) {
+  .tc-gd-left {
+    width: 74px;
+  }
+  .tc-gd-main b,
+  .tc-gd-name,
+  .tc-gd-rec {
+    font-size: 1.06rem;
+  }
+  .tc-gd-two .btn {
+    font-size: 0.95rem;
+    padding: 0 8px;
+  }
+  .tc-gd-kicker {
+    font-size: 0.74rem;
+    letter-spacing: 0.1em;
+  }
+}
