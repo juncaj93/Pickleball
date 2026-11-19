@@ -6850,3 +6850,47 @@ back as credit at End (as they would at 10 PM). Home has no tournament card, no 
 - Kai is not one of the preview's names (the seed refuses any other); the stages use the 10 fixed names.
 - tournament_ties and tournament_results are not in the backup file yet (a question below); the award credit is (credit_ledger).
 - The branch is `claude/new-session-831vmx` (pinned by the build system), not "🎾58.tourney4". No PR was opened (none asked for).
+
+### Review
+A fresh independent reviewer (no part in the build) read the whole change: no high-severity finding; the credit is granted once (the end key,
+`award_pick IS ?`, the unique index), Only me and switched off send players nothing, every lock holds. Fixed from its findings, each with a test
+(tests/zip58-ties.test.ts "a tied team leaves"): a team that left during a tie (before the spin it drops out; after, its game is a walkover); the
+tie's shape is part of its key (fixed results that move the tie make a new tie with its own spin); two ties spun at the same moment say "look
+again" instead of an error; a result tap racing End is refused (every result write checks the tournament is still open, and End is refused if any
+game changed after the card was read). Kept as notes: Game A's "Loser is out." (as drawn), and the two new tables are not in the backup file.
+
+### Tests
+- Unit: full run 205 files, 4,057 passed, 2 skipped, none failed (`npx vitest run`); `npx tsc -b` clean. New: tests/zip58-ties.test.ts (10: the
+  tie rules on every shape, the wheel on the real server code, Game A and B, a fixed result after the spin, a team that leaves),
+  tests/zip58-end.test.ts (8: the End card, credit to the cent and once under a double tap, the unique index, the credit history line, the saved
+  results, locks after End, the ticker, Nice, the banner coming down after 1 week, Edit awards, the organizer winning (medal, no credit), an I paid
+  waiting, Americano 1st $14 and 2nd $7, Only me and switched off send nothing, the money checks at zero), tests/zip58-stages.test.ts (5: every
+  preview stage, Alex's three taps). Older tests updated on purpose: backup-zip19 (a table rebuilt under a temporary name counts once),
+  zip50-backup (the two new tables listed as left out), readonly-pin (the new History address answers 403 with the switch off).
+- Browser: e2e/zip58.cjs 16 of 16 (A to H: the tie, Rowan's spin with the motion, the organizer's spin, the Final with Also now, End tournament
+  and Edit awards, after the end, History and the Players card, Americano's End and Edit awards, reduced motion, switched off; 390/360/320 light
+  and dark; no row wraps; nothing wider than the screen; no em dashes; no page errors). Older ones: zip55 91, zip56 57, zip57 21, zip61 19,
+  zip63 64, zip64 83, zip66 84, all passing. Switch OFF equals main `8afde4d`: e2e/zip55-off.cjs 47 of 47, e2e/zip56-off.cjs 47 of 47.
+- The player download stays inside its budget (141 KB gzipped; tests/zip48-split.test.ts): the ticker and the congratulations card are their
+  own file, fetched only when there are winners to show; the wheel lives in the file the organizer and the tournament card already share.
+
+### Preview
+`pickleball-preview` (fake) only: restore points first (Time Travel bookmark `000001a1-00000000-00005128-ea7a1e9379d83a5197fbd3cf540142fe`, SQL
+export 112 KB kept outside git), then `0029_tournament_end` (the only one pending; its 12 game rows came through the rebuild). Deployed from this
+branch to https://claude-new-session-831vmx.pickleball-club-9h0.pages.dev (deployment `4fe18318`) and re-seeded (`npm run db:seed:preview`: the
+tie for the final). Checked there at 390, light and dark, no page errors: organizer Home's first screen is the Tournament test row, the night's bar
+and the Three-way tie card with the wheel; Vic's Home: "Tied for the final", the standings, the wheel. Alex's three taps run on the preview
+(spin, the Final confirmed, Confirm winners and end: Vic's Home then has the ticker, You won The Cold Open, the medal and $14 credit), then
+re-seeded calm again. Switches: all 23 flags in live's public answer are on the preview, plus Tournaments.
+
+### Live: NOT done (waiting for Alex's "ship it": credit moves)
+To ship (a quiet window): SQL export and Time Travel bookmark of `pickleball`, the three integrity checks, `0029_tournament_end` (rebuilds
+tournament_games: copy, drop, rename), fast-forward main to this branch and push, `npm run deploy` from main, the checks again, the public live
+check. Rollback: the site deployment live before it (db0b7989). No database undo needed (old code never reads the new columns or tables).
+
+### Questions for Alex
+1. The database change above (two new tables, five new columns, the games table rebuilt, one unique index): OK for live?
+2. Four or more tied (or two that never played each other): the organizer taps one team per place. OK?
+3. The organizer can always spin the wheel too (in case the spinning team's phone is not around). OK?
+4. The organizer winning gets the medal but no credit (the organizer never holds credit). OK, or should it be skipped differently?
+5. tournament_ties and tournament_results in the backup file (version 5, with a clock Worker deploy, like Zip 57's version 4)?
