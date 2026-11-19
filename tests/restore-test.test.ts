@@ -49,7 +49,7 @@ describe('the restore test', () => {
     expect(r.checks.filter((c) => !c.ok)).toEqual([]);
     expect(r.ok).toBe(true);
     const text = r.checks.map((c) => c.line).join('\n');
-    expect(text).toMatch(/rows: all \d+ rows in 19 tables match the source, every value/);
+    expect(text).toMatch(/rows: all \d+ rows in 21 tables match the source, every value/);
     expect(text).toMatch(/money matches: finalized games 0 of \d+/);
     expect(text).toMatch(/integrity checks: all 21 the same on the copy as on the source \(19 problem checks/);
     // Zip 50: a version 2 backup brings the switch rows itself, so there is nothing to warn about.

@@ -13,6 +13,9 @@
 //
 // Version 4 (Zip 57, Alex): the teams and the game results too (tournament_teams, tournament_games). A version 1 to 3 file still restores: those
 // two come back empty.
+//
+// Version 5 (Zip 58, Alex): the tie answers and each ended tournament's results, medals and awards (tournament_ties, tournament_results). A
+// version 1 to 4 file still restores: those two come back empty.
 import type { D1Database } from './db';
 
 export const BACKUP_TABLES = [
@@ -38,6 +41,9 @@ export const BACKUP_TABLES = [
   // Version 4 (Zip 57, Alex): the Locked doubles teams and the game results, after the tournaments they belong to.
   'tournament_teams',
   'tournament_games',
+  // Version 5 (Zip 58, Alex): the tie answers and the saved results (medals, awards), after the tournaments and players they point at.
+  'tournament_ties',
+  'tournament_results',
 ] as const;
 
 /**
@@ -52,14 +58,14 @@ export const BACKUP_WHERE: Partial<Record<(typeof BACKUP_TABLES)[number], string
 export const backupWhere = (t: string): string => (BACKUP_WHERE as Record<string, string>)[t] ?? '1';
 
 /**
- * The file's version: 2 since Zip 50 (task_log, organizer_alerts and admin_sessions added), 3 since Zip 56 (the four tournament tables).
- * The reader takes 1, 2 and 3.
+ * The file's version: 2 since Zip 50 (task_log, organizer_alerts and admin_sessions added), 3 since Zip 56 (the four tournament tables), 4
+ * since Zip 57 (teams and games), 5 since Zip 58 (ties and results). The reader takes 1 to 5.
  */
-export const BACKUP_VERSION = 4;
+export const BACKUP_VERSION = 5;
 
 export interface BackupObject {
   format: 'pickleball-backup';
-  version: 1 | 2 | 3 | 4;
+  version: 1 | 2 | 3 | 4 | 5;
   createdAt: string;
   groupName: string;
   tables: Record<string, Record<string, unknown>[]>;

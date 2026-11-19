@@ -105,14 +105,13 @@ beforeAll(async () => {
 
 describe('Zip 50: the backup holds the switches, price locks, alert settings and sign-ins (file version 2)', () => {
   it('the file is version 3 (Zip 56) and holds every table but the short-lived counters', () => {
-    expect(BACKUP_VERSION).toBe(4);
-    expect(download.version).toBe(4);
+    expect(BACKUP_VERSION).toBe(5);
+    expect(download.version).toBe(5);
     expect([...BACKUP_TABLES]).toEqual(TABLES);
     for (const t of NEW) expect(BACKUP_TABLES as readonly string[], t).toContain(t);
     // Zip 56 (Alex): the four tournament tables joined the file (version 3); only the short-lived counters stay out.
     for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) expect(BACKUP_TABLES as readonly string[], t).toContain(t);
-    // Zip 58: the two new tournament tables (ties, results) are left out on purpose until Alex answers (a version 5 needs a clock Worker deploy).
-    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events', 'tournament_results', 'tournament_ties']);
+    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events']);
     // The world really has what the old file lost.
     expect(locksBefore.length).toBe(11);
     expect(switchesBefore.length).toBeGreaterThan(10);
@@ -237,7 +236,7 @@ describe('Zip 50: the backup holds the switches, price locks, alert settings and
     const noTickets = JSON.parse(JSON.stringify(download));
     delete noTickets.tables.tournament_tickets;
     expect(() => backupToSql(noTickets)).toThrow('missing the tournament_tickets table');
-    expect(() => backupToSql({ ...download, version: 5 })).toThrow('version 5');
+    expect(() => backupToSql({ ...download, version: 6 })).toThrow('version 6');
     // Zip 57: a version 4 file must bring the teams and the games.
     const noTeams = JSON.parse(JSON.stringify(download));
     delete noTeams.tables.tournament_teams;
@@ -263,7 +262,7 @@ describe('Zip 50: the backup holds the switches, price locks, alert settings and
   });
 
   it('the read-only download has no sign-ins and no PIN, and the restore script refuses it (Audit C F-11)', () => {
-    expect(roDownload.version).toBe(4);
+    expect(roDownload.version).toBe(5);
     expect(roDownload.tables.admin_sessions).toEqual([]);
     expect(roDownload.tables.groups[0].admin_pin_hash).toBe('');
     // Its switches and price locks are there (View as uses this same file).
