@@ -6772,3 +6772,16 @@ First screen at 390, light and dark: organizer Home shows the Tournament test ro
 playing, the late Round 2 score with Confirm); Vic's Home shows the date alert, the hero and the VS card with Enter score. No page errors.
 Switches: every flag in live's public answer is on the preview too, plus TOURNAMENTS (live's organizer-only rows could not be read: no
 read-only PIN in this session).
+
+### Alex's answers, then live (Thu Nov 19, 2026, about 1:55 to 2:10 PM Eastern; loud hours waived by Alex)
+Alex tapped the three preview taps (they work) and said ship it: 0028 approved for live; ranking is win percentage whenever players have played
+different numbers of games, then total points (built and tested before the deploy: commit `60806ab`); rounds move together, as built.
+- Before: tests green (unit 4,034 passed, 202 files; e2e/zip61.cjs 19 of 19), live was deployment 1d70d2c8 (commit e4600da, part of main).
+  SQL export of `pickleball` (299 KB, kept outside git: it has phone numbers), Time Travel bookmark
+  `000018f1-00000000-00005128-4f641b80f7f6f49eabc044268f7ddee1`. Integrity checks: 21, extension 8, tournament 11 columns, every one 0.
+- `npx wrangler d1 migrations list pickleball --remote` listed only `0028_americano_scores`; `npm run db:migrate:remote` applied it (the three
+  columns checked).
+- main fast-forwarded to `60806ab` and pushed; `npm run deploy -- --override-loud-hours` from main: deployment **db0b7989** (rollback:
+  **1d70d2c8**, Zip 57, in Cloudflare Deployments > Rollback; the new columns can stay, old code never reads them).
+- After: the three integrity checks again, every column 0. Public read-only look (no name picked, nothing written): /api/status and
+  /api/group answer 200; Home at 390 light and dark, no page errors, only GET requests, nothing wider than the screen. No live data touched.
