@@ -6585,7 +6585,7 @@ nothing on live, the schedule and plan match the table. Its real findings, all i
 - Tournaments finalized before this zip hold 2 courts (Create's placeholder): the plan check card now has "Use 1 court" (or "Use 2 courts"
   when 1 is too tight), before the teams are published.
 
-### Questions for Alex
+### Questions for Alex (all answered in the add-on: YES, YES, YES, OK)
 1. The database change above (two new tables, three new nullable columns): OK to apply on live with the deploy?
 2. (Answered by Alex's PM: players never see levels.)
 3. A standby player swapped in during the night: should their paid hold become a spot (it would no longer come back as credit at 10 PM)?
@@ -6650,9 +6650,17 @@ stops the playoff until piece 4: OK; loud hours waived.
   court". Live checked read only before shipping: its one open tournament is not finalized, and its finalized ones are canceled and sized 10
   and 12 (2 courts either way), so no live answer changes.
 
-### Live: NOT done (the database change waits for Alex's OK)
-To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`, the three integrity checks, `npx wrangler d1 migrations list
-pickleball --remote` (must list only 0027), `npm run db:migrate:remote`, fast-forward main to this branch and push, `npm run deploy` from main,
-the checks again, the public live check. Rollback: the Zip 64 deployment live now; the new tables and columns can stay (old code never reads
-them). Tournaments finalized before this zip read 2 courts after the deploy (Create's placeholder); the plan check card's "Use 1 court" fixes it
-before the teams are published.
+### Live (Thu Nov 19, 2026, 10:43 to 10:47 AM Eastern; loud hours waived by Alex in the add-on)
+- Before: main `e6c3907` equal to live (Zip 66, deployment faed6b81), no other deploy running. SQL export of `pickleball` (297 KB, saved in
+  `pickleball-backups` as `export-20261119154524`), Time Travel bookmark `000018c9-00000000-00005128-61e71494b98910ce21ba8a15d821e9bb`.
+  Integrity checks: integrity-checks 21, extension 8, tournament 11 columns, every one 0.
+- `npx wrangler d1 migrations list pickleball --remote` listed only `0027_tournament_games`; `npm run db:migrate:remote` applied it (7
+  commands). Checked: both new tables, the three new columns on tournaments, seat_a and seat_b.
+- main fast-forwarded to `e4600da` and pushed; `npm run deploy -- --override-loud-hours` from main: deployment **1d70d2c8** (rollback:
+  **faed6b81**, Zip 66, in Cloudflare Deployments > Rollback; the new tables and columns can stay, old code never reads them).
+- Clock Worker `pickleball-alerts-clock`: version **074e46f2** (rollback: `npx wrangler rollback 16201e11-42db-447a-b382-ee3962455477
+  --config worker/wrangler.toml`). The weekly copy now holds teams and games (file version 4).
+- After: the three integrity checks again, every column 0. Public read-only look (no name picked, nothing written): /api/status, /api/group
+  and Home answer 200; Home at 390 light and dark, no page errors, no request but GETs, nothing wider than the screen. No live data touched.
+  The organizer-only screens were not looked at on live (no read-only PIN in this session).
+- Live's one open tournament (8 signed up) is not finalized: Finalize now has the Courts row; the teams come after the date is picked.
