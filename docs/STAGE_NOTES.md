@@ -6326,3 +6326,9 @@ The players' own spots ("6 of 8", Every spot is taken) still follow the players 
   up with 3 paid (still 10; 11 locked in after late joins: 14), and the shared count. Older plan expectations updated (zip55 1, zip56 3; the
   browser zip56 plan lines, zip60 the plan line back on Finalize). Unit full run 196 files, 3,604 passed, 2 skipped; browser zip64 83, zip56 57,
   zip55 91, zip60 29, zip63 64, zip59 12, zip62 17, all passing. Preview deployment `0c307505`, re-seeded.
+
+### Part 8 live: shipped Wed Nov 18, 2026, about 10:52 PM Eastern (Alex: "ship it"), no database change
+- Restore points first: Time Travel bookmark `00001835-00000000-00005128-4d5f12459b71f9a97bdfac1a099998df`; SQL export `export-20261119035125` in `pickleball-backups`. Integrity checks before and after: all 0.
+- Main fast-forwarded `fff5eb0` to `316ac36`; `npm run deploy -- --override-loud-hours`: deployment `f9c1da8f-6261-4885-b944-5124e39e34e4` (bundle `index-2GrM6G_G.js`).
+- Public live check: pages 200, no tournament data for a phone with no name, organizer data and test route 401.
+- Rollback: deployment `909c2e58-5042-4545-9aa8-2a2753cd8508` (Zip 64).
