@@ -6894,3 +6894,42 @@ check. Rollback: the site deployment live before it (db0b7989). No database undo
 3. The organizer can always spin the wheel too (in case the spinning team's phone is not around). OK?
 4. The organizer winning gets the medal but no credit (the organizer never holds credit). OK, or should it be skipped differently?
 5. tournament_ties and tournament_results in the backup file (version 5, with a clock Worker deploy, like Zip 57's version 4)?
+
+### Alex's answers (Thu Nov 19, evening): all five YES; two look fixes; ship it
+1. 0029 approved for live. 2. Four or more tied: one tap per place, OK. 3. The organizer can always spin, OK. 4. The organizer wins: medal, no
+credit (the partner still gets theirs), OK. 5. The two new tables go in the backup file: BACKUP_VERSION 5 (server/backupData.ts, worker/backup.ts,
+scripts/backup-sql.mjs V5_TABLES, scripts/restore-backup.mjs), with the clock Worker deploy. A version 1 to 4 file still restores (the two come
+back empty).
+- Look fix 1, the ticker: no fade at either end (the mask is gone); it runs edge to edge with hard ends. Its medals unchanged.
+- Look fix 2, the medal by the name at the top: it now sits INSIDE the name's heading (src/Shell.tsx TitleH1), right after the name like a typed
+  emoji: as tall as the name's letters (0.8 em), on the same baseline, a normal space after the name, then "not you?". A long name ends in "…"
+  before it. Stacked medals and ×N the same size. Game card medals unchanged. e2e/zip58.cjs I checks both at 420/390/360/320, light and dark,
+  Christmas skin on and off, 1 and 2 medals: 8 of 8.
+- The ticker and the congratulations card are now one lazy file door (one loader), so the player download stays inside its 141 KB budget.
+
+### Admin speed rule (Alex): never slower
+Timed the organizer's Home calls (the dashboard and its 5-second version check) at "8 locked in" (day_ready) and game night (mid). First runs
+showed the branch about 0.1 to 0.3 ms slower per call with the same trips (local sqlite, one process, main and branch called in turn:
+scripts/zip58-admin-ab.ts; scripts/zip58-admin-speed.ts). Found and fixed: the tie answers were a separate statement in the screen's batch (it
+redid the "which tournament" lookup); they now ride as one small JSON column on the tournament row the screen already reads (tiesJsonSql in
+server/tournament.ts). Also: no End card work until the Final (or every Americano game) has a result; no first tie pass with no tie game stored;
+the tie table work returns at once until a group's games are all in. After: the same 73 and 4 trips, times within about 0.05 ms either way (noise).
+On Cloudflare (the preview database, main's code on a separate preview address and this branch's, called in turn, median of 30, wall time from
+here): dashboard main 1,198 to 1,207 ms / branch 1,121 to 1,132 ms; version main 129 to 136 ms / branch 126 to 127 ms. Not slower.
+
+### Live: shipped Thu Nov 19, 2026, about 5:15 PM Eastern (loud hours waived by Alex)
+- Tests first: unit 205 files, 4,057 passed, 2 skipped, none failed; `npx tsc -b` clean. Browser: zip58 24 of 24, zip18 103 of 103, zip38 24 of
+  28 (the same 4 "newest switch is the top Settings row" failures as main `8afde4d`, run side by side), and earlier zip55 91, zip56 57, zip57 21,
+  zip61 19, zip63 64, zip64 83, zip66 84; switch OFF equals main: zip55-off and zip56-off 47 of 47 each.
+- Restore points: SQL export of `pickleball` (302 KB) kept outside git in the session's scratch folder (this session's Cloudflare key may not
+  write to the `pickleball-backups` bucket: 401), Time Travel bookmark `00001920-00000000-00005128-4aebff47b6c57c8775d957a62e5439f8`.
+- Integrity checks before and after: 21, extension 8, tournament 11 columns, every one 0.
+- `npx wrangler d1 migrations list pickleball --remote` listed only `0029_tournament_end`; `npm run db:migrate:remote` applied it (14 commands;
+  tournament_games had 0 rows before and after; 5 new columns, 2 new tables, the index, 'tie' allowed: checked).
+- main fast-forwarded `8afde4d` to `4991efd` and pushed; `npm run deploy -- --override-loud-hours` from main: deployment **58652ccf** (rollback:
+  **db0b7989**, Zip 61, in Cloudflare Deployments > Rollback; the new columns and tables can stay, old code never reads them).
+- Clock Worker `pickleball-alerts-clock`: version **0a7adcad-2f27-4022-bc38-00f8e61a02f9** (backup file version 5). Rollback: `npx wrangler
+  rollback 074e46f2-4641-4aeb-879e-465abf25fe3b --config worker/wrangler.toml`.
+- After, read only (no name picked, nothing written, no live data touched): /, /admin, /api/status and /api/group answer 200; Home at 390 light
+  and dark: no page errors, only GET requests, nothing wider than the screen; the Tournament test and History addresses answer 401 without the PIN.
+- The preview address `zip58-speed-main` (main's code, the fake database) was only for the timing; it can be ignored.
