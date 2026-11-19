@@ -17,6 +17,7 @@ import { ALL_SWITCHES_READ, fewerQueriesDb, SWITCH_READ } from '../server/speed'
 
 vi.setConfig({ testTimeout: 300_000 });
 
+const forcedRun = process.env.PB_SPEED_FORCE === '1';
 const AT = Date.parse('2026-11-18T18:30:00.000Z'); // Wed Nov 18, 2026, 1:30 PM Eastern
 const seeds = new Map<boolean, Promise<string>>();
 const seed = (calm: boolean) => {
@@ -77,7 +78,8 @@ describe('Zip 68: the organizer Home in a few trips', () => {
         for (const path of ['/api/admin/dashboard', '/api/admin/version']) {
           const { plain, fast } = await w.plainAndFast(path);
           expect(fast.text, `${s} ${path}`).toBe(plain.text);
-          expect(fast.trips).toBeLessThan(plain.trips);
+          // (PB_SPEED_FORCE=1 runs every request the fast way, so the plain one is fast too there: only the answers are compared.)
+          if (!forcedRun) expect(fast.trips).toBeLessThan(plain.trips);
         }
       }
     });

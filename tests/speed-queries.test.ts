@@ -138,7 +138,8 @@ describe('SPEED_FEWER_QUERIES: trips', () => {
     for (const path of ['/api/admin/dashboard', '/api/admin/version', '/api/admin/money', '/api/admin/activity']) {
       await w.call('GET', path, w.admin);
       await k.call('GET', path, k.admin);
-      expect((await w.call('GET', path, w.admin)).trips, path).toBe((await k.call('GET', path, k.admin)).mainTrips);
+      // Zip 68: an organizer call's sign-in check and the one switch read that decides share a trip, so exactly one fewer than main.
+      expect((await w.call('GET', path, w.admin)).trips, path).toBe((await k.call('GET', path, k.admin)).mainTrips - 1);
     }
   });
 
