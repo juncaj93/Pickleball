@@ -159,8 +159,34 @@ export interface DayRows {
 /** The two reads, for a screen's batch (Zip 62: no trip of their own). `idSql`: a `?` or the screen's pick subquery. */
 export const teamsSqlFor = (idSql: string) => `SELECT * FROM tournament_teams WHERE tournament_id = ${idSql} ORDER BY seat`;
 export const gamesSqlFor = (idSql: string) => `SELECT * FROM tournament_games WHERE tournament_id = ${idSql} ORDER BY num`;
-/** Zip 58: the ties' answers (a third small read in the same batch). */
+/** Zip 58: the ties' answers on their own (a write's fresh read: loadDay). */
 export const tiesSqlFor = (idSql: string) => `SELECT * FROM tournament_ties WHERE tournament_id = ${idSql} ORDER BY created_at, id`;
+/** The ties' answers read back from that column (in the order they were made); anything odd reads as none. */
+export function tiesFromJson(json: unknown): TieRow[] {
+  try {
+    const v = typeof json === 'string' ? JSON.parse(json) : [];
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter((x): x is unknown[] => Array.isArray(x) && x.length >= 9)
+      .map((x) => ({
+        id: String(x[0]),
+        tournament_id: '',
+        tie_key: String(x[1]),
+        kind: String(x[2]),
+        bye_seat: typeof x[3] === 'number' ? x[3] : null,
+        picks: typeof x[4] === 'string' ? x[4] : null,
+        game_a: typeof x[5] === 'number' ? x[5] : null,
+        game_b: typeof x[6] === 'number' ? x[6] : null,
+        spun_by: null,
+        spun_at: typeof x[7] === 'string' ? x[7] : null,
+        created_at: String(x[8]),
+        updated_at: String(x[8]),
+      }))
+      .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id < b.id ? -1 : 1));
+  } catch {
+    return [];
+  }
+}
 
 /** Teams and games of one tournament (a database before 0027 has none: empty), and the ties' answers (none before 0029). */
 export async function loadDay(db: D1Database, tournamentId: string): Promise<DayRows> {
@@ -288,7 +314,8 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   // Zip 58: the ties' answers. A tie game belongs to an answer; it is part of the night only while that tie still stands (a pool result fixed
   // after the wheel spun can end the tie, or make another one: its games are then set aside, kept, and come back if the tie does).
   const records = tieRows.map(tieRecordOf);
-  const standing = tieBlocks(teams.length, all.map(asPlanned), new Map(all.map((g) => [g.num, resultOf(g)])), out, records, gone);
+  // (Admin speed rule: with no tie game stored, nothing to set aside: the first pass is skipped.)
+  const standing = all.some((g) => g.stage === 'tie') ? tieBlocks(teams.length, all.map(asPlanned), new Map(all.map((g) => [g.num, resultOf(g)])), out, records, gone) : [];
   const liveTieGames = new Set(standing.flatMap((b) => (b.record ? [b.record.gameA, b.record.gameB] : [])).filter((n): n is number => n !== null));
   const stored = all.filter((g) => g.stage !== 'tie' || liveTieGames.has(g.num)).sort(byPlay);
   const tieLabel = new Map<number, string>();

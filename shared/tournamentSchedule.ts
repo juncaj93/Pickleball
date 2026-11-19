@@ -773,6 +773,8 @@ export function groupTable(
   const seats = groupsOf(teams).find((g) => (g.pool ?? 'P') === group)?.seats ?? [];
   const raw = standings(games, results, seats, out);
   const done = !!seats.length && groupDone(games, results, seats);
+  // Admin speed rule: a tie exists only once every game of the group is in; before that this is the plain table, nothing else worked out.
+  if (!done) return { rows: raw, blocks: [] };
   const classes = placeClasses(games, group);
   const clsOf = (place: number) => classes.get(place)?.cls ?? 'out';
   const shapeOf = (cls: string[]): TieShape | null => (cls.length === 3 ? (cls[0] === cls[1] && cls[1] !== cls[2] ? 'a' : 'ab') : null);

@@ -733,11 +733,11 @@ export function PlayerHome({
         // showing the organizer's own name), "Alex" + the gray swap icon is one button to Admin. Never in View as, never for a player.
         onTitle={g?.goToAdmin === true && !viewAs && !pickName ? { onClick: () => navigate('/admin'), label: `${g.me?.name ?? 'You'}. Go to Admin` } : undefined}
         title={!g ? (showSaved ? saved!.view.me!.name : SITE_NAME) : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
+        // Zip 58: a tournament winner's medals right after their name at the top, like an emoji typed after it.
+        titleBadge={g?.me && !pickName && g.tourAwards?.medals?.[g.me.name] ? <Medals n={g.tourAwards.medals[g.me.name]} size="top" /> : undefined}
         titleExtra={
           g?.me && !pickName ? (
             <>
-              {/* Zip 58: a tournament winner's medals next to their name at the top. */}
-              {g.tourAwards?.medals?.[g.me.name] ? <Medals n={g.tourAwards.medals[g.me.name]} size="top" /> : null}
               <button className="not-you" aria-label="Not you?" onClick={() => setSwitching(true)}>
                 not you?
               </button>

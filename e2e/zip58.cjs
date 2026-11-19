@@ -61,7 +61,7 @@ async function main() {
   if (await fetch(`${BASE}/api/status`).then((r) => r.ok, () => false)) throw new Error(`port ${PORT} is already in use`);
   const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
     cwd: ROOT,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip58-setup-token-0123456789', DEV_CLOCK: '1', PREVIEW_CALM: 'on', PB_PREVIEW_BUILD: '1' },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip58-setup-token-0123456789', DEV_CLOCK: '1', PREVIEW_CALM: 'on', PB_PREVIEW_BUILD: '1', CHRISTMAS_SKIN_PREVIEW: 'on' },
     stdio: 'ignore',
     detached: true,
   });
@@ -468,6 +468,59 @@ async function main() {
     assert(a.errors.length === 0, a.errors.join(' | '));
     await a.ctx.close();
   });
+
+  // ---------------------------------------------------------------- I  Alex's look fixes (Nov 19): the ticker's hard ends, the medal after the name
+  for (const stageName of ['ended', 'history'])
+    for (const skin of ['off', 'on'])
+      for (const scheme of SCHEMES)
+        await check(`I look fixes (${stageName}, Christmas skin ${skin}, ${scheme}): ticker ends hard; the medal reads like an emoji after the name; 420/390/360/320`, async () => {
+          await stage(stageName);
+          const v = await newPage({ scheme });
+          await v.page.goto(`${BASE}/?as=Vic${skin === 'on' ? '&xmasmode=all&xmasdate=2026-12-05&xmasreset=1' : ''}`);
+          await v.page.locator('[data-tour-ticker]').waitFor({ timeout: 30000 });
+          if (skin === 'on') {
+            await sleep(2400);
+            await v.page.locator('[data-skin-logo]').tap();
+            await sleep(2600);
+            const on = await v.page.evaluate(() => document.documentElement.getAttribute('data-skin'));
+            assert(on === 'christmas', `the Christmas look is on: ${on}`);
+          }
+          const n = stageName === 'history' ? 2 : 1;
+          for (const w of [420, 390, 360, 320]) {
+            await v.page.setViewportSize({ width: w, height: 844 });
+            await sleep(150);
+            const m = await v.page.evaluate(() => {
+              const tw = document.querySelector('[data-tour-ticker]');
+              const cs = getComputedStyle(tw);
+              const h1 = document.querySelector('.topbar h1.has-badge');
+              const name = h1.querySelector('.h1-name');
+              const r = document.createRange();
+              r.selectNodeContents(name);
+              const nameBox = [...r.getClientRects()].pop();
+              const badge = h1.querySelector('[data-medals]');
+              const icon = badge.querySelector('.md-ico').getBoundingClientRect();
+              const all = badge.getBoundingClientRect();
+              const notYou = document.querySelector('.not-you').getBoundingClientRect();
+              const fs = parseFloat(getComputedStyle(h1).fontSize);
+              return { mask: cs.maskImage || cs.webkitMaskImage || 'none', wmask: cs.webkitMaskImage || 'none', twLeft: tw.getBoundingClientRect().left, twWidth: tw.getBoundingClientRect().width,
+                inH1: !!badge.closest('h1'), medals: badge.getAttribute('data-medals'), fs, iconH: icon.height, gap: all.left - nameBox.right, nameTop: nameBox.top, nameBottom: nameBox.bottom,
+                iconTop: icon.top, iconBottom: icon.bottom, notYouLeft: notYou.left, badgeRight: all.right, notYouTop: notYou.top };
+            });
+            assert((m.mask === 'none' || !m.mask) && (m.wmask === 'none' || !m.wmask), `no fade on the ticker ends: ${m.mask} ${m.wmask}`);
+            assert(m.twLeft === 0 && Math.round(m.twWidth) === w, `edge to edge: ${m.twLeft} ${m.twWidth}`);
+            assert(m.inH1 && m.medals === String(n), `the medals sit in the name's heading (${m.medals})`);
+            // As tall as the name's letters: 0.7 to 0.9 of the font size (a capital letter is about 0.72).
+            assert(m.iconH >= m.fs * 0.68 && m.iconH <= m.fs * 0.9, `medal height ${m.iconH.toFixed(1)} for a ${m.fs}px name`);
+            // A normal space after the name (0.15 to 0.4 em).
+            assert(m.gap >= m.fs * 0.15 && m.gap <= m.fs * 0.4, `space after the name ${m.gap.toFixed(1)}px`);
+            // On the name's line: inside its line box, its bottom near the text baseline (the line box bottom less the descent).
+            assert(m.iconTop >= m.nameTop - 1 && m.iconBottom <= m.nameBottom + 1, `on the name's line: ${m.iconTop}..${m.iconBottom} in ${m.nameTop}..${m.nameBottom}`);
+            assert(m.notYouLeft >= m.badgeRight || m.notYouTop > m.nameBottom - 2, 'not you? after the medal');
+            await v.page.screenshot({ path: path.join(SHOTS, `I-${stageName}-${skin}-${scheme}-${w}.png`), clip: { x: 0, y: 0, width: w, height: 140 } });
+          }
+          assert(v.errors.length === 0, v.errors.join(' | '));
+          await v.ctx.close();
+        });
 
   // ---------------------------------------------------------------- H  who may see it
   await check('H switched off: no tournament data and no ticker or medals for a player', async () => {

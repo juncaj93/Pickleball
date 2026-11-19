@@ -63,7 +63,7 @@ import {
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
-import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, tiesSqlFor, type TieRow } from './tournamentDay';
+import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, tiesFromJson } from './tournamentDay';
 import { adminRoundsView, americanoStarted, playerRoundsView } from './americanoDay';
 import { fitWords, nightPlan } from '../shared/tournamentPlan';
 import { adminEndView, type AwardsPre, awardsFrom, awardsReads } from './tournamentEnd';
@@ -170,6 +170,14 @@ export interface SignupRow {
 const FIRST_LEVEL_SQL = (s: string) =>
   `(SELECT h.level FROM tournament_level_history h WHERE h.tournament_id = ${s}.tournament_id AND h.player_id = ${s}.player_id AND h.set_by = 'player' ORDER BY h.created_at, h.rowid LIMIT 1)`;
 
+/**
+ * Zip 58 (Alex's admin speed rule): the ties' answers as one JSON column ON the tournament row a screen already reads (`alias`: that row's
+ * table name), so a screen's batch has no extra statement. Only a tournament with published teams can have a tie, and with no tie answer stored
+ * anywhere (the usual case) nothing is looked up at all; '[]' when there are none.
+ */
+const tiesJsonSql = (alias: string): string =>
+  `(SELECT json_group_array(json_array(x.id, x.tie_key, x.kind, x.bye_seat, x.picks, x.game_a, x.game_b, x.spun_at, x.created_at)) FROM tournament_ties x WHERE x.tournament_id = ${alias}.id) AS ties_json`;
+
 /** The stages a tournament is open in: piece 1's two, then piece 2's (Zip 56) tickets and rescheduled. Later pieces add theirs here. */
 const OPEN = "('signup', 'date_picked', 'tickets', 'rescheduled')";
 
@@ -225,14 +233,15 @@ const WAITING = 'EXISTS (SELECT 1 FROM tournament_tickets k WHERE k.tournament_i
 /** The organizer's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately, else one with an I paid waiting. */
 const SHOWN_WHERE = `group_id = ?1 AND (status IN ${OPEN} OR ${shownCanceled()} OR (status = 'canceled' AND ${WAITING}))
        ORDER BY CASE WHEN status = 'canceled' THEN 1 ELSE 0 END, created_at DESC, id LIMIT 1`;
-const SHOWN_SQL = `SELECT *, (status = 'canceled' AND ${WAITING}) AS claims_waiting FROM tournaments
+const SHOWN_SQL = `SELECT *, (status = 'canceled' AND ${WAITING}) AS claims_waiting, ${tiesJsonSql('tournaments')} FROM tournaments
        WHERE ${SHOWN_WHERE}`;
-type ShownRow = TournamentRow & { claims_waiting: number };
+type ShownRow = TournamentRow & { claims_waiting: number; ties_json?: string };
 
 /** shownTournament's rule on the row its read picked: a canceled one stops showing once its date has passed (unless an I paid waits). */
 function shownFrom(row: ShownRow | null, group: GroupRow, nowMs: number): TournamentRow | null {
   if (!row) return null;
-  const { claims_waiting: claims, ...t } = row;
+  const { claims_waiting: claims, ties_json: _ties, ...t } = row;
+  void _ties;
   if (t.status === 'canceled' && !claims && datePassed(t, todayKey(nowMs, group.timezone))) return null;
   return t;
 }
@@ -261,11 +270,11 @@ async function activeTournamentForPlayer(db: D1Database, group: GroupRow, player
     .catch(() => null);
 }
 
-type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null };
+type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null; ties_json?: string };
 /** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately. */
 const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownCanceled('t.')})
        ORDER BY CASE WHEN t.status = 'canceled' THEN 1 ELSE 0 END, t.created_at DESC, t.id LIMIT 1`;
-const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*,
+const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')},
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ?4 AND group_id = t.group_id) END AS viewer_name,
          CASE WHEN t.status = 'canceled' THEN (SELECT status FROM tournament_signups WHERE tournament_id = t.id AND player_id = ?4) ELSE NULL END AS my_signup
@@ -371,7 +380,6 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
     // Zip 57: the teams and games (published teams only reach a player; the view decides). Zip 58: the ties' answers.
     { sql: teamsSqlFor(pick), values },
     { sql: gamesSqlFor(pick), values },
-    { sql: tiesSqlFor(pick), values },
     // Zip 58: after a tournament ends, the ticker, the congratulations card and medals (three small reads, in this same trip).
     ...awardsReads(group.id, ctx.nowMs),
   ];
@@ -388,8 +396,8 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
         org: org.from(rows(3)),
         freed: freed ? Math.max(0, Number(freed.gone ?? 0) - Number(freed.taken ?? 0)) : 0,
         canceledMoney: money ? { backCents: money.back ?? 0, claimCents: money.claim ?? 0 } : null,
-        day: { teams: rows(6), games: rows(7), ties: rows(8) as TieRow[] },
-        awards: awardsFrom(res.slice(9, 12)),
+        day: { teams: rows(6), games: rows(7), ties: tiesFromJson((rows(0)[0] as { ties_json?: string } | undefined)?.ties_json) },
+        awards: awardsFrom(res.slice(8, 11)),
       };
     },
   };
@@ -428,11 +436,10 @@ export function adminTourReads(group: GroupRow, nowMs: number): TourReads<ShownR
       recentPlayersRead(group.id, nowMs),
       { sql: teamsSqlFor(pick), values },
       { sql: gamesSqlFor(pick), values },
-      { sql: tiesSqlFor(pick), values },
     ],
     from: (res) => {
       const rows = (i: number) => (res[i]?.results ?? []) as never[];
-      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)), recent: rows(4), day: { teams: rows(5), games: rows(6), ties: rows(7) } };
+      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)), recent: rows(4), day: { teams: rows(5), games: rows(6), ties: tiesFromJson((rows(0)[0] as { ties_json?: string } | undefined)?.ties_json) } };
     },
   };
 }
@@ -707,7 +714,8 @@ async function visibleTo(
   // Zip 62: the row the screen's batch already read, else the one read of before.
   const row = pre ? pre.row : await activeTournamentForPlayer(ctx.db, group, playerId, ctx.nowMs);
   if (!row) return null;
-  const { org_saved: orgSaved, viewer_name: viewerName, my_signup: mySignupStatus, ...t } = row;
+  const { org_saved: orgSaved, viewer_name: viewerName, my_signup: mySignupStatus, ties_json: _ties, ...t } = row;
+  void _ties;
   // Zip 56: a canceled tournament's plain card is only for the players who were on its list, and only until its date has passed.
   if (statusOf(t) === 'canceled' && (mySignupStatus !== 'in' || datePassed(t, todayKey(ctx.nowMs, group.timezone)))) return null;
   // Every offered date has passed with none picked: hidden from every player (Alex, Zip 55 feedback), the same as none open. The organizer's

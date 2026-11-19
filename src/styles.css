@@ -4793,3 +4793,21 @@ dialog.sheet[open]::backdrop {
 .preview-hold-tag .nowrap {
   white-space: nowrap;
 }
+/* Zip 58: a name with a badge after it (a tournament winner's medals): the name ends in "…" if needed, the badge stays on the same line and
+   baseline, a normal space after the name. */
+.topbar h1.has-badge {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.topbar h1.has-badge .h1-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar h1.has-badge .h1-badge {
+  flex: none;
+  margin-left: 0.25em;
+  line-height: 1;
+}

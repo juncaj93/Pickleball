@@ -90,6 +90,10 @@ export interface EndPlan {
  */
 export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly SignupRow[], tickets: readonly TicketWithName[], day: DayRows, tz: string, nowMs: number, orgId: string | null): EndPlan | null {
   if (t.status !== 'tickets' || !t.final_date || !styleDecided(t, nowMs)) return null;
+  // Admin speed rule: nothing more is worked out until the rows say the night could be over (the Final has a result, or, Americano, every
+  // stored game has one). The full check follows.
+  const hasResult = (g: { winner: string | null; claim: string | null; skipped: number }) => !!g.winner || !!g.claim || !!g.skipped;
+  if (format === 'doubles' ? !day.games.some((g) => g.stage === 'final' && hasResult(g)) : !day.games.length || !day.games.every(hasResult)) return null;
   const names = new Map<string, string>();
   for (const s of signups) names.set(s.player_id, s.display_name);
   for (const k of tickets) names.set(k.player_id, k.display_name);

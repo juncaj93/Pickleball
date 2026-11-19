@@ -29,6 +29,7 @@ export function TopBar({
   sub,
   action,
   titleExtra,
+  titleBadge,
   tools,
   chip,
   onTitle,
@@ -41,6 +42,8 @@ export function TopBar({
   action?: ReactNode;
   /** Small text right after the title, on the same line (like "not you?"). */
   titleExtra?: ReactNode;
+  /** Zip 58: drawn inside the name's heading, right after the name, like an emoji typed after it (a tournament winner's medals). */
+  titleBadge?: ReactNode;
   /** Small round buttons left of the chip and the date square (more can be added later). */
   tools?: ReactNode;
   /** The player's credit chip: right before the date square, the same height. */
@@ -69,18 +72,18 @@ export function TopBar({
           {onTitle ? (
             <div className="title-line">
               <button type="button" className="title-swap" onClick={onTitle.onClick} aria-label={onTitle.label} data-title-swap>
-                <h1>{title}</h1>
+                <TitleH1 title={title} badge={titleBadge} />
                 <SwapIcon />
               </button>
               {titleExtra}
             </div>
           ) : titleExtra ? (
             <div className="title-line">
-              <h1>{title}</h1>
+              <TitleH1 title={title} badge={titleBadge} />
               {titleExtra}
             </div>
           ) : (
-            <h1>{title}</h1>
+            <TitleH1 title={title} badge={titleBadge} />
           )}
           {sub && <div className="sub">{sub}</div>}
         </div>
@@ -156,5 +159,15 @@ export function SwapIcon({ size = 15 }: { size?: number }) {
     <svg className="swap-icon" viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M2.5 5.5h10M9.5 2.5l3 3-3 3M13.5 10.5h-10M6.5 7.5l-3 3 3 3" />
     </svg>
+  );
+}
+
+/** The name at the top; with a badge (Zip 58 medals) the badge follows the name on its line and baseline, and a long name ends in "…" before it. */
+function TitleH1({ title, badge }: { title: string; badge?: ReactNode }) {
+  if (!badge) return <h1>{title}</h1>;
+  return (
+    <h1 className="has-badge">
+      <span className="h1-name">{title}</span> <span className="h1-badge">{badge}</span>
+    </h1>
   );
 }

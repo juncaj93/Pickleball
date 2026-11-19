@@ -16,12 +16,20 @@
   margin-left: -0.3em;
 }
 .md-top {
-  font-size: 1.05em;
-  margin-left: 0.25em;
+  margin-left: 0;
+  vertical-align: baseline;
 }
+/* Zip 58 (Alex): the medals after the name at the top read like an emoji typed after it: as tall as the name's letters, on its baseline. */
 .md-top .md-ico {
-  width: 0.78em;
-  height: 1.02em;
+  width: 0.62em;
+  height: 0.8em;
+}
+.md-top .md-ico + .md-ico {
+  margin-left: -0.26em;
+}
+.md-top .md-count {
+  font-size: 0.6em;
+  margin-left: 0.15em;
 }
 .md-count {
   margin-left: 0.22em;

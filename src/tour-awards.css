@@ -9,8 +9,6 @@
   border-top: 1px solid #6e6224;
   border-bottom: 1px solid #6e6224;
   color: #ffffff;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 .tw-track {
   display: flex;
