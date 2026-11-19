@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { HOUR, playerPhone, setupGroup } from './harness';
-import { HEAT_RAMP, heatColors, heatStep, isBackSource, isOddSource, styleAtClose, styleBannerWords } from '../shared/tournament';
+import { HEAT_RAMP, heatColors, heatStep, isBackSource, isOddSource, planCount, styleAtClose, styleBannerWords } from '../shared/tournament';
 import { activityText } from '../shared/activity';
 
 // Zip 64 (🎾64.finalize): Finalize's Plays (the real start and end in the existing columns), the style rules once tickets close (an odd count
@@ -367,6 +367,35 @@ describe('review fixes', () => {
     expect((await dash(ctx)).format).toBe('doubles');
     expect((await card(ctx, 'Blair')).format).toBe('doubles');
     expect((await dash(ctx)).formatLocked).toBe(true);
+  });
+});
+
+describe('part 8: the plan follows the players signed up', () => {
+  const EIGHT = SIGNED.slice(0, 8);
+  it('8 signed up, 0 paid (before tickets open): a 10 player plan, 2 courts, 7:30 to 10 PM; Finalize says the same', async () => {
+    const ctx = await world({ signUp: EIGHT, finalize: false });
+    const d = await dash(ctx);
+    expect([d.size, d.courts, d.minutes, d.start]).toEqual([10, 2, 150, 19 * 60 + 30]);
+    const f = (await ctx.organizer.call('GET', `/api/admin/tournament/${ctx.tid}/finalize?date=${DATE}`)).data;
+    expect([f.fits, f.courts]).toEqual([10, 2]);
+  });
+  it('8 signed up, 3 paid (tickets open): still the 10 player plan (the larger of 8 who can make the date and 3 locked in)', async () => {
+    const ctx = await world({ signUp: EIGHT });
+    expect((await dash(ctx)).size).toBe(10);
+    await lockIn(ctx, EIGHT.slice(0, 3));
+    const d = await dash(ctx);
+    expect([d.size, d.courts, d.minutes, d.start]).toEqual([10, 2, 150, 19 * 60 + 30]);
+    expect(d.tickets.filter((k: { place: string }) => k.place === 'spot')).toHaveLength(3);
+    // Once more are locked in than signed up for the date (a late join), the locked-in count wins: 11 locked in = a 14 player plan.
+    for (const n of ['Kai', 'Lee', 'Lane']) await signUp(ctx, n);
+    await lockIn(ctx, [...EIGHT.slice(3), 'Kai', 'Lee', 'Lane']);
+    expect((await dash(ctx)).size).toBe(14);
+    books(ctx);
+  });
+  it('the shared count: before tickets open the list, after it the larger of the date and the locked in', () => {
+    expect(planCount({ signedUp: 8, going: 5, locked: 0, ticketsOpen: false })).toBe(8);
+    expect(planCount({ signedUp: 9, going: 8, locked: 3, ticketsOpen: true })).toBe(8);
+    expect(planCount({ signedUp: 9, going: 8, locked: 11, ticketsOpen: true })).toBe(11);
   });
 });
 

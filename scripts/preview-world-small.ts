@@ -698,7 +698,7 @@ export async function buildSmallPreview(
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 64 Finalize (on): "The Cold Open", Everyone, the vote open, 9 on the list (everyone but Vic), all able to make the third Thursday of next month. Vic sees the short ticket with Sign up; Parker the signed-up ticket; organizer Home has the tournament card (Pick the date: the heat map, then the one-screen Finalize). Every other moment is one tap away on the Tournament test page');
+    summary.push('Zip 64 Finalize (on): "The Cold Open", Everyone, the vote open, 8 on the list (everyone but Vic and Reese; the plan on the organizer card: 10 players, 2 courts, 2.5 hours), all able to make the third Thursday of next month. Vic sees the short ticket with Sign up; Parker the signed-up ticket; organizer Home has the tournament card (Pick the date: the heat map, then the one-screen Finalize). Every other moment is one tap away on the Tournament test page');
   }
 
   await refresh();

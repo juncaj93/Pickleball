@@ -51,6 +51,7 @@ import {
   organizerCost,
   prizeCentsOf,
   smartPlan,
+  planCount,
   planRange,
   STORED_PLAN,
   type PlayerTournamentView,
@@ -965,9 +966,18 @@ export async function adminTournamentFor(
   const oddNow = decided && isOddSource(ts.format_source);
   // The organizer, as the site always finds them (saved, or by the name in Settings): their seat is the $0 one.
   const orgId = tickets.length ? await orgOf() : group.organizer_player_id;
-  // Alex's smart plan: the players locked in decide the planned size, the courts and the hours; the organizer's cost follows.
+  // Alex's smart plan: the planned size, the courts and the hours; the organizer's cost follows. Zip 64 part 8: sized from the players signed
+  // up before tickets open (nobody has paid yet), then from the larger of those who can make the picked date and those locked in.
   const locked = tickets.filter((k) => k.place === 'spot' && k.signup_status === 'in');
-  const plan = smartPlan(locked.length);
+  const listed = rows.filter((r) => r.status === 'in');
+  const plan = smartPlan(
+    planCount({
+      signedUp: listed.length,
+      going: t.final_date ? listed.filter((r) => storedDays(r.dates).includes(t.final_date!)).length : listed.length,
+      locked: locked.length,
+      ticketsOpen: statusOf(t) === 'tickets',
+    }),
+  );
   const paidNow = locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).length;
   const prize = prizeCentsOf(formatOf(ts), t.champion_credit_cents, t.second_credit_cents ?? 0);
   const pending = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
@@ -1386,7 +1396,8 @@ export async function finalizeView(ctx: Ctx): Promise<FinalizeView> {
   const org = await organizerIdOf(ctx.db, group);
   const held = playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org));
   const tally = await voteTally(ctx, t, date!);
-  const fit = planFit(tally.names.length);
+  // Zip 64 part 8: the same count as the organizer's card will use once this date is picked (who can make it, or more locked in already).
+  const fit = planFit(Math.max(tally.names.length, ticketsEverOpened(t) ? lockedCount(await loadTickets(ctx.db, t.id)) : 0));
   let votes: VoteCounts | null = null;
   let winner: FinalizeView['winner'] = null;
   if (isVoteSource(t.format_source) && !held) {
@@ -1400,6 +1411,7 @@ export async function finalizeView(ctx: Ctx): Promise<FinalizeView> {
     players: tally.names,
     fits: fit.fits,
     over: fit.over,
+    courts: smartPlan(fit.fits).courts,
     votes,
     winner,
     format: formatOf(t),

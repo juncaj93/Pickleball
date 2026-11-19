@@ -63,8 +63,8 @@ export const COUNTDOWN_STAGES = ['pay_3d', 'pay_2d', 'pay_1d', 'pay_today', 'pay
 //   style_back     switched to Americano for 9, then Vic paid late: 10 locked in, the organizer's "Switch back to Locked doubles?" (Switch, Not now)
 //   late_open      6 locked in, Pay by an hour ago, spots open: Vic, Zoe and Reese can still pay (red "Your payment is late", Pay now works)
 //   late_cut       the same tournament TODAY, starting in 2 hours: inside the last 3 hours, tickets are closed for Vic ("Tickets are closed.")
-//   zip64_start    the preview's calm start: The Cold Open, the vote open, 9 on the list (everyone but Vic), all able to make the third Thursday
-//                  of next month. Vic sees the short ticket before signing up (mock 00); Parker signed up (mock 01); Alex can Finalize.
+//   zip64_start    the preview's calm start: The Cold Open, the vote open, 8 on the list (everyone but Vic and Reese), all able to make the third
+//                  Thursday of next month (part 8: the organizer's plan is for 10: 2 courts, 2.5 hours). Vic sees the short ticket before signing up (mock 00); Parker signed up (mock 01); Alex can Finalize.
 export const STYLE_STAGES = ['style_even', 'style_odd', 'style_back', 'late_open', 'late_cut', 'zip64_start'] as const;
 export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
@@ -407,7 +407,6 @@ const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 
     { name: 'Wren', level: 320, vote: 'either' },
     { name: 'Quinn', level: 250, vote: 'locked' },
     { name: 'Zoe', level: 275, vote: 'either' },
-    { name: 'Reese', level: 340, vote: 'either' },
     { name: 'Alex', level: 340, vote: 'americano' },
   ],
   vote_tie: [

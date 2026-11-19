@@ -964,3 +964,7 @@ a.btn.tm-remind-btn,
     gap: 6px;
   }
 }
+/* Zip 64 part 8: the plan line on the Finalize screen, under the names. */
+.tm-fin1 .tm-fin-plan {
+  margin: 6px 0 0;
+}

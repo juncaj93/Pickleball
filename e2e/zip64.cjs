@@ -401,9 +401,11 @@ async function main() {
         const sheet = a.page.locator('dialog.tm-date-sheet[open]');
         const text = flat(await sheet.innerText());
         assert(/^Finalize (Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} \d+/.test(text), text.slice(0, 60));
-        assert(/9 can play/.test(text), text.slice(0, 120));
+        assert(/8 can play/.test(text), text.slice(0, 120));
+        // Part 8: the plan line, the same count as the organizer's card (8 can play: a 10 player plan).
+        assert(flat(await sheet.locator('[data-tm-fin-plan]').innerText()) === 'Plan: 10 players · 2 courts', await sheet.locator('[data-tm-fin-plan]').innerText());
         assert(/STYLE|Style/.test(text) && /Auto/.test(text) && /Doubles/.test(text) && /Americano/.test(text), 'the three styles');
-        assert(/Votes: Doubles 3 · Americano 2 · Either 4/.test(text), `votes: ${text}`);
+        assert(/Votes: Doubles 3 · Americano 2 · Either 3/.test(text), `votes: ${text}`);
         assert(!/plan fits|Nobody picked|Ticket price/.test(text), 'removed lines');
         assert((await sheet.locator('[data-tm-fin-start]').inputValue()) === String(19 * 60 + 30) && (await sheet.locator('[data-tm-fin-end]').inputValue()) === String(22 * 60), 'Plays 7:30 PM to 10:00 PM');
         await oneLine(a.page, 'dialog.tm-date-sheet[open] .tm-fin-row, dialog.tm-date-sheet[open] .tm-fin-votes, dialog.tm-date-sheet[open] .tm-fin-style button, dialog.tm-date-sheet[open] .tm-fin-actions .btn');
@@ -454,6 +456,20 @@ async function main() {
     await v.ctx.close();
     await a.ctx.close();
   });
+
+  // ---------------------------------------------------------------- J  part 8: the plan follows the players signed up
+  for (const scheme of SCHEMES)
+    await check(`J part 8 (${scheme}): 8 signed up, nobody paid: the organizer's card says "Plan: 10 players · 2 courts · 2.5 hours"`, async () => {
+      await stage('zip64_start');
+      const t = (await dash()).tournament;
+      assert(t.signups.length === 8 && t.size === 10 && t.courts === 2 && t.minutes === 150, JSON.stringify([t.signups.length, t.size, t.courts, t.minutes]));
+      const a = await adminPage({ width: 390, scheme });
+      const card = a.page.locator('[data-tm-home]');
+      await card.waitFor({ timeout: 15000 });
+      assert(/Plan: 10 players · 2 courts · 2\.5 hours/.test(flat(await card.innerText())), flat(await card.innerText()));
+      await shot(a.page, `J-plan-${scheme}`);
+      await a.ctx.close();
+    });
 
   // ---------------------------------------------------------------- G  the style rules on screen
   await check('G odd after Pay by: the organizer\'s "switched to Americano" card; the players\' banner', async () => {

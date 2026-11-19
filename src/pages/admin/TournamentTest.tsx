@@ -11,7 +11,7 @@ import './tournament-admin.css';
 
 const STAGES = [
   // Zip 64 (🎾64.finalize): the short ticket, the style rules and late paying. These build "The Cold Open" (the format above does not apply).
-  { stage: 'zip64_start', label: 'Start: short ticket and Finalize', line: 'The Cold Open, the vote open, 9 on the list. View as Vic: one wide Sign up (mock 00). View as Parker: See who’s signed up, Edit, Drop out (mock 01). As you: the tournament page, Pick the date (heat map), tap a date: Style, Plays, Pay by, Finalize date, then the venue reminder on Home.' },
+  { stage: 'zip64_start', label: 'Start: short ticket and Finalize', line: 'The Cold Open, the vote open, 8 on the list (Plan: 10 players · 2 courts · 2.5 hours on your card). View as Vic: one wide Sign up (mock 00). View as Parker: See who’s signed up, Edit, Drop out (mock 01). As you: the tournament page, Pick the date (heat map), tap a date: Style, Plays, Pay by, Finalize date, then the venue reminder on Home.' },
   { stage: 'vote_open', label: 'Format vote open (3 on the list)', line: '3 on the list with mixed votes. View as Vic, Sign up: Step 2 of 2 · Your dates and the new line.' },
   { stage: 'vote_majority', label: 'Date finalized, style TBD', line: 'The date is set, Pay by not passed: every card says Tournament style TBD. View as Vic: Lock my spot · $16, Pay by on the right.' },
   { stage: 'style_even', label: 'Tickets closed: 10 locked in (even)', line: 'Pay by passed an hour ago, all 10 locked in: Locked doubles (the vote’s winner) stays.' },

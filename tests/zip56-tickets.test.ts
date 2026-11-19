@@ -207,35 +207,32 @@ describe('picking the date opens tickets (Alex: no Open tickets button)', () => 
 describe('the smart plan on the organizer\'s screens', () => {
   // Zip 64: once the date is finalized the start and the hours are the real ones (Finalize's Plays, 7:30 to 10:00 PM by default), so the court
   // bill is the plan's courts for those hours; the spots still follow the players locked in.
-  it('follows the players locked in: 6, 8, 10, 12 spots; the cost if it fills and with N paid now, on the real hours', async () => {
+  // Zip 64 part 8: the organizer's plan follows the larger of the players who can make the picked date and the players locked in (before tickets
+  // open: everyone signed up). The spots players see still follow the players locked in.
+  it('follows the players signed up for the date (or more locked in); the cost if it fills and with N paid now, on the real hours', async () => {
     const names = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Kai'];
     const ctx = await world({ signUp: ['Alex', ...names] });
     const plan = async () => {
       const t = (await dash(ctx)).tournament;
       return { size: t.size, courts: t.courts, minutes: t.minutes, start: t.start, cost: t.cost };
     };
-    // Alex's $0 seat only: 6 spots, 1 court, 2.5 hours. Court $60; 5 tickets of $16 if it fills; $28 of credits: $60 - $80 + $28 = $8.
-    expect(await plan()).toEqual({ size: 6, courts: 1, minutes: 150, start: 1170, cost: { courtCents: 6000, ifFillsCents: 800, nowCents: 8800, paidNow: 0 } });
+    // 12 can make the date: a 14 player plan, the 12-player plan's 2 courts, the real 2.5 hours. $120 - 13 x $16 + $28 = -$60; nobody paid: $148.
+    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: -6000, nowCents: 14800, paidNow: 0 } });
     for (const n of names.slice(0, 5)) await payCash(ctx, n);
-    // 6 locked in (Alex + 5 paid): 8 spots, 2 courts for the real 2.5 hours: $120 - $112 + $28 = $36; with 5 paid now: $120 - $80 + $28 = $68.
-    expect(await plan()).toEqual({ size: 8, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: 3600, nowCents: 6800, paidNow: 5 } });
+    // Paying does not move the plan (12 can make it); the players' spots still follow the locked in (6: 8 spots).
+    expect(await plan()).toMatchObject({ size: 14, courts: 2, cost: { courtCents: 12000, ifFillsCents: -6000, nowCents: 6800, paidNow: 5 } });
     expect((await card(ctx, 'Kai')).tickets).toMatchObject({ size: 8, full: false });
     expect((await card(ctx, 'Kai'))).toMatchObject({ start: 1170, minutes: 150, startSet: true });
-    await payCash(ctx, names[5]);
-    // 7: 10 spots, 2 courts, 2.5 hours.
-    expect(await plan()).toMatchObject({ size: 10, courts: 2, minutes: 150 });
-    for (const n of names.slice(6, 10)) await payCash(ctx, n);
-    // 11: 14 spots (Zip 63: the cap is 16), the 12-player plan's 2 courts, the real 2.5 hours: $120 - 13 x $16 + $28 = -$60 (the tickets cover
-    // it); 10 paid now: $120 - $160 + $28 = -$12.
+    for (const n of names.slice(5, 10)) await payCash(ctx, n);
+    // 10 paid now: $120 - $160 + $28 = -$12.
     expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: -6000, nowCents: -1200, paidNow: 10 } });
-    expect(await card(ctx, 'Kai')).toMatchObject({ start: 1170, minutes: 150 });
-    // A drop moves it back down at once.
+    // A back out moves it down at once (11 can make it: still 14; 10: 12; 9: 12).
     await backOut(ctx, 'Blair');
-    expect(await plan()).toMatchObject({ size: 12, minutes: 150 });
+    expect(await plan()).toMatchObject({ size: 14, minutes: 150 });
     await backOut(ctx, 'Casey');
     expect(await plan()).toMatchObject({ size: 12 });
     await backOut(ctx, 'Devon');
-    expect(await plan()).toMatchObject({ size: 10, minutes: 150 });
+    expect(await plan()).toMatchObject({ size: 12, minutes: 150 });
     books(ctx);
   });
 
@@ -769,15 +766,16 @@ describe('preview test page: the ticket stages', () => {
     };
     const locked = (t: { tickets: { place: string; name: string }[] }) => t.tickets.filter((k) => k.place === 'spot').map((k) => k.name);
 
-    // Alex: picking the date opens tickets, so "Date picked" is tickets open with nobody paid yet (6 spots).
+    // Alex: picking the date opens tickets, so "Date picked" is tickets open with nobody paid yet. Zip 64 part 8: the plan follows the 8 who
+    // can make the date (a 10 player plan).
     let t = await stage('date_picked');
-    expect(t).toMatchObject({ status: 'tickets', size: 6, ticketCents: 1600 });
+    expect(t).toMatchObject({ status: 'tickets', size: 10, ticketCents: 1600 });
     expect(t.payBy).toBeTruthy();
     expect(locked(t)).toEqual([]);
     expect((await card(ctx, 'Parker')).tickets).toMatchObject({ size: 6, full: false, mine: null, locked: [] });
 
     t = await stage('tickets_open');
-    expect(t).toMatchObject({ status: 'tickets', size: 8, ticketCents: 1600 });
+    expect(t).toMatchObject({ status: 'tickets', size: 12, ticketCents: 1600 });
     expect(locked(t)).toEqual(['Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Wren', 'Quinn']);
     expect((await card(ctx, 'Vic')).tickets).toMatchObject({ mine: null, priceCents: 1600 });
 

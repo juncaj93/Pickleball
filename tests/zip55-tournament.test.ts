@@ -406,7 +406,8 @@ describe('preview test page server half', () => {
     expect((await dash(ctx)).tournamentTest).toBeUndefined();
     await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: true });
     let t = (await dash(ctx)).tournament;
-    expect(t).toMatchObject({ name: 'Winter Classic', status: 'signup', visibility: 'all', size: 6 });
+    // Zip 64 part 8: the plan follows the 5 signed up before tickets open: a 8 player plan.
+    expect(t).toMatchObject({ name: 'Winter Classic', status: 'signup', visibility: 'all', size: 8 });
     expect(t.signups.map((s: any) => s.name)).toEqual(['Parker', 'Rowan', 'Sage', 'Wren', 'Quinn']);
     const b = await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'date_picked' });
     t = (await dash(ctx)).tournament;

@@ -217,13 +217,15 @@ async function main() {
     const t = d.tournament;
     assert(t && t.status === 'tickets' && t.visibility === 'all' && t.signups.length === 8 && t.finalDate === '2026-12-17', JSON.stringify(t && { s: t.status, v: t.visibility, n: t.signups.length, f: t.finalDate }));
     assert(t.payBy === '2026-12-17T00:00:00.000Z', `Pay by Wed Dec 16, 7:00 PM (Zip 59: the night before): ${t.payBy}`);
-    assert(t.size === 6 && t.courts === 1 && t.minutes === 150, `the smart plan for nobody locked in: ${JSON.stringify([t.size, t.courts, t.minutes])}`);
+    // Zip 64 part 8: the plan follows the 8 who can make the date (nobody has paid): a 10 player plan, 2 courts, the real 2.5 hours.
+    assert(t.size === 10 && t.courts === 2 && t.minutes === 150, `the plan for 8 who can make it: ${JSON.stringify([t.size, t.courts, t.minutes])}`);
     const a = await adminPage();
     await a.page.locator('[data-tm-tickets]').waitFor({ timeout: 15000 });
     assert((await a.page.locator('[data-tm-open-tickets]').count()) === 0, 'no Open tickets button');
-    assert(flat(await a.page.locator('[data-tm-row="plan"]').innerText()) === '6 players · 1 court · 2.5 hours', 'the plan line');
-    assert(flat(await a.page.locator('[data-tm-row="cost"]').innerText()) === '$8', 'your cost if it fills');
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/6', 'the Home line');
+    assert(flat(await a.page.locator('[data-tm-row="plan"]').innerText()) === '10 players · 2 courts · 2.5 hours', 'the plan line');
+    // $120 court - 9 x $16 + $28 credits = $4.
+    assert(flat(await a.page.locator('[data-tm-row="cost"]').innerText()) === '$4', 'your cost if it fills');
+    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/10', 'the Home line');
     await shot(a.page, 'A-admin-29');
     assert(a.errors.length === 0, a.errors.join(' | '));
     await a.ctx.close();
@@ -246,7 +248,7 @@ async function main() {
     assert(d.tournament.status === 'tickets' && d.tournament.finalDate === '2026-12-17' && d.tournament.payBy === '2026-12-17T00:00:00.000Z', JSON.stringify({ s: d.tournament.status, p: d.tournament.payBy }));
     const h = await adminPage();
     await h.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
-    assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/6', 'the Home line');
+    assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === `0/${d.tournament.size}`, 'the Home line');
     // Zip 63: while players who can make the date have not paid, the count's card is mock 14's Remind all unpaid card (same data attribute).
     assert(flat(await h.page.locator('[data-tm-row="paid"]').innerText()) === '0', 'Paid 0');
     await shot(h.page, 'B-admin-tickets-open');
@@ -289,7 +291,7 @@ async function main() {
     assert(flat(await claim.innerText()).includes('Parker tapped I paid ($16), not confirmed.'), flat(await claim.innerText()));
     await claim.locator('[data-claim-paid]').click();
     await claim.waitFor({ state: 'detached', timeout: 10000 });
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '1/6', 'the Home line');
+    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === `1/${(await dash()).tournament.size}`, 'the Home line');
     await a.ctx.close();
     const p = await playerPage('Parker');
     const words = flat(await p.page.locator('.tc').first().innerText());
@@ -544,7 +546,8 @@ async function main() {
     const card = a.page.locator('dialog[open] [data-tm-card="plan"]');
     await card.waitFor({ timeout: 10000 });
     const words = flat(await card.innerText());
-    assert(words.includes('8 players') && words.includes('2 courts · 2.5 hours') && words.includes('Your cost if it fills $36') && words.includes('With 6 paid now $52'), words);
+    // Zip 64 part 8: 9 can make the date: a 12 player plan. $120 - 11 x $16 + $28 = -$28; 6 paid now: $120 - $96 + $28 = $52.
+    assert(words.includes('12 players') && words.includes('2 courts · 2.5 hours') && words.includes('Your cost if it fills -$28') && words.includes('With 6 paid now $52'), words);
     await shot(a.page, 'K-plan-8');
     await a.ctx.close();
     // 10 locked in: 12 players, 2 courts, 3 hours. With Booking hours off the plan says to turn it on.

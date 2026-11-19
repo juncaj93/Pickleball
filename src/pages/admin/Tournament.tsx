@@ -1480,6 +1480,10 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
           <b data-tm-fin-count>{view.players.length}</b> can play {dayWords(day)}
         </p>
         {view.players.length > 0 && <p className="tm-fin-names" data-tm-fin-names>{view.players.join(', ')}</p>}
+        {/* Zip 64 part 8: the plan for this date's count (the same count as the organizer's card and the venue reminder). */}
+        <p className="tm-card-note tm-fin-plan" data-tm-fin-plan>
+          Plan: {view.fits} players · {view.courts} {view.courts === 1 ? 'court' : 'courts'}
+        </p>
         {view.over > 0 && (
           <p className="tm-card-note tm-fin-over" data-tm-fin-over>
             {view.over} over the {MAX_SPOTS} spots. Once {MAX_SPOTS} are locked in, the rest can join standby.
@@ -1706,7 +1710,8 @@ export function VenueAlertCard({ t }: { t: AdminTournamentView }) {
       tone="blue"
       icon="court"
       label="Call the venue"
-      title={`Call the venue: keep courts 1 and 2 together, ${planRange(t.start, t.minutes)}`}
+      // Zip 64 part 8: the courts follow the plan (the same count as the card): 1 court, or courts 1 and 2 together.
+      title={`Call the venue: ${t.courts === 1 ? 'keep court 1' : `keep courts 1 and ${t.courts} together`}, ${planRange(t.start, t.minutes)}`}
       data={{ 'data-tm-venue-alert': true }}
       action={
         <button

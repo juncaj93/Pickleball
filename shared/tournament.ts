@@ -190,6 +190,8 @@ export interface FinalizeView {
   ticketCents: number;
   /** The usual Pay by for this date (ISO). */
   payBy: string;
+  /** Zip 64 part 8: the plan's courts for this date's count (the plan line "Plan: 10 players · 2 courts"). */
+  courts: number;
   /** Zip 64: "Plays" starts on these: the start (minutes after midnight Eastern) and the length in minutes (7:30 PM to 10:00 PM). */
   start: number;
   minutes: number;
@@ -330,6 +332,15 @@ export interface SmartPlan {
   minutes: number;
   /** Start, minutes after midnight Eastern (each size's best plan: 7:30 PM, 7:00 PM for 3 hours). */
   start: number;
+}
+
+/**
+ * Zip 64 part 8: how many players the organizer's plan is sized for. Before tickets open nobody has paid, so the plan follows the players
+ * SIGNED UP; once tickets are open, whichever is larger: the players signed up who can make the picked date, or the players locked in. The
+ * same count feeds the organizer's card, the Finalize screen's plan line and the "Call the venue" reminder, so all three agree.
+ */
+export function planCount(o: { signedUp: number; going: number; locked: number; ticketsOpen: boolean }): number {
+  return Math.max(o.ticketsOpen ? o.going : o.signedUp, o.locked);
 }
 
 /** The plan for the players locked in: 6 = 1 court 2.5 hours, 8 = 2 courts 2 hours, 10 = 2 courts 2.5 hours, 12 = 2 courts 3 hours. */
