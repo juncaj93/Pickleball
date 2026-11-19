@@ -334,10 +334,9 @@ async function main() {
         const above = await v.page.evaluate(() => document.querySelector('[data-format-alert]').getBoundingClientRect().bottom <= document.querySelector('.tc').getBoundingClientRect().top + 1);
         assert(above, 'the alert sits above the ticket card');
         const card = flat(await v.page.locator('.tc').first().innerText());
-        assert(card.includes('Americano (new partner every round)'), card);
-        assert(!card.includes('TBD'), card);
-        // Zip 63 (the brief): the top line keeps "~7:30 PM" until the real start is set (nothing sets it yet), also once the date is picked.
-        assert(card.includes('THU DEC 17 · ~7:30 PM'), `the top line: ${card}`);
+        // Zip 64: the style stays "TBD" on the card until tickets close (Pay by); the stub has the date and the real start (no "~").
+        assert(card.includes('Tournament style TBD'), card);
+        assert(card.includes('THU 17 DEC 7:30 PM'), `the stub: ${card}`);
         assert(!/Locked 1|Americano 2|votes/i.test(await v.page.evaluate(() => document.body.innerText)), 'no vote counts on a player screen');
         await fits(v.page, '[data-format-alert], .tc');
         await shot(v.page, `D-alert-${width}-${scheme}`);
@@ -371,15 +370,15 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- E  the tie
-  await check('E tie: the alert says only "Format: Locked doubles" (no vote claim); Alex\'s card says the tie rule decided it', async () => {
+  await check('E tie: the alert makes no vote claim ("Tournament style TBD" until Pay by, Zip 64); Alex\'s card says the tie rule decided it', async () => {
     await stage('vote_tie');
     const v = await playerPage('Vic');
     const alert = v.page.locator('[data-format-alert]');
     await alert.waitFor({ timeout: 15000 });
     const words = flat(await alert.innerText());
-    assert(words.includes('The Cold Open is scheduled for Thu Dec 17.') && words.includes('Format: Locked doubles') && !/voted/i.test(words), words);
+    assert(words.includes('The Cold Open is scheduled for Thu Dec 17.') && words.includes('Tournament style TBD') && !/voted/i.test(words), words);
     const card = flat(await v.page.locator('.tc').first().innerText());
-    assert(card.includes('Locked doubles (same partner all night)'), card);
+    assert(card.includes('Tournament style TBD'), card);
     await shot(v.page, 'E-tie-alert');
     await v.ctx.close();
     const a = await adminPage();
@@ -441,16 +440,15 @@ async function main() {
         assert(flat(await a.page.locator('[data-tm-fin-count]').innerText()) === '10', 'ten can play');
         const names = flat(await a.page.locator('[data-tm-fin-names]').innerText());
         assert(['Parker', 'Rowan', 'Sage', 'Wren', 'Quinn', 'Christopher Vanderberg', 'Zoe', 'Reese', 'Vic', 'Alex'].every((n) => names.includes(n)), names);
-        assert(flat(await a.page.locator('[data-tm-fin-plan]').innerText()) === 'The plan fits 12.', await a.page.locator('[data-tm-fin-plan]').innerText());
+        // Zip 64 (mock 04): no plan line, no winner sentence; the votes in one line under Style; Auto names the winner.
+        assert((await a.page.locator('[data-tm-fin-plan], [data-tm-fin-winner]').count()) === 0, 'no plan or winner lines');
         assert((await a.page.locator('[data-tm-fin-over]').count()) === 0, 'no over line with 10 players');
-        assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Locked doubles 4, Americano 6, Either 0', await a.page.locator('[data-tm-fin-counts]').innerText());
-        assert(flat(await a.page.locator('[data-tm-fin-winner]').innerText()) === 'Americano wins, 6 to 4.', 'winner words');
-        assert((await a.page.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true', 'the chooser starts on the winner');
-        assert(flat(await a.page.locator('[data-format="vote"]').innerText()).includes('Americano wins'), 'the vote row names the winner');
-        assert((await a.page.locator('[data-tm-fin-override]').count()) === 0, 'no override note yet');
-        await oneLine(a.page, '[data-tm-fin-format] .tm-format-name');
+        assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Doubles 4 · Americano 6 · Either 0', await a.page.locator('[data-tm-fin-counts]').innerText());
+        assert((await a.page.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true', 'the chooser starts on Auto');
+        assert(flat(await a.page.locator('[data-format="vote"]').innerText()) === 'Auto Americano', 'Auto names the winner');
+        await oneLine(a.page, '[data-tm-fin-format] button');
         await oneLine(a.page, '[data-tm-fin-counts]');
-        await fits(a.page, 'dialog[open]');
+        await fits(a.page, 'dialog.tm-date-sheet[open]');
         // Finalize date and Back are both on screen without scrolling the sheet (they stay at the bottom).
         const inView = await a.page.evaluate(() => ['[data-tm-finalize-go]', '[data-tm-finalize-back]'].map((s) => { const b = document.querySelector(s).getBoundingClientRect(); return b.top >= 0 && b.bottom <= window.innerHeight; }));
         assert(inView.every(Boolean), `the buttons are in reach: ${inView}`);
@@ -481,42 +479,38 @@ async function main() {
     await openFinalize(a, day);
     const over = flat(await a.page.locator('[data-tm-fin-over]').innerText());
     assert(over === '2 over the 16 spots. Once 16 are locked in, the rest can join standby.', over);
-    await fits(a.page, 'dialog[open]');
+    await fits(a.page, 'dialog.tm-date-sheet[open]');
     const overLines = await a.page.locator('[data-tm-fin-over]').evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
     assert(overLines <= 3, `the over note takes ${overLines} lines`);
     await shot(a.page, 'H-finalize-over-320');
     await a.ctx.close();
   });
-  await check('H override the winner: the note, Finalize date locks it; Vic sees the alert with only the format (no vote claim); Pay by and the price from the sheet are saved', async () => {
+  await check('H override the winner: Finalize date locks it; Vic sees the alert with no vote claim; Pay by from the sheet is saved (Zip 64: no price row, the price stays)', async () => {
     await stage('vote_finalize');
     const day = await commonDate();
     const a = await adminPage({ width: 390 });
     await openFinalize(a, day);
     await a.page.locator('[data-format="doubles"]').click();
     assert((await a.page.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true', 'Locked doubles picked');
-    const note = flat(await a.page.locator('[data-tm-fin-override]').innerText());
-    assert(/only the format/i.test(note), note);
     await shot(a.page, 'H-override');
-    // The price and Pay by are editable on this sheet before Finalize.
-    await a.page.locator('#tm-fin-price').fill('18');
     await a.page.locator('[data-tm-fin-pay-time]').selectOption('1080'); // 6:00 PM
-    // The screen refreshes itself every 5 seconds: what the organizer typed on the sheet must survive it.
+    // The screen refreshes itself every 5 seconds: what the organizer picked on the sheet must survive it.
     await a.page.waitForTimeout(6500);
-    assert((await a.page.locator('#tm-fin-price').inputValue()) === '18' && (await a.page.locator('[data-tm-fin-pay-time]').inputValue()) === '1080', 'the sheet kept the organizer\'s edits through a refresh');
+    assert((await a.page.locator('[data-tm-fin-pay-time]').inputValue()) === '1080', 'the sheet kept the organizer\'s edits through a refresh');
     assert((await a.page.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true', 'and the format pick');
     await a.page.locator('[data-tm-finalize-go]').click();
     await a.page.locator('[data-tm-finalize]').waitFor({ state: 'detached', timeout: 10000 });
     await a.ctx.close();
     const t = (await dash()).tournament;
     assert(t.status === 'tickets' && t.finalDate === day && t.format === 'doubles' && t.formatSource === 'admin', JSON.stringify(t));
-    assert(t.ticketCents === 1800, `price ${t.ticketCents}`);
+    assert(t.ticketCents === 1600, `price stays ${t.ticketCents}`);
     assert(/T23:00:00\.000Z$/.test(t.payBy), `Pay by 6:00 PM Eastern: ${t.payBy}`);
     assert(JSON.stringify(t.votes) === JSON.stringify({ locked: 4, americano: 6, either: 0 }), 'counts kept for Alex');
     const v = await playerPage('Vic');
     const alert = v.page.locator('[data-format-alert]');
     await alert.waitFor({ timeout: 15000 });
     const words = flat(await alert.innerText());
-    assert(words.includes('is scheduled for') && words.includes('Format: Locked doubles') && !/voted/i.test(words), words);
+    assert(words.includes('is scheduled for') && words.includes('Tournament style TBD') && !/voted/i.test(words), words);
     assert(!/Locked doubles 4|Americano 6/.test(await v.page.evaluate(() => document.body.innerText)), 'no counts on a player screen');
     await shot(v.page, 'H-override-alert');
     await v.ctx.close();
@@ -536,8 +530,8 @@ async function main() {
     const notice = flat(await a.page.locator('[data-tm-fin-notice]').innerText());
     assert(/votes changed/i.test(notice) && /Locked doubles wins now/.test(notice), notice);
     assert((await dash()).tournament.status === 'signup', 'nothing was locked');
-    assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Locked doubles 7, Americano 3, Either 0', 'new counts shown');
-    assert(flat(await a.page.locator('[data-tm-fin-winner]').innerText()) === 'Locked doubles wins, 7 to 3.', 'new winner shown');
+    assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Doubles 7 · Americano 3 · Either 0', 'new counts shown');
+    assert(flat(await a.page.locator('[data-format="vote"]').innerText()) === 'Auto Doubles', 'the new winner under Auto');
     await shot(a.page, 'H-votes-changed');
     // The site's double-tap guard drops a second tap on the same button that comes straight after the first (it is not a bug here): a person reads the note first.
     await a.page.waitForTimeout(800);

@@ -227,7 +227,7 @@ async function main() {
     await shot(a.page, 'B-banner');
     await a.ctx.close();
   });
-  await check('B2 (Zip 63: the card has one look, no stub) the sign-up card: the balls 14 px above the button, the bottom line under it, nothing sticks out', async () => {
+  await check('B2 (Zip 64: the short ticket) the sign-up card: the stub, the balls 14 px above the bar\'s button, nothing sticks out', async () => {
     await stage('signup');
     const v = await homeOf('Vic');
     await v.page.locator('[data-tc-signup]').waitFor();
@@ -237,24 +237,30 @@ async function main() {
       const r = await v.page.evaluate(() => {
         const balls = document.querySelector('.tc-balls').getBoundingClientRect();
         const btn = document.querySelector('.tc-btn').getBoundingClientRect();
-        const foot = document.querySelector('.tc-foot').getBoundingClientRect();
-        const card = document.querySelector('.tc-hero').getBoundingClientRect();
-        return { gap: btn.top - balls.bottom, footBelow: foot.top >= btn.bottom, inside: foot.bottom <= card.bottom, stub: document.querySelectorAll('.tc-stub').length };
+        const card = document.querySelector('.tc-short').getBoundingClientRect();
+        return { gap: btn.top - balls.bottom, inside: btn.bottom <= card.bottom - 10, stub: document.querySelectorAll('.tc-short .tc-stub').length };
       });
-      assert(Math.abs(r.gap - 14) <= 1.5 && r.footBelow && r.inside && r.stub === 0, `${width}: ${JSON.stringify(r)}`);
+      assert(Math.abs(r.gap - 14) <= 2 && r.inside && r.stub === 1, `${width}: ${JSON.stringify(r)}`);
     }
     await shot(v.page, 'B2-signup-card');
     await v.ctx.close();
   });
 
   // ---------------------------------------------------------------- C  tickets closed
-  await check('C Pay by passed: "Tickets closed", no Lock my spot or Join waitlist; the server turns a tap away and moves nothing; a locked-in player keeps their spot', async () => {
+  // Zip 64 (late paying): after Pay by a player on the list can still pay while a spot is open; standby stays closed. Inside the last 3 hours
+  // before the start everything closes and a tap moves nothing.
+  await check('C Pay by passed: Lock my spot still works while a spot is open ("Still open"); 3 hours before the start: closed, the server turns a tap away and moves nothing; a locked-in player keeps their spot', async () => {
     await stage('closed');
+    const p0 = await homeOf('Vic');
+    await p0.page.locator('.tc-short [data-tc-lock]').waitFor({ timeout: 15000 });
+    assert(flat(await p0.page.locator('.tc-short .tc-aside').innerText()) === 'Still open', 'Still open');
+    await p0.ctx.close();
+    await stage('late_cut');
     const id = (await dash()).tournament.id;
     const p = await homeOf('Vic');
     await p.page.locator('.tc').first().waitFor({ timeout: 15000 });
     const words = flat(await p.page.locator('.tc').first().innerText());
-    assert(/tickets closed/i.test(words) && /Pay by was/.test(words), words);
+    assert(/tickets closed/i.test(words), words);
     assert((await p.page.locator('[data-tc-lock], [data-tc-join]').count()) === 0, 'no Lock my spot or Join waitlist');
     await shot(p.page, 'C-closed');
     await p.ctx.close();
@@ -316,7 +322,8 @@ async function main() {
     }, png.toString('base64'));
   }
   const near = (a, b, tol) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
-  /** Zip 63: the card has no notch any more (no stub): no mask, the 1 px inside edge, and its rounded corner shows what is behind the card. */
+  /** Zip 64: the notch is back (the short ticket): a mask with the circle cut out at the tear line, the 1 px inside edge, and both the notch and
+   *  the rounded corner show what is behind the card. */
   async function notchIsCutout(page, label) {
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(300);
@@ -324,9 +331,13 @@ async function main() {
       const c = document.querySelector('.tc');
       const b = c.getBoundingClientRect();
       const st = getComputedStyle(c);
-      return { x: b.left + 2, top: b.top, mask: st.maskImage || st.webkitMaskImage, shadow: st.boxShadow };
+      const stub = c.querySelector('.tc-stub');
+      return { x: b.left + 2, nx: stub ? stub.getBoundingClientRect().right + 1 : b.left + 78, top: b.top, mask: st.maskImage || st.webkitMaskImage, shadow: st.boxShadow };
     });
-    assert(!/radial-gradient/.test(m.mask), `${label}: no notch mask (Zip 63): ${m.mask}`);
+    assert(/radial-gradient/.test(m.mask), `${label}: the notch mask (Zip 64): ${m.mask}`);
+    const hole = await px(page, m.nx, m.top + 2);
+    const over = await px(page, m.nx, m.top - 4);
+    assert(near(hole, over, 12), `${label}: the notch is ${hole} but what is behind the card is ${over}`);
     assert(m.shadow.includes('inset'), `${label}: the 1px inside edge: ${m.shadow}`);
     const corner = await px(page, m.x, m.top + 1);
     const behind = await px(page, m.x, m.top - 4);
@@ -389,9 +400,9 @@ async function main() {
   await check('F no focus ring after a tap (the X on a sheet); the ring is back for the keyboard (Tab)', async () => {
     await stage('tickets_open');
     const p = await homeOf('Vic');
-    await p.page.locator('.tc-hero .tc-title').first().waitFor({ timeout: 15000 });
+    await p.page.locator('.tc-short .tc-title').first().waitFor({ timeout: 15000 });
     // A tap opens the sheet (Zip 63: a tap on the card opens its overlay); the browser puts its focus on the first button, the X.
-    await p.page.locator('.tc-hero .tc-title').first().tap();
+    await p.page.locator('.tc-short .tc-title').first().tap();
     await p.page.locator('dialog[open]').waitFor({ timeout: 10000 });
     await p.page.waitForTimeout(400);
     let ring = await p.page.evaluate(() => { const a = document.activeElement; return { tag: a && a.tagName, cls: a && a.className, style: a && getComputedStyle(a).outlineStyle, input: document.documentElement.getAttribute('data-input') }; });
@@ -433,7 +444,7 @@ async function main() {
     const t0 = Date.now();
     await m.page.locator('[data-tm-submit]').click();
     await m.page.locator('[data-tc-punch]').waitFor({ timeout: 2000 });
-    const early = flat(await m.page.locator('[data-tc-sub]').innerText());
+    const early = flat(await m.page.locator('.tc-short .tc-format').innerText());
     assert(early.includes('Signing you up'), early);
     await shot(m.page, 'G-punch-1-signing');
     await m.page.waitForTimeout(800);
@@ -445,7 +456,8 @@ async function main() {
     await m.page.locator('[data-tc-punch]').waitFor({ state: 'detached', timeout: 3000 });
     const took = Date.now() - t0;
     assert(took > 1200 && took < 2600, `the punch lasts about 1.5 s: ${took} ms`);
-    assert(/You’re on the list/.test(flat(await m.page.locator('[data-tc-sub]').innerText())), 'the card says You\'re on the list');
+    // Zip 64: after the punch the card shows the signed-up bar (mock 01) and the format line again.
+    assert((await m.page.locator('.tc-short [data-tc-edit]').count()) === 1, 'the signed-up bar');
     assert(m.errors.length === 0, m.errors.join(' | '));
     await m.ctx.close();
     // Reduced motion: straight to the answer.
@@ -457,7 +469,7 @@ async function main() {
     await r.page.locator('[data-tm-submit]').click();
     await r.page.locator('.tc [data-tc-edit]').waitFor({ timeout: 10000 });
     assert((await r.page.locator('[data-tc-punch]').count()) === 0, 'no punch with reduced motion');
-    assert(/You’re on the list/.test(flat(await r.page.locator('[data-tc-sub]').innerText())), 'You\'re on the list');
+    assert((await r.page.locator('.tc-short [data-tc-edit]').count()) === 1, 'the signed-up bar');
     await r.ctx.close();
   });
 

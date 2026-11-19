@@ -261,7 +261,7 @@ async function main() {
   const STATES = [
     ['zip64_start', 'Vic', 'open', 'Sign up'],
     ['zip64_start', 'Parker', 'listed', 'See who’s signed up'],
-    ['vote_majority', 'Vic', 'lock', 'Lock my spot · $16'],
+    ['vote_majority', 'Parker', 'lock', 'Lock my spot · $16'],
     ['tickets_open', 'Parker', 'in', 'See who’s in'],
     ['late_open', 'Vic', 'lock', 'Lock my spot · $16'],
     ['late_cut', 'Vic', 'closed', 'See who’s in'],

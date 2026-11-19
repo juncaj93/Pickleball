@@ -1788,4 +1788,9 @@ dialog.sheet.tc-tw-overlay {
   .tc-aside {
     font-size: 0.82rem;
   }
+  /* "Lock my spot · $16" beside "Pay by 12/16" on a 320 phone: the lime button a little smaller so the words beside it are never cut. */
+  .tc-bar .tc-lime:not(.tc-wide) {
+    padding: 0 10px;
+    font-size: 1rem;
+  }
 }

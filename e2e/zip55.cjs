@@ -194,12 +194,13 @@ async function main() {
         // Under the name: the format and its one rule (no small label above the name any more).
         // Zip 56 (Alex): the format in ONE line, no separate rule line.
         assert(flat(await a.page.locator('[data-tc-format-name]').innerText()) === 'Locked doubles (same partner all night)' && (await a.page.locator('[data-tc-rule]').count()) === 0, card);
-        const order = await a.page.evaluate(() => ['.tc-title', '[data-tc-format-name]', '[data-tc-sub]'].map((q) => document.querySelector(q).getBoundingClientRect().top));
+        const order = await a.page.evaluate(() => ['.tc-title', '[data-tc-format-name]', '.tc-bar'].map((q) => document.querySelector(q).getBoundingClientRect().top));
         assert(order.every((y, i) => i === 0 || y > order[i - 1]), `title, format, rule, then the line: ${order}`);
-        // Zip 63: the card's one look (zip63 mocks): the top line says DATE TBD (no stub, no steps); still no border line (the edge is drawn inside).
-        assert(flat(await a.page.locator('.tc-kicker').innerText()) === 'TOURNAMENT · DATE TBD · ~7:30 PM', 'the top line');
-        assert(/Pick the dates you can play/.test(card) && /Sign up/.test(card) && !/VOTE|FINAL/.test(card), card);
-        assert((await a.page.locator('.tc-stub, .tc-track').count()) === 0, 'no stub or steps (Zip 63)');
+        // Zip 64 (the short ticket): the stub says DATE TBD, the kicker TOURNAMENT; no steps; still no border line (the edge is drawn inside).
+        assert(flat(await a.page.locator('.tc-kicker').innerText()) === 'TOURNAMENT', 'the kicker');
+        assert(/^DATE TBD (DEC|DEC–JAN) ~7:30 PM$/.test(flat(await a.page.locator('.tc-stub').innerText())), 'the stub');
+        assert(/Sign up/.test(card) && !/VOTE|FINAL/.test(card), card);
+        assert((await a.page.locator('.tc-track').count()) === 0 && (await a.page.locator('.tc-stub').count()) === 1, 'the stub, no steps (Zip 64)');
         assert((await a.page.locator('.tc').evaluate((el) => getComputedStyle(el).borderTopWidth)) === '0px', 'a border line on the card');
         await fits(a.page, '.tc, .tc-strip');
         assert(a.errors.length === 0, a.errors.join(' | '));
@@ -241,7 +242,8 @@ async function main() {
         await v.page.locator('.tc[data-tc="open"]').waitFor({ timeout: 15000 });
         const card = flat(await v.page.locator('.tc').innerText());
         // Zip 63: no counts on the card (one ball per sign-up says it).
-        assert(card.includes('Pick the dates you can play') && (await v.page.locator('.tc [data-tb="ball"]').count()) === 6, card);
+        // Zip 64 (mock 00): no hint words, one wide Sign up.
+        assert(card.includes('Sign up') && (await v.page.locator('.tc [data-tb="ball"]').count()) === 6, card);
         await fits(v.page, '.tc');
         await shot(v.page, `C1-card-${width}-${scheme}`);
         await v.page.locator('[data-tc-signup]').click();
@@ -272,7 +274,8 @@ async function main() {
     await v.page.locator('[data-tm-submit]').click();
     await v.page.locator('.tc[data-tc="listed"]').waitFor({ timeout: 10000 });
     const card = flat(await v.page.locator('.tc').innerText());
-    assert(card.includes('Locked doubles') && card.includes('You’re on the list. We’re picking the date.') && card.includes('Edit sign-up') && card.includes('Drop out'), card);
+    // Zip 64 (mock 01): See who's signed up, Edit and Drop out in the bar.
+    assert(card.includes('Locked doubles') && card.includes('See who’s signed up') && card.includes('Edit') && card.includes('Drop out'), card);
     await v.page.locator('[data-tc-who]').click();
     const names = await v.page.locator('[data-tm-who-row] .tm-who-name').allInnerTexts();
     assert(names.length === 7 && names.includes('Vic') && names.includes('Christopher Vanderberg'), names.join(', '));
@@ -428,7 +431,8 @@ async function main() {
           // Zip 56 (Alex): picking the date opened tickets.
           await v.page.locator(who === 'Parker' ? '.tc[data-tc="lock"]' : '.tc[data-tc="date"]').waitFor({ timeout: 15000 });
           const card = flat(await v.page.locator('.tc').innerText());
-          assert(who === 'Parker' ? card.includes('Lock my spot · $16') : card.includes('Tickets are open. Sign up first.') && card.includes('Locked doubles (same partner all night)'), card);
+          // Zip 64: once the date is set the style says TBD until Pay by; Zoe (not on the list) has the one Sign up.
+          assert(who === 'Parker' ? card.includes('Lock my spot · $16') : card.includes('Sign up') && card.includes('Tournament style TBD'), card);
           const [y, m, dd] = finalDay.split('-').map(Number);
           const wd = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(Date.UTC(y, m - 1, dd)).getUTCDay()];
           assert(card.includes(wd) && card.includes(String(dd)), `${card} (${finalDay})`);
@@ -454,7 +458,7 @@ async function main() {
     const parkerDates = (await dash()).tournament.signups.find((s) => s.name === 'Parker').dates.join();
     // Zip 63: tickets are open, so Edit sign-up and Drop out are in the card's overlay (a tap on the card).
     const p = await playerPage('Parker');
-    await p.page.locator('.tc-hero .tc-title').first().click();
+    await p.page.locator('.tc-short .tc-title').first().click();
     await p.page.locator('dialog[open] [data-tc-edit]').waitFor({ timeout: 10000 });
     // The site drops a tap that comes right after the last one (its double-tap guard): a pause, as a person makes.
     await p.page.waitForTimeout(700);
@@ -463,7 +467,7 @@ async function main() {
     assert((await p.page.locator('dialog[open] [data-tm-change]').count()) === 0, 'no level row (Alex)');
     await p.ctx.close();
     const q = await playerPage('Quinn');
-    await q.page.locator('.tc-hero .tc-title').first().click();
+    await q.page.locator('.tc-short .tc-title').first().click();
     await q.page.locator('dialog[open] [data-tc-drop]').waitFor({ timeout: 10000 });
     await q.page.waitForTimeout(700);
     await q.page.locator('dialog[open] [data-tc-drop]').click();
@@ -566,14 +570,15 @@ async function main() {
         await shot(a.page, `M-admin-card-${width}-${scheme}`);
         await a.ctx.close();
       });
-  await check('M (Zip 63: the stub is gone) the top line "TOURNAMENT · DATE TBD · ~7:30 PM" stays on one line inside the card at 320', async () => {
+  await check('M (Zip 64: the stub is back) the kicker and the stub "DATE TBD" stay on one line each inside the card at 320', async () => {
     const v = await playerPage('Vic', { width: 320 });
     await v.page.locator('.tc .tc-kicker').waitFor({ timeout: 15000 });
     const k = await v.page.evaluate(() => {
       const el = document.querySelector('.tc .tc-kicker');
       return { sw: el.scrollWidth, cw: el.clientWidth, text: el.textContent };
     });
-    assert(k.sw <= k.cw + 1 && /DATE TBD/i.test(k.text), JSON.stringify(k));
+    assert(k.sw <= k.cw + 1 && /TOURNAMENT/i.test(k.text), JSON.stringify(k));
+    assert(/DATE TBD/.test(flat(await v.page.locator('.tc .tc-stub').innerText())), 'the stub');
     await shot(v.page, 'M-top-line-320');
     await v.ctx.close();
   });
@@ -596,12 +601,13 @@ async function main() {
       for (const width of SIZES)
         await check(`N Americano, ${st === 'signup' ? 'sign-up open' : 'date picked'}: Americano and "New partner every round" under the name, steps Vote, Tickets, Games, Winners; the admin card too (${width} ${scheme})`, async () => {
           const v = await playerPage('Parker', { width, scheme });
-          await v.page.locator('.tc[data-tc-format="americano"]').waitFor({ timeout: 15000 });
+          // Zip 64: once the date is set the style says TBD until Pay by.
+          await v.page.locator(st === 'signup' ? '.tc[data-tc-format="americano"]' : '.tc[data-tc-format="tbd"]').waitFor({ timeout: 15000 });
           // Zip 56 (Alex): picking the date opens tickets; the format shows on the cards before that, in one line.
           if (st === 'signup') assert(flat(await v.page.locator('[data-tc-format-name]').innerText()) === 'Americano (new partner every round)' && (await v.page.locator('[data-tc-rule]').count()) === 0, 'format in one line');
           // Zip 63: the card has no steps any more (the zip63 mocks); the format line says Americano in every state.
           assert((await v.page.locator('.tc-step-label, .tc-track').count()) === 0, 'no steps (Zip 63)');
-          assert(/^Americano \(new partner every round\)$/.test(flat(await v.page.locator('[data-tc-format-name]').innerText())), 'Americano');
+          assert((st === 'signup' ? /^Americano \(new partner every round\)$/ : /^Tournament style TBD$/).test(flat(await v.page.locator('[data-tc-format-name]').innerText())), 'the format line');
           await fits(v.page, '.tc');
           await shot(v.page, `N-americano-${st}-${width}-${scheme}`);
           await v.ctx.close();
@@ -638,7 +644,7 @@ async function main() {
     await shot(a.page, 'N-edit-americano');
     await a.ctx.close();
   });
-  await check('N the date is picked (tickets open): the page says Americano and Edit shows the format locked', async () => {
+  await check('N the date is picked (tickets open): the page says Americano and Edit can still change the style (Zip 64: until the night starts)', async () => {
     await call('POST', '/api/admin/tournament-test', { stage: 'date_picked', format: 'americano' });
     const a = await adminPage();
     await a.page.locator('[data-tm-open-page]').click();
@@ -646,7 +652,7 @@ async function main() {
     await a.page.locator('[data-tm-edit-settings]').click();
     await a.page.locator('[data-tm-form="edit"]').waitFor();
     assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
-    assert(await a.page.locator('[data-format="doubles"]').isDisabled(), 'locked once tickets are open');
+    assert(!(await a.page.locator('[data-format="doubles"]').isDisabled()), 'still free once tickets are open (Zip 64)');
     await a.ctx.close();
   });
 

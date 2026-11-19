@@ -6233,3 +6233,70 @@ it). NOT on live: waiting for Alex's "ship it".
 `tournaments.format` is the style in play; `format_source` says why: 'vote', 'tie', 'admin', NULL as before, plus `odd:<ISO time>` (switched to
 Americano for an odd count) and `back:<ISO time>` (the organizer switched back). The time makes each switch its own banner and card. Older code
 reads both as "the organizer's own" (sourceOf returns null), so a code rollback is safe.
+
+### Where it differs from the brief (the code is the truth)
+- The branch is `claude/new-session-5sgveq` (the build system pins it), not "🎾64.finalize"; no PR was opened (none was asked for).
+- Mock 04's Pay by "Fri Dec 4" for a Tue Dec 8: the code's rule is the night before at 7:00 PM (Mon Dec 7), kept; the box changes it.
+- Finalize's "Auto" with no vote (a style chosen at Create) keeps that style. Edit offers "Auto" (the vote's winner for the picked date) only on a
+  tournament whose players voted.
+- The date alert (Zip 60) while the style is TBD: a real majority keeps "Most players voted Americano." (a fact about the vote); every other case
+  now says "Tournament style TBD" (it used to name the format). Question for Alex below.
+- The odd switch also happens at the moment tickets close (an odd count at Pay by), with the same card, alert and banner ("is now Americano").
+- After Pay by the style is decided from "locked in" as players see it (every spot and every trusted I paid), the same people as the gold balls.
+- Once the night starts the style shown is the stored one (frozen; no switch from a count change during the night).
+- Court cost on the organizer's card: once the date is finalized it uses the real hours ("Plays") on the plan's courts (7:30 to 10:00 PM = 2.5
+  hours, so 8 players now read 2 courts x 2.5 hours = $120, not the plan's 2 hours = $96). Question below.
+- Late paying: an I paid still waiting for Alex counts as a taken spot after Pay by, so nobody is promised a 17th spot. Standby does not open
+  after Pay by (as before).
+- A tournament whose date was picked before Zip 64 holds Create's placeholder 7:00 PM for 3 hours in those columns, so it would read as "7:00 to
+  10:00 PM" with no "~" (none exists on live: The Cold Open is still on its vote; the preview is re-seeded).
+- The Who's in sheet's card copy (inside the overlay) keeps Zip 63's look; only Home's card is the short ticket.
+- The Telegram alert has no switch of its own (that would need a column): it follows the main Alerts switch and counts toward the hourly limit
+  for player-caused alerts.
+
+### Review
+A fresh independent reviewer (no part in the build) read the whole change. No money defect: no path to a 17th spot, the odd switch happens once
+with one alert and one History line when screens race, it never switches back by itself, and the new fields cannot reach a player who may not
+see the tournament. Fixed from its findings, each with a test: a late I paid waiting for Alex now counts as a taken spot after Pay by (no 17th
+promise); the style shown is frozen once the night starts; Switch back and the odd switch are guarded on the locked-in count when the write
+lands; a late Lock that loses the race says "Tickets are closed."; Remove player and Finalize's same-day check use the real start; the organizer's
+cost uses the style in play; the "Still open" words use the site's clock; Edit offers Auto only where players voted. Kept, as questions or notes
+above: the court bill on the real hours, the date alert's vote line, pre-Zip 64 date picks, no banner for a hand change after close.
+
+### Tests
+- Unit: full run 196 files, 3,601 passed, 2 skipped, none failed; `npx tsc -b` clean. New tests/zip64-finalize.test.ts (22: the heat ramp,
+  the style words, Finalize's Plays and Pay by, bad Plays refused, the cutoff following the real start, TBD until Pay by, odd/even at close (one
+  switch, one alert, one History line), back out then late join (Switch back, never by itself), Edit changes the style while tickets are held and
+  refuses Locked doubles with an odd count or after the start, late paying and late joining until 3 hours before the start, every spot taken,
+  a waiting I paid counted, the style frozen at the start, Only me and the switch off send nothing). Older tests updated where this zip changes the
+  rule on purpose (the format lock, late paying, the real hours, the alert's TBD line): zip55 (1), zip56 (5), zip59 (rewritten for late paying),
+  zip60 (9), zip63 (1).
+- Browser: e2e/zip64.cjs 81 of 81 (A mocks 00 and 01 at 420 light and dark: 183 and 175 px, the 77 px stub, the notch mask, the tear line, the
+  bar's button at 123 px; B nine states at 390/360/320 light and dark, one line each, nothing cut or sticking out; C Edit and Drop out tap areas;
+  D the sign-up words and Who's in's X; E the heat map's ends and one text color; F Finalize at 420 x 912 with no scrolling and at 390/360/320 light
+  and dark, Plays and Pay by saved, the venue reminder and Done; G the switched card, Switch back, the banners; H late paying and the 3-hour
+  cutoff; I Only me and the switch off). Older ones updated for the short card and the new rules: zip55 91, zip56 57, zip59 12, zip60 29, zip63 64,
+  zip62 17. Switch OFF equals main `d1084e9`: e2e/zip55-off.cjs 47 of 47, e2e/zip56-off.cjs 47 of 47.
+- Measured against the mocks at 420 px (3x pixels): kicker, name, format line, balls, stub (DATE, TBD, DEC, time) and the bar's button all within
+  1 px of mocks 00 and 01.
+
+### Preview
+`pickleball-preview` (fake) only: restore point first (Time Travel bookmark `00000189-00000000-00005128-c36e13a6cdfd54a9570daae923326d71`), no
+migration. Deployed from this branch to https://claude-new-session-5sgveq.pickleball-club-9h0.pages.dev (deployment `ea6c7b58`; before it
+`a5189b17`), re-seeded with `npm run db:seed:preview` (the calm start: The Cold Open, the vote open, 9 on the list, Vic not). Checked there in a
+browser at 390 (and 420 for Finalize), light and dark: Vic's card 183 px with one Sign up, Parker's 175 px with See who's signed up, Edit and Drop
+out; organizer Home shows the Tournament test row and The Cold Open card; Pick date opens the heat map; Finalize fits with no scrolling (the button
+ends at 808 of 912). No page errors. Switches: every flag in live's public answer is on the preview too, plus TOURNAMENTS (live's organizer-only
+rows could not be read: no read-only PIN in this session).
+
+### Live: NOT done (waiting for Alex's "ship it")
+No migration and no Worker change. To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`, the three integrity checks,
+fast-forward main to this branch and push, `npm run deploy` from main, the checks again, the public live check. Rollback: site deployment
+`998a005a-1528-4a9a-b0f4-b4c001e56331` (Zip 63, live now). No database undo: the new `format_source` values only appear once a tournament's Pay by
+passes, and older code reads them as the organizer's own.
+
+### Questions for Alex
+1. The banner words: "Tournament style is now Americano." and "Tournament style is back to Locked doubles." OK?
+2. Court cost on your card now uses the real hours from Plays (7:30 to 10:00 PM = 2.5 hours on 2 courts, $120), not the plan's hours. Right?
+3. The date alert while the style is TBD: keep "Most players voted Locked doubles." (the vote's result), or say "Tournament style TBD" there too?
+4. An odd count right at Pay by also sends the Telegram alert and shows "switched to Americano" (the brief only asks for it after a back out). OK?

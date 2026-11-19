@@ -201,11 +201,11 @@ async function main() {
 
   // Zip 63: the card's one look has no See who's in, Edit sign-up or Drop out while tickets are open: a tap on the card opens the overlay, which has them.
   async function openOverlay(page) {
-    await page.locator('.tc-hero .tc-title').first().click();
+    await page.locator('.tc-short .tc-title').first().click();
     await page.locator('dialog[open] [data-tw]').waitFor({ timeout: 10000 });
   }
   async function tapLink(page, attr) {
-    const own = page.locator(`.tc-hero [${attr}]`);
+    const own = page.locator(`.tc-short [${attr}]`);
     if (await own.count()) return own.first().click();
     await openOverlay(page);
     // The site drops a tap that comes right after the last one (its double-tap guard): a pause, as a person makes.
@@ -262,7 +262,8 @@ async function main() {
     const words = flat(await card.innerText());
     // Nobody locked in yet: the plan is 6 players, 2.5 hours (Alex's smart plan); players see its hours.
     // Zip 63: the card's one look (top line, name, format, balls, Lock my spot, Pay by): the hours and See who's in live in the overlay now.
-    assert(/^TOURNAMENT · /.test(words) && words.includes('Lock my spot · $16') && /Pay by \d+\/\d+$/.test(words), words);
+    // Zip 64: the short ticket (the stub first, then TOURNAMENT); Lock my spot with Pay by on the bar.
+    assert(words.includes('TOURNAMENT') && words.includes('Lock my spot · $16') && /Pay by \d+\/\d+$/.test(words), words);
     await card.locator('[data-tc-lock]').click();
     const pay = p.page.locator('[data-pay-sheet]');
     await pay.waitFor({ timeout: 10000 });
@@ -355,7 +356,7 @@ async function main() {
     const q = await newPage();
     await fakeFull(q.page, true);
     await q.page.goto(`${BASE}/?as=Vic`);
-    await q.page.locator('.tc-hero').first().waitFor({ timeout: 30000 });
+    await q.page.locator('.tc-short').first().waitFor({ timeout: 30000 });
     await openOverlay(q.page);
     await q.page.locator('dialog[open] [data-tc-keep]').waitFor({ timeout: 10000 });
     const overlay = flat(await sheetOpen(q.page).innerText());
@@ -386,7 +387,8 @@ async function main() {
     assert(d.tournament.status === 'rescheduled', d.tournament.status);
     const p = await playerPage('Parker');
     const words = flat(await p.page.locator('.tc').first().innerText());
-    assert(words.includes('Rescheduled. Pick your dates again.'), words);
+    // Zip 64: the kicker says RESCHEDULED; the date is TBD on the stub again; the signed-up bar.
+    assert(words.includes('RESCHEDULED') && words.includes('DATE TBD') && words.includes('See who’s signed up'), words);
     await shot(p.page, 'G-rescheduled');
     await p.ctx.close();
   });
@@ -405,19 +407,21 @@ async function main() {
     assert(data.credit.balanceCents === before + 1600, `credit ${before} -> ${data.credit.balanceCents}`);
     const p = await playerPage('Parker');
     const words = flat(await p.page.locator('.tc').first().innerText());
-    assert(/canceled/i.test(words) && words.includes('Canceled. Your $16 is back as credit.'), words);
+    assert(/canceled/i.test(words) && words.includes('Your $16 is back as credit.'), words);
     assert((await p.page.locator('.tc button').count()) === 0, 'the Canceled card has no buttons');
     await shot(p.page, 'G-player-canceled');
     await p.ctx.close();
   });
 
   // ---------------------------------------------------------------- H  evens
-  await check('H 7 locked in after Pay by: the plain warning, and nobody is taken off', async () => {
+  // Zip 64 (the style rules): an odd number after Pay by plays Americano by itself, so the evens warning gave way to the switched card.
+  await check('H 7 locked in after Pay by: Americano by itself (the switched card), no evens warning, and nobody is taken off', async () => {
     await stage('odd');
     const a = await adminPage();
-    const warn = a.page.locator('[data-tm-evens]');
+    const warn = a.page.locator('[data-tm-odd-switch]');
     await warn.waitFor({ timeout: 15000 });
-    assert(flat(await warn.innerText()) === '7 locked in. Need 1 more or 1 less.', flat(await warn.innerText()));
+    assert(/switched to Americano \(odd number of players\)/.test(flat(await warn.innerText())), flat(await warn.innerText()));
+    assert((await a.page.locator('[data-tm-evens]').count()) === 0, 'no evens warning');
     assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '7/10', 'the Home line (7 locked in: 10 planned)');
     await shot(a.page, 'H-odd');
     await a.ctx.close();
@@ -456,7 +460,7 @@ async function main() {
         const v = await newPage({ width, scheme });
         await fakeFull(v.page, true);
         await v.page.goto(`${BASE}/?as=Vic`);
-        await v.page.locator('.tc-hero').first().waitFor({ timeout: 30000 });
+        await v.page.locator('.tc-short').first().waitFor({ timeout: 30000 });
         await fits(v.page, '.tc');
         await openOverlay(v.page);
         await v.page.locator('dialog[open] [data-tc-keep]').waitFor({ timeout: 10000 });
@@ -532,15 +536,15 @@ async function main() {
       });
 
   // ---------------------------------------------------------------- K  Alex's changes after testing piece 1
-  await check('K the smart plan on the tournament page: 8 players, 2 courts, 2 hours; your cost if it fills $12, with 6 paid now $28; the Booking hours note only when needed', async () => {
+  // Zip 64: once the date is finalized the hours are the real ones (Plays, 7:30 to 10:00 PM = 2.5 hours) on the plan's courts.
+  await check('K the smart plan on the tournament page: 8 players, 2 courts, 2.5 hours (the real hours); your cost if it fills $36, with 6 paid now $52; the Booking hours note when Booking hours is off', async () => {
     await stage('tickets_open');
     const a = await adminPage();
     await a.page.locator('[data-tm-open-page]').click();
     const card = a.page.locator('dialog[open] [data-tm-card="plan"]');
     await card.waitFor({ timeout: 10000 });
     const words = flat(await card.innerText());
-    assert(words.includes('8 players') && words.includes('2 courts · 2 hours') && words.includes('Your cost if it fills $12') && words.includes('With 6 paid now $28'), words);
-    assert((await a.page.locator('dialog[open] [data-tm-booking-note]').count()) === 0, 'no Booking hours note for 2 hours');
+    assert(words.includes('8 players') && words.includes('2 courts · 2.5 hours') && words.includes('Your cost if it fills $36') && words.includes('With 6 paid now $52'), words);
     await shot(a.page, 'K-plan-8');
     await a.ctx.close();
     // 10 locked in: 12 players, 2 courts, 3 hours. With Booking hours off the plan says to turn it on.
@@ -551,9 +555,9 @@ async function main() {
       await b.page.locator('[data-tm-open-page]').click();
       await b.page.locator('dialog[open] [data-tm-card="plan"]').waitFor({ timeout: 10000 });
       const w2 = flat(await b.page.locator('dialog[open] [data-tm-card="plan"]').innerText());
-      // 10 locked in: 12 spots, 2 courts, 3 hours. $144 - 11 x $16 + $28 = -$4 (the tickets cover it); 9 paid now: $144 - $144 + $28 = $28.
-      assert(w2.includes('12 players') && w2.includes('2 courts · 3 hours') && w2.includes('Turn on Booking hours'), w2);
-      assert(w2.includes('Your cost if it fills -$4') && w2.includes('With 9 paid now $28'), w2);
+      // 10 locked in: 12 spots, 2 courts, the real 2.5 hours. $120 - 11 x $16 + $28 = -$28; 9 paid now: $120 - $144 + $28 = $4.
+      assert(w2.includes('12 players') && w2.includes('2 courts · 2.5 hours') && w2.includes('Turn on Booking hours'), w2);
+      assert(w2.includes('Your cost if it fills -$28') && w2.includes('With 9 paid now $4'), w2);
       await shot(b.page, 'K-plan-12-booking-off');
       await b.ctx.close();
     } finally {
@@ -675,6 +679,8 @@ async function main() {
       await check(`K the format line on the ticket cards too: the player card, Who's in and the organizer's card, one line (${format}, ${width} ${scheme})`, async () => {
         await call('POST', '/api/admin/tournament-test', { stage: 'tickets_open', format });
         const want = format === 'americano' ? 'Americano (new partner every round)' : 'Locked doubles (same partner all night)';
+        // Zip 64: players see "Tournament style TBD" until Pay by; the organizer's card names the style as it stands.
+        const tbd = 'Tournament style TBD';
         const oneLine = (loc) =>
           loc.evaluate((el) => {
             const r = document.createRange();
@@ -684,12 +690,12 @@ async function main() {
         const p = await playerPage('Parker', { width, scheme });
         const line = p.page.locator('.tc [data-tc-format-name]').first();
         await line.waitFor({ timeout: 15000 });
-        assert(flat(await line.innerText()) === want && (await oneLine(line)) === 1, `card: ${flat(await line.innerText())}`);
+        assert(flat(await line.innerText()) === tbd && (await oneLine(line)) === 1, `card: ${flat(await line.innerText())}`);
         await p.page.waitForTimeout(600);
         await openOverlay(p.page);
         const inSheet = p.page.locator('dialog[open] .tc [data-tc-format-name]').first();
         await inSheet.waitFor({ timeout: 10000 });
-        assert(flat(await inSheet.innerText()) === want && (await oneLine(inSheet)) === 1, 'Who\'s in');
+        assert(flat(await inSheet.innerText()) === tbd && (await oneLine(inSheet)) === 1, 'Who\'s in');
         await fits(p.page, 'dialog[open]');
         await shot(p.page, `K-ticket-format-${format}-${width}-${scheme}`);
         await p.ctx.close();
