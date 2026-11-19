@@ -1894,15 +1894,16 @@ export async function removePlayer(ctx: Ctx) {
   // migration 0024 has no tickets: nothing changes.
   const tickets = await ctx.db
     .prepare(
-      `SELECT t.name, t.status, t.final_date, k.place, k.credit_cents + k.paid_cents AS money, k.claim_cents AS claim
+      `SELECT t.name, t.status, t.final_date, t.start_minutes, k.place, k.credit_cents + k.paid_cents AS money, k.claim_cents AS claim
        FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id WHERE k.player_id = ?`,
     )
     .bind(id)
-    .all<{ name: string; status: string; final_date: string | null; place: string; money: number; claim: number }>()
+    .all<{ name: string; status: string; final_date: string | null; start_minutes: number | null; place: string; money: number; claim: number }>()
     .then((r) => r.results)
-    .catch(() => [] as { name: string; status: string; final_date: string | null; place: string; money: number; claim: number }[]);
-  const started = (d: string | null) => !!d && ctx.nowMs >= startMsOf(d, NIGHT_START_MINUTES, group.timezone);
-  const holds = tickets.find((k) => k.claim > 0 || (k.status !== 'canceled' && !started(k.final_date) && (k.place !== 'none' || k.money > 0)));
+    .catch(() => [] as { name: string; status: string; final_date: string | null; start_minutes: number | null; place: string; money: number; claim: number }[]);
+  // Zip 64: a finalized tournament starts at its real start (Plays, in start_minutes; 7:00 PM for one picked before Zip 64).
+  const started = (d: string | null, s: number | null) => !!d && ctx.nowMs >= startMsOf(d, s ?? NIGHT_START_MINUTES, group.timezone);
+  const holds = tickets.find((k) => k.claim > 0 || (k.status !== 'canceled' && !started(k.final_date, k.start_minutes) && (k.place !== 'none' || k.money > 0)));
   if (holds) {
     throw new HttpError(409, 'player_has_ticket', `${p.display_name} holds a ticket for the ${holds.name}. Take ${p.display_name} off its list first (the tournament's Tickets), then remove the name.`);
   }

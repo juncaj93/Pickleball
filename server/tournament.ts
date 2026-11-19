@@ -533,6 +533,11 @@ export const lockedInCount = (tickets: readonly TicketWithName[]): number =>
       (k.place === 'spot' || (k.place !== 'line' && k.claim_cents > 0 && ticketOwed({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents }) === 0)),
   ).length;
 
+/** Zip 64: lockedInCount as SQL (read when a write lands, so a back out in between is seen). `id`: SQL for the tournament id. */
+export const lockedInSql = (id: string) =>
+  `(SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
+     WHERE k.tournament_id = ${id} AND (k.place = 'spot' OR (k.place <> 'line' AND k.claim_cents > 0 AND k.credit_cents + k.paid_cents + k.claim_cents >= k.price_cents)))`;
+
 /** Zip 64: tickets have closed for the style (Pay by has passed): the style is decided from who is locked in. */
 export const styleDecided = (t: TournamentRow, nowMs: number): boolean => statusOf(t) === 'tickets' && !!t.pay_by && nowMs >= Date.parse(t.pay_by);
 
@@ -551,7 +556,10 @@ async function settleStyle(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets:
   const source = `odd:${ctx.nowIso}`;
   try {
     const res = await ctx.db
-      .prepare("UPDATE tournaments SET format = 'americano', format_source = ?, updated_at = ? WHERE id = ? AND status = 'tickets' AND format = 'doubles' AND format_source IS ? AND pay_by = ?")
+.prepare(
+        `UPDATE tournaments SET format = 'americano', format_source = ?, updated_at = ? WHERE id = ? AND status = 'tickets' AND format = 'doubles' AND format_source IS ? AND pay_by = ?
+           AND ${lockedInSql('tournaments.id')} % 2 = 1`,
+      )
       .bind(source, ctx.nowIso, t.id, t.format_source ?? null, t.pay_by)
       .run();
     if ((res.meta?.changes ?? 0) !== 1) return t;
@@ -684,6 +692,7 @@ function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, now
   if (t.final_date < todayKey(nowMs, group.timezone)) return null;
   const words = formatAlertWords(t.name, t.final_date, formatOf(t), source);
   // Zip 64: the style is not final until tickets close: the alert says the vote's result only when it was a real majority, else "TBD".
+  // (A real majority's "Most players voted Americano." stays: it is a fact about the vote, not the final style.)
   if (styleTbd && source !== 'vote') words.sub = 'Tournament style TBD';
   return { key: `fmt:${t.id}:${t.date_picked_at ?? t.final_date}:${playerId}`, ...words };
 }
@@ -795,6 +804,8 @@ export async function playerTournamentFor(
   const tbd = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
   // Zip 64: the date is finalized but tickets have not closed: the style is still "TBD" on the card. After: the style in play, and its banner.
   const decided = styleDecided(t2, ctx.nowMs);
+  // Once the night starts the style is frozen as stored (no switch after the start; review).
+  const live = decided && !salesClosed(t2, group.timezone, ctx.nowMs);
   const styleTbd = !tbd && !decided && (statusOf(t) === 'tickets' || statusOf(t) === 'date_picked') && !!t.final_date;
   const banner = decided ? styleBannerWords(t2.format_source) : null;
   const real = startSetOf(t) ? realTimes(t) : null;
@@ -802,7 +813,7 @@ export async function playerTournamentFor(
   const base: PlayerTournamentView = {
     id: t.id,
     name: t.name,
-    format: decided ? styleAtClose(formatOf(t2), lockedInCount(tickets)) : formatOf(t2),
+    format: live ? styleAtClose(formatOf(t2), lockedInCount(tickets)) : formatOf(t2),
     status: statusOf(t),
     start: real ? real.start : plan.start,
     minutes: real ? real.minutes : plan.minutes,
@@ -851,7 +862,7 @@ async function playerTicketsView(
   // started or 3 hours before the real start. Zip 64 (late paying and late joining): after Pay by a player on the list can still lock a spot
   // while one is open (the cap of 16); only with every spot taken are tickets closed for them then.
   const holding = !!own && (own.place === 'spot' || own.claim_cents > 0 || (own.place === 'line' && own.credit_cents + own.paid_cents >= own.price_cents));
-  const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && locked >= MAX_SPOTS))));
+  const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && lockedInCount(tickets) >= MAX_SPOTS))));
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at 12.
     size: smartPlan(locked).size,
@@ -958,13 +969,13 @@ export async function adminTournamentFor(
   const locked = tickets.filter((k) => k.place === 'spot' && k.signup_status === 'in');
   const plan = smartPlan(locked.length);
   const paidNow = locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).length;
-  const prize = prizeCentsOf(formatOf(t), t.champion_credit_cents, t.second_credit_cents ?? 0);
+  const prize = prizeCentsOf(formatOf(ts), t.champion_credit_cents, t.second_credit_cents ?? 0);
   const pending = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
   const voters = rows.filter((r) => r.status === 'in' && (!t.final_date || storedDays(r.dates).includes(t.final_date)));
   return {
     id: t.id,
     name: t.name,
-    format: decided ? styleAtClose(formatOf(ts), nIn) : formatOf(ts),
+    format: decided && !salesClosed(t, tz, ctx.nowMs) ? styleAtClose(formatOf(ts), nIn) : formatOf(ts),
     // Zip 64: the style can change until the tournament starts (Finalize or Edit); only the night starting (or a cancel) locks it.
     formatLocked: statusOf(t) === 'canceled' || salesClosed(t, tz, ctx.nowMs),
     startSet: !!real,
@@ -1308,7 +1319,7 @@ export async function switchBackStyle(ctx: Ctx) {
   if (n % 2 === 1) throw new HttpError(409, 'odd_count', `Locked doubles needs an even number. ${n} are locked in.`);
   changedOrLookAgain(
     await ctx.db
-      .prepare(`UPDATE tournaments SET format = 'doubles', format_source = ?, updated_at = ? WHERE id = ? AND format = 'americano' AND format_source = ? ${OPEN_GUARD}`)
+      .prepare(`UPDATE tournaments SET format = 'doubles', format_source = ?, updated_at = ? WHERE id = ? AND format = 'americano' AND format_source = ? ${OPEN_GUARD} AND ${lockedInSql('tournaments.id')} % 2 = 0`)
       .bind(`back:${ctx.nowIso}`, ctx.nowIso, t.id, t.format_source)
       .run(),
   );
@@ -1370,12 +1381,12 @@ export async function finalizeView(ctx: Ctx): Promise<FinalizeView> {
   if (statusOf(t) === 'tickets') throw new HttpError(409, 'tickets_open', 'Tickets are open. Reschedule to change the date.');
   if (!date || !storedDays(t.offered_dates).includes(date)) bad('invalid_date', 'Pick one of the dates you offered.');
   if (date! < todayKey(ctx.nowMs, group.timezone)) bad('invalid_date', 'That date has passed. Pick another one.');
-  if (ctx.nowMs >= startMsOf(date!, NIGHT_START_MINUTES, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
+  const plays = finalizeTimesOf(t);
+  if (ctx.nowMs >= startMsOf(date!, plays.start, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
   const org = await organizerIdOf(ctx.db, group);
   const held = playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org));
   const tally = await voteTally(ctx, t, date!);
   const fit = planFit(tally.names.length);
-  const plays = finalizeTimesOf(t);
   let votes: VoteCounts | null = null;
   let winner: FinalizeView['winner'] = null;
   if (isVoteSource(t.format_source) && !held) {

@@ -777,13 +777,13 @@ describe('format: Doubles or Americano (Alex, before shipping)', () => {
     // Both credits can be $0.
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'americano', creditCents: 0, secondCreditCents: 0 })).status).toBe(200);
     expect((await dash(ctx)).tournament).toMatchObject({ championCreditCents: 0, secondCreditCents: 0 });
-    // Back to Doubles before the date is picked; once it is picked tickets are open (Alex), so the format stays.
+    // Back to Doubles before the date is picked. Zip 64 (Alex): the style can still change after that, until the tournament starts.
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'doubles' })).status).toBe(200);
     expect((await dash(ctx)).tournament.format).toBe('doubles');
     await ctx.organizer.call('PUT', `/api/admin/tournament/${id}/date`, { date: DATES[2] });
     const locked = await ctx.organizer.call('PUT', `/api/admin/tournament/${id}`, { ...BASE, visibility: 'all', format: 'americano' });
-    expect(locked.status).toBe(409);
-    expect(locked.data.message).toBe('Tickets are open. The format cannot change now.');
+    expect(locked.status, locked.text).toBe(200);
+    expect((await dash(ctx)).tournament.format).toBe('americano');
   });
 
   it('an Edit that leaves out the format and the 2nd place credit keeps them (it never turns an Americano back into Locked doubles)', async () => {

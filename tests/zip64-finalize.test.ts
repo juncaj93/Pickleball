@@ -342,6 +342,34 @@ describe('late paying and late joining (6f, 7)', () => {
   });
 });
 
+describe('review fixes', () => {
+  it('after Pay by an I paid still waiting for Alex counts as a taken spot: no 17th promise ("Tickets are closed.")', async () => {
+    const all = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', ...MORE];
+    const ctx = await world({ signUp: all });
+    await lockIn(ctx, all.slice(0, 15));
+    // The 16th: Lock with no credit, then I paid (waits for Alex; players see it as locked in).
+    const p16 = await playerPhone(ctx, all[15]);
+    expect((await p16.call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: 1600 })).data.result).toBe('due');
+    expect((await p16.call('POST', '/api/tournament/paid', { tournamentId: ctx.tid, cents: 1600 })).status).toBe(200);
+    ctx.app.now = PAY_BY_MS + HOUR;
+    const last = all[16];
+    expect((await card(ctx, last)).tickets.closed).toBe(true);
+    const res = await lockWithCredit(ctx, last);
+    expect(res.status).toBe(409);
+    expect(res.data.message).toBe('Tickets are closed.');
+    books(ctx);
+  });
+  it('once the night starts the style shown is the stored one (no switch by a count change after the start)', async () => {
+    const ctx = await world({ signUp: SIGNED.slice(0, 4) });
+    await lockIn(ctx, SIGNED.slice(0, 4));
+    // Nobody read it between Pay by and the start: still Locked doubles with an even count; then the night starts.
+    ctx.app.now = START_MS + 60_000;
+    expect((await dash(ctx)).format).toBe('doubles');
+    expect((await card(ctx, 'Blair')).format).toBe('doubles');
+    expect((await dash(ctx)).formatLocked).toBe(true);
+  });
+});
+
 describe('who may see it', () => {
   it('Only me: another player gets no tournament data at all, even after the style switches', async () => {
     const ctx = await world({ signUp: [], visibility: 'me' });

@@ -6177,3 +6177,59 @@ stays green.
   with no name gets no tournament data, the preview-only test route answers 401 without the PIN. No read-only PIN in this session, so the
   organizer screens were not opened.
 - Rollback: site deployment `6c00f062-f737-4b09-9341-68fe94b43a08` (Zip 62); the 16-spot triggers can stay.
+
+## Zip 64: The short ticket, clearer sign-up, one-screen Finalize, tournament style rules, late paying (🎾64.finalize), Thu Nov 19, 2026
+Branch `claude/new-session-5sgveq` (the session is named "🎾64.finalize"; the build system pins the branch name). Built on main `d1084e9` (Zip 63
+live). Same switch, TOURNAMENTS, and the per-tournament Who can see it. **NO database change** (no table, no column, no migration): the real
+start and length go in the existing `start_minutes` and `minutes` columns, and the style rules use two new VALUES in `format_source` (no CHECK on
+it). NOT on live: waiting for Alex's "ship it".
+
+### What it does (the brief's seven things)
+1. The short ticket (mocks 00 and 01): Zip 59's shape is back (the 77 px date stub, the real notch cut out of the card, the dashed tear line) with
+   Zip 63's balls, gold, pop and shimmer, and one bar along the bottom. Stub: weekday, day, month, start; before a date "DATE / TBD / DEC
+   (DEC–JAN) / ~7:30 PM"; once the date is finalized the real start with no "~". Right side: the kicker "TOURNAMENT" with the lime dot (Canceled
+   and Rescheduled say so there), the name (mixed case), the green format line, the balls (21 px up to 10, 6 px apart; then 18, 16, 14 and the
+   card's own width, so 16 stay on one row at 320). Bar by state: before you sign up one wide lime Sign up (no hint words); signed up, no date:
+   a narrower gray "See who's signed up" with Edit and Drop out as underlined words on the right (36 px tall tap areas, 24 px apart at 420, 16 at
+   390 and 360, 12 at 320); Lock my spot · $16 with "Pay by 11/30" (after Pay by "Still open", after a back out "A spot opened"); Join standby with
+   Pay by; Hold my spot with "2nd on standby"; See who's in with "You're locked in", "Spot held", "Tickets closed" or "Started"; Canceled says
+   what came back. No steps strip. Measured against the mocks at 420 (3x pixels): every piece within 1 px; 183 px before signing up (mock 184),
+   175 px signed up (mock 176). Other states 149 (canceled) to 183 px. The gold ring is scaled to the smaller ball (2.5 px ring, 4 px halo). The
+   loading placeholder is the card's new height (176 px). Who's in (the overlay) keeps Zip 63's card copy inside the sheet.
+2. Sign-up words (mock 02): "Step 2 of 2 · Your dates" ("Your dates" when the level is already known), then "Tap every date you can make. We pick
+   the one that works for the most people." The old "Pick every date that works" and "Green dates are open. Games start around 7:30 PM." are
+   gone. Edit sign-up shows the same line with no step label. Once a date is picked (a late sign-up), the line is left out (one date to tap).
+3. Who's in: the "‹ Home" back link is gone; the sheet has the usual round ✕ at the top right.
+4. Pick the date, heat map (mock 03): each date still to pick is shaded by how many can play, from #d3f1e1 (fewest) to #3fd68a (most) in light
+   and #153322 to #1f8a53 in dark, edges #bae1cc to #2fbf79 and #285539 to #3fb87a, all measured from the mock, in even steps (a straight line in
+   sRGB, `heatColors` in shared/tournament.ts). One text color per ramp (#10231a light, white dark). The count stays in each tile. Note: "Brighter
+   green means more can play. Tap a date to pick it." All the same count: every tile the brightest.
+5. Finalize on one screen (mock 04): the sheet title "Finalize Tue Dec 8"; "8 can play Tue Dec 8" and the names; Style (Auto with the vote's winner
+   under it, Doubles, Americano) and "Votes: Doubles 3 · Americano 1 · Either 4"; Plays (start and end boxes, 7:30 PM to 10:00 PM; starts 4:00 to
+   9:30 PM, ends 1 to 6 hours later, never past midnight); Pay by (day and time boxes); Back and Finalize date. Gone: "The plan fits N", the
+   winner/tie sentence, the Ticket price row (the price stays the tournament's, changed in Edit). The "over 16" standby line shows only when it
+   applies. Fits 420 x 912 with no scrolling (checked: the sheet's scroll height equals its height; the Finalize button ends above 912). Plays is
+   saved in the tournament's existing `start_minutes` and `minutes`; the 3-hour cutoff, the night's start and the stub follow it. After Finalize,
+   the organizer's Home shows the site's alert card "Call the venue: keep courts 1 and 2 together, 7:30 to 10 PM" (the real times) with Done
+   (remembered on that phone).
+6. Style rules. a) Players see "Tournament style TBD" until Pay by (`styleTbd`; the vote question itself still closes at Finalize). The old rule
+   that locked the format once players held tickets is gone: Finalize or Edit can change it until the night starts (Edit's choice reads "Auto"
+   after Finalize = the vote's winner for that date). The price lock is unchanged. b) At Pay by the style follows who is locked in (every spot
+   and every trusted I paid, the same people as the gold balls): even plays the stored style (the vote's winner, or Alex's pick), odd plays
+   Americano. c) The first screen that reads the tournament after Pay by with an odd count on Locked doubles switches it to Americano (one guarded
+   write, so one switch, one History line "The Cold Open switched to Americano (9 locked in, an odd number)", one Telegram alert "The Cold Open
+   switched to Americano (odd number of players). 9 are locked in." under the main Alerts switch), and the organizer's Home shows the amber card
+   with an X. d) Even again after that: "Switch back to Locked doubles?" with Switch and Not now; it never switches by itself (only after an odd
+   switch, which only happens from Locked doubles: the vote's winner or Alex's pick). e) Players' banner (the site's alert card, X per player):
+   "Tournament style is now Americano." and "Tournament style is back to Locked doubles." After Pay by, Edit refuses Locked doubles with an odd
+   count ("Locked doubles needs an even number. 9 are locked in."). f) Late join, checked first: on main a brand-new player CAN sign up after the
+   date is picked (the sign-up offers just that date) and Lock my spot until Pay by; after Pay by only a spot freed by a back out could be taken.
+   Changed only that: after Pay by anyone on the list can pay while a spot is open (under the cap of 16), until 3 hours before the start.
+7. Late paying: after Pay by, Lock my spot and Pay now work while a spot is open and it is more than 3 hours before the real start; the spot check
+   is inside the very statements that take the spot (no 17th spot). No spot open, or the last 3 hours: "Tickets are closed." and no money moves.
+   Standby does not open after Pay by. Back out and credit rules unchanged; no fees.
+
+### How the style is stored (no new column)
+`tournaments.format` is the style in play; `format_source` says why: 'vote', 'tie', 'admin', NULL as before, plus `odd:<ISO time>` (switched to
+Americano for an odd count) and `back:<ISO time>` (the organizer switched back). The time makes each switch its own banner and card. Older code
+reads both as "the organizer's own" (sourceOf returns null), so a code rollback is safe.

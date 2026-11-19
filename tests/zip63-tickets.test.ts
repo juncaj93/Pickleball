@@ -292,7 +292,8 @@ describe('the preview test page: the countdown stages', () => {
     }
     expect((await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'pay_closed' })).status).toBe(200);
     const closed = await card(ctx, 'Vic');
-    expect(closed.tickets).toMatchObject({ closed: true, freed: 0 });
+    // Zip 64 (late paying): after Pay by with spots open the late payer can still pay: not closed.
+    expect(closed.tickets).toMatchObject({ closed: false, freed: 0 });
   }, 60_000);
 });
 

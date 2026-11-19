@@ -4,8 +4,8 @@ import { defaultPayBy, salesCutoffMs } from '../shared/tournamentTickets';
 import { NIGHT_START_MINUTES } from '../shared/tournament';
 
 // Zip 59 (🎾59.polish), Tournaments polish before the switch flips. The rules with a number or a clock in them, in the server:
-//   2. Pay by = the night before at 7:00 PM; after it no new tickets and no waitlist joins, except a spot freed by a back out, until 3 hours
-//      before the start; no credit or charge amount changes
+//   2. Pay by = the night before at 7:00 PM; after it no waitlist joins (Zip 64: a player on the list can still pay while a spot is open), until
+//      3 hours before the start; no credit or charge amount changes
 //   3. Hide a canceled tournament (and Restore it), and the leak rules
 // The clock is Monday Oct 26, 2026, 12 PM Eastern (tests/harness.ts). The tournament is Thu Nov 12 (the night: 7:00 to 10:00 PM Eastern).
 
@@ -81,7 +81,11 @@ describe('the shared rules', () => {
 });
 
 describe('tickets close the night before (Pay by)', () => {
-  it('before Pay by tickets sell as before; after it a new buyer and a waitlist join are turned away, nothing moves', async () => {
+  // Zip 64 (late paying): after Pay by a player on the list can still pay while a spot is open, until 3 hours before the REAL start (Finalize's
+  // Plays, 7:30 PM here: 4:30 PM); standby does not open after Pay by. No credit or charge amount changes on a refused tap.
+  const REAL_START_MS = START_MS + 30 * 60_000; // Thu 7:30 PM
+  const REAL_CUTOFF_MS = CUTOFF_MS + 30 * 60_000; // Thu 4:30 PM
+  it('before Pay by tickets sell as before; after it a late payer can still lock a spot, a standby join is turned away and nothing moves', async () => {
     const ctx = await world({ signUp: ['Blair', 'Casey', 'Devon'] });
     await giveCredit(ctx, 'Blair', 1600);
     await giveCredit(ctx, 'Devon', 1600);
@@ -89,64 +93,48 @@ describe('tickets close the night before (Pay by)', () => {
     const k = await card(ctx, 'Devon');
     expect(k.tickets.closed).toBe(false);
     expect(k.tickets.payBy).toBe(new Date(PAY_BY_MS).toISOString());
-    const potsBefore = allPots(ctx);
-    const rowsBefore = ledgerCount(ctx);
     // Wednesday 7:30 PM: Pay by has passed.
     ctx.app.now = AFTER_PAY_BY;
-    const closed = await card(ctx, 'Devon');
-    expect(closed.tickets.closed).toBe(true);
-    expect(closed.tickets.started).toBe(false);
-    expect(closed.tickets.freed).toBe(0);
-    const res = await lock(ctx, 'Devon');
-    expect(res.status).toBe(409);
-    expect(res.data.error).toBe('tickets_closed');
+    const potsBefore = allPots(ctx);
+    const rowsBefore = ledgerCount(ctx);
     const wl = await join(ctx, 'Casey');
     expect(wl.status).toBe(409);
-    // Nothing moved: not one credit or charge amount changed, no ticket row for the turned-away players.
     expect(allPots(ctx)).toEqual(potsBefore);
     expect(ledgerCount(ctx)).toBe(rowsBefore);
-    expect(ctx.app.db.raw.prepare('SELECT COUNT(*) AS c FROM tournament_tickets WHERE player_id IN (?, ?)').get(ctx.byName.Devon, ctx.byName.Casey)).toEqual({ c: 0 });
+    const late = await card(ctx, 'Devon');
+    expect(late.tickets.closed).toBe(false);
+    expect(late.tickets.started).toBe(false);
+    const res = await lock(ctx, 'Devon');
+    expect(res.status, res.text).toBe(200);
+    expect(res.data.result).toBe('locked');
+    expect(pot(ctx, 'Devon')).toBe(0);
     // The player already locked in keeps their spot and sees it.
     expect((await card(ctx, 'Blair')).tickets.mine.place).toBe('spot');
   });
 
-  it('a spot freed by a back out can be claimed by one new buyer, until 3 hours before the start', async () => {
+  it('after Pay by, paying late works until 3 hours before the real start; then everything closes', async () => {
     const ctx = await world({ signUp: ['Blair', 'Casey', 'Devon', 'Emery'] });
     for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await giveCredit(ctx, n, 1600);
     expect((await lock(ctx, 'Blair')).data.result).toBe('locked');
-    expect((await lock(ctx, 'Casey')).data.result).toBe('locked');
     ctx.app.now = AFTER_PAY_BY;
-    expect((await lock(ctx, 'Devon')).status).toBe(409);
-    // Blair backs out after Pay by: her $16 comes back, one spot is freed.
+    expect((await lock(ctx, 'Casey')).data.result).toBe('locked');
+    // A back out after Pay by gives the money back as before.
     const potBlair = pot(ctx, 'Blair');
     expect((await backOut(ctx, 'Blair')).status).toBe(200);
     expect(pot(ctx, 'Blair')).toBe(potBlair + 1600);
-    const open = await card(ctx, 'Devon');
-    expect(open.tickets.freed).toBe(1);
-    expect(open.tickets.closed).toBe(false);
-    // Devon claims it (his credit pays at once); Emery, one step behind, is turned away.
-    const got = await lock(ctx, 'Devon');
-    expect(got.status, got.text).toBe(200);
-    expect(got.data.result).toBe('locked');
-    expect(pot(ctx, 'Devon')).toBe(0);
-    const late = await lock(ctx, 'Emery');
-    expect(late.status).toBe(409);
-    expect((await card(ctx, 'Emery')).tickets.closed).toBe(true);
-    // A later back out frees another; Emery can have that one.
-    expect((await backOut(ctx, 'Casey')).status).toBe(200);
-    expect((await lock(ctx, 'Emery')).data.result).toBe('locked');
-    // The new buyer who backs out again frees nothing extra beyond the one they took: one spot, one claim.
-    expect((await backOut(ctx, 'Devon')).status).toBe(200);
-    expect((await card(ctx, 'Blair')).tickets.freed).toBe(1);
-    // The cutoff is 3 hours before the REAL start of the games: with this few locked in the plan starts at 7:30 PM, so 4:30 PM, not 4:00 PM.
+    expect((await lock(ctx, 'Devon')).data.result).toBe('locked');
+    // 4:00 PM (3 hours before the old fixed 7:00 PM) still sells: the cutoff follows the real start, 7:30 PM, so 4:30 PM.
     ctx.app.now = CUTOFF_MS;
-    expect((await card(ctx, 'Blair')).tickets.closed).toBe(false);
-    ctx.app.now = CUTOFF_MS + 30 * 60_000;
-    const cut = await card(ctx, 'Blair');
+    expect((await card(ctx, 'Emery')).tickets.closed).toBe(false);
+    ctx.app.now = REAL_CUTOFF_MS;
+    const cut = await card(ctx, 'Emery');
     expect(cut.tickets.closed).toBe(true);
     expect(cut.tickets.started).toBe(false);
+    const potEmery = pot(ctx, 'Emery');
     const turned = await lock(ctx, 'Emery');
     expect(turned.status).toBe(409);
+    expect(turned.data.message).toBe('Tickets are closed.');
+    expect(pot(ctx, 'Emery')).toBe(potEmery);
   });
 
   it('a back out BEFORE Pay by frees nothing special: the spot is open to everyone then', async () => {
@@ -161,18 +149,19 @@ describe('tickets close the night before (Pay by)', () => {
 
   it('Pay by can still be changed by the organizer, but never later than 3 hours before the start', async () => {
     const ctx = await world({ signUp: ['Blair'] });
-    const ok = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: new Date(CUTOFF_MS).toISOString() });
+    const ok = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: new Date(REAL_CUTOFF_MS).toISOString() });
     expect(ok.status, ok.text).toBe(200);
-    const late = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: new Date(CUTOFF_MS + 60_000).toISOString() });
+    const late = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: new Date(REAL_CUTOFF_MS + 60_000).toISOString() });
     expect(late.status).toBe(400);
-    // With Pay by moved to Thursday 4:00 PM, Wednesday 7:30 PM still sells.
     ctx.app.now = AFTER_PAY_BY;
     expect((await card(ctx, 'Blair')).tickets.closed).toBe(false);
   });
 
-  it('the night starting still ends everything (as before)', async () => {
+  it('the night starting still ends everything (as before), at the real start', async () => {
     const ctx = await world({ signUp: ['Blair'] });
     ctx.app.now = START_MS + 60_000;
+    expect((await card(ctx, 'Blair')).tickets.started).toBe(false);
+    ctx.app.now = REAL_START_MS + 60_000;
     const k = (await card(ctx, 'Blair')).tickets;
     expect(k.closed).toBe(true);
     expect(k.started).toBe(true);
@@ -180,27 +169,20 @@ describe('tickets close the night before (Pay by)', () => {
 });
 
 describe('a waitlist player after Pay by', () => {
-  it('stays on the list: Lock and Hold only while a freed spot exists', async () => {
+  it('stays on the list; with a spot open (Zip 64) she can lock it late, and Hold is not needed', async () => {
     const ctx = await world({ signUp: ['Blair', 'Casey'] });
     await giveCredit(ctx, 'Blair', 1600);
     await giveCredit(ctx, 'Casey', 1600);
     expect((await lock(ctx, 'Blair')).data.result).toBe('locked');
-    // Casey is already in line (as if the 12 spots had been full when she joined), nothing paid.
+    // Casey is already in line (as if the spots had been full when she joined), nothing paid.
     ctx.app.db.raw
       .prepare("INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, created_at, updated_at) VALUES ('wl1', ?, ?, 'line', '2026-10-27T00:00:00.000Z', 1600, '2026-10-27T00:00:00.000Z', '2026-10-27T00:00:00.000Z')")
       .run(ctx.tid, ctx.byName.Casey);
     ctx.app.now = AFTER_PAY_BY;
     const potBefore = pot(ctx, 'Casey');
-    const closed = await card(ctx, 'Casey');
-    expect(closed.tickets.mine.place).toBe('line'); // still on the list
-    expect(closed.tickets.closed).toBe(true); // no button for her
-    const hold = await (await playerPhone(ctx, 'Casey')).call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'hold', priceCents: 1600 });
-    expect(hold.status).toBe(409);
-    expect((await lock(ctx, 'Casey')).status).toBe(409);
-    expect(pot(ctx, 'Casey')).toBe(potBefore);
-    // Blair backs out after Pay by: a spot is freed, so Casey may lock it (her credit pays at once).
-    expect((await backOut(ctx, 'Blair')).status).toBe(200);
-    expect((await card(ctx, 'Casey')).tickets.closed).toBe(false);
+    const open = await card(ctx, 'Casey');
+    expect(open.tickets.mine.place).toBe('line'); // still on the list
+    expect(open.tickets.closed).toBe(false);
     expect((await lock(ctx, 'Casey')).data.result).toBe('locked');
     expect(pot(ctx, 'Casey')).toBe(potBefore - 1600);
   });

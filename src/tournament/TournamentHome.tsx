@@ -642,6 +642,8 @@ export function TicketCard({
   const picked = !!t.finalDate && (t.status === 'date_picked' || t.status === 'tickets');
   const k = t.tickets ?? null;
   const s = ticketStateOf(t);
+  // The site's clock ("Pretend it's..." holds it still), for "Still open" after Pay by.
+  const nowMs = useNow(30_000);
 
   // ---- Zip 56: the plain Canceled card (no balls, no buttons): the kicker in gray, what came back in the bar ----
   if (t.status === 'canceled') {
@@ -672,7 +674,7 @@ export function TicketCard({
       bar = (
         <>
           {lime(`Lock my spot · ${formatPrice(due)}`, onLock, 'data-tc-lock')}
-          <Aside>{k.freed > 0 ? 'A spot opened' : k.payBy && Date.parse(k.payBy) <= Date.now() ? 'Still open' : (foot ?? hoursLabel(t.minutes))}</Aside>
+          <Aside>{k.freed > 0 ? 'A spot opened' : k.payBy && Date.parse(k.payBy) <= nowMs ? 'Still open' : (foot ?? hoursLabel(t.minutes))}</Aside>
         </>
       );
     else if (s === 'full')

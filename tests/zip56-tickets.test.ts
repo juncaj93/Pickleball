@@ -157,7 +157,8 @@ describe('picking the date opens tickets (Alex: no Open tickets button)', () => 
   it('Pay by is set, the price and format lock, players on the list see Lock my spot with 6 spots; the organizer on the list has the $0 seat', async () => {
     const ctx = await world({ signUp: ['Alex', 'Blair', 'Casey'] });
     const t = (await dash(ctx)).tournament;
-    expect(t).toMatchObject({ status: 'tickets', payBy: '2026-11-12T00:00:00.000Z', settingsLocked: true, formatLocked: true, closed: false, ticketCents: 1600 });
+    // Zip 64: the style is free until the night starts (formatLocked only then); the price and Everyone still lock.
+    expect(t).toMatchObject({ status: 'tickets', payBy: '2026-11-12T00:00:00.000Z', settingsLocked: true, formatLocked: false, closed: false, ticketCents: 1600 });
     // The organizer's own seat ($0) was taken in the same tap: 1 locked in, so 6 spots (the plan for 6: 1 court, 2.5 hours).
     expect(t).toMatchObject({ size: 6, courts: 1, minutes: 150 });
     expect(t.tickets).toEqual([expect.objectContaining({ name: 'Alex', place: 'spot', priceCents: 0, organizer: true })]);
@@ -204,7 +205,9 @@ describe('picking the date opens tickets (Alex: no Open tickets button)', () => 
 });
 
 describe('the smart plan on the organizer\'s screens', () => {
-  it('follows the players locked in: 6, 8, 10, 12 spots; the cost if it fills and with N paid now; the start moves to 7:00 PM for 3 hours', async () => {
+  // Zip 64: once the date is finalized the start and the hours are the real ones (Finalize's Plays, 7:30 to 10:00 PM by default), so the court
+  // bill is the plan's courts for those hours; the spots still follow the players locked in.
+  it('follows the players locked in: 6, 8, 10, 12 spots; the cost if it fills and with N paid now, on the real hours', async () => {
     const names = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Kai'];
     const ctx = await world({ signUp: ['Alex', ...names] });
     const plan = async () => {
@@ -214,21 +217,21 @@ describe('the smart plan on the organizer\'s screens', () => {
     // Alex's $0 seat only: 6 spots, 1 court, 2.5 hours. Court $60; 5 tickets of $16 if it fills; $28 of credits: $60 - $80 + $28 = $8.
     expect(await plan()).toEqual({ size: 6, courts: 1, minutes: 150, start: 1170, cost: { courtCents: 6000, ifFillsCents: 800, nowCents: 8800, paidNow: 0 } });
     for (const n of names.slice(0, 5)) await payCash(ctx, n);
-    // 6 locked in (Alex + 5 paid): 8 spots, 2 courts, 2 hours: $96 - $112 + $28 = $12; with 5 paid now: $96 - $80 + $28 = $44.
-    expect(await plan()).toEqual({ size: 8, courts: 2, minutes: 120, start: 1170, cost: { courtCents: 9600, ifFillsCents: 1200, nowCents: 4400, paidNow: 5 } });
+    // 6 locked in (Alex + 5 paid): 8 spots, 2 courts for the real 2.5 hours: $120 - $112 + $28 = $36; with 5 paid now: $120 - $80 + $28 = $68.
+    expect(await plan()).toEqual({ size: 8, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: 3600, nowCents: 6800, paidNow: 5 } });
     expect((await card(ctx, 'Kai')).tickets).toMatchObject({ size: 8, full: false });
-    expect((await card(ctx, 'Kai'))).toMatchObject({ start: 1170, minutes: 120 });
+    expect((await card(ctx, 'Kai'))).toMatchObject({ start: 1170, minutes: 150, startSet: true });
     await payCash(ctx, names[5]);
     // 7: 10 spots, 2 courts, 2.5 hours.
     expect(await plan()).toMatchObject({ size: 10, courts: 2, minutes: 150 });
     for (const n of names.slice(6, 10)) await payCash(ctx, n);
-    // 11: 14 spots (Zip 63: the cap is 16), the 12-player plan's 2 courts and 3 hours, starting at 7:00 PM. $144 - 13 x $16 + $28 = -$36 (the
-    // tickets cover it); 10 paid now: $144 - $160 + $28 = $12.
-    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 180, start: 1140, cost: { courtCents: 14400, ifFillsCents: -3600, nowCents: 1200, paidNow: 10 } });
-    expect(await card(ctx, 'Kai')).toMatchObject({ start: 1140, minutes: 180 });
+    // 11: 14 spots (Zip 63: the cap is 16), the 12-player plan's 2 courts, the real 2.5 hours: $120 - 13 x $16 + $28 = -$60 (the tickets cover
+    // it); 10 paid now: $120 - $160 + $28 = -$12.
+    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: -6000, nowCents: -1200, paidNow: 10 } });
+    expect(await card(ctx, 'Kai')).toMatchObject({ start: 1170, minutes: 150 });
     // A drop moves it back down at once.
     await backOut(ctx, 'Blair');
-    expect(await plan()).toMatchObject({ size: 12, minutes: 180 });
+    expect(await plan()).toMatchObject({ size: 12, minutes: 150 });
     await backOut(ctx, 'Casey');
     expect(await plan()).toMatchObject({ size: 12 });
     await backOut(ctx, 'Devon');
@@ -782,7 +785,7 @@ describe('preview test page: the ticket stages', () => {
     t = await stage('all_locked');
     expect(locked(t)).toHaveLength(10);
     expect(locked(t)).toEqual(expect.arrayContaining(['Alex', 'Vic']));
-    expect(t).toMatchObject({ size: 12, courts: 2, minutes: 180 });
+    expect(t).toMatchObject({ size: 12, courts: 2, minutes: 150 });
     expect(t.tickets.find((k: { name: string }) => k.name === 'Alex')).toMatchObject({ priceCents: 0, organizer: true });
     expect((await card(ctx, 'Vic')).tickets).toMatchObject({ size: 12, full: false, mine: { place: 'spot' } });
 
@@ -940,12 +943,13 @@ describe('second review fixes (Zip 56)', () => {
     // Everyone: Blair sees Lock my spot at the new price; from then on the price, the format and Everyone stay.
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/visibility`, { visibility: 'all' })).status).toBe(200);
     expect((await card(ctx, 'Blair')).tickets).toMatchObject({ priceCents: 2000, mine: null });
-    expect((await dash(ctx)).tournament).toMatchObject({ visibility: 'all', settingsLocked: true, formatLocked: true });
+    expect((await dash(ctx)).tournament).toMatchObject({ visibility: 'all', settingsLocked: true, formatLocked: false });
     const AM = { ...BASE, ticketCents: 2000, format: 'americano', secondCreditCents: 700 };
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/visibility`, { visibility: 'me' })).data.message).toBe('Players have tickets. It stays on Everyone.');
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, { ...AM, visibility: 'me' })).data.message).toBe('Players have tickets. It stays on Everyone.');
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, { ...AM, ticketCents: 1600 })).data.message).toBe('Tickets have been sold. The price stays $20.');
-    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, { ...AM, format: 'doubles' })).data.message).toBe('Tickets are open. The format cannot change now.');
+    // Zip 64: the style may change until the night starts (only the price and Everyone stay).
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, { ...AM, format: 'doubles' })).status).toBe(200);
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, AM)).status).toBe(200);
     books(ctx);
   });
@@ -1062,13 +1066,13 @@ describe('third review fixes (Zip 56)', () => {
     // Back on Everyone and the date picked: tickets are open on Everyone, so the settings lock.
     expect((await ctx.organizer.call('PUT', `${tour}/visibility`, { visibility: 'all' })).status).toBe(200);
     expect((await ctx.organizer.call('PUT', `${tour}/date`, { date: DATE })).status).toBe(200);
-    expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', settingsLocked: true, formatLocked: true });
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'tickets', settingsLocked: true, formatLocked: false });
     // Blair takes a ticket at $20; after a Reschedule it stays locked (a player holds a ticket).
     await giveCredit(ctx, 'Blair', 2000);
     const locked = await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: 2000 });
     expect(locked.status, locked.text).toBe(200);
     expect((await ctx.organizer.call('POST', `${tour}/reschedule`, {})).status).toBe(200);
-    expect((await dash(ctx)).tournament).toMatchObject({ status: 'rescheduled', settingsLocked: true, formatLocked: true });
+    expect((await dash(ctx)).tournament).toMatchObject({ status: 'rescheduled', settingsLocked: true, formatLocked: false });
     expect((await ctx.organizer.call('PUT', tour, { ...BASE, ticketCents: 1600 })).data.message).toBe('Tickets have been sold. The price stays $20.');
     expect((await ctx.organizer.call('PUT', `${tour}/visibility`, { visibility: 'me' })).data.message).toBe('Players have tickets. It stays on Everyone.');
     books(ctx);

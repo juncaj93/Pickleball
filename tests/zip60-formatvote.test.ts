@@ -94,7 +94,8 @@ describe('Create and Edit', () => {
       expect((await card(ctx, 'Blair')).formatTbd).toBeUndefined();
       await pick(ctx, tid);
       expect(row(ctx, tid)).toMatchObject({ format, format_source: null });
-      expect((await card(ctx, 'Blair')).formatAlert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: `Format: ${format === 'doubles' ? 'Locked doubles' : 'Americano'}` });
+      // Zip 64: the style is "TBD" until tickets close (Pay by); only a real vote majority keeps its line.
+      expect((await card(ctx, 'Blair')).formatAlert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: 'Tournament style TBD' });
     }
   });
   it('the organizer can switch to a format by hand while the vote is open (source admin), and back to a vote', async () => {
@@ -206,7 +207,7 @@ describe('Pick date decides the format', () => {
       for (let i = 0; i < votes.length; i++) await signUp(ctx, tid, names[i], votes[i]);
       await pick(ctx, tid);
       expect(row(ctx, tid)).toMatchObject({ format: 'doubles', format_source: 'tie' });
-      expect((await card(ctx, 'Frankie')).formatAlert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: 'Format: Locked doubles' });
+      expect((await card(ctx, 'Frankie')).formatAlert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: 'Tournament style TBD' });
       expect((await dash(ctx)).formatSource).toBe('tie');
     }
   });
@@ -244,10 +245,11 @@ describe('Pick date decides the format', () => {
     await pick(ctx, tid);
     const before = (await card(ctx, 'Blair')).formatAlert;
     expect(before.sub).toBe('Most players voted Americano.');
-    // The organizer's own edit: tickets are open on Everyone, so the format is locked (Zip 56): a hand change is refused.
+    // Zip 64 (Alex): the style can change until the tournament starts, tickets or not: a hand change is the organizer's (admin).
     const edit = await ctx.organizer.call('PUT', `/api/admin/tournament/${tid}`, { ...BASE, format: 'doubles' });
-    expect(edit.status).toBe(409);
-    expect(row(ctx, tid)).toMatchObject({ format: 'americano', format_source: 'vote' });
+    expect(edit.status, edit.text).toBe(200);
+    expect(row(ctx, tid)).toMatchObject({ format: 'doubles', format_source: 'admin' });
+    expect((await card(ctx, 'Blair')).formatAlert.key).toBe(before.key);
   });
   it('on Only me nobody holds a ticket, so the organizer may still change the format by hand: source admin, the alert keeps its key and says only the format', async () => {
     const { ctx, tid } = await world({ visibility: 'me' });
@@ -264,7 +266,7 @@ describe('Pick date decides the format', () => {
     expect(row(ctx, tid)).toMatchObject({ format: 'doubles', format_source: 'admin' });
     const second = (await alex.call('GET', '/api/group')).data.tournament.formatAlert;
     expect(second.key).toBe(first.key);
-    expect(second.sub).toBe('Format: Locked doubles');
+    expect(second.sub).toBe('Tournament style TBD');
     expect((await dash(ctx)).formatSource).toBe('admin');
   });
   it('after the date is locked the vote is closed: a sent vote is ignored, the vote option cannot come back, and the card shows the format', async () => {
@@ -358,7 +360,7 @@ describe('Edit rules and the preview test stages', () => {
     expect((await card(ctx, 'Vic')).formatAlert.sub).toBe('Most players voted Americano.');
     t = await run('vote_tie');
     expect(t).toMatchObject({ status: 'tickets', format: 'doubles', formatSource: 'tie', votes: { locked: 1, americano: 1, either: 2 } });
-    expect((await card(ctx, 'Vic')).formatAlert.sub).toBe('Format: Locked doubles');
+    expect((await card(ctx, 'Vic')).formatAlert.sub).toBe('Tournament style TBD');
     await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'none' });
     expect(await dash(ctx)).toBeUndefined();
   });
@@ -373,13 +375,15 @@ describe('review fixes', () => {
     expect(lock.status, lock.text).toBe(200);
     expect((await ctx.organizer.call('POST', `/api/admin/tournament/${tid}/reschedule`, {})).status).toBe(200);
     const d = await dash(ctx);
-    expect(d).toMatchObject({ format: 'americano', formatLocked: true });
+    // Zip 64: the style is free until the night starts (formatLocked only then).
+    expect(d).toMatchObject({ format: 'americano', formatLocked: false });
     // The form sends the format it shows (the decided one): nothing changes, the save lands.
     const res = await ctx.organizer.call('PUT', `/api/admin/tournament/${tid}`, { ...BASE, name: 'The Cold Open 2', format: 'americano' });
     expect(res.status, res.text).toBe(200);
     expect(row(ctx, tid)).toMatchObject({ format: 'americano', format_source: 'vote' });
-    // A real change is still refused.
-    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${tid}`, { ...BASE, format: 'doubles' })).status).toBe(409);
+    // Zip 64: a real change is allowed too now (until the night starts), and is the organizer's.
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${tid}`, { ...BASE, format: 'doubles' })).status).toBe(200);
+    expect(row(ctx, tid)).toMatchObject({ format: 'doubles', format_source: 'admin' });
   });
   it('the stale-tally guard does not block a normal pick after sign-ups (the race itself is a millisecond window)', async () => {
     const { ctx, tid } = await world();
@@ -483,7 +487,7 @@ describe('pass 2: the Finalize screen (server half)', () => {
     expect(res.status, res.text).toBe(200);
     expect(row(ctx, tid)).toMatchObject({ format: 'doubles', format_source: 'admin', final_date: DATE });
     const alert = (await card(ctx, 'Blair')).formatAlert;
-    expect(alert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: 'Format: Locked doubles' });
+    expect(alert).toMatchObject({ title: 'The Cold Open is scheduled for Thu Nov 12.', sub: 'Tournament style TBD' });
     expect(JSON.stringify(await card(ctx, 'Blair'))).not.toMatch(/voted/);
     const line = raw(ctx).prepare("SELECT details_json FROM admin_audit_log WHERE action = 'tournament_format'").get() as { details_json: string };
     expect(JSON.parse(line.details_json)).toMatchObject({ format: 'doubles', how: 'admin', americano: 3, locked: 1 });
@@ -544,8 +548,8 @@ describe('pass 2: the Finalize screen (server half)', () => {
     const f = await fin(b.ctx, b.tid);
     expect(f.data).toMatchObject({ locked: true, votes: null, winner: null });
     expect((await lock(b.ctx, b.tid, { ticketCents: 900 })).status).toBe(409);
-    expect((await lock(b.ctx, b.tid, { format: 'americano' })).status).toBe(409);
-    expect((await lock(b.ctx, b.tid, { ticketCents: 1600, format: 'doubles' })).status).toBe(200);
+    // Zip 64: the style may change on the next lock too (the price may not).
+    expect((await lock(b.ctx, b.tid, { ticketCents: 1600, format: 'americano' })).status).toBe(200);
   });
 
   it('counts that move without moving the winner do not stop the lock; the read writes nothing in any table', async () => {
@@ -571,7 +575,7 @@ describe('pass 2: the Finalize screen (server half)', () => {
     expect((await fin(a.ctx, a.tid)).data.winner).toMatchObject({ format: 'doubles', rule: 'tie' });
     expect((await lock(a.ctx, a.tid, { format: 'americano' })).status).toBe(200);
     expect(row(a.ctx, a.tid)).toMatchObject({ format: 'americano', format_source: 'admin' });
-    expect((await card(a.ctx, 'Blair')).formatAlert.sub).toBe('Format: Americano');
+    expect((await card(a.ctx, 'Blair')).formatAlert.sub).toBe('Tournament style TBD');
     const b = await world({ format: 'doubles' });
     await signUp(b.ctx, b.tid, 'Blair');
     expect((await lock(b.ctx, b.tid, { format: 'americano' })).status).toBe(200);

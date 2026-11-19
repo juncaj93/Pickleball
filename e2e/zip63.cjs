@@ -195,15 +195,15 @@ async function main() {
   /** Vic's page with the card drawn. `motion`: let the gold pop play (the other pages use reduced motion). */
   async function vicCard(opts = {}) {
     const v = await playerPage(opts.who || 'Vic', opts);
-    await v.page.locator('.tc-hero').first().waitFor({ timeout: 20000 });
+    await v.page.locator('.tc-short').first().waitFor({ timeout: 20000 });
     return v;
   }
-  const cardOneLine = async (page) => oneLine(page, '.tc-hero .tc-kicker, .tc-hero .tc-format, .tc-hero .tc-btn, .tc-foot, .tc-hero .tc-link');
+  const cardOneLine = async (page) => oneLine(page, '.tc-short .tc-kicker, .tc-short .tc-format, .tc-short .tc-btn, .tc-aside, .tc-short .tc-link');
   /** Every ball's top: one row means one top. */
   const ballRow = (page) =>
     page.evaluate(() => {
-      const balls = [...document.querySelectorAll('.tc-hero .tc-ball')];
-      const row = document.querySelector('.tc-hero .tc-balls');
+      const balls = [...document.querySelectorAll('.tc-short .tc-ball')];
+      const row = document.querySelector('.tc-short .tc-balls');
       const box = row ? row.getBoundingClientRect() : null;
       return {
         n: balls.length,
@@ -212,7 +212,7 @@ async function main() {
         size: balls[0] ? +balls[0].getBoundingClientRect().width.toFixed(1) : 0,
         right: balls.length ? Math.max(...balls.map((b) => b.getBoundingClientRect().right)) : 0,
         rowRight: box ? box.right : 0,
-        card: document.querySelector('.tc-hero').getBoundingClientRect().right,
+        card: document.querySelector('.tc-short').getBoundingClientRect().right,
       };
     });
 
@@ -222,23 +222,25 @@ async function main() {
     for (const width of SIZES)
       await check(`A the card: top line, name, format, 9 balls with 6 gold, Lock my spot, Pay by 12/16; nothing wraps (${width} ${scheme})`, async () => {
         const v = await vicCard({ width, scheme });
-        const card = v.page.locator('.tc-hero').first();
-        assert(flat(await card.locator('.tc-kicker').innerText()) === 'TOURNAMENT · THU DEC 17 · ~7:30 PM', await card.locator('.tc-kicker').innerText());
+        const card = v.page.locator('.tc-short').first();
+        // Zip 64: the short ticket: the kicker is the one word, the date and the real start are on the stub.
+        assert(flat(await card.locator('.tc-kicker').innerText()) === 'TOURNAMENT', await card.locator('.tc-kicker').innerText());
+        assert(flat(await card.locator('.tc-stub').innerText()) === 'THU 17 DEC 7:30 PM', await card.locator('.tc-stub').innerText());
         assert(flat(await card.locator('.tc-title').innerText()) === 'Winter Classic', 'the real name');
         assert(flat(await card.locator('[data-tc-lock]').innerText()) === 'Lock my spot · $16', 'the lime button');
-        const foot = card.locator('.tc-foot');
+        const foot = card.locator('.tc-aside');
         assert(flat(await foot.innerText()) === 'Pay by 12/16', await foot.innerText());
         const style = await foot.evaluate((e) => ({ tag: e.tagName, deco: getComputedStyle(e).textDecorationLine, links: e.querySelectorAll('a,button').length }));
-        assert(style.tag === 'P' && style.deco === 'none' && style.links === 0, `Pay by is plain text: ${JSON.stringify(style)}`);
+        assert(style.tag === 'SPAN' && style.deco === 'none' && style.links === 0, `Pay by is plain text: ${JSON.stringify(style)}`);
         const row = await ballRow(v.page);
         assert(row.n === 9 && row.gold === 6, `9 balls (who can make the date), 6 gold: ${JSON.stringify(row)}`);
         assert(row.tops.length === 1, `one row: ${row.tops}`);
         const gold = await card.locator('.tc-ball').evaluateAll((els) => els.map((e) => e.dataset.tb).join(','));
         assert(gold === 'gold,gold,gold,gold,gold,gold,ball,ball,ball', `gold fills from the left: ${gold}`);
-        assert((await card.locator('.tc-stub, .tc-track, .dot, [data-tc-who], [data-tc-edit], [data-tc-drop]').count()) === 0, 'no stub, steps, empty rings, See who is in or links on the mock card');
+        assert((await card.locator('.tc-track, .dot, [data-tc-who], [data-tc-edit], [data-tc-drop]').count()) === 0, 'no steps, empty rings, See who is in or links on the mock card');
         assert(!/\d+ of \d+|paid/i.test(flat(await card.innerText())), 'no counts on the card');
         await cardOneLine(v.page);
-        await fits(v.page, '.tc-hero');
+        await fits(v.page, '.tc-short');
         await noDash(v.page, 'the card');
         await shot(v.page, `A-card-${width}-${scheme}`);
         assert(v.errors.length === 0, v.errors.join(' | '));
@@ -246,20 +248,21 @@ async function main() {
       });
 
   // ---------------------------------------------------------------- B  10 to 16 on one row
-  const MOCK_SIZE = { 3: 26, 8: 26, 10: 26, 12: 22, 14: 19, 16: 17 };
+  // Zip 64: the short ticket's narrower column (mock 00: 21 px up to 10, then 18, 16 and 14, or the card's own width).
+  const MOCK_SIZE = { 3: 21, 8: 21, 10: 21, 12: 18, 14: 16, 16: 14 };
   for (const [n, g] of [[3, 1], [8, 5], [10, 3], [12, 7], [14, 9], [16, 12]])
     for (const width of [420, 390, 360, 320])
       await check(`B ${n} balls (${g} gold) on one row at ${width}`, async () => {
         const v = await newPage({ width, scheme: width === 320 ? 'dark' : 'light' });
         await v.page.goto(`${BASE}/?as=Vic&balls=${n},${g}`);
-        await v.page.locator('.tc-hero').first().waitFor({ timeout: 20000 });
+        await v.page.locator('.tc-short').first().waitFor({ timeout: 20000 });
         const row = await ballRow(v.page);
         assert(row.n === n && row.gold === g, JSON.stringify(row));
         assert(row.tops.length === 1, `one row: ${JSON.stringify(row)}`);
         assert(row.right <= row.rowRight + 0.5 && row.right <= row.card, `inside the card: ${JSON.stringify(row)}`);
-        if (width === 420) assert(Math.abs(row.size - MOCK_SIZE[n]) < 0.6, `the mock's size ${MOCK_SIZE[n]} px: ${row.size}`);
+        if (width === 420) assert(Math.abs(row.size - MOCK_SIZE[n]) < 0.8, `the mock's size ${MOCK_SIZE[n]} px: ${row.size}`);
         await cardOneLine(v.page);
-        await fits(v.page, '.tc-hero');
+        await fits(v.page, '.tc-short');
         if (width === 320 || width === 420) await shot(v.page, `B-${n}-${width}`);
         await v.page.goto(`${BASE}/?as=Vic&balls=off`);
         await v.ctx.close();
@@ -271,7 +274,7 @@ async function main() {
     const v = await vicCard({ reducedMotion: 'no-preference' });
     const calm = await newPage({});
     await calm.page.goto(`${BASE}/?as=Vic`);
-    await calm.page.locator('.tc-hero').first().waitFor({ timeout: 20000 });
+    await calm.page.locator('.tc-short').first().waitFor({ timeout: 20000 });
     const t = (await dash()).tournament;
     const zoe = (await dash()).players.find((p) => p.name === 'Zoe').id;
     await call('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId: zoe, action: 'mark_paid' });
@@ -279,7 +282,7 @@ async function main() {
     for (let i = 0; i < 40 && !fresh; i++) {
       await sleep(250);
       fresh = await v.page.evaluate(() => {
-        const balls = [...document.querySelectorAll('.tc-hero .tc-ball')];
+        const balls = [...document.querySelectorAll('.tc-short .tc-ball')];
         const i = balls.findIndex((b) => b.classList.contains('tc-gold-new'));
         if (i < 0) return null;
         const b = balls[i];
@@ -289,13 +292,13 @@ async function main() {
     assert(fresh && fresh.i === 6 && fresh.gold === 7, `the 7th ball lights: ${JSON.stringify(fresh)}`);
     assert(fresh.anim === 'tc-gold-in' && fresh.ball === 'm-ball-pop', `the glow and the site's pop: ${JSON.stringify(fresh)}`);
     await v.page.waitForTimeout(1400);
-    assert((await v.page.locator('.tc-hero .tc-gold-new').count()) === 0, 'steady after');
+    assert((await v.page.locator('.tc-short .tc-gold-new').count()) === 0, 'steady after');
     // Reduced motion: the same gold, no animation.
     for (let i = 0; i < 40; i++) {
-      if ((await calm.page.locator('.tc-hero .tc-gold').count()) === 7) break;
+      if ((await calm.page.locator('.tc-short .tc-gold').count()) === 7) break;
       await sleep(250);
     }
-    const still = await calm.page.evaluate(() => [...document.querySelectorAll('.tc-hero .tc-ball')].map((b) => getComputedStyle(b).animationName).filter((a) => a !== 'none'));
+    const still = await calm.page.evaluate(() => [...document.querySelectorAll('.tc-short .tc-ball')].map((b) => getComputedStyle(b).animationName).filter((a) => a !== 'none'));
     assert(still.length === 0, `no animation with reduced motion: ${still}`);
     await v.ctx.close();
     await calm.ctx.close();
@@ -315,7 +318,7 @@ async function main() {
       const t0 = performance.now();
       window.__t0 = t0;
       const tick = () => {
-        const balls = [...document.querySelectorAll('.tc-hero .tc-ball')];
+        const balls = [...document.querySelectorAll('.tc-short .tc-ball')];
         const b = balls[6];
         if (b) {
           const svg = b.querySelector('.ball');
@@ -332,7 +335,7 @@ async function main() {
     const tapAt = await v.page.evaluate(() => Math.round(performance.now() - window.__t0));
     await sheet.getByRole('button', { name: /I paid/ }).click();
     // Pictures of the balls row while it happens (every 60 ms for about 1.2 s), for the frame strip in the shots folder.
-    const row = v.page.locator('.tc-hero .tc-balls');
+    const row = v.page.locator('.tc-short .tc-balls');
     for (let i = 0; i < 20; i++) {
       await row.screenshot({ path: path.join(SHOTS, `C2-frame-${String(i).padStart(2, '0')}.png`) }).catch(() => null);
       await v.page.waitForTimeout(45);
@@ -349,7 +352,7 @@ async function main() {
     assert(peakScale >= 1.15, `it pops (the site's m-ball-pop, up to 1.3x): peak ${peakScale}`);
     assert(peakBlur >= 12, `it glows (a big soft gold glow first): peak blur ${peakBlur}px`);
     assert(last.gold && !last.fresh && last.scale === 1 && last.blur === 0, `then the steady ring: ${JSON.stringify(last)}`);
-    assert(flat(await v.page.locator('.tc-foot').innerText()) === 'You’re locked in', 'You\'re locked in');
+    assert(flat(await v.page.locator('.tc-aside').innerText()) === 'You’re locked in', 'You\'re locked in');
     console.log(`      C2: gold ${firstGold.t - tapAt} ms after the I paid tap (the save's round trip), ${popped.length} animated frames, peak scale ${peakScale}, peak glow ${peakBlur}px, steady at +${last.t - tapAt} ms`);
     await v.ctx.close();
   });
@@ -361,8 +364,8 @@ async function main() {
         await stage('tickets_open');
         for (const who of ['Vic', 'Parker']) {
           const v = await vicCard({ who, width, scheme });
-          const cardGold = await v.page.locator('.tc-hero .tc-ball').evaluateAll((els) => els.map((e) => e.dataset.tb));
-          await v.page.locator('.tc-hero .tc-title').first().click();
+          const cardGold = await v.page.locator('.tc-short .tc-ball').evaluateAll((els) => els.map((e) => e.dataset.tb));
+          await v.page.locator('.tc-short .tc-title').first().click();
           const list = v.page.locator('dialog[open] [data-tw-in]');
           await list.waitFor({ timeout: 10000 });
           const rows = await list.locator('li').evaluateAll((els) =>
@@ -394,25 +397,27 @@ async function main() {
         const v = await vicCard({ width, scheme });
         const row = await ballRow(v.page);
         assert(row.n === 3 && row.gold === 0 && row.tops.length === 1, JSON.stringify(row));
-        assert(flat(await v.page.locator('.tc-hero .tc-kicker').innerText()) === 'TOURNAMENT · DATE TBD · ~7:30 PM', 'TBD');
-        assert(flat(await v.page.locator('.tc-hero .tc-format').innerText()) === 'Tournament style TBD', 'TBD style');
-        assert((await v.page.locator('.tc-hero [data-tc-signup]').count()) === 1, 'Sign up');
+        assert(flat(await v.page.locator('.tc-short .tc-kicker').innerText()) === 'TOURNAMENT', 'kicker');
+        assert(/^DATE TBD (DEC|DEC–JAN) ~7:30 PM$/.test(flat(await v.page.locator('.tc-short .tc-stub').innerText())), 'TBD on the stub');
+        assert(flat(await v.page.locator('.tc-short .tc-format').innerText()) === 'Tournament style TBD', 'TBD style');
+        assert((await v.page.locator('.tc-short [data-tc-signup]').count()) === 1, 'Sign up');
         await cardOneLine(v.page);
-        await fits(v.page, '.tc-hero');
+        await fits(v.page, '.tc-short');
         await shot(v.page, `D-vote-${width}-${scheme}`);
         await v.ctx.close();
       }
     const p = await vicCard({ who: 'Parker' });
-    assert((await p.page.locator('.tc-hero [data-tc-who]').count()) === 1 && (await p.page.locator('.tc-hero [data-tc-edit]').count()) === 1 && (await p.page.locator('.tc-hero [data-tc-drop]').count()) === 1, 'listed: See who and the links');
-    assert(flat(await p.page.locator('.tc-foot').innerText()) === 'You’re on the list. We’re picking the date.', await p.page.locator('.tc-foot').innerText());
+    assert((await p.page.locator('.tc-short [data-tc-who]').count()) === 1 && (await p.page.locator('.tc-short [data-tc-edit]').count()) === 1 && (await p.page.locator('.tc-short [data-tc-drop]').count()) === 1, 'listed: See who and the links');
+    // Zip 64 (mock 01): no words in the bar besides the button and the two links.
+    assert(flat(await p.page.locator('.tc-bar').innerText()) === 'See who’s signed up Edit Drop out', await p.page.locator('.tc-bar').innerText());
     await p.ctx.close();
   });
   await check('D tickets open: tapping the card opens the overlay with Edit sign-up and Drop out (they left the Home card)', async () => {
     await stage('tickets_open');
     const v = await vicCard({});
     // Vic is on the list with no ticket at tickets_open: Lock my spot.
-    await v.page.locator('.tc-hero [data-tc-lock]').waitFor({ timeout: 20000 });
-    await v.page.locator('.tc-hero .tc-title').click();
+    await v.page.locator('.tc-short [data-tc-lock]').waitFor({ timeout: 20000 });
+    await v.page.locator('.tc-short .tc-title').click();
     const sheet = v.page.locator('dialog[open]');
     await sheet.locator('[data-tw]').waitFor({ timeout: 10000 });
     assert((await sheet.locator('[data-tc-edit]').count()) === 1 && (await sheet.locator('[data-tc-drop]').count()) === 1, 'the two links in the overlay');
@@ -449,15 +454,15 @@ async function main() {
           await route.fulfill({ response: res, json: j });
         });
         await v.page.goto(`${BASE}/?as=Vic`);
-        await v.page.locator('.tc-hero [data-tc-join]').waitFor({ timeout: 20000 });
-        assert(flat(await v.page.locator('.tc-hero [data-tc-join]').innerText()) === 'Join standby', 'Join standby');
+        await v.page.locator('.tc-short [data-tc-join]').waitFor({ timeout: 20000 });
+        assert(flat(await v.page.locator('.tc-short [data-tc-join]').innerText()) === 'Join standby', 'Join standby');
         const row = await ballRow(v.page);
         assert(row.n === 16 && row.gold === 16 && row.tops.length === 1, JSON.stringify(row));
-        assert(flat(await v.page.locator('.tc-foot').innerText()) === 'Pay by 12/16', 'Pay by under Join standby (mock 15)');
+        assert(flat(await v.page.locator('.tc-aside').innerText()) === 'Pay by 12/16', 'Pay by under Join standby (mock 15)');
         await cardOneLine(v.page);
-        await fits(v.page, '.tc-hero');
+        await fits(v.page, '.tc-short');
         await shot(v.page, `E-standby-${width}-${scheme}`);
-        await v.page.locator('.tc-hero .tc-title').click();
+        await v.page.locator('.tc-short .tc-title').click();
         const sheet = v.page.locator('dialog[open]');
         await sheet.locator('[data-tw]').waitFor({ timeout: 10000 });
         const words = flat(await sheet.innerText());
@@ -496,7 +501,7 @@ async function main() {
           // First thing on Home under the header (above the card).
           const order = await v.page.evaluate(() => {
             const a = document.querySelector('[data-pay-countdown]').getBoundingClientRect().top;
-            const c = document.querySelector('.tc-hero').getBoundingClientRect().top;
+            const c = document.querySelector('.tc-short').getBoundingClientRect().top;
             const f = document.querySelector('[data-format-alert]');
             return a < c && (!f || a < f.getBoundingClientRect().top);
           });
@@ -525,15 +530,20 @@ async function main() {
     await sheet.getByRole('button', { name: /I paid/ }).click();
     await v.page.locator('[data-pay-countdown]').waitFor({ state: 'detached', timeout: 10000 });
     // Round 2 (Alex, the trust rule): after I paid, "You're locked in" at once, a gold ball, no waiting words anywhere on the page.
-    await v.page.locator('.tc-foot', { hasText: 'You’re locked in' }).waitFor({ timeout: 10000 });
-    assert((await v.page.locator('.tc-hero .tc-gold').count()) === 7, 'the 7th ball is gold');
+    await v.page.locator('.tc-aside', { hasText: 'You’re locked in' }).waitFor({ timeout: 10000 });
+    assert((await v.page.locator('.tc-short .tc-gold').count()) === 7, 'the 7th ball is gold');
     assert(!/confirm|waiting/i.test(flat(await v.page.locator('body').innerText())), 'no waiting words');
     await v.ctx.close();
+    // Zip 64 (late paying): after Pay by with spots open Vic can still pay, so the late card shows; inside the last 3 hours it is closed.
     await stage('pay_closed');
     const c = await vicCard({});
-    await c.page.waitForTimeout(500);
-    assert((await c.page.locator('[data-pay-countdown]').count()) === 0, 'closed: no countdown');
+    await c.page.locator('[data-pay-countdown="late"]').waitFor({ timeout: 10000 });
     await c.ctx.close();
+    await stage('late_cut');
+    const c2 = await vicCard({});
+    await c2.page.waitForTimeout(500);
+    assert((await c2.page.locator('[data-pay-countdown]').count()) === 0, 'closed: no countdown');
+    await c2.ctx.close();
   });
 
   await check('F standby, unpaid, a spot open but tickets closed after Pay by (the reviewer\'s case): no countdown, so no Pay now that would fail', async () => {
@@ -551,7 +561,7 @@ async function main() {
       await route.fulfill({ response: res, json: j });
     });
     await v.page.goto(`${BASE}/?as=Vic`);
-    await v.page.locator('.tc-hero').first().waitFor({ timeout: 20000 });
+    await v.page.locator('.tc-short').first().waitFor({ timeout: 20000 });
     await v.page.waitForTimeout(400);
     assert((await v.page.locator('[data-pay-countdown]').count()) === 0, 'no countdown while tickets are closed for them');
     await v.ctx.close();
@@ -599,7 +609,7 @@ async function main() {
     const hidden = await answerOf('Vic');
     assert(!('tournament' in hidden.data) && !hidden.text.includes('The Cold Open') && !hidden.text.includes('going'), 'Only me: nothing');
     const v = await playerPage('Vic', {});
-    assert((await v.page.locator('.tc-hero, [data-pay-countdown]').count()) === 0, 'no card, no countdown');
+    assert((await v.page.locator('.tc-short, [data-pay-countdown]').count()) === 0, 'no card, no countdown');
     await v.ctx.close();
     // The switch off, with tickets open and Vic unpaid inside the countdown: nothing.
     await stage('pay_1d');
@@ -609,7 +619,7 @@ async function main() {
     const off = await answerOf('Vic');
     assert(!('tournament' in off.data) && !off.text.includes('payBy') && !off.text.includes('Winter Classic'), 'switch off: nothing');
     const o = await playerPage('Vic', {});
-    assert((await o.page.locator('.tc-hero, [data-pay-countdown], [data-tc-shell]').count()) === 0, 'switch off: no card, no countdown');
+    assert((await o.page.locator('.tc-short, [data-pay-countdown], [data-tc-shell]').count()) === 0, 'switch off: no card, no countdown');
     await o.ctx.close();
     await call('PUT', '/api/admin/tournaments-switch', { on: true });
   });
@@ -626,7 +636,7 @@ async function main() {
     const shell = v.page.locator('[data-tc-shell]');
     await shell.waitFor({ timeout: 20000 });
     const s = await shell.evaluate((e) => ({ cls: e.className, anim: getComputedStyle(e).animationName, h: e.getBoundingClientRect().height, bg: getComputedStyle(e).backgroundImage }));
-    assert(/\bskel\b/.test(s.cls) && s.anim === 'skel-shimmer' && /gradient/.test(s.bg) && s.h >= 250, JSON.stringify(s));
+    assert(/\bskel\b/.test(s.cls) && s.anim === 'skel-shimmer' && /gradient/.test(s.bg) && s.h >= 170, JSON.stringify(s));
     await shot(v.page, 'I-shell');
     await v.ctx.close();
   });

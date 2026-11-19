@@ -33,6 +33,8 @@ import {
   readPayByTime,
   salesClosed,
   heldSpotSincePayBy,
+  lockedInCount,
+  lockedInSql,
   ticketPhase,
   type TicketPhase,
   statusOf,
@@ -98,7 +100,8 @@ async function ticketsTarget(ctx: Ctx, who: TournamentActor, body: Record<string
     // before the start; no fees. An I paid already waiting (and a spot holder's own I paid) always finishes. Standby does not open after Pay by.
     const own = await ticketOf(ctx.db, t.id, playerId);
     const keeps = kind === 'paid' && (own?.place === 'spot' || (own?.claim_cents ?? 0) > 0);
-    const open = (await loadTickets(ctx.db, t.id)).filter((x) => x.place === 'spot').length < MAX_SPOTS;
+    // Spots taken plus every I paid for a whole ticket still waiting for the organizer (they show as locked in): no 17th promise (review).
+    const open = lockedInCount(await loadTickets(ctx.db, t.id)) < MAX_SPOTS;
     if (!keeps && (kind === 'waitlist' || !open)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
   }
   return { t, playerId, phase };
@@ -121,7 +124,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   const intent = body.intent === undefined ? 'lock' : v.oneOf(body.intent, 'intent', ['lock', 'hold'] as const);
   const { t, playerId, phase } = await ticketsTarget(ctx, who, body, intent);
   // Zip 64: after Pay by the claim itself checks that a spot is still open (under the cap of 16), in the very statements that take it.
-  const claimOk = phase === 'after' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS}` : '';
+  const claimOk = phase === 'after' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS} AND ${lockedInSql(sqlText(t.id))} < ${MAX_SPOTS}` : '';
   // The organizer pays the venue, never the group: their own seat is $0.
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
   const price = organizer ? 0 : t.ticket_cents;
@@ -141,6 +144,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   }
   const tickets = await loadTickets(ctx.db, t.id);
   if (intent === 'lock' && tickets.filter((x) => x.place === 'spot').length >= MAX_SPOTS) {
+    if (phase === 'after') throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
     throw new HttpError(409, 'spots_full', 'Every spot just filled. Join standby.');
   }
   // The ticket as it will be after its first statement: a new one (Hold puts it in line), or the one read (Hold puts it in line if it was not).
@@ -176,6 +180,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   statements.push(...pay.statements);
   const res = await ctx.db.batch(statements).catch(lookAgainOn);
   if ((res[at].meta?.changes ?? 0) !== 1) {
+    if (phase === 'after') throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
     throw intent === 'lock' ? new HttpError(409, 'spots_full', 'Every spot just filled. Join standby.') : new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   }
   const used = (await ctx.db.prepare('SELECT amount_cents AS c FROM credit_ledger WHERE id = ?').bind(usedId).first<{ c: number }>())?.c ?? 0;
