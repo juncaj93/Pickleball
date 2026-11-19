@@ -13,6 +13,7 @@ import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import './tournament-day.css';
 import { AmericanoCards } from './AmericanoDay';
+import { AdminTieCards, EndCards } from './TournamentEnd';
 
 // The court picker (the site's court map) is loaded when the published card draws it, not with this file: a static import here would pull
 // src/GameDay.tsx (and its styles) in ahead of the other organizer screens in the one-file build, changing the style order (tests/zip48-split).
@@ -63,9 +64,16 @@ export function TournamentDayCards({ ctx, t }: { ctx: AdminCtx; t: AdminTourname
       {d && d.phase === 'none' && d.canDraft && <DraftPrompt ctx={ctx} t={t} d={d} />}
       {d && d.phase === 'draft' && <DraftCard ctx={ctx} t={t} d={d} />}
       {d && d.phase === 'published' && d.fix && <FixTeamsCard ctx={ctx} t={t} d={d} />}
-      {d && d.phase === 'published' && t.format === 'doubles' && (nightOn(ctx, t) ? <NightControls ctx={ctx} t={t} d={d} /> : <PublishedCard ctx={ctx} t={t} d={d} />)}
-      {/* Zip 61: the Americano night (the rounds before it; on the night the scores, the Time check, Pause, Player left). */}
-      {t.format === 'americano' && t.rounds && <AmericanoCards ctx={ctx} t={t} />}
+      {/* Zip 58: once the Final (or the last round) is in, End tournament replaces the round results, Pause and Player left. */}
+      {t.end ? (
+        <EndCards ctx={ctx} t={t} end={t.end} />
+      ) : (
+        <>
+          {d && d.phase === 'published' && t.format === 'doubles' && (nightOn(ctx, t) ? <NightControls ctx={ctx} t={t} d={d} /> : <PublishedCard ctx={ctx} t={t} d={d} />)}
+          {/* Zip 61: the Americano night (the rounds before it; on the night the scores, the Time check, Pause, Player left). */}
+          {t.format === 'americano' && t.rounds && <AmericanoCards ctx={ctx} t={t} />}
+        </>
+      )}
     </>
   );
 }
@@ -379,7 +387,7 @@ function PublishedCard({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
 const sideName = (g: AdminDayGame, s: 'a' | 'b') => (s === 'a' ? (g.a?.name ?? g.waitA ?? 'Not decided') : (g.b?.name ?? g.waitB ?? 'Not decided'));
 const sidePlayers = (g: AdminDayGame, s: 'a' | 'b') => (s === 'a' ? g.a?.players : g.b?.players)?.join(' + ') ?? '';
 const where = (g: AdminDayGame) => (g.courtNumber ? `Court ${g.courtNumber}` : `Court ${g.court}`);
-const stageName = (g: AdminDayGame) => (g.stage === 'semi' ? 'Semifinal' : g.stage === 'final' ? 'Final' : g.stage === 'third' ? '3rd place' : `Game ${g.num}`);
+const stageName = (g: AdminDayGame) => (g.tieLabel ? g.tieLabel : g.stage === 'semi' ? 'Semifinal' : g.stage === 'final' ? 'Final' : g.stage === 'third' ? '3rd place' : `Game ${g.num}`);
 
 /** What a game row says and which button it has. */
 function rowOf(g: AdminDayGame): { status: string; first: 'a' | 'b'; word: string; button: 'fix' | 'confirm' | 'set' | 'decide' | null } {
@@ -420,6 +428,8 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
       {d.paused && (
         <AlertCard as="section" tone="blue" icon="clock" label="Paused" title="Paused. Players see it." data={{ 'data-tm-paused': true }} />
       )}
+      {/* Zip 58: a tie for a playoff place (the wheel, or the organizer's picks), first. */}
+      <AdminTieCards ctx={ctx} t={t} d={d} />
       {tc && (
         <section className="tm-gd-tc" role="status" data-tm-time-check={`${tc.fromRound}:${tc.to}`}>
           <p className="tm-gd-tc-title">{tc.text.split('. ')[0]}.</p>

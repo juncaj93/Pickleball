@@ -1,0 +1,117 @@
+/* Zip 58 (🎾58.tourney4): the tie, The wheel picked, Playoff and Also now cards (pictures 20 to 22), in 57's card look (tc-gd-card). */
+.tc-tie-line {
+  margin: 0;
+  padding: 14px 16px 6px;
+  font-size: 1.02rem;
+  color: var(--ink-2);
+}
+.tc-tie-wheel {
+  padding: 10px 16px 6px;
+}
+.tc-tie-result {
+  margin: 0;
+  padding: 2px 16px 0;
+  text-align: center;
+  font-family: var(--body);
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.tc-tie-spin {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 12px 16px 16px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: #1f6d47;
+  color: #ffffff;
+  font-family: var(--body);
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.tc-tie-spin {
+  cursor: pointer;
+}
+button.tc-tie-spin:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.tc-tie-spin-wait {
+  box-sizing: border-box;
+}
+:root[data-theme='dark'] .tc-tie-spin {
+  background: #25805a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tc-tie-spin {
+    background: #25805a;
+  }
+}
+.tc-tie-picked-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px 16px;
+}
+.tc-tie-picked-row .tc-wh {
+  width: auto;
+  flex: none;
+}
+.tc-tie-picked-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.tc-tie-picked-text b {
+  font-family: var(--body);
+  font-size: 1.32rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.tc-tie-picked-text span {
+  font-size: 1rem;
+  color: var(--ink-2);
+}
+.tc-also {
+  margin-top: -6px;
+}
+.tc-also > .tc-gd-label {
+  padding: 14px 16px 12px;
+}
+.tc-also-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 12px 16px 16px;
+  min-width: 0;
+}
+.tc-also-body b {
+  font-family: var(--body);
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-also-body span {
+  font-size: 0.95rem;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-gd-through {
+  white-space: nowrap;
+}

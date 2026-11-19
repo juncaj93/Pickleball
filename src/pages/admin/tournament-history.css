@@ -1,0 +1,86 @@
+/* Zip 58 (🎾58.tourney4), picture 46: History > Tournaments (the organizer card style). */
+.th-skel {
+  min-height: 220px;
+}
+.th-chip {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.th-empty {
+  margin: 12px 0 0;
+  color: var(--ink-2);
+}
+.th-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.th-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+}
+.th-row + .th-row {
+  border-top: 1px dashed var(--line);
+}
+.th-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.th-main b {
+  font-family: var(--body);
+  font-size: 1.1rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.th-main span {
+  color: var(--ink-2);
+}
+.th-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+  max-width: 50%;
+  text-align: right;
+}
+.th-side b {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.th-side span {
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.th-win {
+  align-items: center;
+}
+.th-rank {
+  flex: none;
+  width: 1.6em;
+  font-size: 1.1rem;
+  color: var(--ink-2);
+}
+.th-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.th-wins {
+  flex: none;
+  font-size: 1.05rem;
+  font-weight: 800;
+  white-space: nowrap;
+}

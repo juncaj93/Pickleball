@@ -63,7 +63,7 @@ import {
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
-import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, tiesSqlFor, type GameRow, type TeamRow, type TieRow } from './tournamentDay';
+import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, tiesSqlFor, type TieRow } from './tournamentDay';
 import { adminRoundsView, americanoStarted, playerRoundsView } from './americanoDay';
 import { fitWords, nightPlan } from '../shared/tournamentPlan';
 import { adminEndView, type AwardsPre, awardsFrom, awardsReads } from './tournamentEnd';

@@ -11,6 +11,7 @@ import type { PlayerDayGame, PlayerDayView, PlayerTournamentView } from '../../s
 import { api, ApiError, storageGet, storageSet, VIEW_ONLY_MESSAGE } from '../lib';
 import { CourtMap } from '../GameDay';
 import { Sheet, useToast } from '../ui';
+import { AlsoNowCard, PlayoffCard, TieCard, WheelPickedCard } from './TieCards';
 import './gameday-tour.css';
 
 /** How long We won waits before it is sent (the card's Undo). */
@@ -137,7 +138,17 @@ function StandingsCard({ day }: { day: PlayerDayView }) {
               <TeamName name={r.name} players={r.players} />
             </span>
             <span className="tc-gd-rec">{r.record}</span>
-            {r.tied ? <span className="tc-gd-chip">Tied</span> : r.me ? <span className="tc-gd-chip">You</span> : <span className="tc-gd-chip tc-gd-chip-empty" aria-hidden="true" />}
+            {r.tied ? (
+              <span className="tc-gd-chip">Tied</span>
+            ) : r.through ? (
+              <span className="tc-gd-chip tc-gd-through" data-tc-day-through={r.through}>
+                {r.through === 'semi' ? 'In the semis' : 'In the final'}
+              </span>
+            ) : r.me ? (
+              <span className="tc-gd-chip">You</span>
+            ) : (
+              <span className="tc-gd-chip tc-gd-chip-empty" aria-hidden="true" />
+            )}
           </li>
         ))}
       </ol>
@@ -163,7 +174,15 @@ function PoolsCards({ day }: { day: PlayerDayView }) {
               <TeamName name={r.name} players={r.players} />
             </span>
                 <span className="tc-gd-rec">{r.record}</span>
-                {r.tied ? <span className="tc-gd-chip">Tied</span> : r.where ? <span className="tc-gd-chip">{r.where}</span> : null}
+                {r.tied ? (
+                  <span className="tc-gd-chip">Tied</span>
+                ) : r.through ? (
+                  <span className="tc-gd-chip tc-gd-through" data-tc-day-through={r.through}>
+                    {r.through === 'semi' ? 'In the semis' : 'In the final'}
+                  </span>
+                ) : r.where ? (
+                  <span className="tc-gd-chip">{r.where}</span>
+                ) : null}
               </li>
             ))}
           </ol>
@@ -445,6 +464,12 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
   const ask = day.games.find((g) => g.askConfirm) ?? null;
   const [askSeen, setAskSeen] = useState<number | null>(null);
   const pools = day.pools;
+  // Zip 58: a tie for a playoff place. Until it is spun (or picked): the standings and the tie card. Once spun: The wheel picked, the big card
+  // for a team in Game A or B, and the Playoff card. A phone that did not see the spin plays it once (spun in the last 3 minutes).
+  const tie = day.tie ?? null;
+  const [spinSeen, markSpinSeen] = useSeen(tie ? `spin:${tie.key}` : null);
+  const replay = !!tie && tie.state === 'playoff' && !!tie.bye && !!tie.spunAt && !spinSeen && Date.now() - Date.parse(tie.spunAt) < 3 * 60_000;
+  const tiePhase: 'tie' | 'playoff' | null = !tie ? null : tie.state === 'playoff' && !replay ? 'playoff' : 'tie';
   if (!day.today) {
     return (
       <div className="tc-gd stack" data-tc-day="before">
@@ -481,7 +506,14 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           </button>
         </section>
       )}
-      {next && (
+      {tiePhase === 'tie' && tie && (
+        <>
+          {pools ? <PoolsCards day={day} /> : <StandingsCard day={day} />}
+          <TieCard t={t} tie={tie} org={org} onChanged={onChanged} replay={replay} onSeen={markSpinSeen} />
+        </>
+      )}
+      {tiePhase === 'playoff' && tie && <WheelPickedCard tie={tie} />}
+      {next && (tiePhase === null || (tiePhase === 'playoff' && next.stage === 'tie')) && (
         <Slide k={next.num}>
           <UpNext
             g={next}
@@ -494,14 +526,17 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           />
         </Slide>
       )}
-      {day.timeNote && (
+      {/* Zip 58 (picture 22): the 3rd place game beside this player's Final. */}
+      {tiePhase === null && day.alsoNow && next?.stage === 'final' && <AlsoNowCard a={day.alsoNow} />}
+      {tiePhase === 'playoff' && day.playoff && <PlayoffCard rows={day.playoff} day={day} />}
+      {tiePhase === null && day.timeNote && (
         <p className="tc-gd-tc" role="status" data-tc-day-time>
           <b>Time check.</b> {day.timeNote}
         </p>
       )}
-      <GamesCard day={day} org={org} />
-      {pools ? <PoolsCards day={day} /> : <StandingsCard day={day} />}
-      {day.live.length > 0 && (
+      {tiePhase === null && <GamesCard day={day} org={org} />}
+      {tiePhase === null && (pools ? <PoolsCards day={day} /> : <StandingsCard day={day} />)}
+      {tiePhase === null && day.live.length > 0 && (
         <section className="tc-gd-card" aria-label="Currently playing" data-tc-day-live>
           <h3 className="tc-gd-label">Currently playing</h3>
           <ul className="tc-gd-rows">
@@ -517,7 +552,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           </ul>
         </section>
       )}
-      {pools && <NightCard day={day} />}
+      {tiePhase === null && pools && <NightCard day={day} />}
       <Sheet calmFocus open={!!ask && askSeen !== ask.num && !held} title="Did you win?" onClose={() => ask && setAskSeen(ask.num)} className="tc-gd-sheet">
         {ask && (
           <div className="stack" data-tc-day-confirm={ask.num}>

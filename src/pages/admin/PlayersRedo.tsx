@@ -1,4 +1,5 @@
 import '../../players-redo.css';
+import { shortDate } from './TournamentHistory';
 import type { ReactNode } from 'react';
 import type { AdminDashboard, AdminPlayer, PlayerSummary } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
@@ -190,6 +191,18 @@ function DetailsBody({ ctx, player, children }: { ctx: AdminCtx; player: AdminPl
         <Kv label="Games played" value={sum ? String(sum.allTime.played) : null} data="all-played" />
         <Kv label="Spent" value={sum ? spentText(sum.allTime.spentCents, formatPrice) : null} data="all-spent" />
       </section>
+      {/* Zip 58 (picture 47): the TOURNAMENTS card, after ALL TIME, once the player has finished a tournament (the switch on). Read only. */}
+      {sum?.tournaments && (
+        <section className="pr-cd" aria-label="Tournaments" data-pr-card="tournaments">
+          <h4>TOURNAMENTS</h4>
+          <Kv label="Played" value={String(sum.tournaments.played)} data="tour-played" />
+          <Kv label="Won" value={String(sum.tournaments.won)} data="tour-won" />
+          <Kv label="Runner-up" value={String(sum.tournaments.runnerUp)} data="tour-runner" />
+          {sum.tournaments.rows.map((r, i) => (
+            <Kv key={`${r.name}-${i}`} label={`${r.name}${r.date ? `, ${shortDate(r.date)}` : ''}`} value={r.finish} data={`tour-row-${i}`} />
+          ))}
+        </section>
+      )}
       {load.error && <p className="small muted">Couldn't load the month and All time numbers. Close and open again.</p>}
       {children}
     </div>

@@ -1,0 +1,72 @@
+/* Zip 58 (🎾58.tourney4): the slim winners ticker (pictures 38 to 40, videos 44 and 45) and the congratulations card. The bar runs the whole
+   width of the screen with a small gap above and below; the words run right to left (stopped with reduced motion). */
+.tw {
+  position: relative;
+  width: 100%;
+  margin: 6px 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, #14301f 0%, #102619 100%);
+  border-top: 1px solid #6e6224;
+  border-bottom: 1px solid #6e6224;
+  color: #ffffff;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+}
+.tw-track {
+  display: flex;
+  width: max-content;
+  animation: tw-run 22s linear infinite;
+}
+.tw-run {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 14px;
+  padding: 9px 7px;
+  white-space: nowrap;
+}
+.tw-label {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f0d64e;
+}
+.tw-name {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--body);
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #ffffff;
+}
+.tw-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b9c2b5;
+  flex: none;
+}
+.tw .md-count {
+  color: #e8ece6;
+}
+@keyframes tw-run {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tw-track {
+    animation: none;
+  }
+}
+.tw-congrats .ac-actions {
+  display: block;
+}
+.tw-nice {
+  width: 100%;
+}

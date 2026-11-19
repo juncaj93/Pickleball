@@ -1867,3 +1867,77 @@ dialog.sheet.tc-tw-overlay {
 .tc-standby {
   padding-bottom: 14px;
 }
+
+/* Zip 58 (🎾58.tourney4): the wheel (picture 20, wheel-spin3.mp4). Slower at the end (ease-out), the winning slice lit, the others dimmed. */
+.tc-wh {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+.tc-wh-svg {
+  display: block;
+  width: min(100%, 300px);
+  height: auto;
+  overflow: visible;
+}
+.tc-wh-small .tc-wh-svg {
+  width: 112px;
+}
+.tc-wh-rim-gold {
+  fill: #f0c94a;
+}
+.tc-wh-rim {
+  fill: #12261b;
+}
+.tc-wh-dot {
+  fill: #f0c94a;
+}
+.tc-wh-turn {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  transition: transform 4.2s cubic-bezier(0.12, 0.66, 0.16, 1);
+}
+.tc-wh-small .tc-wh-turn {
+  transition: none;
+}
+.tc-wh-fill {
+  stroke: none;
+  transition: opacity 0.35s ease;
+}
+.tc-wh-line {
+  stroke: #ffffff;
+  stroke-width: 3;
+}
+.tc-wh-text {
+  fill: #ffffff;
+  font-family: var(--body);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+.tc-wh-off .tc-wh-fill {
+  opacity: 0.32;
+}
+.tc-wh-off .tc-wh-text {
+  opacity: 0.45;
+}
+.tc-wh-win .tc-wh-fill {
+  filter: brightness(1.08);
+}
+.tc-wh-hub {
+  fill: #f5cf5a;
+  stroke: #ffffff;
+  stroke-width: 3;
+}
+.tc-wh-arrow {
+  fill: #ffffff;
+  stroke: #12261b;
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-wh-turn,
+  .tc-wh-fill {
+    transition: none;
+  }
+}

@@ -1,6 +1,6 @@
 import { actingWhoChanged, InstantContext, markPressed, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
 import { declinePatch, iPaidPatch, leaveWaitlistPatch } from '../playerPatches';
-import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, Fragment, lazy, type ReactNode, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import { setSiteName } from '../siteName';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
@@ -57,6 +57,10 @@ import { GameDayButtons, isGameDayCard } from '../GameDay';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
 import { isOrganizerPhone, preloadAdminSoon } from '../adminChunk';
+import { Medals, MedalsContext } from '../Medals';
+// Zip 58: the ticker and the congratulations card are their own small file, fetched only when a tournament has winners to show.
+const WinnersTicker = lazy(() => import('../TourAwards').then((m) => ({ default: m.WinnersTicker })));
+const CongratsCard = lazy(() => import('../TourAwards').then((m) => ({ default: m.CongratsCard })));
 
 /** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
 function flatOfGame(g: GroupView | null | undefined, sessionId: string): number {
@@ -228,6 +232,9 @@ export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, sho
  * every request carries the chosen player and it's look-only: taps say
  * "Demo only" and nothing is saved.
  */
+/** Zip 58: no medals (the same object every draw, so nothing redraws for it). */
+const NO_MEDALS: Readonly<Record<string, number>> = {};
+
 export function PlayerHome({
   groupKey,
   viewAs,
@@ -728,9 +735,13 @@ export function PlayerHome({
         title={!g ? (showSaved ? saved!.view.me!.name : SITE_NAME) : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
         titleExtra={
           g?.me && !pickName ? (
-            <button className="not-you" aria-label="Not you?" onClick={() => setSwitching(true)}>
-              not you?
-            </button>
+            <>
+              {/* Zip 58: a tournament winner's medals next to their name at the top. */}
+              {g.tourAwards?.medals?.[g.me.name] ? <Medals n={g.tourAwards.medals[g.me.name]} size="top" /> : null}
+              <button className="not-you" aria-label="Not you?" onClick={() => setSwitching(true)}>
+                not you?
+              </button>
+            </>
           ) : undefined
         }
         tools={<ModeButton preview={!!viewAs} />}
@@ -742,7 +753,14 @@ export function PlayerHome({
           ) : undefined
         }
       />
+      {/* Zip 58: the slim winners ticker, the whole width of the screen, for the banner length after a tournament ends. */}
+      {g && !pickName && g.tourAwards?.ticker && (
+        <Suspense fallback={null}>
+          <WinnersTicker t={g.tourAwards.ticker} />
+        </Suspense>
+      )}
       <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`} data-sw-main={swapFrom ? '' : undefined}>
+        <MedalsContext.Provider value={g?.tourAwards?.medals ?? NO_MEDALS}>
         <NudgeContext.Provider value={nudgeApi}>
         {/* Pull to refresh: the ball that shows in the gap the list leaves (motion only). */}
         {motion && (
@@ -788,6 +806,12 @@ export function PlayerHome({
           <>
             {/* Zip 51b "Money change note" (server/moneyNote.ts): first on the screen, and shown on a calm preview too (it is that zip's card). */}
             {view!.moneyNotes && view!.moneyNotes.length > 0 && <MoneyNotes notes={view!.moneyNotes} />}
+            {/* Zip 58: the one-time congratulations card for a tournament's winners (and Americano's runner-up), until Nice. */}
+            {view!.tourAwards?.congrats && (
+              <Suspense fallback={null}>
+                <CongratsCard key={view!.tourAwards.congrats.key} c={view!.tourAwards.congrats} onChanged={load.reload} />
+              </Suspense>
+            )}
             {/* Zip 55 "Tournaments": the pinned ticket card (and the Only me strip), only when the server sent one for this phone. Shown on a calm preview too (it is that zip's card). */}
             {/* Zip 60: once the date is locked, the alert above the ticket card ("The Cold Open is scheduled for Thu Dec 17." and the format). The site's alert card, dismissed per player. */}
             {/* Zip 63: the pay countdown comes first (the brief: at the top of Home), so the slot draws this alert right under it. */}
@@ -959,6 +983,7 @@ export function PlayerHome({
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}
         {plain && !viewAs && pickName && <OrganizerLink />}
         </NudgeContext.Provider>
+        </MedalsContext.Provider>
       </main>
       {cashOut && (
         <CashOutPrompt

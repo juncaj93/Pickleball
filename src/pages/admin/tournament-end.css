@@ -1,0 +1,316 @@
+/* Zip 58 (🎾58.tourney4): the organizer's tie card, End tournament (pictures 37, 43) and Edit awards (41, 42). The organizer card style
+   (tm-card, tm-rows) and the night's slim bar (tm-gd-hero); the big green card is 57's big-card look. */
+.tm-tie-line {
+  margin: 12px 0 8px;
+  font-size: 1rem;
+  color: var(--ink-2);
+}
+.tm-tie-spin {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: #1f6d47;
+  color: #ffffff;
+  font-family: var(--body);
+  font-size: 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-tie-spin:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.tm-tie-picked {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+.tm-tie-picked .tc-wh {
+  width: auto;
+  flex: none;
+}
+.tm-tie-picked-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.tm-tie-picked-text b {
+  font-family: var(--body);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.tm-tie-picked-text span {
+  color: var(--ink-2);
+}
+.tm-tie-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tm-tie-team {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.tm-tie-team:disabled {
+  cursor: default;
+  background: var(--fill);
+}
+.tm-tie-team-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tm-tie-team-text b {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-tie-team-text span {
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-tie-team-mark {
+  flex: none;
+  font-weight: 700;
+  color: var(--accent-text, var(--ink-2));
+}
+
+/* The big green card: "Final is done" / "Net Ninjas won" / "Vic + Wren beat Kitchen Crew (Rowan + Zoe)." */
+.tm-end-done {
+  padding: 20px 18px 20px;
+  border-radius: 22px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2b8c5b 0%, #1f6d47 100%);
+  box-shadow:
+    0 0 0 1px rgb(110 240 176 / 18%),
+    0 10px 30px rgb(43 140 91 / 28%);
+}
+.tm-end-kicker {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #e3f03b;
+}
+.tm-end-title {
+  margin: 6px 0 2px;
+  font-family: var(--body);
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+.tm-end-sub {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: rgb(255 255 255 / 86%);
+}
+.tm-end-edit {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tm-end-rows .tm-row {
+  min-height: 52px;
+  padding: 6px 0;
+}
+.tm-end-val {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  min-width: 0;
+}
+.tm-end-val b {
+  font-weight: 800;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-end-val > span {
+  font-size: 0.92rem;
+  color: var(--ink-2);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-end-row > span:first-child {
+  flex: none;
+}
+.tm-end-blocked {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--amber-soft, #fdf1d6);
+  color: var(--amber-text, #7a4b00);
+  font-size: 0.95rem;
+}
+.tm-end-go {
+  margin-top: 14px;
+}
+
+/* Edit awards */
+.tm-awards {
+  gap: 4px;
+}
+.tm-awards-pick + .tm-awards-pick,
+.tm-awards-pick + .tm-awards-row,
+.tm-awards-row + .tm-awards-row,
+.tm-awards-row + .tm-awards-banner {
+  border-top: 1px dashed var(--line);
+}
+.tm-awards-pick {
+  padding: 8px 0;
+}
+.tm-awards-pick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tm-awards-pick-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tm-awards-kicker {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.tm-awards-pick-text b {
+  font-size: 1.12rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-awards-players {
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-awards-change {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 16px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tm-awards-choices {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tm-awards-choice {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-awards-choice[aria-pressed='true'] {
+  border-color: #1f6d47;
+  box-shadow: inset 0 0 0 1px #1f6d47;
+}
+.tm-awards-row {
+  min-height: 56px;
+}
+.tm-end-money input {
+  width: 2.4em;
+}
+.tm-awards-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0 4px;
+}
+.tm-awards-weeks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.tm-awards-week {
+  min-height: 44px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tm-awards-week.tm-on {
+  background: #1f6d47;
+  color: #ffffff;
+}
+@media (max-width: 359px) {
+  .tm-awards-week {
+    font-size: 0.86rem;
+  }
+}

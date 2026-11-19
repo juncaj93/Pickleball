@@ -1267,7 +1267,7 @@ export async function spinTie(ctx: Ctx, group: { id: string; timezone: string },
   const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
   const b = f.blocks.find((x) => x.key === key && x.mode === 'wheel' && !x.order);
   const settledBefore = f.blocks.find((x) => x.key === key && x.record?.bye != null);
-  if (settledBefore?.record?.bye != null) return { ok: true, bye: settledBefore.record.bye, already: true };
+  if (settledBefore?.record?.bye != null) return { ok: true, bye: settledBefore.record.bye, index: settledBefore.seats.indexOf(settledBefore.record.bye), already: true };
   if (!b) bad('tournament_changed', 'This just changed. Look again.');
   if (by === 'team' && (b!.spinner === null || !f.teams.some((x) => x.seat === b!.spinner && (x.player_a === playerId || x.player_b === playerId)))) bad('not_spinner', 'Another team spins the wheel.');
   const bye = b!.seats[fairPick(b!.seats.length)];
@@ -1299,10 +1299,10 @@ export async function spinTie(ctx: Ctx, group: { id: string; timezone: string },
   ]);
   const row = await ctx.db.prepare('SELECT bye_seat, id FROM tournament_ties WHERE tournament_id = ? AND tie_key = ?').bind(t.id, key).first<{ bye_seat: number | null; id: string }>();
   if (!row || row.bye_seat === null) bad('tournament_changed', 'This just changed. Look again.');
-  if (row!.id !== id) return { ok: true, bye: row!.bye_seat, already: true };
+  if (row!.id !== id) return { ok: true, bye: row!.bye_seat, index: b!.seats.indexOf(row!.bye_seat!), already: true };
   const team = (seat: number) => f.bySeat.get(seat)?.name ?? `Team ${seat}`;
   await audit(ctx.db, groupId, null, 'tournament_wheel', { tournament: t.name, tied: b!.seats.map(team).join(', '), bye: team(bye), by, games: planned.length }, nowIso);
-  return { ok: true, bye, already: false };
+  return { ok: true, bye, index: b!.seats.indexOf(bye), already: false };
 }
 
 /** Four or more tied (or two that never played each other): the organizer taps the team for the next place, one tap per place. */

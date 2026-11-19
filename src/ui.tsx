@@ -1,4 +1,5 @@
 import { createContext, type CSSProperties, Fragment, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { NameMedals } from './Medals';
 import { createPortal } from 'react-dom';
 import './confirm-buttons.css';
 import { type CourtKind } from '../shared/court';
@@ -1086,7 +1087,13 @@ export function NamesLine({
   // Yours is bold; so is your own guest (mock player_pair_1: "Rowan + Sam (guest)").
   const mineAt = (i: number) => (isGuest(i) ? i > 0 && names[i - 1] === me : names[i] === me);
   const label1 = (n: string, i: number) => (isGuest(i) ? n : show(n));
-  const one = (n: string, i: number) => (mineAt(i) ? <strong>{label1(n, i)}</strong> : label1(n, i));
+  // Zip 58: a tournament winner's medals after the name (nothing without medals: MedalsContext is empty everywhere else).
+  const one = (n: string, i: number) => (
+    <>
+      {mineAt(i) ? <strong>{label1(n, i)}</strong> : label1(n, i)}
+      {!isGuest(i) && <NameMedals name={n} />}
+    </>
+  );
   const list = names.map((n, i) => (
     <Fragment key={n + i}>
       {i > 0 && (isGuest(i) ? <span className="guest-plus"> + </span> : ', ')}

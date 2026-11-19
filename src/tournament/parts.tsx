@@ -1,6 +1,6 @@
 // Zip 55 "Tournaments": the pieces the player sheets (src/tournament/TournamentHome.tsx, loaded only when a tournament is on a player's Home)
 // and the organizer screens (src/pages/admin/Tournament.tsx) share: the month calendar and the level list. Styles: src/tournament/tournament.css.
-import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef } from 'react';
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import { type CalMonth, type FormatVote, LEVELS, monthTitle, VOTE_ROWS } from '../../shared/tournament';
 import './tournament.css';
 
@@ -213,6 +213,107 @@ export function VoteList({ value, onPick }: { value: FormatVote; onPick: (v: For
           <span className="tm-radio" aria-hidden="true" />
         </button>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 58 (🎾58.tourney4): the wheel for a three-way tie (picture 20, wheel-spin3.mp4). In this shared file because the player's card and the
+// organizer's Home both draw it (one shared file, as Zip 55 set up: tests/zip48-split.test.ts).
+// The arrow is on the rim at the top center; the answer is the server's (`result`, the index of the team that got the bye). Spinning turns the
+// wheel clockwise several times and slows down so the winning slice stops under the arrow; then it lights up and the others dim. Reduced
+// motion: no spin, the result just shows.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The slices' colors (picture 20): green, purple, orange. */
+const COLORS = ['#2f9e64', '#b45ccb', '#e08a3c'];
+/** How long a spin takes (the video: about 4 seconds of turning). */
+export const SPIN_MS = 4200;
+
+const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** The angle (clockwise from the top) that puts slice `i` of `n` under the arrow. */
+const restAngle = (i: number, n: number) => -((i + 0.5) * (360 / n));
+
+/**
+ * The wheel. `names`: the slices, clockwise from the top. `result`: the slice that won (null: not spun). `spin`: play the spin to `result` now
+ * (once per change of `spinKey`). `small`: the little wheel of "The wheel picked" (picture 21).
+ */
+export function Wheel({ names, result, spinKey, small, onDone }: { names: string[]; result: number | null; spinKey?: string | null; small?: boolean; onDone?: () => void }) {
+  const n = Math.max(1, names.length);
+  const step = 360 / n;
+  // At rest: unspun as drawn (slice 0 starting at the top); spun: the result under the arrow.
+  const [angle, setAngle] = useState(result === null || spinKey ? 0 : restAngle(result, n));
+  const [lit, setLit] = useState(result !== null && !spinKey);
+  const played = useRef<string | null>(null);
+  useEffect(() => {
+    if (result === null || !spinKey || played.current === spinKey) return;
+    played.current = spinKey;
+    if (reduced()) {
+      setAngle(restAngle(result, n));
+      setLit(true);
+      onDone?.();
+      return;
+    }
+    setLit(false);
+    // Five turns and a little, so it lands on the slice's middle with a small random lean (never on a line).
+    const lean = (Math.random() - 0.5) * step * 0.5;
+    const raf = requestAnimationFrame(() => setAngle(5 * 360 + restAngle(result, n) + lean));
+    const done = setTimeout(() => {
+      setLit(true);
+      onDone?.();
+    }, SPIN_MS + 80);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(done);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, spinKey]);
+  const R = 92;
+  const slice = (i: number) => {
+    const a0 = ((i * step - 90) * Math.PI) / 180;
+    const a1 = (((i + 1) * step - 90) * Math.PI) / 180;
+    const large = step > 180 ? 1 : 0;
+    return `M0 0 L${(R * Math.cos(a0)).toFixed(2)} ${(R * Math.sin(a0)).toFixed(2)} A${R} ${R} 0 ${large} 1 ${(R * Math.cos(a1)).toFixed(2)} ${(R * Math.sin(a1)).toFixed(2)} Z`;
+  };
+  const dots = Array.from({ length: 18 }, (_, i) => (i * 360) / 18);
+  return (
+    <div className={`tc-wh${small ? ' tc-wh-small' : ''}${lit ? ' tc-wh-lit' : ''}`} data-wheel={result === null ? 'ready' : lit ? 'picked' : 'spinning'}>
+      <svg viewBox="-110 -110 220 220" className="tc-wh-svg" role="img" aria-label={result !== null && lit ? `The wheel picked ${names[result]}` : `A wheel with ${names.join(', ')}`}>
+        <circle r="106" className="tc-wh-rim-gold" />
+        <circle r="102" className="tc-wh-rim" />
+        {dots.map((d) => (
+          <circle key={d} r="2.6" cx={(98 * Math.cos(((d - 90) * Math.PI) / 180)).toFixed(2)} cy={(98 * Math.sin(((d - 90) * Math.PI) / 180)).toFixed(2)} className="tc-wh-dot" />
+        ))}
+        <g className="tc-wh-turn" style={{ transform: `rotate(${angle}deg)` }}>
+          {names.map((name, i) => {
+            const mid = i * step + step / 2;
+            const off = result !== null && lit && i !== result;
+            // A label reads along the slice from the middle out, flipped on the left side so it is never upside down.
+            const flip = mid > 180;
+            return (
+              <g key={i} className={off ? 'tc-wh-slice tc-wh-off' : result === i && lit ? 'tc-wh-slice tc-wh-win' : 'tc-wh-slice'}>
+                <path d={slice(i)} fill={COLORS[i % COLORS.length]} className="tc-wh-fill" />
+                <text
+                  className="tc-wh-text"
+                  transform={`rotate(${mid - 90}) translate(${R * 0.56} 0)${flip ? ' rotate(180)' : ''}`}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  style={{ fontSize: `${Math.max(9, Math.min(15, 150 / Math.max(6, name.length)))}px` }}
+                >
+                  {name}
+                </text>
+              </g>
+            );
+          })}
+          {names.map((_, i) => {
+            const a = ((i * step - 90) * Math.PI) / 180;
+            return <line key={`l${i}`} x1="0" y1="0" x2={(R * Math.cos(a)).toFixed(2)} y2={(R * Math.sin(a)).toFixed(2)} className="tc-wh-line" />;
+          })}
+        </g>
+        <circle r="13" className="tc-wh-hub" />
+        <path d="M-11 -113 L11 -113 L0 -88 Z" className="tc-wh-arrow" />
+      </svg>
     </div>
   );
 }

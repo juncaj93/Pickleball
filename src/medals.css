@@ -1,0 +1,32 @@
+/* Zip 58 (🎾58.tourney4): gold medals next to names (pictures 26 and 28). Stacked up to 3, each over the one before; 4 and more: one and "×n". */
+.md {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -0.12em;
+  white-space: nowrap;
+  margin-left: 0.18em;
+}
+.md-ico {
+  display: block;
+  flex: none;
+  width: 0.78em;
+  height: 1.02em;
+}
+.md-ico + .md-ico {
+  margin-left: -0.3em;
+}
+.md-top {
+  font-size: 1.05em;
+  margin-left: 0.25em;
+}
+.md-top .md-ico {
+  width: 0.62em;
+  height: 0.82em;
+}
+.md-count {
+  margin-left: 0.22em;
+  font-size: 0.78em;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--ink-2, currentColor);
+}

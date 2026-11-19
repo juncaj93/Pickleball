@@ -6,6 +6,7 @@ import { api, ApiError, storageGet, storageSet } from '../../lib';
 import { Empty, ErrorState, Sheet, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { SessionCard } from './Sessions';
+import { TournamentHistory } from './TournamentHistory';
 import { lateDropsAll } from './todo';
 
 /** History: played sessions, or everything anyone did, newest first. Organizer only. */
@@ -19,7 +20,7 @@ export function HistoryTab({ ctx }: { ctx: AdminCtx }) {
 function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
   // Admin screens, round 2 (ADMIN_R2): Activity first and the default, Sessions second.
   const r2 = ctx.d.adminR2 === true;
-  const [view, setView] = useState<'sessions' | 'activity'>(r2 ? 'activity' : 'sessions');
+  const [view, setView] = useState<'sessions' | 'activity' | 'tournaments'>(r2 ? 'activity' : 'sessions');
   const sessionsChip = (
     <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
       Sessions
@@ -39,9 +40,15 @@ function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
         <div className="chips" role="group" aria-label="Show">
           {r2 ? activityChip : sessionsChip}
           {r2 ? sessionsChip : activityChip}
+          {/* Zip 58 (picture 46): the third chip, only while Tournaments is on. */}
+          {ctx.d.tournaments === true && (
+            <button className="chip-btn" aria-pressed={view === 'tournaments'} onClick={() => setView('tournaments')} data-history-tournaments>
+              Tournaments
+            </button>
+          )}
         </div>
       </div>
-      {view === 'sessions' ? <PastSessions ctx={ctx} /> : <Activity ctx={ctx} />}
+      {view === 'tournaments' && ctx.d.tournaments === true ? <TournamentHistory ctx={ctx} /> : view === 'sessions' ? <PastSessions ctx={ctx} /> : <Activity ctx={ctx} />}
     </section>
   );
 }
@@ -178,7 +185,7 @@ const newestMs = (entries: ActivityEntry[] | null) => (entries ?? []).reduce((m,
  * so the NEW group stays visible for the whole visit. The very first visit on a phone has no NEW group.
  */
 function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
-  const [view, setView] = useState<'activity' | 'sessions'>('activity');
+  const [view, setView] = useState<'activity' | 'sessions' | 'tournaments'>('activity');
   // Fixed for this whole visit (read once, when the tab opens).
   const [baseline] = useState<string | null>(() => storageGet(HISTORY_SEEN_KEY));
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
@@ -239,9 +246,17 @@ function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
           <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
             Sessions
           </button>
+          {/* Zip 58 (picture 46): the third chip, only while Tournaments is on. */}
+          {ctx.d.tournaments === true && (
+            <button className="chip-btn" aria-pressed={view === 'tournaments'} onClick={() => setView('tournaments')} data-history-tournaments>
+              Tournaments
+            </button>
+          )}
         </div>
       </div>
-      {view === 'sessions' ? (
+      {view === 'tournaments' && ctx.d.tournaments === true ? (
+        <TournamentHistory ctx={ctx} />
+      ) : view === 'sessions' ? (
         <PastSessions ctx={ctx} />
       ) : (
         <ActivityV2 ctx={ctx} baseline={baseline} entries={entries} more={more} error={error} busy={busy} load={load} />
