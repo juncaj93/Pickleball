@@ -6464,3 +6464,16 @@ dark, the organizer's pill "3 unpaid", no tickets card, Not paid yet: Vic, Zoe, 
    cents ("Hold my spot · $16.50"). e2e/zip66.cjs H checks both at every width and theme, the button, and the place in the sheet: zip66 84 of 84;
    zip55 91, zip56 57, zip59 12, zip63 64, zip64 83 again.
 2. Next Tuesday 8 PM close time: OK, no box. 3. Hide the Not signed up row when nobody is on it: yes (as built). 4. Tickets on the canceled card: OK.
+
+### Live: shipped Thu Nov 19, 2026, about 9:25 AM Eastern (Alex: "ship it", loud hours waived by Alex), no database change
+- Restore points first: Time Travel bookmark `000018b7-00000000-00005128-a34fcfcc8c142d76f349b0832df2e29a`; SQL export saved as
+  `export-20261119142548` in `pickleball-backups` (checked, local copy deleted). Integrity checks before and after: all 0 (21, 8, 11 columns).
+  No migration pending.
+- Main fast-forwarded `316ac36` to `43f74dd` and pushed; `npm run deploy -- --override-loud-hours` from main: deployment
+  `faed6b81-4140-469a-b9b4-e9fbb8237078` (bundle `index-BHq-_sNS.js`). No Worker deploy.
+- Rollback: site deployment `f9c1da8f-6261-4885-b944-5124e39e34e4` (Zip 64 part 8, `316ac36`). No database undo needed.
+- Live check, read only (no read-only PIN in this session, so no live data was read): page and /admin 200; a phone with no name gets no
+  tournament key; the preview-only test route answers 401 without the PIN. The live site's own pages and code, with every data request
+  answered by the fake preview in the browser (nothing sent to live): organizer Home's card closed on load with its pill ("8 signed up";
+  "3 unpaid" with tickets open), Vic's ticket row "Lock in · $16 | Who's in | Drop out" on one line with nothing cut at 420, 390, 360 and
+  320, light and dark; no page errors.
