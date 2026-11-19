@@ -6168,3 +6168,12 @@ stays green.
   Alex runs it with `-- --override-loud-hours`; then the integrity checks and the public live check. Rollback after it ships: deployment
   `6c00f062-f737-4b09-9341-68fe94b43a08`; the triggers can stay.
 - Preview redeployed with round 2 (deployment `6dd9f1c4`).
+
+### Live: shipped Wed Nov 18, 2026, 7:10 PM Eastern (Alex: "ship it", loud hours waived by Alex for this one deploy)
+- Restore point first: Time Travel bookmark `00001804-00000000-00005128-e8b5677580b6e19aebb2deaee9979a23`; SQL export saved as
+  `export-20261119000948` in `pickleball-backups` (local copy deleted). Migration 0026 was already on live (6:57 PM, above).
+- `npm run deploy -- --override-loud-hours` from main `d810b31`: deployment `998a005a-1528-4a9a-b0f4-b4c001e56331`, bundle `index-D6AYqQMy.js`.
+- After: integrity checks all 0 (21, 8, 11 columns). Public live check (pickleball-club-9h0.pages.dev, no PIN): page and /admin 200, a phone
+  with no name gets no tournament data, the preview-only test route answers 401 without the PIN. No read-only PIN in this session, so the
+  organizer screens were not opened.
+- Rollback: site deployment `6c00f062-f737-4b09-9341-68fe94b43a08` (Zip 62); the 16-spot triggers can stay.
