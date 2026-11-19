@@ -102,13 +102,16 @@ export async function buildSmallPreview(
   /** `zip56`: Zip 55's profile, with the tournament's date picked for Everyone (Zip 56: picking the date opens tickets; nobody has paid). */
   /** `zip63`: Zip 60's profile, then the Tournament test page's "Countdown: 2 days left" stage (tickets open, 6 paid; Vic sees the pay countdown). */
   /** `zip60`: Zip 60's profile (the players vote the format): the Zip 55 profile with NO tournament open (Alex taps Create, the default is "Let players vote"; the Tournament test page has the vote stages). */
-  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean; zip60?: boolean; zip63?: boolean } = {},
+  /** `zip66`: one more of last month's games, played by Vic, Reese, Rowan and Wren (Zip 66's "Not signed up" row: who played lately). */
+  opts: { calm?: boolean; zip49?: boolean; zip51?: boolean; zip55?: boolean; zip56?: boolean; zip60?: boolean; zip63?: boolean; zip66?: boolean } = {},
 ): Promise<Seed> {
   const keep: string[] = [];
   /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
   const skinKeep: string[] = [];
   /** Zip 43's two last-month booked games (the calm profile keeps them, hidden from the lists). */
   const venueKeep: string[] = [];
+  /** Zip 66: last month's game Vic and Reese played (kept in the calm profile, hidden from the organizer's lists). */
+  const recentKeep: string[] = [];
   let lateMove: { id: string; startsAt: string; endsAt: string } | undefined;
   const w = new World();
   const summary: string[] = [];
@@ -197,6 +200,21 @@ export async function buildSmallPreview(
         skinKeep.push(g.id);
         venueKeep.push(g.id);
       }
+      oldGames++;
+    }
+    // Zip 66 (🎾66.admincard): one more of last month's games, played by Vic, Reese, Rowan and Wren (all paid $14, finalized, no credit moves),
+    // so the organizer's "Not signed up" row has players who played lately (the calm profile keeps it, hidden from the organizer's lists).
+    const extra = inMonth[inMonth.length - 2];
+    if (opts.zip66 && back === 1 && extra && extra !== inMonth[1] && extra !== inMonth[inMonth.length - 3]) {
+      const names = ['Vic', 'Reese', 'Rowan', 'Wren'];
+      await at(ms(extra.startsAt) - 2 * DAY);
+      await setCourt(extra, 'booked');
+      for (const n of names) await join(n, extra);
+      for (const n of names) await orgPays(n, extra);
+      await at(ms(extra.endsAt) + 2 * HOUR);
+      await w.org.ok('POST', `/api/admin/sessions/${extra.id}/finalize`, { everyone: true });
+      w.db.raw.prepare('UPDATE sessions SET shown_early = 1 WHERE id = ?').run(extra.id);
+      recentKeep.push(extra.id);
       oldGames++;
     }
   }
@@ -694,7 +712,8 @@ export async function buildSmallPreview(
     w.env.PREVIEW_CALM = 'on';
     try {
       // Zip 64 (🎾64.finalize): the calm start is the short ticket and Finalize scene (The Cold Open, the vote open, 9 on the list, Vic not).
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip64_start' });
+      // Zip 66 (🎾66.admincard): the same scene, named for this zip (the card starts as one closed line).
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip66_start' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
@@ -709,7 +728,7 @@ export async function buildSmallPreview(
   if (opts.calm) {
     // The calm profile keeps the zip's games (Zip 49's three with `zip49`, else Zip 42's guest games and late scenes) and Zip 43's two last-month
     // booked games the Venue charge alert adds up (hidden from the lists). The Zip 38 tonight and tomorrow player games stay in the full world (--full).
-    calmSql = calmDown(w.db.raw, keep, N, lateMove, venueKeep);
+    calmSql = calmDown(w.db.raw, keep, N, lateMove, [...venueKeep, ...recentKeep]);
     summary.push(
       opts.zip55
         ? `CALM profile (${opts.zip60 ? 'Zip 60' : 'Zip 55'}): no game of any zip is kept (only the empty regular games, hidden from the organizer lists), no payment, credit entry or cash-out request, and the Venue charge alert row is dated now (no card); npm run db:seed:preview -- --full builds the whole world`

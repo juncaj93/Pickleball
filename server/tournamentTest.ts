@@ -66,7 +66,15 @@ export const COUNTDOWN_STAGES = ['pay_3d', 'pay_2d', 'pay_1d', 'pay_today', 'pay
 //   zip64_start    the preview's calm start: The Cold Open, the vote open, 8 on the list (everyone but Vic and Reese), all able to make the third
 //                  Thursday of next month (part 8: the organizer's plan is for 10: 2 courts, 2.5 hours). Vic sees the short ticket before signing up (mock 00); Parker signed up (mock 01); Alex can Finalize.
 export const STYLE_STAGES = ['style_even', 'style_odd', 'style_back', 'late_open', 'late_cut', 'zip64_start'] as const;
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES] as const;
+// Zip 66 (🎾66.admincard): the organizer's card and the in-or-out alert.
+//   zip66_start    the preview's calm start: The Cold Open, the vote open, 8 on the list (everyone but Vic and Reese; the same as zip64_start).
+//                  Organizer Home: the card is one closed line; open it, tap Votes (who voted what), tap Not signed up (the players who played
+//                  lately and are not on the list: Vic and Reese on the preview), Copy reminder text.
+//   missed_date    the same list, but Sage did NOT pick the date most can make, and the organizer finalized it (tickets open, nobody paid). View as
+//                  Sage: "The Cold Open is <day>" / "Can you make it?" with I'm in · $16 and Can't make it, and no pay countdown. Organizer Home:
+//                  Not signed up lists Sage.
+export const ZIP66_STAGES = ['zip66_start', 'missed_date'] as const;
+export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -219,7 +227,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
-  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start') return voteStage(ctx, group, stage);
+  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date') return voteStage(ctx, group, stage);
 
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
@@ -373,8 +381,21 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
  * Zip 60: the vote stages. The date is locked by the very code the organizer's Pick date runs (lockDate), so the count and the alert are the real ones.
  * Zip 62 (🎾62.speed): `speed_check` is The Cold Open as it is on live: Everyone, the vote open, every fixed name but the organizer on the list.
  */
-type VoteStage = 'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize' | 'speed_check' | 'zip64_start';
+type VoteStage = 'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize' | 'speed_check' | 'zip64_start' | 'zip66_start' | 'missed_date';
+const ZIP64_VOTERS: { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[] = [
+  { name: 'Parker', level: 360, vote: 'locked' },
+  { name: 'Rowan', level: 350, vote: 'americano' },
+  { name: 'Sage', level: 300, vote: 'either' },
+  { name: 'Christopher Vanderberg', level: 300, vote: 'locked' },
+  { name: 'Wren', level: 320, vote: 'either' },
+  { name: 'Quinn', level: 250, vote: 'locked' },
+  { name: 'Zoe', level: 275, vote: 'either' },
+  { name: 'Alex', level: 340, vote: 'americano' },
+];
 const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[]> = {
+  zip64_start: ZIP64_VOTERS,
+  zip66_start: ZIP64_VOTERS,
+  missed_date: ZIP64_VOTERS,
   vote_open: [
     { name: 'Parker', level: 360, vote: 'locked' },
     { name: 'Rowan', level: 350, vote: 'americano' },
@@ -398,16 +419,6 @@ const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 
     { name: 'Reese', level: 340, vote: 'locked' },
     { name: 'Vic', level: 320, vote: 'locked' },
     { name: 'Alex', level: 340, vote: 'locked' },
-  ],
-  zip64_start: [
-    { name: 'Parker', level: 360, vote: 'locked' },
-    { name: 'Rowan', level: 350, vote: 'americano' },
-    { name: 'Sage', level: 300, vote: 'either' },
-    { name: 'Christopher Vanderberg', level: 300, vote: 'locked' },
-    { name: 'Wren', level: 320, vote: 'either' },
-    { name: 'Quinn', level: 250, vote: 'locked' },
-    { name: 'Zoe', level: 275, vote: 'either' },
-    { name: 'Alex', level: 340, vote: 'americano' },
   ],
   vote_tie: [
     { name: 'Parker', level: 360, vote: 'locked' },
@@ -433,7 +444,7 @@ async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
   const all = testDates(todayKey(ctx.nowMs, group.timezone));
   // Zip 64: the calm start offers next month only, like The Cold Open on live (the stub then reads "DEC", as in the mocks).
-  const dates = stage === 'zip64_start' ? all.filter((d) => d.slice(0, 7) === all[0].slice(0, 7)) : all;
+  const dates = stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date' ? all.filter((d) => d.slice(0, 7) === all[0].slice(0, 7)) : all;
   const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
   const best = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
   const id = newId();
@@ -448,6 +459,9 @@ async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin
       )
       .bind(id, group.id, JSON.stringify([...new Set([...dates, best])].sort()), at(0), ctx.nowIso, at(1)),
   ];
+  // Every voter can make `best`; Zip 66's missed_date: Sage cannot (every other offered date she can).
+  const picksFor = (name: string, n: number) =>
+    stage === 'missed_date' && name === 'Sage' ? dates.filter((d) => d !== best) : [...new Set([...dates.filter((_, i) => i % 2 === n % 2), best])].sort();
   let n = 0;
   for (const c of VOTERS[stage]) {
     const pid = idOf.get(c.name);
@@ -459,14 +473,15 @@ async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin
           `INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at, format_vote)
            VALUES (?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?, ?)`,
         )
-        .bind(newId(), id, pid, c.level, JSON.stringify([...new Set([...dates.filter((_, i) => i % 2 === n % 2), best])].sort()), at(10 + n * 7), at(10 + n * 7), at(10 + n * 7), c.vote),
+        .bind(newId(), id, pid, c.level, JSON.stringify(picksFor(c.name, n)), at(10 + n * 7), at(10 + n * 7), at(10 + n * 7), c.vote),
       ctx.db.prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, ?, 'player', ?)").bind(newId(), id, pid, c.level, at(10 + n * 7)),
     );
   }
   await ctx.db.batch(statements);
-  if (stage === 'vote_majority' || stage === 'vote_tie') {
+  const locks = stage === 'vote_majority' || stage === 'vote_tie' || stage === 'missed_date';
+  if (locks) {
     const row = await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<TournamentRow>();
     await lockDate(ctx, group, row!, { date: best });
   }
-  return { ok: true, stage, id, signedUp: n, date: stage === 'vote_majority' || stage === 'vote_tie' ? best : null, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
+  return { ok: true, stage, id, signedUp: n, date: locks ? best : null, firstDate: dates[0] ?? dayKey(2026, 1, 1) };
 }

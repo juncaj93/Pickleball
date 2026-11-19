@@ -126,11 +126,21 @@ async function main() {
     await p.page.waitForTimeout(700);
     return p;
   }
+  /** Zip 66: open the organizer's tournament card when it is closed (it starts as one closed line). */
+  async function openTourCard(page) {
+    const toggle = page.locator('[data-tm-home-toggle][aria-expanded="false"]');
+    if (await toggle.count()) {
+      await toggle.first().click();
+      await page.locator('[data-tm-home-body]').first().waitFor({ timeout: 10000 });
+    }
+  }
   async function adminPage(opts = {}) {
     const p = await newPage({ ...opts, organizer: true });
     await p.page.goto(`${BASE}/admin`);
     await p.page.locator('.tabbar').waitFor({ timeout: 30000 });
     await p.page.waitForTimeout(700);
+    // Zip 66: the tournament card starts as one closed line; open it (one tap) so the checks below see its rows and buttons.
+    await openTourCard(p.page);
     return p;
   }
   async function fits(page, sel) {
@@ -306,8 +316,9 @@ async function main() {
     // The organizer's card: the counts. Players never see them.
     const a = await adminPage();
     await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
-    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked 2, Americano 1, Either 1', await a.page.locator('[data-tm-vote-counts]').innerText());
-    assert(flat(await a.page.locator('[data-tm-home-format]').first().innerText()) === 'Format: players vote', 'format line');
+    // Zip 66: the Votes row says Doubles, not Locked; the Style row says Players vote (mock 02).
+    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Doubles 2 · Americano 1 · Either 1', await a.page.locator('[data-tm-vote-counts]').innerText());
+    assert(flat(await a.page.locator('[data-tm-home-format]').first().innerText()) === 'Players vote', 'Style row');
     await shot(a.page, 'C-admin-card');
     await noDash(a.page, 'organizer Home');
     await a.ctx.close();

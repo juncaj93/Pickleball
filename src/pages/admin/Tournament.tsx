@@ -26,14 +26,12 @@ import {
   planRange,
   type Visibility,
   WINNERS,
-  formatLine,
   formatName,
   formatRule,
   DEFAULT_FORMAT_CHOICE,
   type FinalizeView,
   type FormatChoice,
   type TournamentFormat,
-  voteCountsLine,
   VOTE_LABEL,
   DEFAULT_SECOND_CREDIT_CENTS,
   MAX_SPOTS,
@@ -42,10 +40,11 @@ import {
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { evensWarning, payByAt, payByDays, payByLabel, payByParts, ticketsLine, tournamentRemindText } from '../../../shared/tournamentTickets';
 import { siteAddress, smsHref } from '../../../shared/messages';
+import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
 import { AlertCard } from '../../AlertCard';
 import { localParts } from '../../../shared/time';
-import { api, ApiError, isIOS, storageGet, storageRemove, storageSet, useNow, VIEW_ONLY_MESSAGE } from '../../lib';
-import { ConfirmDialog, Sheet, useToast } from '../../ui';
+import { api, ApiError, copyText, isIOS, storageGet, storageRemove, storageSet, useNow, VIEW_ONLY_MESSAGE } from '../../lib';
+import { ConfirmDialog, Pickleball, Sheet, useToast } from '../../ui';
 import { type DayLook, LevelList, MonthCalendar } from '../../tournament/parts';
 import type { AdminCtx } from '../Admin';
 import './tournament-admin.css';
@@ -173,77 +172,271 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
       ))}
       {/* Zip 63: while anyone who can make the date has not paid, mock 14's card (Remind all unpaid) takes the count card's place. */}
       {t.status === 'tickets' && (unpaidOf(t, ctx.d.now).length > 0 ? <RemindUnpaidCard ctx={ctx} t={t} /> : <TicketsCountCard ctx={ctx} t={t} />)}
-      {t.status === 'date_picked' || t.status === 'tickets' || t.status === 'canceled' ? <TicketsHomeCard ctx={ctx} t={t} /> : <SignupHomeCard ctx={ctx} t={t} />}
+      {/* Zip 66: one card for every stage, starting closed (mocks 01 and 02). */}
+      <HomeCard ctx={ctx} t={t} />
     </>
   );
 }
+
+/** Zip 66: "Doubles 2 · Americano 0 · Either 6" (the card's Votes row; Doubles, not Locked). */
+const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Doubles ${v.locked} · Americano ${v.americano} · Either ${v.either}`;
+/** Zip 66: "6 players · 1 court · 2.5 hrs" (the card's Plan row). */
+const planShort = (t: AdminTournamentView) => `${t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
+/** Zip 66: the Style row ("Players vote" while the vote is open). */
+const styleWords = (t: AdminTournamentView) => (t.formatPending ? 'Players vote' : formatName(t.format));
+/** Zip 66: the players whose votes the counts are: everyone on the list before a date, then those who can make the picked date. */
+const votersOf = (t: AdminTournamentView) => t.signups.filter((s) => !t.finalDate || s.dates.includes(t.finalDate));
+
+/** Zip 66 (mock 07): who voted what, inside the card under the Votes row. Organizer only. */
+function VotesBox({ t }: { t: AdminTournamentView }) {
+  const voters = votersOf(t);
+  const rows: { key: 'locked' | 'americano' | 'either'; label: string }[] = [
+    { key: 'locked', label: 'Doubles' },
+    { key: 'americano', label: 'Americano' },
+    { key: 'either', label: 'Either' },
+  ];
+  return (
+    <dl className="tm-hc-box tm-hc-votes" data-tm-votes-box>
+      {rows.map((r) => {
+        const names = voters.filter((s) => (s.vote ?? 'either') === r.key).map((s) => s.name);
+        return (
+          <div key={r.key} className="tm-hc-vrow" data-tm-votes-row={r.key}>
+            <dt>{r.label}</dt>
+            <dd className={names.length ? undefined : 'tm-hc-nobody'}>{names.length ? names.join(', ') : 'Nobody'}</dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+/** Zip 66 (mock 09): the names not signed up, and Copy reminder text. Organizer only. */
+function MissingBox({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const toast = useToast();
+  const ns = t.notSignedUp!;
+  const tz = ctx.d.group.timezone;
+  async function copy() {
+    const close = ns.closeAt ?? signupCloseDefault(Date.parse(ctx.d.now), tz);
+    const text = signupReminderText(
+      ns.players.map((p) => p.name),
+      t.name,
+      close,
+      tz,
+      siteAddress(ctx.d.group.playerLink),
+    );
+    const ok = await copyText(text);
+    toast(ok ? 'Copied' : 'Could not copy. Try again.', ok ? undefined : 'error');
+  }
+  return (
+    <div className="tm-hc-box tm-hc-missing" data-tm-missing-box={ns.mode}>
+      <p className="tm-hc-names" data-tm-missing-names>
+        {ns.players.map((p) => p.name).join(', ')}
+      </p>
+      <button type="button" className="tm-hc-copy" onClick={() => void copy()} data-tm-missing-copy>
+        Copy reminder text
+      </button>
+    </div>
+  );
+}
+
+/** Zip 66: a row that opens a soft box under it (Votes, Not signed up). No arrow; tap again to close. */
+function TapRow({ label, value, open, onTap, data, valueData, fit }: { label: string; value: ReactNode; open: boolean; onTap: () => void; data: string; valueData?: string; fit?: boolean }) {
+  return (
+    <button type="button" className="tm-row tm-hc-tap" aria-expanded={open} onClick={onTap} {...{ [data]: true }}>
+      <span>{label}</span>
+      <b className={fit ? 'tm-hc-val tm-hc-fit' : 'tm-hc-val'} {...(valueData ? { [valueData]: true } : {})}>
+        {value}
+      </b>
+    </button>
+  );
+}
+
+const ChevronIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 9.5l6 6 6-6" />
+  </svg>
+);
 
 /**
- * Zip 60: the votes on the organizer's card ("Locked 3, Americano 6, Either 2") and which rule decided the format. Only the organizer sees counts;
- * no player's screen ever carries them.
+ * Zip 66 (mocks 01, 02, 06 to 09): the tournament on the organizer's Home. One line to start (the pickleball, the name, "8 signed up", a chevron);
+ * tap anywhere on it to open, tap again to close. It starts closed every time Home loads (nothing is remembered). Open: Style, Votes (tap: who
+ * voted what), Not signed up (tap: the names and Copy reminder text), Plan, then the stage's buttons as before: Pick date and Edit (sign-up),
+ * the ticket rows with Tickets and Cancel or reschedule (once the date is picked), or the Canceled note with Hide.
  */
-function VoteLines({ t, tix }: { t: AdminTournamentView; tix?: boolean }) {
-  if (!t.votes || t.status === 'canceled') return null;
-  const how = t.formatPending ? null : t.formatSource === 'vote' ? 'Decided by the most votes' : t.formatSource === 'tie' ? 'Decided by the tie rule' : t.formatSource === 'admin' ? 'Changed by you' : null;
-  return (
-    <>
-      <p className={tix ? 'tm-home-sub tm-vote-counts tm-tix-votes' : 'tm-home-sub tm-vote-counts'} data-tm-vote-counts>
-        {voteCountsLine(t.votes)}
-      </p>
-      {how && (
-        <p className={tix ? 'tm-home-sub tm-vote-how tm-tix-votes' : 'tm-home-sub tm-vote-how'} data-tm-vote-how>
-          {how}
-        </p>
-      )}
-    </>
-  );
-}
-
-/** Piece 1's Home card (sign-up open, or rescheduled): Pick date and Edit. */
-function SignupHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
-  const [open, setOpen] = useState<null | 'dates' | 'edit'>(null);
-  const who = t.visibility === 'me' ? 'Only you can see it' : 'Everyone can see it';
+function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const [open, setOpen] = useState(false);
+  const [showVotes, setShowVotes] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
+  const [page, setPage] = useState<null | 'dates' | 'edit' | 'tickets'>(null);
+  const tz = ctx.d.group.timezone;
+  const canceled = t.status === 'canceled';
+  const ticketsStage = t.status === 'date_picked' || t.status === 'tickets' || canceled;
+  const today = todayKeyOf(ctx.d.now, tz);
   // Every offered date has passed and none is picked: players do not see the card any more (server/tournament.ts), so say it here.
-  const today = todayKeyOf(ctx.d.now, ctx.d.group.timezone);
-  const datesPassed = !t.finalDate && !t.offeredDates.some((d) => d >= today);
+  const datesPassed = !ticketsStage && !t.finalDate && !t.offeredDates.some((d) => d >= today);
+  const ns = t.notSignedUp && t.notSignedUp.players.length > 0 ? t.notSignedUp : null;
+  const evens = evensOf(t, ctx.d.now);
+  const locked = lockedOf(t).length;
+  const line = lineOf(t);
+  const bodyId = `tm-hc-body-${t.id}`;
   return (
-    <section className="tm-home card" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home>
-      <div className="tm-home-top">
-        <span className="tm-home-ball" aria-hidden="true" />
-        <div className="tm-home-text">
-          <h2 className="tm-home-title">{t.name}</h2>
-          <p className="tm-home-format" data-tm-home-format={t.formatPending ? 'vote' : t.format}>
-            {t.formatPending ? 'Format: players vote' : formatLine(t.format)}
-          </p>
-          <VoteLines t={t} />
-          <p className="tm-home-sub">
-            {statusLine(t)} · {who}
-          </p>
-          {/* Alex's smart plan, a short line (it follows the players locked in; after a Reschedule the held spots count). */}
-          <p className="tm-home-sub tm-home-plan" data-tm-home-plan>
-            {/* Each part stays whole ("2.5 hours"); a narrow phone wraps between parts, like the line above. */}
-            {[`Plan: ${t.size} players`, ...planTitle(t).split(' · ')].map((part) => part.replace(/ /g, '\u00a0')).join(' · ')}
-          </p>
+    <section className={open ? 'tm-hc tm-hc-open' : 'tm-hc'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={ticketsStage ? t.status : true} data-tm-open={open}>
+      <h2 className="tm-hc-head">
+        <button type="button" className="tm-hc-top" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((o) => !o)} data-tm-home-toggle>
+          <span className="tm-hc-ball" aria-hidden="true">
+            <Pickleball />
+          </span>
+          <span className="tm-hc-name">{t.name}</span>
+          <span className={canceled ? 'tm-chip tm-hc-pill' : 'tm-chip tm-chip-ok tm-hc-pill'} data-tm-stage>
+            {canceled ? 'Canceled' : `${t.signups.length} signed up`}
+          </span>
+          <span className="tm-hc-chev" aria-hidden="true">
+            <ChevronIcon />
+          </span>
+        </button>
+      </h2>
+      {/* Review: the card's warnings show on the closed line too (they used to be on the always-open card). */}
+      {(datesPassed || evens) && (
+        <div className="tm-hc-notes">
           {datesPassed && (
             <p className="tm-home-note" data-tm-home-note>
               Dates have passed. Add dates.
             </p>
           )}
+          {evens && (
+            <p className="tm-evens" role="status" data-tm-evens>
+              {evens}
+            </p>
+          )}
         </div>
-      </div>
-      {/* One row of buttons for the stage (Levels live inside Edit): Pick date and Edit (sign-up open, or rescheduled). Picking the date opens
-          tickets and the card becomes picture 29's. Edit opens the whole tournament page at the top. */}
-      <div className="tm-home-actions">
-        {t.status !== 'date_picked' && (
-          <button type="button" className="btn" onClick={() => setOpen('dates')} data-tm-open-dates>
-            Pick date
-          </button>
-        )}
-        <button type="button" className={t.status === 'date_picked' ? 'btn' : 'btn secondary'} onClick={() => setOpen('edit')} data-tm-open-edit>
-          Edit
-        </button>
-      </div>
-      <TournamentPage ctx={ctx} t={t} open={open !== null} focus={open === 'dates' ? open : undefined} onClose={() => setOpen(null)} />
+      )}
+      {open && (
+        <div className="tm-hc-body" id={bodyId} data-tm-home-body>
+          <div className="tm-rows tm-hc-rows">
+            {!canceled && (
+              <div className="tm-row">
+                <span>Style</span>
+                <b className="tm-hc-val" data-tm-home-format={t.formatPending ? 'vote' : t.format}>
+                  {styleWords(t)}
+                </b>
+              </div>
+            )}
+            {!canceled && t.votes && (
+              <>
+                <TapRow label="Votes" value={votesWords(t.votes)} open={showVotes} onTap={() => setShowVotes((v) => !v)} data="data-tm-votes-toggle" valueData="data-tm-vote-counts" fit />
+                {showVotes && <VotesBox t={t} />}
+              </>
+            )}
+            {!canceled && ns && (
+              <>
+                <TapRow label="Not signed up" value={ns.players.length} open={showMissing} onTap={() => setShowMissing((v) => !v)} data="data-tm-missing-toggle" valueData="data-tm-missing-count" />
+                {showMissing && <MissingBox ctx={ctx} t={t} />}
+              </>
+            )}
+            {ticketsStage && (
+              <div className="tm-row">
+                <span>Date</span>
+                <b className="tm-hc-val tm-hc-fit" data-tm-row="date">
+                  {dateRow(t)}
+                </b>
+              </div>
+            )}
+            {!canceled && (!ticketsStage || t.status === 'tickets') && (
+              <div className="tm-row">
+                <span>Plan</span>
+                <b className="tm-hc-val tm-hc-fit" data-tm-row="plan" data-tm-home-plan>
+                  {planShort(t)}
+                </b>
+              </div>
+            )}
+            {t.status === 'tickets' && (
+              <>
+                {t.cost && (
+                  <div className="tm-row">
+                    <span>Your cost if it fills</span>
+                    <b data-tm-row="cost">{costWords(t.cost.ifFillsCents)}</b>
+                  </div>
+                )}
+                <div className="tm-row">
+                  <span>Locked in</span>
+                  <b data-tm-row="locked">
+                    {locked} of {t.size}
+                  </b>
+                </div>
+                {line.length > 0 && (
+                  <div className="tm-row">
+                    <span>Standby</span>
+                    <b data-tm-row="line">
+                      {line.length} ({line.filter(ticketIsPaid).length} paid)
+                    </b>
+                  </div>
+                )}
+              </>
+            )}
+            {t.status === 'date_picked' && (
+              <div className="tm-row">
+                <span>Signed up</span>
+                <b data-tm-row="signed">{t.signups.length}</b>
+              </div>
+            )}
+            {ticketsStage && !canceled && (
+              <div className="tm-row">
+                <span>Ticket</span>
+                <b className="tm-hc-val tm-hc-fit" data-tm-row="ticket">
+                  {formatPrice(t.ticketCents)}
+                  {t.payBy ? ` · pay by ${payByLabel(t.payBy, tz, t.finalDate)}` : ''}
+                </b>
+              </div>
+            )}
+          </div>
+          {canceled ? (
+            <>
+              <p className="tm-card-note" data-tm-canceled-note>
+                Every paid ticket came back as credit.
+              </p>
+              {/* The name used to open the page; it opens and closes the card now, so Tickets opens the page (the list on top). */}
+              <button type="button" className="btn block secondary tm-tix-go" onClick={() => setPage('tickets')} data-tm-tickets>
+                Tickets
+              </button>
+              <HideCanceled ctx={ctx} t={t} />
+            </>
+          ) : ticketsStage ? (
+            <>
+              {/* Alex: no Open tickets button. Picking the date opened them. Tickets opens the tournament page (the list on top). */}
+              {t.status === 'tickets' ? (
+                <button type="button" className="btn block big tm-tix-go" onClick={() => setPage('tickets')} data-tm-tickets>
+                  Tickets
+                </button>
+              ) : (
+                <div className="tm-home-actions">
+                  <button type="button" className="btn" onClick={() => setPage('edit')} data-tm-open-edit>
+                    Edit
+                  </button>
+                </div>
+              )}
+              {/* A night that has been played is never refunded or moved (the server refuses both), so the taps are not offered. */}
+              {!t.over && <CancelOrReschedule ctx={ctx} t={t} />}
+            </>
+          ) : (
+            // Pick date and Edit, exactly as before (Levels live inside Edit). Edit opens the whole tournament page at the top.
+            <div className="tm-home-actions">
+              <button type="button" className="btn" onClick={() => setPage('dates')} data-tm-open-dates>
+                Pick date
+              </button>
+              <button type="button" className="btn secondary" onClick={() => setPage('edit')} data-tm-open-edit>
+                Edit
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      <TournamentPage
+        ctx={ctx}
+        t={t}
+        open={page !== null}
+        focus={page === 'dates' ? 'dates' : page === 'tickets' ? 'tickets' : undefined}
+        onClose={() => setPage(null)}
+      />
     </section>
   );
 }
@@ -391,123 +584,6 @@ function TicketsCountCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView })
       />
       <TournamentPage ctx={ctx} t={t} open={open} focus="tickets" onClose={() => setOpen(false)} />
     </>
-  );
-}
-
-/**
- * Picture 29: the tournament on Home once the date is picked (which opens tickets). The name and the stage, then the facts, then Tickets and
- * Cancel or reschedule (not once the night is over). The name opens the whole tournament page (levels, settings). A piece 1 date pick that has
- * not become tickets yet (only while nothing could write: the read-only PIN, or its night has started) shows the date and the list only.
- */
-function TicketsHomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
-  const [open, setOpen] = useState<null | 'page' | 'tickets'>(null);
-  const tz = ctx.d.group.timezone;
-  const chip = t.status === 'canceled' ? 'Canceled' : t.status === 'tickets' ? (t.closed ? 'Tickets closed' : 'Tickets open') : 'Date picked';
-  const evens = evensOf(t, ctx.d.now);
-  const locked = lockedOf(t).length;
-  const line = lineOf(t);
-  return (
-    <section className="tm-card tm-tix" aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={t.status}>
-      <div className="tm-card-head tm-head-line">
-        <button type="button" className="tm-tix-name" onClick={() => setOpen('page')} data-tm-open-page>
-          <h2 className="tm-label">{t.name}</h2>
-        </button>
-        <span className={t.status === 'canceled' ? 'tm-chip' : 'tm-chip tm-chip-ok'} data-tm-stage>
-          {chip}
-        </span>
-      </div>
-      {/* Alex (ship answer 6): the same one-line format as the sign-up card. */}
-      {t.status !== 'canceled' && (
-        <>
-          <p className="tm-home-format tm-tix-format" data-tm-home-format={t.formatPending ? 'vote' : t.format}>
-            {t.formatPending ? 'Format: players vote' : formatLine(t.format)}
-          </p>
-          <VoteLines t={t} tix />
-        </>
-      )}
-      <div className="tm-rows">
-        <div className="tm-row">
-          <span>Date</span>
-          <b data-tm-row="date">{dateRow(t)}</b>
-        </div>
-        {t.status === 'tickets' ? (
-          <>
-            {/* Alex's smart plan: follows the players locked in (the planned size, its courts and hours). */}
-            <div className="tm-row">
-              <span>Plan</span>
-              <b data-tm-row="plan">
-                {t.size} players · {planTitle(t)}
-              </b>
-            </div>
-            {t.cost && (
-              <div className="tm-row">
-                <span>Your cost if it fills</span>
-                <b data-tm-row="cost">{costWords(t.cost.ifFillsCents)}</b>
-              </div>
-            )}
-            <div className="tm-row">
-              <span>Locked in</span>
-              <b data-tm-row="locked">
-                {locked} of {t.size}
-              </b>
-            </div>
-            {line.length > 0 && (
-              <div className="tm-row">
-                <span>Standby</span>
-                <b data-tm-row="line">
-                  {line.length} ({line.filter(ticketIsPaid).length} paid)
-                </b>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="tm-row">
-            <span>Signed up</span>
-            <b data-tm-row="signed">{t.signups.length}</b>
-          </div>
-        )}
-        {t.status !== 'canceled' && (
-          <div className="tm-row">
-            <span>Ticket</span>
-            <b data-tm-row="ticket">
-              {formatPrice(t.ticketCents)}
-              {t.payBy ? ` · pay by ${payByLabel(t.payBy, tz, t.finalDate)}` : ''}
-            </b>
-          </div>
-        )}
-        {t.status !== 'canceled' && (
-          <div className="tm-row">
-            <span>Who can see it</span>
-            <b>{t.visibility === 'all' ? 'Everyone' : 'Only me'}</b>
-          </div>
-        )}
-      </div>
-      {evens && (
-        <p className="tm-evens" role="status" data-tm-evens>
-          {evens}
-        </p>
-      )}
-      {t.status === 'canceled' ? (
-        <>
-          <p className="tm-card-note" data-tm-canceled-note>
-            Every paid ticket came back as credit.
-          </p>
-          <HideCanceled ctx={ctx} t={t} />
-        </>
-      ) : (
-        <>
-          {/* Alex: no Open tickets button. Picking the date opened them. */}
-          {t.status === 'tickets' && (
-            <button type="button" className="btn block big tm-tix-go" onClick={() => setOpen('tickets')} data-tm-tickets>
-              Tickets
-            </button>
-          )}
-          {/* A night that has been played is never refunded or moved (the server refuses both), so the taps are not offered. */}
-          {!t.over && <CancelOrReschedule ctx={ctx} t={t} />}
-        </>
-      )}
-      <TournamentPage ctx={ctx} t={t} open={open === 'page' || open === 'tickets'} focus={open === 'tickets' ? 'tickets' : undefined} onClose={() => setOpen(null)} />
-    </section>
   );
 }
 
@@ -1054,18 +1130,6 @@ export function TournamentPage({
   );
 }
 
-/** The stage in a word, for the page's chip. */
-const stageWord = (t: AdminTournamentView) =>
-  t.status === 'canceled'
-    ? 'Canceled'
-    : t.status === 'tickets'
-      ? 'Tickets open'
-      : t.status === 'date_picked'
-        ? 'Date picked'
-        : t.status === 'rescheduled'
-          ? 'Rescheduled'
-          : 'Sign-up open';
-
 /** "$12", or "-$4" when the tickets more than cover it (the minus as Adjust credit writes it, "-$5"). */
 const costWords = (cents: number) => (cents < 0 ? `-${formatPrice(-cents)}` : formatPrice(cents));
 
@@ -1077,34 +1141,34 @@ function PlanCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const locked = lockedOf(t).length;
   // 2.5 and 3 hour games need Booking hours on (the same gate as their prices).
   const needsBooking = t.minutes > 120 && ctx.d.longGames !== true;
+  // Zip 66 (mock 03): the plan as three pills, then one cost line: "$8 ($88 with 0 paid)".
+  const pills = [`${t.size} players`, `${t.courts} ${t.courts === 1 ? 'court' : 'courts'}`, `${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`];
   return (
     <section className="tm-card tm-plan-card" aria-label="Plan" data-tm-card="plan">
-      <div className="tm-card-head tm-head-line">
+      <div className="tm-card-head">
         <h3 className="tm-label">Plan</h3>
         <span className="tm-chip" data-tm-plan-locked>
           {locked} locked in
         </span>
       </div>
-      <div className="tm-rows">
-        <div className="tm-row">
-          <span>{t.size} players</span>
-          <b data-tm-plan>{planTitle(t)}</b>
+      <p className="tm-plan-pills" aria-label={`${t.size} players, ${planTitle(t)}`} data-tm-plan={planTitle(t)}>
+        {pills.map((x) => (
+          <span key={x} className="tm-plan-pill">
+            {x}
+          </span>
+        ))}
+      </p>
+      {t.cost && (
+        <div className="tm-row tm-plan-cost">
+          <span>Your cost if it fills</span>
+          <span className="tm-plan-cost-val">
+            <b data-tm-cost-fills>{costWords(t.cost.ifFillsCents)}</b>{' '}
+            <span className="tm-plan-cost-now" data-tm-cost-now>
+              ({costWords(t.cost.nowCents)} with {t.cost.paidNow} paid)
+            </span>
+          </span>
         </div>
-        {t.cost && (
-          <>
-            <div className="tm-row tm-cost-main">
-              <span>Your cost if it fills</span>
-              <b data-tm-cost-fills>{costWords(t.cost.ifFillsCents)}</b>
-            </div>
-            <div className="tm-row tm-cost-now">
-              <span>
-                With {t.cost.paidNow} paid now
-              </span>
-              <span data-tm-cost-now>{costWords(t.cost.nowCents)}</span>
-            </div>
-          </>
-        )}
-      </div>
+      )}
       {needsBooking && (
         <p className="tm-card-note tm-booking-note" data-tm-booking-note>
           Turn on Booking hours
@@ -1121,6 +1185,8 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
   const [editing, setEditing] = useState(false);
   const [askCancel, setAskCancel] = useState(false);
   const [payBy, setPayBy] = useState(false);
+  // Zip 66: Pick the date starts folded, unless the page was opened for it (Home's Pick date).
+  const [datesOpen, setDatesOpen] = useState(focus === 'dates');
   const canceled = t.status === 'canceled';
   // Zip 56: the date stays once tickets are open (Cancel or reschedule moves it).
   const dateLocked = t.status === 'tickets' || canceled;
@@ -1156,28 +1222,11 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
   return (
     <div className="tm-form stack" data-tm-page>
       {showTickets && <TicketsCard ctx={ctx} t={t} scrollRef={focus === 'tickets' ? scrollRef : undefined} />}
+      {/* Zip 66 (mocks 03 and 04): Plan, Players (the levels), Pick the date (folded), Settings. */}
       {!canceled && <PlanCard ctx={ctx} t={t} />}
-      <Card label="Who can see it" chip={<span className="tm-chip">{stageWord(t)}</span>} data="page-who">
-        <div className="segmented tm-seg tm-seg-who" role="group" aria-label="Who can see it">
-          {(['me', 'all'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={t.visibility === v}
-              // Zip 56: once tickets have been open on Everyone it stays there (players may hold tickets).
-              disabled={busy || canceled || (v === 'me' && t.settingsLocked === true)}
-              onClick={() => t.visibility !== v && void save(() => api('PUT', `/api/admin/tournament/${t.id}/visibility`, { visibility: v }), v === 'all' ? 'Everyone can see it now' : 'Only you can see it now')}
-              data-vis={v}
-            >
-              {v === 'me' ? 'Only me' : 'Everyone'}
-            </button>
-          ))}
-        </div>
-        <p className="tm-card-note tm-who-note">{t.visibility === 'me' ? 'Players see nothing yet.' : 'Every player sees the card on Home.'}</p>
-      </Card>
 
       <section className="tm-card tm-levels-card" aria-label="Levels" data-tm-card="levels" ref={focus === 'levels' ? scrollRef : undefined}>
-        <div className="tm-card-head tm-head-line">
+        <div className="tm-card-head">
           <h3 className="tm-label">Levels</h3>
           <span className="tm-chip" data-tm-count>
             {t.signups.length} {t.signups.length === 1 ? 'player' : 'players'}
@@ -1211,30 +1260,38 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
         )}
       </section>
 
-      <section className="tm-card" aria-label="Pick the date" data-tm-card="dates" ref={focus === 'dates' ? scrollRef : undefined}>
-        <div className="tm-card-head">
-          <h3 className="tm-label">Pick the date</h3>
-          <span className="tm-chip">{t.finalDate ? dayLong(t.finalDate) : `${t.offeredDates.length} offered`}</span>
-        </div>
-        <p className="tm-card-note tm-dates-note" data-tm-dates-note>
-          {dateLocked
-            ? canceled
-              ? 'Canceled.'
-              : 'Tickets are open on this date. To move it, use Cancel or reschedule.'
-            : !t.finalDate && !t.offeredDates.some((d) => d >= today)
-              ? 'Every date you offered has passed. Tap Edit below to offer new ones.'
-              : 'Brighter green means more can play. Tap a date to pick it.'}
-        </p>
-        <MonthCalendar
-          months={months}
-          variant="counts"
-          boxed={false}
-          label="Offered dates, with how many can play"
-          look={look}
-          onTap={(d) => !dateLocked && offered.has(d) && (d >= today || d === t.finalDate) && setDay(d)}
-          dayStyle={dateLocked ? undefined : heat}
-          badge={(d) => (offered.has(d) ? <span className={(counts.get(d)?.length ?? 0) === best && best > 0 ? 'tm-best-count' : undefined}>{counts.get(d)?.length ?? 0}</span> : null)}
-        />
+      {/* Zip 66: Pick the date starts folded (one line with "34 offered"); tap the line to open the calendar, tap it again to close. Opened
+          from Home's Pick date, it starts open. */}
+      <section className={datesOpen ? 'tm-card tm-dates-card tm-dates-open' : 'tm-card tm-dates-card'} aria-label="Pick the date" data-tm-card="dates" data-tm-dates-open={datesOpen} ref={focus === 'dates' ? scrollRef : undefined}>
+        <h3 className="tm-dates-head">
+          <button type="button" className="tm-dates-top" aria-expanded={datesOpen} onClick={() => setDatesOpen((o) => !o)} data-tm-dates-toggle>
+            <span className="tm-label">Pick the date</span>
+            <span className="tm-chip">{t.finalDate ? dayLong(t.finalDate) : `${t.offeredDates.length} offered`}</span>
+          </button>
+        </h3>
+        {datesOpen && (
+          <>
+            <p className="tm-card-note tm-dates-note" data-tm-dates-note>
+              {dateLocked
+                ? canceled
+                  ? 'Canceled.'
+                  : 'Tickets are open on this date. To move it, use Cancel or reschedule.'
+                : !t.finalDate && !t.offeredDates.some((d) => d >= today)
+                  ? 'Every date you offered has passed. Tap Edit below to offer new ones.'
+                  : 'Brighter green means more can play. Tap a date to pick it.'}
+            </p>
+            <MonthCalendar
+              months={months}
+              variant="counts"
+              boxed={false}
+              label="Offered dates, with how many can play"
+              look={look}
+              onTap={(d) => !dateLocked && offered.has(d) && (d >= today || d === t.finalDate) && setDay(d)}
+              dayStyle={dateLocked ? undefined : heat}
+              badge={(d) => (offered.has(d) ? <span className={(counts.get(d)?.length ?? 0) === best && best > 0 ? 'tm-best-count' : undefined}>{counts.get(d)?.length ?? 0}</span> : null)}
+            />
+          </>
+        )}
       </section>
 
       <Card label="Settings" data="settings" line>
@@ -1247,19 +1304,6 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
             <span>Ticket price</span>
             <b>{formatPrice(t.ticketCents)}</b>
           </div>
-          {t.status === 'tickets' && t.payBy && (
-            <div className="tm-row">
-              <span>Pay by</span>
-              <span className="tm-row-end">
-                <b data-tm-pay-by-row>{payByLabel(t.payBy, tz, t.finalDate)}</b>
-                {!t.closed && (
-                  <button type="button" className="tm-mini" onClick={() => setPayBy(true)} data-tm-pay-by-change>
-                    Change
-                  </button>
-                )}
-              </span>
-            </div>
-          )}
           {t.format === 'americano' || t.formatPending ? (
             <>
               <div className="tm-row">
@@ -1277,6 +1321,24 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               <b>{formatPrice(t.championCreditCents)}</b>
             </div>
           )}
+          {t.status === 'tickets' && t.payBy && (
+            <div className="tm-row">
+              <span>Pay by</span>
+              <span className="tm-row-end">
+                <b data-tm-pay-by-row>{payByLabel(t.payBy, tz, t.finalDate)}</b>
+                {!t.closed && (
+                  <button type="button" className="tm-mini" onClick={() => setPayBy(true)} data-tm-pay-by-change>
+                    Change
+                  </button>
+                )}
+              </span>
+            </div>
+          )}
+          {/* Zip 66: Who can see it is a plain row here (no caret, not a tap of its own); the Edit button below changes it. */}
+          <div className="tm-row">
+            <span>Who can see it</span>
+            <b data-tm-who-row={t.visibility}>{t.visibility === 'all' ? 'Everyone' : 'Only me'}</b>
+          </div>
         </div>
         {!canceled && (
           <button type="button" className="btn secondary block tm-edit" onClick={() => setEditing(true)} data-tm-edit-settings>
@@ -1348,6 +1410,19 @@ function LevelSheet({ ctx, t, who, onClose }: { ctx: AdminCtx; t: AdminTournamen
     >
       {who && (
         <div className="stack" data-tm-level-sheet>
+          {/* Zip 66 (mock 05): the dates this player signed up for, as chips under the title. */}
+          <div className="tm-signed-for" data-tm-signed-for>
+            <span className="tm-signed-for-label">Signed up for</span>
+            {who.dates.length === 0 ? (
+              <span className="tm-signed-for-none">No dates</span>
+            ) : (
+              who.dates.map((d) => (
+                <span key={d} className="tm-date-chip" data-tm-date-chip={d}>
+                  {dayWords(d)}
+                </span>
+              ))
+            )}
+          </div>
           <LevelList flat value={value} onPick={setPick} theirPick={who.pickedLevel} theirName={who.name} />
           <button
             type="button"

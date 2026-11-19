@@ -6326,3 +6326,62 @@ The players' own spots ("6 of 8", Every spot is taken) still follow the players 
   up with 3 paid (still 10; 11 locked in after late joins: 14), and the shared count. Older plan expectations updated (zip55 1, zip56 3; the
   browser zip56 plan lines, zip60 the plan line back on Finalize). Unit full run 196 files, 3,604 passed, 2 skipped; browser zip64 83, zip56 57,
   zip55 91, zip60 29, zip63 64, zip59 12, zip62 17, all passing. Preview deployment `0c307505`, re-seeded.
+
+## Zip 66: The organizer's tournament card and the in-or-out alert (🎾66.admincard), Thu Nov 19, 2026
+Branch `claude/new-session-v42nwe` (the session is named "🎾66.admincard"; the build system pins the branch name). Built on main `316ac36` (Zip 64
+part 8). Same switch, TOURNAMENTS, and the per-tournament Who can see it. **NO database change** (no table, column, row kind or migration).
+NOT on live: the brief holds the deploy for Alex's "ship it" (item 10 decides who is asked to pay).
+
+### What it does (the brief's ten things)
+1. Home card starts as ONE closed line (mock 01): the site's own pickleball icon (src/ui.tsx Pickleball), the name, a green "8 signed up" pill, a
+   chevron. The whole line is one button inside the card's h2 (aria-expanded). It starts closed every time Home loads (nothing remembered).
+   Narrow phones (under 400 px) get a slightly smaller line so a usual name is never cut (The Cold Open fits at 320).
+2. Open (mock 02): dashed rows Style ("Players vote", else the format's name), Votes ("Doubles 3 · Americano 2 · Either 3"), Not signed up, Plan
+   ("10 players · 2 courts · 2.5 hrs", Zip 64 part 8's count), then Pick date and Edit as before. "Everyone can see it" is gone from the card. Once
+   the date is picked the same card holds the ticket rows (Date, Plan, Your cost if it fills, Locked in, Standby, Ticket), Tickets and Cancel or
+   reschedule, as before; a canceled one the note, Tickets and Hide. The evens warning and "Dates have passed. Add dates." show on the closed line
+   too. Long values shrink with the card (cqw) so no row wraps at 320.
+3. Edit page order: Plan, Levels, Pick the date, Settings (then Backed out, Cancel). The Tickets list stays first once tickets are open (Home's
+   Tickets button opens the page there).
+4. Levels: the body font (not the display font), 48 px rows, 36 px pencils (44 px tap area kept with an invisible edge).
+5. Pick the date: folded to one line with "16 offered" (the date once picked); tap the line to open the calendar (Zip 64's heat map inside), tap
+   again to close. Opened from Home's Pick date it starts open.
+6. Settings (mock 04): Format, Ticket price, 1st and 2nd place credit (Champion credit for Locked doubles), Pay by with Change (tickets open), Who
+   can see it ("Everyone" or "Only me", no caret, not a tap; Edit changes it), Edit, then Cancel tournament below the card. The old "Who can see it"
+   card with its Only me / Everyone switch is gone (the Edit form has the same choice). The page's chips read in plain words ("0 locked in").
+7. Level sheet (mock 05): "Signed up for" and the player's dates as chips under the title (from adminView signups[].dates).
+8. Who voted (mocks 06, 07): the Votes row (no arrow) opens a soft gray box in place: Doubles, Americano, Either with names ("Nobody" in gray).
+   Tap again to close; starts closed. The organizer's view now carries each sign-up's `vote` (only when the counts are sent; never to a player).
+9. Not signed up (mocks 08, 09): the count on the right; tap: the names and Copy reminder text (white button in the box), toast "Copied". Before
+   the date: active players with at least one played game in the last 3 calendar months who are not on the list, never the organizer
+   (`recentPlayersRead`, the Players tab's "played" rule). After the date (tickets open): the players on the list who did not pick that date and
+   have not answered (item 10), until tickets close for them (the night starts, the last 3 hours, or every spot taken). Copied words:
+   "Vic, Reese: sign-ups for The Cold Open close Tue Nov 24 at 8 PM. pickleball.juncaj.net". The row hides when nobody is on it.
+10. In-or-out alert (picture 10), player side: a player on the list whose dates do not include the picked date gets the site's blue two-button
+   alert card above the ticket: "The Cold Open is Thu Dec 17" / "Most players picked it. Can you make it?", "I'm in · $16" and "Can't make it", no
+   X. I'm in puts the picked date on their sign-up (PUT /api/tournament/signup) and runs Lock my spot (credit first, then the Pay sheet), in one
+   busy tap. Can't make it opens the existing Back out? confirm. Until they answer: no pay countdown and no "Your payment is late"; they are not
+   in the plan, the balls or Remind all unpaid (already true); Lock my spot on the ticket stays. The rule is `missedDate` (shared/tournamentNudge.ts),
+   from their own sign-up only. The Zip 60 date alert and the Zip 64 style note wait until they answer (the alert already says the date).
+
+### Where it differs from the brief (the code is the truth)
+- No sign-up close time is stored before the date is picked. The copied text uses the next Tuesday at 8:00 PM Eastern (Tue Nov 24 from today),
+  the night Alex finalizes; after the date: Pay by, then the 3-hour cutoff once Pay by has passed. Question for Alex.
+- I'm in REPLACES the player's dates with the picked one (after the date is picked the server only accepts that date). No lasting effect: a
+  Reschedule clears everyone's dates anyway. Their level sheet then shows only the picked date.
+- The alert asks only while the player can lock a spot (the card's "lock" state); with every one of the 16 spots taken it does not show.
+- The card's pill says "N signed up" at every stage (the old "Tickets open / Tickets closed / Date picked" chip and the page's stage chip are gone;
+  the ticket rows say where it stands). The vote-decision line ("Decided by the most votes") is gone from the card, as drawn.
+- Picture 04 draws a caret after Everyone; the brief says no caret: no caret.
+- The canceled card had no button into the page except its name (which now opens and closes the card), so it gets a Tickets button.
+- The Votes and Not signed up rows are 38 px tall, as drawn (above WCAG's 24 px minimum; under the site's usual 44).
+- Kai is not one of the preview's names (the seed refuses any other); the stages use the 10 fixed names.
+- The branch is `claude/new-session-v42nwe` (pinned), not "🎾66.admincard"; no PR was opened (none was asked for).
+
+### Review
+A fresh independent reviewer (no part in the build) read the change: no leak (the list and each vote only in the organizer's view; Only me and
+switch off send players nothing), no money path changed (Lock and Back out keep their guards). Fixed from its findings: the "played lately" read
+now does nothing unless a tournament is at its sign-up step and reads the last 3 months' seats once (it rides in the dashboard's existing batch: no
+extra trip); I'm in stays busy across both steps and refreshes the screen if the lock fails after the date went on; the organizer's row uses the
+player card's own rules (a partial I paid still asks; fullness counts spots); the card's warnings show on the closed line; aria-controls only
+while the body is there. Kept, as notes: dates replaced on I'm in (above), the 38 px tap rows, the hidden Zip 60/64 notices until they answer.

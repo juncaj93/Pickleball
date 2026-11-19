@@ -137,11 +137,21 @@ async function main() {
     await p.page.waitForTimeout(700);
     return p;
   }
+  /** Zip 66: open the organizer's tournament card when it is closed (it starts as one closed line). */
+  async function openTourCard(page) {
+    const toggle = page.locator('[data-tm-home-toggle][aria-expanded="false"]');
+    if (await toggle.count()) {
+      await toggle.first().click();
+      await page.locator('[data-tm-home-body]').first().waitFor({ timeout: 10000 });
+    }
+  }
   async function adminPage(opts = {}) {
     const p = await newPage({ ...opts, organizer: true });
     await p.page.goto(`${BASE}/admin`);
     await p.page.locator('.tabbar').waitFor({ timeout: 30000 });
     await p.page.waitForTimeout(600);
+    // Zip 66: the tournament card starts as one closed line; open it (one tap) so the checks below see its rows and buttons.
+    await openTourCard(p.page);
     return p;
   }
   /** Nothing on the page is wider than the screen, and nothing inside `sel` sticks out of it. */
@@ -399,11 +409,11 @@ async function main() {
     finalDay = d.tournament.finalDate;
     assert(d.tournament.status === 'tickets' && finalDay === best && !!d.tournament.payBy, JSON.stringify([d.tournament.status, finalDay, best]));
   });
-  await check('G after the date is picked the admin card is picture 29 (Zip 56): Tickets; the name opens the whole tournament page at the top and stays where you scroll', async () => {
+  await check('G after the date is picked the admin card is picture 29 (Zip 56): Tickets opens the whole tournament page at the top (Zip 66: the name opens and closes the card) and it stays where you scroll', async () => {
     const a = await adminPage();
-    // Zip 56 (picture 29, Alex): tickets are open: the button is Tickets (no Open tickets, no Edit); the tournament's name opens its page.
+    // Zip 56 (picture 29, Alex): tickets are open: the button is Tickets (no Open tickets, no Edit); Zip 66: Tickets opens its page.
     assert((await a.page.locator('[data-tm-tickets]').count()) === 1 && (await a.page.locator('[data-tm-open-tickets], [data-tm-open-edit]').count()) === 0, 'Tickets, no Open tickets, no Edit');
-    await a.page.locator('[data-tm-open-page]').click();
+    await a.page.locator('[data-tm-tickets]').click(); // Zip 66: the name opens and closes the card; Tickets opens the page
     await a.page.locator('[data-tm-page]').waitFor();
     await a.page.waitForTimeout(600);
     const top = await a.page.evaluate(() => document.querySelector('dialog[open] .sheet-body')?.scrollTop ?? document.querySelector('dialog[open]').scrollTop);
@@ -564,7 +574,8 @@ async function main() {
         await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
         const b = await a.page.locator('.tm-home-actions .btn').evaluateAll((els) => els.map((e) => ({ t: e.innerText.trim(), top: Math.round(e.getBoundingClientRect().top), h: e.getBoundingClientRect().height })));
         assert(b.map((x) => x.t).join('|') === 'Pick date|Edit', JSON.stringify(b));
-        assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Locked doubles (same partner all night)' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin format in one line (Alex)');
+        // Zip 66: the open card's Style row names the format (mock 02).
+        assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Locked doubles' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin Style row');
         assert(b[0].top === b[1].top && b.every((x) => x.h < 60), `one row, one line each: ${JSON.stringify(b)}`);
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `M-admin-card-${width}-${scheme}`);
@@ -614,7 +625,8 @@ async function main() {
           const a = await adminPage({ width, scheme });
           await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
           if (st === 'signup') {
-            assert(flat(await a.page.locator('.tm-home-format').innerText()) === 'Americano (new partner every round)' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin format in one line');
+            // Zip 66: the open card's Style row names the format (mock 02).
+            assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Americano' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin Style row');
           } else {
             // Zip 56: once the date is picked the organizer's card is picture 29's (no format line, as drawn; a question for Alex).
             assert((await a.page.locator('[data-tm-home="tickets"] [data-tm-tickets]').count()) === 1, 'picture 29\'s card, tickets open');
@@ -647,7 +659,7 @@ async function main() {
   await check('N the date is picked (tickets open): the page says Americano and Edit can still change the style (Zip 64: until the night starts)', async () => {
     await call('POST', '/api/admin/tournament-test', { stage: 'date_picked', format: 'americano' });
     const a = await adminPage();
-    await a.page.locator('[data-tm-open-page]').click();
+    await a.page.locator('[data-tm-tickets]').click(); // Zip 66: the name opens and closes the card; Tickets opens the page
     assert(flat(await a.page.locator('[data-tm-format-row]').innerText()) === 'Americano', 'the Settings row');
     await a.page.locator('[data-tm-edit-settings]').click();
     await a.page.locator('[data-tm-form="edit"]').waitFor();

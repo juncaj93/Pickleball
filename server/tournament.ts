@@ -62,6 +62,7 @@ import {
 } from '../shared/tournament';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
+import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
@@ -293,6 +294,8 @@ export interface TourPre<Row> {
   freed?: number;
   /** A player's card: canceledMoneyOf for the picked tournament (null while it is not canceled). */
   canceledMoney?: { backCents: number; claimCents: number } | null;
+  /** Zip 66, the organizer's card: the active players who played a game in the last 3 months (recentPlayersRead). */
+  recent?: { id: string; display_name: string }[];
 }
 
 /** The reads (for the screen's batch) and how to read their answers back. Only while the switch is on for the request. */
@@ -372,16 +375,35 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
   };
 }
 
+/**
+ * Zip 66: the active players who played at least one game in the last 3 months (the same "played" rule as the Players tab: in, not canceled,
+ * over, and not marked "did not play"), in the Players tab's order. Only while the tournament is still at its sign-up step does the card use it.
+ */
+export const recentPlayersRead = (groupId: string, nowMs: number): ReadSpec => ({
+  // Review: only while a tournament sits at its sign-up step (else SQLite stops at the first line and reads nothing more), and the last 3
+  // months' seats are read once (the games in range, then their seats), not once per player.
+  sql: `SELECT p.id, p.display_name FROM players p
+        WHERE p.group_id = ?1 AND p.is_active = 1
+          AND EXISTS (SELECT 1 FROM tournaments t WHERE t.group_id = ?1 AND t.status IN ('signup', 'rescheduled'))
+          AND p.id IN (
+            SELECT sp.player_id FROM sessions s JOIN session_players sp ON sp.session_id = s.id
+            WHERE s.group_id = ?1 AND s.status <> 'canceled' AND s.ends_at <= ?2 AND s.ends_at >= ?3
+              AND sp.status = 'confirmed' AND (sp.played IS NULL OR sp.played = 1))
+        ORDER BY p.sort_order, p.display_name`,
+  values: [groupId, new Date(nowMs).toISOString(), recentFrom(nowMs)],
+});
+
 /** The organizer's screens (the dashboard and its 5-second check): the same row shownTournament reads, its sign-ups and tickets. */
 export function adminTourReads(group: GroupRow, nowMs: number): TourReads<ShownRow> {
   const values = [group.id, canceledFrom(nowMs)];
   const pick = `(SELECT id FROM tournaments WHERE ${SHOWN_WHERE})`;
   const org = orgReads(group);
   return {
-    reads: [{ sql: SHOWN_SQL, values }, { sql: signupsSqlFor(pick), values }, { sql: ticketsSqlFor(pick), values }, org.read],
+    // Zip 66: the players who played lately ride in the same trip (one more small read in the batch, no trip of its own).
+    reads: [{ sql: SHOWN_SQL, values }, { sql: signupsSqlFor(pick), values }, { sql: ticketsSqlFor(pick), values }, org.read, recentPlayersRead(group.id, nowMs)],
     from: (res) => {
       const rows = (i: number) => (res[i]?.results ?? []) as never[];
-      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)) };
+      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)), recent: rows(4) };
     },
   };
 }
@@ -982,6 +1004,9 @@ export async function adminTournamentFor(
   const prize = prizeCentsOf(formatOf(ts), t.champion_credit_cents, t.second_credit_cents ?? 0);
   const pending = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
   const voters = rows.filter((r) => r.status === 'in' && (!t.final_date || storedDays(r.dates).includes(t.final_date)));
+  const votesSent = !!sourceOf(ts.format_source);
+  // Zip 66: the "Not signed up" row (organizer only).
+  const notSignedUp = await notSignedUpOf(ctx, group, t, listed, tickets, orgOf, pre);
   return {
     id: t.id,
     name: t.name,
@@ -995,7 +1020,8 @@ export async function adminTournamentFor(
     switchBack: oddNow && nIn % 2 === 0 && !salesClosed(t, tz, ctx.nowMs) ? { key: `back:${t.id}:${ts.format_source}:${nIn}` } : null,
     // Zip 60: the vote, with the counts (organizer only): while the date is not locked every player on the list, then the players who can make the picked date.
     ...(pending ? { formatPending: true } : {}),
-    ...(sourceOf(ts.format_source) ? { formatSource: sourceOf(ts.format_source), votes: tallyVotes(voters.map((r) => r.format_vote)) } : {}),
+    ...(votesSent ? { formatSource: sourceOf(ts.format_source), votes: tallyVotes(voters.map((r) => r.format_vote)) } : {}),
+    ...(notSignedUp ? { notSignedUp } : {}),
     settingsLocked: playersHoldTickets(t, tickets.some((k) => k.player_id !== orgId)),
     payBy:
       statusOf(t) === 'tickets' ? (t.pay_by ?? null) : statusOf(t) === 'date_picked' && t.final_date ? defaultPayBy(t.final_date, NIGHT_START_MINUTES, tz, ctx.nowMs) : null,
@@ -1041,12 +1067,66 @@ export async function adminTournamentFor(
         reviewed: r.approved_level !== null,
         dates: storedDays(r.dates),
         at: r.joined_at,
+        // Zip 66: each player's vote, with the counts (the card's Votes row lists the names). A missing vote counts as Either.
+        ...(votesSent ? { vote: isFormatVote(r.format_vote) ? r.format_vote : ('either' as const) } : {}),
       })),
     backedOut: rows
       .filter((r) => r.status !== 'in')
       .sort((a, b) => (b.backed_out_at ?? '').localeCompare(a.backed_out_at ?? ''))
       .map((r) => ({ playerId: r.player_id, name: r.display_name })),
   };
+}
+
+/**
+ * Zip 66: the organizer's "Not signed up" row. Sign-up step (sign-up open, or rescheduled): the active players who played a game in the last 3
+ * months and are not on the list (never the organizer). Tickets open: the players on the list who did NOT pick the date and have not answered
+ * the in-or-out alert (no spot, nothing paid in full, no I paid), while they can still lock a spot (before the last 3 hours, a spot open, the
+ * night not started); `closeAt` is Pay by, or the 3-hour cutoff once Pay by has passed. Otherwise none (the row hides).
+ */
+async function notSignedUpOf(
+  ctx: Ctx,
+  group: GroupRow,
+  t: TournamentRow,
+  listed: readonly SignupRow[],
+  tickets: readonly TicketWithName[],
+  orgOf: () => Promise<string | null>,
+  pre?: TourPre<ShownRow>,
+): Promise<NotSignedUpView | null> {
+  const st = statusOf(t);
+  const on = new Set(listed.map((r) => r.player_id));
+  if (st === 'signup' || st === 'rescheduled') {
+    const read = recentPlayersRead(group.id, ctx.nowMs);
+    const recent =
+      pre?.recent ??
+      (
+        await ctx.db
+          .prepare(read.sql)
+          .bind(...read.values)
+          .all<{ id: string; display_name: string }>()
+      ).results;
+    const org = await orgOf();
+    return { mode: 'recent', players: recent.filter((p) => p.id !== org && !on.has(p.id)).map((p) => ({ playerId: p.id, name: p.display_name })), closeAt: null };
+  }
+  // The same fullness the player's card uses (spots taken: lockedCount), so the row and the player's alert agree.
+  if (st !== 'tickets' || !t.final_date || salesClosed(t, group.timezone, ctx.nowMs) || lockedCount(tickets) >= MAX_SPOTS) return null;
+  const phase = ticketPhase(t, group.timezone, ctx.nowMs);
+  if (phase === 'cut') return null;
+  const byId = new Map(tickets.map((k) => [k.player_id, k]));
+  const org = await orgOf();
+  // Answered, by the player's own card rules (shared/tournamentNudge.ts ticketStateOf): a spot, paid in full, a standby place with money or an I
+  // paid on it, or an I paid for the whole ticket. A partial I paid still owes, so the alert still asks them (and so does this row).
+  const answered = (k: TicketWithName | undefined) => {
+    if (!k) return false;
+    const money = { priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents };
+    if (k.place === 'spot' || k.credit_cents + k.paid_cents >= k.price_cents) return true;
+    if (k.place === 'line') return k.claim_cents > 0;
+    return k.claim_cents > 0 && ticketOwed(money) === 0;
+  };
+  const players = listed
+    .filter((r) => r.player_id !== org && !storedDays(r.dates).includes(t.final_date!) && !answered(byId.get(r.player_id)))
+    .map((r) => ({ playerId: r.player_id, name: r.display_name }));
+  const closeAt = phase === 'open' && t.pay_by ? t.pay_by : new Date(salesCutoffMs(startMsOf(t.final_date, realTimes(t).start, group.timezone))).toISOString();
+  return { mode: 'missed', players, closeAt };
 }
 
 /**

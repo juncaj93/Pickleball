@@ -10,6 +10,9 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 66 (🎾66.admincard): the organizer's card (one closed line, Votes, Not signed up) and the in-or-out alert.
+  { stage: 'zip66_start', label: 'Start: the card, Votes, Not signed up', line: 'The Cold Open, the vote open, 8 on the list (Vic and Reese are not). Home: the card is one closed line. Tap it open, tap Votes, tap Not signed up, Copy reminder text. Edit: Plan, Levels (a pencil shows the dates), Pick the date (folded), Settings.' },
+  { stage: 'missed_date', label: 'Date picked, Sage missed it', line: 'Finalized on a date Sage did not pick. View as Sage: The Cold Open is that day, Can you make it? I’m in opens the pay sheet; Can’t make it takes her off. Home: Not signed up lists Sage.' },
   // Zip 64 (🎾64.finalize): the short ticket, the style rules and late paying. These build "The Cold Open" (the format above does not apply).
   { stage: 'zip64_start', label: 'Start: short ticket and Finalize', line: 'The Cold Open, the vote open, 8 on the list (Plan: 10 players · 2 courts · 2.5 hours on your card). View as Vic: one wide Sign up (mock 00). View as Parker: See who’s signed up, Edit, Drop out (mock 01). As you: the tournament page, Pick the date (heat map), tap a date: Style, Plays, Pay by, Finalize date, then the venue reminder on Home.' },
   { stage: 'vote_open', label: 'Format vote open (3 on the list)', line: '3 on the list with mixed votes. View as Vic, Sign up: Step 2 of 2 · Your dates and the new line.' },

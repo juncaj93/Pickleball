@@ -79,7 +79,7 @@ async function main() {
   // Zip 63: the default is Zip 60's profile with the "Countdown: 2 days left" stage on top; `--zip60` builds Zip 60's start alone.
   const zip60only = args.includes('--zip60');
   const zip60 = !zip51 && !args.includes('--zip55') && !zip56;
-  const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') && zip56, zip60, zip63: zip60 && !zip60only });
+  const built = await buildSmallPreview(Date.now(), { calm: !args.includes('--full'), zip51, zip55: !zip51, zip56: !zip51 && !args.includes('--zip55') && zip56, zip60, zip63: zip60 && !zip60only, zip66: zip60 && !zip60only });
   const { summary } = built;
   // PREVIEW SWITCHES RULE, Zip 56: five more rows are ON on live (read Tue Nov 17, 2026, switch rows only) that the lists in
   // scripts/preview-world-small.ts do not have. They go on the real preview only (a local e2e world keeps its lists, so other zips' browser

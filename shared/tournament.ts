@@ -13,6 +13,8 @@
 // Only me (the start: only the organizer, signed in, on their own player page) or Everyone. While Only me, a player's phone gets NOTHING about
 // it from the server (no card, no names, no count), not just a hidden card.
 
+import type { NotSignedUpView } from './tournamentNudge';
+
 export const TOURNAMENTS = {
   task: 'tournaments_on',
   header: 'X-Tournaments',
@@ -632,6 +634,8 @@ export interface TournamentSignupView {
   reviewed: boolean;
   dates: string[];
   at: string;
+  /** Zip 66: this player's format vote (organizer only; sent with the vote counts, so the card's Votes row can list names). */
+  vote?: FormatVote;
 }
 
 /** What the organizer's screens get (GET /api/admin/dashboard `tournament`), only while the switch is on. */
@@ -690,6 +694,8 @@ export interface AdminTournamentView {
   oddSwitch?: { key: string } | null;
   /** Zip 64: the count is even again after an odd switch: "Switch back to Locked doubles?" (the organizer's Switch or Not now). */
   switchBack?: { key: string } | null;
+  /** Zip 66: the "Not signed up" row (shared/tournamentNudge.ts). Left out when it does not apply (tickets closed, canceled). */
+  notSignedUp?: NotSignedUpView;
 }
 
 /**

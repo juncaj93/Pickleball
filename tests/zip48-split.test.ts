@@ -153,8 +153,9 @@ describe('Zip 48: /admin', () => {
       `<link rel="modulepreload" crossorigin href="/assets/${js}">`,
       `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^zip11-.*\.js$/)}">`,
       // Zip 56: the ticket rules (shared/tournamentTickets.ts), shared by the organizer file, the player's tournament file and View as's copy of
-      // the server, so the build keeps them in one small file of their own (no style).
-      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^tournamentTickets-.*\.js$/)}">`,
+      // the server, so the build keeps them in one small file of their own (no style). Zip 66: that file also holds the new shared helpers
+      // (shared/tournamentNudge.ts), so the build names it after them.
+      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^tournament(Tickets|Nudge)-.*\.js$/)}">`,
       // Zip 55: the tournament calendar and level list, shared with the player's tournament file (src/tournament/parts.tsx), and its style.
       `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^parts-.*\.js$/)}">`,
       `<link rel="stylesheet" crossorigin href="/assets/${asset(split, /^parts-.*\.css$/)}">`,

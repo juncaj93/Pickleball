@@ -968,3 +968,415 @@ a.btn.tm-remind-btn,
 .tm-fin1 .tm-fin-plan {
   margin: 6px 0 0;
 }
+
+/* ---------- Zip 66 (🎾66.admincard): the Home card, one line to start (mocks 01, 02, 06 to 09), measured at 420 wide ---------- */
+.tm-hc {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  overflow: hidden;
+  /* The values size themselves to the card (cqw), so no row wraps at 320. */
+  container-type: inline-size;
+}
+.tm-hc-head {
+  margin: 0;
+  font: inherit;
+}
+.tm-hc-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 54px;
+  padding: 9px 12px 9px 14px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tm-hc-top:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+  border-radius: 20px;
+}
+/* The site's own pickleball (src/ui.tsx Pickleball), at the mock's size. */
+.tm-hc-ball {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+}
+.tm-hc-ball .ball {
+  width: 30px;
+  height: 30px;
+}
+.tm-hc-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--display);
+  font-size: 1.22rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.tm-chip.tm-hc-pill {
+  flex: 0 0 auto;
+  letter-spacing: 0;
+  text-transform: none;
+  min-height: 26px;
+  padding: 3px 11px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tm-hc-chev {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.tm-hc-chev svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.18s ease;
+}
+.tm-hc-open .tm-hc-chev svg {
+  transform: rotate(180deg);
+}
+/* Narrow phones: everything on the line a little smaller, so the name keeps its room (one line, no cut at 320 for a usual name). */
+@media (max-width: 399px) {
+  .tm-hc-top {
+    gap: 7px;
+    padding-inline: 10px 8px;
+  }
+  .tm-hc-ball,
+  .tm-hc-ball .ball {
+    width: 24px;
+    height: 24px;
+  }
+  .tm-hc-name {
+    font-size: 1.04rem;
+  }
+  .tm-chip.tm-hc-pill {
+    min-height: 24px;
+    padding-inline: 8px;
+    font-size: 0.8rem;
+  }
+  .tm-hc-chev {
+    width: 28px;
+    height: 28px;
+  }
+}
+@media (max-width: 339px) {
+  .tm-hc-name {
+    font-size: 0.94rem;
+  }
+}
+.tm-hc-body {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 14px 14px;
+  border-top: 1px solid var(--line);
+}
+.tm-hc-rows .tm-row {
+  min-height: 38px;
+  font-size: 1rem;
+}
+.tm-hc-rows .tm-row > span {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  font-size: clamp(0.88rem, 4.3cqw, 1rem);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tm-hc-rows .tm-row b {
+  min-width: 0;
+  white-space: nowrap;
+}
+/* The long values (Votes, Plan, Date, Ticket) shrink with the card instead of wrapping: 15.5 px at 420 (the mock), about 12 px at 320. */
+.tm-hc-val.tm-hc-fit {
+  font-size: 0.95rem;
+  font-size: clamp(0.7rem, 4cqw, 1rem);
+}
+/* A row that opens a soft box under it (Votes, Not signed up): the whole row is the tap, no arrow. */
+.tm-row.tm-hc-tap {
+  width: 100%;
+  padding: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* A tap row has no line of its own; the dashed line between two rows (.tm-rows .tm-row + .tm-row) still draws above it. */
+.tm-hc-rows .tm-hc-tap {
+  border-top-width: 0;
+  border-top-style: none;
+}
+.tm-row.tm-hc-tap:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* The soft gray box (var(--fill), rounded) right under its row, inside the card. */
+.tm-hc-box {
+  margin: 2px 0 8px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--fill);
+  font-size: 0.97rem;
+  line-height: 1.35;
+}
+.tm-hc-votes {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.tm-hc-vrow {
+  display: grid;
+  grid-template-columns: 6.4em minmax(0, 1fr);
+  gap: 10px;
+}
+.tm-hc-vrow dt {
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.tm-hc-vrow dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.tm-hc-vrow dd.tm-hc-nobody {
+  color: var(--ink-2);
+}
+.tm-hc-names {
+  margin: 0 0 10px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.tm-hc-copy {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tm-hc-copy:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.tm-hc .tm-home-actions {
+  margin-top: 8px;
+}
+.tm-hc .tm-home-actions .btn {
+  min-height: 44px;
+  border-radius: 14px;
+}
+.tm-hc .tm-tix-go {
+  margin-top: 10px;
+}
+.tm-hc-notes {
+  padding: 0 14px 12px;
+}
+.tm-hc .tm-home-note {
+  margin: 0;
+}
+.tm-hc .tm-evens {
+  margin: 0;
+}
+.tm-hc .tm-home-note + .tm-evens {
+  margin-top: 8px;
+}
+
+/* ---------- Zip 66: the Edit page (mocks 03 and 04) ---------- */
+/* Plan: three pills, then one cost line. */
+.tm-plan-card .tm-card-head {
+  margin-bottom: 10px;
+}
+.tm-plan-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+.tm-plan-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+@media (max-width: 379px) {
+  .tm-plan-pills {
+    gap: 6px;
+  }
+  .tm-plan-pill {
+    padding-inline: 8px;
+    font-size: 0.84rem;
+  }
+}
+
+.tm-row.tm-plan-cost {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 1rem;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.tm-plan-cost-val {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.tm-plan-cost-val b {
+  font-size: 1.12rem;
+}
+.tm-plan-cost-now {
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+/* Levels: the site's normal body font (not the rounded display font), smaller rows and pencils. */
+.tm-levels-card .tm-card-head {
+  margin-bottom: 4px;
+}
+.tm-lrow {
+  min-height: 48px;
+  gap: 10px;
+  padding: 4px 16px;
+}
+.tm-lrow-name {
+  font-family: var(--body);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.tm-lrow-picked {
+  margin-top: 0;
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+.tm-lrow-level {
+  font-family: var(--body);
+  font-size: 1.15rem;
+  font-weight: 750;
+}
+.tm-pencil {
+  position: relative;
+  width: 36px;
+  height: 36px;
+}
+/* The tap area stays 44 px (the visible circle is 36). */
+.tm-pencil::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+.tm-pencil svg {
+  width: 17px;
+  height: 17px;
+}
+/* Pick the date: one line to start; the line opens and closes the calendar. */
+.tm-dates-card {
+  padding-block: 0;
+}
+.tm-dates-head {
+  margin: 0;
+  font: inherit;
+}
+.tm-dates-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: calc(100% + 32px);
+  min-height: 52px;
+  margin: 0 -16px;
+  padding: 8px 16px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tm-dates-top:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+  border-radius: 20px;
+}
+.tm-dates-open {
+  padding-bottom: 16px;
+}
+.tm-dates-open .tm-dates-note {
+  margin-top: 0;
+}
+/* The level sheet: the dates this player signed up for (mock 05). */
+.tm-signed-for {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+.tm-signed-for-label {
+  margin-right: 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.tm-signed-for-none {
+  font-size: 0.95rem;
+  color: var(--ink-2);
+}
+.tm-date-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 11px;
+  border: 1.5px solid color-mix(in srgb, var(--ok-fg) 75%, transparent);
+  border-radius: 999px;
+  background: var(--ok-bg);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* The tournament page's chips in plain words, as mock 03 draws them ("0 locked in", "8 players", "34 offered"). */
+[data-tm-page] .tm-chip {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}

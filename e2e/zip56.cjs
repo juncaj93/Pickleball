@@ -151,11 +151,21 @@ async function main() {
     await p.page.waitForTimeout(700);
     return p;
   }
+  /** Zip 66: open the organizer's tournament card when it is closed (it starts as one closed line). */
+  async function openTourCard(page) {
+    const toggle = page.locator('[data-tm-home-toggle][aria-expanded="false"]');
+    if (await toggle.count()) {
+      await toggle.first().click();
+      await page.locator('[data-tm-home-body]').first().waitFor({ timeout: 10000 });
+    }
+  }
   async function adminPage(opts = {}) {
     const p = await newPage({ ...opts, organizer: true });
     await p.page.goto(`${BASE}/admin`);
     await p.page.locator('.tabbar').waitFor({ timeout: 30000 });
     await p.page.waitForTimeout(700);
+    // Zip 66: the tournament card starts as one closed line; open it (one tap) so the checks below see its rows and buttons.
+    await openTourCard(p.page);
     return p;
   }
   /** Nothing on the page is wider than the screen, and nothing inside `sel` sticks out of it. */
@@ -222,7 +232,8 @@ async function main() {
     const a = await adminPage();
     await a.page.locator('[data-tm-tickets]').waitFor({ timeout: 15000 });
     assert((await a.page.locator('[data-tm-open-tickets]').count()) === 0, 'no Open tickets button');
-    assert(flat(await a.page.locator('[data-tm-row="plan"]').innerText()) === '10 players · 2 courts · 2.5 hours', 'the plan line');
+    // Zip 66 (mock 02): the open card's Plan row.
+    assert(flat(await a.page.locator('[data-tm-row="plan"]').innerText()) === '10 players · 2 courts · 2.5 hrs', 'the plan line');
     // $120 court - 9 x $16 + $28 credits = $4.
     assert(flat(await a.page.locator('[data-tm-row="cost"]').innerText()) === '$4', 'your cost if it fills');
     assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/10', 'the Home line');
@@ -542,12 +553,13 @@ async function main() {
   await check('K the smart plan on the tournament page: 8 players, 2 courts, 2.5 hours (the real hours); your cost if it fills $36, with 6 paid now $52; the Booking hours note when Booking hours is off', async () => {
     await stage('tickets_open');
     const a = await adminPage();
-    await a.page.locator('[data-tm-open-page]').click();
+    await a.page.locator('[data-tm-tickets]').click(); // Zip 66: the name opens and closes the card; Tickets opens the page
     const card = a.page.locator('dialog[open] [data-tm-card="plan"]');
     await card.waitFor({ timeout: 10000 });
     const words = flat(await card.innerText());
     // Zip 64 part 8: 9 can make the date: a 12 player plan. $120 - 11 x $16 + $28 = -$28; 6 paid now: $120 - $96 + $28 = $52.
-    assert(words.includes('12 players') && words.includes('2 courts · 2.5 hours') && words.includes('Your cost if it fills -$28') && words.includes('With 6 paid now $52'), words);
+    // Zip 66 (mock 03): the plan as pills ("12 players", "2 courts", "2.5 hrs") and one cost line "-$28 ($52 with 6 paid)".
+    assert(words.includes('12 players') && (await card.locator('[data-tm-plan]').getAttribute('data-tm-plan')) === '2 courts · 2.5 hours' && words.includes('Your cost if it fills -$28 ($52 with 6 paid)'), words);
     await shot(a.page, 'K-plan-8');
     await a.ctx.close();
     // 10 locked in: 12 players, 2 courts, 3 hours. With Booking hours off the plan says to turn it on.
@@ -555,12 +567,12 @@ async function main() {
     await call('PUT', '/api/admin/booking-hours-switch', { on: false });
     try {
       const b = await adminPage();
-      await b.page.locator('[data-tm-open-page]').click();
+      await b.page.locator('[data-tm-tickets]').click(); // Zip 66: Tickets opens the page
       await b.page.locator('dialog[open] [data-tm-card="plan"]').waitFor({ timeout: 10000 });
       const w2 = flat(await b.page.locator('dialog[open] [data-tm-card="plan"]').innerText());
       // 10 locked in: 12 spots, 2 courts, the real 2.5 hours. $120 - 11 x $16 + $28 = -$28; 9 paid now: $120 - $144 + $28 = $4.
-      assert(w2.includes('12 players') && w2.includes('2 courts · 2.5 hours') && w2.includes('Turn on Booking hours'), w2);
-      assert(w2.includes('Your cost if it fills -$28') && w2.includes('With 9 paid now $4'), w2);
+      assert(w2.includes('12 players') && w2.includes('2.5 hrs') && w2.includes('Turn on Booking hours'), w2);
+      assert(w2.includes('Your cost if it fills -$28 ($4 with 9 paid)'), w2);
       await shot(b.page, 'K-plan-12-booking-off');
       await b.ctx.close();
     } finally {
@@ -588,9 +600,10 @@ async function main() {
           await shot(v.page, `K-format-${format}-${width}-${scheme}`);
           await v.ctx.close();
           const a = await adminPage({ width, scheme });
-          const al = a.page.locator('.tm-home-format');
+          // Zip 66: the organizer's open card names the format on its Style row (mock 02): "Americano" or "Locked doubles".
+          const al = a.page.locator('[data-tm-home-format]');
           await al.waitFor({ timeout: 15000 });
-          assert(flat(await al.innerText()) === want && (await a.page.locator('.tm-home-rule').count()) === 0, flat(await al.innerText()));
+          assert(flat(await al.innerText()) === want.replace(/ \(.*$/, '') && (await a.page.locator('.tm-home-rule').count()) === 0, flat(await al.innerText()));
           await fits(a.page, '[data-tm-home]');
           await a.ctx.close();
           assert(/rgb/.test(color), color);
@@ -649,7 +662,7 @@ async function main() {
   await check('K canceled: no Take off and no level pencils; Tournaments off for players: no Mark paid (the server refuses each of them)', async () => {
     await stage('canceled');
     const a = await adminPage();
-    await a.page.locator('[data-tm-open-page]').click();
+    await a.page.locator('[data-tm-tickets]').click(); // Zip 66: the name opens and closes the card; Tickets opens the page
     await a.page.locator('dialog[open] [data-tm-page]').waitFor({ timeout: 15000 });
     assert((await a.page.locator('dialog[open] [data-tm-pencil]').count()) === 0, 'no level pencils on a canceled tournament');
     await a.page.waitForTimeout(600);

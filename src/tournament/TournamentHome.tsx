@@ -14,6 +14,7 @@ import { payByLabel, payByShort, payCountdown, placeWord } from '../../shared/to
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, useNow, VIEW_ONLY_MESSAGE } from '../lib';
 import { AlertCard } from '../AlertCard';
+import { missedDate, type TicketState, ticketStateOf } from '../../shared/tournamentNudge';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
@@ -32,33 +33,7 @@ function errorText(err: unknown): string {
 /** The organizer's first name for the players' words ("Pay Alex $16", "once Alex confirms"). */
 const firstOf = (name: string | null | undefined) => (name ?? '').trim().split(/\s+/)[0] || 'the organizer';
 
-/**
- * Zip 56: where this player stands with tickets, from the server's answer only.
- *   lock     a spot is open and their ticket is not paid: Lock my spot (state 3)
- *   full     every spot is taken and they are not in line: Join waitlist (state 4)
- *   in       locked in (state 5)
- *   line     on the waitlist (unpaid: Hold my spot; paid: their spot is held)
- *   (Zip 63, the trust rule: an I paid counts as locked in on the player's screens, so there is no "waiting" state for players any more)
- *   closed   ticket sales are over (the night has started) and they are not locked in
- */
-type TicketState = 'lock' | 'full' | 'in' | 'line' | 'closed';
-
-export function ticketStateOf(t: PlayerTournamentView): TicketState | null {
-  const k = t.tickets;
-  if (t.status !== 'tickets' || !k || !t.me) return null;
-  const mine = k.mine;
-  if (mine?.place === 'spot') return 'in';
-  // Zip 63 (Alex): we trust people that they paid. An I paid for the whole ticket (not a standby hold) is "locked in" at once, also after the
-  // night starts (the organizer confirms or undoes it).
-  if (mine && mine.place !== 'line' && mine.claimCents > 0 && mine.owedCents === 0) return 'in';
-  // A waitlist player keeps their place on the card even when sales are closed (no Hold button then: it waits for a freed spot).
-  if (k.closed && mine?.place !== 'line') return 'closed';
-  // Alex: the spots follow the players locked in; every spot is taken only at 12, then the waitlist starts.
-  const open = !k.full;
-  const paid = !!mine && mine.creditCents + mine.paidCents >= k.priceCents;
-  if (mine?.place === 'line') return open && !paid && mine.claimCents === 0 ? 'lock' : 'line';
-  return open ? 'lock' : 'full';
-}
+// Zip 66: ticketStateOf and missedDate moved to shared/tournamentNudge.ts (pure, so the unit tests can read them); the same rules.
 
 /** What is still to pay on their ticket (the price before they ever tapped Lock my spot). */
 const dueOf = (k: PlayerTicketsView) => (k.mine ? k.mine.owedCents : k.priceCents);
@@ -88,6 +63,7 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
   }
   const signed = t.me !== null;
   const k = t.tickets ?? null;
+  const missed = missedDate(t);
   const org = firstOf(pay.group.organizerName);
 
   async function run(fn: () => Promise<unknown>, done: string | ((res: any) => string)): Promise<any> {
@@ -110,10 +86,18 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
   }
 
   /** Lock my spot / Hold my spot: credit goes on at once; what is left opens the Pay sheet. */
-  async function lock(intent: 'lock' | 'hold') {
+  async function lock(intent: 'lock' | 'hold', before?: () => Promise<unknown>) {
     if (!k) return;
+    let added = false;
     const res = await run(
-      () => api('POST', '/api/tournament/lock', { tournamentId: t.id, intent, priceCents: k.priceCents }),
+      async () => {
+        // Zip 66: I'm in on the in-or-out alert first puts the picked date on their sign-up, inside the same busy tap.
+        if (before) {
+          await before();
+          added = true;
+        }
+        return api('POST', '/api/tournament/lock', { tournamentId: t.id, intent, priceCents: k.priceCents });
+      },
       (r: { result: string; creditUsedCents: number; dueCents: number }) => {
         const used = r.creditUsedCents > 0 ? ` ${formatPrice(r.creditUsedCents)} credit used.` : '';
         if (r.result === 'locked') return `You're locked in.${used}`;
@@ -122,6 +106,15 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
       },
     );
     if (res && res.result === 'due' && res.dueCents > 0) setPaying(res.dueCents);
+    // The date went on but the lock failed: show what is true now (the alert is gone; Lock my spot is on the card).
+    if (!res && added) void onChanged();
+  }
+
+  /** Zip 66: I'm in on the in-or-out alert: the picked date goes on their sign-up, then the same flow as Lock my spot (credit first, then Pay). */
+  function imIn() {
+    if (!t.finalDate) return;
+    const day = t.finalDate;
+    void lock('lock', () => api('PUT', '/api/tournament/signup', { tournamentId: t.id, dates: [day] }));
   }
 
   async function iPaid() {
@@ -152,9 +145,11 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
   return (
     <div className="tc-wrap stack" data-tournament={t.status}>
       {/* Zip 63: the pay countdown (mocks 08 to 13), first: only while this player can lock a spot and has not paid, from 3 days before Pay by. */}
-      {k?.payBy && !k.closed && ticketStateOf(t) === 'lock' && <PayCountdownCard t={t} payBy={k.payBy} due={dueOf(k)} busy={busy} onPay={() => void lock('lock')} />}
-      {/* Zip 60's date alert, right under the countdown (PlayerHome hands it in). */}
-      {notice}
+      {/* Zip 66: signed up but not for the picked date: "Can you make it?" first, and no pay countdown (or late words) until they answer. */}
+      {missed && k && t.finalDate && <MissedDateCard t={t} due={dueOf(k)} busy={busy} onIn={imIn} onOut={() => setAskOut(true)} />}
+      {!missed && k?.payBy && !k.closed && ticketStateOf(t) === 'lock' && <PayCountdownCard t={t} payBy={k.payBy} due={dueOf(k)} busy={busy} onPay={() => void lock('lock')} />}
+      {/* Zip 60's date alert, right under the countdown (PlayerHome hands it in). Zip 66: the in-or-out alert already says the date. */}
+      {!missed && notice}
       {t.onlyMe && (
         <div className="tc-strip" role="note" data-tc-strip>
           <div className="tc-strip-text">
@@ -327,6 +322,37 @@ function PayCountdownCard({ t, payBy, due, busy, onPay }: { t: PlayerTournamentV
         <button type="button" className="ac-btn" disabled={busy} onClick={onPay} data-pay-countdown-btn>
           {c.late ? 'Pay now' : `Pay ${formatPrice(due)}`}
         </button>
+      }
+    />
+  );
+}
+
+/**
+ * Zip 66 (picture 10): the site's two-button blue alert card (the same look as the "game moved: Still in / Can't make it" card), above the ticket:
+ * "The Cold Open is Tue Dec 8" / "Most players picked it. Can you make it?", I'm in · $16 and Can't make it. No X: it stays until they answer.
+ */
+function MissedDateCard({ t, due, busy, onIn, onOut }: { t: PlayerTournamentView; due: number; busy: boolean; onIn: () => void; onOut: () => void }) {
+  const s = stubParts(t.finalDate!);
+  const day = `${s.weekday.charAt(0)}${s.weekday.slice(1).toLowerCase()} ${s.month.charAt(0)}${s.month.slice(1).toLowerCase()} ${s.day}`;
+  return (
+    <AlertCard
+      as="section"
+      tone="blue"
+      icon="court"
+      label={`${t.name} is ${day}. Can you make it?`}
+      className="tc-missed"
+      data={{ 'data-missed-date': t.finalDate! }}
+      title={`${t.name} is ${day}`}
+      sub="Most players picked it. Can you make it?"
+      actions={
+        <>
+          <button type="button" className="ac-btn" disabled={busy} onClick={onIn} data-missed-in>
+            I’m in · {formatPrice(due)}
+          </button>
+          <button type="button" className="ac-btn ac-out" disabled={busy} onClick={onOut} data-missed-out>
+            Can’t make it
+          </button>
+        </>
       }
     />
   );

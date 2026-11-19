@@ -128,11 +128,21 @@ async function main() {
     await p.page.waitForTimeout(700);
     return p;
   }
+  /** Zip 66: open the organizer's tournament card when it is closed (it starts as one closed line). */
+  async function openTourCard(page) {
+    const toggle = page.locator('[data-tm-home-toggle][aria-expanded="false"]');
+    if (await toggle.count()) {
+      await toggle.first().click();
+      await page.locator('[data-tm-home-body]').first().waitFor({ timeout: 10000 });
+    }
+  }
   async function adminPage(opts = {}) {
     const p = await newPage({ ...opts, organizer: true });
     await p.page.goto(`${BASE}/admin`);
     await p.page.locator('.tabbar').waitFor({ timeout: 30000 });
     await p.page.waitForTimeout(700);
+    // Zip 66: the tournament card starts as one closed line; open it (one tap) so the checks below see its rows and buttons.
+    await openTourCard(p.page);
     return p;
   }
   async function fits(page, sel) {
@@ -466,7 +476,8 @@ async function main() {
       const a = await adminPage({ width: 390, scheme });
       const card = a.page.locator('[data-tm-home]');
       await card.waitFor({ timeout: 15000 });
-      assert(/Plan: 10 players · 2 courts · 2\.5 hours/.test(flat(await card.innerText())), flat(await card.innerText()));
+      // Zip 66 (mock 02): the open card's Plan row, "10 players · 2 courts · 2.5 hrs".
+      assert(/Plan 10 players · 2 courts · 2\.5 hrs/.test(flat(await card.innerText())), flat(await card.innerText()));
       await shot(a.page, `J-plan-${scheme}`);
       await a.ctx.close();
     });
