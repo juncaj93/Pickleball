@@ -2,17 +2,20 @@
 // name, Redo the draw and Publish teams; the published teams with the venue's court numbers; the check when tickets close; Fix teams after a
 // back out; and game night (mocks 48 to 50, for Locked doubles: who won, not scores): the round's results with Confirm and Fix, the Time
 // check with one tap, Pause and Player left. Only drawn while the switch is on and a tournament has tickets open.
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import type { AdminDayGame, AdminDayTeam, AdminDayView, AdminTournamentView } from '../../../shared/tournament';
 import { levelShort } from '../../../shared/tournament';
 import { totalLabel } from '../../../shared/tournamentSchedule';
 import { startMsOf } from '../../../shared/tournamentTickets';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { AlertCard } from '../../AlertCard';
-import { CourtRow } from '../../GameDay';
 import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import './tournament-day.css';
+
+// The court picker (the site's court map) is loaded when the published card draws it, not with this file: a static import here would pull
+// src/GameDay.tsx (and its styles) in ahead of the other organizer screens in the one-file build, changing the style order (tests/zip48-split).
+const CourtRow = lazy(() => import('../../GameDay').then((m) => ({ default: m.CourtRow })));
 
 function errText(err: unknown): string {
   if (err instanceof ApiError) return err.status === 403 && /view only/i.test(err.message) ? VIEW_ONLY_MESSAGE : err.message;
@@ -324,9 +327,11 @@ function PublishedCard({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
       </div>
       <TeamList ctx={ctx} t={t} d={d} />
       <div className="tm-gd-courts" data-tm-courts>
-        {nums.map((n, i) => (
-          <CourtRow key={i} value={n} onChange={(c) => setCourt(i, c)} />
-        ))}
+        <Suspense fallback={null}>
+          {nums.map((n, i) => (
+            <CourtRow key={i} value={n} onChange={(c) => setCourt(i, c)} />
+          ))}
+        </Suspense>
       </div>
       <p className="tm-card-note">
         {d.plan ? `${d.games.length} games. ${d.plan.fits ? '' : 'Too tight: games to 7. '}Pool games to ${d.plan.gameTo}.` : ''} Game 1 begins at the start time.

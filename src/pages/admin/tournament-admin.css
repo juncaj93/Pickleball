@@ -1358,6 +1358,7 @@ a.tm-hc-copy {
   margin: -4px 0 10px;
   font-size: 0.88rem;
   color: var(--ink-2);
+}
 /* Zip 57 (mocks 60 and 61): the Courts row (1 | 2) and the one line under the rows: the accent color when it fits, amber when it is too tight. */
 .tm-fin-courts {
   flex: none;
