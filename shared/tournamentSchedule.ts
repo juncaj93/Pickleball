@@ -569,6 +569,8 @@ export interface RoundState {
   doneAt?: number;
   /** Some game in it has a result already (a round with none can still be shortened: "play to 9 this round"). */
   anyResult?: boolean;
+  /** Zip 61: never shortened (Americano's last round), though it is counted at its own length. */
+  keep?: boolean;
 }
 
 export interface TimeCheck {
@@ -607,7 +609,7 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   const startedAt = Math.max(planned.get(cur.round)!.start, prev?.doneAt ?? planned.get(cur.round)!.start);
   const after = list.filter((r) => r.round > cur.round);
   // Rounds that can still change: the ones after this one, and this one while none of its games has a result. Never the playoffs.
-  const open = [...(cur.pool && !cur.anyResult ? [cur] : []), ...after.filter((r) => !r.anyResult)];
+  const open = [...(cur.pool && !cur.anyResult && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.keep)];
   /** When the night ends if pool rounds from `from` on (that can still change) are played to `to`. */
   const ending = (to?: GameTo, from?: number) => {
     const len = (r: RoundState) => lenOf(r, to !== undefined && from !== undefined && r.pool && r.round >= from && open.includes(r) ? minLen(r.playTo, to) : undefined);

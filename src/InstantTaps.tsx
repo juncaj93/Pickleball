@@ -103,7 +103,9 @@ if (typeof document !== 'undefined') {
       const close = !!prev && now - prev.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_PX;
       // Tap guard fix: the switch's own click, sent by the browser for the label that was just tapped, is the same tap (and the label stays "the last tap").
       if (pair && close) return;
-      if (prev && close && dropThisTap({ fix, hasPrev: true, same: !!same, pair, close, quick: fix && !!prev && now - prev.at < REFLEX_MS, prevGoneOrMoved: fix && !same ? prevGoneOrMoved(prev) : false, textField: fix && el.matches(TEXT_FIELD) })) {
+      // Zip 61: a counter's − and + (the score steppers, `data-tap-repeat`) are meant to be tapped fast: a repeat on the SAME one counts.
+      const repeat = !!prev && prev.el === el && el.hasAttribute('data-tap-repeat');
+      if (prev && close && !repeat && dropThisTap({ fix, hasPrev: true, same: !!same, pair, close, quick: fix && !!prev && now - prev.at < REFLEX_MS, prevGoneOrMoved: fix && !same ? prevGoneOrMoved(prev) : false, textField: fix && el.matches(TEXT_FIELD) })) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;

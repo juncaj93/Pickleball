@@ -20,6 +20,7 @@ import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
 import { type DayLook, LevelList, MonthCalendar, useMoreBelow, VoteList } from './parts';
 import { DayBody } from './GameDayView';
+import { RoundsBody } from './RoundsView';
 
 /** Zip 60: the format line on the cards. While the players' vote is open it is "Tournament style TBD" (no other words). */
 const formatText = (t: PlayerTournamentView): string => (t.formatTbd || t.styleTbd ? 'Tournament style TBD' : formatLine(t.format));
@@ -192,7 +193,8 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         />
       )}
       {/* Zip 57: Your team, Your games, All teams or the pools; on game night the one big card, Standings and Currently playing. */}
-      {t.day && <DayBody t={t} day={t.day} org={org} onChanged={onChanged} />}
+      {/* Zip 61: the Americano night (Your rounds; on the night the round card, Standings with points, Currently playing). */}
+      {t.day?.kind === 'americano' ? <RoundsBody t={t} day={t.day} onChanged={onChanged} /> : t.day && <DayBody t={t} day={t.day} org={org} onChanged={onChanged} />}
       {t.status === 'tickets' && k && signed && (
         <Sheet calmFocus open={sheet === 'overlay'} title={t.name} onClose={() => setSheet((cur) => (cur === 'overlay' ? null : cur))} className="tc-tw-overlay">
           <Overlay

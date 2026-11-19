@@ -437,19 +437,33 @@ async function main() {
       assert(p.errors.length === 0, p.errors.join(' | '));
       await p.ctx.close();
     });
-  await check('C "<other team> won": no lime, the card slides, the banner names them; Undo puts Game 1 back', async () => {
+  // Zip 61 (picture 37, Alex Nov 19): a loss is no longer just a slide. The winners' side glows soft white (white at 16%, a 2 px white ring at
+  // 35%), our side and We won dim, the tapped button says "Onto the next!"; then the same slide, the gray Lost tag, the banner with Undo.
+  await check('C "<other team> won": the white glow and "Onto the next!", then the slide; the banner names them; Undo puts Game 1 back', async () => {
     await stage('game1');
     const v = await playerPage('Vic', { reducedMotion: 'no-preference' });
     await v.page.locator('[data-tc-day-theywon]').waitFor({ timeout: 15000 });
     let posted = 0;
     v.page.on('request', (r) => r.method() === 'POST' && r.url().endsWith('/api/tournament/game') && posted++);
     await v.page.locator('[data-tc-day-theywon]').click();
-    await v.page.waitForTimeout(80);
+    await v.page.waitForTimeout(350);
     assert((await v.page.locator('.tc-gd-litcheck, .tc-gd-next-lit').count()) === 0, 'no lime');
-    assert(!flat(await v.page.locator('body').innerText()).includes('Let\u2019s go'), 'no Let\u2019s go');
-    assert((await v.page.locator('.tc-gd-slide-out').count()) === 1, 'it slides at once');
+    const lost = await v.page.evaluate(() => {
+      const card = document.querySelector('[data-tc-day-next="1"]');
+      const winners = card.querySelector('.tc-gd-vs > .tc-gd-tn:last-child');
+      return {
+        btn: card.querySelector('[data-tc-day-theywon]').innerText.trim(),
+        bg: getComputedStyle(winners).backgroundColor,
+        ring: getComputedStyle(winners).boxShadow,
+        mine: Number(getComputedStyle(card.querySelector('.tc-gd-side-a')).opacity),
+        weWon: Number(getComputedStyle(card.querySelector('[data-tc-day-wewon]')).opacity),
+      };
+    });
+    assert(lost.btn === 'Onto the next!' && /255, 255, 255, 0\.16/.test(lost.bg) && /255, 255, 255, 0\.35\) 0px 0px 0px 2px/.test(lost.ring) && lost.mine < 1 && lost.weWon < 1, `lost: ${JSON.stringify(lost)}`);
+    await SH(v.page, 'C-onto-next');
     const tText = flat(await toastBox(v.page).innerText());
     assert(tText.startsWith('Third Shot Gang won Game 1') && tText.includes('Undo'), `toast: ${tText}`);
+    await v.page.locator('.tc-gd-slide-out').waitFor({ timeout: 2500 });
     await v.page.waitForTimeout(600);
     assert((await v.page.locator('[data-tc-day-game="Game 1"] .tc-gd-tag').innerText()) === 'Lost', 'Lost tag');
     await SH(v.page, 'C-theywon');
@@ -576,7 +590,8 @@ async function main() {
     await SH(a.page, 'G-odd-admin');
     await a.ctx.close();
     const v = await answerOf('Vic');
-    assert(v.data.tournament && !v.data.tournament.day, 'no teams on an Americano night');
+    // Zip 61: an Americano night has no teams; the players get their Americano rounds instead.
+    assert(v.data.tournament && v.data.tournament.day && v.data.tournament.day.kind === 'americano' && !v.data.tournament.day.team, 'no teams on an Americano night, rounds instead');
     assert(v.data.tournament.styleNote && v.data.tournament.styleNote.text === 'Tournament style is now Americano.', JSON.stringify(v.data.tournament.styleNote));
   });
 

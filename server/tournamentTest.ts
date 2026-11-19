@@ -5,6 +5,7 @@ import { requireAdmin } from './auth';
 import * as v from './validate';
 import { hiddenTask, lockDate, setTournamentsForAll, type SignupRow, todayKey, type TournamentRow } from './tournament';
 import { gamesFor, type GameRow, playerDayView, type TeamRow, writeTeamsAndGames } from './tournamentDay';
+import { americanoNight, pairSlot } from '../shared/americanoSchedule';
 import { previewSiteFor } from './secondChance';
 import { organizerIdOf } from './repo';
 import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
@@ -90,7 +91,22 @@ export const ZIP66_STAGES = ['zip66_start', 'missed_date'] as const;
 export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out'] as const;
 type DayStage = (typeof DAY_STAGES)[number];
 const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
+// Zip 61 (🎾61.americano): the Americano night. "The Cold Open", Americano, all 10 names locked in (Alex's own $0 seat), Pay by passed, courts 1
+// and 2, 7:30 to 10:00 PM worth of court time (2.5 hours: 6 rounds to 11, 2 sit each round). The seats are drawn so Vic plays Rounds 1 to 3, sits
+// Round 4 and plays 5 and 6 (as the pictures do); who plays with whom comes from the real schedule, never typed in.
+//   am_before     two days from now: Vic sees the ticket, then Your rounds (picture 31)
+//   am_round1     tonight, started a minute ago, nothing entered: Round 1 with Enter score
+//   am_round3     rounds 1 and 2 in (the other court's Round 2 score still waits for a Yes: late, Confirm on the organizer's card); Round 3 is
+//                 on, both courts (Enter score, picture 32). Alex's taps:
+//                 view as Vic, Enter score, Submit (the motion and Undo); then view as one of Vic's opponents: Is this right? (picture 34)
+//   am_break      rounds 1 to 3 in, Round 4 on: Vic is on a break (picture 35)
+//   am_standings  rounds 1 to 5 in, Round 6 on: the table after Round 5
+//   am_switched   Locked doubles with 9 locked in (Reese did not pay) after Pay by, two days from now: the first screen that reads it switches to
+//                 Americano (zip 64): players see "Tournament style is now Americano." and their new rounds
+export const AM_STAGES = ['am_round3', 'am_before', 'am_round1', 'am_break', 'am_standings', 'am_switched'] as const;
+type AmStage = (typeof AM_STAGES)[number];
+const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).includes(s);
+export const TEST_STAGES = [...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -244,6 +260,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   ]);
   if (stage === 'none') return { ok: true, stage };
   if (isDayStage(stage)) return dayStage(ctx, group, stage);
+  if (isAmStage(stage)) return americanoStage(ctx, group, stage);
   if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date') return voteStage(ctx, group, stage);
 
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
@@ -690,4 +707,105 @@ export async function poolsLook(ctx: Ctx) {
     updated_at: ctx.nowIso,
   }));
   return { day: playerDayView(t, signups, { teams, games }, 'p-Vic', tz, ctx.nowMs) };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 61: the Americano stages (see AM_STAGES above). The rows are written the way the night's first save writes them (server/americanoDay.ts
+// ensureRows), scores the way a player's Enter score and the other side's Yes write them.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The 10 names of an Americano stage (the preview's fixed names; Kai is not on the small preview). */
+const AM_NAMES = ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Vic', 'Wren', 'Zoe', 'Quinn', 'Reese'];
+
+async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: AmStage) {
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const org = await organizerIdOf(ctx.db, group);
+  const tz = group.timezone;
+  const nowLocal = localParts(ctx.nowMs, tz);
+  const nowMin = nowLocal.hour * 60 + nowLocal.minute;
+  const later = stage === 'am_before' || stage === 'am_switched';
+  const date = later ? dayAfter(ctx.nowMs + 86_400_000, tz) : todayKey(ctx.nowMs, tz);
+  // Rounds played before now: 0 (Round 1), 2 (Round 3), 3 (Round 4), 5 (Round 6); each round 23 minutes, plus a few minutes into the next one.
+  const done = stage === 'am_round3' ? 2 : stage === 'am_break' ? 3 : stage === 'am_standings' ? 5 : 0;
+  const ago = later ? 0 : done * 23 + (done ? 6 : 1);
+  const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
+  const switched = stage === 'am_switched';
+  const names = AM_NAMES.filter((n) => idOf.has(n) && !(switched && n === 'Reese'));
+  const locked = names.map((n) => idOf.get(n)!);
+  // Seats: a tournament id whose schedule has Vic playing Rounds 1 to 3, sitting Round 4 and playing 5 and 6 (the pictures' night).
+  const vic = idOf.get('Vic');
+  let id = newId();
+  for (let i = 0; i < 4000 && vic && !switched; i++) {
+    const night = americanoNight(locked, 2, 150, id);
+    const sits = [...night.sits.entries()].filter(([, ids]) => ids.includes(vic)).map(([r]) => r);
+    if (sits.length === 1 && sits[0] === 4) break;
+    id = newId();
+  }
+  const t0 = ctx.nowMs - 3 * 86_400_000;
+  const at = (m: number) => new Date(t0 + m * 60_000).toISOString();
+  const payBy = new Date(ctx.nowMs - 3_600_000).toISOString();
+  const statements = [
+    ctx.db
+      .prepare(
+        `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
+           status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, pay_by, format_source, court_numbers)
+         VALUES (?, ?, 'The Cold Open', ${STORED_PLAN.size}, 2, 150, ?, 1600, 1400, ?, ?, 'tickets', 'all', ?, ?, ?, ?, ?, 700, ?, ?, '[1,2]')`,
+      )
+      .bind(id, group.id, start, JSON.stringify([date]), date, at(0), ctx.nowIso, at(5), at(1), switched ? 'doubles' : 'americano', payBy, switched ? 'vote' : null),
+  ];
+  let n = 0;
+  for (const name of AM_NAMES) {
+    const pid = idOf.get(name);
+    if (!pid) continue;
+    n++;
+    const free = pid === org;
+    const paid = !(switched && name === 'Reese');
+    statements.push(
+      ctx.db
+        .prepare(`INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at) VALUES (?, ?, ?, 'in', 300, NULL, ?, ?, ?, ?)`)
+        .bind(newId(), id, pid, JSON.stringify([date]), at(10 + n * 7), at(10 + n * 7), at(10 + n * 7)),
+      ctx.db.prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, 300, 'player', ?)").bind(newId(), id, pid, at(10 + n * 7)),
+      ctx.db
+        .prepare(
+          `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, credit_cents, paid_cents, paid_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+        )
+        .bind(newId(), id, pid, paid ? 'spot' : 'none', paid ? at(200 + n * 11) : null, free ? 0 : 1600, paid && !free ? 1600 : 0, paid && !free ? at(200 + n * 11) : null, at(200 + n * 11), at(200 + n * 11)),
+    );
+  }
+  await ctx.db.batch(statements);
+  if (later || done === 0) return { ok: true, stage, id, date, signedUp: n };
+  // The night's rows (as the first save writes them), then the rounds before now in, as Enter score and the other side's Yes write them.
+  const night = americanoNight(locked, 2, 150, id);
+  const nowIso = ctx.nowIso;
+  const startMs = ctx.nowMs - (nowMin - start) * 60_000;
+  const rows = night.games.map((g) =>
+    ctx.db
+      .prepare(
+        `INSERT INTO tournament_games (id, tournament_id, num, round, court, stage, pool, slot_a, slot_b, play_to, skipped, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'pool', NULL, ?, ?, ?, 0, ?, ?)`,
+      )
+      .bind(newId(), id, g.num, g.round, g.court, pairSlot(g.a), pairSlot(g.b), g.playTo, nowIso, nowIso),
+  );
+  // Scores: the winners 11, the others 3 to 9 (made up from the game number, so a re-run gives the same table).
+  const scores = night.games
+    .filter((g) => g.round <= done)
+    .map((g) => {
+      const lose = 3 + ((g.num * 5) % 7);
+      const aWins = g.num % 3 !== 0;
+      const when = new Date(startMs + (g.round * 23 - 2) * 60_000).toISOString();
+      // Round 3: the other court's Round 2 score still waits for a Yes (entered 8 minutes ago: late on the organizer's card).
+      const waiting = stage === 'am_round3' && g.round === 2 && !(vic && [...g.a, ...g.b].includes(vic));
+      const [sa, sb] = aWins ? [11, lose] : [lose, 11];
+      return waiting
+        ? ctx.db
+            .prepare("UPDATE tournament_games SET claim = 'a', claim_by = ?, claim_at = ?, score_a = ?, score_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
+            .bind(g.a[0], new Date(ctx.nowMs - 8 * 60_000).toISOString(), sa, sb, nowIso, id, g.num)
+        : ctx.db
+            .prepare("UPDATE tournament_games SET claim = 'a', claim_by = ?, claim_at = ?, score_a = ?, score_b = ?, winner = ?, result_at = ?, result_by = 'players', updated_at = ? WHERE tournament_id = ? AND num = ?")
+            .bind(g.a[0], when, sa, sb, aWins ? 'a' : 'b', when, when, id, g.num);
+    });
+  await ctx.db.batch([...rows, ...scores]);
+  return { ok: true, stage, id, date, signedUp: n };
 }

@@ -16,7 +16,7 @@ import './gameday-tour.css';
 /** How long We won waits before it is sent (the card's Undo). */
 export const UNDO_MS = 5000;
 
-function errorText(err: unknown): string {
+export function errorText(err: unknown): string {
   if (err instanceof ApiError) return err.status === 403 && /view only/i.test(err.message) ? VIEW_ONLY_MESSAGE : err.message;
   return 'That did not work. Try again.';
 }
@@ -31,7 +31,7 @@ function seenList(): string[] {
     return [];
   }
 }
-function useSeen(key: string | null): [boolean, () => void] {
+export function useSeen(key: string | null): [boolean, () => void] {
   const [list, setList] = useState(seenList);
   return [
     !!key && list.includes(key),
@@ -49,7 +49,7 @@ function useSeen(key: string | null): [boolean, () => void] {
 }
 
 /** The short card on game night (mocks 17 and 18): the name, where they are, a slim bar. Replaces the ticket on Home. */
-export function DayHero({ t, day }: { t: PlayerTournamentView; day: PlayerDayView }) {
+export function DayHero({ t, day }: { t: PlayerTournamentView; day: { progress: PlayerDayView['progress'] } }) {
   const pct = day.progress.total ? Math.round((day.progress.done / day.progress.total) * 100) : 0;
   return (
     <section className="tc-gd-hero" aria-label={`${t.name}, ${day.progress.label}`} data-tc-day-hero>
@@ -67,7 +67,7 @@ export function DayHero({ t, day }: { t: PlayerTournamentView; day: PlayerDayVie
 }
 
 /** "Court 9": a button that opens the court map once the organizer set the courts, else plain text. */
-function Court({ n, set }: { n: number | null; set: boolean }) {
+export function Court({ n, set }: { n: number | null; set: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   if (n === null) return null;
@@ -214,17 +214,20 @@ function TeamName({ name, players, big }: { name: string; players: string[]; big
   return (
     <span className={big ? 'tc-gd-tn tc-gd-tn-big' : 'tc-gd-tn'}>
       <b>{name}</b>
-      <span>{players.join(' + ')}</span>
+      {players.length > 0 && <span>{players.join(' + ')}</span>}
     </span>
   );
 }
 
-/** Two teams side by side with VS between them, each with its players under. */
-function Matchup({ a, b, big, lit }: { a: { name: string; players: string[] }; b: { name: string; players: string[] }; big?: boolean; lit?: boolean }) {
+/**
+ * Two teams (or two pairs) side by side with VS between them, each with its players under (Americano: names only). `lit` (the result motion):
+ * 'mine' lights our side lime with a check (we won); 'theirs' gives the winners a soft white glow and dims our side (picture 37: a loss).
+ */
+export function Matchup({ a, b, big, lit }: { a: { name: string; players: string[] }; b: { name: string; players: string[] }; big?: boolean; lit?: 'mine' | 'theirs' | null }) {
   return (
-    <span className={`${big ? 'tc-gd-vs tc-gd-vs-big' : 'tc-gd-vs'}${lit ? ' tc-gd-vs-lit' : ''}`}>
+    <span className={`${big ? 'tc-gd-vs tc-gd-vs-big' : 'tc-gd-vs'}${lit === 'mine' ? ' tc-gd-vs-lit' : lit === 'theirs' ? ' tc-gd-vs-lost' : ''}`} data-tc-day-lit={lit ?? undefined}>
       <span className="tc-gd-side-a">
-        {lit && (
+        {lit === 'mine' && (
           <span className="tc-gd-litcheck" aria-hidden="true">
             <svg viewBox="0 0 20 20">
               <path d="M5 10.5l3.2 3.2L15 7" />
@@ -322,11 +325,82 @@ function YourTeamCard({ t, day, onChanged }: { t: PlayerTournamentView; day: Pla
   );
 }
 
-/** Everything under the ticket (before the night) or the short card (game night). */
-/** How long the lit card (our side lime, "✓ Let's go!") holds before it slides to the next game. */
+/** How long the lit card (our side lime, "✓ Let's go!"; or their side's white glow, "Onto the next!") holds before it slides to the next game. */
 export const LIT_MS = 1000;
 
-type Held = { num: number; action: 'won' | 'lost'; label: string; winner: string; lit: boolean };
+/** A result held on this phone for its 5 seconds: which game, won or lost, and whether the card is still lit (the first second). */
+export type Held = { num: number; won: boolean; lit: boolean };
+
+/**
+ * THE result motion, shared by Locked doubles (We won, "<other team> won") and Americano (Submit score): zip 57's code, the one copy. The card
+ * lights for a second (won: our side lime and "✓ Let's go!"; lost: their side's white glow and "Onto the next!"), then slides to the next game;
+ * the bottom banner says who won with Undo and a 5 second drain line; the result is sent after 5 seconds unless Undo. Leaving Home or locking
+ * the phone inside the 5 seconds still sends it. Reduced motion: no light and no slide (the card just changes).
+ */
+export function useHeldResult(t: PlayerTournamentView, onChanged: () => Promise<unknown>) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState<Held | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const litTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // A result still in its 5 seconds when the card goes away (the player leaves Home, the page closes): it is sent then, not lost.
+  const pending = useRef<Record<string, unknown> | null>(null);
+  const sendNow = (body: Record<string, unknown>) => api('POST', '/api/tournament/game', { tournamentId: t.id, ...body }).catch(() => undefined);
+  useEffect(() => {
+    const leave = () => {
+      const p = pending.current;
+      if (p && document.visibilityState === 'hidden') {
+        pending.current = null;
+        clearTimeout(timer.current);
+        void sendNow(p);
+      }
+    };
+    document.addEventListener('visibilitychange', leave);
+    return () => {
+      document.removeEventListener('visibilitychange', leave);
+      clearTimeout(timer.current);
+      clearTimeout(litTimer.current);
+      const p = pending.current;
+      if (p) void sendNow(p);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  async function send(body: Record<string, unknown>): Promise<boolean> {
+    setBusy(true);
+    try {
+      await api('POST', '/api/tournament/game', { tournamentId: t.id, ...body });
+      await onChanged();
+      return true;
+    } catch (err) {
+      toast(errorText(err), 'error');
+      if (err instanceof ApiError && (err.status === 409 || err.status === 404)) void onChanged();
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  function undo() {
+    clearTimeout(timer.current);
+    clearTimeout(litTimer.current);
+    pending.current = null;
+    setHeld(null);
+  }
+  /** Hold a result: `banner` is the bottom banner's words ("Net Ninjas won Game 1", "You + Parker won 11 to 8"). */
+  function hold(num: number, won: boolean, body: Record<string, unknown>, banner: string) {
+    if (held) return;
+    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const lit = !reduced;
+    setHeld({ num, won, lit });
+    if (lit) litTimer.current = setTimeout(() => setHeld((h) => (h && h.num === num ? { ...h, lit: false } : h)), LIT_MS);
+    pending.current = body;
+    toast(banner, 'ok', { action: { label: 'Undo', onClick: undo }, stayMs: UNDO_MS, keep: true, drain: UNDO_MS });
+    timer.current = setTimeout(() => {
+      pending.current = null;
+      void send(body).then(() => setHeld(null));
+    }, UNDO_MS);
+  }
+  return { busy, held, hold, send };
+}
 
 /**
  * What the screen shows while a result is held for its 5 seconds (Alex's add-on, picture 04): the game is done (won or lost), the next game is
@@ -336,7 +410,7 @@ function withHeld(day: PlayerDayView, held: Held | null): PlayerDayView {
   if (!held || held.lit) return day;
   let first = true;
   const games = day.games.map((g) => {
-    if (g.num === held.num) return { ...g, state: 'done' as const, won: held.action === 'won', onNow: false, claimed: undefined };
+    if (g.num === held.num) return { ...g, state: 'done' as const, won: held.won, onNow: false, claimed: undefined };
     if (g.state === 'done') return g;
     const state = first ? ('next' as const) : ('later' as const);
     first = false;
@@ -357,71 +431,14 @@ function withHeld(day: PlayerDayView, held: Held | null): PlayerDayView {
  */
 export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentView; day: PlayerDayView; org: string; onChanged: () => Promise<unknown> }) {
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  // We won (or "<other team> won"): lit for a second, then the card slides to the next game; the result is sent after 5 seconds unless Undo.
-  const [held, setHeld] = useState<Held | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const litTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // A result still in its 5 seconds when the card goes away (the player leaves Home, the page closes): it is sent then, not lost.
-  const pending = useRef<{ num: number; action: string } | null>(null);
-  const sendNow = (p: { num: number; action: string }) => api('POST', '/api/tournament/game', { tournamentId: t.id, num: p.num, action: p.action }).catch(() => undefined);
-  useEffect(() => {
-    const leave = () => {
-      const p = pending.current;
-      if (p && document.visibilityState === 'hidden') {
-        pending.current = null;
-        clearTimeout(timer.current);
-        void sendNow(p);
-      }
-    };
-    document.addEventListener('visibilitychange', leave);
-    return () => {
-      document.removeEventListener('visibilitychange', leave);
-      clearTimeout(timer.current);
-      clearTimeout(litTimer.current);
-      const p = pending.current;
-      if (p) void sendNow(p);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { busy, held, hold: holdResult, send: sendBody } = useHeldResult(t, onChanged);
   const day = withHeld(real, held);
   const [noteSeen, hideNote] = useSeen(day.partnerNote?.key ?? null);
-  async function send(num: number, action: string): Promise<boolean> {
-    setBusy(true);
-    try {
-      await api('POST', '/api/tournament/game', { tournamentId: t.id, num, action });
-      await onChanged();
-      return true;
-    } catch (err) {
-      toast(errorText(err), 'error');
-      if (err instanceof ApiError && (err.status === 409 || err.status === 404)) void onChanged();
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
-  function undo() {
-    clearTimeout(timer.current);
-    clearTimeout(litTimer.current);
-    pending.current = null;
-    setHeld(null);
-  }
+  const send = (num: number, action: string) => sendBody({ num, action });
   function hold(g: PlayerDayGame, action: 'won' | 'lost') {
-    if (held) return;
     const mine = day.team?.name ?? 'Your team';
     const theirs = g.opponent?.name ?? 'The other team';
-    const winner = action === 'won' ? mine : theirs;
-    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // We won lights our side first; "<other team> won" goes straight to the next game.
-    const lit = action === 'won' && !reduced;
-    setHeld({ num: g.num, action, label: g.label, winner, lit });
-    if (lit) litTimer.current = setTimeout(() => setHeld((h) => (h && h.num === g.num ? { ...h, lit: false } : h)), LIT_MS);
-    pending.current = { num: g.num, action };
-    toast(`${winner} won ${g.label}`, 'ok', { action: { label: 'Undo', onClick: undo }, stayMs: UNDO_MS, keep: true, drain: UNDO_MS });
-    timer.current = setTimeout(() => {
-      pending.current = null;
-      void send(g.num, action).then(() => setHeld(null));
-    }, UNDO_MS);
+    holdResult(g.num, action === 'won', { num: g.num, action }, `${action === 'won' ? mine : theirs} won ${g.label}`);
   }
   const litGame = held?.lit ? (real.games.find((g) => g.num === held.num) ?? null) : null;
   const next = litGame ?? day.games.find((g) => g.state === 'next') ?? null;
@@ -471,7 +488,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
             day={day}
             first={!day.games.some((g) => g.state === 'done') && !held}
             busy={busy || (!!held && !litGame)}
-            lit={litGame ? 'mine' : null}
+            lit={litGame ? (held!.won ? 'mine' : 'theirs') : null}
             onWon={() => hold(next, 'won')}
             onLost={() => hold(next, 'lost')}
           />
@@ -524,9 +541,9 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
  * The big card's slide (picture 04): when the game changes, the old card slides out to the left and the new one in from the right. Reduced motion:
  * no slide, the card just changes (the site's global reduced-motion rule turns the animation off).
  */
-function Slide({ k, children }: { k: number; children: ReactNode }) {
-  const prev = useRef<{ k: number; node: ReactNode }>({ k, node: children });
-  const [leaving, setLeaving] = useState<{ k: number; node: ReactNode } | null>(null);
+export function Slide({ k, children }: { k: number | string; children: ReactNode }) {
+  const prev = useRef<{ k: number | string; node: ReactNode }>({ k, node: children });
+  const [leaving, setLeaving] = useState<{ k: number | string; node: ReactNode } | null>(null);
   if (prev.current.k !== k) {
     const old = prev.current;
     prev.current = { k, node: children };
@@ -569,8 +586,9 @@ function UpNext({
   day: PlayerDayView;
   first: boolean;
   busy: boolean;
-  /** We won was just tapped: our side lights lime with a check, the button says "✓ Let's go!", the rest dims (about a second). */
-  lit?: 'mine' | null;
+  /** We won was just tapped: our side lights lime with a check, the button says "✓ Let's go!", the rest dims (about a second). Zip 61: the
+   *  other team's button was tapped: their side glows soft white, ours and We won dim, the button says "Onto the next!". */
+  lit?: 'mine' | 'theirs' | null;
   onWon: () => void;
   onLost: () => void;
 }) {
@@ -582,14 +600,14 @@ function UpNext({
       <p className="tc-gd-next-kicker">{kicker}</p>
       {g.opponent ? (
         <>
-          <Matchup a={{ name: mine.name, players: mine.players }} b={g.opponent} big lit={lit === 'mine'} />
+          <Matchup a={{ name: mine.name, players: mine.players }} b={g.opponent} big lit={lit} />
           {g.onNow && (
-            <div className={lit ? 'tc-gd-next-btns tc-gd-next-lit' : 'tc-gd-next-btns'}>
+            <div className={lit === 'mine' ? 'tc-gd-next-btns tc-gd-next-lit' : lit === 'theirs' ? 'tc-gd-next-btns tc-gd-next-lost' : 'tc-gd-next-btns'}>
               <button type="button" className="tc-gd-wewon" disabled={busy || !!lit} onClick={onWon} data-tc-day-wewon>
-                {lit ? '✓ Let’s go!' : 'We won'}
+                {lit === 'mine' ? '✓ Let’s go!' : 'We won'}
               </button>
               <button type="button" className="tc-gd-theywon" disabled={busy || !!lit} onClick={onLost} data-tc-day-theywon>
-                {g.opponent.name} won
+                {lit === 'theirs' ? 'Onto the next!' : `${g.opponent.name} won`}
               </button>
             </div>
           )}

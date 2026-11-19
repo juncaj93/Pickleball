@@ -6664,3 +6664,64 @@ stops the playoff until piece 4: OK; loud hours waived.
   and Home answer 200; Home at 390 light and dark, no page errors, no request but GETs, nothing wider than the screen. No live data touched.
   The organizer-only screens were not looked at on live (no read-only PIN in this session).
 - Live's one open tournament (8 signed up) is not finalized: Finalize now has the Courts row; the teams come after the date is picked.
+
+## Zip 61: Tournaments, the Americano night (🎾61.americano), Thu Nov 19, 2026
+Branch `claude/new-session-j4d3lq` (the session is named "🎾61.americano"; the build system pins the branch name). Built on main `77c57e2` (Zip 57
+live, plus 🎾67's pre-check notes). Same switch, TOURNAMENTS, and the per-tournament Who can see it; no new switch. **Database change: migration
+`0028_americano_scores`** (three NEW nullable columns on `tournament_games`: `score_a`, `score_b`, `claim_by`; nothing existing changed). Applied
+to the fake preview database only. **NOT on live: Alex's OK first.** No money moves anywhere in this piece. The ending (awards, medals, ticker,
+End tournament) is zip 58 and is NOT built.
+
+### The database change (for Alex's OK)
+- `ALTER TABLE tournament_games ADD COLUMN score_a INTEGER; ... score_b INTEGER; ... claim_by TEXT;`
+- An Americano game is a `tournament_games` row like a Locked doubles one, with two players a side: `slot_a` / `slot_b` hold "id1+id2". The
+  points each side scored go in `score_a` / `score_b`; `claim_by` is the player who entered the score waiting for the other side (on a skipped
+  game, the player who left). The existing columns keep their zip 57 meaning (claim, disputed_at, winner, skipped).
+- Undo (only to remove the scores): the three `ALTER TABLE tournament_games DROP COLUMN`. Code from before Zip 61 never reads them: a code
+  rollback needs no database step.
+
+### What it does
+1. The schedule (shared/americanoSchedule.ts `americanoNight(players, courts, minutes, key)`, pure). Rounds and game length come only from the
+   game plan table (shared/tournamentPlan.ts `americanoPlan`, zip 57). Players on court = 4 x the smaller of (courts, players / 4); the rest sit.
+   Who sits: always the players who have sat least (sit-outs differ by at most 1 after every round). Partners: never again while an unused
+   partner is left. Opponents spread evenly (every row of the table: the most two players meet is at most 2 more than the least; 8 players on 2
+   courts for 3 hours is a perfect "whist" night: every partner once, every opponent exactly twice). Courts rotate (nobody with 3 or more games
+   plays them all on one court). The pattern is searched once, offline (`npx vite-node scripts/americano-patterns.ts`), and saved for 6 to 16
+   players, 1 or 2 courts, 16 rounds (shared/americanoPatterns.ts); a longer night carries on with the same rules. The players are put in the
+   seats in an order drawn from the tournament's id, so the same list always gets the same rounds and nothing heavy runs on a screen refresh.
+2. When the rows are written: never by a screen that only reads. Until the night's first save (a score, or the organizer's Fix, Time check or
+   Player left) every screen works the rounds out from who is locked in, so a back out or a style switch before the night simply gives the new
+   rounds. The first save writes every game (guarded: two saves at once write them once).
+3. Players (pictures 31 to 37): before the night, Your rounds under zip 66's ticket (Round 4 "Break"). From 30 minutes before the start the
+   night takes the ticket's place on Home: the hero ("Round 3 of 6"), the big VS card ("Round 3 · Court 1", "You + Parker" VS "Quinn +
+   Reese", Enter score), or the dark break card ("Round 4 · Your break", "On break until Round 5", who else sits); the Time check; Your rounds
+   (done green with Won or Lost, next blue); Standings (rank, name, wins-losses, points chip, your row highlighted); Currently playing (the other
+   court; every court on a break); Show future games.
+4. Enter score: zip 57's sheet, "Final score", each side with − and + (44 px; the number can also be typed), Submit score. Then zip 57's motion
+   (the one copy, now `useHeldResult` in src/tournament/GameDayView.tsx): a win lights our side lime with the check and "✓ Let's go!"; a loss
+   gives the winners a soft white glow (white at 16%, a 2 px white ring at 35%), dims our side, and the button says "Onto the next!"; about a
+   second later the card slides to the next round (or the break card); the banner "You + Parker won 11 to 8" (or "Quinn + Reese won 11 to 8")
+   with Undo and the 5 second drain line; sent after 5 seconds unless Undo (leaving Home still sends it). Reduced motion: no glow, no slide.
+   The same loss motion now runs on Locked doubles' "<other team> won" (Alex, Nov 19).
+5. The other side: "Is this right?" / "Vic says Round 3 ended 11 to 8 for Vic + Parker." / Yes, that's right / No, fix it. No, fix it opens the
+   score sheet with the numbers from their side; their score replaces it (it counts) and the side that entered first is asked. The same score
+   entered by both sides counts as a Yes.
+6. The points table: wins first, then total points (picture 32's order). Once someone has left the night: win percentage, then average point
+   difference per game. Players still level when every game is in: "Tied" (and an amber card tells the organizer who).
+7. The organizer: before the night the Rounds card ("10 locked in. 6 rounds to 11, 2 sit each round. New partner every round.", the courts'
+   numbers, All rounds with who sits). On the night: zip 57's hero, Pause, the Time check (counted in rounds; never the last round), "Round 3 ·
+   Scores" (Done, Waiting with Confirm, Changed, Playing with Set; "Waiting 7 min" or "8 min over" when late; a late score from an earlier round
+   shows here too), Fix with two numbers (Save, Clear the score), All rounds, Player left (their games still to play are off; the others in them
+   sit and get "Zoe left. Your Round 5 game is off."). A player who backs out during the night is handled the same way.
+8. The switch: zip 64 decides the style (odd count at Pay by or after a back out). An Americano night shows its rounds from the moment tickets
+   close; players see zip 64's "Tournament style is now Americano." and their rounds. Switch back (zip 64's button) gives zip 57's teams again.
+   Mid-night: zip 64 never switches after the start; and Switch back is refused once an Americano score is in ("The rounds have started.").
+
+### Where it differs from the brief (the code is the truth)
+- The Round 3 preview stage: "a score waiting" is the other court's ROUND 2 score (late, with Confirm on the organizer's card), so Round 3 is
+  on both courts and Currently playing shows the other court as picture 32 draws it.
+- Ranking by win percentage starts when someone LEFT the night (as the brief says), not whenever counts differ: with 10 players, 6 rounds, 8
+  players get 5 games and 2 get 4 by the schedule itself, and picture 32's order is wins then points (question below).
+- 8 players on 2 courts: everyone plays every round with a new partner, so the courts cannot also be even: over 7 rounds one player can have 6
+  games on one court. Partners and opponents are kept perfect instead (every partner once, every opponent twice).
+- Scores are whole numbers 0 to 30 and cannot be equal; "first to 11" is not enforced (a game cut short by time can end 9 to 7).

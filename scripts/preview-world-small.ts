@@ -713,11 +713,14 @@ export async function buildSmallPreview(
     try {
       // Zip 57 (🎾57.tourney3): the calm start is game night with no teams yet (The Cold Open, Locked doubles, 8 locked in, tonight, started 10
       // minutes before the seed): organizer Home says "8 locked in. Draft the teams." (Zip 64's start is one tap away on the Tournament test page.)
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'day_ready' });
+      // Zip 61 (🎾61.americano): the calm start is the Americano night at Round 3 (rounds 1 and 2 in, the other court's score waiting): View as
+      // Vic, Enter score. Zip 57's game night is one tap away on the Tournament test page.
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'am_round3' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 57 game day (on): "The Cold Open", Locked doubles, 8 locked in (Net Ninjas Vic and Wren, Dill With It Sage and Christopher, Kitchen Crew Rowan and Zoe, Third Shot Gang Parker and Quinn), tonight, started 10 minutes before the seed, courts 1 and 2; organizer Home: Draft teams. The Tournament test page puts it back to tonight (Game night, no teams yet) or any other stage');
+    summary.push('Zip 61 Americano (on): "The Cold Open", Americano, all 10 names locked in, tonight at Round 3 (rounds 1 and 2 in, the other court\'s Round 3 score waiting), courts 1 and 2; View as Vic: Enter score. The Tournament test page has every Americano stage and zip 57\'s');
+    summary.push('Zip 57 game day (one tap away): "The Cold Open", Locked doubles, 8 locked in (Net Ninjas Vic and Wren, Dill With It Sage and Christopher, Kitchen Crew Rowan and Zoe, Third Shot Gang Parker and Quinn), tonight, started 10 minutes before the seed, courts 1 and 2; organizer Home: Draft teams. The Tournament test page puts it back to tonight (Game night, no teams yet) or any other stage');
   }
 
   await refresh();

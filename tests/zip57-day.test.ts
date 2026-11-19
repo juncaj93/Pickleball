@@ -162,8 +162,10 @@ describe('zip 57: every size 6 to 16, odd and even, with back outs', () => {
       if (n % 2 === 1) {
         expect(d.format).toBe('americano');
         expect(d.day.canDraft).toBe(false);
-        // The players hear it from zip 64's banner; no teams reach them.
-        expect((await card(ctx, 'Blair')).day).toBeUndefined();
+        // The players hear it from zip 64's banner; no teams reach them. Zip 61: their Americano rounds do (on purpose).
+        const day = (await card(ctx, 'Blair')).day;
+        expect(day.kind).toBe('americano');
+        expect(day.team).toBeUndefined();
         return;
       }
       await draftAndPublish(ctx);

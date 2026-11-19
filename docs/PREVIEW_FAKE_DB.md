@@ -302,3 +302,12 @@ Draft the teams." The night is relative to the seed, so a later visit taps Tourn
 night back to "started 10 minutes ago"). The other stages: Teams drafted, Teams published (two days before), Game 1, Mid-tournament (running
 behind), All pool games done, Player backed out (odd count). 12 players cannot be made with the 10 names: the test page's "Pools look (12
 players)" link draws the 12 players night as Vic from made-up rows (look only; the 6th team is "Kai + Guest").
+
+Zip 61 (🎾61.americano, the Americano night): no new names, migration `0028_americano_scores` (three empty columns on `tournament_games`:
+`score_a`, `score_b`, `claim_by`) applied to `pickleball-preview` first. `npm run db:seed:preview` now opens on the Americano night at Round 3:
+"The Cold Open", Americano, all 10 names locked in (Alex's own $0 seat), courts 1 and 2, 2.5 hours of court time (6 rounds to 11, 2 sit each
+round), tonight, Rounds 1 and 2 in (the other court's Round 2 score still waits for a Yes, 8 minutes: late, Confirm on the organizer's card),
+Round 3 on both courts. The seats are drawn so Vic plays Rounds 1 to 3, sits Round 4 and plays 5 and 6 (as the pictures); who plays with whom
+comes from the real schedule. The night is relative to the seed, so a later visit taps Tournament test > "Americano: Round 3 (start here)"
+first. The other stages: Americano: before the night, Round 1, a break, after Round 5, switched from Locked doubles (9 locked in, Reese did not
+pay). Zip 57's Locked doubles stages are still on the page.

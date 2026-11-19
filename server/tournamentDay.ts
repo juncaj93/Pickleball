@@ -51,6 +51,7 @@ import {
 } from '../shared/tournamentSchedule';
 import { startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
+import { americanoGameAction, americanoGamesAction } from './americanoDay';
 import {
   firstName,
   logPlayer,
@@ -835,6 +836,8 @@ export async function teamsAction(ctx: Ctx, body: Record<string, unknown>) {
 export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
+  // Zip 61: an Americano night has its own controls (scores, not who won), server/americanoDay.ts.
+  if (t.format === 'americano') return americanoGamesAction(ctx, body);
   if (!t.teams_at) bad('tournament_changed', 'The teams are not published.');
   const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left'] as const);
   const nowIso = ctx.nowIso;
@@ -972,6 +975,8 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
  */
 export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
   const { t, playerId } = await playerTarget(ctx, who, body);
+  // Zip 61: on an Americano night a player enters a score (server/americanoDay.ts), once tickets have closed on Americano.
+  if (t.format === 'americano' && styleDecided(t, ctx.nowMs)) return americanoGameAction(ctx, who, t, playerId, body);
   if (!t.teams_at) bad('tournament_changed', 'This just changed. Look again.');
   const action = v.oneOf(body.action, 'action', ['won', 'lost', 'confirm', 'dispute', 'undo'] as const);
   const num = Number(body.num);

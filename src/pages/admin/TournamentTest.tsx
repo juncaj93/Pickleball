@@ -10,6 +10,14 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 61 (🎾61.americano): the Americano night. "The Cold Open", Americano, all 10 names locked in, courts 1 and 2, 2.5 hours (6 rounds to 11,
+  // 2 sit each round). Vic plays Rounds 1 to 3, sits Round 4, plays 5 and 6. The format above does not apply.
+  { stage: 'am_round3', label: 'Americano: Round 3 (start here)', line: 'Tonight, Round 3 on both courts; a Round 2 score still waits for a Yes (Home: Confirm). View as Vic: Enter score, Submit (the motion, Undo). Then view as one of Vic’s opponents: Is this right?' },
+  { stage: 'am_before', label: 'Americano: before the night', line: 'Two days from now. View as Vic: the ticket, then Your rounds (Round 4 is a break).' },
+  { stage: 'am_round1', label: 'Americano: Round 1', line: 'Tonight, started a minute ago, nothing entered. View as Vic: Round 1 with Enter score.' },
+  { stage: 'am_break', label: 'Americano: a break', line: 'Rounds 1 to 3 in, Round 4 on. View as Vic: On break until Round 5, who else sits, every court under Currently playing.' },
+  { stage: 'am_standings', label: 'Americano: after Round 5', line: 'Rounds 1 to 5 in, Round 6 on: the points table after Round 5. Home: the scores, Fix, Player left.' },
+  { stage: 'am_switched', label: 'Americano: switched from Locked doubles', line: 'Locked doubles, 9 locked in after Pay by (Reese did not pay), two days from now: it switches to Americano. View as Vic: Tournament style is now Americano, and Your rounds.' },
   // Zip 57 (🎾57.tourney3): teams and game day. "The Cold Open", Locked doubles, 8 locked in: Net Ninjas (Vic, Wren), Dill With It (Sage,
   // Christopher), Kitchen Crew (Rowan, Zoe), Third Shot Gang (Parker, Quinn); courts 1 and 2. The format above does not apply.
   { stage: 'day_ready', label: 'Game night, no teams yet (start here)', line: 'Tonight, started 10 minutes ago, 8 locked in. Home: Draft teams, then Publish teams. View as Vic: Game 1 with We won. View as Parker: Confirm.' },

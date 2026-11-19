@@ -618,8 +618,9 @@ export interface PlayerTournamentView {
   tickets?: PlayerTicketsView;
   /** Zip 56: the canceled tournament's plain card (only for players who were on the list): what came back to this player. */
   canceled?: { backCents: number; claimCents: number };
-  /** Zip 57: Locked doubles teams and game day, once the organizer published the teams (and the style is Locked doubles). */
-  day?: PlayerDayView;
+  /** Zip 57: Locked doubles teams and game day, once the organizer published the teams (and the style is Locked doubles). Zip 61: the Americano
+   *  night (`kind: 'americano'`), once tickets close on Americano, for a player in it. */
+  day?: PlayerDayView | PlayerRoundsView;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -661,6 +662,8 @@ export interface PlayerDayGame {
 }
 
 export interface PlayerDayView {
+  /** Zip 61: never set on a Locked doubles night (the Americano night says 'americano'). */
+  kind?: undefined;
   /** Their own team (null: not on a team, e.g. not locked in). `canRename`: either partner can type a name or roll the dice (until Game 1). */
   team: { name: string; players: string[]; seat: number; canRename?: true } | null;
   /** Every team (All teams), names and players only, in seat order. */
@@ -756,6 +759,110 @@ export interface AdminDayView {
   fix?: { gone: string[]; spare: string[]; text: string } | null;
   /** Swap in candidates for "Player left": locked in but on no team, then paid standby. */
   spares: { id: string; name: string; standby: boolean }[];
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 61 (🎾61.americano): the Americano night (server/americanoDay.ts). Every round a new partner; everyone plays for their own points. A player
+// sees only their own rounds, the games being played now, and the points table (names only, never a level).
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** One of a player's rounds (pictures 31 and 32): a game with a partner and two opponents, or a break. */
+export interface PlayerRound {
+  round: number;
+  /** The game (null: a break). `key` is what the screen sends back with a score, so a schedule that changed in between is caught. */
+  num: number | null;
+  key?: string;
+  /** The venue's court number (or 1 and 2 until the organizer sets them); null on a break. */
+  court: number | null;
+  partner: string | null;
+  opponents: [string, string] | null;
+  /** done (a score counts, or the break is over), next (the first one not done), later. */
+  state: 'done' | 'next' | 'later';
+  /** Their side won (done games with a score). */
+  won?: boolean;
+  /** The score from their side (mine first). */
+  score?: { mine: number; theirs: number };
+  playTo: number;
+  /** Their side entered the score and the other side has not said Yes yet. */
+  claimed?: true;
+  /** The other side entered a score: "Is this right?" (who said it, the score from this player's side). */
+  ask?: { by: string; mine: number; theirs: number; winners: string };
+  /** Never played (someone left). */
+  skipped?: true;
+  /** Its round is being played now: Enter score shows on it. */
+  onNow?: true;
+  /** A break: the others sitting that round (names). */
+  alsoOff?: string[];
+}
+
+export interface PlayerRoundsView {
+  kind: 'americano';
+  /** This player's own name (the cards say "You + Parker"). */
+  me: string;
+  rounds: PlayerRound[];
+  /** The night has started (scores can be entered). */
+  started: boolean;
+  /** The live window (from 30 minutes before the start through the night): the live view takes the ticket's place on Home. */
+  today: boolean;
+  beginsAt: string;
+  courtsSet: boolean;
+  /** "Round 3 of 6" (or "Done") and the bar. */
+  progress: { label: string; done: number; total: number };
+  /** Games being played now that are not theirs (every court while they sit). */
+  live: { round: number; court: number; a: string[]; b: string[] }[];
+  /** The points table: rank, name, wins-losses, points. */
+  standings: { rank: number; name: string; record: string; points: number; me?: true; tied?: true; out?: true }[];
+  timeNote?: string;
+  paused?: true;
+  /** Someone left: a plain note for each player whose later game is off ("Zoe left. Your Round 5 game is off."). */
+  leftNote?: { key: string; text: string };
+}
+
+/** Zip 61: one Americano game on the organizer's screens. */
+export interface AdminRoundGame {
+  num: number;
+  round: number;
+  court: number;
+  courtNumber: number | null;
+  a: { ids: string[]; names: string[] };
+  b: { ids: string[]; names: string[] };
+  playTo: number;
+  scoreA: number | null;
+  scoreB: number | null;
+  /** done (the score stands), waiting (entered, the other side has not said Yes), changed (the other side changed it), playing, later, skipped. */
+  status: 'done' | 'waiting' | 'changed' | 'playing' | 'later' | 'skipped';
+  /** Who entered the score (or who left, on a skipped game). */
+  by?: string;
+  /** Late: waiting for a Yes for more than 5 minutes, or playing past the round's time. The words say how long. */
+  late?: string;
+  /** What the screen showed (sent back with Confirm and Fix, so a change in between is caught). */
+  stamp: string;
+}
+
+/** Zip 61: the organizer's Americano night (AdminTournamentView.rounds). */
+export interface AdminRoundsView {
+  kind: 'americano';
+  lockedIn: number;
+  /** Every player in the night (Player left picks from it). */
+  players: { id: string; name: string; left?: true }[];
+  courts: number;
+  courtNumbers: number[] | null;
+  plan: { gameTo: number; rounds: number; fits: boolean; onCourt: number };
+  games: AdminRoundGame[];
+  /** Who sits each round. */
+  sits: { round: number; names: string[] }[];
+  /** The round being played (null: not started, or over). */
+  round: number | null;
+  started: boolean;
+  over: boolean;
+  paused: boolean;
+  anyResult: boolean;
+  timeCheck?: { text: string; fromRound: number; to: number; key: string } | null;
+  timeNote?: string;
+  /** Every game is in and players are still level on every rule: "Tied" (the names). */
+  tied?: string[];
+  /** Players have played unequal numbers of games (someone left): the table ranks by win percentage. */
+  byPercent: boolean;
 }
 
 /** Zip 56: one ticket on the organizer's tournament page and Home cards (the organizer sees everyone's money). */
@@ -854,6 +961,8 @@ export interface AdminTournamentView {
   closeCheck?: { kind: 'tight' | 'extra_court' | 'few'; text: string } | null;
   /** Zip 57: teams and game day (Locked doubles). */
   day?: AdminDayView;
+  /** Zip 61: the Americano night (once tickets close on Americano). */
+  rounds?: AdminRoundsView;
 }
 
 /**

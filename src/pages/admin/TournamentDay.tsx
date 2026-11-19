@@ -12,6 +12,7 @@ import { AlertCard } from '../../AlertCard';
 import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import './tournament-day.css';
+import { AmericanoCards } from './AmericanoDay';
 
 // The court picker (the site's court map) is loaded when the published card draws it, not with this file: a static import here would pull
 // src/GameDay.tsx (and its styles) in ahead of the other organizer screens in the one-file build, changing the style order (tests/zip48-split).
@@ -63,6 +64,8 @@ export function TournamentDayCards({ ctx, t }: { ctx: AdminCtx; t: AdminTourname
       {d && d.phase === 'draft' && <DraftCard ctx={ctx} t={t} d={d} />}
       {d && d.phase === 'published' && d.fix && <FixTeamsCard ctx={ctx} t={t} d={d} />}
       {d && d.phase === 'published' && t.format === 'doubles' && (nightOn(ctx, t) ? <NightControls ctx={ctx} t={t} d={d} /> : <PublishedCard ctx={ctx} t={t} d={d} />)}
+      {/* Zip 61: the Americano night (the rounds before it; on the night the scores, the Time check, Pause, Player left). */}
+      {t.format === 'americano' && t.rounds && <AmericanoCards ctx={ctx} t={t} />}
     </>
   );
 }

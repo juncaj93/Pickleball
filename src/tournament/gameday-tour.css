@@ -696,3 +696,180 @@
     box-shadow: none;
   }
 }
+
+/* Zip 61 (picture 37): a loss, both styles. The winners' side gets a soft white glow (white at 16%, a 2 px white ring at 35%); our side, VS and
+   the other button dim; the tapped white button says "Onto the next!". Then the same slide as a win. Reduced motion: no glow, no slide. */
+.tc-gd-vs > .tc-gd-tn:last-child {
+  position: relative;
+  border-radius: 14px;
+  transition:
+    background 220ms var(--ease),
+    box-shadow 220ms var(--ease);
+}
+.tc-gd-vs-lost > .tc-gd-tn:last-child {
+  padding: 6px 10px;
+  margin: -6px -10px;
+  background: rgb(255 255 255 / 16%);
+  box-shadow:
+    0 0 0 2px rgb(255 255 255 / 35%),
+    0 0 22px rgb(255 255 255 / 22%);
+}
+.tc-gd-vs-lost .tc-gd-side-a,
+.tc-gd-vs-lost .tc-gd-vs-mark {
+  opacity: 0.4;
+}
+.tc-gd-next-lost .tc-gd-wewon {
+  opacity: 0.35;
+}
+.tc-gd-next-lost .tc-gd-theywon:disabled {
+  opacity: 1;
+  background: rgb(255 255 255 / 26%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-gd-vs-lost > .tc-gd-tn:last-child {
+    box-shadow: 0 0 0 2px rgb(255 255 255 / 35%);
+  }
+}
+
+/* Zip 61, the Americano night (pictures 31 to 36). */
+.tc-gd-game .tc-gd-main > b {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.tc-gd-main .tc-gd-with {
+  color: inherit;
+  font-size: inherit;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-gd-game .tc-gd-main > b > .tc-gd-tag {
+  flex: none;
+}
+.tc-gd-game .tc-gd-main > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-gd-break .tc-gd-main b {
+  color: var(--ink);
+}
+.tc-gd-break.tc-gd-s-done .tc-gd-main b {
+  color: var(--ink-2);
+}
+/* Standings with points: the name cut with an ellipsis, "2 - 0", the points chip. */
+.tc-gd-pname {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.tc-gd-pname > b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.tc-gd-pname > .tc-gd-tag {
+  flex: none;
+}
+.tc-gd-pts {
+  min-width: 62px;
+  text-align: center;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+.tc-gd-stand .tc-gd-rank {
+  width: 22px;
+}
+.tc-gd-stand.tc-gd-out .tc-gd-pname > b {
+  color: var(--ink-2);
+}
+/* The break card (picture 35): the hero's dark green, the lime kicker, the big line, who else sits. */
+.tc-gd-breakcard {
+  gap: 4px;
+  box-shadow:
+    inset 0 0 0 1px #24503a,
+    0 10px 30px rgb(13 33 24 / 22%);
+}
+.tc-gd-breakcard .tc-gd-next-title {
+  margin: 2px 0 0;
+}
+/* Enter score (picture 33): each side's name, then − 11 + with 44 px buttons; the number can be typed too. */
+.tc-gd-score {
+  display: flex;
+  flex-direction: column;
+}
+.tc-gd-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 72px;
+}
+.tc-gd-score-row + .tc-gd-score-row {
+  border-top: 1.5px dashed var(--line);
+}
+.tc-gd-score-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--body);
+  font-size: 1.12rem;
+  font-weight: 700;
+}
+.tc-gd-score-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tc-gd-step {
+  flex: none;
+  font-family: var(--body);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.tc-gd-step:disabled {
+  opacity: 0.4;
+}
+.tc-gd-score-ctl > input.tc-gd-score-num {
+  flex: none;
+  width: 64px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 2.1rem;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tc-gd-score-ctl > input.tc-gd-score-num:focus-visible {
+  outline: 2px solid var(--accent-text);
+}
+@media (max-width: 359px) {
+  .tc-gd-score-ctl > input.tc-gd-score-num {
+    width: 52px;
+    font-size: 1.8rem;
+  }
+  .tc-gd-score-name {
+    font-size: 1rem;
+  }
+  .tc-gd-pts {
+    min-width: 54px;
+  }
+}
+/* Currently playing (Americano): two names a side wrap between words only (picture 35), never inside a name. */
+.tc-gd-liverow .tc-gd-tn > b {
+  overflow-wrap: break-word;
+  font-size: 1rem;
+}

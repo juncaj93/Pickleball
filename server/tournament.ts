@@ -64,6 +64,7 @@ import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
 import { adminDayView, courtNumbersOf, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, type GameRow, type TeamRow } from './tournamentDay';
+import { adminRoundsView, americanoStarted, playerRoundsView } from './americanoDay';
 import { fitWords, nightPlan } from '../shared/tournamentPlan';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
@@ -884,7 +885,10 @@ export async function playerTournamentFor(
   const dayView =
     statusOf(t2) === 'tickets' && t2.teams_at && t2.final_date && base.format === 'doubles'
       ? playerDayView(t2, all, readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id), playerId, group.timezone, ctx.nowMs)
-      : null;
+      : // Zip 61: the Americano night, once tickets close on Americano, for a player in it (their rounds, the games now, the points table).
+        statusOf(t2) === 'tickets' && t2.final_date && base.format === 'americano' && decided
+        ? playerRoundsView(t2, all, tickets, (readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id)).games, playerId, group.timezone, ctx.nowMs)
+        : null;
   return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf, readTickets ? pre?.freed : undefined), ...(dayView ? { day: dayView } : {}) };
 }
 
@@ -1097,6 +1101,8 @@ export async function adminTournamentFor(
     ...(real ? { chosenCourts: courts } : {}),
     closeCheck,
     ...(dayRows ? { day: adminDayView(ts, shownFormat, rows, tickets, dayRows, tz, ctx.nowMs) } : {}),
+    // Zip 61: the Americano night (once tickets close on Americano): the rounds, the scores, the Time check, Player left.
+    ...(dayRows && decided && shownFormat === 'americano' ? { rounds: adminRoundsView(ts, rows, tickets, dayRows.games, tz, ctx.nowMs) } : {}),
     ticketCents: t.ticket_cents,
     championCreditCents: t.champion_credit_cents,
     secondCreditCents: t.second_credit_cents ?? 0,
@@ -1451,6 +1457,8 @@ export async function switchBackStyle(ctx: Ctx) {
   const t = await openById(ctx, group);
   if (!isOddSource(t.format_source) || formatOf(t) !== 'americano') return { ok: true, changed: false };
   if (salesClosed(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'format_locked', 'The tournament has started. The style stays.');
+  // Zip 61: a score is in for the Americano night (results open 15 minutes before the start): the rounds have started, the style stays.
+  if (await americanoStarted(ctx.db, t.id)) throw new HttpError(409, 'format_locked', 'The rounds have started. The style stays Americano.');
   const n = lockedInCount(await loadTickets(ctx.db, t.id));
   if (n % 2 === 1) throw new HttpError(409, 'odd_count', `Locked doubles needs an even number. ${n} are locked in.`);
   changedOrLookAgain(
