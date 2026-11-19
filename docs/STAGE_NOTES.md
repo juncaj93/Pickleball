@@ -6933,3 +6933,42 @@ here): dashboard main 1,198 to 1,207 ms / branch 1,121 to 1,132 ms; version main
 - After, read only (no name picked, nothing written, no live data touched): /, /admin, /api/status and /api/group answer 200; Home at 390 light
   and dark: no page errors, only GET requests, nothing wider than the screen; the Tournament test and History addresses answer 401 without the PIN.
 - The preview address `zip58-speed-main` (main's code, the fake database) was only for the timing; it can be ignored.
+
+## Zip 69: full tournament dry run before Tue Dec 1 (🎾69.dryrun), Thu Nov 19, 2026
+Branch `claude/new-session-j00lyg` (the session is named "🎾69.dryrun"). Findings only: NO code change, NO deploy, NO switch change, nothing
+written to live (SELECT and GET only), the shared preview untouched. Main `40d0f32` (Zips 55 to 64, 66, 57, 61 and 58 live).
+
+### How it was run
+- The real server code on its own in-memory database with a fake clock (`tests/dryrun69/`, the test harness), the preview's fixed names, Alex
+  the organizer playing a $0 seat (as on live), every switch that is on for everyone on live turned on (read from live's `task_log`), The Cold
+  Open's live settings (Tue Dec 1, 7:30 to 10:00 PM, 2 courts, $18, credits $0, Pay by Mon Nov 30 7:00 PM, players vote). `npx vitest run
+  tests/dryrun69` (13 checks, about 4 seconds). Every stage is also saved as a database copy (`.data/dryrun69/snaps`, not in git) and opened on a
+  local dev server at 390 px, light and dark (52 screenshots in `.data/dryrun69/shots`): no page errors, no 500s, nothing wider than the
+  screen, no em dashes.
+- Night A (10, Locked doubles), Night B (9, Americano), Night C (8: three-way tie; and a back out after Pay by), the edge cases (missed date,
+  late joiner, drop outs before and after Pay by and in the last 3 hours, I paid waiting then a drop, reschedule, cancel, Only me, a phone with
+  no name, double taps on Lock, I paid, confirm, results), the Time check when late. Every money check (integrity-checks, extension, tournament)
+  reads 0 after every step.
+
+### Findings (ranked)
+1. Drop out stays on a locked-in player's card until 7:30 PM, and the server takes it: full $18 back as credit; with teams published and an even
+   count it flips the night to Americano (seen 2 hours before the start), and in the last 3 hours nobody can buy the freed spot ("Tickets are
+   closed"). The "Copy text for the group" then offers a spot with a pay-by time that has already passed. Files: src/tournament/TournamentHome.tsx
+   (canDrop), server/tournament.ts (playerTournamentBackOut: only refuses once the night has started), src/pages/admin/Tournament.tsx
+   (OddSwitchCard text). Needs Alex's rule before Dec 1.
+2. The organizer's "switched to Americano" card squeezes its words into a column one word wide at 390 px (the long "Copy text for the group"
+   button sits beside the text). Shows at Pay by with an odd count and after any back out. File: src/pages/admin/Tournament.tsx OddSwitchCard
+   (uses `action`, the inline slot, not `actions`, the row under the text).
+3. A phone with no name picked gets the organizer's Venmo link and Zelle number in /api/group (no tournament data). Older than the tournaments
+   (the Pay sheet). File: server/player.ts groupView.
+4. The organizer card's "Your cost if it fills" is for the plan size (12), not the players locked in: 10 locked in reads -$78 while the real
+   number is -$42 ($162 tickets, $120 courts). The Money tab shows ticket money in the month it was paid and never the tournament's courts.
+Nice to have: a regular game on the tournament night is not flagged (live's Dec 1 game is already canceled, "Cold Open Tourney"); the AlertCard
+congratulations draws a big black circle if ALERT_CARDS is ever off; two banners say the same style after a switch; "Currently playing" names
+the 3rd place game "Round 6"; a partner's "<other team> won" silently replaces the teammate's We won (the organizer can Fix).
+
+### Live, read only (Thu Nov 19, about 6 PM Eastern)
+The Cold Open: Tue Dec 1, 7:30 to 10:00 PM, 2 courts, $18, champion and 2nd credit $0, Pay by Mon Nov 30 7:00 PM, status tickets, style from the
+vote (Locked doubles so far, styleTbd until Pay by), Everyone. 10 signed up, 9 can make Dec 1 (Joe picked other dates: he gets the in-or-out
+alert), 1 locked in (Alex's $0 seat), no I paid waiting. Integrity checks 21 / 8 / 11 columns, every one 0. The regular Tue Dec 1 game is canceled
+("Cold Open Tourney").
