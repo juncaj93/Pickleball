@@ -27,6 +27,10 @@ import {
   tallyVotes,
   type FinalizeView,
   formatName,
+  isOddSource,
+  oddSwitchWords,
+  styleAtClose,
+  styleBannerWords,
   planFit,
   type TournamentFormat,
   type VoteCounts,
@@ -47,6 +51,7 @@ import {
   organizerCost,
   prizeCentsOf,
   smartPlan,
+  planRange,
   STORED_PLAN,
   type PlayerTournamentView,
   TOURNAMENTS,
@@ -55,6 +60,7 @@ import {
   type Visibility,
 } from '../shared/tournament';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
+import { notifyTournament } from './alerts';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
@@ -491,12 +497,71 @@ export function openDatesOf(t: TournamentRow, today: string): string[] {
  */
 export function nightOf(t: TournamentRow, tz: string): { start: number; end: number } | null {
   if (!t.final_date) return null;
-  return { start: startMsOf(t.final_date, NIGHT_START_MINUTES, tz), end: startMsOf(t.final_date, NIGHT_END_MINUTES, tz) };
+  // Zip 64: the night starts at the tournament's real start (Finalize's "Plays" box, stored in start_minutes; a date picked before Zip 64 kept
+  // the 7:00 PM default there, so its night is exactly what it was) and ends at its end, never before 10:00 PM (unused holds come back after).
+  const r = realTimes(t);
+  return { start: startMsOf(t.final_date, r.start, tz), end: Math.max(startMsOf(t.final_date, r.start + r.minutes, tz), startMsOf(t.final_date, NIGHT_END_MINUTES, tz)) };
 }
+
+/**
+ * Zip 64: the tournament's real start and length, minutes after midnight Eastern and minutes, once the organizer finalized the date ("Plays 7:30 PM
+ * to 10:00 PM" on the Finalize screen, stored in the existing start_minutes and minutes columns; no new column). Before a date is picked the
+ * screens show the plan's estimate instead (startSetOf is false then).
+ */
+export function realTimes(t: Pick<TournamentRow, 'start_minutes' | 'minutes'>): { start: number; minutes: number } {
+  const start = Number.isInteger(t.start_minutes) && t.start_minutes >= 0 && t.start_minutes < 1440 ? t.start_minutes : NIGHT_START_MINUTES;
+  const minutes = Number.isInteger(t.minutes) && t.minutes >= 60 && t.minutes <= 360 ? t.minutes : NIGHT_END_MINUTES - NIGHT_START_MINUTES;
+  return { start, minutes };
+}
+/** Zip 64: the date is finalized, so start_minutes and minutes are the real times (the stub drops its "~"). */
+export const startSetOf = (t: TournamentRow): boolean => !!t.final_date && (statusOf(t) === 'tickets' || statusOf(t) === 'date_picked' || statusOf(t) === 'canceled');
+/** Zip 64: what the Finalize screen's "Plays" boxes start on: 7:30 PM to 10:00 PM. */
+export const FINALIZE_TIMES = { start: 19 * 60 + 30, minutes: 150 } as const;
 
 /** The players locked in (a spot, still on the list): what the smart plan follows. */
 export const lockedCount = (tickets: readonly { place: string; signup_status: string }[]): number =>
   tickets.filter((k) => k.place === 'spot' && k.signup_status === 'in').length;
+
+/**
+ * Zip 64: the players locked in as everyone sees them (Zip 63's trust rule): every spot, and every I paid for a whole ticket (not a standby hold)
+ * still waiting for the organizer. The style follows this count, so the gold balls and the style always agree.
+ */
+export const lockedInCount = (tickets: readonly TicketWithName[]): number =>
+  tickets.filter(
+    (k) =>
+      k.signup_status === 'in' &&
+      (k.place === 'spot' || (k.place !== 'line' && k.claim_cents > 0 && ticketOwed({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents }) === 0)),
+  ).length;
+
+/** Zip 64: tickets have closed for the style (Pay by has passed): the style is decided from who is locked in. */
+export const styleDecided = (t: TournamentRow, nowMs: number): boolean => statusOf(t) === 'tickets' && !!t.pay_by && nowMs >= Date.parse(t.pay_by);
+
+/**
+ * Zip 64: the style rule at work. Once Pay by has passed and until the night starts, an ODD number locked in on Locked doubles switches the
+ * tournament to Americano, once (the write is guarded on the row as read, so two screens reading at the same moment switch it once and send one
+ * alert). It never switches back by itself: the organizer's card asks. Run by the first screen that reads the tournament (no clock job), like
+ * the unused holds after the night. A look-only database (the read-only PIN, "Pretend it's...") writes nothing; the views still show
+ * Americano for an odd count (styleAtClose), so every screen agrees either way.
+ */
+async function settleStyle(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets: readonly TicketWithName[], upkeep?: Upkeep): Promise<TournamentRow> {
+  if (!styleDecided(t, ctx.nowMs) || salesClosed(t, group.timezone, ctx.nowMs)) return t;
+  const n = lockedInCount(tickets);
+  if (n % 2 === 0 || formatOf(t) !== 'doubles') return t;
+  if (upkeep) upkeep.tried = true;
+  const source = `odd:${ctx.nowIso}`;
+  try {
+    const res = await ctx.db
+      .prepare("UPDATE tournaments SET format = 'americano', format_source = ?, updated_at = ? WHERE id = ? AND status = 'tickets' AND format = 'doubles' AND format_source IS ? AND pay_by = ?")
+      .bind(source, ctx.nowIso, t.id, t.format_source ?? null, t.pay_by)
+      .run();
+    if ((res.meta?.changes ?? 0) !== 1) return t;
+  } catch {
+    return t;
+  }
+  await audit(ctx.db, group.id, null, 'tournament_format', { tournament: t.name, format: 'americano', how: 'odd', lockedIn: n }, ctx.nowIso).catch(() => undefined);
+  await notifyTournament(ctx, group, `${oddSwitchWords(t.name)} ${n} are locked in.`);
+  return { ...t, format: 'americano', format_source: source, updated_at: ctx.nowIso };
+}
 
 /**
  * Zip 59: where ticket sales stand for NEW activity.
@@ -505,7 +570,7 @@ export const lockedCount = (tickets: readonly { place: string; signup_status: st
  *   cut    3 hours before the start: nothing more, a freed spot included
  */
 export type TicketPhase = 'open' | 'after' | 'cut';
-export function ticketPhase(t: TournamentRow, tz: string, nowMs: number, startMinutes: number = NIGHT_START_MINUTES): TicketPhase {
+export function ticketPhase(t: TournamentRow, tz: string, nowMs: number, startMinutes: number = realTimes(t).start): TicketPhase {
   if (!t.final_date) return 'open';
   // The cutoff follows the REAL start of the games (the plan: 7:30 PM start means 4:30 PM), not a fixed 7:00 PM.
   if (nowMs >= salesCutoffMs(startMsOf(t.final_date, startMinutes, tz))) return 'cut';
@@ -611,13 +676,16 @@ const shownDate = (t: TournamentRow): string | null => (statusOf(t) === 'date_pi
  * creating it: just "Format: Locked doubles", no vote claim). `key` is new for every date pick (a re-pick or a reschedule shows a fresh
  * alert) and carries the player, so a dismissed alert stays dismissed for that player only. No vote counts, ever.
  */
-function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, nowMs: number): { key: string; title: string; sub: string } | null {
+function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, nowMs: number, styleTbd = false): { key: string; title: string; sub: string } | null {
   // Every tournament gets it when its date is locked (Alex, pass 2); only a real vote majority says "Most players voted". A format chosen when
   // creating it (no source), changed by hand, or decided by the tie rule shows the date and the format only.
   const source: FormatSource = sourceOf(t.format_source) ?? 'admin';
   if (!t.final_date || (statusOf(t) !== 'tickets' && statusOf(t) !== 'date_picked')) return null;
   if (t.final_date < todayKey(nowMs, group.timezone)) return null;
-  return { key: `fmt:${t.id}:${t.date_picked_at ?? t.final_date}:${playerId}`, ...formatAlertWords(t.name, t.final_date, formatOf(t), source) };
+  const words = formatAlertWords(t.name, t.final_date, formatOf(t), source);
+  // Zip 64: the style is not final until tickets close: the alert says the vote's result only when it was a real majority, else "TBD".
+  if (styleTbd && source !== 'vote') words.sub = 'Tournament style TBD';
+  return { key: `fmt:${t.id}:${t.date_picked_at ?? t.final_date}:${playerId}`, ...words };
 }
 
 /**
@@ -720,17 +788,27 @@ export async function playerTournamentFor(
   // Zip 56: the tickets (once they have opened), and the smart plan they decide: the start time and the hours players see.
   const tickets =
     ticketsEverOpened(t) && statusOf(t) !== 'canceled' ? await returnUnusedHolds(ctx, group, t, readTickets ?? (await loadTickets(ctx.db, t.id)), upkeep) : [];
+  // Zip 64: the style rule (an odd number locked in after Pay by plays Americano).
+  const t2 = await settleStyle(ctx, group, t, tickets, upkeep);
   const plan = smartPlan(lockedCount(tickets));
   // Zip 60: the vote is open (the card says "Tournament style TBD"), or the date was locked (the alert). Their own vote only, never anyone else's.
   const tbd = statusOf(t) !== 'canceled' && (await votePending(ctx, group, t, tickets, orgOf));
-  const alert = formatAlertFor(t, group, playerId, ctx.nowMs);
+  // Zip 64: the date is finalized but tickets have not closed: the style is still "TBD" on the card. After: the style in play, and its banner.
+  const decided = styleDecided(t2, ctx.nowMs);
+  const styleTbd = !tbd && !decided && (statusOf(t) === 'tickets' || statusOf(t) === 'date_picked') && !!t.final_date;
+  const banner = decided ? styleBannerWords(t2.format_source) : null;
+  const real = startSetOf(t) ? realTimes(t) : null;
+  const alert = formatAlertFor(t2, group, playerId, ctx.nowMs, styleTbd);
   const base: PlayerTournamentView = {
     id: t.id,
     name: t.name,
-    format: formatOf(t),
+    format: decided ? styleAtClose(formatOf(t2), lockedInCount(tickets)) : formatOf(t2),
     status: statusOf(t),
-    start: plan.start,
-    minutes: plan.minutes,
+    start: real ? real.start : plan.start,
+    minutes: real ? real.minutes : plan.minutes,
+    ...(real ? { startSet: true as const } : {}),
+    ...(styleTbd ? { styleTbd: true as const } : {}),
+    ...(banner ? { styleNote: { key: `style:${t.id}:${t2.format_source}:${playerId}`, text: banner } } : {}),
     openDates: openDatesOf(t, todayKey(ctx.nowMs, group.timezone)),
     finalDate: shownDate(t),
     names: rows.map((r) => r.display_name),
@@ -767,13 +845,13 @@ async function playerTicketsView(
   const money = (k: TicketWithName) => ({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents });
   const own = tickets.find((k) => k.player_id === playerId) ?? null;
   const locked = lockedCount(tickets);
-  const planStart = smartPlan(locked).start;
-  const phase = statusOf(t) === 'tickets' ? ticketPhase(t, group.timezone, ctx.nowMs, planStart) : 'open';
+  const phase = statusOf(t) === 'tickets' ? ticketPhase(t, group.timezone, ctx.nowMs) : 'open';
   const freed = phase === 'after' ? (freedRead ?? (await freedSpots(ctx.db, group.id, t))) : 0;
   // Someone who already holds something (a spot, a paid place in line, an I paid waiting) keeps seeing it. Everyone else: closed once the night
-  // started, 3 hours before the real start, or after Pay by with no freed spot. A waitlist player waits on the list (no Hold button) until a spot is freed.
+  // started or 3 hours before the real start. Zip 64 (late paying and late joining): after Pay by a player on the list can still lock a spot
+  // while one is open (the cap of 16); only with every spot taken are tickets closed for them then.
   const holding = !!own && (own.place === 'spot' || own.claim_cents > 0 || (own.place === 'line' && own.credit_cents + own.paid_cents >= own.price_cents));
-  const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && freed === 0))));
+  const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && locked >= MAX_SPOTS))));
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at 12.
     size: smartPlan(locked).size,
@@ -868,6 +946,12 @@ export async function adminTournamentFor(
   const rows = (pre ? pre.signups : await signupRows(ctx.db, t.id)).filter((r) => r.is_active === 1);
   const tickets = ticketsEverOpened(t) ? await returnUnusedHolds(ctx, group, t, readTickets ?? (await loadTickets(ctx.db, t.id)), upkeep) : [];
   const tz = group.timezone;
+  // Zip 64: the style rule, and the real times once the date is finalized.
+  const ts = await settleStyle(ctx, group, t, tickets, upkeep);
+  const decided = styleDecided(ts, ctx.nowMs);
+  const nIn = lockedInCount(tickets);
+  const real = startSetOf(t) ? realTimes(t) : null;
+  const oddNow = decided && isOddSource(ts.format_source);
   // The organizer, as the site always finds them (saved, or by the name in Settings): their seat is the $0 one.
   const orgId = tickets.length ? await orgOf() : group.organizer_player_id;
   // Alex's smart plan: the players locked in decide the planned size, the courts and the hours; the organizer's cost follows.
@@ -880,12 +964,17 @@ export async function adminTournamentFor(
   return {
     id: t.id,
     name: t.name,
-    format: formatOf(t),
-    // Zip 56: once players may hold tickets (open on Everyone, or a player's ticket row) the format, the price and Everyone stay.
-    formatLocked: playersHoldTickets(t, tickets.some((k) => k.player_id !== orgId)),
+    format: decided ? styleAtClose(formatOf(ts), nIn) : formatOf(ts),
+    // Zip 64: the style can change until the tournament starts (Finalize or Edit); only the night starting (or a cancel) locks it.
+    formatLocked: statusOf(t) === 'canceled' || salesClosed(t, tz, ctx.nowMs),
+    startSet: !!real,
+    styleDecided: decided,
+    lockedIn: nIn,
+    oddSwitch: oddNow && nIn % 2 === 1 ? { key: `odd:${t.id}:${ts.format_source}` } : null,
+    switchBack: oddNow && nIn % 2 === 0 && !salesClosed(t, tz, ctx.nowMs) ? { key: `back:${t.id}:${ts.format_source}:${nIn}` } : null,
     // Zip 60: the vote, with the counts (organizer only): while the date is not locked every player on the list, then the players who can make the picked date.
     ...(pending ? { formatPending: true } : {}),
-    ...(sourceOf(t.format_source) ? { formatSource: sourceOf(t.format_source), votes: tallyVotes(voters.map((r) => r.format_vote)) } : {}),
+    ...(sourceOf(ts.format_source) ? { formatSource: sourceOf(ts.format_source), votes: tallyVotes(voters.map((r) => r.format_vote)) } : {}),
     settingsLocked: playersHoldTickets(t, tickets.some((k) => k.player_id !== orgId)),
     payBy:
       statusOf(t) === 'tickets' ? (t.pay_by ?? null) : statusOf(t) === 'date_picked' && t.final_date ? defaultPayBy(t.final_date, NIGHT_START_MINUTES, tz, ctx.nowMs) : null,
@@ -911,9 +1000,10 @@ export async function adminTournamentFor(
     visibility: t.visibility === 'all' ? 'all' : 'me',
     size: plan.size,
     courts: plan.courts,
-    minutes: plan.minutes,
-    start: plan.start,
-    cost: { ...organizerCost(plan, t.ticket_cents, prize, paidNow), paidNow },
+    minutes: real ? real.minutes : plan.minutes,
+    start: real ? real.start : plan.start,
+    // Zip 64: once the date is finalized the court bill follows the real hours ("Plays"), on the plan's courts.
+    cost: { ...organizerCost(real ? { ...plan, minutes: real.minutes } : plan, t.ticket_cents, prize, paidNow), paidNow },
     ticketCents: t.ticket_cents,
     championCreditCents: t.champion_credit_cents,
     secondCreditCents: t.second_credit_cents ?? 0,
@@ -1111,8 +1201,13 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   if (body.format !== undefined) {
     if (s.format === 'vote') {
       if (!isVoteSource(wasSource)) {
-        if (t.final_date) throw new HttpError(409, 'format_locked', 'The date is picked. The format cannot go back to a vote now.');
-        nextSource = 'vote';
+        if (t.final_date) {
+          // Zip 64: "Auto" after the date is finalized: the vote's winner for that date again (the vote itself closed with the date).
+          const tally = await voteTally(ctx, t, t.final_date);
+          const d = decideFormat(tally.counts, await previousFormat(ctx.db, t));
+          nextFormat = d.format;
+          nextSource = d.rule === 'majority' ? 'vote' : 'tie';
+        } else nextSource = 'vote';
       }
     } else if (isVoteSource(wasSource)) {
       // A hand pick while the vote is still open, or a different format. Saving the format as it already stands (the form after a Reschedule that
@@ -1125,7 +1220,16 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
       nextFormat = s.format;
     }
   }
-  if ((nextFormat !== formatOf(t) || nextSource !== wasSource) && held) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
+  // Zip 64 (Alex): the style can change at any time before the tournament starts, tickets or not. Once tickets have closed, Locked doubles needs
+  // an even number locked in; switching back to it from an odd switch says so to players ("back to Locked doubles").
+  if (nextFormat !== formatOf(t) || nextSource !== wasSource) {
+    if (salesClosed(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'format_locked', 'The tournament has started. The style stays.');
+    if (styleDecided(t, ctx.nowMs) && nextFormat !== formatOf(t)) {
+      const n = lockedInCount(await loadTickets(ctx.db, t.id));
+      if (nextFormat === 'doubles' && n % 2 === 1) throw new HttpError(409, 'odd_count', `Locked doubles needs an even number. ${n} are locked in.`);
+      nextSource = nextFormat === 'doubles' && isOddSource(wasSource) ? `back:${ctx.nowIso}` : 'admin';
+    }
+  }
   if (held) {
     if (s.ticketCents !== t.ticket_cents) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
     if (s.visibility !== 'all') throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
@@ -1146,9 +1250,9 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
            visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?, format_source = ?
          WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))
            AND format_source IS ?
-           AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND format = ? AND ? = 'all'))`,
+           AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND ? = 'all'))`,
       )
-      .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, nextFormat, s.secondCreditCents, nextSource, t.id, group.id, offer, wasSource, s.ticketCents, nextFormat, s.visibility),
+      .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, nextFormat, s.secondCreditCents, nextSource, t.id, group.id, offer, wasSource, s.ticketCents, s.visibility),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
     // tournament holds exactly the new offer and is still open).
     ctx.db
@@ -1165,7 +1269,7 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   changedOrLookAgain(res);
   await audit(ctx.db, group.id, null, 'tournament_edited', { tournament: s.name, ...(trimmed ? { trimmed } : {}) }, ctx.nowIso);
   if (nextFormat !== formatOf(t) || nextSource !== wasSource) {
-    await audit(ctx.db, group.id, null, 'tournament_format', { tournament: s.name, format: nextFormat, how: nextSource === 'admin' ? 'admin' : nextSource === 'vote' ? 'vote_open' : 'admin' }, ctx.nowIso);
+    await audit(ctx.db, group.id, null, 'tournament_format', { tournament: s.name, format: nextFormat, how: nextSource === 'vote' ? (t.final_date ? 'vote' : 'vote_open') : nextSource === 'tie' ? 'tie' : 'admin' }, ctx.nowIso);
   }
   if (s.visibility !== (t.visibility === 'all' ? 'all' : 'me')) await audit(ctx.db, group.id, null, s.visibility === 'all' ? 'tournament_shown' : 'tournament_hidden', { tournament: s.name }, ctx.nowIso);
   return { ok: true };
@@ -1188,6 +1292,28 @@ export async function setTournamentVisibility(ctx: Ctx, body: Record<string, unk
   );
   if (visibility !== (t.visibility === 'all' ? 'all' : 'me')) await audit(ctx.db, group.id, null, visibility === 'all' ? 'tournament_shown' : 'tournament_hidden', { tournament: t.name }, ctx.nowIso);
   return { ok: true, visibility };
+}
+
+/**
+ * Zip 64: POST /api/admin/tournament/:id/switch-back: "Switch back to Locked doubles?" > Switch. Only after an odd switch (the vote's winner or
+ * the organizer's pick was Locked doubles), with an even number locked in, before the night starts. Guarded on the style as read: a second tap
+ * changes nothing. Players see "Tournament style is back to Locked doubles."
+ */
+export async function switchBackStyle(ctx: Ctx) {
+  const group = await organizerOn(ctx);
+  const t = await openById(ctx, group);
+  if (!isOddSource(t.format_source) || formatOf(t) !== 'americano') return { ok: true, changed: false };
+  if (salesClosed(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'format_locked', 'The tournament has started. The style stays.');
+  const n = lockedInCount(await loadTickets(ctx.db, t.id));
+  if (n % 2 === 1) throw new HttpError(409, 'odd_count', `Locked doubles needs an even number. ${n} are locked in.`);
+  changedOrLookAgain(
+    await ctx.db
+      .prepare(`UPDATE tournaments SET format = 'doubles', format_source = ?, updated_at = ? WHERE id = ? AND format = 'americano' AND format_source = ? ${OPEN_GUARD}`)
+      .bind(`back:${ctx.nowIso}`, ctx.nowIso, t.id, t.format_source)
+      .run(),
+  );
+  await audit(ctx.db, group.id, null, 'tournament_format', { tournament: t.name, format: 'doubles', how: 'back', lockedIn: n }, ctx.nowIso);
+  return { ok: true, changed: true };
 }
 
 /** PUT /api/admin/tournament/:id/level { playerId, level }: the organizer's level for one player (kept in the level history too). */
@@ -1249,6 +1375,7 @@ export async function finalizeView(ctx: Ctx): Promise<FinalizeView> {
   const held = playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org));
   const tally = await voteTally(ctx, t, date!);
   const fit = planFit(tally.names.length);
+  const plays = finalizeTimesOf(t);
   let votes: VoteCounts | null = null;
   let winner: FinalizeView['winner'] = null;
   if (isVoteSource(t.format_source) && !held) {
@@ -1267,8 +1394,29 @@ export async function finalizeView(ctx: Ctx): Promise<FinalizeView> {
     format: formatOf(t),
     locked: held,
     ticketCents: t.ticket_cents,
-    payBy: defaultPayBy(date!, NIGHT_START_MINUTES, group.timezone, ctx.nowMs),
+    payBy: defaultPayBy(date!, plays.start, group.timezone, ctx.nowMs),
+    start: plays.start,
+    minutes: plays.minutes,
   };
+}
+
+/**
+ * Zip 64: what "Plays" starts on: 7:30 PM to 10:00 PM, or after a Reschedule the times the organizer finalized before (a tournament created
+ * before Zip 64 still holds Create's placeholder 7:00 PM for 3 hours there, which is not a real choice, so it starts on 7:30 PM too).
+ */
+function finalizeTimesOf(t: TournamentRow): { start: number; minutes: number } {
+  const placeholder = t.start_minutes === STORED_PLAN.start && t.minutes === STORED_PLAN.minutes;
+  return placeholder ? { ...FINALIZE_TIMES } : realTimes(t);
+}
+
+/** Zip 64: the Finalize screen's "Plays" (start and length): whole 5 minutes, 1 to 6 hours, ending by midnight. Left out: finalizeTimesOf. */
+function readPlays(body: Record<string, unknown>, t: TournamentRow): { start: number; minutes: number } {
+  if (body.start === undefined && body.minutes === undefined) return finalizeTimesOf(t);
+  const start = body.start;
+  const minutes = body.minutes;
+  const ok = (x: unknown, lo: number, hi: number): x is number => typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi && x % 5 === 0;
+  if (!ok(start, 6 * 60, 23 * 60) || !ok(minutes, 60, 360) || start + minutes > 24 * 60) bad('invalid_plays', 'Pick a start and an end on the same night, 1 to 6 hours apart.');
+  return { start: start as number, minutes: minutes as number };
 }
 
 /**
@@ -1295,15 +1443,17 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
   const date = body.date;
   if (typeof date !== 'string' || !storedDays(t.offered_dates).includes(date)) bad('invalid_date', 'Pick one of the dates you offered.');
   if ((date as string) < todayKey(ctx.nowMs, group.timezone)) bad('invalid_date', 'That date has passed. Pick another one.');
-  if (ctx.nowMs >= startMsOf(date as string, NIGHT_START_MINUTES, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
+  // Zip 64: the real start and end ("Plays" on the Finalize screen), saved in the existing start_minutes and minutes columns.
+  const plays = readPlays(body, t);
+  if (ctx.nowMs >= startMsOf(date as string, plays.start, group.timezone)) bad('invalid_date', 'That night has started. Pick another date.');
   // Zip 56 (Alex): picking the date opens tickets, for everyone on the list, in the same tap: Pay by starts at the night before at 7:00 PM (the
   // organizer can change it), the organizer's own $0 seat is taken when they are on the list. No other trigger.
-  const night = startMsOf(date as string, NIGHT_START_MINUTES, group.timezone);
+  const night = startMsOf(date as string, plays.start, group.timezone);
   const org = await organizerIdOf(ctx.db, group);
   const held = playersHoldTickets(t, await playerTicketExists(ctx.db, t.id, org));
   // Zip 60 (the Finalize screen): everything the organizer may set while locking, all optional (a plain pick sends none of them and gets today's
   // defaults): Pay by, the ticket price, and the format (a format, or "Let players vote" = take the vote's winner).
-  const payBy = body.payBy === undefined ? defaultPayBy(date as string, NIGHT_START_MINUTES, group.timezone, ctx.nowMs) : readPayByTime(body.payBy, ctx.nowMs, night);
+  const payBy = body.payBy === undefined ? defaultPayBy(date as string, plays.start, group.timezone, ctx.nowMs) : readPayByTime(body.payBy, ctx.nowMs, night);
   const ticketCents = body.ticketCents === undefined ? t.ticket_cents : wholeCents(body.ticketCents, 'ticket', 'The ticket price');
   if (ticketCents !== t.ticket_cents && held) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
   const choice = body.format === undefined ? undefined : v.oneOf(body.format, 'format', FORMAT_CHOICES);
@@ -1327,7 +1477,7 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
   if (choice === 'doubles' || choice === 'americano') {
     const cur = decided ? decided.format : formatOf(t);
     if (choice !== cur) {
-      if (held) throw new HttpError(409, 'format_locked', 'Tickets are open. The format cannot change now.');
+      // Zip 64: the style may change until the tournament starts (players who hold tickets after a Reschedule too).
       setFormat = choice;
       setSource = 'admin';
     }
@@ -1336,7 +1486,7 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
     ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?,
-           format = COALESCE(?, format), format_source = COALESCE(?, format_source), ticket_cents = ?
+           format = COALESCE(?, format), format_source = COALESCE(?, format_source), ticket_cents = ?, start_minutes = ${plays.start}, minutes = ${plays.minutes}
          WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ? AND ticket_cents = ?
            AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)`,
       )
@@ -1349,8 +1499,15 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
   if (decided || setSource === 'admin') {
     await audit(ctx.db, group.id, null, 'tournament_format', { tournament: t.name, format: setFormat, how: setSource === 'admin' ? 'admin' : decided!.source, ...(decided ? decided.counts : {}) }, ctx.nowIso);
   }
-  await audit(ctx.db, group.id, null, 'tournament_tickets_opened', { tournament: t.name, date: dayLong(date as string), priceCents: ticketCents, payBy: payByLabel(payBy, group.timezone, date as string) }, ctx.nowIso);
-  return { ok: true, date, payBy, format: setFormat ?? formatOf(t), source: setSource ?? t.format_source ?? null };
+  await audit(
+    ctx.db,
+    group.id,
+    null,
+    'tournament_tickets_opened',
+    { tournament: t.name, date: dayLong(date as string), priceCents: ticketCents, payBy: payByLabel(payBy, group.timezone, date as string), plays: planRange(plays.start, plays.minutes) },
+    ctx.nowIso,
+  );
+  return { ok: true, date, payBy, format: setFormat ?? formatOf(t), source: setSource ?? t.format_source ?? null, start: plays.start, minutes: plays.minutes };
 }
 
 /**

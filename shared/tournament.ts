@@ -190,6 +190,9 @@ export interface FinalizeView {
   ticketCents: number;
   /** The usual Pay by for this date (ISO). */
   payBy: string;
+  /** Zip 64: "Plays" starts on these: the start (minutes after midnight Eastern) and the length in minutes (7:30 PM to 10:00 PM). */
+  start: number;
+  minutes: number;
 }
 
 /** "Locked 3, Americano 6, Either 2" (the organizer's card). */
@@ -204,6 +207,36 @@ export function formatAlertWords(name: string, dayKeyOfDate: string, format: Tou
     sub: source === 'vote' ? `Most players voted ${formatName(format)}.` : `Format: ${formatName(format)}`,
   };
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 64 (🎾64.finalize): the tournament style rules. Players see "Tournament style TBD" until tickets close (Pay by). Then the style is decided
+// from who is locked in: an EVEN number plays the vote's winner (or the organizer's own pick); an ODD number plays Americano (Locked doubles
+// needs teams of two). After that, a back out that makes the count odd switches it to Americano by itself (once; the organizer gets a Telegram
+// alert and a card); a late join that makes it even again never switches back by itself: the organizer gets "Switch back to Locked doubles?".
+// No new column: tournaments.format holds the style in play, and tournaments.format_source (no CHECK) says why, with two new values that carry
+// the moment they were set: 'odd:<ISO time>' (switched to Americano for an odd count; the vote or the pick was Locked doubles) and
+// 'back:<ISO time>' (the organizer switched back to Locked doubles). Code from before Zip 64 reads either as "the organizer's own" (sourceOf).
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The style was switched to Americano for an odd number locked in. */
+export const isOddSource = (v: string | null | undefined): boolean => typeof v === 'string' && v.startsWith('odd:');
+/** The organizer switched back to Locked doubles after an odd switch. */
+export const isBackSource = (v: string | null | undefined): boolean => typeof v === 'string' && v.startsWith('back:');
+/**
+ * The style in play once tickets have closed: Americano when an odd number is locked in (whatever was picked); otherwise what is stored (the
+ * winner, the organizer's pick, or an earlier odd switch that the organizer has not switched back).
+ */
+export function styleAtClose(format: TournamentFormat, lockedIn: number): TournamentFormat {
+  return lockedIn % 2 === 1 ? 'americano' : format;
+}
+/** The players' one short banner when the style changes after tickets close (Alex reviews the words in the preview). */
+export function styleBannerWords(source: string | null | undefined): string | null {
+  if (isOddSource(source)) return 'Tournament style is now Americano.';
+  if (isBackSource(source)) return 'Tournament style is back to Locked doubles.';
+  return null;
+}
+/** The organizer's Telegram alert and card when the style switches to Americano. */
+export const oddSwitchWords = (name: string): string => `${name} switched to Americano (odd number of players).`;
 
 /** The most a ticket or the credit can be set to ($200), so a typo cannot store a silly number. */
 export const MAX_PRICE_CENTS = 20_000;
@@ -540,6 +573,14 @@ export interface PlayerTournamentView {
   me: { level: number; dates: string[]; formatVote?: FormatVote } | null;
   /** Zip 60: the vote decides the format and the date is not locked: the card says "Tournament style TBD" and the sign-up asks "Format you'd like". */
   formatTbd?: true;
+  /** Zip 64: the organizer finalized the date with a real start and end ("Plays 7:30 PM to 10:00 PM"): `start` and `minutes` are those, and
+   *  the stub shows the start with no "~". Left out: `start` is the plan's estimate. */
+  startSet?: true;
+  /** Zip 64: the date is finalized but tickets have not closed (Pay by): the card still says "Tournament style TBD" (the vote is over, so the
+   *  sign-up does not ask "Format you'd like"). */
+  styleTbd?: true;
+  /** Zip 64: the style changed after tickets closed: one short banner on Home, dismissed per player ("Tournament style is now Americano."). */
+  styleNote?: { key: string; text: string };
   /** Zip 60: the date was locked (the vote or the organizer set the format): the alert at the top of Home, dismissed per player. */
   formatAlert?: { key: string; title: string; sub: string };
   /** Off the list after signing up before: the level they picked first, which stays theirs (Alex: a level is picked once). */
@@ -628,6 +669,40 @@ export interface AdminTournamentView {
   tickets?: AdminTicketView[];
   /** Zip 56: when it was canceled (the Canceled card). */
   canceledAt?: string | null;
+  /** Zip 64: the date is finalized: `start` and `minutes` are the real times ("Plays"), not the plan's estimate. */
+  startSet?: boolean;
+  /** Zip 64: tickets have closed (Pay by passed): the style is decided from who is locked in. */
+  styleDecided?: boolean;
+  /** Zip 64: players locked in (every spot, and every I paid for one waiting for the organizer: what players see as locked in). */
+  lockedIn?: number;
+  /** Zip 64: the style was switched to Americano for an odd count (the card "switched to Americano"); `key` changes with each switch. */
+  oddSwitch?: { key: string } | null;
+  /** Zip 64: the count is even again after an odd switch: "Switch back to Locked doubles?" (the organizer's Switch or Not now). */
+  switchBack?: { key: string } | null;
+}
+
+/**
+ * Zip 64 (mock 03): the organizer's heat map. Each offered date's tile is shaded by how many can play: the brightest green for the most, the
+ * palest for the fewest, in even steps between (a straight line in sRGB between the two ends, measured from the mock). One text color across
+ * each ramp (dark ink on the light ramp, white on the dark one). All the same count: every tile is the brightest (nothing to compare).
+ */
+export const HEAT_RAMP = {
+  light: { bg: ['#d3f1e1', '#3fd68a'], edge: ['#bae1cc', '#2fbf79'], ink: '#10231a' },
+  dark: { bg: ['#153322', '#1f8a53'], edge: ['#285539', '#3fb87a'], ink: '#ffffff' },
+} as const;
+function mixHex(a: string, b: string, t: number): string {
+  const ch = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, '0')).join('')}`;
+}
+/** Where a count sits on the ramp, 0 (palest) to 1 (brightest). */
+export function heatStep(n: number, min: number, max: number): number {
+  if (max <= min) return max > 0 ? 1 : 0;
+  return Math.min(1, Math.max(0, (n - min) / (max - min)));
+}
+export function heatColors(n: number, min: number, max: number): { light: { bg: string; edge: string }; dark: { bg: string; edge: string } } {
+  const t = heatStep(n, min, max);
+  const side = (r: (typeof HEAT_RAMP)['light' | 'dark']) => ({ bg: mixHex(r.bg[0], r.bg[1], t), edge: mixHex(r.edge[0], r.edge[1], t) });
+  return { light: side(HEAT_RAMP.light), dark: side(HEAT_RAMP.dark) };
 }
 
 /** For each offered date, who can make it (from the players on the list). */

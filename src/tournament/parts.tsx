@@ -1,6 +1,6 @@
 // Zip 55 "Tournaments": the pieces the player sheets (src/tournament/TournamentHome.tsx, loaded only when a tournament is on a player's Home)
 // and the organizer screens (src/pages/admin/Tournament.tsx) share: the month calendar and the level list. Styles: src/tournament/tournament.css.
-import { type ReactNode, type RefObject, useEffect, useRef } from 'react';
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef } from 'react';
 import { type CalMonth, type FormatVote, LEVELS, monthTitle, VOTE_ROWS } from '../../shared/tournament';
 import './tournament.css';
 
@@ -67,6 +67,7 @@ export function MonthCalendar({
   label,
   boxed = true,
   scrollTo,
+  dayStyle,
 }: {
   months: CalMonth[];
   look: (day: string) => DayLook;
@@ -78,6 +79,8 @@ export function MonthCalendar({
   boxed?: boolean;
   /** A day to bring into view when the calendar opens (the first lit or picked one). */
   scrollTo?: string | null;
+  /** Zip 64: a day's own colors (the organizer's heat map sets --heat-* custom properties on each offered day). */
+  dayStyle?: (day: string) => CSSProperties | undefined;
 }) {
   const box = useRef<HTMLDivElement>(null);
   // The boxed calendar scrolls by itself: its fade only while more months are below.
@@ -109,6 +112,7 @@ export function MonthCalendar({
               const n = Number(d.slice(8));
               const tappable = !!onTap && l !== 'past' && (variant !== 'pick' || l !== 'off');
               const cls = `tm-day tm-${l}`;
+              const st = dayStyle?.(d);
               const inner = (
                 <>
                   <span className="tm-num">{n}</span>
@@ -117,11 +121,11 @@ export function MonthCalendar({
                 </>
               );
               return tappable ? (
-                <button key={d} type="button" className={cls} data-day={d} aria-pressed={l === 'on'} aria-label={dayAria(d)} onClick={() => onTap!(d)}>
+                <button key={d} type="button" className={cls} style={st} data-heat={st ? '' : undefined} data-day={d} aria-pressed={l === 'on'} aria-label={dayAria(d)} onClick={() => onTap!(d)}>
                   {inner}
                 </button>
               ) : (
-                <span key={d} className={cls} data-day={d} aria-disabled="true">
+                <span key={d} className={cls} style={st} data-heat={st ? '' : undefined} data-day={d} aria-disabled="true">
                   {inner}
                 </span>
               );

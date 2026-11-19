@@ -7,7 +7,7 @@ import { hiddenTask, lockDate, setTournamentsForAll, todayKey, type TournamentRo
 import { previewSiteFor } from './secondChance';
 import { organizerIdOf } from './repo';
 import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
-import { zonedTimeToUtc } from '../shared/time';
+import { localParts, zonedTimeToUtc } from '../shared/time';
 import { defaultPayBy, tourReason } from '../shared/tournamentTickets';
 import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 
@@ -55,7 +55,19 @@ import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 //   pay_late        Pay by an hour ago, and Wren backed out after it (a freed spot, the existing late rule): red "Your payment is late"
 //   pay_closed      Pay by an hour ago, no spot freed: tickets closed for Vic, so no countdown (the card says Tickets closed)
 export const COUNTDOWN_STAGES = ['pay_3d', 'pay_2d', 'pay_1d', 'pay_today', 'pay_hours', 'pay_minutes', 'pay_late', 'pay_closed'] as const;
-export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES] as const;
+// Zip 64 (🎾64.finalize): the style rules and late paying. Each is Tickets open with Pay by an hour ago (tickets closed for the style), the vote's
+// winner Locked doubles, Plays 7:30 to 10:00 PM.
+//   style_even     all 10 names locked in: Locked doubles stays (an even number)
+//   style_odd      9 locked in (Vic on the list, not paid): the first screen that reads it switches to Americano (History, the organizer's card
+//                  "switched to Americano", a Telegram alert where alerts are connected); players see "Tournament style is now Americano."
+//   style_back     switched to Americano for 9, then Vic paid late: 10 locked in, the organizer's "Switch back to Locked doubles?" (Switch, Not now)
+//   late_open      6 locked in, Pay by an hour ago, spots open: Vic, Zoe and Reese can still pay (red "Your payment is late", Pay now works)
+//   late_cut       the same tournament TODAY, starting in 2 hours: inside the last 3 hours, tickets are closed for Vic ("Tickets are closed.")
+//   zip64_start    the preview's calm start: The Cold Open, the vote open, 9 on the list (everyone but Vic), all able to make the third Thursday
+//                  of next month. Vic sees the short ticket before signing up (mock 00); Parker signed up (mock 01); Alex can Finalize.
+export const STYLE_STAGES = ['style_even', 'style_odd', 'style_back', 'late_open', 'late_cut', 'zip64_start'] as const;
+export const TEST_STAGES = ['none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES] as const;
+const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
 
@@ -154,6 +166,30 @@ const TICKET_STAGES: Partial<Record<Stage, { name: string; place: 'spot' | 'line
     { name: 'Reese', place: 'spot', pay: 'cash' },
     { name: 'Vic', place: 'spot', pay: 'cash' },
   ],
+  style_even: [
+    { name: 'Alex', place: 'spot', pay: 'free' },
+    { name: 'Parker', place: 'spot', pay: 'cash' },
+    { name: 'Rowan', place: 'spot', pay: 'cash' },
+    { name: 'Sage', place: 'spot', pay: 'credit' },
+    { name: 'Christopher Vanderberg', place: 'spot', pay: 'cash' },
+    { name: 'Wren', place: 'spot', pay: 'cash' },
+    { name: 'Quinn', place: 'spot', pay: 'cash' },
+    { name: 'Zoe', place: 'spot', pay: 'cash' },
+    { name: 'Reese', place: 'spot', pay: 'cash' },
+    { name: 'Vic', place: 'spot', pay: 'cash' },
+  ],
+  style_odd: [
+    { name: 'Alex', place: 'spot', pay: 'free' },
+    { name: 'Parker', place: 'spot', pay: 'cash' },
+    { name: 'Rowan', place: 'spot', pay: 'cash' },
+    { name: 'Sage', place: 'spot', pay: 'credit' },
+    { name: 'Christopher Vanderberg', place: 'spot', pay: 'cash' },
+    { name: 'Wren', place: 'spot', pay: 'cash' },
+    { name: 'Quinn', place: 'spot', pay: 'cash' },
+    { name: 'Zoe', place: 'spot', pay: 'cash' },
+    { name: 'Reese', place: 'spot', pay: 'cash' },
+    { name: 'Vic', place: 'none', pay: 'none' },
+  ],
   odd: [
     { name: 'Alex', place: 'spot', pay: 'free' },
     { name: 'Parker', place: 'spot', pay: 'cash' },
@@ -183,7 +219,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
-  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check') return voteStage(ctx, group, stage);
+  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start') return voteStage(ctx, group, stage);
 
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
@@ -192,8 +228,16 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
   // Zip 63: a countdown stage's tournament is the day after its Pay by.
   const countdownBy = isCountdown(stage) ? countdownPayBy(stage, ctx.nowMs, group.timezone) : null;
-  const best = countdownBy !== null ? dayAfter(countdownBy, group.timezone) : (thursdays[2] ?? dates[Math.floor(dates.length / 2)]);
-  const tickets = TICKET_STAGES[['canceled', 'rescheduled', 'closed', 'hidden'].includes(stage) || isCountdown(stage) ? 'tickets_open' : stage] ?? null;
+  // Zip 64: late_cut is today, starting 2 hours from now (inside the last 3 hours before the start).
+  const nowLocal = localParts(ctx.nowMs, group.timezone);
+  const cutStart = Math.min(23 * 60, Math.ceil((nowLocal.hour * 60 + nowLocal.minute + 120) / 5) * 5);
+  const best =
+    stage === 'late_cut' ? todayKey(ctx.nowMs, group.timezone) : countdownBy !== null ? dayAfter(countdownBy, group.timezone) : (thursdays[2] ?? dates[Math.floor(dates.length / 2)]);
+  // Zip 64: a picked date has the real times (Plays): 7:30 to 10:00 PM, as Finalize starts on.
+  const plays = stage === 'late_cut' ? { start: cutStart, minutes: Math.min(150, 24 * 60 - cutStart) } : { start: 19 * 60 + 30, minutes: 150 };
+  const ticketKey: Stage =
+    ['canceled', 'rescheduled', 'closed', 'hidden', 'late_open', 'late_cut'].includes(stage) || isCountdown(stage) ? 'tickets_open' : stage === 'style_back' ? 'style_even' : stage;
+  const tickets = TICKET_STAGES[ticketKey] ?? null;
   // Alex: picking the date opens tickets, so every stage after Sign-up open has them open (Canceled and Rescheduled then run the real taps).
   const picked = stage !== 'signup';
   const id = newId();
@@ -202,20 +246,20 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   const payBy =
     countdownBy !== null
       ? new Date(countdownBy).toISOString()
-      : stage === 'odd' || stage === 'closed'
+      : stage === 'odd' || stage === 'closed' || isStyleStage(stage)
         ? new Date(ctx.nowMs - 3_600_000).toISOString()
         : defaultPayBy(best, NIGHT_START_MINUTES, group.timezone, ctx.nowMs);
   const statements = [
     ctx.db
       .prepare(
         `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
-           status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, pay_by)
-         VALUES (?, ?, ?, ${STORED_PLAN.size}, ${STORED_PLAN.courts}, ${STORED_PLAN.minutes}, ${STORED_PLAN.start}, 1600, 1400, ?, ?, ?, 'all', ?, ?, ?, ?, ?, ?, ?)`,
+           status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, pay_by, format_source)
+         VALUES (?, ?, ?, ${STORED_PLAN.size}, ${STORED_PLAN.courts}, ${picked ? plays.minutes : STORED_PLAN.minutes}, ${picked ? plays.start : STORED_PLAN.start}, 1600, 1400, ?, ?, ?, 'all', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
         group.id,
-        format === 'americano' ? 'Winter Americano' : 'Winter Classic',
+        isStyleStage(stage) ? 'The Cold Open' : format === 'americano' ? 'Winter Americano' : 'Winter Classic',
         JSON.stringify([...new Set([...dates, best])].sort()),
         picked ? best : null,
         picked ? 'tickets' : 'signup',
@@ -224,8 +268,9 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
         picked ? ctx.nowIso : null,
         at(1),
         format,
-        format === 'americano' ? 700 : 0,
+        format === 'americano' || isStyleStage(stage) ? 700 : 0,
         picked ? payBy : null,
+        isStyleStage(stage) ? 'vote' : null,
       ),
   ];
   // Who is on the list: piece 1's stages as before; a ticket stage exactly its own names.
@@ -301,6 +346,15 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
       ]);
     }
   }
+  // Zip 64: style_back = the odd switch already happened (9 locked in, half an hour ago), then Vic paid late: 10 now.
+  if (stage === 'style_back') {
+    await ctx.db
+      .prepare("UPDATE tournaments SET format = 'americano', format_source = ? WHERE id = ?")
+      .bind(`odd:${new Date(ctx.nowMs - 30 * 60_000).toISOString()}`, id)
+      .run();
+    const vic = idOf.get('Vic');
+    if (vic) await ctx.db.prepare('UPDATE tournament_tickets SET place_at = ?, paid_at = ?, updated_at = ? WHERE tournament_id = ? AND player_id = ?').bind(ctx.nowIso, ctx.nowIso, ctx.nowIso, id, vic).run();
+  }
   // Zip 59: hidden = canceled, then the same one row a Hide tap writes (the tournament and its tickets stay).
   if (stage === 'hidden') {
     await ctx.db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)").bind(newId(), group.id, hiddenTask(id), ctx.nowIso).run();
@@ -319,7 +373,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
  * Zip 60: the vote stages. The date is locked by the very code the organizer's Pick date runs (lockDate), so the count and the alert are the real ones.
  * Zip 62 (🎾62.speed): `speed_check` is The Cold Open as it is on live: Everyone, the vote open, every fixed name but the organizer on the list.
  */
-type VoteStage = 'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize' | 'speed_check';
+type VoteStage = 'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize' | 'speed_check' | 'zip64_start';
 const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[]> = {
   vote_open: [
     { name: 'Parker', level: 360, vote: 'locked' },
@@ -345,6 +399,17 @@ const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 
     { name: 'Vic', level: 320, vote: 'locked' },
     { name: 'Alex', level: 340, vote: 'locked' },
   ],
+  zip64_start: [
+    { name: 'Parker', level: 360, vote: 'locked' },
+    { name: 'Rowan', level: 350, vote: 'americano' },
+    { name: 'Sage', level: 300, vote: 'either' },
+    { name: 'Christopher Vanderberg', level: 300, vote: 'locked' },
+    { name: 'Wren', level: 320, vote: 'either' },
+    { name: 'Quinn', level: 250, vote: 'locked' },
+    { name: 'Zoe', level: 275, vote: 'either' },
+    { name: 'Reese', level: 340, vote: 'either' },
+    { name: 'Alex', level: 340, vote: 'americano' },
+  ],
   vote_tie: [
     { name: 'Parker', level: 360, vote: 'locked' },
     { name: 'Rowan', level: 350, vote: 'americano' },
@@ -367,7 +432,9 @@ const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 
 async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: VoteStage) {
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
-  const dates = testDates(todayKey(ctx.nowMs, group.timezone));
+  const all = testDates(todayKey(ctx.nowMs, group.timezone));
+  // Zip 64: the calm start offers next month only, like The Cold Open on live (the stub then reads "DEC", as in the mocks).
+  const dates = stage === 'zip64_start' ? all.filter((d) => d.slice(0, 7) === all[0].slice(0, 7)) : all;
   const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
   const best = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
   const id = newId();

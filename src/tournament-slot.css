@@ -1,9 +1,9 @@
 /* Zip 55: the place the ticket card holds while its own file arrives (src/TournamentSlot.tsx). The card's real styles come with that file.
    Zip 63: the card is about 255 px tall now, and the place it holds has the site's own loading shimmer (the .skel class, src/player-cards.css),
-   in the card's deep greens. */
+   in the card's deep greens. Zip 64: the short ticket is about 176 to 184 px tall at 420 wide. */
 .tc-shell {
-  min-height: 255px;
-  border: 1px solid #2f4a3a;
+  min-height: 176px;
+  border: 1px solid #24503a;
   border-radius: 22px;
   background-color: #0d2118;
   --pc-skel-a: #10251b;

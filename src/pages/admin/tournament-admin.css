@@ -798,3 +798,169 @@ a.btn.tm-remind-btn,
   background: var(--primary);
   color: var(--primary-ink);
 }
+
+/* Zip 64 (🎾64.finalize, mock 03): the heat map. Each date still to pick is shaded by how many can play (Tournament.tsx sets the colors from
+   shared/tournament.ts HEAT_RAMP): brightest green = the most, palest = the fewest. One text color across each ramp, so the steps read evenly:
+   dark ink on the light ramp, white on the dark one. The count stays in each tile. */
+.tm-cal-counts .tm-day.tm-open[data-heat] {
+  border-color: var(--heat-edge);
+  background: var(--heat-bg);
+  color: #10231a;
+}
+.tm-cal-counts .tm-day.tm-open[data-heat] .tm-badge,
+.tm-cal-counts .tm-day.tm-open[data-heat] .tm-best-count {
+  color: inherit;
+}
+:root[data-theme='dark'] .tm-cal-counts .tm-day.tm-open[data-heat] {
+  border-color: var(--heat-edge-dark);
+  background: var(--heat-bg-dark);
+  color: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tm-cal-counts .tm-day.tm-open[data-heat] {
+    border-color: var(--heat-edge-dark);
+    background: var(--heat-bg-dark);
+    color: #ffffff;
+  }
+}
+
+/* Zip 64 (🎾64.finalize, mock 04): the Finalize screen on ONE iPhone Air screen (420 x 912), no scrolling. Top to bottom: who can play, Style
+   (Auto, Doubles, Americano) with the votes under it, Plays (start and end), Pay by (day and time), then Back and Finalize date. */
+.tm-finalize.tm-fin1 {
+  gap: 0;
+}
+.tm-fin-count {
+  margin: 0;
+  font-size: 1.22rem;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.tm-fin-count b {
+  margin-right: 2px;
+  font-family: var(--display);
+  font-size: 1.7rem;
+  font-weight: 800;
+}
+.tm-fin-names {
+  margin: 8px 0 0;
+  font-size: 1.1rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.tm-fin-style-block {
+  margin-top: 22px;
+}
+.tm-fin-style-block .tm-label {
+  margin: 0 0 12px;
+}
+.segmented.tm-fin-style {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.segmented.tm-fin-style button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 52px;
+  padding: 6px 4px;
+  white-space: nowrap;
+}
+.tm-fin-style-name {
+  font-size: 1.1rem;
+  font-weight: 750;
+  line-height: 1.15;
+}
+.tm-fin-style-sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink-2);
+}
+.tm-fin-votes {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tm-fin-rows {
+  margin-top: 16px;
+}
+.tm-fin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+}
+.tm-fin-row + .tm-fin-row {
+  border-top: 1px dashed var(--line-strong);
+}
+.tm-fin-row-label {
+  font-size: 1.1rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.tm-fin-boxes {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tm-select.tm-fin-box {
+  max-width: none;
+  width: auto;
+  min-width: 104px;
+  min-height: 40px;
+  padding: 6px 8px;
+  font-size: 0.98rem;
+}
+.tm-fin-to {
+  color: var(--ink-2);
+}
+.tm-fin1 .tm-fin-notice {
+  margin-top: 10px;
+}
+.tm-fin1 .tm-fin-over {
+  margin-top: 6px;
+}
+.tm-fin1 .tm-fin-actions {
+  margin-top: 16px;
+}
+@media (max-width: 379px) {
+  .tm-select.tm-fin-box {
+    min-width: 0;
+    padding: 6px 4px;
+    font-size: 0.9rem;
+  }
+  .tm-fin-row-label {
+    font-size: 1rem;
+  }
+  .tm-fin-count {
+    font-size: 1.08rem;
+  }
+  .tm-fin-names {
+    font-size: 1rem;
+  }
+  .tm-fin-votes {
+    font-size: 0.84rem;
+  }
+}
+@media (max-width: 339px) {
+  .tm-select.tm-fin-box {
+    font-size: 0.84rem;
+  }
+  .tm-fin1 .tm-fin-actions .btn {
+    padding-left: 8px;
+    padding-right: 8px;
+    font-size: 0.98rem;
+    white-space: nowrap;
+  }
+  .tm-fin-boxes {
+    gap: 4px;
+  }
+  .tm-fin-row {
+    gap: 6px;
+  }
+}

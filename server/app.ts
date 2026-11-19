@@ -210,6 +210,7 @@ route('PUT', '/api/admin/tournaments-switch', admin.setTournamentsSwitch);
 route('POST', '/api/admin/tournament', tournament.createTournament);
 route('PUT', '/api/admin/tournament/:id', tournament.updateTournament);
 route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVisibility);
+route('POST', '/api/admin/tournament/:id/switch-back', tournament.switchBackStyle);
 route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
 route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
 // Zip 60: the Finalize screen's facts for one date (reads only).

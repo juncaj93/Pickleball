@@ -268,6 +268,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       if (d.how === 'vote') return `The players' vote made the ${tourName(d)} ${fmt}${counts}`;
       if (d.how === 'tie') return `No majority, so the tie rule made the ${tourName(d)} ${fmt}${counts}`;
       if (d.how === 'vote_open') return `${who} let the players vote the ${tourName(d)} format`;
+      // Zip 64: the style rules once tickets close (an odd number locked in plays Americano; the organizer can switch back).
+      if (d.how === 'odd') return `${tourName(d)} switched to Americano (${num(d.lockedIn)} locked in, an odd number)`;
+      if (d.how === 'back') return `${who} switched the ${tourName(d)} back to Locked doubles (${num(d.lockedIn)} locked in)`;
       return `${who} set the ${tourName(d)} format to ${fmt}`;
     }
     case 'tournament_canceled':
@@ -281,7 +284,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     // Zip 56 "Tournaments" piece 2 (server/tournamentTickets.ts): tickets, the waitlist and their money.
     // Since Alex's changes, picking the date opens tickets (no spots count: the smart plan follows the players).
     case 'tournament_tickets_opened':
-      return `Tickets opened for the ${tourName(d)} (${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''})`;
+      return `Tickets opened for the ${tourName(d)} (${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''}${typeof d.plays === 'string' ? `, plays ${d.plays}` : ''})`;
     case 'tournament_pay_by':
       return `${who} set Pay by for the ${tourName(d)} to ${typeof d.payBy === 'string' ? d.payBy : '?'}`;
     case 'tournament_ticket': {

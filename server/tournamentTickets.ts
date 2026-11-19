@@ -18,7 +18,7 @@ import { newId } from './crypto';
 import * as v from './validate';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { formatPrice } from '../shared/money';
-import { dayLong, MAX_SPOTS, smartPlan } from '../shared/tournament';
+import { dayLong, MAX_SPOTS } from '../shared/tournament';
 import { payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
 import {
   changedOrLookAgain,
@@ -32,11 +32,8 @@ import {
   playerTarget,
   readPayByTime,
   salesClosed,
-  lockedCount,
-  freedSpots,
   heldSpotSincePayBy,
   ticketPhase,
-  freedSpotSql,
   type TicketPhase,
   statusOf,
   tournamentsFlags,
@@ -93,14 +90,16 @@ async function ticketsTarget(ctx: Ctx, who: TournamentActor, body: Record<string
   if (salesClosed(t, who.group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. The tournament has started.');
   const s = await mySignup(ctx.db, t.id, playerId);
   if (!s || s.status !== 'in') throw new HttpError(409, 'not_signed_up', 'You are not on the list. Sign up first.');
-  const planStart = smartPlan(lockedCount(await loadTickets(ctx.db, t.id))).start;
-  const phase = ticketPhase(t, who.group.timezone, ctx.nowMs, planStart);
+  // Zip 64: three hours before the REAL start (the Finalize screen's "Plays"), everything closes.
+  const phase = ticketPhase(t, who.group.timezone, ctx.nowMs);
   if (phase === 'cut') throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
   if (phase === 'after') {
+    // Zip 64 (late paying, late joining): after Pay by a player on the list can still pay while a spot is open (the cap of 16), until 3 hours
+    // before the start; no fees. An I paid already waiting (and a spot holder's own I paid) always finishes. Standby does not open after Pay by.
     const own = await ticketOf(ctx.db, t.id, playerId);
-    // Only an I paid already waiting stays (and a spot holder's own I paid). Everything else, a waitlist player included, needs a freed spot.
     const keeps = kind === 'paid' && (own?.place === 'spot' || (own?.claim_cents ?? 0) > 0);
-    if (!keeps && (kind === 'waitlist' || (await freedSpots(ctx.db, who.group.id, t)) <= 0)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed. Pay by has passed.');
+    const open = (await loadTickets(ctx.db, t.id)).filter((x) => x.place === 'spot').length < MAX_SPOTS;
+    if (!keeps && (kind === 'waitlist' || !open)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
   }
   return { t, playerId, phase };
 }
@@ -121,8 +120,8 @@ function answerOf(k: TicketRow | null) {
 export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
   const intent = body.intent === undefined ? 'lock' : v.oneOf(body.intent, 'intent', ['lock', 'hold'] as const);
   const { t, playerId, phase } = await ticketsTarget(ctx, who, body, intent);
-  // After Pay by the claim itself checks that a freed spot is still unclaimed, in the very statements that take it (one winner).
-  const claimOk = phase === 'after' ? ` AND ${freedSpotSql(who.group.id, t)}` : '';
+  // Zip 64: after Pay by the claim itself checks that a spot is still open (under the cap of 16), in the very statements that take it.
+  const claimOk = phase === 'after' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS}` : '';
   // The organizer pays the venue, never the group: their own seat is $0.
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
   const price = organizer ? 0 : t.ticket_cents;

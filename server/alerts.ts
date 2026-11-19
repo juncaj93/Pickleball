@@ -288,6 +288,22 @@ export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, playerId: s
 }
 
 /**
+ * Zip 64 (🎾64.finalize): a tournament alert ("The Cold Open switched to Americano (odd number of players)."). Under the main Alerts switch (no
+ * per-alert switch: no new column). A player's tap usually causes it (a back out), so it counts toward the player-caused hourly limit and
+ * carries no links. Never from the demo or Pretend, and never worth failing anything over.
+ */
+export async function notifyTournament(ctx: Ctx, group: GroupRow, text: string): Promise<void> {
+  try {
+    if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
+    const prefs = prefsOf(await alertRow(ctx.db, group.id));
+    if (!prefs.enabled) return;
+    ctx.waitUntil(deliver(ctx, group.id, text, true));
+  } catch {
+    // Never worth failing the request over.
+  }
+}
+
+/**
  * One short line when a player puts their pending cash out toward a game
  * ("Use it" at sign-up), under the same "Refund requests" switch. Never from
  * the demo or Pretend, and never worth failing the request over.

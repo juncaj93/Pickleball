@@ -9,7 +9,7 @@
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormatVote, PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
-import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, hoursLabel, monthsBetween, startLabel, stubParts } from '../../shared/tournament';
+import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, hoursLabel, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
 import { payByLabel, payByShort, payCountdown, placeWord } from '../../shared/tournamentTickets';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, useNow, VIEW_ONLY_MESSAGE } from '../lib';
@@ -20,9 +20,9 @@ import type { TournamentPayInfo } from '../TournamentSlot';
 import { type DayLook, LevelList, MonthCalendar, useMoreBelow, VoteList } from './parts';
 
 /** Zip 60: the format line on the cards. While the players' vote is open it is "Tournament style TBD" (no other words). */
-const formatText = (t: PlayerTournamentView): string => (t.formatTbd ? 'Tournament style TBD' : formatLine(t.format));
+const formatText = (t: PlayerTournamentView): string => (t.formatTbd || t.styleTbd ? 'Tournament style TBD' : formatLine(t.format));
 /** The card's label for screen readers. */
-const cardLabel = (t: PlayerTournamentView): string => (t.formatTbd ? `${t.name}, style to be decided` : `${t.name}, ${formatName(t.format)} tournament`);
+const cardLabel = (t: PlayerTournamentView): string => (t.formatTbd || t.styleTbd ? `${t.name}, style to be decided` : `${t.name}, ${formatName(t.format)} tournament`);
 
 function errorText(err: unknown): string {
   if (err instanceof ApiError) return err.status === 403 && /view only/i.test(err.message) ? VIEW_ONLY_MESSAGE : err.message;
@@ -181,7 +181,7 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
         onJoin={() => void joinWaitlist()}
       />
       {t.status === 'tickets' && k && signed && (
-        <Sheet calmFocus open={sheet === 'overlay'} title={t.name} back="Home" onClose={() => setSheet((cur) => (cur === 'overlay' ? null : cur))} className="tc-tw-overlay">
+        <Sheet calmFocus open={sheet === 'overlay'} title={t.name} onClose={() => setSheet((cur) => (cur === 'overlay' ? null : cur))} className="tc-tw-overlay">
           <Overlay
             t={t}
             k={k}
@@ -382,7 +382,7 @@ function PunchSub() {
  */
 function kickerWords(t: PlayerTournamentView): string {
   const s = t.finalDate ? stubParts(t.finalDate) : null;
-  return ['Tournament', s ? `${s.weekday} ${s.month} ${s.day}` : 'Date TBD', `~${startLabel(t.start)}`].join(' · ');
+  return ['Tournament', s ? `${s.weekday} ${s.month} ${s.day}` : 'Date TBD', `${s && t.startSet ? '' : '~'}${startLabel(t.start)}`].join(' · ');
 }
 
 /** The small status line above the name (the lime dot and the words). */
@@ -406,10 +406,11 @@ const MAX_BALLS = 16;
  * both shrink together (from the card's own width, `100cqw` of the row), so a 320 px phone keeps one row too.
  */
 function ballSpec(n: number): { size: number; gap: number } {
-  if (n <= 10) return { size: 26, gap: 9 };
-  if (n <= 12) return { size: 22, gap: 8 };
-  if (n <= 14) return { size: 19, gap: 6 };
-  return { size: 17, gap: 5 };
+  // Zip 64: the short ticket's narrower column (mock 00: 21 px balls, 6 px apart, up to 10), then Zip 63's steps down, scaled the same way.
+  if (n <= 10) return { size: 21, gap: 6 };
+  if (n <= 12) return { size: 18, gap: 5 };
+  if (n <= 14) return { size: 16, gap: 4 };
+  return { size: 14, gap: 4 };
 }
 
 /**
@@ -521,7 +522,36 @@ function ticketWords(t: PlayerTournamentView, s: TicketState): { foot: string; s
   }
 }
 
-/** Zip 63: the card's one look (mocks 00 to 07), every state: the top line, the name, the format, the balls, the button, the bottom line. */
+/**
+ * Zip 64 (🎾64.finalize): the date stub on the left of the short ticket (mocks 00 and 01): the weekday, the day, the month and the start. Before a
+ * date is picked: "DATE / TBD / DEC (or DEC–JAN) / ~7:30 PM". Once the organizer finalizes the date, the start is the real one (no "~").
+ */
+function Stub({ t }: { t: PlayerTournamentView }) {
+  const s = t.finalDate ? stubParts(t.finalDate) : null;
+  const months = monthSpan(t.openDates.length ? t.openDates : t.me?.dates ?? []);
+  const time = `${s && t.startSet ? '' : '~'}${startLabel(t.start)}`;
+  return (
+    <div className="tc-stub" aria-label={s ? `On ${s.weekday} ${s.month} ${s.day} at ${startLabel(t.start)}` : `Date not picked yet, around ${startLabel(t.start)}`} data-tc-stub>
+      <span className="tc-wd" aria-hidden="true">
+        {s ? s.weekday : 'Date'}
+      </span>
+      <span className={s ? 'tc-day' : 'tc-day tc-day-tbd'} aria-hidden="true">
+        {s ? s.day : 'TBD'}
+      </span>
+      <span className={!s && months.includes('–') ? 'tc-mon tc-mon-span' : 'tc-mon'} aria-hidden="true">
+        {s ? s.month : months || ' '}
+      </span>
+      <span className="tc-time" aria-hidden="true">
+        {time}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Zip 64: the short ticket (mocks 00 and 01), every state: the date stub, the notch and the dashed tear line, then the kicker, the name, the format
+ * and the balls on the right; one bar along the bottom with the state's one button (and a small link or "Pay by 11/30" on the right).
+ */
 function CardShell({
   t,
   data,
@@ -529,9 +559,8 @@ function CardShell({
   onClick,
   tap,
   balls,
-  actions,
-  foot,
-  links,
+  bar,
+  kicker = 'Tournament',
   muted,
 }: {
   t: PlayerTournamentView;
@@ -540,38 +569,46 @@ function CardShell({
   onClick?: (e: MouseEvent<HTMLElement>) => void;
   tap?: boolean;
   balls?: boolean;
-  actions?: ReactNode;
-  foot: ReactNode;
-  links?: ReactNode;
+  bar: ReactNode;
+  kicker?: string;
   muted?: boolean;
 }) {
   const b = ballsOf(t);
   return (
     <section
-      className={`tc tc-hero${tap ? ' tc-tap' : ''}${punch ? ' tc-punching' : ''}`}
+      className={`tc tc-short${tap ? ' tc-tap' : ''}${punch ? ' tc-punching' : ''}`}
       aria-label={t.status === 'canceled' ? `${t.name}, canceled` : cardLabel(t)}
-      data-tc-format={t.formatTbd ? 'tbd' : t.format}
+      data-tc-format={t.formatTbd || t.styleTbd ? 'tbd' : t.format}
       data-tc={data}
       onClick={onClick}
     >
-      <span className="tc-halo" aria-hidden="true" />
       {punch && <PunchRing />}
-      <Kicker muted={muted}>{muted ? `Canceled · ${kickerWords(t).split(' · ').slice(1).join(' · ')}` : kickerWords(t)}</Kicker>
-      <Title t={t} />
-      {t.status !== 'canceled' && (
-        <p className="tc-format" data-tc-format-name>
-          {formatText(t)}
-        </p>
-      )}
-      {balls && <TourBalls total={b.total} gold={b.gold} />}
-      {actions && <div className="tc-actions">{actions}</div>}
-      <p className="tc-foot" data-tc-sub>
-        {punch ? <PunchSub /> : foot}
-      </p>
-      {links}
+      <div className="tc-top">
+        <Stub t={t} />
+        <div className="tc-main">
+          <Kicker muted={muted}>{kicker}</Kicker>
+          <Title t={t} />
+          {t.status !== 'canceled' && (
+            <p className="tc-format" data-tc-format-name>
+              {punch ? <PunchSub /> : formatText(t)}
+            </p>
+          )}
+          {balls && <TourBalls total={b.total} gold={b.gold} />}
+        </div>
+      </div>
+      <div className="tc-bar" data-tc-bar>
+        {bar}
+      </div>
     </section>
   );
 }
+
+/** Zip 64: the small words on the right of the bar ("Pay by 11/30", "You're locked in"). Plain text, never a link. */
+const Aside = ({ children, lime }: { children: ReactNode; lime?: boolean }) => (
+  <span className={lime ? 'tc-aside tc-aside-lime' : 'tc-aside'} data-tc-sub>
+    {children}
+  </span>
+);
 
 export function TicketCard({
   t,
@@ -606,16 +643,16 @@ export function TicketCard({
   const k = t.tickets ?? null;
   const s = ticketStateOf(t);
 
-  // ---- Zip 56: the plain Canceled card (no balls, no buttons) ----
+  // ---- Zip 56: the plain Canceled card (no balls, no buttons): the kicker in gray, what came back in the bar ----
   if (t.status === 'canceled') {
     const c = t.canceled ?? { backCents: 0, claimCents: 0 };
     const money =
-      c.claimCents > 0 ? `Your ${formatPrice(c.claimCents + c.backCents)} comes back as credit.` : c.backCents > 0 ? `Your ${formatPrice(c.backCents)} is back as credit.` : null;
-    return <CardShell t={t} data="canceled" muted foot={money ? `Canceled. ${money}` : 'Canceled.'} />;
+      c.claimCents > 0 ? `Your ${formatPrice(c.claimCents + c.backCents)} comes back as credit.` : c.backCents > 0 ? `Your ${formatPrice(c.backCents)} is back as credit.` : 'This tournament is canceled.';
+    return <CardShell t={t} data="canceled" muted kicker="Canceled" bar={<Aside>{money}</Aside>} />;
   }
 
-  const lime = (label: string, fn: () => void, data: string) => (
-    <button type="button" className="tc-btn tc-lime" disabled={busy} onClick={fn} {...{ [data]: '' }}>
+  const lime = (label: string, fn: () => void, data: string, wide = false) => (
+    <button type="button" className={wide ? 'tc-btn tc-lime tc-wide' : 'tc-btn tc-lime'} disabled={busy} onClick={fn} {...{ [data]: '' }}>
       {label}
     </button>
   );
@@ -625,20 +662,42 @@ export function TicketCard({
     </button>
   );
 
-  // ---- Zip 56: tickets open (Lock my spot, Join standby, locked in, standby, waiting for a confirm, closed) ----
+  // ---- Zip 56: tickets open (Lock my spot, Join standby, locked in, standby, closed). Edit sign-up and Drop out live in the card's overlay. ----
   if (s && k) {
-    const w = ticketWords(t, s);
     const due = dueOf(k);
     const paidLine = !!k.mine && k.mine.creditCents + k.mine.paidCents >= k.priceCents;
-    // Mocks 00 to 07 and 15: the one lime button. The other states keep See who's in (Edit sign-up and Drop out are in the card's overlay).
-    const main =
-      s === 'lock'
-        ? lime(`Lock my spot · ${formatPrice(due)}`, onLock, 'data-tc-lock')
-        : s === 'full'
-          ? lime('Join standby', onJoin, 'data-tc-join')
-          : s === 'line' && !k.closed && !paidLine && !(k.mine && k.mine.claimCents > 0)
-            ? lime(`Hold my spot · ${formatPrice(due)}`, onHold, 'data-tc-hold')
-            : gray('See who’s in', onWho, 'data-tc-who');
+    const foot = payByFoot(k);
+    let bar: ReactNode;
+    if (s === 'lock')
+      bar = (
+        <>
+          {lime(`Lock my spot · ${formatPrice(due)}`, onLock, 'data-tc-lock')}
+          <Aside>{k.freed > 0 ? 'A spot opened' : k.payBy && Date.parse(k.payBy) <= Date.now() ? 'Still open' : (foot ?? hoursLabel(t.minutes))}</Aside>
+        </>
+      );
+    else if (s === 'full')
+      bar = (
+        <>
+          {lime('Join standby', onJoin, 'data-tc-join')}
+          {foot && <Aside>{foot}</Aside>}
+        </>
+      );
+    else if (s === 'line' && !k.closed && !paidLine && !(k.mine && k.mine.claimCents > 0))
+      bar = (
+        <>
+          {lime(`Hold my spot · ${formatPrice(due)}`, onHold, 'data-tc-hold')}
+          <Aside>{shortStandby(linePlace(k))}</Aside>
+        </>
+      );
+    else {
+      const words = s === 'in' ? 'You’re locked in' : s === 'line' ? 'Spot held' : k.started ? 'Started' : 'Tickets closed';
+      bar = (
+        <>
+          {gray('See who’s in', onWho, 'data-tc-who')}
+          <Aside lime={s === 'in'}>{words}</Aside>
+        </>
+      );
+    }
     // Tap the card (not a button) for the overlay (mock 09).
     const open = onOpen
       ? (e: MouseEvent<HTMLElement>) => {
@@ -646,50 +705,41 @@ export function TicketCard({
           onOpen();
         }
       : undefined;
-    return <CardShell t={t} data={s} punch={punch} tap={!!onOpen} onClick={open} balls actions={main} foot={w.foot} />;
+    return <CardShell t={t} data={s} punch={punch} tap={!!onOpen} onClick={open} balls bar={bar} />;
   }
 
   // ---- Piece 1's states (before you sign up, signed up, the date picked), and a Reschedule ----
   // The picked date has passed: nothing to pick, so no Sign up (the list, Edit and Drop out stay for those on it). (Every offered date passed
   // with none picked: the server sends no card at all.)
   const noDates = t.openDates.length === 0;
-  const held = !!k?.mine && k.mine.creditCents + k.mine.paidCents + k.mine.claimCents > 0;
-  // Zip 63: no counts on the card (the balls say it). Where they stand is the plain bottom line.
-  const foot =
-    t.status === 'rescheduled' && signed
-      ? 'Rescheduled. Pick your dates again.'
-      : t.status === 'tickets' && !signed
-        ? k?.closed
-          ? 'Tickets are closed.'
-          : noDates
-            ? 'That date has passed.'
-            : 'Tickets are open. Sign up first.'
-        : noDates
-          ? 'That date has passed.'
-          : picked
-            ? signed
-              ? held
-                ? 'You’re on the list. Your ticket is held. Tickets open soon.'
-                : 'You’re on the list. Tickets open soon.'
-              : 'Tickets open soon'
-            : signed
-              ? 'You’re on the list. We’re picking the date.'
-              : 'Pick the dates you can play';
   const state = t.status === 'rescheduled' ? 'rescheduled' : picked ? 'date' : signed ? 'listed' : 'open';
-  const action =
-    (signed || !noDates) && !(t.status === 'tickets' && !signed && k?.closed) ? (signed ? gray('See who’s signed up', onWho, 'data-tc-who') : lime('Sign up', onSignUp, 'data-tc-signup')) : null;
-  const links = signed ? (
-    <div className="tc-links">
-      <button type="button" className="tc-link" onClick={onEdit} data-tc-edit>
-        Edit sign-up
-      </button>
-      <button type="button" className="tc-link" onClick={onDropOut} data-tc-drop>
-        Drop out
-      </button>
-    </div>
-  ) : undefined;
-  return <CardShell t={t} data={state} punch={punch} balls actions={action} foot={foot} links={links} />;
+  const kicker = t.status === 'rescheduled' ? 'Rescheduled' : 'Tournament';
+  let bar: ReactNode;
+  if (signed) {
+    // Mock 01: the narrower gray button on the left; Edit and Drop out as plain underlined words on the right, wide apart (no mis-taps).
+    bar = (
+      <>
+        {gray('See who’s signed up', onWho, 'data-tc-who')}
+        <span className="tc-bar-links">
+        <button type="button" className="tc-link" onClick={onEdit} data-tc-edit>
+          Edit
+        </button>
+        <button type="button" className="tc-link" onClick={onDropOut} data-tc-drop>
+          Drop out
+        </button>
+      </span>
+      </>
+    );
+  } else if (t.status === 'tickets' && k?.closed) bar = <Aside>Tickets are closed.</Aside>;
+  else if (noDates) bar = <Aside>That date has passed.</Aside>;
+  // Mock 00: one wide lime Sign up across the whole bar, no hint words.
+  else bar = lime('Sign up', onSignUp, 'data-tc-signup', true);
+  return <CardShell t={t} data={state} punch={punch} balls bar={bar} kicker={kicker} />;
 }
+
+/** Zip 64: "2nd on standby" (the bar's short words next to Hold my spot). */
+const shortStandby = (place: number) => (place > 0 ? `${placeWord(place)} on standby` : 'On standby');
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Zip 56: the overlay (mocks 09, 11, 12): the card once more with its one action, then Who's in and the waitlist.
@@ -730,7 +780,7 @@ function Overlay({
   const lists = [<WhoIn key="in" t={t} />, k.line.length > 0 ? <Waitlist key="line" k={k} /> : null];
   return (
     <div className="tc-tw stack" data-tw={s}>
-      <section className="tc tc-hero tc-overlay" aria-label={cardLabel(t)} data-tc-format={t.formatTbd ? 'tbd' : t.format} data-tc={s}>
+      <section className="tc tc-hero tc-overlay" aria-label={cardLabel(t)} data-tc-format={t.formatTbd || t.styleTbd ? 'tbd' : t.format} data-tc={s}>
         <span className="tc-halo" aria-hidden="true" />
         <Kicker>{kickerWords(t)}</Kicker>
         <Title t={t} />
@@ -922,6 +972,9 @@ function VoteBlock({ vote, onPick }: { vote: FormatVote; onPick: (v: FormatVote)
   );
 }
 
+/** Zip 64 (mock 02): the line under "Your dates" in Sign up and Edit sign-up. */
+const DATES_HELP = 'Tap every date you can make. We pick the one that works for the most people.';
+
 function SignUpSheet({
   t,
   org,
@@ -971,8 +1024,9 @@ function SignUpSheet({
         </div>
       ) : (
         <div data-tm-step="2">
-          <p className="tm-eyebrow">{locked === null ? 'Step 2 of 2 · Pick every date that works' : 'Pick every date that works'}</p>
-          <p className="tm-help">Green dates are open. Games start around {startLabel(t.start)}.</p>
+          {/* Zip 64 (mock 02): the clearer words; the start time is on the ticket. */}
+          <p className="tm-eyebrow">{locked === null ? 'Step 2 of 2 · Your dates' : 'Your dates'}</p>
+          {!t.finalDate && <p className="tm-help" data-tm-dates-help>{DATES_HELP}</p>}
           <DatesPicker t={t} picked={picked} setPicked={setPicked} />
           {t.formatTbd && <VoteBlock vote={vote} onPick={setVote} />}
           <SheetBottom>
@@ -1025,7 +1079,14 @@ function EditSheet({
       {/* Alex: dates only. The level was picked once at sign-up; only the organizer changes it. */}
       {t.openDates.length > 0 && (
         <>
-          <p className="tm-eyebrow tm-eyebrow-dates">Dates that work</p>
+          {/* Zip 64: the same line as Sign up, without the step label (only while the date is still to be picked). */}
+          {t.finalDate ? (
+            <p className="tm-eyebrow tm-eyebrow-dates">Your date</p>
+          ) : (
+            <p className="tm-help tm-eyebrow-dates" data-tm-dates-help>
+              {DATES_HELP}
+            </p>
+          )}
           <DatesPicker t={t} picked={picked} setPicked={setPicked} summary={false} />
         </>
       )}

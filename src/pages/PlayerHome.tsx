@@ -794,7 +794,17 @@ export function PlayerHome({
                 t={view!.tournament}
                 onChanged={load.reload}
                 pay={{ group: g.group, meName: g.me?.name ?? null }}
-                notice={view!.tournament.formatAlert ? <FormatAlertCard a={view!.tournament.formatAlert} /> : undefined}
+                notice={
+                  view!.tournament.formatAlert || view!.tournament.styleNote ? (
+                    <>
+                      {/* Zip 64: the style changed after tickets closed: one short banner, dismissed per player. */}
+                      {view!.tournament.styleNote && (
+                        <FormatAlertCard a={{ key: view!.tournament.styleNote.key, title: view!.tournament.styleNote.text }} label="Tournament style" data="data-style-note" />
+                      )}
+                      {view!.tournament.formatAlert && <FormatAlertCard a={view!.tournament.formatAlert} />}
+                    </>
+                  ) : undefined
+                }
               />
             )}
             {/* Preview only (shared/previewCalm.ts): the alert cards stay hidden unless the phone opened ?alerts=all. */}
@@ -1192,7 +1202,7 @@ function readFormatAlertSeen(): string[] {
   }
 }
 /** The alert card with the tournament's name and date, and the format (who decided it) under it. The X hides it for good on this phone. */
-function FormatAlertCard({ a }: { a: { key: string; title: string; sub: string } }) {
+function FormatAlertCard({ a, label = 'Tournament scheduled', data = 'data-format-alert' }: { a: { key: string; title: string; sub?: string }; label?: string; data?: string }) {
   const [seen, setSeen] = useState<string[]>(readFormatAlertSeen);
   if (seen.includes(a.key)) return null;
   return (
@@ -1200,10 +1210,10 @@ function FormatAlertCard({ a }: { a: { key: string; title: string; sub: string }
       as="section"
       tone="blue"
       icon="court"
-      label="Tournament scheduled"
+      label={label}
       title={a.title}
-      sub={a.sub}
-      data={{ 'data-format-alert': true }}
+      sub={a.sub || undefined}
+      data={{ [data]: true }}
       xLabel={a.title}
       onX={() => {
         const next = [...readFormatAlertSeen().filter((x) => x !== a.key), a.key].slice(-50);

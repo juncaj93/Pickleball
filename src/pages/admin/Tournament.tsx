@@ -2,7 +2,7 @@
 // the tournament's own page (who can see it, the level list of mock 14, how many can make each date and picking it, Edit, Cancel), the card on
 // Home, and the level and date sheets. Only drawn while the switch is on for this phone (ctx.d.tournaments). No money moves here: the ticket
 // price and the champion credit are stored for pieces 2 and 3.
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AdminTicketView,
   type AdminTournamentView,
@@ -10,6 +10,8 @@ import {
   startLabel,
   stubParts,
   dateCounts,
+  heatColors,
+  oddSwitchWords,
   dayLong,
   DEFAULT_CREDIT_CENTS,
   DEFAULT_TICKET_CENTS,
@@ -21,6 +23,7 @@ import {
   monthStartPlus,
   NAME_MAX,
   planTitle,
+  planRange,
   type Visibility,
   WINNERS,
   formatLine,
@@ -30,7 +33,6 @@ import {
   type FinalizeView,
   type FormatChoice,
   type TournamentFormat,
-  dayShort,
   voteCountsLine,
   VOTE_LABEL,
   DEFAULT_SECOND_CREDIT_CENTS,
@@ -42,7 +44,7 @@ import { evensWarning, payByAt, payByDays, payByLabel, payByParts, ticketsLine, 
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { AlertCard } from '../../AlertCard';
 import { localParts } from '../../../shared/time';
-import { api, ApiError, isIOS, useNow, VIEW_ONLY_MESSAGE } from '../../lib';
+import { api, ApiError, isIOS, storageGet, storageRemove, storageSet, useNow, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Sheet, useToast } from '../../ui';
 import { type DayLook, LevelList, MonthCalendar } from '../../tournament/parts';
 import type { AdminCtx } from '../Admin';
@@ -105,7 +107,10 @@ const ticketIsPaid = (k: AdminTicketView) => k.creditCents + k.paidCents >= k.pr
 /** Zip 56: Pay by has passed (the moment the evens rule is checked). */
 const payByPassed = (t: AdminTournamentView, nowIso: string) => t.status === 'tickets' && !!t.payBy && Date.parse(nowIso) >= Date.parse(t.payBy);
 /** Zip 56: the plain warning on the card: an odd number locked in at the Pay by time (nobody is taken off by the site). */
-const evensOf = (t: AdminTournamentView, nowIso: string) => (payByPassed(t, nowIso) && lockedOf(t).length % 2 === 1 ? evensWarning(lockedOf(t).length) : null);
+// Zip 64: an odd number after Pay by now plays Americano by itself (the style rules), so the evens warning shows only where no rule covers it
+// (a style still on Locked doubles with an odd count, e.g. a screen that has not caught up yet).
+const evensOf = (t: AdminTournamentView, nowIso: string) =>
+  payByPassed(t, nowIso) && t.format !== 'americano' && lockedOf(t).length % 2 === 1 ? evensWarning(lockedOf(t).length) : null;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Where the organizer finds it: Settings > Schedule, and a card on Home while one is open.
@@ -159,6 +164,10 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
   const claims = claimsOf(t);
   return (
     <>
+      {/* Zip 64: the style cards (an odd switch; switch back?) and the venue reminder after Finalize, first. */}
+      {t.oddSwitch && <OddSwitchCard t={t} k={t.oddSwitch.key} />}
+      {t.switchBack && <SwitchBackCard ctx={ctx} t={t} k={t.switchBack.key} />}
+      <VenueAlertCard t={t} />
       {claims.map((k) => (
         <TicketClaimCard key={k.playerId} ctx={ctx} t={t} k={k} />
       ))}
@@ -835,9 +844,12 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   const [ticket, setTicket] = useState<number | null>(editing?.ticketCents ?? DEFAULT_TICKET_CENTS);
   const [credit, setCredit] = useState<number | null>(editing?.championCreditCents ?? DEFAULT_CREDIT_CENTS);
   // Zip 60: a format, or "Let players vote" (the start for a new tournament; an edited one starts on it while the vote is still open).
-  const [format, setFormat] = useState<FormatChoice>(editing ? (editing.formatPending ? 'vote' : editing.format) : DEFAULT_FORMAT_CHOICE);
-  // The vote can be switched on until the date is locked.
-  const canVote = !editing || !editing.finalDate || editing.formatPending === true;
+  // Zip 64: after the date is finalized, a style the vote decided starts on "Auto" (the vote's winner), until tickets close.
+  const autoNow = !!editing?.finalDate && (editing.formatSource === 'vote' || editing.formatSource === 'tie') && !editing.styleDecided;
+  const [format, setFormat] = useState<FormatChoice>(editing ? (editing.formatPending || autoNow ? 'vote' : editing.format) : DEFAULT_FORMAT_CHOICE);
+  // The vote can be switched on until the date is locked. Zip 64: after that, the same choice is "Auto" (the vote's winner for that date).
+  const canVote = true;
+  const autoLabel = !!editing?.finalDate && editing.formatPending !== true;
   // Americano's 2nd place: what an Americano tournament has, else the $7 start (a Doubles one switched to Americano starts there too).
   const [second, setSecond] = useState<number | null>(editing && (editing.format === 'americano' || editing.formatPending) ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
   const formatLocked = editing?.formatLocked === true;
@@ -928,7 +940,8 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
         <div className="segmented tm-seg tm-seg-format" role="group" aria-label="Format">
           {canVote && (
             <button type="button" aria-pressed={format === 'vote'} disabled={formatLocked} onClick={() => setFormat('vote')} data-format="vote">
-              <span className="tm-format-name">{VOTE_LABEL}</span>
+              <span className="tm-format-name">{autoLabel ? 'Auto' : VOTE_LABEL}</span>
+              {autoLabel && <span className="tm-format-rule">The vote’s winner</span>}
             </button>
           )}
           {(['doubles', 'americano'] as const).map((f) => (
@@ -1122,6 +1135,16 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
   const today = todayKeyOf(ctx.d.now, ctx.d.group.timezone);
   // A day that has passed can no longer be picked (its count still shows).
   const look = (d: string): DayLook => (d === t.finalDate ? 'on' : offered.has(d) ? (d < today ? 'past' : 'open') : 'off');
+  // Zip 64 (mock 03): the heat map: each date still to pick is shaded by how many can play, the brightest for the most, the palest for the fewest.
+  const heatDays = t.offeredDates.filter((d) => d >= today && d !== t.finalDate);
+  const heatN = heatDays.map((d) => counts.get(d)?.length ?? 0);
+  const heatMin = Math.min(...heatN);
+  const heatMax = Math.max(...heatN);
+  const heat = (d: string): CSSProperties | undefined => {
+    if (look(d) !== 'open') return undefined;
+    const c = heatColors(counts.get(d)?.length ?? 0, heatMin, heatMax);
+    return { '--heat-bg': c.light.bg, '--heat-edge': c.light.edge, '--heat-bg-dark': c.dark.bg, '--heat-edge-dark': c.dark.edge } as CSSProperties;
+  };
   const who = t.signups.find((s) => s.playerId === levelFor) ?? null;
   // Open on the part the Home card asked for, ONCE: a later redraw (a save, a live update) never scrolls the page back there.
   const scrolled = useRef(false);
@@ -1200,7 +1223,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               : 'Tickets are open on this date. To move it, use Cancel or reschedule.'
             : !t.finalDate && !t.offeredDates.some((d) => d >= today)
               ? 'Every date you offered has passed. Tap Edit below to offer new ones.'
-              : 'The number on each date is how many can play. Tap a date to pick it.'}
+              : 'Brighter green means more can play. Tap a date to pick it.'}
         </p>
         <MonthCalendar
           months={months}
@@ -1209,6 +1232,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
           label="Offered dates, with how many can play"
           look={look}
           onTap={(d) => !dateLocked && offered.has(d) && (d >= today || d === t.finalDate) && setDay(d)}
+          dayStyle={dateLocked ? undefined : heat}
           badge={(d) => (offered.has(d) ? <span className={(counts.get(d)?.length ?? 0) === best && best > 0 ? 'tm-best-count' : undefined}>{counts.get(d)?.length ?? 0}</span> : null)}
         />
       </section>
@@ -1365,8 +1389,10 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
   const [choice, setChoice] = useState<FormatChoice | null>(null);
   const [payDay, setPayDay] = useState('');
   const [payMinutes, setPayMinutes] = useState(19 * 60);
-  const [price, setPrice] = useState<number | null>(null);
-  const [touched, setTouched] = useState({ pay: false, price: false });
+  // Zip 64: "Plays", the real start and end (7:30 PM to 10:00 PM to start).
+  const [start, setStart] = useState(19 * 60 + 30);
+  const [end, setEnd] = useState(22 * 60);
+  const [touched, setTouched] = useState({ pay: false });
   /** Read the facts for this date. `keep`: after a "votes changed" answer the organizer's own edits stay. */
   async function load(keep: boolean) {
     try {
@@ -1378,7 +1404,8 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         const p = payByParts(v.payBy, tz);
         setPayDay(p.day);
         setPayMinutes(p.minutes);
-        setPrice(v.ticketCents);
+        setStart(v.start);
+        setEnd(v.start + v.minutes);
       } else if (!v.winner && choice === 'vote') setChoice(v.format);
     } catch (err) {
       setFailed(errText(err));
@@ -1404,20 +1431,22 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
   const days = payByDays(day, tz, nowMs);
   const times = PAY_TIMES.includes(payMinutes) ? PAY_TIMES : [...PAY_TIMES, payMinutes].sort((a, b) => a - b);
   const payIso = payDay ? payByAt(payDay, payMinutes, tz) : null;
-  // What the chooser means: "Let players vote" is the vote's winner; a format that is not the winner is the organizer's own pick.
-  const chosen: TournamentFormat = choice === 'doubles' || choice === 'americano' ? choice : (winner?.format ?? view.format);
-  const override = !!winner && chosen !== winner.format;
+  const starts = PLAY_STARTS.includes(start) ? PLAY_STARTS : [...PLAY_STARTS, start].sort((a, b) => a - b);
+  const ends = playEnds(start, end);
   async function finalize() {
-    if (price === null || !payIso || busy) return;
+    if (!payIso || busy) return;
     setBusy(true);
     try {
       await api('PUT', `/api/admin/tournament/${t.id}/date`, {
         date: day,
         format: choice ?? undefined,
+        start,
+        minutes: end - start,
         ...(touched.pay ? { payBy: payIso } : {}),
-        ...(touched.price && !view!.locked ? { ticketCents: price } : {}),
         ...(winner ? { seenWinner: winner.format } : {}),
       });
+      // Zip 64: the small venue reminder on Home ("Call the venue: keep courts 1 and 2 together, 7:30 to 10 PM"), until Done.
+      venueAsk(t.id, day, start, end - start);
       // The date is locked: a failed refresh must not read as a failed lock (the screen refreshes itself in 5 seconds).
       await ctx.reload().catch(() => undefined);
       toast(`${dayLong(day)} is the date. Tickets are open.`);
@@ -1436,87 +1465,101 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
       setBusy(false);
     }
   }
+  // Mock 04: Auto (the vote's winner under it), Doubles, Americano. With no vote (a style chosen when it was created), Auto keeps that style.
+  const autoFormat = winner?.format ?? view.format;
+  const styles: { key: FormatChoice; name: string; sub?: string }[] = [
+    { key: 'vote', name: 'Auto', sub: shortStyle(autoFormat) },
+    { key: 'doubles', name: 'Doubles' },
+    { key: 'americano', name: 'Americano' },
+  ];
+  const picked = choice === 'doubles' || choice === 'americano' ? choice : 'vote';
   return (
-    <div className="stack tm-finalize" data-tm-finalize={day}>
-      <section className="tm-fin-block" aria-label="Players for this date" data-tm-fin-players>
-        <p className="tm-date-count">
-          <b data-tm-fin-count>{view.players.length}</b> can play {dayShort(day)}
+    <div className="stack tm-finalize tm-fin1" data-tm-finalize={day}>
+      <section className="tm-fin-who" aria-label="Players for this date" data-tm-fin-players>
+        <p className="tm-fin-count">
+          <b data-tm-fin-count>{view.players.length}</b> can play {dayWords(day)}
         </p>
-        {view.players.length > 0 && <p className="tm-date-names" data-tm-fin-names>{view.players.join(', ')}</p>}
-        <p className="tm-card-note" data-tm-fin-plan>
-          The plan fits {view.fits}.
-        </p>
+        {view.players.length > 0 && <p className="tm-fin-names" data-tm-fin-names>{view.players.join(', ')}</p>}
         {view.over > 0 && (
           <p className="tm-card-note tm-fin-over" data-tm-fin-over>
             {view.over} over the {MAX_SPOTS} spots. Once {MAX_SPOTS} are locked in, the rest can join standby.
           </p>
         )}
       </section>
-      {view.votes && winner && (
-        <section className="tm-fin-block" aria-label="Format votes" data-tm-fin-votes>
-          <p className="tm-date-count tm-fin-counts" data-tm-fin-counts>
-            Locked doubles <b>{view.votes.locked}</b>, Americano <b>{view.votes.americano}</b>, Either <b>{view.votes.either}</b>
-          </p>
-          <p className="tm-card-note" data-tm-fin-winner>
-            {winner.words}
-          </p>
-        </section>
-      )}
-      <section className="tm-fin-block" aria-label="Format" data-tm-fin-format>
-        <div className="tm-card-head">
-          <h3 className="tm-label">Format</h3>
-          {view.locked && <span className="tm-chip">Locked</span>}
-        </div>
-        <div className="segmented tm-seg tm-seg-format" role="group" aria-label="Format">
-          {winner && (
-            <button type="button" aria-pressed={choice === 'vote'} disabled={view.locked} onClick={() => setChoice('vote')} data-format="vote">
-              <span className="tm-format-name">{VOTE_LABEL}</span>
-              <span className="tm-format-rule">{formatName(winner.format)} wins</span>
-            </button>
-          )}
-          {(['doubles', 'americano'] as const).map((f) => (
-            <button key={f} type="button" aria-pressed={choice === f} disabled={view.locked} onClick={() => setChoice(f)} data-format={f}>
-              <span className="tm-format-name">{formatName(f)}</span>
-              <span className="tm-format-rule">{formatRule(f)}</span>
+      <section className="tm-fin-style-block" aria-label="Style" data-tm-fin-format>
+        <h3 className="tm-label">Style</h3>
+        <div className="segmented tm-fin-style" role="group" aria-label="Style">
+          {styles.map((x) => (
+            <button key={x.key} type="button" aria-pressed={picked === x.key} disabled={busy} onClick={() => setChoice(x.key === 'vote' ? (winner ? 'vote' : view.format) : x.key)} data-format={x.key}>
+              <span className="tm-fin-style-name">{x.name}</span>
+              {x.sub && <span className="tm-fin-style-sub">{x.sub}</span>}
             </button>
           ))}
         </div>
-        {override && (
-          <p className="tm-card-note" data-tm-fin-override>
-            Your pick. Players will see only the format, not the votes.
+        {view.votes && (
+          <p className="tm-fin-votes" data-tm-fin-counts>
+            Votes: Doubles {view.votes.locked} · Americano {view.votes.americano} · Either {view.votes.either}
           </p>
         )}
       </section>
-      <section className="tm-fin-block" aria-label="Settings" data-tm-fin-settings>
-        <div className="tm-rows">
-          <label className="tm-row" htmlFor="tm-fin-day">
-            <span>Pay by</span>
+      <div className="tm-fin-rows" data-tm-fin-settings>
+        <div className="tm-fin-row" role="group" aria-label="Plays">
+          <span className="tm-fin-row-label">Plays</span>
+          <span className="tm-fin-boxes">
             <select
-              id="tm-fin-day"
-              className="tm-select"
+              className="tm-select tm-fin-box"
+              aria-label="Start"
+              value={start}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                // Keep the length when the start moves (never past midnight).
+                setEnd(Math.min(next + (end - start), 24 * 60, next + 360));
+                setStart(next);
+              }}
+              data-tm-fin-start
+            >
+              {starts.map((m) => (
+                <option key={m} value={m}>
+                  {timeWords(m)}
+                </option>
+              ))}
+            </select>
+            <span className="tm-fin-to">to</span>
+            <select className="tm-select tm-fin-box" aria-label="End" value={end} onChange={(e) => setEnd(Number(e.target.value))} data-tm-fin-end>
+              {ends.map((m) => (
+                <option key={m} value={m}>
+                  {timeWords(m % (24 * 60))}
+                </option>
+              ))}
+            </select>
+          </span>
+        </div>
+        <div className="tm-fin-row" role="group" aria-label="Pay by">
+          <span className="tm-fin-row-label">Pay by</span>
+          <span className="tm-fin-boxes">
+            <select
+              className="tm-select tm-fin-box"
+              aria-label="Pay by day"
               value={payDay}
               onChange={(e) => {
                 setPayDay(e.target.value);
-                setTouched((x) => ({ ...x, pay: true }));
+                setTouched({ pay: true });
               }}
               data-tm-fin-pay-day
             >
               {days.map((d) => (
                 <option key={d} value={d}>
-                  {dayLong(d)}
+                  {dayWords(d)}
                 </option>
               ))}
             </select>
-          </label>
-          <label className="tm-row" htmlFor="tm-fin-time">
-            <span>Time</span>
             <select
-              id="tm-fin-time"
-              className="tm-select"
+              className="tm-select tm-fin-box"
+              aria-label="Pay by time"
               value={payMinutes}
               onChange={(e) => {
                 setPayMinutes(Number(e.target.value));
-                setTouched((x) => ({ ...x, pay: true }));
+                setTouched({ pay: true });
               }}
               data-tm-fin-pay-time
             >
@@ -1526,25 +1569,9 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
                 </option>
               ))}
             </select>
-          </label>
-          <label className="tm-row" htmlFor="tm-fin-price">
-            <span>Ticket price</span>
-            {view.locked ? (
-              <b data-tm-fin-price-locked>{formatPrice(view.ticketCents)}</b>
-            ) : (
-              <MoneyBox
-                id="tm-fin-price"
-                cents={price}
-                onChange={(c) => {
-                  setPrice(c);
-                  setTouched((x) => ({ ...x, price: true }));
-                }}
-                label="Ticket price"
-              />
-            )}
-          </label>
+          </span>
         </div>
-      </section>
+      </div>
       {notice && (
         <p className="tm-card-note tm-fin-notice" role="status" data-tm-fin-notice>
           {notice}
@@ -1554,11 +1581,151 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         <button type="button" className="btn secondary" disabled={busy} onClick={onClose} data-tm-finalize-back>
           Back
         </button>
-        <button type="button" className="btn tm-go" disabled={busy || price === null || !payIso} onClick={() => void finalize()} data-tm-finalize-go>
+        <button type="button" className="btn tm-go" disabled={busy || !payIso} onClick={() => void finalize()} data-tm-finalize-go>
           {busy ? 'Working…' : 'Finalize date'}
         </button>
       </div>
     </div>
+  );
+}
+
+/** Zip 64: the style cards' "Not now" and X, remembered on this phone (each key is one switch, so a new switch shows again). */
+const STYLE_SEEN_KEY = 'pb_tour_style_seen';
+function readStyleSeen(): string[] {
+  try {
+    const v = JSON.parse(storageGet(STYLE_SEEN_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function useStyleSeen(key: string): [boolean, () => void] {
+  const [seen, setSeen] = useState<string[]>(readStyleSeen);
+  return [
+    seen.includes(key),
+    () => {
+      const next = [...readStyleSeen().filter((x) => x !== key), key].slice(-30);
+      try {
+        storageSet(STYLE_SEEN_KEY, JSON.stringify(next));
+      } catch {
+        /* it shows again on this phone */
+      }
+      setSeen(next);
+    },
+  ];
+}
+
+/** Zip 64 (rule c): "The Cold Open switched to Americano (odd number of players)." The site's alert card, with an X. */
+function OddSwitchCard({ t, k }: { t: AdminTournamentView; k: string }) {
+  const [seen, hide] = useStyleSeen(k);
+  if (seen) return null;
+  return (
+    <AlertCard
+      as="section"
+      tone="amber"
+      icon="info"
+      label="Style switched"
+      title={oddSwitchWords(t.name)}
+      sub={`${t.lockedIn ?? 0} locked in. Locked doubles needs an even number.`}
+      data={{ 'data-tm-odd-switch': true }}
+      xLabel="Close"
+      onX={hide}
+    />
+  );
+}
+
+/** Zip 64 (rule d): the count is even again after an odd switch. Never switches by itself: Switch or Not now. */
+function SwitchBackCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k: string }) {
+  const { busy, save } = useSave(ctx);
+  const [seen, hide] = useStyleSeen(k);
+  if (seen) return null;
+  return (
+    <AlertCard
+      as="section"
+      tone="blue"
+      icon="info"
+      label="Switch back"
+      title="Switch back to Locked doubles?"
+      sub={`${t.lockedIn ?? 0} locked in now, an even number.`}
+      data={{ 'data-tm-switch-back': true }}
+      actions={
+        <>
+          <button type="button" className="ac-btn" disabled={busy} onClick={() => void save(() => api('POST', `/api/admin/tournament/${t.id}/switch-back`, {}), 'Back to Locked doubles')} data-tm-switch-back-go>
+            Switch
+          </button>
+          <button type="button" className="ac-btn ac-out" disabled={busy} onClick={hide} data-tm-switch-back-later>
+            Not now
+          </button>
+        </>
+      }
+    />
+  );
+}
+
+/** Zip 64: "Tue Dec 8" (the Finalize screen's words, no comma). */
+const dayWords = (d: string) => dayLong(d).replace(',', '');
+/** Zip 64: the style's short name on the Finalize screen ("Doubles" under Auto). */
+const shortStyle = (f: TournamentFormat) => (f === 'americano' ? 'Americano' : 'Doubles');
+/** Zip 64: "Plays" starts from 4:00 PM to 9:30 PM, on the half hour. */
+const PLAY_STARTS = Array.from({ length: 12 }, (_, i) => 16 * 60 + i * 30);
+/** The ends for a start: 1 to 6 hours after it, on the half hour, never past midnight (the current end always listed). */
+function playEnds(start: number, end: number): number[] {
+  const out: number[] = [];
+  for (let m = start + 60; m <= Math.min(start + 360, 24 * 60); m += 30) out.push(m);
+  if (!out.includes(end) && end > start) out.push(end);
+  return out.sort((a, b) => a - b);
+}
+
+/**
+ * Zip 64: after Finalize, one small reminder on the organizer's Home: "Call the venue: keep courts 1 and 2 together, 7:30 to 10 PM", until Done.
+ * Remembered on this phone only (the site's own alert card; nothing new on the server).
+ */
+const VENUE_KEY = 'pb_tour_venue';
+type VenueAsk = { id: string; day: string; start: number; minutes: number };
+function venueAsk(id: string, day: string, start: number, minutes: number) {
+  try {
+    storageSet(VENUE_KEY, JSON.stringify({ id, day, start, minutes } satisfies VenueAsk));
+  } catch {
+    /* no reminder on this phone: nothing else depends on it */
+  }
+}
+function readVenueAsk(): VenueAsk | null {
+  try {
+    const v = JSON.parse(storageGet(VENUE_KEY) ?? 'null');
+    return v && typeof v.id === 'string' && typeof v.start === 'number' && typeof v.minutes === 'number' ? (v as VenueAsk) : null;
+  } catch {
+    return null;
+  }
+}
+export function VenueAlertCard({ t }: { t: AdminTournamentView }) {
+  const [ask, setAsk] = useState<VenueAsk | null>(readVenueAsk);
+  if (!ask || ask.id !== t.id || t.status !== 'tickets' || t.finalDate !== ask.day) return null;
+  return (
+    <AlertCard
+      as="section"
+      tone="blue"
+      icon="court"
+      label="Call the venue"
+      title={`Call the venue: keep courts 1 and 2 together, ${planRange(t.start, t.minutes)}`}
+      data={{ 'data-tm-venue-alert': true }}
+      action={
+        <button
+          type="button"
+          className="ac-btn"
+          onClick={() => {
+            try {
+              storageRemove(VENUE_KEY);
+            } catch {
+              /* it shows again on this phone */
+            }
+            setAsk(null);
+          }}
+          data-tm-venue-done
+        >
+          Done
+        </button>
+      }
+    />
   );
 }
 
@@ -1567,7 +1734,7 @@ function DateSheet({ ctx, t, day, names, onClose }: { ctx: AdminCtx; t: AdminTou
   const cant = day ? t.signups.filter((s) => !s.dates.includes(day)).map((s) => s.name) : [];
   const isFinal = !!day && day === t.finalDate;
   return (
-    <Sheet calmFocus open={!!day} title={day ? dayLong(day) : 'Date'} onClose={onClose} className="tm-date-sheet">
+    <Sheet calmFocus open={!!day} title={day ? (day === t.finalDate ? dayLong(day) : `Finalize ${dayWords(day)}`) : 'Date'} onClose={onClose} className="tm-date-sheet">
       {day && (
         <div className="stack" data-tm-date-sheet={day}>
           {isFinal && (

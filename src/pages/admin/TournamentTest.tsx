@@ -10,6 +10,15 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 64 (🎾64.finalize): the short ticket, the style rules and late paying. These build "The Cold Open" (the format above does not apply).
+  { stage: 'zip64_start', label: 'Start: short ticket and Finalize', line: 'The Cold Open, the vote open, 9 on the list. View as Vic: one wide Sign up (mock 00). View as Parker: See who’s signed up, Edit, Drop out (mock 01). As you: the tournament page, Pick the date (heat map), tap a date: Style, Plays, Pay by, Finalize date, then the venue reminder on Home.' },
+  { stage: 'vote_open', label: 'Format vote open (3 on the list)', line: '3 on the list with mixed votes. View as Vic, Sign up: Step 2 of 2 · Your dates and the new line.' },
+  { stage: 'vote_majority', label: 'Date finalized, style TBD', line: 'The date is set, Pay by not passed: every card says Tournament style TBD. View as Vic: Lock my spot · $16, Pay by on the right.' },
+  { stage: 'style_even', label: 'Tickets closed: 10 locked in (even)', line: 'Pay by passed an hour ago, all 10 locked in: Locked doubles (the vote’s winner) stays.' },
+  { stage: 'style_odd', label: 'Tickets closed: 9 locked in (odd)', line: 'Pay by passed, 9 locked in: it switches to Americano. Home: the switched card. View as Parker: Tournament style is now Americano. Vic can still pay (a spot is open).' },
+  { stage: 'style_back', label: 'Odd, then a late payer makes 10', line: 'Switched to Americano at 9, then Vic paid late: 10. Home: Switch back to Locked doubles? Switch, or Not now. It never switches by itself.' },
+  { stage: 'late_open', label: 'Late paying (Pay by passed, spots open)', line: '6 locked in, Pay by an hour ago. View as Vic: red Your payment is late, Pay now opens the Pay sheet. No fees.' },
+  { stage: 'late_cut', label: '3 hours before the start', line: 'Today, starting in 2 hours: tickets are closed for Vic (no Pay now). Parker stays locked in.' },
   // Zip 63 (🎾63.tickets): the pay countdown at the top of Vic's Home. Each is Tickets open (6 paid) with Pay by set from now; the tournament is
   // the day after Pay by. View as Vic to see the alert; Pay opens the same sheet as Lock my spot.
   { stage: 'pay_3d', label: 'Countdown: 3 days left', line: 'Pay by is 7:00 PM three days from today. View as Vic: amber 3 days left to pay.' },
@@ -19,13 +28,10 @@ const STAGES = [
   { stage: 'pay_hours', label: 'Countdown: due in 5 hours', line: 'Pay by is 5 hours 20 minutes from now: red Due in 5 hours.' },
   { stage: 'pay_minutes', label: 'Countdown: due in 42 minutes', line: 'Pay by is 42 minutes from now: red Due in 42 minutes, counting down while Home is open.' },
   { stage: 'pay_late', label: 'Countdown: late', line: 'Pay by passed an hour ago and Wren backed out after it (a spot is free): red Your payment is late, Pay now.' },
-  { stage: 'pay_closed', label: 'Countdown: late, no spot free', line: 'Pay by passed an hour ago and no spot was freed: tickets are closed for Vic, so no countdown (the card says Tickets closed).' },
+  { stage: 'pay_closed', label: 'Countdown: late, spots open', line: 'Pay by passed an hour ago, no back out: since Zip 64 a spot is still open, so Vic sees Your payment is late with Pay now.' },
   // Zip 62 (🎾62.speed): The Cold Open as it is on live, to feel the speed (the format above does not apply).
   { stage: 'speed_check', label: 'Speed check (like live)', line: 'The Cold Open as on live: Everyone, the vote open, 9 on the list (everyone but you). Open Home and View as Vic: the card draws with the rest.' },
   // Zip 60 (🎾60.formatvote): the players vote the format. These build "The Cold Open" on Let players vote; the format above does not apply.
-  { stage: 'vote_open', label: 'Format vote open', line: '3 on the list with mixed votes (Parker Locked doubles, Rowan Americano, Sage Either). View as Vic, Sign up: Format you’d like. The card says Tournament style TBD.' },
-  { stage: 'vote_finalize', label: 'Finalize screen (6 to 4 vote)', line: 'All 10 names can make the date; Americano 6, Locked doubles 4. Not locked yet: tap the date on the tournament page, see the votes, override the winner, Finalize. The over line needs more than 12 players (the preview has 10).' },
-  { stage: 'vote_majority', label: 'Date locked, clear majority', line: 'Americano wins 3 to 1 (two Either). View as Vic: the alert at the top says most players voted Americano. Your card shows the counts.' },
   { stage: 'vote_tie', label: 'Date locked, tie', line: 'Locked 1, Americano 1, Either 2: a tie, so the first tournament is Locked doubles. The alert says only the format.' },
   { stage: 'signup', label: 'Sign-up open (sign-up finish)', line: 'Everyone can see it. 6 on the list; Vic, Zoe, Reese and Alex are not. View as Vic, Sign up, watch the ticket punch. Pick the format above first.' },
   // Alex: picking the date opens tickets.
@@ -37,7 +43,7 @@ const STAGES = [
   { stage: 'canceled', label: 'Canceled', line: '6 paid, then canceled: every paid ticket is credit now. Players who were on the list see Canceled.' },
   { stage: 'rescheduled', label: 'Rescheduled', line: '6 paid, then rescheduled: tickets stay held, players pick their dates again.' },
   // Zip 59: the polish piece. 
-  { stage: 'closed', label: 'Tickets closed (Pay by passed)', line: 'Pay by passed an hour ago: no new tickets, no standby. View as Vic: Tickets closed.' },
+  { stage: 'closed', label: 'Pay by passed (6 paid)', line: 'Pay by passed an hour ago: no standby, but spots are open, so Vic can still pay late (Zip 64).' },
   { stage: 'hidden', label: 'Canceled and hidden', line: 'Out of Home. Settings, Advanced, Hidden tournaments lists it with Restore. Cancel above, then Hide, does the same.' },
   { stage: 'none', label: 'No tournament', line: 'Nothing open, to try Create tournament.' },
 ] as const;

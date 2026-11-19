@@ -1572,8 +1572,8 @@ dialog.sheet.tc-tw-overlay {
 .tc-gold {
   box-shadow:
     0 0 0 1px #102018,
-    0 0 0 3.5px #e6b83a,
-    0 0 0 5.5px rgb(230 184 58 / 27%);
+    0 0 0 var(--tc-ring, 3.5px) #e6b83a,
+    0 0 0 var(--tc-ring-halo, 5.5px) rgb(230 184 58 / 27%);
 }
 /* Mocks 03 and 04: the ball pops (the site's own m-ball-pop, 240 ms) and the gold ring arrives with a big glow that eases to the steady ring. */
 @media (prefers-reduced-motion: no-preference) {
@@ -1595,15 +1595,15 @@ dialog.sheet.tc-tw-overlay {
   30% {
     box-shadow:
       0 0 0 1px #102018,
-      0 0 0 3.5px #f0c64a,
-      0 0 0 5.5px rgb(230 184 58 / 45%),
+      0 0 0 var(--tc-ring, 3.5px) #f0c64a,
+      0 0 0 var(--tc-ring-halo, 5.5px) rgb(230 184 58 / 45%),
       0 0 18px 7px rgb(246 210 92 / 55%);
   }
   100% {
     box-shadow:
       0 0 0 1px #102018,
-      0 0 0 3.5px #e6b83a,
-      0 0 0 5.5px rgb(230 184 58 / 27%),
+      0 0 0 var(--tc-ring, 3.5px) #e6b83a,
+      0 0 0 var(--tc-ring-halo, 5.5px) rgb(230 184 58 / 27%),
       0 0 0 0 rgb(246 210 92 / 0%);
   }
 }
@@ -1612,5 +1612,180 @@ dialog.sheet.tc-tw-overlay {
   .tc-hero .tc-kicker {
     font-size: min(0.78rem, calc(4.3cqw - 0.7px));
     letter-spacing: 0.1em;
+  }
+}
+
+/* ---------- Zip 64 (🎾64.finalize): the SHORT ticket (zip64 mocks/BUILD_NOW 00 and 01, measured at 420 px wide) ----------
+   Zip 59's ticket shape is back (the date stub, the real notch cut out of the card, the dashed tear line), with Zip 63's balls, gold and pop,
+   and one bar along the bottom. About 184 px tall before you sign up (mock 00) and 176 px signed up (mock 01), at 420 wide. No steps strip. */
+.tc.tc-short {
+  /* Zip 63's overrides never reach this card (no .tc-hero): the base .tc above gives the greens, the 1 px inside edge and the notch mask. */
+  container-type: normal;
+}
+.tc-short .tc-top {
+  min-height: 0;
+}
+.tc-short .tc-stub {
+  padding: 13px 0 10px;
+}
+.tc-short .tc-day-tbd {
+  margin: 6px 0 5px;
+}
+.tc-short .tc-time {
+  margin-top: 6px;
+}
+/* The tear line runs from under the notch down to the bar. */
+.tc-short .tc-stub::after {
+  top: 10px;
+}
+.tc-short .tc-main {
+  padding: 14px 14px 12px 16px;
+}
+.tc-short .tc-kicker {
+  gap: 8px;
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.17em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.tc-short .tc-kdot {
+  width: 9px;
+  height: 9px;
+}
+.tc-short .tc-title {
+  margin: 7px 0 0;
+  font-size: min(1.6rem, 10.7cqw);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A long name (17 letters or more) may take two lines rather than shrink to nothing. */
+.tc-short .tc-title.tc-title-long {
+  font-size: min(1.3rem, 8.4cqw);
+  white-space: normal;
+}
+.tc-short .tc-format {
+  margin: 3px 0 0;
+  font-size: min(0.8rem, 5.5cqw);
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.tc-short .tc-punch-sub {
+  text-align: left;
+}
+.tc-short .tc-balls-row {
+  margin-top: 10px;
+}
+.tc-short .tc-balls {
+  height: 21px;
+  /* The gold ring scaled to the smaller ball, so neighbors never touch (6 px apart). */
+  --tc-ring: 2.5px;
+  --tc-ring-halo: 4px;
+}
+/* The bar: one main button, and the small words or links on the right. */
+.tc-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 14px 12px;
+}
+.tc-bar .tc-btn {
+  flex: 1 1 auto;
+  min-height: 48px;
+  border-radius: 16px;
+  font-size: 1.12rem;
+  white-space: nowrap;
+}
+.tc-bar .tc-lime {
+  box-shadow: none;
+}
+/* Mock 01: the gray button is narrower and shorter, sized to its words. */
+.tc-bar .tc-gray {
+  flex: 0 1 auto;
+  min-height: 40px;
+  padding: 0 19px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Edit and Drop out: plain underlined words, far apart (about 22 px between the tap areas), each tap area at least 36 px tall. */
+.tc-bar-links {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 24px;
+  margin-left: auto;
+  padding-right: 5px;
+}
+.tc-bar .tc-link {
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.tc-aside {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 0.9rem;
+  line-height: 1.25;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tc-sub);
+}
+.tc-aside-lime {
+  color: var(--tc-lime);
+  font-weight: 650;
+}
+/* Words alone in the bar (Canceled, Tickets are closed): left, under the stub's edge. */
+.tc-bar > .tc-aside:only-child {
+  margin-left: 0;
+  padding: 8px 2px 0;
+  text-align: left;
+  white-space: normal;
+}
+/* Phones under 420 wide (390, 360, 320): the same bar, tighter, so "See who's signed up", Edit and Drop out keep one line each with no cut words. */
+@media (max-width: 419px) {
+  .tc-bar .tc-gray {
+    padding: 0 14px;
+    font-size: 0.9rem;
+  }
+  .tc-bar-links {
+    gap: 16px;
+    padding-right: 2px;
+  }
+  .tc-bar .tc-link {
+    padding: 0 6px;
+  }
+}
+@media (max-width: 359px) {
+  .tc-bar {
+    gap: 6px;
+    padding: 0 12px 12px;
+  }
+  .tc-bar .tc-gray {
+    padding: 0 11px;
+    font-size: 0.84rem;
+  }
+  .tc-bar-links {
+    gap: 12px;
+    padding-right: 0;
+  }
+  .tc-bar .tc-link {
+    padding: 0 5px;
+    font-size: 0.78rem;
+  }
+  .tc-aside {
+    font-size: 0.82rem;
   }
 }

@@ -693,11 +693,12 @@ export async function buildSmallPreview(
     if (!opts.zip60) throw new Error('zip63 builds on the zip60 profile');
     w.env.PREVIEW_CALM = 'on';
     try {
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'pay_2d' });
+      // Zip 64 (🎾64.finalize): the calm start is the short ticket and Finalize scene (The Cold Open, the vote open, 9 on the list, Vic not).
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip64_start' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 63 Tickets (on): "Winter Classic" at the Countdown: 2 days left stage (Everyone, tickets open, 6 paid; Vic, Zoe and Reese unpaid; Pay by 7:00 PM two days after the seed). Vic sees the amber countdown and the gold-ball card; organizer Home shows Remind all unpaid (3 unpaid)');
+    summary.push('Zip 64 Finalize (on): "The Cold Open", Everyone, the vote open, 9 on the list (everyone but Vic), all able to make the third Thursday of next month. Vic sees the short ticket with Sign up; Parker the signed-up ticket; organizer Home has the tournament card (Pick the date: the heat map, then the one-screen Finalize). Every other moment is one tap away on the Tournament test page');
   }
 
   await refresh();
