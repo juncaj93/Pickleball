@@ -6706,8 +6706,9 @@ End tournament) is zip 58 and is NOT built.
 5. The other side: "Is this right?" / "Vic says Round 3 ended 11 to 8 for Vic + Parker." / Yes, that's right / No, fix it. No, fix it opens the
    score sheet with the numbers from their side; their score replaces it (it counts) and the side that entered first is asked. The same score
    entered by both sides counts as a Yes.
-6. The points table: wins first, then total points (picture 32's order). Once someone has left the night: win percentage, then average point
-   difference per game. Players still level when every game is in: "Tied" (and an amber card tells the organizer who).
+6. The points table (Alex's answer, Nov 19): while everyone has played the same number of games, wins first, then total points; whenever
+   players have played different numbers of games (a sit-out or someone left), win percentage first, then total points. Players still level
+   when every game is in: "Tied" (and an amber card tells the organizer who).
 7. The organizer: before the night the Rounds card ("10 locked in. 6 rounds to 11, 2 sit each round. New partner every round.", the courts'
    numbers, All rounds with who sits). On the night: zip 57's hero, Pause, the Time check (counted in rounds; never the last round), "Round 3 ·
    Scores" (Done, Waiting with Confirm, Changed, Playing with Set; "Waiting 7 min" or "8 min over" when late; a late score from an earlier round
@@ -6720,8 +6721,8 @@ End tournament) is zip 58 and is NOT built.
 ### Where it differs from the brief (the code is the truth)
 - The Round 3 preview stage: "a score waiting" is the other court's ROUND 2 score (late, with Confirm on the organizer's card), so Round 3 is
   on both courts and Currently playing shows the other court as picture 32 draws it.
-- Ranking by win percentage starts when someone LEFT the night (as the brief says), not whenever counts differ: with 10 players, 6 rounds, 8
-  players get 5 games and 2 get 4 by the schedule itself, and picture 32's order is wins then points (question below).
+- Ranking: Alex chose win percentage whenever game counts differ (then total points), so mid-night after a sit-out round the table can differ
+  from picture 32's order (a 1-0 player who sat Round 1 is above 1-1 players).
 - 8 players on 2 courts: everyone plays every round with a new partner, so the courts cannot also be even: over 7 rounds one player can have 6
   games on one court. Partners and opponents are kept perfect instead (every partner once, every opponent twice).
 - Scores are whole numbers 0 to 30 and cannot be equal; "first to 11" is not enforced (a game cut short by time can end 9 to 7).
@@ -6744,11 +6745,10 @@ Not changed (by design): one round's missing score holds Enter score on the next
 late and can Set it).
 
 ### Questions for Alex
-1. The database change above (three new nullable columns on tournament_games): OK to apply on live with the deploy?
-2. Unequal games from the schedule itself: 10 players, 6 rounds, 2 sit each round: 8 players get 5 games and 2 get 4. The table ranks wins
-   first (picture 32), so a 5-game player can pass a 4-game one by playing more. Switch to win percentage whenever counts differ (not only
-   after someone leaves)?
-3. A score must be entered before the next round's Enter score shows (rounds move together). OK, or should a court be allowed to run ahead?
+1. The database change above (three new nullable columns on tournament_games): ANSWERED, approved for live.
+2. Unequal games from the schedule itself (10 players: 8 get 5 games, 2 get 4): ANSWERED, win percentage whenever counts differ, then total
+   points (built after the preview; tests updated).
+3. A score must be entered before the next round's Enter score shows (rounds move together): ANSWERED, OK as built.
 
 ### Tests
 - Unit: tests/zip61-americano.test.ts (219: every row of the game plan table, both styles; every size 6 to 16 on 1 and 2 courts at 2, 2.5, 3,

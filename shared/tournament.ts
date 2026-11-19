@@ -861,7 +861,7 @@ export interface AdminRoundsView {
   timeNote?: string;
   /** Every game is in and players are still level on every rule: "Tied" (the names). */
   tied?: string[];
-  /** Players have played unequal numbers of games (someone left): the table ranks by win percentage. */
+  /** Players have played different numbers of games (a sit-out, someone left): the table ranks by win percentage, then total points. */
   byPercent: boolean;
 }
 

@@ -496,12 +496,12 @@ export interface PointsRow {
 }
 
 /**
- * The live points table. Ranking: wins first, ties broken by total points (picture 32). Once someone has left the night (`byPercent`: their
- * later games were skipped, so players end up with unequal numbers of games), win percentage first, then average point difference per game.
- * Players still level on every rule keep their order (the caller passes ids in name order) and, once the night's games are all in (`final`),
- * are marked tied: the screens say "Tied" and the organizer is told.
+ * The live points table (Alex, Nov 19). While everyone has played the same number of games: wins first, then total points (picture 32).
+ * Whenever players have played different numbers of games (a sit-out, or someone left): win percentage first, then total points. Players still
+ * level keep their order (the caller passes ids in name order) and, once the night's games are all in (`final`), are marked tied: the screens
+ * say "Tied" and the organizer is told.
  */
-export function pointsTable(ids: readonly string[], games: readonly ScoredGame[], opts: { byPercent: boolean; final: boolean }): PointsRow[] {
+export function pointsTable(ids: readonly string[], games: readonly ScoredGame[], opts: { final: boolean }): PointsRow[] {
   const rec = new Map(ids.map((id) => [id, { wins: 0, losses: 0, points: 0, against: 0, played: 0 }]));
   for (const g of games) {
     const aWon = g.scoreA > g.scoreB;
@@ -520,14 +520,13 @@ export function pointsTable(ids: readonly string[], games: readonly ScoredGame[]
       }
     }
   }
-  // Compared as fractions (cross multiplied), so 2 of 3 and 4 of 6 are equal; a player with no games counts as 0%.
+  // Different numbers of games: win percentage, compared as fractions (cross multiplied, so 2 of 3 and 4 of 6 are equal; no games is 0%).
+  const unequal = new Set([...rec.values()].map((r) => r.played)).size > 1;
   const cmp = (x: string, y: string): number => {
     const a = rec.get(x)!;
     const b = rec.get(y)!;
-    if (!opts.byPercent) return b.wins - a.wins || b.points - a.points;
-    const pa = a.played || 1;
-    const pb = b.played || 1;
-    return b.wins * pa - a.wins * pb || (b.points - b.against) * pa - (a.points - a.against) * pb;
+    if (!unequal) return b.wins - a.wins || b.points - a.points;
+    return b.wins * (a.played || 1) - a.wins * (b.played || 1) || b.points - a.points;
   };
   const order = [...ids].sort((x, y) => cmp(x, y) || ids.indexOf(x) - ids.indexOf(y));
   const rows: PointsRow[] = order.map((id, i) => {
@@ -545,3 +544,6 @@ export function pointsTable(ids: readonly string[], games: readonly ScoredGame[]
 
 /** "2-0" (wins-losses), the same as the Locked doubles standings. */
 export const winLoss = (r: Pick<PointsRow, 'wins' | 'losses'>): string => `${r.wins}-${r.losses}`;
+
+/** Players have played different numbers of games (the table then ranks by win percentage). */
+export const gamesDiffer = (rows: readonly Pick<PointsRow, 'played'>[]): boolean => new Set(rows.map((r) => r.played)).size > 1;

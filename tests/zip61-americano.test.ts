@@ -11,6 +11,7 @@ import {
   pairSlot,
   PATTERN_ROUNDS,
   patternKey,
+  gamesDiffer,
   pointsTable,
   seatOrder,
   seatRounds,
@@ -233,45 +234,53 @@ describe('zip 61: the saved patterns', () => {
 });
 
 describe('zip 61: the points table', () => {
-  // Picture 32 (Round 3 being played, rounds 1 and 2 in): Vic 2-0 22 pts, Christopher 1-1 20, Parker 1-1 20, Wren 1-1 19, Reese 1-1 17,
-  // Rowan 1-0 11, Zoe 1-0 11, Sage 0-2 15, Alex 0-1 7, Quinn 0-1 6.
+  // Alex, Nov 19: win percentage whenever players have played different numbers of games, then total points; equal games: wins, then points.
   const names = ['Alex', 'Christopher', 'Parker', 'Quinn', 'Reese', 'Rowan', 'Sage', 'Vic', 'Wren', 'Zoe'];
   const g = (a: [string, string], b: [string, string], scoreA: number, scoreB: number) => ({ a, b, scoreA, scoreB });
-  it('wins first, then total points (the picture order, with the live table numbers)', () => {
-    const real = [g(['Vic', 'Christopher'], ['Wren', 'Sage'], 11, 9), g(['Parker', 'Reese'], ['Alex', 'Quinn'], 11, 7), g(['Vic', 'Wren'], ['Parker', 'Christopher'], 11, 9), g(['Rowan', 'Zoe'], ['Reese', 'Sage'], 11, 6)];
-    const rows = pointsTable(names, real, { byPercent: false, final: false });
-    const shown = rows.map((r) => `${r.id} ${winLoss(r)} ${r.points}`);
-    expect(shown.slice(0, 3)).toEqual(['Vic 2-0 22', 'Christopher 1-1 20', 'Parker 1-1 20']);
-    // 1-0 with 11 points is below every 1-1 with more points (wins first, then points; not win percentage while nobody has left).
-    expect(rows.findIndex((r) => r.id === 'Rowan')).toBeGreaterThan(rows.findIndex((r) => r.id === 'Reese'));
-    expect(rows.find((r) => r.id === 'Sage')!.rank).toBeGreaterThan(rows.find((r) => r.id === 'Zoe')!.rank);
-    // Nobody is "Tied" while the night is on (Christopher and Parker are level), only once every game is in.
+  it('equal games: wins first, then total points; "Tied" only once every game is in', () => {
+    const four = ['A', 'B', 'C', 'D'];
+    const list = [g(['A', 'B'], ['C', 'D'], 11, 9), g(['A', 'C'], ['B', 'D'], 11, 5), g(['A', 'D'], ['B', 'C'], 7, 11)];
+    // Everyone played 3: C 2-1 31 pts, A 2-1 29, B 2-1 27, D 0-3 21.
+    const rows = pointsTable(four, list, { final: false });
+    expect(rows.map((r) => `${r.id} ${winLoss(r)} ${r.points}`)).toEqual(['C 2-1 31', 'A 2-1 29', 'B 2-1 27', 'D 0-3 21']);
+    expect(gamesDiffer(rows)).toBe(false);
     expect(rows.some((r) => r.tied)).toBe(false);
-    const done = pointsTable(names, real, { byPercent: false, final: true });
-    expect(done.filter((r) => r.tied).map((r) => r.id)).toEqual(expect.arrayContaining(['Christopher', 'Parker']));
+    const level = pointsTable(['X', 'Y', 'Z', 'W'], [g(['X', 'Y'], ['Z', 'W'], 11, 5), g(['X', 'Z'], ['Y', 'W'], 5, 11)], { final: true });
+    // X 1-1 16 pts, Y 2-0 22, Z 0-2 10, W 1-1 16: X and W are level on every rule, so Tied once every game is in.
+    expect(level.filter((r) => r.tied).map((r) => r.id).sort()).toEqual(['W', 'X']);
+    expect(pointsTable(['X', 'Y', 'Z', 'W'], [g(['X', 'Y'], ['Z', 'W'], 11, 5), g(['X', 'Z'], ['Y', 'W'], 5, 11)], { final: false }).some((r) => r.tied)).toBe(false);
   });
 
-  it('after someone leaves: win percentage, then average point difference per game', () => {
-    const list = [
-      g(['A', 'B'], ['C', 'D'], 11, 5),
-      g(['A', 'C'], ['B', 'D'], 11, 9),
-      g(['B', 'C'], ['A', 'D'], 11, 2),
-      g(['B', 'D'], ['A', 'C'], 11, 10),
-    ];
-    // E played one game and won it 11 to 0 with A before leaving: 100% beats A's 3 of 5.
-    list.push(g(['E', 'A'], ['C', 'D'], 11, 0));
-    const wins = pointsTable(['A', 'B', 'C', 'D', 'E'], list, { byPercent: false, final: false });
-    const pct = pointsTable(['A', 'B', 'C', 'D', 'E'], list, { byPercent: true, final: false });
-    expect(wins[0].id).not.toBe('E');
-    expect(pct[0].id).toBe('E');
-    // Same percentage: the better average point difference first.
-    const same = pointsTable(['X', 'Y', 'Z', 'W'], [g(['X', 'Z'], ['Y', 'W'], 11, 9), g(['Y', 'Z'], ['X', 'W'], 11, 1), g(['X', 'Y'], ['Z', 'W'], 11, 3)], { byPercent: true, final: false });
-    // X, Y and Z all won 2 of 3; Y is +16 over 3 games, Z +4, X 0.
-    expect(same.map((r) => r.id).slice(0, 3)).toEqual(['Y', 'Z', 'X']);
+  it('different numbers of games (picture 32: two players sat Round 1): win percentage first, then total points', () => {
+    const real = [g(['Vic', 'Christopher'], ['Wren', 'Sage'], 11, 9), g(['Parker', 'Reese'], ['Alex', 'Quinn'], 11, 7), g(['Vic', 'Wren'], ['Parker', 'Christopher'], 11, 9), g(['Rowan', 'Zoe'], ['Reese', 'Sage'], 11, 6)];
+    const rows = pointsTable(names, real, { final: false });
+    expect(gamesDiffer(rows)).toBe(true);
+    // 100%: Vic 2-0 (22), then Rowan and Zoe 1-0 (11 each, name order); 50%: Christopher 20, Parker 20, Wren 20, Reese 17; 0%: Sage 15, Alex 7, Quinn 7.
+    expect(rows.map((r) => r.id).slice(0, 3)).toEqual(['Vic', 'Rowan', 'Zoe']);
+    expect(rows.findIndex((r) => r.id === 'Rowan')).toBeLessThan(rows.findIndex((r) => r.id === 'Christopher'));
+    const half = rows.filter((r) => r.wins === 1 && r.losses === 1).map((r) => r.points);
+    expect(half).toEqual([...half].sort((x, y) => y - x));
+    expect(rows.slice(-3).map((r) => r.wins)).toEqual([0, 0, 0]);
+    // Same percentage over different counts (2 of 4 and 1 of 2): total points decides. Y 2-2 with 30 points is above X 1-1 with 20.
+    const same = pointsTable(
+      ['X', 'Y', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6'],
+      [
+        g(['Y', 'F1'], ['F2', 'F3'], 11, 0),
+        g(['Y', 'F1'], ['F2', 'F3'], 0, 11),
+        g(['Y', 'F2'], ['F1', 'F3'], 11, 1),
+        g(['Y', 'F2'], ['F1', 'F3'], 8, 11),
+        g(['X', 'F4'], ['F5', 'F6'], 11, 0),
+        g(['X', 'F4'], ['F5', 'F6'], 9, 11),
+      ],
+      { final: false },
+    );
+    const at = (id: string) => same.findIndex((r) => r.id === id);
+    expect([winLoss(same[at('Y')]), same[at('Y')].points, winLoss(same[at('X')]), same[at('X')].points]).toEqual(['2-2', 30, '1-1', 20]);
+    expect(at('Y')).toBeLessThan(at('X'));
   });
 
   it('players with no games yet: 0-0, in the order they came (names), nobody tied', () => {
-    const rows = pointsTable(['A', 'B', 'C'], [], { byPercent: false, final: true });
+    const rows = pointsTable(['A', 'B', 'C'], [], { final: true });
     expect(rows.map((r) => [r.id, winLoss(r), r.points, r.tied])).toEqual([
       ['A', '0-0', 0, false],
       ['B', '0-0', 0, false],

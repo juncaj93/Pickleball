@@ -18,7 +18,7 @@ import { newId } from './crypto';
 import * as v from './validate';
 import { audit } from './repo';
 import type { AdminRoundGame, AdminRoundsView, PlayerRound, PlayerRoundsView } from '../shared/tournament';
-import { americanoNight, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
+import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
 import { americanoPlan, clockLabel, type GameTo, ROUND_MINUTES } from '../shared/tournamentPlan';
 import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournamentSchedule';
 import { startMsOf } from '../shared/tournamentTickets';
@@ -232,7 +232,7 @@ function tableOf(f: AmFacts) {
   return pointsTable(
     f.roster,
     f.games.filter(counts).map((g) => ({ a: g.a, b: g.b, scoreA: g.scoreA!, scoreB: g.scoreB! })),
-    { byPercent: f.gone.size > 0, final: f.games.every(decided) && f.games.length > 0 },
+    { final: f.games.every(decided) && f.games.length > 0 },
   );
 }
 
@@ -411,7 +411,7 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
     timeCheck: sug ? { text: timeCheckWords(f.check!.behind, sug.fromRound, sug.to, clockLabel(f.end), sug.stillOver), fromRound: sug.fromRound, to: sug.to, key: `tc:${t.id}:${sug.fromRound}:${sug.to}` } : null,
     ...(note ? { timeNote: note } : {}),
     ...(tied.length ? { tied } : {}),
-    byPercent: f.gone.size > 0,
+    byPercent: gamesDiffer(table),
   };
 }
 
