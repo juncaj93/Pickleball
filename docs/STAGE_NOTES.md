@@ -6725,3 +6725,50 @@ End tournament) is zip 58 and is NOT built.
 - 8 players on 2 courts: everyone plays every round with a new partner, so the courts cannot also be even: over 7 rounds one player can have 6
   games on one court. Partners and opponents are kept perfect instead (every partner once, every opponent twice).
 - Scores are whole numbers 0 to 30 and cannot be equal; "first to 11" is not enforced (a game cut short by time can end 9 to 7).
+
+### Review
+A fresh independent reviewer (no part in the build) read the whole change. Its real findings, each fixed with a test (tests/zip61-day.test.ts,
+"the independent review, each finding"):
+- A stale Yes could confirm a score the screen never showed (taken back and entered again in between): Yes and No, fix it now send the score
+  the screen showed, and a different one says "The score just changed. Look again."
+- A partner's different score silently replaced the one waiting: now refused (the same score is fine).
+- A later round's score was accepted, and an open score sheet could jump to the next round on a refresh: the server takes only the round being
+  played ("Round 5 has not started. Finish Round 1 first."), the key is required, and the sheet holds the round it was opened for.
+- The "left" note's key carried the leaver's player id: now a short hash (every key of every player's answer is checked for ids).
+- The leaver's own header fell back to "Round 1 of 6": it follows the night now.
+- Player left could wipe a score entered a moment before: it only skips games still exactly as read.
+- Player left with nothing left to play said "is out": it says "had no games left" and changes nothing.
+- Organizer taps (Fix, Time check, Player left) before the night would write the rows early: they open 15 minutes before the start, like the
+  players' scores.
+Not changed (by design): one round's missing score holds Enter score on the next round (rounds are played together; the organizer sees it as
+late and can Set it).
+
+### Questions for Alex
+1. The database change above (three new nullable columns on tournament_games): OK to apply on live with the deploy?
+2. Unequal games from the schedule itself: 10 players, 6 rounds, 2 sit each round: 8 players get 5 games and 2 get 4. The table ranks wins
+   first (picture 32), so a 5-game player can pass a 4-game one by playing more. Switch to win percentage whenever counts differ (not only
+   after someone leaves)?
+3. A score must be entered before the next round's Enter score shows (rounds move together). OK, or should a court be allowed to run ahead?
+
+### Tests
+- Unit: tests/zip61-americano.test.ts (219: every row of the game plan table, both styles; every size 6 to 16 on 1 and 2 courts at 2, 2.5, 3,
+  3.5 and 4 hours; sit-outs, partners, opponents, courts, games each; the saved patterns; the points table), tests/zip61-day.test.ts (35, on
+  the real server code: before the night, no writes on reads, the leak walk, switched off, scores, Yes, No fix it, Undo, the organizer's
+  Confirm / Fix / Clear, late, the whole night and Tied, the Time check never touching the last round, Pause, Player left, a back out mid
+  night, the switch both ways, every size 6 to 16 through the API, the preview stages, the review findings). tests/zip57-day.test.ts updated on
+  purpose (an odd count now gets Americano rounds). `npx tsc -b` clean.
+- Browser: e2e/zip61.cjs 19 of 19 (before the night, Round 3, Enter score with the win motion, the loss motion and Undo, the other side's
+  Yes and No fix it, a break, the organizer before and on the night, the late Round 2 Confirm, switched from Locked doubles, reduced motion,
+  switched off; 390/360/320 light and dark, no row wraps, nothing wider than the screen, no em dashes, no page errors). e2e/zip57.cjs 21 of 21
+  (its "<other team> won" check now expects the white glow and "Onto the next!"; its odd back out now expects Americano rounds).
+- 14 and 16 players on 2 courts: 8 play each round; 14: 7 rounds, 4 games each (to 9 at 2.5 hours, to 11 at 3 hours); 16: 8 rounds, 4 games
+  each (to 7 at 2.5 hours, to 9 at 3 hours).
+
+### Preview
+`pickleball-preview` (fake) only: restore points first (Time Travel bookmark `0000019d-00000000-00005128-cb55a349fc1f05edcb2059b4e23ee5c9`, SQL
+export 106 KB kept outside git), then `0028_americano_scores` (the only one pending). Deployed from this branch to
+https://claude-new-session-j4d3lq.pickleball-club-9h0.pages.dev and re-seeded (`npm run db:seed:preview`: the Americano night at Round 3).
+First screen at 390, light and dark: organizer Home shows the Tournament test row, the hero "Round 3 of 6" and "Round 3 · Scores" (two games
+playing, the late Round 2 score with Confirm); Vic's Home shows the date alert, the hero and the VS card with Enter score. No page errors.
+Switches: every flag in live's public answer is on the preview too, plus TOURNAMENTS (live's organizer-only rows could not be read: no
+read-only PIN in this session).

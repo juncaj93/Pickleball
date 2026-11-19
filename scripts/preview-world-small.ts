@@ -719,7 +719,7 @@ export async function buildSmallPreview(
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 61 Americano (on): "The Cold Open", Americano, all 10 names locked in, tonight at Round 3 (rounds 1 and 2 in, the other court\'s Round 3 score waiting), courts 1 and 2; View as Vic: Enter score. The Tournament test page has every Americano stage and zip 57\'s');
+    summary.push('Zip 61 Americano (on): "The Cold Open", Americano, all 10 names locked in, tonight at Round 3 (rounds 1 and 2 in, the other court\'s Round 2 score still waiting for a Yes), courts 1 and 2; View as Vic: Enter score. The Tournament test page has every Americano stage and zip 57\'s');
     summary.push('Zip 57 game day (one tap away): "The Cold Open", Locked doubles, 8 locked in (Net Ninjas Vic and Wren, Dill With It Sage and Christopher, Kitchen Crew Rowan and Zoe, Third Shot Gang Parker and Quinn), tonight, started 10 minutes before the seed, courts 1 and 2; organizer Home: Draft teams. The Tournament test page puts it back to tonight (Game night, no teams yet) or any other stage');
   }
 

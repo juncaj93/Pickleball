@@ -128,7 +128,7 @@ function AllRoundsSheet({ r, open, onClose, onFix, busy, onConfirm }: { r: Admin
 }
 
 /** One game: where and how it stands, the two pairs (the winners first once there is a score), the score, the button it needs. */
-function ScoreRow({ g, busy, onFix, onConfirm }: { g: AdminRoundGame; busy: boolean; onFix?: () => void; onConfirm?: () => void }) {
+function ScoreRow({ g, busy, onFix, onConfirm, round }: { g: AdminRoundGame; busy: boolean; onFix?: () => void; onConfirm?: () => void; round?: number }) {
   const scored = g.scoreA !== null && g.scoreB !== null;
   const aFirst = !scored || g.scoreA! > g.scoreB!;
   const [first, second] = aFirst ? [g.a, g.b] : [g.b, g.a];
@@ -138,11 +138,9 @@ function ScoreRow({ g, busy, onFix, onConfirm }: { g: AdminRoundGame; busy: bool
   return (
     <li className={`tm-gd-result tm-gd-${g.status === 'changed' ? 'disputed' : g.status}`} data-tm-am-game={g.num} data-status={g.status}>
       <span className="tm-gd-court">
-        <b>{where(g)}</b>
-        <span>
-          {status}
-          {g.late && <span className="tm-am-late"> · {g.late}</span>}
-        </span>
+        <b>{round !== undefined && g.round !== round ? `Round ${g.round} · ${where(g)}` : where(g)}</b>
+        {/* Late says how long instead of the plain status ("Waiting 8 min", "8 min over"). */}
+        <span className={g.late ? 'tm-am-late' : undefined}>{g.late ?? status}</span>
       </span>
       <span className="tm-gd-result-text">
         <span className="tm-gd-side">
@@ -230,7 +228,7 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
         </div>
         <ul className="tm-gd-results">
           {[...inRound, ...changedElsewhere].map((g) => (
-            <ScoreRow key={g.num} g={g} busy={busy} onFix={() => setFix(g)} onConfirm={() => confirm(g)} />
+            <ScoreRow key={g.num} g={g} busy={busy} round={round} onFix={() => setFix(g)} onConfirm={() => confirm(g)} />
           ))}
         </ul>
         {sits.length > 0 && (
