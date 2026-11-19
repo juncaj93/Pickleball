@@ -505,7 +505,7 @@ export function resolveGames(
   for (const [k, seats] of Object.entries(groups)) {
     // Zip 58: a tie that matters is settled by its answer (the wheel and its playoff games, or the organizer's picks); one that does not matter
     // (the places it shares are in the same game) is not a tie at all.
-    table[k] = groupTable(teams, games, results, out, records, k as GroupKey).rows;
+    table[k] = groupTable(teams, games, results, out, records, k as GroupKey, gone).rows;
     done[k] = groupDone(games, results, seats);
   }
   const byNum = new Map<number, Resolved>();
@@ -735,14 +735,27 @@ export function placeClasses(games: readonly PlannedGame[], group: GroupKey): Ma
 }
 
 /** The two sides of a tie game, as seats ('T3' a seat, 'W12' the winner of tie game 12), and which side won. */
-function tieGameOutcome(games: readonly PlannedGame[], results: ReadonlyMap<number, GameResult>, num: number, known: ReadonlyMap<number, number>): { win: number; lose: number } | null {
+function tieGameOutcome(
+  games: readonly PlannedGame[],
+  results: ReadonlyMap<number, GameResult>,
+  num: number,
+  known: ReadonlyMap<number, number>,
+  gone: ReadonlySet<number>,
+): { win: number; lose: number } | null {
   const g = games.find((x) => x.num === num);
   const r = results.get(num);
-  if (!g || !r?.winner) return null;
+  if (!g || !r) return null;
   const seatOf = (slot: Slot): number | null => (slot[0] === 'T' ? Number(slot.slice(1)) : slot[0] === 'W' ? (known.get(Number(slot.slice(1))) ?? null) : null);
   const a = seatOf(g.a);
   const b = seatOf(g.b);
   if (a === null || b === null) return null;
+  // Not played because a team left (review): the team still there goes on.
+  if (r.skipped || (!r.winner && (gone.has(a) || gone.has(b)))) {
+    if (gone.has(a) && !gone.has(b)) return { win: b, lose: a };
+    if (gone.has(b) && !gone.has(a)) return { win: a, lose: b };
+    return null;
+  }
+  if (!r.winner) return null;
   return r.winner === 'a' ? { win: a, lose: b } : { win: b, lose: a };
 }
 
@@ -754,13 +767,43 @@ export function groupTable(
   out: ReadonlySet<number>,
   records: readonly TieRecord[],
   group: GroupKey,
+  /** Teams that left at any point (review): in a tie they go to the bottom of it and take no part in the wheel or its games. */
+  gone: ReadonlySet<number> = out,
 ): { rows: StandingRow[]; blocks: TieBlock[] } {
   const seats = groupsOf(teams).find((g) => (g.pool ?? 'P') === group)?.seats ?? [];
-  const rows = standings(games, results, seats, out);
-  const blocks: TieBlock[] = [];
-  if (!seats.length || !groupDone(games, results, seats)) return { rows, blocks };
+  const raw = standings(games, results, seats, out);
+  const done = !!seats.length && groupDone(games, results, seats);
   const classes = placeClasses(games, group);
   const clsOf = (place: number) => classes.get(place)?.cls ?? 'out';
+  const shapeOf = (cls: string[]): TieShape | null => (cls.length === 3 ? (cls[0] === cls[1] && cls[1] !== cls[2] ? 'a' : 'ab') : null);
+  const keyOf = (tied: number[], from: number) => {
+    const shape = shapeOf(tied.map((_, i) => clsOf(from + i)));
+    return `${tieKeyOf(group, tied)}${shape ? `:${shape}` : ''}`;
+  };
+  // Review: a team that left after the pools. Before the wheel spins it drops to the bottom of its tie and the teams still playing settle it
+  // (head to head among them); once the wheel has spun the tie stays as it was and the leaver's playoff game is a walkover (tieGameOutcome).
+  const { beat } = record(games, results, seats);
+  const rows: StandingRow[] = [];
+  let extra = 1000;
+  for (let i = 0; i < raw.length; ) {
+    let j = i + 1;
+    if (raw[i].tied) while (j < raw.length && raw[j].tied && raw[j].block === raw[i].block) j++;
+    const run = raw.slice(i, j);
+    const tiedSeats = run.map((r) => r.seat).sort((a, b) => a - b);
+    const spun = records.some((x) => x.key === keyOf(tiedSeats, run[0].rank));
+    if (run.length > 1 && run.some((r) => gone.has(r.seat)) && !spun) {
+      const live = run.filter((r) => !gone.has(r.seat)).map((r) => r.seat);
+      const parts = headToHead(live, beat);
+      for (const part of parts) {
+        extra++;
+        for (const seat of part) rows.push({ ...run.find((r) => r.seat === seat)!, rank: rows.length + 1, tied: done && part.length > 1, block: extra });
+      }
+      for (const r of run.filter((x) => gone.has(x.seat))) rows.push({ ...r, rank: rows.length + 1, tied: false, block: ++extra });
+    } else for (const r of run) rows.push({ ...r, rank: rows.length + 1 });
+    i = j;
+  }
+  const blocks: TieBlock[] = [];
+  if (!done) return { rows, blocks };
   const runs = new Map<number, StandingRow[]>();
   for (const r of rows) if (r.tied) runs.set(r.block ?? r.rank, [...(runs.get(r.block ?? r.rank) ?? []), r]);
   for (const run of runs.values()) {
@@ -770,9 +813,10 @@ export function groupTable(
     const cls = places.map(clsOf);
     if (cls.every((c) => c === cls[0])) continue; // no tie: those places lead to the same game (or to none)
     const tied = run.map((r) => r.seat).sort((a, b) => a - b);
-    const key = tieKeyOf(group, tied);
     const mode: TieBlock['mode'] = tied.length === 3 ? 'wheel' : 'pick';
-    const shape: TieShape | null = mode === 'wheel' ? (cls[0] === cls[1] && cls[1] !== cls[2] ? 'a' : 'ab') : null;
+    const shape: TieShape | null = mode === 'wheel' ? shapeOf(cls) : null;
+    // The shape is part of the key (review): if fixed results move the tie to other places, it is a new tie with its own spin.
+    const key = keyOf(tied, from);
     const record = records.find((x) => x.key === key && x.kind === mode) ?? null;
     let order: number[] | null = null;
     let needPicks = 0;
@@ -787,19 +831,19 @@ export function groupTable(
       if (needPicks === 0) order = [...picks, ...rest];
     } else if (record && record.bye !== null && tied.includes(record.bye) && record.gameA !== null) {
       const known = new Map<number, number>();
-      const a = tieGameOutcome(games, results, record.gameA, known);
+      const a = tieGameOutcome(games, results, record.gameA, known, gone);
       if (a) {
         known.set(record.gameA, a.win);
         if (shape === 'a') order = [record.bye, a.win, a.lose];
         else if (record.gameB !== null) {
-          const b = tieGameOutcome(games, results, record.gameB, known);
+          const b = tieGameOutcome(games, results, record.gameB, known, gone);
           if (b) order = [b.win, b.lose, a.lose];
         }
       }
     }
     const top = places.map((p) => classes.get(p)).find((x) => !!x);
     const target: TieBlock['target'] = top?.stage === 'semi' ? 'semi' : top?.stage === 'third' ? 'third' : 'final';
-    const spinner = rows.find((r) => !tied.includes(r.seat) && !out.has(r.seat))?.seat ?? null;
+    const spinner = rows.find((r) => !tied.includes(r.seat) && !out.has(r.seat) && !gone.has(r.seat))?.seat ?? null;
     blocks.push({ key, group, pool: group === 'P' ? null : group, seats: tied, from, mode, shape, record, order, target, spinner: mode === 'wheel' ? spinner : null, needPicks });
   }
   // The table as the playoffs read it: a settled tie in its settled order; a tie that does not matter is no tie; a tie still waiting stays tied.
@@ -816,8 +860,15 @@ export function groupTable(
 }
 
 /** Every tie that matters, in every group. */
-export function tieBlocks(teams: number, games: readonly PlannedGame[], results: ReadonlyMap<number, GameResult>, out: ReadonlySet<number>, records: readonly TieRecord[]): TieBlock[] {
-  return groupsOf(teams).flatMap((g) => groupTable(teams, games, results, out, records, (g.pool ?? 'P') as GroupKey).blocks);
+export function tieBlocks(
+  teams: number,
+  games: readonly PlannedGame[],
+  results: ReadonlyMap<number, GameResult>,
+  out: ReadonlySet<number>,
+  records: readonly TieRecord[],
+  gone: ReadonlySet<number> = out,
+): TieBlock[] {
+  return groupsOf(teams).flatMap((g) => groupTable(teams, games, results, out, records, (g.pool ?? 'P') as GroupKey, gone).blocks);
 }
 
 /**

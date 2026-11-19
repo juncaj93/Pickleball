@@ -115,3 +115,19 @@ button.tc-tie-spin:disabled {
 .tc-gd-through {
   white-space: nowrap;
 }
+/* One line at every width (320 included): the label tightens on narrow phones. */
+.tc-also > .tc-gd-label {
+  white-space: nowrap;
+}
+@media (max-width: 389px) {
+  .tc-also > .tc-gd-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+  }
+}
+@media (max-width: 359px) {
+  .tc-also > .tc-gd-label {
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+  }
+}

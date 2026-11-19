@@ -42,7 +42,7 @@ describe('zip 58: the tie rules (pure)', () => {
     const g = schedule(4, 2);
     const r = resultsOf(g, circleBelowOne);
     const [b] = tieBlocks(4, g, r, new Set(), []);
-    expect(b).toMatchObject({ key: 'P:2,3,4', mode: 'wheel', shape: 'ab', from: 2, target: 'final', spinner: 1, order: null });
+    expect(b).toMatchObject({ key: 'P:2,3,4:ab', mode: 'wheel', shape: 'ab', from: 2, target: 'final', spinner: 1, order: null });
     // Without an answer the Final and the 3rd place game wait.
     const made = tieGames(b, 3, 9, 4, 1);
     expect(made.map((x) => [x.num, x.stage, x.a, x.b])).toEqual([
@@ -63,7 +63,7 @@ describe('zip 58: the tie rules (pure)', () => {
     const g = schedule(4, 2);
     const r = resultsOf(g, circleAtTop);
     const [b] = tieBlocks(4, g, r, new Set(), []);
-    expect(b).toMatchObject({ key: 'P:1,2,3', mode: 'wheel', shape: 'a', from: 1, spinner: 4 });
+    expect(b).toMatchObject({ key: 'P:1,2,3:a', mode: 'wheel', shape: 'a', from: 1, spinner: 4 });
     expect(tieGames(b, 2, 9, 4, 1)).toHaveLength(1);
   });
   it('1st and 2nd level before a Final between 1st and 2nd: no tie (both are in either way)', () => {
@@ -79,7 +79,7 @@ describe('zip 58: the tie rules (pure)', () => {
       return (a === 3 && b === 4) || (a === 4 && b === 3) ? 3 : (a === 4 && b === 5) || (a === 5 && b === 4) ? 4 : 5;
     };
     const [b5] = tieBlocks(5, g5, resultsOf(g5, order5), new Set(), []);
-    expect(b5).toMatchObject({ key: 'P:3,4,5', shape: 'a', target: 'third', spinner: 1 });
+    expect(b5).toMatchObject({ key: 'P:3,4,5:a', shape: 'a', target: 'third', spinner: 1 });
   });
   it('four or more level: the organizer picks, one place at a time, until the places left lead to the same game', () => {
     // 16 players: pools of 4. Pool A all 1.5... Use a round robin of 4 where everyone is 1-2 but seat 1 (3-0): 2, 3, 4 a circle is a wheel. For 4
@@ -110,7 +110,7 @@ describe('zip 58: the wheel on the real server (8 players, round robin, a circle
     const d = (await adminTour(ctx)).day;
     expect(d.ties).toHaveLength(1);
     const tie = d.ties[0];
-    expect(tie).toMatchObject({ key: 'P:2,3,4', mode: 'wheel', target: 'final' });
+    expect(tie).toMatchObject({ key: 'P:2,3,4:ab', mode: 'wheel', target: 'final' });
     expect(tie.spinner.name).toBe(d.teams.find((x: any) => x.seat === 1).name);
     // The Final and the 3rd place game wait.
     const fin = d.games.find((g: any) => g.stage === 'final');
@@ -198,6 +198,42 @@ describe('zip 58: the wheel on the real server (8 players, round robin, a circle
     const d3 = (await adminTour(ctx)).day;
     expect(d3.ties[0].bye).toBeTruthy();
     expect(d3.games.filter((g: any) => g.stage === 'tie')).toHaveLength(2);
+  });
+});
+
+describe('zip 58: a tied team leaves (review)', () => {
+  it('after the spin: its tie game is not played, the team still there goes on, and the tie settles', async () => {
+    const ctx = await world(8);
+    await draftAndPublish(ctx);
+    ctx.app.now = START_MS + 60 * 60_000;
+    await playPools(ctx, circleBelowOne);
+    const tie = (await adminTour(ctx)).day.ties[0];
+    const bye = (await games(ctx, { action: 'spin', key: tie.key })).data.bye as number;
+    const [ga] = (await adminTour(ctx)).day.games.filter((g: any) => g.stage === 'tie');
+    // One team of Game A leaves (Player left, Remove): Game A is skipped and the other team goes on to Game B.
+    const leaving = ga.a.seat;
+    const who = await playerOfSeat(ctx, leaving);
+    const left = await games(ctx, { action: 'left', playerId: ctx.byName[who] });
+    expect(left.status, left.text).toBe(200);
+    const d = (await adminTour(ctx)).day;
+    const gb = d.games.find((g: any) => g.tieLabel === 'Game B');
+    expect([gb.a?.seat, gb.b?.seat]).toEqual([ga.b.seat, bye]);
+    await setWinner(ctx, gb.num, bye);
+    const d2 = (await adminTour(ctx)).day;
+    expect(d2.ties).toBeUndefined();
+    expect(d2.games.find((g: any) => g.stage === 'final').b.seat).toBe(bye);
+  });
+  it('before the spin: a team that left is not in the tie (two left: head to head settles it)', async () => {
+    const ctx = await world(8);
+    await draftAndPublish(ctx);
+    ctx.app.now = START_MS + 60 * 60_000;
+    await playPools(ctx, circleBelowOne);
+    const who = await playerOfSeat(ctx, 4);
+    expect((await games(ctx, { action: 'left', playerId: ctx.byName[who] })).status).toBe(200);
+    const d = (await adminTour(ctx)).day;
+    expect(d.ties).toBeUndefined();
+    // 2 beat 3 (head to head): 2 is in the Final.
+    expect(d.games.find((g: any) => g.stage === 'final').b.seat).toBe(2);
   });
 });
 

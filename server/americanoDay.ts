@@ -535,7 +535,7 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   const other = side === 'a' ? 'b' : 'a';
   const stamp = row!.updated_at;
   const run = (sql: string, ...values: unknown[]) =>
-    ctx.db.prepare(`UPDATE tournament_games SET ${sql}, updated_at = ? WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL`).bind(...values, ctx.nowIso, row!.id, stamp).run();
+    ctx.db.prepare(`UPDATE tournament_games SET ${sql}, updated_at = ? WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`).bind(...values, ctx.nowIso, row!.id, stamp).run();
   const asAB = (mine: number, theirs: number): [number, number] => (side === 'a' ? [mine, theirs] : [theirs, mine]);
   if (g.winner) {
     if (action === 'undo') return { ok: true, result: 'nothing' };
@@ -669,7 +669,7 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   if (g!.skipped) bad('tournament_changed', 'That game is off (someone left).');
   const stamp = g!.row!.updated_at;
   const run = (sql: string, ...values: unknown[]) =>
-    ctx.db.prepare(`UPDATE tournament_games SET ${sql}, updated_at = ? WHERE id = ? AND updated_at = ? AND skipped = 0`).bind(...values, nowIso, g!.row!.id, stamp).run();
+    ctx.db.prepare(`UPDATE tournament_games SET ${sql}, updated_at = ? WHERE id = ? AND updated_at = ? AND skipped = 0 AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`).bind(...values, nowIso, g!.row!.id, stamp).run();
   let res;
   let details: Record<string, unknown>;
   if (action === 'score') {

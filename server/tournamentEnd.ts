@@ -44,6 +44,9 @@ import { organizerSignedIn } from './zip13';
 import { ADMIN_COOKIE } from './context';
 import { VIEW_ONLY_COOKIE_PREFIX } from './viewOnly';
 
+/** The newest change to any game of the night (End is refused if a result changed after the card was read: review). */
+const lastGameChange = (day: DayRows): string | null => day.games.reduce<string | null>((m, g) => (m === null || g.updated_at > m ? g.updated_at : m), null);
+
 /** The ledger reason of an award. */
 export const awardReason = (tournamentId: string, award: 'champion' | 'second'): string => `tour:${tournamentId}:${award}`;
 
@@ -295,9 +298,10 @@ export async function writeEnd(ctx: Ctx, group: GroupRow, t: EndRow, night: Awai
       .prepare(
         `UPDATE tournaments SET status = 'ended', ended_at = ?, end_key = ?, banner_until = ?, updated_at = ?
          WHERE id = ? AND status = 'tickets' AND end_key IS NULL AND champion_credit_cents = ? AND second_credit_cents = ? AND COALESCE(banner_weeks, ?) = ?
-           AND award_pick IS ?`,
+           AND award_pick IS ?
+           AND (SELECT MAX(updated_at) FROM tournament_games WHERE tournament_id = tournaments.id) IS ?`,
       )
-      .bind(nowIso, key, until, nowIso, t.id, view.championCents, view.secondCents, DEFAULT_BANNER_WEEKS, weeks, t.award_pick ?? null),
+      .bind(nowIso, key, until, nowIso, t.id, view.championCents, view.secondCents, DEFAULT_BANNER_WEEKS, weeks, t.award_pick ?? null, lastGameChange(night.day)),
     ...plan.results.map((r) =>
       ctx.db
         .prepare(

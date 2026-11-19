@@ -289,17 +289,17 @@ export function Wheel({ names, result, spinKey, small, onDone }: { names: string
           {names.map((name, i) => {
             const mid = i * step + step / 2;
             const off = result !== null && lit && i !== result;
-            // A label reads along the slice from the middle out, flipped on the left side so it is never upside down.
-            const flip = mid > 180;
+            // A label runs around the wheel across its slice (picture 20), turned the other way on the bottom half so it is never upside down.
+            const flip = mid > 90 && mid < 270;
             return (
               <g key={i} className={off ? 'tc-wh-slice tc-wh-off' : result === i && lit ? 'tc-wh-slice tc-wh-win' : 'tc-wh-slice'}>
                 <path d={slice(i)} fill={COLORS[i % COLORS.length]} className="tc-wh-fill" />
                 <text
                   className="tc-wh-text"
-                  transform={`rotate(${mid - 90}) translate(${R * 0.56} 0)${flip ? ' rotate(180)' : ''}`}
+                  transform={`rotate(${mid}) translate(0 ${-R * 0.6})${flip ? ' rotate(180)' : ''}`}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  style={{ fontSize: `${Math.max(9, Math.min(15, 150 / Math.max(6, name.length)))}px` }}
+                  style={{ fontSize: `${Math.max(7, Math.min(16, 165 / Math.max(6, name.length)))}px` }}
                 >
                   {name}
                 </text>

@@ -6785,3 +6785,21 @@ different numbers of games, then total points (built and tested before the deplo
   **1d70d2c8**, Zip 57, in Cloudflare Deployments > Rollback; the new columns can stay, old code never reads them).
 - After: the three integrity checks again, every column 0. Public read-only look (no name picked, nothing written): /api/status and
   /api/group answer 200; Home at 390 light and dark, no page errors, only GET requests, nothing wider than the screen. No live data touched.
+
+## Zip 58: Tournaments, piece 4: ties, the Final, End tournament, medals, the winners banner, champion credit (🎾58.tourney4), Thu Nov 19, 2026
+Branch `claude/new-session-831vmx` (the session is named "🎾58.tourney4"; the build system pins the branch name). Built on main `8afde4d` (Zips 55 to
+64, 66, 57 and 61 live). Same switch, TOURNAMENTS, and the per-tournament Who can see it; no new switch. **MONEY MOVES (award credit) and a
+database change: migration `0029_tournament_end`.** Applied to the fake preview database only. **NOT on live: waiting for Alex's "ship it".**
+
+### The database change (for Alex's OK)
+- `tournaments`: five new nullable columns: `ended_at`, `end_key` (the one tap's random key: every row End writes is guarded on it), `banner_weeks`
+  (1 to 4, NULL = 1), `banner_until`, `award_pick` (Edit awards' Change pickers, JSON).
+- `tournament_ties` (NEW): one row per tie settled: its key (group and tied seats), 'wheel' or 'pick', the wheel's bye (chosen by the server), the
+  organizer's picks, the Game A / Game B numbers, who spun and when.
+- `tournament_results` (NEW): one row per player per ended tournament: finish, wins, losses, Americano points, team and partner, the picked and the
+  approved level as they stood (organizer only, never sent to players), medal, award ('champion' / 'second'), credit granted, seen (Nice).
+- `tournament_games` REBUILT (create new, copy every row, drop, rename) so stage may be 'tie' and play_to may be 5. Same columns in the same order.
+  Nothing points at the table. On live today it is empty or nearly (the one open tournament is not finalized).
+- One unique index on `credit_ledger`: at most one award row per player and reason 'tour:<id>:champion' / ':second'.
+- Undo (only to remove piece 4's data, after an export): the index, the two tables, the five columns (in the migration's last comment). Old code
+  never reads any of it and never writes 'tie' or 5: a code rollback needs no database step.
