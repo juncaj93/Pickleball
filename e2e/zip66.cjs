@@ -530,14 +530,17 @@ async function main() {
   // standby spot, and a price with cents. One row, nothing cut, at every width.
   const STANDS = {
     'Join standby': (k) => { k.full = true; k.mine = null; },
-    '10th on standby': (k) => { k.full = true; k.line = Array.from({ length: 10 }, (_, i) => ({ name: `P${i}`, ...(i === 9 ? { me: true } : {}) })); k.mine = { place: 'line', creditCents: 0, paidCents: 0, claimCents: 0, owedCents: 1600 }; },
+    // Alex (ship answer 1): on standby and not paid, the lime spot is Hold my spot; the place in line is in the Who's in sheet.
+    'Hold my spot · $16': (k) => { k.full = true; k.line = Array.from({ length: 10 }, (_, i) => ({ name: `P${i}`, ...(i === 9 ? { me: true } : {}) })); k.mine = { place: 'line', creditCents: 0, paidCents: 0, claimCents: 0, owedCents: 1600 }; },
+    'Hold my spot · $16.50': (k) => { k.full = true; k.priceCents = 1650; k.line = [{ name: 'Vic', me: true }]; k.mine = { place: 'line', creditCents: 0, paidCents: 0, claimCents: 0, owedCents: 1650 }; },
     'Spot held': (k) => { k.full = true; k.line = [{ name: 'Vic', me: true }]; k.mine = { place: 'line', creditCents: 0, paidCents: 1600, claimCents: 0, owedCents: 0 }; },
     'Lock in · $16.50': (k) => { k.priceCents = 1650; },
   };
   for (const [label, fn] of Object.entries(STANDS))
     for (const width of WIDTHS)
-      await check(`H stood in, ${label} at ${width}: one row, nothing cut`, async () => {
-        const v = await newPage({ width, scheme: width === 320 ? 'dark' : 'light' });
+      for (const scheme of label.startsWith('Hold') ? SCHEMES : [width === 320 ? 'dark' : 'light'])
+      await check(`H stood in, ${label} at ${width} ${scheme}: one row, nothing cut`, async () => {
+        const v = await newPage({ width, scheme });
         await v.page.route('**/api/group', async (route) => {
           const res = await route.fetch();
           const j = await res.json();
@@ -549,6 +552,16 @@ async function main() {
         await v.page.waitForTimeout(500);
         const parts = await v.page.locator('.tc-short .tc-bar > *').evaluateAll((els) => els.map((e) => ({ t: e.textContent, cut: e.scrollWidth > e.clientWidth + 1, mid: Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2) })));
         assert(parts[0].t === label && parts[1].t === 'Who’s in' && parts.every((p) => !p.cut) && parts.every((p) => Math.abs(p.mid - parts[0].mid) <= 3), JSON.stringify(parts));
+        if (label.startsWith('Hold')) {
+          assert((await v.page.locator('.tc-short [data-tc-hold]').count()) === 1, 'the Hold my spot button');
+          if (width === 320 || width === 420) await shot(v.page, `H-hold-${label.includes('.50') ? 'cents' : 'usual'}-${width}-${scheme}`);
+          // The place in line moved into the Who's in sheet.
+          await v.page.locator('.tc-short [data-tc-who]').click();
+          const place = v.page.locator('dialog[open] [data-tc-place]');
+          await place.waitFor({ timeout: 10000 });
+          const want = label.includes('.50') ? 'first' : '10th';
+          assert(flat(await place.innerText()).includes(`You’re ${want} on standby`), await place.innerText());
+        }
         await v.ctx.close();
       });
   await check("H the card itself is not a tap; Who's in opens the Who's in list; Drop out opens the Back out confirm", async () => {

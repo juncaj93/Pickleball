@@ -171,6 +171,7 @@ export default function TournamentHome({ t, onChanged, pay, notice }: { t: Playe
         onEdit={() => setSheet('edit')}
         onDropOut={() => setAskOut(true)}
         onLock={() => void lock('lock')}
+        onHold={() => void lock('hold')}
         onJoin={() => void joinWaitlist()}
       />
       {t.status === 'tickets' && k && signed && (
@@ -589,6 +590,7 @@ export function TicketCard({
   onEdit,
   onDropOut,
   onLock,
+  onHold,
   onJoin,
 }: {
   t: PlayerTournamentView;
@@ -601,6 +603,7 @@ export function TicketCard({
   onEdit: () => void;
   onDropOut: () => void;
   onLock: () => void;
+  onHold: () => void;
   onJoin: () => void;
 }) {
   const signed = t.me !== null;
@@ -634,13 +637,18 @@ export function TicketCard({
   if (s && k) {
     const due = dueOf(k);
     const held = !!k.mine && k.mine.creditCents + k.mine.paidCents + k.mine.claimCents >= k.priceCents;
+    // Alex (ship answer 1): on standby and not paid, the lime spot is Hold my spot (the same flow as before); the place in line ("2nd on
+    // standby") is in the Who's in sheet. Once held: "Spot held".
+    const hold = s === 'line' && !held && !k.closed && !(k.mine && k.mine.claimCents > 0);
     const words = s === 'in' ? 'Locked in' : s === 'line' ? (held ? 'Spot held' : shortStandby(linePlace(k))) : k.started ? 'Started' : 'Tickets closed';
-    // A longer label ("Lock in · $16.50", "10th on standby") is set a little smaller, so it is never cut on a narrow phone.
-    const label = s === 'lock' ? `Lock in · ${formatPrice(due)}` : s === 'full' ? 'Join standby' : words;
-    const long = Array.from(label).length > 13 ? ' tc-long' : '';
+    // A longer label ("Lock in · $16.50", "Hold my spot · $16") is set a little smaller, so it is never cut on a narrow phone.
+    const label = s === 'lock' ? `Lock in · ${formatPrice(due)}` : s === 'full' ? 'Join standby' : hold ? `Hold my spot · ${formatPrice(due)}` : words;
+    const long = Array.from(label).length > 13 ? (Array.from(label).length > 16 ? ' tc-long tc-longer' : ' tc-long') : '';
+    const act = s === 'lock' ? onLock : s === 'full' ? onJoin : hold ? onHold : null;
+    const actData = s === 'lock' ? 'data-tc-lock' : s === 'full' ? 'data-tc-join' : 'data-tc-hold';
     const main =
-      s === 'lock' || s === 'full' ? (
-        <button type="button" className={`tc-btn tc-lime${long}`} disabled={busy} onClick={s === 'lock' ? onLock : onJoin} {...{ [s === 'lock' ? 'data-tc-lock' : 'data-tc-join']: '' }}>
+      act ? (
+        <button type="button" className={`tc-btn tc-lime${long}`} disabled={busy} onClick={act} {...{ [actData]: '' }}>
           {label}
         </button>
       ) : (

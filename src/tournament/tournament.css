@@ -1819,6 +1819,50 @@ dialog.sheet.tc-tw-overlay {
     font-size: 0.84rem;
   }
 }
+/* The longest label ("Hold my spot · $16", Alex's ship answer 1): smaller still, and Who's in and Drop out a little tighter beside it. */
+.tc-bar-row .tc-lime.tc-longer {
+  padding: 0 8px;
+  font-size: 1rem;
+}
+@media (max-width: 419px) {
+  .tc-bar-row .tc-lime.tc-longer {
+    padding: 0 6px;
+    font-size: 0.9rem;
+  }
+  .tc-bar-row:has(.tc-longer) {
+    gap: 8px;
+  }
+  .tc-bar-row:has(.tc-longer) .tc-gray {
+    padding: 0 9px;
+    font-size: 0.88rem;
+  }
+  .tc-bar-row:has(.tc-longer) .tc-row-drop {
+    padding: 0 2px;
+    font-size: 0.84rem;
+  }
+}
+@media (max-width: 379px) {
+  .tc-bar-row .tc-lime.tc-longer {
+    font-size: 0.82rem;
+  }
+}
+@media (max-width: 359px) {
+  .tc-bar-row .tc-lime.tc-longer {
+    padding: 0 4px;
+    font-size: 0.76rem;
+  }
+  .tc-bar-row:has(.tc-longer) {
+    gap: 5px;
+  }
+  .tc-bar-row:has(.tc-longer) .tc-gray {
+    padding: 0 7px;
+    font-size: 0.78rem;
+  }
+  .tc-bar-row:has(.tc-longer) .tc-row-drop {
+    padding: 0 1px;
+    font-size: 0.76rem;
+  }
+}
 /* The Who's in sheet on standby: the place in line and the choices, without the old card copy around them. */
 .tc-standby {
   padding-bottom: 14px;

@@ -6456,3 +6456,11 @@ zip60 29, zip63 64, zip64 83, zip62 17, all passing; switch OFF equals main `316
 point first (Time Travel bookmark `00000198-00000000-00005128-3bf21c6050ed21e348eab2e8513824bf`), deployment `0395c945`, re-seeded (calm start:
 zip66_start); checked there: Vic's row "Lock in · $16 | Who's in | Drop out", Parker's "Locked in | Who's in | Drop out" at 390 light and 320
 dark, the organizer's pill "3 unpaid", no tickets card, Not paid yet: Vic, Zoe, Reese with "No number for Reese"; no page errors. Live untouched.
+
+### Alex's ship answers (Thu Nov 19, morning) and the one change before shipping
+1. Standby: the lime spot is the Hold my spot button again ("Hold my spot · $16", the same flow as before: credit first, then the Pay sheet);
+   the place in line ("You're 2nd on standby") is in the Who's in sheet; once held, "Spot held". The longest label is set a little smaller
+   (`tc-longer`, Who's in and Drop out tighter beside it): one line with nothing cut at 420/390/360/320, light and dark, also with a price with
+   cents ("Hold my spot · $16.50"). e2e/zip66.cjs H checks both at every width and theme, the button, and the place in the sheet: zip66 84 of 84;
+   zip55 91, zip56 57, zip59 12, zip63 64, zip64 83 again.
+2. Next Tuesday 8 PM close time: OK, no box. 3. Hide the Not signed up row when nobody is on it: yes (as built). 4. Tickets on the canceled card: OK.
