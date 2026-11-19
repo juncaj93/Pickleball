@@ -63,7 +63,7 @@ import {
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
-import { adminDayView, courtNumbersOf, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, type GameRow, type TeamRow } from './tournamentDay';
+import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, tiesSqlFor, type GameRow, type TeamRow, type TieRow } from './tournamentDay';
 import { adminRoundsView, americanoStarted, playerRoundsView } from './americanoDay';
 import { fitWords, nightPlan } from '../shared/tournamentPlan';
 import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
@@ -303,8 +303,8 @@ export interface TourPre<Row> {
   canceledMoney?: { backCents: number; claimCents: number } | null;
   /** Zip 66, the organizer's card: the active players who played a game in the last 3 months (recentPlayersRead). */
   recent?: { id: string; display_name: string }[];
-  /** Zip 57: the teams and games of the picked tournament (empty before any draft). */
-  day?: { teams: TeamRow[]; games: GameRow[] };
+  /** Zip 57: the teams and games of the picked tournament (empty before any draft). Zip 58: and the ties' answers. */
+  day?: DayRows;
 }
 
 /** The reads (for the screen's batch) and how to read their answers back. Only while the switch is on for the request. */
@@ -365,9 +365,10 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
        FROM (SELECT t.id FROM tournaments t WHERE t.id = ${pick} AND t.status = 'canceled') c`,
       values: [...values, playerId],
     },
-    // Zip 57: the teams and games (published teams only reach a player; the view decides).
+    // Zip 57: the teams and games (published teams only reach a player; the view decides). Zip 58: the ties' answers.
     { sql: teamsSqlFor(pick), values },
     { sql: gamesSqlFor(pick), values },
+    { sql: tiesSqlFor(pick), values },
   ];
   return {
     reads,
@@ -382,7 +383,7 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
         org: org.from(rows(3)),
         freed: freed ? Math.max(0, Number(freed.gone ?? 0) - Number(freed.taken ?? 0)) : 0,
         canceledMoney: money ? { backCents: money.back ?? 0, claimCents: money.claim ?? 0 } : null,
-        day: { teams: rows(6), games: rows(7) },
+        day: { teams: rows(6), games: rows(7), ties: rows(8) as TieRow[] },
       };
     },
   };
@@ -421,10 +422,11 @@ export function adminTourReads(group: GroupRow, nowMs: number): TourReads<ShownR
       recentPlayersRead(group.id, nowMs),
       { sql: teamsSqlFor(pick), values },
       { sql: gamesSqlFor(pick), values },
+      { sql: tiesSqlFor(pick), values },
     ],
     from: (res) => {
       const rows = (i: number) => (res[i]?.results ?? []) as never[];
-      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)), recent: rows(4), day: { teams: rows(5), games: rows(6) } };
+      return { row: (rows(0)[0] as ShownRow | undefined) ?? null, signups: rows(1), tickets: rows(2), org: org.from(rows(3)), recent: rows(4), day: { teams: rows(5), games: rows(6), ties: rows(7) } };
     },
   };
 }

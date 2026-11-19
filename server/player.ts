@@ -136,7 +136,7 @@ import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup, tournamentsFlags } from './tournament';
 import { playerTicketLock, playerTicketPaid, playerTicketWaitlist } from './tournamentTickets';
-import { playerGameAction, playerTeamName } from './tournamentDay';
+import { playerGameAction, playerSpin, playerTeamName } from './tournamentDay';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
 import { refuseOverLimit, unpaidNudgeFor } from './unpaidNudge';
@@ -487,6 +487,11 @@ export async function tournamentBackOut(ctx: Ctx, body: Record<string, unknown>)
 /** Zip 57 (server/tournamentDay.ts): POST /api/tournament/game { tournamentId, num, action }: We won, the other team won, Confirm, No we won, Undo. */
 export async function tournamentGame(ctx: Ctx, body: Record<string, unknown>) {
   return playerGameAction(ctx, await viewer(ctx), body);
+}
+
+/** Zip 58: POST /api/tournament/spin { tournamentId, key }: a player of the team with the best record outside a three-way tie spins the wheel. */
+export async function tournamentSpin(ctx: Ctx, body: Record<string, unknown>) {
+  return playerSpin(ctx, await viewer(ctx), body);
 }
 
 /** Zip 57: POST /api/tournament/team-name { tournamentId, name? }: a partner names the team (or rolls the dice), until Game 1. */

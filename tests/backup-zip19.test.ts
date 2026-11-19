@@ -146,8 +146,17 @@ describe('every table is covered', () => {
   it('every table the migrations make is either backed up or listed as left out on purpose (with a reason)', () => {
     // Read the migrations as text too, so a table made by a migration is found even if the shim above changes.
     const made = new Set<string>();
-    for (const f of readdirSync(join(process.cwd(), 'migrations')).filter((x) => x.endsWith('.sql'))) {
-      for (const m of readFileSync(join(process.cwd(), 'migrations', f), 'utf8').matchAll(/CREATE TABLE (?:IF NOT EXISTS )?([a-z_]+)/gi)) made.add(m[1]);
+    // Zip 58: a table rebuilt under a temporary name (CREATE ..._new, copy, DROP the old one, RENAME the new one back) counts once, by its final name.
+    for (const f of readdirSync(join(process.cwd(), 'migrations')).filter((x) => x.endsWith('.sql')).sort()) {
+      const sql = readFileSync(join(process.cwd(), 'migrations', f), 'utf8').replace(/--.*$/gm, '');
+      for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?([a-z_]+)|DROP TABLE (?:IF EXISTS )?([a-z_]+)|ALTER TABLE ([a-z_]+) RENAME TO ([a-z_]+)/gi)) {
+        if (m[1]) made.add(m[1]);
+        else if (m[2]) made.delete(m[2]);
+        else if (m[3] && m[4]) {
+          made.delete(m[3]);
+          made.add(m[4]);
+        }
+      }
     }
     expect([...made].sort()).toEqual(tables);
     for (const t of tables) expect(BACKUP_TABLES.includes(t as never) || t in BACKUP_LEFT_OUT, `table "${t}" is neither backed up nor listed in BACKUP_LEFT_OUT`).toBe(true);

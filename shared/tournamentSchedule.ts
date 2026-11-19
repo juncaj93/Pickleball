@@ -151,7 +151,7 @@ export function draftNote(pairs: readonly Pair[]): string {
 // ---------------------------------------------------------------------------------------------------------------------
 
 export type PoolName = 'A' | 'B';
-export type GameStage = 'pool' | 'semi' | 'final' | 'third';
+export type GameStage = 'pool' | 'semi' | 'final' | 'third' | 'tie';
 
 /**
  * Who plays in a game: 'T3' the team in seat 3; 'P1' 1st place of the round robin (3 to 5 teams); 'A1' / 'B2' a place in Pool A or B;
@@ -394,6 +394,8 @@ export interface StandingRow {
   rank: number;
   /** Still level with another team after head to head, once every game of the group is in. */
   tied: boolean;
+  /** Zip 58: which run of still-level teams this row is in (rows with the same `block` are tied with each other). */
+  block?: number;
 }
 
 /** Wins and losses from pool games (a game whose teams are seats). */
@@ -436,20 +438,31 @@ export function standings(games: readonly PlannedGame[], results: ReadonlyMap<nu
   const byWins = [...seats].sort((x, y) => Number(out.has(x)) - Number(out.has(y)) || w.get(y)! - w.get(x)! || x - y);
   const rows: StandingRow[] = [];
   let i = 0;
+  let blockNo = 0;
   while (i < byWins.length) {
     let j = i;
     while (j < byWins.length && w.get(byWins[j]) === w.get(byWins[i]) && out.has(byWins[j]) === out.has(byWins[i])) j++;
-    const block = byWins.slice(i, j);
-    // Head to head inside the block: wins against the others in it.
-    const h2h = new Map(block.map((s) => [s, block.filter((o) => beat.has(`${s}>${o}`)).length]));
-    const ordered = [...block].sort((x, y) => h2h.get(y)! - h2h.get(x)! || x - y);
-    for (const s of ordered) {
-      const level = ordered.filter((o) => h2h.get(o) === h2h.get(s));
-      rows.push({ seat: s, wins: w.get(s)!, losses: l.get(s)!, rank: rows.length + 1, tied: done && level.length > 1 && !out.has(s) });
+    // Head to head inside the block (Zip 58: again inside any part still level, so two teams level on wins are always split by the game they
+    // played each other; three teams that each beat one of the others stay level: the wheel's tie).
+    for (const level of headToHead(byWins.slice(i, j), beat)) {
+      blockNo++;
+      for (const s of level) rows.push({ seat: s, wins: w.get(s)!, losses: l.get(s)!, rank: rows.length + 1, tied: done && level.length > 1 && !out.has(s), block: blockNo });
     }
     i = j;
   }
   return rows;
+}
+
+/**
+ * Zip 58: teams level on wins, ordered by head to head: wins against the others in the group, and again among any that are still level (a
+ * mini table each time), until nothing splits. Returns the runs still level, in order (each run in seat order).
+ */
+function headToHead(block: readonly number[], beat: ReadonlyMap<string, true>): number[][] {
+  if (block.length <= 1) return [[...block]];
+  const h2h = new Map(block.map((s) => [s, block.filter((o) => beat.has(`${s}>${o}`)).length]));
+  const counts = [...new Set(block.map((s) => h2h.get(s)!))].sort((x, y) => y - x);
+  if (counts.length === 1) return [[...block].sort((x, y) => x - y)];
+  return counts.flatMap((c) => headToHead(block.filter((s) => h2h.get(s) === c), beat));
 }
 
 /** "1-0" (wins-losses). */
@@ -480,6 +493,8 @@ export function resolveGames(
   out: ReadonlySet<number> = new Set(),
   frozen: ReadonlyMap<number, { a: number | null; b: number | null }> = new Map(),
   gone: ReadonlySet<number> = out,
+  /** Zip 58: the stored answers to ties (the wheel, the organizer's picks). */
+  records: readonly TieRecord[] = [],
 ): Resolved[] {
   const sizes = poolSizes(teams);
   const groups: Record<string, number[]> = sizes
@@ -488,7 +503,9 @@ export function resolveGames(
   const table: Record<string, StandingRow[]> = {};
   const done: Record<string, boolean> = {};
   for (const [k, seats] of Object.entries(groups)) {
-    table[k] = standings(games, results, seats, out);
+    // Zip 58: a tie that matters is settled by its answer (the wheel and its playoff games, or the organizer's picks); one that does not matter
+    // (the places it shares are in the same game) is not a tie at all.
+    table[k] = groupTable(teams, games, results, out, records, k as GroupKey).rows;
     done[k] = groupDone(games, results, seats);
   }
   const byNum = new Map<number, Resolved>();
@@ -516,13 +533,10 @@ export function resolveGames(
     const rows = table[k];
     const row = rows[n - 1];
     if (!row || out.has(row.seat)) return { seat: null, tied: false, never: true };
+    // Zip 58: a tie that does not change this game (1st and 2nd tied, and this game is 1st against 2nd) is no tie (groupTable); one that does
+    // waits for its answer.
+    void partner;
     if (!row.tied) return { seat: row.seat, tied: false, never: false };
-    // A tie that does not change this game (1st and 2nd tied, and this game is 1st against 2nd of the same group): both are in, either way.
-    if (partner[0] === k) {
-      const m = Number(partner.slice(1));
-      const levelSeats = rows.filter((x) => x.tied && x.wins === row.wins).map((x) => x.rank);
-      if (levelSeats.length === 2 && levelSeats.includes(n) && levelSeats.includes(m)) return { seat: row.seat, tied: false, never: false };
-    }
     return { seat: null, tied: true, never: false };
   };
   for (const g of games) {
@@ -642,4 +656,178 @@ export function timeCheckWords(behind: number, fromRound: number, to: GameTo, cl
   return stillOver > 0
     ? `${lead} From Round ${fromRound} on, play to ${to}. That still runs about ${stillOver} ${stillOver === 1 ? 'minute' : 'minutes'} over.`
     : `${lead} From Round ${fromRound} on, play to ${to} so we finish on time.`;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 58: ties for a playoff place
+// ---------------------------------------------------------------------------------------------------------------------
+// Locked doubles counts only wins, so a tie is by record. After head to head (standings above) two teams level on wins are always split by the
+// game they played each other. Three teams that each beat one of the others stay level: THE WHEEL picks one of them for a bye, the other two
+// play Game A to 5, and (when the tie decides more than which two go on) the winner of A plays the bye team to 5 in Game B. Four or more level:
+// the organizer picks, one tap per place. A tie only matters when the places it shares lead to different games (1st and 2nd tied before a Final
+// between 1st and 2nd: both are in either way, no tie).
+
+export type GroupKey = 'P' | 'A' | 'B';
+/** Game A and Game B are played to this. */
+export const TIE_TO = 5;
+
+/** A tie's stored answer (migration 0029's tournament_ties). */
+export interface TieRecord {
+  key: string;
+  kind: 'wheel' | 'pick';
+  bye: number | null;
+  picks: number[];
+  gameA: number | null;
+  gameB: number | null;
+}
+
+/**
+ * 'a': the tie decides only who of three is out (two of them go on to the same game): Game A, its loser is out, the bye team and A's winner go
+ * on. 'ab': it decides the top place (or every place): Game A, then the winner of A plays the bye team (Game B); B's winner takes the top place.
+ */
+export type TieShape = 'a' | 'ab';
+
+export interface TieBlock {
+  key: string;
+  group: GroupKey;
+  pool: PoolName | null;
+  /** The tied seats, in seat order. */
+  seats: number[];
+  /** The first place they share in the group (1-based). */
+  from: number;
+  mode: 'wheel' | 'pick';
+  shape: TieShape | null;
+  /** The stored answer for exactly this tie (an answer to another tie, after a result was fixed, never applies). */
+  record: TieRecord | null;
+  /** Every place of the tie in order once it is settled, else null. */
+  order: number[] | null;
+  /** The game the top tied place leads to ('final', 'semi' or 'third'). */
+  target: 'final' | 'semi' | 'third';
+  /** The seat whose players spin the wheel: the best record in the group outside the tie. Null: the organizer spins. */
+  spinner: number | null;
+  /** 'pick': how many places are still to be picked (0 once settled). */
+  needPicks: number;
+}
+
+/** The tie's key: its group and its seats ('P:1,2,4'). */
+export const tieKeyOf = (group: GroupKey, seats: readonly number[]): string => `${group}:${[...seats].sort((a, b) => a - b).join(',')}`;
+
+/**
+ * Which places of a group the playoff games use. Places that meet in the same game share a class (the Final's 1st and 2nd, the 3rd place
+ * game's 3rd and 4th); a place that meets a team from elsewhere has a class of its own; a place no game uses is 'out'.
+ */
+export function placeClasses(games: readonly PlannedGame[], group: GroupKey): Map<number, { cls: string; stage: GameStage }> {
+  const out = new Map<number, { cls: string; stage: GameStage }>();
+  const placeIn = (slot: Slot) => (slot[0] === group && /^\d+$/.test(slot.slice(1)) ? Number(slot.slice(1)) : null);
+  for (const g of games) {
+    if (g.stage === 'pool' || g.stage === 'tie') continue;
+    const a = placeIn(g.a);
+    const b = placeIn(g.b);
+    if (a !== null && b !== null) {
+      out.set(a, { cls: `${g.num}`, stage: g.stage });
+      out.set(b, { cls: `${g.num}`, stage: g.stage });
+    } else {
+      if (a !== null) out.set(a, { cls: `${g.num}:a`, stage: g.stage });
+      if (b !== null) out.set(b, { cls: `${g.num}:b`, stage: g.stage });
+    }
+  }
+  return out;
+}
+
+/** The two sides of a tie game, as seats ('T3' a seat, 'W12' the winner of tie game 12), and which side won. */
+function tieGameOutcome(games: readonly PlannedGame[], results: ReadonlyMap<number, GameResult>, num: number, known: ReadonlyMap<number, number>): { win: number; lose: number } | null {
+  const g = games.find((x) => x.num === num);
+  const r = results.get(num);
+  if (!g || !r?.winner) return null;
+  const seatOf = (slot: Slot): number | null => (slot[0] === 'T' ? Number(slot.slice(1)) : slot[0] === 'W' ? (known.get(Number(slot.slice(1))) ?? null) : null);
+  const a = seatOf(g.a);
+  const b = seatOf(g.b);
+  if (a === null || b === null) return null;
+  return r.winner === 'a' ? { win: a, lose: b } : { win: b, lose: a };
+}
+
+/** The ties of one group that matter, each with its answer if it has one, and the group's table with every settled tie in its settled order. */
+export function groupTable(
+  teams: number,
+  games: readonly PlannedGame[],
+  results: ReadonlyMap<number, GameResult>,
+  out: ReadonlySet<number>,
+  records: readonly TieRecord[],
+  group: GroupKey,
+): { rows: StandingRow[]; blocks: TieBlock[] } {
+  const seats = groupsOf(teams).find((g) => (g.pool ?? 'P') === group)?.seats ?? [];
+  const rows = standings(games, results, seats, out);
+  const blocks: TieBlock[] = [];
+  if (!seats.length || !groupDone(games, results, seats)) return { rows, blocks };
+  const classes = placeClasses(games, group);
+  const clsOf = (place: number) => classes.get(place)?.cls ?? 'out';
+  const runs = new Map<number, StandingRow[]>();
+  for (const r of rows) if (r.tied) runs.set(r.block ?? r.rank, [...(runs.get(r.block ?? r.rank) ?? []), r]);
+  for (const run of runs.values()) {
+    if (run.length < 2) continue;
+    const from = run[0].rank;
+    const places = run.map((_, i) => from + i);
+    const cls = places.map(clsOf);
+    if (cls.every((c) => c === cls[0])) continue; // no tie: those places lead to the same game (or to none)
+    const tied = run.map((r) => r.seat).sort((a, b) => a - b);
+    const key = tieKeyOf(group, tied);
+    const mode: TieBlock['mode'] = tied.length === 3 ? 'wheel' : 'pick';
+    const shape: TieShape | null = mode === 'wheel' ? (cls[0] === cls[1] && cls[1] !== cls[2] ? 'a' : 'ab') : null;
+    const record = records.find((x) => x.key === key && x.kind === mode) ?? null;
+    let order: number[] | null = null;
+    let needPicks = 0;
+    if (mode === 'pick') {
+      const picks = [...new Set((record?.picks ?? []).filter((s) => tied.includes(s)))];
+      const rest = tied.filter((s) => !picks.includes(s));
+      // Picked one place at a time, until the places left all lead to the same game (or one team is left).
+      const same = (xs: number[]) => xs.map(clsOf).every((c, _, all) => c === all[0]);
+      let need = 0;
+      while (picks.length + need < places.length - 1 && !same(places.slice(picks.length + need))) need++;
+      needPicks = need;
+      if (needPicks === 0) order = [...picks, ...rest];
+    } else if (record && record.bye !== null && tied.includes(record.bye) && record.gameA !== null) {
+      const known = new Map<number, number>();
+      const a = tieGameOutcome(games, results, record.gameA, known);
+      if (a) {
+        known.set(record.gameA, a.win);
+        if (shape === 'a') order = [record.bye, a.win, a.lose];
+        else if (record.gameB !== null) {
+          const b = tieGameOutcome(games, results, record.gameB, known);
+          if (b) order = [b.win, b.lose, a.lose];
+        }
+      }
+    }
+    const top = places.map((p) => classes.get(p)).find((x) => !!x);
+    const target: TieBlock['target'] = top?.stage === 'semi' ? 'semi' : top?.stage === 'third' ? 'third' : 'final';
+    const spinner = rows.find((r) => !tied.includes(r.seat) && !out.has(r.seat))?.seat ?? null;
+    blocks.push({ key, group, pool: group === 'P' ? null : group, seats: tied, from, mode, shape, record, order, target, spinner: mode === 'wheel' ? spinner : null, needPicks });
+  }
+  // The table as the playoffs read it: a settled tie in its settled order; a tie that does not matter is no tie; a tie still waiting stays tied.
+  const waiting = new Set(blocks.filter((b) => !b.order).flatMap((b) => b.seats));
+  const settled = rows.map((r) => ({ ...r, tied: waiting.has(r.seat) }));
+  for (const b of blocks) {
+    if (!b.order) continue;
+    b.order.forEach((seat, i) => {
+      const was = rows.find((r) => r.seat === seat)!;
+      settled[b.from - 1 + i] = { ...was, rank: b.from + i, tied: false };
+    });
+  }
+  return { rows: settled, blocks };
+}
+
+/** Every tie that matters, in every group. */
+export function tieBlocks(teams: number, games: readonly PlannedGame[], results: ReadonlyMap<number, GameResult>, out: ReadonlySet<number>, records: readonly TieRecord[]): TieBlock[] {
+  return groupsOf(teams).flatMap((g) => groupTable(teams, games, results, out, records, (g.pool ?? 'P') as GroupKey).blocks);
+}
+
+/**
+ * The playoff games the wheel makes for a three-way tie (`bye` the wheel's answer): Game A between the two other teams (seat order), and Game B
+ * (shape 'ab') between the winner of A and the bye team. `firstNum`: the next free game number. Both to 5, in `round` (the first playoff round,
+ * before the semifinals or the Final), on `court` (the first free court).
+ */
+export function tieGames(block: Pick<TieBlock, 'seats' | 'shape' | 'pool'>, bye: number, firstNum: number, round: number, court: number): PlannedGame[] {
+  const [x, y] = block.seats.filter((s) => s !== bye);
+  const a: PlannedGame = { num: firstNum, round, court, stage: 'tie', pool: block.pool, a: `T${x}`, b: `T${y}` };
+  if (block.shape === 'a') return [a];
+  return [a, { num: firstNum + 1, round, court, stage: 'tie', pool: block.pool, a: `W${firstNum}`, b: `T${bye}` }];
 }

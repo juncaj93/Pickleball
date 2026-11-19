@@ -628,7 +628,7 @@ export interface PlayerTournamentView {
 // the games being played now, by team name), the standings and the night's times.
 // ---------------------------------------------------------------------------------------------------------------------
 
-export type DayStage = 'pool' | 'semi' | 'final' | 'third';
+export type DayStage = 'pool' | 'semi' | 'final' | 'third' | 'tie';
 
 /** One of this player's games (mocks 16 to 18). */
 export interface PlayerDayGame {
@@ -661,6 +661,42 @@ export interface PlayerDayGame {
   onNow?: boolean;
 }
 
+/** Zip 58: the two sides of a team, as every screen names them. */
+export interface TeamSide {
+  name: string;
+  players: string[];
+}
+
+/**
+ * Zip 58: a tie for a playoff place, as a player sees it (pictures 20 and 21). `state`: 'spin' (three teams tied, the wheel not spun yet),
+ * 'playoff' (the wheel picked: Game A and Game B decide it), 'pick' (four or more tied, or two that never played: the organizer picks).
+ */
+export interface PlayerTieView {
+  key: string;
+  state: 'spin' | 'playoff' | 'pick';
+  /** What the tie is for. */
+  target: 'final' | 'semi' | 'third';
+  /** The tied teams, in seat order (the wheel's slices). */
+  teams: TeamSide[];
+  /** The team that spins (the best record outside the tie); null: the organizer spins. */
+  spinner: TeamSide | null;
+  /** This player is on the team that spins: the button works on this phone. */
+  canSpin?: true;
+  /** The wheel's answer: the team that gets the bye. */
+  bye?: TeamSide & { index: number };
+  /** When the wheel was spun (a phone that has not shown it yet plays the spin once). */
+  spunAt?: string;
+}
+
+/** Zip 58: one row of the Playoff card (picture 21): Game A, Game B, then the games the tie feeds. */
+export interface PlayoffRow {
+  label: string;
+  court: number | null;
+  title: string;
+  sub: string;
+  state: 'done' | 'next' | 'later';
+}
+
 export interface PlayerDayView {
   /** Zip 61: never set on a Locked doubles night (the Americano night says 'americano'). */
   kind?: undefined;
@@ -685,8 +721,15 @@ export interface PlayerDayView {
   progress: { label: string; done: number; total: number };
   /** Games being played now that are not theirs. */
   live: { round: number; court: number | null; a: { name: string; players: string[] }; b: { name: string; players: string[] } }[];
-  /** Standings: one group, or Pool A and Pool B. Each row: record, theirs, a tie, and (pools) where the team plays this round. */
-  standings: { pool: 'A' | 'B' | null; rows: { rank: number; name: string; players: string[]; record: string; me?: true; tied?: true; out?: true; where?: string }[] }[];
+  /** Standings: one group, or Pool A and Pool B. Each row: record, theirs, a tie, and (pools) where the team plays this round. Zip 58: `through`,
+   *  the team is already in the Final (or the semifinals) while a tie is being settled ("In the final"). */
+  standings: { pool: 'A' | 'B' | null; rows: { rank: number; name: string; players: string[]; record: string; me?: true; tied?: true; out?: true; where?: string; through?: 'final' | 'semi' }[] }[];
+  /** Zip 58: a tie for a playoff place (the first one still being settled). */
+  tie?: PlayerTieView;
+  /** Zip 58: the Playoff card while the wheel's games are played (Game A, Game B, then the games they feed). */
+  playoff?: PlayoffRow[];
+  /** Zip 58: the other game being played at the same time as this player's Final (picture 22: "Also now · Court 2 · 3rd place"). */
+  alsoNow?: { label: string; court: number | null; a: TeamSide; b: TeamSide };
   /** The night's times (pools): pool play, semifinals, Final and 3rd place, shifted by the real start and the rounds' lengths. */
   night: { label: string; time: string }[];
   /** The Time check banner (only when shorter games are in force or suggested). */
@@ -727,6 +770,27 @@ export interface AdminDayGame {
   disputed: boolean;
   skipped: boolean;
   resultBy: string | null;
+  /** Zip 58: a tie playoff game: 'Game A' or 'Game B'. */
+  tieLabel?: string;
+}
+
+/** Zip 58: a tie the organizer sees (the first card on game night until it is settled). */
+export interface AdminTieView {
+  key: string;
+  mode: 'wheel' | 'pick';
+  target: 'final' | 'semi' | 'third';
+  pool: 'A' | 'B' | null;
+  teams: (TeamSide & { seat: number })[];
+  /** The team whose players spin (the organizer can always spin too); null: only the organizer. */
+  spinner: TeamSide | null;
+  /** The wheel's answer. */
+  bye?: TeamSide & { seat: number; index: number };
+  spunAt?: string;
+  /** Picks: how many places are still to pick, and who is picked so far (in order). */
+  needPicks: number;
+  picked: string[];
+  /** The picks as stored (sent back with the next pick, so a change in between is caught). */
+  picks: number[];
 }
 
 /** Zip 57: the organizer's teams and game day (AdminTournamentView.day). */
@@ -759,6 +823,8 @@ export interface AdminDayView {
   fix?: { gone: string[]; spare: string[]; text: string } | null;
   /** Swap in candidates for "Player left": locked in but on no team, then paid standby. */
   spares: { id: string; name: string; standby: boolean }[];
+  /** Zip 58: ties for a playoff place still being settled. */
+  ties?: AdminTieView[];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

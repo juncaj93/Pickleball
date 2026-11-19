@@ -81,6 +81,8 @@ route('POST', '/api/tournament/waitlist', player.tournamentWaitlist);
 // Zip 57 (server/tournamentDay.ts): Tournaments, piece 3. A player's result on game night.
 route('POST', '/api/tournament/game', player.tournamentGame);
 route('POST', '/api/tournament/team-name', player.tournamentTeamName);
+// Zip 58 (server/tournamentDay.ts): Tournaments, piece 4. The team with the best record outside a three-way tie spins the wheel.
+route('POST', '/api/tournament/spin', player.tournamentSpin);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));

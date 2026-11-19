@@ -111,7 +111,8 @@ describe('Zip 50: the backup holds the switches, price locks, alert settings and
     for (const t of NEW) expect(BACKUP_TABLES as readonly string[], t).toContain(t);
     // Zip 56 (Alex): the four tournament tables joined the file (version 3); only the short-lived counters stay out.
     for (const t of ['tournaments', 'tournament_signups', 'tournament_level_history', 'tournament_tickets']) expect(BACKUP_TABLES as readonly string[], t).toContain(t);
-    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events']);
+    // Zip 58: the two new tournament tables (ties, results) are left out on purpose until Alex answers (a version 5 needs a clock Worker deploy).
+    expect(Object.keys(BACKUP_LEFT_OUT).sort()).toEqual(['login_attempts', 'rate_events', 'tournament_results', 'tournament_ties']);
     // The world really has what the old file lost.
     expect(locksBefore.length).toBe(11);
     expect(switchesBefore.length).toBeGreaterThan(10);

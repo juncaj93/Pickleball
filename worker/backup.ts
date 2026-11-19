@@ -137,6 +137,9 @@ export const BACKUP_LEFT_OUT: Record<string, string> = {
   rate_events: 'spam counters: short-lived',
   // Zip 56 (Alex): the four tournament tables are in the file now (version 3).
   // Zip 57 (Alex): the teams and game results are in the file too (version 4).
+  // Zip 58: not in the file yet (Time Travel keeps them; a question for Alex: version 5 needs a clock Worker deploy, like Zip 57's version 4).
+  tournament_ties: 'Zip 58: the wheel answers and the organizer picks for a tie (Time Travel keeps them)',
+  tournament_results: 'Zip 58: each ended tournament results, medals and awards (the award credit itself is in credit_ledger, which is in the file; Time Travel keeps these rows)',
 };
 
 const NAME = /^[a-z_][a-z0-9_]*$/;

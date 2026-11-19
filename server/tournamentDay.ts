@@ -21,8 +21,11 @@ import {
   type AdminDayGame,
   type AdminDayTeam,
   type AdminDayView,
+  type AdminTieView,
   type PlayerDayGame,
   type PlayerDayView,
+  type PlayerTieView,
+  type PlayoffRow,
   type TournamentFormat,
   MAX_SPOTS,
 } from '../shared/tournament';
@@ -48,6 +51,13 @@ import {
   timeCheck,
   timeCheckWords,
   type RoundState,
+  groupTable,
+  type GroupKey,
+  type TieBlock,
+  tieBlocks,
+  tieGames,
+  type TieRecord,
+  TIE_TO,
 } from '../shared/tournamentSchedule';
 import { startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
@@ -123,19 +133,68 @@ function readTeamName(raw: unknown): string {
 export const LIVE_BEFORE_MS = 30 * 60_000;
 export const LIVE_AFTER_MS = 6 * 3_600_000;
 
+/** Zip 58 (migration 0029): a tie's stored answer (the wheel's bye and the playoff games it made, or the organizer's picks). */
+export interface TieRow {
+  id: string;
+  tournament_id: string;
+  tie_key: string;
+  kind: string;
+  bye_seat: number | null;
+  picks: string | null;
+  game_a: number | null;
+  game_b: number | null;
+  spun_by: string | null;
+  spun_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** The rows of one night: the teams, the games and (Zip 58) the ties' answers. */
+export interface DayRows {
+  teams: TeamRow[];
+  games: GameRow[];
+  ties?: TieRow[];
+}
+
 /** The two reads, for a screen's batch (Zip 62: no trip of their own). `idSql`: a `?` or the screen's pick subquery. */
 export const teamsSqlFor = (idSql: string) => `SELECT * FROM tournament_teams WHERE tournament_id = ${idSql} ORDER BY seat`;
 export const gamesSqlFor = (idSql: string) => `SELECT * FROM tournament_games WHERE tournament_id = ${idSql} ORDER BY num`;
+/** Zip 58: the ties' answers (a third small read in the same batch). */
+export const tiesSqlFor = (idSql: string) => `SELECT * FROM tournament_ties WHERE tournament_id = ${idSql} ORDER BY created_at, id`;
 
-/** Teams and games of one tournament (a database before 0027 has none: empty). */
-export async function loadDay(db: D1Database, tournamentId: string): Promise<{ teams: TeamRow[]; games: GameRow[] }> {
+/** Teams and games of one tournament (a database before 0027 has none: empty), and the ties' answers (none before 0029). */
+export async function loadDay(db: D1Database, tournamentId: string): Promise<DayRows> {
+  let day: DayRows;
   try {
     const [a, b] = await db.batch([db.prepare(teamsSqlFor('?')).bind(tournamentId), db.prepare(gamesSqlFor('?')).bind(tournamentId)]);
-    return { teams: a.results as unknown as TeamRow[], games: b.results as unknown as GameRow[] };
+    day = { teams: a.results as unknown as TeamRow[], games: b.results as unknown as GameRow[] };
   } catch {
-    return { teams: [], games: [] };
+    return { teams: [], games: [], ties: [] };
   }
+  const ties = await db
+    .prepare(tiesSqlFor('?'))
+    .bind(tournamentId)
+    .all<TieRow>()
+    .then((r) => r.results)
+    .catch(() => [] as TieRow[]);
+  return { ...day, ties };
 }
+
+/** A stored tie row as the pure rules read it. */
+export function tieRecordOf(r: TieRow): TieRecord {
+  let picks: number[] = [];
+  try {
+    const v = JSON.parse(r.picks ?? '[]');
+    if (Array.isArray(v)) picks = v.filter((x) => Number.isInteger(x));
+  } catch {
+    picks = [];
+  }
+  return { key: r.tie_key, kind: r.kind === 'pick' ? 'pick' : 'wheel', bye: r.bye_seat ?? null, picks, gameA: r.game_a ?? null, gameB: r.game_b ?? null };
+}
+
+/** Play order: by round, and in a round the tie games first (they decide who plays the rest), then by number. */
+const STAGE_ORDER: Record<string, number> = { pool: 0, tie: 1, semi: 2, final: 3, third: 3 };
+const byPlay = (x: GameRow, y: GameRow) => x.round - y.round || (STAGE_ORDER[x.stage] ?? 2) - (STAGE_ORDER[y.stage] ?? 2) || x.num - y.num;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // What the rows mean
@@ -194,7 +253,15 @@ function minuteOf(t: TournamentRow, tz: string, ms: number): number {
 /** Everything the screens need, worked out once from the rows. */
 interface DayFacts {
   teams: TeamRow[];
+  /** The night's games in play order (Zip 58: with only the tie games of ties that still stand). */
   games: GameRow[];
+  /** Zip 58: the ties that matter (settled or not), and their stored answers. */
+  blocks: TieBlock[];
+  records: TieRecord[];
+  /** Zip 58: tie game number -> 'Game A' / 'Game B'. */
+  tieLabel: Map<number, string>;
+  /** Zip 58: when each tie's wheel was spun (by key). */
+  spunAt: Map<string, string>;
   bySeat: Map<number, TeamRow>;
   results: Map<number, GameResult>;
   resolved: Map<number, { a: number | null; b: number | null; tied: boolean }>;
@@ -210,20 +277,33 @@ interface DayFacts {
   end: number;
 }
 
-function facts(t: TournamentRow, teams: TeamRow[], stored: GameRow[], tz: string, nowMs: number): DayFacts {
+function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, nowMs: number, tieRows: readonly TieRow[] = []): DayFacts {
   const bySeat = new Map(teams.map((x) => [x.seat, x]));
   // Teams that left: all of them never play again (`gone`); the ones that left during pool play (a pool game of theirs skipped) also drop below
   // every team still playing (`out`). A team that left after its pool was done keeps its place, and a playoff it cannot play is a walkover.
   const gone = new Set(teams.filter((x) => x.out_at).map((x) => x.seat));
-  const out = new Set([...gone].filter((seat) => stored.some((g) => g.stage === 'pool' && g.skipped && (g.slot_a === `T${seat}` || g.slot_b === `T${seat}`))));
+  const out = new Set([...gone].filter((seat) => all.some((g) => g.stage === 'pool' && g.skipped && (g.slot_a === `T${seat}` || g.slot_b === `T${seat}`))));
+  // Zip 58: the ties' answers. A tie game belongs to an answer; it is part of the night only while that tie still stands (a pool result fixed
+  // after the wheel spun can end the tie, or make another one: its games are then set aside, kept, and come back if the tie does).
+  const records = tieRows.map(tieRecordOf);
+  const standing = tieBlocks(teams.length, all.map(asPlanned), new Map(all.map((g) => [g.num, resultOf(g)])), out, records);
+  const liveTieGames = new Set(standing.flatMap((b) => (b.record ? [b.record.gameA, b.record.gameB] : [])).filter((n): n is number => n !== null));
+  const stored = all.filter((g) => g.stage !== 'tie' || liveTieGames.has(g.num)).sort(byPlay);
+  const tieLabel = new Map<number, string>();
+  for (const b of standing) {
+    if (b.record?.gameA != null) tieLabel.set(b.record.gameA, 'Game A');
+    if (b.record?.gameB != null) tieLabel.set(b.record.gameB, 'Game B');
+  }
   // A game that got a result keeps the teams it had then (a later change to an earlier game never moves it to other teams).
   const frozen = new Map(stored.filter((g) => g.seat_a != null || g.seat_b != null).map((g) => [g.num, { a: g.seat_a ?? null, b: g.seat_b ?? null }]));
-  const resolve = (list: GameRow[]) => new Map(resolveGames(teams.length, list.map(asPlanned), new Map(list.map((g) => [g.num, resultOf(g)])), out, frozen, gone).map((r) => [r.num, r]));
+  const resolve = (list: GameRow[]) =>
+    new Map(resolveGames(teams.length, list.map(asPlanned), new Map(list.map((g) => [g.num, resultOf(g)])), out, frozen, gone, records).map((r) => [r.num, r]));
   // A playoff game one side of which can never be filled is not played (counted as skipped): the team there goes on (a walkover).
   const first = resolve(stored);
   const games = stored.map((g) => (first.get(g.num)?.never && !g.winner && !g.skipped ? { ...g, skipped: 1, claim: null, result_by: 'skipped' } : g));
   const results = new Map(games.map((g) => [g.num, resultOf(g)]));
   const resolved = resolve(games);
+  const blocks = tieBlocks(teams.length, games.map(asPlanned), results, out, records);
   const real = realTimes(t);
   const plan = nightPlan(teams.length * 2, courtsOf(t), real.minutes, 'doubles');
   const startMs = t.final_date ? startMsOf(t.final_date, real.start, tz) : Infinity;
@@ -247,7 +327,8 @@ function facts(t: TournamentRow, teams: TeamRow[], stored: GameRow[], tz: string
   const check = started && !over && !t.paused_at && games.length && t.final_date ? timeCheck(states, real.start, real.start + real.minutes, minuteOf(t, tz, nowMs)) : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
-  return { teams, games, bySeat, results, resolved, out, plan, anyResult, started, over, check, shorter, start: real.start, end: real.start + real.minutes };
+  const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
+  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, results, resolved, out, plan, anyResult, started, over, check, shorter, start: real.start, end: real.start + real.minutes };
 }
 
 /** "1st of Pool A", "2nd", "Winner of game 9". */
@@ -260,6 +341,50 @@ function slotName(slot: string): string {
   if (k === 'W') return `Winner of game ${n}`;
   if (k === 'L') return `Loser of game ${n}`;
   return slot;
+}
+
+/** Zip 58: a team as every screen names it (its name and its two players). */
+function sideFor(f: DayFacts, names: ReadonlyMap<string, string>, seat: number): { name: string; players: string[] } {
+  const x = f.bySeat.get(seat);
+  return { name: x?.name ?? `Team ${seat}`, players: x ? [x.player_a, x.player_b].filter((id): id is string => !!id).map((id) => names.get(id) ?? 'A player') : [] };
+}
+
+/**
+ * Zip 58: the Playoff card (picture 21) for a tie the wheel has spun: Game A, Game B, then every playoff game the tie feeds, each side named by
+ * its team or by what decides it ("Winner of B", "Losers of A and B").
+ */
+function playoffRows(t: TournamentRow, f: DayFacts, names: ReadonlyMap<string, string>, b: TieBlock): PlayoffRow[] {
+  const rec = b.record;
+  if (!rec || rec.bye === null || rec.gameA === null) return [];
+  const side = (seat: number) => sideFor(f, names, seat);
+  const tieGamesHere = [rec.gameA, rec.gameB].map((n) => (n === null ? undefined : f.games.find((g) => g.num === n))).filter((g): g is GameRow => !!g);
+  const open = tieGamesHere.find((g) => !decided(g));
+  const rows: PlayoffRow[] = [];
+  for (const g of tieGamesHere) {
+    const r = f.resolved.get(g.num);
+    const isA = g.num === rec.gameA;
+    const a = r?.a ? side(r.a).name : isA ? 'A team' : 'Winner of A';
+    const bb = r?.b ? side(r.b).name : side(rec.bye).name;
+    rows.push({ label: isA ? 'Game A' : 'Game B', court: courtNo(t, g.court), title: `${a} vs ${bb}`, sub: `To ${g.play_to}. Loser is out.`, state: decided(g) ? 'done' : g === open ? 'next' : 'later' });
+  }
+  const places = b.seats.map((_, i) => b.from + i);
+  const words = (pos: number) => (b.shape === 'a' ? [side(rec.bye!).name, 'Winner of A', 'Loser of A'] : ['Winner of B', 'Loser of B', 'Loser of A'])[pos];
+  const fromTie = (slot: string) => (slot[0] === b.group && places.includes(Number(slot.slice(1))) ? Number(slot.slice(1)) - b.from : null);
+  const finalRound = f.games.find((g) => g.stage === 'final')?.round ?? null;
+  for (const g of f.games) {
+    if (g.stage === 'pool' || g.stage === 'tie') continue;
+    const pa = fromTie(g.slot_a);
+    const pb = fromTie(g.slot_b);
+    if (pa === null && pb === null) continue;
+    const r = f.resolved.get(g.num);
+    const na = r?.a ? side(r.a).name : pa !== null ? words(pa) : slotName(g.slot_a);
+    const nb = r?.b ? side(r.b).name : pb !== null ? words(pb) : slotName(g.slot_b);
+    const losers = [na, nb].sort().join('|') === 'Loser of A|Loser of B';
+    const title = losers ? 'Losers of A and B' : pa !== null ? `${na} vs ${nb}` : `${nb} vs ${na}`;
+    const sub = g.stage === 'third' && finalRound === g.round ? 'Same time as the final' : `To ${g.play_to}`;
+    rows.push({ label: stageLabel(g.stage), court: courtNo(t, g.court), title, sub, state: decided(g) ? 'done' : 'later' });
+  }
+  return rows;
 }
 
 /** The players' and the organizer's Time check words while shorter games are in force (and how far behind it is now). */
@@ -277,7 +402,7 @@ export function adminDayView(
   format: TournamentFormat,
   signups: readonly SignupRow[],
   tickets: readonly TicketWithName[],
-  rows: { teams: TeamRow[]; games: GameRow[] },
+  rows: DayRows,
   tz: string,
   nowMs: number,
 ): AdminDayView {
@@ -286,7 +411,7 @@ export function adminDayView(
   for (const s of signups) names.set(s.player_id, s.display_name);
   for (const k of tickets) names.set(k.player_id, k.display_name);
   const levels = new Map(signups.map((s) => [s.player_id, s.approved_level ?? s.picked_level]));
-  const f = facts(t, rows.teams, rows.games, tz, nowMs);
+  const f = facts(t, rows.teams, rows.games, tz, nowMs, rows.ties ?? []);
   const phase: AdminDayView['phase'] = rows.teams.length === 0 ? 'none' : t.teams_at ? 'published' : 'draft';
   const why =
     format !== 'doubles'
@@ -338,8 +463,29 @@ export function adminDayView(
       disputed: !!g.disputed_at && !g.winner,
       skipped: !!g.skipped,
       resultBy: g.result_by,
+      ...(f.tieLabel.get(g.num) ? { tieLabel: f.tieLabel.get(g.num) } : {}),
     };
   });
+  // Zip 58: the ties still being settled (the wheel not spun, its games still being played, or the organizer's picks).
+  const ties: AdminTieView[] = f.blocks
+    .filter((b) => !b.order)
+    .map((b) => {
+      const side = (seat: number) => sideFor(f, names, seat);
+      const picks = b.record?.kind === 'pick' ? b.record.picks.filter((x) => b.seats.includes(x)) : [];
+      return {
+        key: b.key,
+        mode: b.mode,
+        target: b.target,
+        pool: b.pool,
+        teams: b.seats.map((seat) => ({ seat, ...side(seat) })),
+        spinner: b.spinner ? side(b.spinner) : null,
+        ...(b.record?.bye != null ? { bye: { seat: b.record.bye, index: b.seats.indexOf(b.record.bye), ...side(b.record.bye) } } : {}),
+        ...(f.spunAt.get(b.key) ? { spunAt: f.spunAt.get(b.key) } : {}),
+        needPicks: b.needPicks,
+        picked: picks.map((x) => side(x).name),
+        picks,
+      };
+    });
   // After publishing, before any result: the teams no longer match the players locked in (a back out, a late join).
   const gone = teams.flatMap((x) => x.players.filter((p) => p.gone && p.id).map((p) => p.name));
   const spare = locked.filter((id) => !onTeam.has(id)).map((id) => names.get(id) ?? 'A player');
@@ -382,6 +528,7 @@ export function adminDayView(
     ...(shorterNote(f) ? { timeNote: shorterNote(f) } : {}),
     fix,
     spares,
+    ...(ties.length ? { ties } : {}),
   };
 }
 
@@ -397,13 +544,13 @@ const stageLabel = (stage: string) => (stage === 'semi' ? 'Semifinal' : stage ==
 export function playerDayView(
   t: TournamentRow,
   signups: readonly SignupRow[],
-  rows: { teams: TeamRow[]; games: GameRow[] },
+  rows: DayRows,
   playerId: string,
   tz: string,
   nowMs: number,
 ): PlayerDayView {
   const names = new Map(signups.map((s) => [s.player_id, s.display_name]));
-  const f = facts(t, rows.teams, rows.games, tz, nowMs);
+  const f = facts(t, rows.teams, rows.games, tz, nowMs, rows.ties ?? []);
   const playersOf = (x: TeamRow) => [x.player_a, x.player_b].filter((id): id is string => !!id).map((id) => names.get(id) ?? 'A player');
   const mine = rows.teams.find((x) => x.player_a === playerId || x.player_b === playerId) ?? null;
   const seat = mine?.seat ?? null;
@@ -434,12 +581,12 @@ export function playerDayView(
     const opp = other ? f.bySeat.get(other) : null;
     const entry: PlayerDayGame = {
       num: g.num,
-      label: g.stage === 'pool' ? `Game ${++poolNo}` : stageLabel(g.stage),
+      label: g.stage === 'pool' ? `Game ${++poolNo}` : g.stage === 'tie' ? (f.tieLabel.get(g.num) ?? 'Playoff') : stageLabel(g.stage),
       stage: g.stage as PlayerDayGame['stage'],
       round: g.round,
       court: courtNo(t, g.court),
       opponent: opp ? { name: opp.name, players: playersOf(opp) } : null,
-      ...(opp ? {} : { pending: r.tied ? 'Tied: Alex settles it' : 'Not decided yet' }),
+      ...(opp ? {} : { pending: r.tied ? 'Decided by the tie' : 'Not decided yet' }),
       state: done ? 'done' : firstOpen ? 'next' : 'later',
       ...(done && res.winner ? { won: res.winner === side } : {}),
       playTo: g.play_to,
@@ -447,7 +594,8 @@ export function playerDayView(
       ...(g.claim && g.claim !== side && !g.winner && !g.disputed_at ? { askConfirm: true as const } : {}),
       ...(g.disputed_at && !g.winner ? { disputed: true as const } : {}),
       ...(g.skipped ? { skipped: true as const } : {}),
-      ...(!done && opp && f.started && g.round <= roundNow ? { onNow: true as const } : {}),
+      // Zip 58: a tie game is played as soon as both its teams are known (a pool can be done while the other still plays).
+      ...(!done && opp && f.started && (g.round <= roundNow || g.stage === 'tie') ? { onNow: true as const } : {}),
     };
     if (!done) firstOpen = false;
     games.push(entry);
@@ -500,12 +648,46 @@ export function playerDayView(
       return r.a && r.b ? { round: g.round, court: courtNo(t, g.court), a: team(r.a), b: team(r.b) } : null;
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
+  // Zip 58: a tie for a playoff place still being settled (this player's group first), and who is already through while it is.
+  const pendingTies = f.blocks.filter((b) => !b.order);
+  const myGroup: GroupKey | null = mine ? (mine.pool === 'A' || mine.pool === 'B' ? mine.pool : 'P') : null;
+  const blk = pendingTies.find((b) => b.group === myGroup) ?? pendingTies[0] ?? null;
+  const through = new Map<number, 'final' | 'semi'>();
+  if (blk) {
+    for (const g of f.games) {
+      if (g.stage !== 'final' && g.stage !== 'semi') continue;
+      const r = f.resolved.get(g.num);
+      for (const x of [r?.a, r?.b]) if (x && !through.has(x)) through.set(x, g.stage);
+    }
+  }
+  const side = (x: number) => sideFor(f, names, x);
+  let tie: PlayerTieView | undefined;
+  let playoff: PlayoffRow[] | undefined;
+  if (blk) {
+    const spun = blk.mode === 'wheel' && blk.record?.bye != null;
+    tie = {
+      key: blk.key,
+      state: blk.mode === 'pick' ? 'pick' : spun ? 'playoff' : 'spin',
+      target: blk.target,
+      teams: blk.seats.map(side),
+      spinner: blk.spinner ? side(blk.spinner) : null,
+      ...(blk.spinner !== null && seat === blk.spinner && !spun && mine && !mine.out_at ? { canSpin: true as const } : {}),
+      ...(spun ? { bye: { ...side(blk.record!.bye!), index: blk.seats.indexOf(blk.record!.bye!) } } : {}),
+      ...(spun && f.spunAt.get(blk.key) ? { spunAt: f.spunAt.get(blk.key) } : {}),
+    };
+    if (spun) playoff = playoffRows(t, f, names, blk);
+  }
+  // Zip 58 (picture 22): the other game being played beside this player's Final (the 3rd place game, both teams known).
+  const nextMine = games.find((g) => g.state === 'next');
+  const third = f.games.find((g) => g.stage === 'third' && !decided(g));
+  const thirdR = third ? f.resolved.get(third.num) : undefined;
+  const alsoNow = nextMine?.stage === 'final' && nextMine.opponent && third && thirdR?.a && thirdR?.b ? { label: '3rd place', court: courtNo(t, third.court), a: side(thirdR.a), b: side(thirdR.b) } : undefined;
   // Standings: wins, then head to head; with pools, where each team plays the round now (or round 1 before the night).
   const showRound = Number.isFinite(roundNow) ? roundNow : 1;
   const planned = f.games.map(asPlanned);
   const standingsOut = groupsOf(rows.teams.length).map((grp) => ({
     pool: grp.pool,
-    rows: standings(planned, f.results, grp.seats, f.out).map((r) => {
+    rows: groupTable(rows.teams.length, planned, f.results, f.out, f.records, (grp.pool ?? 'P') as GroupKey).rows.map((r) => {
       const x = f.bySeat.get(r.seat)!;
       const here = f.games.find((g) => g.round === showRound && g.stage === 'pool' && (g.slot_a === `T${r.seat}` || g.slot_b === `T${r.seat}`));
       return {
@@ -517,6 +699,7 @@ export function playerDayView(
         ...(r.tied ? { tied: true as const } : {}),
         ...(x.out_at ? { out: true as const } : {}),
         ...(pools && showRound <= poolRounds ? { where: here ? `Court ${courtNo(t, here.court)}` : 'Sits' } : {}),
+        ...(through.get(r.seat) ? { through: through.get(r.seat) } : {}),
       };
     }),
   }));
@@ -539,6 +722,10 @@ export function playerDayView(
     if (finalAt !== null) night.push({ label: f.games.some((g) => g.stage === 'third') ? 'Final and 3rd place' : 'Final', time: clockLabel(about(finalAt)) });
   }
   const note = shorterNote(f);
+  // Zip 58: while a tie is settled the bar says so (picture 20: "Tied for the final"; picture 21: "Playoff").
+  if (tie && today) {
+    label = tie.state === 'playoff' ? 'Playoff' : tie.target === 'semi' ? 'Tied for the semifinals' : tie.target === 'third' ? 'Tied for 3rd place' : 'Tied for the final';
+  }
   return {
     // Either partner can rename their team until Game 1 starts (then the pencil and the dice disappear).
     team: mine ? { name: mine.name, players: playersOf(mine), seat: mine.seat, ...(!f.started && !mine.out_at ? { canRename: true as const } : {}) } : null,
@@ -555,6 +742,9 @@ export function playerDayView(
     night,
     ...(note ? { timeNote: note } : {}),
     ...(t.paused_at ? { paused: true as const } : {}),
+    ...(tie ? { tie } : {}),
+    ...(playoff && playoff.length ? { playoff } : {}),
+    ...(alsoNow ? { alsoNow } : {}),
     ...(mine && mine.changed_at && t.teams_at
       ? {
           partnerNote: {
@@ -839,9 +1029,13 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   // Zip 61: an Americano night has its own controls (scores, not who won), server/americanoDay.ts.
   if (t.format === 'americano') return americanoGamesAction(ctx, body);
   if (!t.teams_at) bad('tournament_changed', 'The teams are not published.');
-  const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left'] as const);
+  const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left', 'spin', 'pick'] as const);
   const nowIso = ctx.nowIso;
   const day = await loadDay(ctx.db, t.id);
+
+  // Zip 58: the organizer spins the wheel (always allowed: the team that spins may not be looking), or picks for four or more tied.
+  if (action === 'spin') return spinTie(ctx, group, t, day, v.text(body.key, 'key', { max: 80 }), 'organizer');
+  if (action === 'pick') return pickTie(ctx, group, t, day, body);
 
   if (action === 'pause' || action === 'resume') {
     await ctx.db.prepare(`UPDATE tournaments SET paused_at = ${action === 'pause' ? '?' : 'NULL'}, updated_at = ? WHERE id = ?`).bind(...(action === 'pause' ? [nowIso] : []), nowIso, t.id).run();
@@ -868,7 +1062,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     const g = day.games.find((x) => x.num === num);
     if (!g) bad('tournament_changed', 'That game is not on the schedule.');
     const winner = body.winner === null ? null : v.oneOf(body.winner, 'winner', ['a', 'b'] as const);
-    const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs);
+    const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
     const r = f.resolved.get(num);
     if (winner && (!r?.a || !r?.b)) bad('not_ready', 'Both teams of that game are not known yet.');
     // What the organizer saw (the screen sends the claim and the winner it showed): a tap on a game that changed since does nothing ("look again").
@@ -945,7 +1139,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     return { ok: true, holdToSpot: spot };
   }
   // The team sits out: its games still to play are skipped (they count for nobody), its played games stay.
-  const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs);
+  const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
   const skip = day.games.filter((g) => !decided(g) && (f.resolved.get(g.num)?.a === team!.seat || f.resolved.get(g.num)?.b === team!.seat || g.slot_a === `T${team!.seat}` || g.slot_b === `T${team!.seat}`));
   await ctx.db.batch([
     ctx.db.prepare('UPDATE tournament_teams SET out_at = ?, updated_at = ? WHERE id = ? AND out_at IS NULL').bind(nowIso, nowIso, team!.id),
@@ -959,6 +1153,105 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   ]);
   await audit(ctx.db, group.id, null, 'tournament_player_left', { tournament: t.name, player: names.get(playerId) ?? 'A player', team: team!.name, skipped: skip.length }, nowIso);
   return { ok: true, skipped: skip.length };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 58: the wheel and the organizer's picks
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** A fair whole number from 0 to n - 1 (the wheel's answer is the server's, never the phone's). */
+function fairPick(n: number): number {
+  const buf = new Uint32Array(1);
+  const limit = Math.floor(0x1_0000_0000 / n) * n;
+  for (;;) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < limit) return buf[0] % n;
+  }
+}
+
+/**
+ * Spin the wheel for a three-way tie (`key`): the server picks the bye team, stores it, and makes the playoff games (Game A, and Game B when the
+ * tie needs it) in the first playoff round on the first free court. Once only: a second spin (a double tap, two phones, a refresh) changes nothing
+ * and answers with the stored result.
+ */
+export async function spinTie(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow, day: DayRows, key: string, by: 'organizer' | 'team', playerId?: string) {
+  const groupId = group.id;
+  const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
+  const b = f.blocks.find((x) => x.key === key && x.mode === 'wheel' && !x.order);
+  const settledBefore = f.blocks.find((x) => x.key === key && x.record?.bye != null);
+  if (settledBefore?.record?.bye != null) return { ok: true, bye: settledBefore.record.bye, already: true };
+  if (!b) bad('tournament_changed', 'This just changed. Look again.');
+  if (by === 'team' && (b!.spinner === null || !f.teams.some((x) => x.seat === b!.spinner && (x.player_a === playerId || x.player_b === playerId)))) bad('not_spinner', 'Another team spins the wheel.');
+  const bye = b!.seats[fairPick(b!.seats.length)];
+  const firstNum = Math.max(0, ...day.games.map((g) => g.num)) + 1;
+  const playoffRounds = f.games.filter((g) => g.stage !== 'pool' && g.stage !== 'tie').map((g) => g.round);
+  const round = playoffRounds.length ? Math.min(...playoffRounds) : Math.max(1, ...f.games.map((g) => g.round));
+  // The first free court: one with no game being played on it now (a pool still playing, another tie's game).
+  const busy = new Set(f.games.filter((g) => !decided(g) && (g.stage === 'pool' || g.stage === 'tie') && f.resolved.get(g.num)?.a && f.resolved.get(g.num)?.b).map((g) => g.court));
+  const court = [1, 2].slice(0, courtsOf(t)).find((c) => !busy.has(c)) ?? 1;
+  const planned = tieGames(b!, bye, firstNum, round, court);
+  const id = newId();
+  const nowIso = ctx.nowIso;
+  await ctx.db.batch([
+    ctx.db
+      .prepare(
+        `INSERT INTO tournament_ties (id, tournament_id, tie_key, kind, bye_seat, picks, game_a, game_b, spun_by, spun_at, created_at, updated_at)
+         SELECT ?, ?, ?, 'wheel', ?, NULL, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND status = 'tickets')
+         ON CONFLICT (tournament_id, tie_key) DO NOTHING`,
+      )
+      .bind(id, t.id, key, bye, planned[0].num, planned[1]?.num ?? null, by, nowIso, nowIso, nowIso, t.id),
+    ...planned.map((g) =>
+      ctx.db
+        .prepare(
+          `INSERT INTO tournament_games (id, tournament_id, num, round, court, stage, pool, slot_a, slot_b, play_to, skipped, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, 'tie', ?, ?, ?, ?, 0, ?, ? WHERE EXISTS (SELECT 1 FROM tournament_ties WHERE id = ?)`,
+        )
+        .bind(newId(), t.id, g.num, g.round, g.court, g.pool, g.a, g.b, TIE_TO, nowIso, nowIso, id),
+    ),
+  ]);
+  const row = await ctx.db.prepare('SELECT bye_seat, id FROM tournament_ties WHERE tournament_id = ? AND tie_key = ?').bind(t.id, key).first<{ bye_seat: number | null; id: string }>();
+  if (!row || row.bye_seat === null) bad('tournament_changed', 'This just changed. Look again.');
+  if (row!.id !== id) return { ok: true, bye: row!.bye_seat, already: true };
+  const team = (seat: number) => f.bySeat.get(seat)?.name ?? `Team ${seat}`;
+  await audit(ctx.db, groupId, null, 'tournament_wheel', { tournament: t.name, tied: b!.seats.map(team).join(', '), bye: team(bye), by, games: planned.length }, nowIso);
+  return { ok: true, bye, already: false };
+}
+
+/** Four or more tied (or two that never played each other): the organizer taps the team for the next place, one tap per place. */
+async function pickTie(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow, day: DayRows, body: Record<string, unknown>) {
+  const groupId = group.id;
+  const key = v.text(body.key, 'key', { max: 80 });
+  const seat = Number(body.seat);
+  const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
+  const b = f.blocks.find((x) => x.key === key && x.mode === 'pick');
+  if (!b || b.needPicks === 0 || !b.seats.includes(seat)) bad('tournament_changed', 'This just changed. Look again.');
+  const had = b!.record?.picks.filter((x) => b!.seats.includes(x)) ?? [];
+  const seen = Array.isArray(body.picks) ? (body.picks as unknown[]).map(Number) : had;
+  if (JSON.stringify(seen) !== JSON.stringify(had) || had.includes(seat)) bad('tournament_changed', 'This just changed. Look again.');
+  const before = b!.record ? JSON.stringify(b!.record.picks) : null;
+  const next = JSON.stringify([...had, seat]);
+  const nowIso = ctx.nowIso;
+  const res = await ctx.db
+    .prepare(
+      `INSERT INTO tournament_ties (id, tournament_id, tie_key, kind, bye_seat, picks, game_a, game_b, spun_by, spun_at, created_at, updated_at)
+       SELECT ?, ?, ?, 'pick', NULL, ?, NULL, NULL, 'organizer', NULL, ?, ? WHERE EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND status = 'tickets')
+       ON CONFLICT (tournament_id, tie_key) DO UPDATE SET picks = excluded.picks, updated_at = excluded.updated_at WHERE tournament_ties.picks IS ?`,
+    )
+    .bind(newId(), t.id, key, next, nowIso, nowIso, t.id, before)
+    .run();
+  if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
+  await audit(ctx.db, groupId, null, 'tournament_tie_pick', { tournament: t.name, team: f.bySeat.get(seat)?.name ?? `Team ${seat}`, place: b!.from + had.length }, nowIso);
+  return { ok: true };
+}
+
+/** POST /api/tournament/spin { tournamentId, key }: a player of the team that spins taps "spin the wheel". */
+export async function playerSpin(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
+  const { t, playerId } = await playerTarget(ctx, who, body);
+  if (!t.teams_at || t.format === 'americano') bad('tournament_changed', 'This just changed. Look again.');
+  const day = await loadDay(ctx.db, t.id);
+  const r = await spinTie(ctx, who.group, t, day, v.text(body.key, 'key', { max: 80 }), 'team', playerId);
+  if (!r.already) await logPlayer(ctx, who.group, playerId, 'tournament_wheel_spun', { tournament: t.name });
+  return r;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -982,7 +1275,7 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
   const num = Number(body.num);
   const day = await loadDay(ctx.db, t.id);
   const tz = who.group.timezone;
-  const f = facts(t, day.teams, day.games, tz, ctx.nowMs);
+  const f = facts(t, day.teams, day.games, tz, ctx.nowMs, day.ties ?? []);
   const g = day.games.find((x) => x.num === num);
   const team = day.teams.find((x) => (x.player_a === playerId || x.player_b === playerId) && !x.out_at);
   const r = g ? f.resolved.get(g.num) : null;
