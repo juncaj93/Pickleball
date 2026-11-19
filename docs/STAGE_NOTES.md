@@ -6451,3 +6451,8 @@ at all four widths. Dead code from the old overlay and the old tickets card remo
 .tc-row-link, .tc-under, .tm-remind*). Kept, as notes for Alex: on standby, Hold my spot now sits in the Who's in sheet (the card says "2nd on
 standby"); "A spot opened" and "Still open" are no longer on the card (the late countdown says it); Who's in opens a sheet titled with the
 tournament's name (its list is headed Who's in); Drop out is no longer offered once the night has started (the server refused it then anyway).
+Final runs (66b code): unit 197 files, 3,616 passed, 2 skipped, none failed; `npx tsc -b` clean. Browser: zip66 72, zip55 91, zip56 57, zip59 12,
+zip60 29, zip63 64, zip64 83, zip62 17, all passing; switch OFF equals main `316ac36`: zip55-off 47 of 47, zip56-off 47 of 47. Preview: restore
+point first (Time Travel bookmark `00000198-00000000-00005128-3bf21c6050ed21e348eab2e8513824bf`), deployment `0395c945`, re-seeded (calm start:
+zip66_start); checked there: Vic's row "Lock in · $16 | Who's in | Drop out", Parker's "Locked in | Who's in | Drop out" at 390 light and 320
+dark, the organizer's pill "3 unpaid", no tickets card, Not paid yet: Vic, Zoe, Reese with "No number for Reese"; no page errors. Live untouched.
