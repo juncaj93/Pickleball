@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { playerPhone, setupGroup } from './harness';
 
-// Zip 71 (🎾71.teams), part 1: partner taps on game night. The FIRST answer from a side counts: once Vic answers, his partner's answer for that
-// game is refused by the server (not only hidden), the partner's screen gets the waiting line, either player on the other side can confirm (or say
-// No), the organizer can confirm or fix, and only the one who answered can take it back. Locked doubles AND Americano scores. Same world as
-// tests/zip57-day.test.ts and tests/zip61-day.test.ts (Thu Nov 12, 7:30 PM; Pay by the night before).
+// Zip 71 (🎾71.teams), part 1, NO CONFIRMING (Alex, Nov 20): the FIRST answer from ANY of the 4 players in a game is the result, at once
+// (Locked doubles: who won; Americano: the score). Nobody confirms. A second answer from anyone is refused by the server with who answered; the
+// same player sending the same answer again is fine. The 5 second Undo is on the answering phone (nothing is sent until it runs out). The
+// organizer can still Fix or clear any result. Same world as tests/zip57-day.test.ts and tests/zip61-day.test.ts (Thu Nov 12, 7:30 PM).
 
 const DATE = '2026-11-12';
 const DATES = ['2026-11-05', DATE, '2026-11-19'];
@@ -68,7 +68,7 @@ const gameRow = (ctx: Ctx, num: number) => ctx.app.db.raw.prepare('SELECT * FROM
 // Locked doubles
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** 8 players, teams published, Game 1 being played: Vic (a) and Wren (a2) on one side, Quinn (b) and Reese (b2) on the other (names from the world). */
+/** 8 players, teams published, Game 1 being played: a and a2 on one team, b and b2 on the other (names from the world). */
 async function doublesNight() {
   const ctx = await world(8, 'doubles');
   expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/teams`, { action: 'draft' })).status).toBe(200);
@@ -81,132 +81,110 @@ async function doublesNight() {
   return { ctx, num: g1.num as number, teamA: ta.name as string, teamB: tb.name as string, a: ta.players[0].name as string, a2: ta.players[1].name as string, b: tb.players[0].name as string, b2: tb.players[1].name as string };
 }
 const tap = async (ctx: Ctx, name: string, num: number, action: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, action });
+const fix = (ctx: Ctx, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, body);
+const NO_CONFIRM_KEYS = ['askConfirm', 'waiting', 'ask'];
 
-describe('zip 71: Locked doubles, the first answer from a team counts', () => {
-  it("Vic's We won: his partner's answers are refused by the server with the waiting line; the partner's card shows it; Vic's does not", async () => {
-    const { ctx, num, teamA, teamB, a, a2 } = await doublesNight();
+describe('zip 71, no confirming: Locked doubles, the first answer from any of the 4 players is the result', () => {
+  it("Vic's We won is the result at once: all four phones show it done, nothing to confirm, standings and the next game follow", async () => {
+    const { ctx, num, a, a2, b, b2 } = await doublesNight();
     const before = moneyRows(ctx);
     expect((await tap(ctx, a, num, 'won')).status).toBe(200);
-    expect(gameRow(ctx, num)).toMatchObject({ claim: 'a', claim_by: ctx.byName[a] });
-    const line = `${a} said ${teamA} won. Waiting for ${teamB} or Alex to confirm.`;
-    for (const action of ['lost', 'won', 'undo', 'confirm', 'dispute']) {
-      const r = await tap(ctx, a2, num, action);
-      expect(r.status, `${action}: ${r.text}`).toBe(409);
-      expect(r.data.error?.message ?? r.data.message ?? r.text).toContain(line);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', claim: null, claim_by: ctx.byName[a], result_by: 'players' });
+    for (const [who, won] of [[a, true], [a2, true], [b, false], [b2, false]] as const) {
+      const day = (await card(ctx, who)).day;
+      expect(day.games[0], who).toMatchObject({ state: 'done', won });
+      for (const k of NO_CONFIRM_KEYS) expect(day.games[0][k], `${who} ${k}`).toBeUndefined();
+      expect(day.games.find((g: any) => g.state === 'next')?.label, who).toBe('Game 2');
+      expect(day.standings[0].rows.find((r: any) => r.me).record, who).toBe(won ? '1-0' : '0-1');
     }
-    // Nothing changed: still Vic's We won, waiting for the other team.
-    expect(gameRow(ctx, num)).toMatchObject({ claim: 'a', claim_by: ctx.byName[a], winner: null, disputed_at: null });
-    const partner = (await card(ctx, a2)).day;
-    expect(partner.games[0]).toMatchObject({ state: 'done', won: true, claimed: true, waiting: line });
-    const mine = (await card(ctx, a)).day;
-    expect(mine.games[0].waiting).toBeUndefined();
-    expect(mine.games[0]).toMatchObject({ claimed: true });
-    // Vic tapping again (a refresh, a double tap) is fine; changing his own answer is not (Alex fixes it).
-    expect((await tap(ctx, a, num, 'won')).data.result).toBe('claimed');
-    const own = await tap(ctx, a, num, 'lost');
-    expect(own.status).toBe(409);
-    expect(own.text).toContain(`You said ${teamA} won. Waiting for ${teamB} or Alex to confirm.`);
+    const g = (await dash(ctx)).day.games[0];
+    expect(g).toMatchObject({ winner: 'a', claim: null });
     expect(moneyRows(ctx)).toBe(before);
     books(ctx);
   });
 
-  it('either player on the other side can confirm, or say No (the organizer then decides)', async () => {
-    for (const who of ['b', 'b2'] as const) {
-      const n = await doublesNight();
-      await tap(n.ctx, n.a, n.num, 'won');
-      expect((await card(n.ctx, n[who])).day.games[0].askConfirm).toBe(true);
-      expect((await tap(n.ctx, n[who], n.num, 'confirm')).status).toBe(200);
-      expect(gameRow(n.ctx, n.num)).toMatchObject({ winner: 'a' });
-      expect((await card(n.ctx, n.a2)).day.games[0].waiting).toBeUndefined();
-    }
-    const n = await doublesNight();
-    await tap(n.ctx, n.a, n.num, 'won');
-    expect((await tap(n.ctx, n.b2, n.num, 'dispute')).status).toBe(200);
-    // Both teams say they won: only the organizer settles it. Nobody on either side can answer again (the review's findings 1 and 2), and
-    // all four phones show the line instead of the buttons.
-    const both = `${n.teamA} and ${n.teamB} both say they won. Alex will decide.`;
-    for (const who of [n.a, n.a2, n.b, n.b2])
-      for (const action of ['lost', 'won', 'confirm', 'dispute', 'undo']) {
-        const r = await tap(n.ctx, who, n.num, action);
-        expect(r.status, `${who} ${action}`).toBe(409);
-        expect(r.text).toContain(both);
-      }
-    for (const who of [n.a, n.a2, n.b, n.b2]) expect((await card(n.ctx, who)).day.games[0]).toMatchObject({ disputed: true, waiting: both, onNow: true });
-    expect((await n.ctx.organizer.call('POST', `/api/admin/tournament/${n.ctx.tid}/games`, { action: 'result', num: n.num, winner: 'b' })).status).toBe(200);
-    expect(gameRow(n.ctx, n.num)).toMatchObject({ winner: 'b', disputed_at: null });
-    return;
-    expect(gameRow(n.ctx, n.num)).toMatchObject({ claim: 'a', winner: null });
-    expect(gameRow(n.ctx, n.num).disputed_at).not.toBeNull();
-  });
-
-  it('the organizer can confirm from the night screen, and fix or change the result afterward', async () => {
-    const { ctx, num, a, a2 } = await doublesNight();
+  it('a second answer from anyone (either team, any button) is refused with who answered; the same player sending the same answer is fine', async () => {
+    const { ctx, num, teamA, a, a2, b, b2 } = await doublesNight();
     await tap(ctx, a, num, 'won');
-    const g = (await dash(ctx)).day.games[0];
-    expect(g.claim).toBe('a');
-    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'result', num, winner: 'a', seen: { claim: 'a', winner: null } })).status).toBe(200);
-    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', result_by: 'organizer' });
-    expect((await card(ctx, a2)).day.games[0].waiting).toBeUndefined();
-    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'result', num, winner: 'b' })).status).toBe(200);
-    expect(gameRow(ctx, num)).toMatchObject({ winner: 'b' });
+    const line = `${a} said ${teamA} won. Ask Alex to fix it.`;
+    for (const who of [a2, b, b2])
+      for (const action of ['won', 'lost', 'confirm', 'dispute', 'undo']) {
+        const r = await tap(ctx, who, num, action);
+        expect(r.status, `${who} ${action}`).toBe(409);
+        expect(r.text).toContain(line);
+      }
+    expect((await tap(ctx, a, num, 'won')).status).toBe(200);
+    for (const action of ['lost', 'undo']) {
+      const r = await tap(ctx, a, num, action);
+      expect(r.status).toBe(409);
+      expect(r.text).toContain(`You said ${teamA} won. Ask Alex to fix it.`);
+    }
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', claim_by: ctx.byName[a] });
   });
 
-  it("Undo: Vic's 5 seconds never reach the server, so the partner may answer; after a sent We won only Vic can take it back, then the partner may answer", async () => {
-    // The 5 second Undo is on Vic's phone only: nothing was sent, so Wren's answer is the first one.
-    const n = await doublesNight();
-    expect((await tap(n.ctx, n.a2, n.num, 'lost')).status).toBe(200);
-    expect(gameRow(n.ctx, n.num)).toMatchObject({ winner: 'b' });
-    // Sent, then taken back by Vic: the game is open again and Wren answers.
-    const m = await doublesNight();
-    await tap(m.ctx, m.a, m.num, 'won');
-    expect((await tap(m.ctx, m.a2, m.num, 'undo')).status).toBe(409);
-    expect((await tap(m.ctx, m.a, m.num, 'undo')).status).toBe(200);
-    expect(gameRow(m.ctx, m.num)).toMatchObject({ claim: null, claim_by: null });
-    expect((await card(m.ctx, m.a2)).day.games[0]).toMatchObject({ state: 'next', onNow: true });
-    expect((await tap(m.ctx, m.a2, m.num, 'lost')).status).toBe(200);
-    expect(gameRow(m.ctx, m.num)).toMatchObject({ winner: 'b' });
+  it('any of the four can be first, the losing side too ("<other team> won"); then the winners cannot answer again', async () => {
+    const { ctx, num, teamA, a, b2 } = await doublesNight();
+    expect((await tap(ctx, b2, num, 'lost')).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', claim_by: ctx.byName[b2] });
+    const r = await tap(ctx, a, num, 'won');
+    expect(r.status).toBe(409);
+    expect(r.text).toContain(`${b2} said ${teamA} won. Ask Alex to fix it.`);
   });
 
-  it('two phones at once on the same side: exactly one answer lands; the other is refused; refreshing changes nothing', async () => {
-    const { ctx, num, a, a2 } = await doublesNight();
-    const [x, y] = await Promise.all([tap(ctx, a, num, 'won'), tap(ctx, a2, num, 'lost')]);
-    expect([x.status, y.status].sort()).toEqual([200, 409]);
+  it('nothing to confirm: Yes / No / Undo with no result are refused, nothing written', async () => {
+    const { ctx, num, b } = await doublesNight();
+    const stamp = gameRow(ctx, num).updated_at;
+    for (const action of ['confirm', 'dispute', 'undo']) expect((await tap(ctx, b, num, action)).status).toBe(409);
+    expect(gameRow(ctx, num).updated_at).toBe(stamp);
+  });
+
+  it("Undo: Vic's 5 seconds run on his phone and send nothing, so after his Undo anyone else may answer first", async () => {
+    const { ctx, num, a, b } = await doublesNight();
+    // (Vic tapped We won and then Undo inside the 5 seconds: no request ever reached the server.)
+    expect(gameRow(ctx, num)).toMatchObject({ winner: null, claim: null });
+    expect((await tap(ctx, b, num, 'won')).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'b', claim_by: ctx.byName[b] });
+    expect((await tap(ctx, a, num, 'won')).status).toBe(409);
+  });
+
+  it('the organizer fixes or clears any result afterward; a cleared game takes a first answer again', async () => {
+    const { ctx, num, teamB, a, a2 } = await doublesNight();
+    await tap(ctx, a, num, 'won');
+    expect((await fix(ctx, { action: 'result', num, winner: 'b' })).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'b', result_by: 'organizer', claim_by: null });
+    expect((await card(ctx, a)).day.games[0]).toMatchObject({ state: 'done', won: false });
+    const r = await tap(ctx, a, num, 'won');
+    expect(r.status).toBe(409);
+    expect(r.text).toContain(`Alex set ${teamB} as the winner. Ask Alex to fix it.`);
+    expect((await fix(ctx, { action: 'result', num, winner: null })).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: null, claim: null });
+    expect((await tap(ctx, a2, num, 'won')).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', claim_by: ctx.byName[a2] });
+  });
+
+  it('two phones at once: one answer lands, the other is refused; the same player on two phones with the same answer: both fine', async () => {
+    const { ctx, num, a, b } = await doublesNight();
+    const both = await Promise.all([tap(ctx, a, num, 'won'), tap(ctx, b, num, 'won')]);
+    expect(both.map((r) => r.status).sort()).toEqual([200, 409]);
     const row = gameRow(ctx, num);
-    if (x.status === 200) expect(row).toMatchObject({ claim: 'a', claim_by: ctx.byName[a], winner: null });
-    else expect(row).toMatchObject({ winner: 'b' });
-    // A refresh on every phone reads the same thing and writes nothing.
+    expect(row.claim_by).toBe(row.winner === 'a' ? ctx.byName[a] : ctx.byName[b]);
     const stamp = row.updated_at;
-    for (const name of [a, a2]) await card(ctx, name);
+    for (const name of [a, b]) await card(ctx, name);
     await dash(ctx);
     expect(gameRow(ctx, num).updated_at).toBe(stamp);
-    // Both partners tapping We won at once: one claim, by one of them.
     const n = await doublesNight();
-    const both = await Promise.all([tap(n.ctx, n.a, n.num, 'won'), tap(n.ctx, n.a2, n.num, 'won')]);
-    expect(both.map((r) => r.status).sort()).toEqual([200, 409]);
-    expect([n.ctx.byName[n.a], n.ctx.byName[n.a2]]).toContain(gameRow(n.ctx, n.num).claim_by);
+    const same = await Promise.all([tap(n.ctx, n.a, n.num, 'won'), tap(n.ctx, n.a, n.num, 'won')]);
+    expect(same.map((r) => r.status)).toEqual([200, 200]);
     books(n.ctx);
   });
 
-  it("a claim from before Zip 71 (no claim_by): the partner is refused with \"Your team said ...\"; either partner may still take it back", async () => {
-    const { ctx, num, teamA, teamB, a, a2 } = await doublesNight();
-    await tap(ctx, a, num, 'won');
-    ctx.app.db.raw.prepare('UPDATE tournament_games SET claim_by = NULL WHERE tournament_id = ? AND num = ?').run(ctx.tid, num);
-    const r = await tap(ctx, a2, num, 'lost');
+  it('a We won from before this zip (still waiting, no claim_by) counts as the result: nobody can answer over it', async () => {
+    const { ctx, num, teamA, b } = await doublesNight();
+    ctx.app.db.raw.prepare("UPDATE tournament_games SET claim = 'a', claim_at = ? WHERE tournament_id = ? AND num = ?").run(new Date(START_MS).toISOString(), ctx.tid, num);
+    const r = await tap(ctx, b, num, 'confirm');
     expect(r.status).toBe(409);
-    expect(r.text).toContain(`Your team said ${teamA} won. Waiting for ${teamB} or Alex to confirm.`);
-    expect((await card(ctx, a2)).day.games[0].waiting).toBeUndefined();
-    expect((await tap(ctx, a2, num, 'undo')).status).toBe(200);
-  });
-
-  it('a stale screen: the partner whose phone still shows the buttons is refused with the waiting line (not a silent overwrite)', async () => {
-    const { ctx, num, teamA, teamB, a, a2 } = await doublesNight();
-    const stale = (await card(ctx, a2)).day.games[0];
-    expect(stale).toMatchObject({ onNow: true, state: 'next' });
-    await tap(ctx, a, num, 'won');
-    const r = await tap(ctx, a2, num, 'lost');
-    expect(r.status).toBe(409);
-    expect(r.text).toContain(`${a} said ${teamA} won. Waiting for ${teamB} or Alex to confirm.`);
-    expect(gameRow(ctx, num)).toMatchObject({ claim: 'a', winner: null });
+    expect(r.text).toContain(`${teamA} won. Ask Alex to fix it.`);
+    expect((await card(ctx, b)).day.games[0].askConfirm).toBeUndefined();
   });
 });
 
@@ -224,95 +202,82 @@ async function americanoNight() {
 const score = async (ctx: Ctx, name: string, body: Record<string, unknown>) => {
   const phone = await playerPhone(ctx, name);
   const mine = ((await phone.call('GET', '/api/group')).data.tournament?.day?.rounds ?? []).find((r: any) => r.num === body.num);
-  const fill = {
-    ...(mine ? { key: mine.key } : {}),
-    ...((body.action === 'confirm' || body.action === 'fix') && mine?.ask ? { shown: { mine: mine.ask.mine, theirs: mine.ask.theirs } } : {}),
-  };
-  return phone.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, ...fill, ...body });
+  return phone.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, ...(mine ? { key: mine.key } : {}), ...body });
 };
 const round1 = (day: any) => day.rounds.find((r: any) => r.round === 1);
 
-describe('zip 71: Americano, the first score from a side counts', () => {
-  it("Vic's 11 to 8: his partner's score (the same or another), Undo and No, fix it are refused with the waiting line; the partner's card shows it", async () => {
+describe('zip 71, no confirming: Americano, the first score from any of the 4 players is the result', () => {
+  it("Vic's 11 to 8 is in at once: all four see it done with the score, nothing to confirm, the table follows", async () => {
     const { ctx, num, a, a2, b, b2 } = await americanoNight();
     const before = moneyRows(ctx);
     expect((await score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 })).status).toBe(200);
-    const line = `${a} entered 11 to 8. Waiting for ${b}, ${b2} or Alex to confirm.`;
-    for (const body of [
-      { action: 'score', mine: 11, theirs: 8 },
-      { action: 'score', mine: 11, theirs: 9 },
-      { action: 'score', mine: 8, theirs: 11 },
-      { action: 'undo' },
-      { action: 'confirm', shown: { mine: 11, theirs: 8 } },
-      { action: 'fix', mine: 11, theirs: 2, shown: { mine: 11, theirs: 8 } },
-    ]) {
-      const r = await score(ctx, a2, { num, ...body });
-      expect(r.status, `${JSON.stringify(body)}: ${r.text}`).toBe(409);
-      expect(r.text).toContain(line);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', claim: null, claim_by: ctx.byName[a], score_a: 11, score_b: 8, result_by: 'players' });
+    for (const [who, mine, theirs] of [[a, 11, 8], [a2, 11, 8], [b, 8, 11], [b2, 8, 11]] as const) {
+      const r = round1((await card(ctx, who)).day);
+      expect(r, who).toMatchObject({ state: 'done', won: mine > theirs, score: { mine, theirs } });
+      for (const k of [...NO_CONFIRM_KEYS, 'claimed']) expect(r[k], `${who} ${k}`).toBeUndefined();
     }
-    expect(gameRow(ctx, num)).toMatchObject({ claim: 'a', claim_by: ctx.byName[a], score_a: 11, score_b: 8, winner: null });
-    expect(round1((await card(ctx, a2)).day)).toMatchObject({ claimed: true, waiting: line, score: { mine: 11, theirs: 8 } });
-    expect(round1((await card(ctx, a)).day).waiting).toBeUndefined();
-    // Vic sending the same score again is fine (a refresh); another score from him is refused (Alex fixes it).
-    expect((await score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 })).status).toBe(200);
-    const own = await score(ctx, a, { num, action: 'score', mine: 11, theirs: 6 });
-    expect(own.status).toBe(409);
-    expect(own.text).toContain(`You entered 11 to 8. Waiting for ${b}, ${b2} or Alex to confirm.`);
+    const table = (await card(ctx, a)).day.standings;
+    expect(table.find((x: any) => x.name === a)).toMatchObject({ record: '1-0', points: 11 });
     expect(moneyRows(ctx)).toBe(before);
     books(ctx);
   });
 
-  it('either player on the other side says Yes; or No, fix it, and then that side is the one waiting (its partner refused, the first side asked)', async () => {
-    for (const who of ['b', 'b2'] as const) {
-      const n = await americanoNight();
-      await score(n.ctx, n.a, { num: n.num, action: 'score', mine: 11, theirs: 8 });
-      expect(round1((await card(n.ctx, n[who])).day).ask).toMatchObject({ by: n.a });
-      expect((await score(n.ctx, n[who], { num: n.num, action: 'confirm' })).status).toBe(200);
-      expect(gameRow(n.ctx, n.num)).toMatchObject({ winner: 'a' });
-      expect(round1((await card(n.ctx, n.a2)).day).waiting).toBeUndefined();
-    }
-    const n = await americanoNight();
-    await score(n.ctx, n.a, { num: n.num, action: 'score', mine: 11, theirs: 8 });
-    expect((await score(n.ctx, n.b2, { num: n.num, action: 'fix', mine: 11, theirs: 9 })).status).toBe(200);
-    expect(gameRow(n.ctx, n.num)).toMatchObject({ claim: 'b', claim_by: n.ctx.byName[n.b2], score_a: 9, score_b: 11 });
-    const r = await score(n.ctx, n.b, { num: n.num, action: 'score', mine: 11, theirs: 9 });
-    expect(r.status).toBe(409);
-    expect(r.text).toContain(`${n.b2} entered 11 to 9. Waiting for ${n.a}, ${n.a2} or Alex to confirm.`);
-    expect(round1((await card(n.ctx, n.b)).day).waiting).toBe(`${n.b2} entered 11 to 9. Waiting for ${n.a}, ${n.a2} or Alex to confirm.`);
-    // The first side's partner answers the fix (both of them are asked).
-    expect(round1((await card(n.ctx, n.a2)).day).ask).toMatchObject({ by: n.b2 });
-    expect((await score(n.ctx, n.a2, { num: n.num, action: 'confirm' })).status).toBe(200);
-    expect(gameRow(n.ctx, n.num)).toMatchObject({ winner: 'b', score_a: 9, score_b: 11 });
+  it('any other score (the partner or the other side, the same or another), Yes, No fix it and Undo are refused with who entered it', async () => {
+    const { ctx, num, a, a2, b, b2 } = await americanoNight();
+    await score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 });
+    const line = `${a} entered 11 to 8. Ask Alex to fix it.`;
+    for (const who of [a2, b, b2])
+      for (const body of [
+        { action: 'score', mine: 11, theirs: 8 },
+        { action: 'score', mine: 8, theirs: 11 },
+        { action: 'score', mine: 11, theirs: 9 },
+        { action: 'confirm', shown: { mine: 11, theirs: 8 } },
+        { action: 'fix', mine: 11, theirs: 2, shown: { mine: 11, theirs: 8 } },
+        { action: 'undo' },
+      ]) {
+        const r = await score(ctx, who, { num, ...body });
+        expect(r.status, `${who} ${JSON.stringify(body)}: ${r.text}`).toBe(409);
+        expect(r.text).toContain(line);
+      }
+    expect((await score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 })).status).toBe(200);
+    const own = await score(ctx, a, { num, action: 'score', mine: 11, theirs: 6 });
+    expect(own.status).toBe(409);
+    expect(own.text).toContain('You entered 11 to 8. Ask Alex to fix it.');
+    expect(gameRow(ctx, num)).toMatchObject({ score_a: 11, score_b: 8, claim_by: ctx.byName[a] });
   });
 
-  it('the organizer confirms the score waiting, or fixes it', async () => {
+  it('the other side can be first; after Undo on the phone (nothing sent) anyone may enter it', async () => {
+    const { ctx, num, a, b2 } = await americanoNight();
+    expect((await score(ctx, b2, { num, action: 'score', mine: 11, theirs: 5 })).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'b', score_a: 5, score_b: 11, claim_by: ctx.byName[b2] });
+    expect((await score(ctx, a, { num, action: 'score', mine: 5, theirs: 11 })).status).toBe(409);
+  });
+
+  it('the organizer fixes or clears a score; a cleared game takes a first score again', async () => {
     const { ctx, num, a, a2 } = await americanoNight();
     await score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 });
     const g = (await dash(ctx)).rounds.games[0];
-    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'confirm', num, seen: g.stamp })).status).toBe(200);
-    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', result_by: 'organizer' });
-    expect(round1((await card(ctx, a2)).day).waiting).toBeUndefined();
+    expect(g.status).toBe('done');
+    expect((await fix(ctx, { action: 'score', num, a: 7, b: 11, seen: g.stamp })).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'b', score_a: 7, score_b: 11, result_by: 'organizer' });
+    const r = await score(ctx, a2, { num, action: 'score', mine: 11, theirs: 7 });
+    expect(r.status).toBe(409);
+    expect(r.text).toContain('Alex set it to 11 to 7. Ask Alex to fix it.');
     const g2 = (await dash(ctx)).rounds.games[0];
-    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'score', num, a: 7, b: 11, seen: g2.stamp })).status).toBe(200);
-    expect(gameRow(ctx, num)).toMatchObject({ winner: 'b', score_a: 7, score_b: 11 });
-  });
-
-  it('Undo by the one who entered it opens the round again: then the partner may enter the score', async () => {
-    const { ctx, num, a, a2 } = await americanoNight();
-    await score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 });
-    expect((await score(ctx, a, { num, action: 'undo' })).status).toBe(200);
-    expect(gameRow(ctx, num)).toMatchObject({ claim: null, claim_by: null, score_a: null });
+    expect((await fix(ctx, { action: 'clear', num, seen: g2.stamp })).status).toBe(200);
     expect((await score(ctx, a2, { num, action: 'score', mine: 11, theirs: 7 })).status).toBe(200);
-    expect(gameRow(ctx, num)).toMatchObject({ claim: 'a', claim_by: ctx.byName[a2], score_a: 11, score_b: 7 });
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', claim_by: ctx.byName[a2] });
   });
 
-  it('two phones at once on the same side: one score lands, the other is refused', async () => {
-    const { ctx, num, a, a2 } = await americanoNight();
-    const both = await Promise.all([score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 }), score(ctx, a2, { num, action: 'score', mine: 11, theirs: 5 })]);
+  it('two phones at once: one score lands, the other is refused; the same player twice with the same score: both fine', async () => {
+    const { ctx, num, a, b } = await americanoNight();
+    const both = await Promise.all([score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 }), score(ctx, b, { num, action: 'score', mine: 11, theirs: 5 })]);
     expect(both.map((r) => r.status).sort()).toEqual([200, 409]);
-    const row = gameRow(ctx, num);
-    expect([ctx.byName[a], ctx.byName[a2]]).toContain(row.claim_by);
-    expect(row.score_b).toBe(row.claim_by === ctx.byName[a] ? 8 : 5);
-    books(ctx);
+    expect([ctx.byName[a], ctx.byName[b]]).toContain(gameRow(ctx, num).claim_by);
+    const n = await americanoNight();
+    const same = await Promise.all([score(n.ctx, n.a, { num: n.num, action: 'score', mine: 11, theirs: 4 }), score(n.ctx, n.a, { num: n.num, action: 'score', mine: 11, theirs: 4 })]);
+    expect(same.map((r) => r.status)).toEqual([200, 200]);
+    books(n.ctx);
   });
 });

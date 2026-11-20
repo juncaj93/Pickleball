@@ -57,19 +57,19 @@ describe('zip 58: the preview stages', () => {
     expect(fin.a.name).toBe('Kitchen Crew');
     expect(fin.b).not.toBeNull();
   });
-  it('Final: Vic sees the Final with We won and Also now · Court 2 · 3rd place; a confirmed winner brings End tournament', async () => {
-    const { ctx, c, stage, dash, group } = await previewWorld();
+  it('Final: Vic sees the Final with We won and Also now · Court 2 · 3rd place; the first answer brings End tournament (zip 71: no confirming)', async () => {
+    const { c, stage, dash, group } = await previewWorld();
     const tid = await stage('final_on');
     const vic = (await group('Vic')).tournament.day;
     expect(vic.progress.label).toBe('Final');
     const next = vic.games.find((g: any) => g.state === 'next');
     expect(next).toMatchObject({ stage: 'final', onNow: true, opponent: { name: 'Third Shot Gang' } });
     expect(vic.alsoNow).toMatchObject({ label: '3rd place', court: 2, a: { name: 'Kitchen Crew' }, b: { name: 'Dill With It' } });
-    // Vic: We won (after the card's 5 seconds); the organizer confirms on Home. Then End tournament.
+    // Vic: We won (after the card's 5 seconds). Zip 71, no confirming: it is the result at once, so End tournament shows (the organizer still
+    // taps End tournament himself; nothing moves money until then).
     expect((await (await playerPhone(c, 'Vic')).call('POST', '/api/tournament/game', { tournamentId: tid, num: next.num, action: 'won' })).status).toBe(200);
     const fin = (await dash()).tournament.day.games.find((g: any) => g.stage === 'final');
-    expect(fin.claim).toBe('a');
-    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${tid}/games`, { action: 'result', num: fin.num, winner: 'a', seen: { claim: 'a', winner: null } })).status).toBe(200);
+    expect([fin.winner, fin.claim]).toEqual(['a', null]);
     const end = (await dash()).tournament.end;
     expect(end).toMatchObject({ hero: 'Final', first: { name: 'Net Ninjas', players: ['Vic', 'Wren'] }, championCents: 1400, weeks: 1 });
     expect(end.done).toEqual({ kicker: 'Final is done', title: 'Net Ninjas won', sub: 'Vic + Wren beat Third Shot Gang (Parker + Quinn).' });

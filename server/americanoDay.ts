@@ -18,7 +18,7 @@ import { newId } from './crypto';
 import * as v from './validate';
 import { audit } from './repo';
 import type { AdminRoundGame, AdminRoundsView, PlayerRound, PlayerRoundsView } from '../shared/tournament';
-import { saidScore, waitingLine } from '../shared/partnerTaps';
+import { firstAnswer, saidScore } from '../shared/partnerTaps';
 import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
 import { americanoPlan, clockLabel, type GameTo, ROUND_MINUTES } from '../shared/tournamentPlan';
 import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournamentSchedule';
@@ -247,8 +247,6 @@ export function americanoOutcome(t: TournamentRow, signups: readonly SignupRow[]
   return { ready: f.stored && f.games.length > 0 && f.games.every(decided), table, names: f.names, gone: f.gone, rounds: f.rounds };
 }
 
-/** The pair with the player who entered the score first ("Vic says ... for Vic + Parker"). */
-const claimerFirst = (p: readonly string[], by: string | null): string[] => (by && p[1] === by ? [p[1], p[0]] : [...p]);
 const nameOf = (f: AmFacts, id: string) => f.names.get(id) ?? 'A player';
 const pairNames = (f: AmFacts, p: readonly string[]) => p.map((id) => nameOf(f, id));
 const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
@@ -270,7 +268,6 @@ export function playerRoundsView(
   playerId: string,
   tz: string,
   nowMs: number,
-  org = 'the organizer',
 ): PlayerRoundsView | null {
   const f = amFacts(t, signups, tickets, rows, tz, nowMs);
   if (!f.roster.includes(playerId) && !f.gone.has(playerId)) return null;
@@ -297,7 +294,6 @@ export function playerRoundsView(
     const mine = side === 'a' ? g.scoreA : g.scoreB;
     const theirs = side === 'a' ? g.scoreB : g.scoreA;
     const scored = counts(g) && mine !== null && theirs !== null;
-    const askMe = !g.winner && !!g.claim && g.claim !== side && !g.skipped && scored;
     rounds.push({
       round: r,
       num: g.num,
@@ -308,14 +304,6 @@ export function playerRoundsView(
       state: done ? 'done' : first ? 'next' : 'later',
       ...(scored ? { won: mine! > theirs!, score: { mine: mine!, theirs: theirs! } } : {}),
       playTo: g.playTo,
-      ...(g.claim === side && !g.winner && !g.skipped ? { claimed: true as const } : {}),
-      // Zip 71: the partner entered it: this phone shows the waiting line instead of Enter score.
-      ...(g.claim === side && !g.winner && !g.skipped && scored && g.claimBy && g.claimBy !== playerId
-        ? { waiting: waitingLine(saidScore(nameOf(f, g.claimBy), mine!, theirs!), pairNames(f, opp), org) }
-        : {}),
-      ...(askMe
-        ? { ask: { by: nameOf(f, g.claimBy ?? (g.claim === 'a' ? g.a[0] : g.b[0])), mine: mine!, theirs: theirs!, winners: pairNames(f, claimerFirst(mine! > theirs! ? (side === 'a' ? g.a : g.b) : opp, g.claimBy)).join(' + ') } }
-        : {}),
       ...(g.skipped ? { skipped: true as const } : {}),
       ...(!done && f.started && r <= f.roundNow ? { onNow: true as const } : {}),
     });
@@ -503,11 +491,11 @@ function readPair(body: Record<string, unknown>, first: string, second: string):
 }
 
 /**
- * POST /api/tournament/game on an Americano night { tournamentId, num, key, action, mine?, theirs? }: a player in that game.
- *   score     Enter score (sent after the card's 5 second Undo): counts at once; the other side is asked "Is this right?"
- *   confirm   "Yes, that's right": the score stands
- *   fix       "No, fix it", then Submit score: their score replaces it (it counts), and the side that entered first is asked
- *   undo      take back our score while the other side has not said Yes
+ * POST /api/tournament/game on an Americano night { tournamentId, num, key, action: 'score', mine, theirs }: a player in that game.
+ * Zip 71, NO CONFIRMING (Alex, Nov 20): the FIRST score entered by ANY of the 4 players is the result, at once (who entered it is kept in
+ * claim_by; the 5 second Undo is on that phone before it is sent). Nobody says Yes or No, fix it. A second score from anyone is refused with who
+ * entered it ("Vic entered 11 to 8. Ask Alex to fix it."); the same player sending the same score again (a refresh, two phones) is fine. Only the
+ * organizer changes it afterward (Fix, or clear it). The old 'confirm', 'fix' and 'undo' are refused.
  */
 export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: TournamentRow, playerId: string, body: Record<string, unknown>) {
   const action = v.oneOf(body.action, 'action', ['score', 'confirm', 'fix', 'undo'] as const);
@@ -525,89 +513,52 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   // The screen sends the game's key (its four players): a schedule that changed in between is caught.
   if (body.key !== gameKey(seen!)) bad('tournament_changed', 'The rounds just changed. Look again.');
   if (seen!.skipped) bad('tournament_changed', 'That game is off. Look again.');
+  const org = firstName(who.group);
+  // What a refused answer says: who gave the score that stands.
+  const standing = (x: AmGame) =>
+    x.row?.result_by === 'organizer'
+      ? firstAnswer(`${org} set it to ${Math.max(x.scoreA ?? 0, x.scoreB ?? 0)} to ${Math.min(x.scoreA ?? 0, x.scoreB ?? 0)}.`, org)
+      : firstAnswer(saidScore(!x.claimBy ? 'Someone' : x.claimBy === playerId ? 'You' : nameOf(before, x.claimBy), x.scoreA ?? 0, x.scoreB ?? 0), org);
+  const done = (x: AmGame) => !!x.winner || !!x.claim;
+  if (action !== 'score') {
+    if (done(seen!)) bad('decided', standing(seen!));
+    bad('no_confirm', 'Nothing to confirm. Enter the score.');
+  }
   // Only the round being played (or one before it): a later round's score waits until its round comes.
-  if (action === 'score' && seen!.round > before.roundNow) bad('not_yet', `Round ${seen!.round} has not started. Finish Round ${before.roundNow} first.`);
-  // Yes and No, fix it answer the score the screen showed ("Is this right?"), sent back from this player's side: a score that changed since is
-  // not confirmed or replaced ("look again").
-  const shown = action === 'confirm' || action === 'fix' ? readPair({ mine: (body.shown as { mine?: unknown } | undefined)?.mine, theirs: (body.shown as { theirs?: unknown } | undefined)?.theirs }, 'mine', 'theirs') : null;
+  if (seen!.round > before.roundNow) bad('not_yet', `Round ${seen!.round} has not started. Finish Round ${before.roundNow} first.`);
   // A bad score is refused before anything is written.
-  const sent = action === 'score' || action === 'fix' ? readPair(body, 'mine', 'theirs') : null;
-  const rows = action === 'score' ? await ensureRows(ctx, t, night, ctx.nowIso) : night.games;
+  const sent = readPair(body, 'mine', 'theirs');
+  const rows = await ensureRows(ctx, t, night, ctx.nowIso);
   const row = americanoRows(rows).find((r) => r.num === num);
   if (!row) bad('tournament_changed', 'This just changed. Look again.');
   const g = fromRow(row!);
   if (pairSlot(g.a) !== pairSlot(seen!.a) || pairSlot(g.b) !== pairSlot(seen!.b)) bad('tournament_changed', 'The rounds just changed. Look again.');
   const side = sideOf(g, playerId)!;
-  const other = side === 'a' ? 'b' : 'a';
-  const stamp = row!.updated_at;
-  const run = (sql: string, ...values: unknown[]) =>
-    ctx.db.prepare(`UPDATE tournament_games SET ${sql}, updated_at = ? WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`).bind(...values, ctx.nowIso, row!.id, stamp).run();
-  const asAB = (mine: number, theirs: number): [number, number] => (side === 'a' ? [mine, theirs] : [theirs, mine]);
-  // Zip 71 (partner taps): the FIRST answer from a side counts. Once one player of a side entered the score (or said No, fix it), a second
-  // answer from that side is refused (the partner's phone shows "Vic entered 11 to 8. Waiting for Quinn, Reese or Alex to confirm."); only the
-  // one who answered may take it back. Either player on the other side says Yes or No, fix it; the organizer can always confirm or fix.
-  const org = firstName(who.group);
-  const waitWords = (x: AmGame) =>
-    waitingLine(saidScore(!x.claimBy ? 'Your side' : x.claimBy === playerId ? 'You' : nameOf(before, x.claimBy), x.scoreA ?? 0, x.scoreB ?? 0), pairNames(before, side === 'a' ? x.b : x.a), org);
-  if (!g.winner && g.claim === side) {
-    const mineClaim = !g.claimBy || g.claimBy === playerId;
-    if (action === 'score' && mineClaim && sent) {
-      const [x, y] = asAB(...sent);
-      if (x === g.scoreA && y === g.scoreB) return { ok: true, result: 'score' };
-    }
-    if (!(action === 'undo' && mineClaim)) bad('already_answered', waitWords(g));
+  const [x, y] = side === 'a' ? sent : [sent[1], sent[0]];
+  const same = (z: AmGame) => z.claimBy === playerId && z.scoreA === x && z.scoreB === y;
+  if (done(g)) {
+    if (same(g)) return { ok: true, result: 'score' };
+    bad('decided', standing(g));
   }
-  if (g.winner) {
-    if (action === 'undo') return { ok: true, result: 'nothing' };
-    // The same score again (both sides entered it): nothing to change.
-    if (action === 'confirm') return { ok: true, result: 'confirm' };
-    if (action === 'score' || action === 'fix') {
-      const [x, y] = asAB(...sent!);
-      if (x === g.scoreA && y === g.scoreB) return { ok: true, result: action };
-    }
-    bad('decided', `That score is in. Ask ${firstName(who.group)}.`);
-  }
-  let res: { meta?: { changes?: number } } | undefined;
-  let words = '';
-  if (action === 'score') {
-    const [x, y] = asAB(...sent!);
-    if (g.claim === other) {
-      // The other side already entered one: the same score is their Yes; another score waits for the screen to ask.
-      if (x === g.scoreA && y === g.scoreB) res = await run("winner = ?, disputed_at = NULL, result_at = ?, result_by = 'players'", x > y ? 'a' : 'b', ctx.nowIso);
-      else bad('already_claimed', `${nameOf(before, g.claimBy ?? '')} entered a score. Look again.`);
-    } else res = await run('claim = ?, claim_by = ?, claim_at = ?, score_a = ?, score_b = ?, disputed_at = NULL', side, playerId, ctx.nowIso, x, y);
-    words = `${pairNames(before, x > y ? g.a : g.b).join(' + ')} won ${Math.max(x, y)} to ${Math.min(x, y)}`;
-  } else if (action === 'confirm') {
-    if (g.claim !== other || g.scoreA === null || g.scoreB === null) bad('tournament_changed', 'This just changed. Look again.');
-    if (asAB(...shown!).join() !== [g.scoreA, g.scoreB].join()) bad('tournament_changed', 'The score just changed. Look again.');
-    res = await run("winner = ?, disputed_at = NULL, result_at = ?, result_by = 'players'", g.scoreA! > g.scoreB! ? 'a' : 'b', ctx.nowIso);
-    words = `${pairNames(before, g.scoreA! > g.scoreB! ? g.a : g.b).join(' + ')} won ${Math.max(g.scoreA!, g.scoreB!)} to ${Math.min(g.scoreA!, g.scoreB!)} (confirmed)`;
-  } else if (action === 'fix') {
-    if (g.claim !== other) bad('tournament_changed', 'This just changed. Look again.');
-    if (asAB(...shown!).join() !== [g.scoreA, g.scoreB].join()) bad('tournament_changed', 'The score just changed. Look again.');
-    const [x, y] = asAB(...sent!);
-    if (x === g.scoreA && y === g.scoreB) res = await run("winner = ?, disputed_at = NULL, result_at = ?, result_by = 'players'", x > y ? 'a' : 'b', ctx.nowIso);
-    else res = await run('claim = ?, claim_by = ?, claim_at = ?, score_a = ?, score_b = ?, disputed_at = ?', side, playerId, ctx.nowIso, x, y, ctx.nowIso);
-    words = `changed the score to ${Math.max(x, y)} to ${Math.min(x, y)} for ${pairNames(before, x > y ? g.a : g.b).join(' + ')}`;
-  } else {
-    if (g.claim !== side) return { ok: true, result: 'nothing' };
-    res = await run('claim = NULL, claim_by = NULL, claim_at = NULL, score_a = NULL, score_b = NULL, disputed_at = NULL');
-    words = 'took back their score';
-  }
-  if ((res?.meta?.changes ?? 0) === 0) {
-    // Two phones at once: the other one landed first. When it was the partner, say so (the waiting line), not just "look again".
+  const res = await ctx.db
+    .prepare(
+      `UPDATE tournament_games SET score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = ?, claim_at = ?, disputed_at = NULL, result_at = ?, result_by = 'players', updated_at = ?
+       WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND claim IS NULL
+         AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
+    )
+    .bind(x, y, x > y ? 'a' : 'b', playerId, ctx.nowIso, ctx.nowIso, ctx.nowIso, row!.id, row!.updated_at)
+    .run();
+  if ((res.meta?.changes ?? 0) === 0) {
+    // Two phones at once: another score landed first. The same player with the same score: it is in. Anyone else: who entered it.
     const nowRow = await ctx.db.prepare('SELECT * FROM tournament_games WHERE id = ?').bind(row!.id).first<GameRow>().catch(() => null);
     const now = nowRow ? fromRow(nowRow) : null;
-    if (now && now.claim === side && !now.winner && !now.skipped && now.claimBy && now.claimBy !== playerId) bad('already_answered', waitWords(now));
-    // The same player on two phones at once, the same score: it is in.
-    if (now && action === 'score' && sent && now.claim === side && now.claimBy === playerId && !now.winner) {
-      const [x, y] = asAB(...sent);
-      if (x === now.scoreA && y === now.scoreB) return { ok: true, result: 'score' };
-    }
+    if (now && same(now) && done(now)) return { ok: true, result: 'score' };
+    if (now && done(now)) bad('decided', standing(now));
     bad('tournament_changed', 'This just changed. Look again.');
   }
+  const words = `${pairNames(before, x > y ? g.a : g.b).join(' + ')} won ${Math.max(x, y)} to ${Math.min(x, y)}`;
   await logPlayer(ctx, who.group, playerId, 'tournament_result', { tournament: t.name, game: num, round: g.round, result: words, by: 'player' });
-  return { ok: true, result: action };
+  return { ok: true, result: 'score' };
 }
 
 /**

@@ -664,13 +664,8 @@ export interface PlayerDayGame {
   playTo: number;
   /** This team said it won and the other team has not confirmed (Undo is still possible). */
   claimed?: boolean;
-  /** The other team said it won: this player is asked to confirm. */
-  askConfirm?: boolean;
   /** The other team said "No, we won": the organizer decides. */
   disputed?: boolean;
-  /** Zip 71: a line instead of the buttons: a teammate answered first ("Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to
-   *  confirm."), or both teams say they won ("Net Ninjas and Third Shot Gang both say they won. Alex will decide."). */
-  waiting?: string;
   /** Never played (a team left). */
   skipped?: boolean;
   /** Its round is being played now: We won and "<other team> won" show on it. */
@@ -868,10 +863,6 @@ export interface PlayerRound {
   playTo: number;
   /** Their side entered the score and the other side has not said Yes yet. */
   claimed?: true;
-  /** Zip 71: the partner entered it first: "Vic entered 11 to 8. Waiting for Quinn, Reese or Alex to confirm." (no score sheet). */
-  waiting?: string;
-  /** The other side entered a score: "Is this right?" (who said it, the score from this player's side). */
-  ask?: { by: string; mine: number; theirs: number; winners: string };
   /** Never played (someone left). */
   skipped?: true;
   /** Its round is being played now: Enter score shows on it. */

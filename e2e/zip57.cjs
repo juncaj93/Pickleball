@@ -350,7 +350,7 @@ async function main() {
   const toastBox = (page) => page.locator('.pop.toast');
   await stage('game1');
   for (const scheme of SCHEMES)
-    await check(`C Game 1 (${scheme}): We won lights up, slides on, toast with Undo, sent after 5 s, Parker confirms`, async () => {
+    await check(`C Game 1 (${scheme}): We won lights up, slides on, toast with Undo, sent after 5 s, it is the result (zip 71)`, async () => {
       if (scheme === 'dark') await stage('game1');
       const v = await playerPage('Vic', { scheme, reducedMotion: 'no-preference' });
       await v.page.locator('[data-tc-day-hero]').waitFor({ timeout: 15000 });
@@ -426,14 +426,14 @@ async function main() {
       assert(stand.includes('Net Ninjas Vic + Wren 1-0'), stand);
       assert(v.errors.length === 0, v.errors.join(' | '));
       await v.ctx.close();
-      // Parker's "Did you win?" stays as it was.
-      const p = await playerPage('Parker', { scheme });
-      await p.page.locator('[data-tc-day-confirm]').waitFor({ timeout: 15000 });
-      await SH(p.page, `C-confirm-${scheme}`);
-      await p.page.locator('[data-tc-day-yes]').click();
-      await p.page.waitForTimeout(800);
+      // Zip 71, no confirming: Vic's We won is the result. Parker sees Game 1 lost, nothing to answer.
       const d = await dash();
-      assert(d.tournament.day.games[0].winner === 'a', 'confirmed');
+      assert(d.tournament.day.games[0].winner === 'a', 'the result at once');
+      const p = await playerPage('Parker', { scheme });
+      await p.page.waitForTimeout(800);
+      assert((await p.page.locator('[data-tc-day-confirm], [data-tc-day-yes]').count()) === 0, 'nothing to confirm');
+      assert(flat(await p.page.locator('[data-tc-day-game="Game 1"]').innerText()).includes('Lost'), 'Game 1 Lost');
+      await SH(p.page, `C-parker-${scheme}`);
       assert(p.errors.length === 0, p.errors.join(' | '));
       await p.ctx.close();
     });

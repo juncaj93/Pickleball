@@ -2,15 +2,15 @@
 // (src/tournament/TournamentHome.tsx), so a phone without a tournament never fetches it.
 //   Before the night: Your team, Your games (only theirs, each with its court), All teams; with pools (12 players and up), Pool A and Pool B with
 //   where each team plays the first round, and The night's times.
-//   Game night: the short card (the name, "Game 2 of 3", a slim bar), Up next with We won and "<other team> won" (a 5 second Undo, then the
-//   other team is asked), "<team> won Game 1" with Undo, the Time check, Your games, Standings (or the pools), Currently playing, and the
-//   other team's "Did you win?" sheet (Yes, they won / No, we won).
+//   Game night: the short card (the name, "Game 2 of 3", a slim bar), Up next with We won and "<other team> won" (a 5 second Undo on this
+//   phone, then it is the result: Zip 71, no confirming, the first answer from any of the 4 players counts), "<team> won Game 1" with Undo,
+//   the Time check, Your games, Standings (or the pools), Currently playing.
 // No clock times except "Game 1 begins at" (and The night's times with pools, as mock 51 draws them). Names only.
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { PlayerDayGame, PlayerDayView, PlayerTournamentView } from '../../shared/tournament';
 import { api, ApiError, storageGet, storageSet, VIEW_ONLY_MESSAGE } from '../lib';
 import { CourtMap } from '../GameDay';
-import { Sheet, useToast } from '../ui';
+import { useToast } from '../ui';
 import { AlsoNowCard, PlayoffCard, TieCard, WheelPickedCard } from './TieCards';
 import './gameday-tour.css';
 
@@ -449,11 +449,9 @@ function withHeld(day: PlayerDayView, held: Held | null): PlayerDayView {
  * Your team (pencil and dice), Your games, All teams (or the pools and the night's times).
  */
 export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentView; day: PlayerDayView; org: string; onChanged: () => Promise<unknown> }) {
-  const toast = useToast();
-  const { busy, held, hold: holdResult, send: sendBody } = useHeldResult(t, onChanged);
+  const { busy, held, hold: holdResult } = useHeldResult(t, onChanged);
   const day = withHeld(real, held);
   const [noteSeen, hideNote] = useSeen(day.partnerNote?.key ?? null);
-  const send = (num: number, action: string) => sendBody({ num, action });
   function hold(g: PlayerDayGame, action: 'won' | 'lost') {
     const mine = day.team?.name ?? 'Your team';
     const theirs = g.opponent?.name ?? 'The other team';
@@ -461,8 +459,6 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
   }
   const litGame = held?.lit ? (real.games.find((g) => g.num === held.num) ?? null) : null;
   const next = litGame ?? day.games.find((g) => g.state === 'next') ?? null;
-  const ask = day.games.find((g) => g.askConfirm) ?? null;
-  const [askSeen, setAskSeen] = useState<number | null>(null);
   const pools = day.pools;
   // Zip 58: a tie for a playoff place. Until it is spun (or picked): the standings and the tie card. Once spun: The wheel picked, the big card
   // for a team in Game A or B, and the Playoff card. A phone that did not see the spin plays it once (spun in the last 3 minutes).
@@ -496,25 +492,6 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           Paused. Hang tight.
         </p>
       )}
-      {ask && !held && (
-        <section className="tc-gd-ask" role="status" data-tc-day-ask={ask.num}>
-          <span>
-            {ask.opponent?.name} says they won {ask.label}.
-          </span>
-          <button type="button" className="tc-gd-ask-btn" onClick={() => setAskSeen(null)} data-tc-day-ask-open>
-            Answer
-          </button>
-        </section>
-      )}
-      {/* Zip 71 (partner taps): a teammate answered first. No buttons for this game on this phone, only who said it and who can confirm. */}
-      {/* Zip 71: a teammate answered first, or both teams say they won: the line, and no buttons for that game. */}
-      {real.games
-        .filter((g) => g.waiting)
-        .map((g) => (
-          <p key={g.num} className="tc-gd-ask" role="status" data-tc-day-waiting>
-            {g.waiting}
-          </p>
-        ))}
       {tiePhase === 'tie' && tie && (
         <>
           {pools ? <PoolsCards day={day} /> : <StandingsCard day={day} />}
@@ -562,21 +539,6 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
         </section>
       )}
       {tiePhase === null && pools && <NightCard day={day} />}
-      <Sheet calmFocus open={!!ask && askSeen !== ask.num && !held} title="Did you win?" onClose={() => ask && setAskSeen(ask.num)} className="tc-gd-sheet">
-        {ask && (
-          <div className="stack" data-tc-day-confirm={ask.num}>
-            <p className="tc-gd-ask-text">{ask.opponent?.name} says they beat you. Right?</p>
-            <div className="tc-gd-two">
-              <button type="button" className="btn big" disabled={busy} onClick={() => void send(ask.num, 'confirm').then((ok) => ok && toast(`${ask.opponent?.name} won ${ask.label}`))} data-tc-day-yes>
-                Yes, they won
-              </button>
-              <button type="button" className="btn big tc-gd-no" disabled={busy} onClick={() => void send(ask.num, 'dispute').then((ok) => ok && toast(`${org} will decide`))} data-tc-day-no>
-                No, we won
-              </button>
-            </div>
-          </div>
-        )}
-      </Sheet>
     </div>
   );
 }
@@ -645,7 +607,7 @@ function UpNext({
       {g.opponent ? (
         <>
           <Matchup a={{ name: mine.name, players: mine.players }} b={g.opponent} big lit={lit} />
-          {g.onNow && !(g.waiting && !lit) && (
+          {g.onNow && (
             <div className={lit === 'mine' ? 'tc-gd-next-btns tc-gd-next-lit' : lit === 'theirs' ? 'tc-gd-next-btns tc-gd-next-lost' : 'tc-gd-next-btns'}>
               <button type="button" className="tc-gd-wewon" disabled={busy || !!lit} onClick={onWon} data-tc-day-wewon>
                 {lit === 'mine' ? '✓ Let’s go!' : 'We won'}

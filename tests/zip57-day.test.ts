@@ -231,46 +231,40 @@ describe('zip 57: game night', () => {
     const nameB = d.teams.find((x: any) => x.seat === g1.b.seat).players[0].name;
     return { ctx, g1, nameA, nameB };
   }
-  it('We won counts at once; the other team is asked; Yes stands it; standings 1-0', async () => {
+  it('We won is the result at once (zip 71: no confirming); standings 1-0; the other team sees it, nothing to answer', async () => {
     const { ctx, g1, nameA, nameB } = await night();
     const before = moneyRows(ctx);
-    expect((await play(ctx, nameA, g1.num, 'won')).status).toBe(200);
-    const mine = (await card(ctx, nameA)).day;
-    expect(mine.games[0]).toMatchObject({ state: 'done', won: true, claimed: true });
-    expect(mine.standings[0].rows[0]).toMatchObject({ record: '1-0', me: true });
-    const theirs = (await card(ctx, nameB)).day;
-    expect(theirs.games[0]).toMatchObject({ askConfirm: true, won: false });
     // A player not in the game cannot answer it.
     const outsider = (await dash(ctx)).day.teams.find((x: any) => x.seat !== g1.a.seat && x.seat !== g1.b.seat).players[0].name;
-    expect((await play(ctx, outsider, g1.num, 'confirm')).status).toBe(409);
-    expect((await play(ctx, nameB, g1.num, 'confirm')).status).toBe(200);
+    expect((await play(ctx, outsider, g1.num, 'won')).status).toBe(409);
+    expect((await play(ctx, nameA, g1.num, 'won')).status).toBe(200);
+    const mine = (await card(ctx, nameA)).day;
+    expect(mine.games[0]).toMatchObject({ state: 'done', won: true });
+    expect(mine.standings[0].rows[0]).toMatchObject({ record: '1-0', me: true });
+    const theirs = (await card(ctx, nameB)).day;
+    expect(theirs.games[0]).toMatchObject({ state: 'done', won: false });
+    expect(theirs.games[0].askConfirm).toBeUndefined();
     const g = (await dash(ctx)).day.games[0];
     expect([g.winner, g.resultBy]).toEqual(['a', 'players']);
-    // Undo is gone once confirmed.
-    expect((await play(ctx, nameA, g1.num, 'undo')).data.result).toBe('nothing');
+    // Nothing to confirm, and Undo after the 5 seconds is gone (only the organizer changes it).
+    expect((await play(ctx, nameB, g1.num, 'confirm')).status).toBe(409);
+    expect((await play(ctx, nameA, g1.num, 'undo')).status).toBe(409);
     expect(moneyRows(ctx)).toBe(before);
   });
-  it('No, we won: the result counts for nobody until the organizer decides; Fix sets it', async () => {
-    const { ctx, g1, nameA, nameB } = await night();
+  it('the organizer Fix changes any result, and can clear it', async () => {
+    const { ctx, g1, nameA } = await night();
     await play(ctx, nameA, g1.num, 'won');
-    expect((await play(ctx, nameB, g1.num, 'dispute')).status).toBe(200);
-    expect((await dash(ctx)).day.games[0].disputed).toBe(true);
-    expect((await card(ctx, nameA)).day.standings[0].rows.every((r: any) => r.record === '0-0')).toBe(true);
     expect((await games(ctx, { action: 'result', num: g1.num, winner: 'b' })).status).toBe(200);
     const g = (await dash(ctx)).day.games[0];
     expect([g.winner, g.disputed, g.resultBy]).toEqual(['b', false, 'organizer']);
-    // The organizer can also clear a result.
+    expect((await card(ctx, nameA)).day.standings[0].rows.find((r: any) => r.me).record).toBe('0-1');
     expect((await games(ctx, { action: 'result', num: g1.num, winner: null })).status).toBe(200);
     expect((await dash(ctx)).day.games[0].winner).toBeNull();
   });
-  it('the losing team can say the other team won; Undo takes back our own We won', async () => {
+  it('the losing team can be first and say the other team won', async () => {
     const { ctx, g1, nameB } = await night();
     expect((await play(ctx, nameB, g1.num, 'lost')).status).toBe(200);
     expect((await dash(ctx)).day.games[0].winner).toBe('a');
-    const { ctx: c2, g1: h1, nameA: a2 } = await night();
-    await play(c2, a2, h1.num, 'won');
-    expect((await play(c2, a2, h1.num, 'undo')).status).toBe(200);
-    expect((await dash(c2)).day.games[0].claim).toBeNull();
   });
   it('results wait for the night (15 minutes before the start)', async () => {
     const ctx = await world(8);
@@ -372,7 +366,7 @@ describe('zip 57: the review fixes (playoffs after a team leaves or a result cha
     // Nothing is left waiting forever: the 3rd place game (one side never comes) counts as not played.
     expect((await dash(ctx)).day.games.find((g: any) => g.stage === 'third').skipped).toBe(true);
   });
-  it('the organizer Confirm sends what it saw: a change in between does nothing ("look again")', async () => {
+  it('the organizer Fix sends what it saw: a change in between does nothing ("look again")', async () => {
     const ctx = await world(8);
     await draftAndPublish(ctx);
     ctx.app.now = START_MS + 60_000;
@@ -380,14 +374,14 @@ describe('zip 57: the review fixes (playoffs after a team leaves or a result cha
     const g = d.games[0];
     const a = d.teams.find((x: any) => x.seat === g.a.seat).players[0].name;
     const b = d.teams.find((x: any) => x.seat === g.b.seat).players[0].name;
+    void b;
     await play(ctx, a, g.num, 'won');
-    // The organizer's screen showed "A won · Confirm"; meanwhile A undid it and B said they won.
-    await play(ctx, a, g.num, 'undo');
-    await play(ctx, b, g.num, 'won');
-    expect((await games(ctx, { action: 'result', num: g.num, winner: 'a', seen: { claim: 'a', winner: null } })).status).toBe(409);
-    expect((await dash(ctx)).day.games[0].claim).toBe('b');
+    // Zip 71, no confirming: A's We won is the result. The organizer's screen showed "A won"; meanwhile it was fixed to B (another tap).
+    expect((await games(ctx, { action: 'result', num: g.num, winner: 'b', seen: { claim: null, winner: 'a' } })).status).toBe(200);
+    expect((await games(ctx, { action: 'result', num: g.num, winner: null, seen: { claim: null, winner: 'a' } })).status).toBe(409);
+    expect((await dash(ctx)).day.games[0].winner).toBe('b');
   });
-  it('both teams agreeing never shows an error; results stop once the style is Americano', async () => {
+  it('zip 71: a second answer is refused even when it agrees (the first one is the result)', async () => {
     const ctx = await world(8);
     await draftAndPublish(ctx);
     ctx.app.now = START_MS + 60_000;
@@ -396,7 +390,10 @@ describe('zip 57: the review fixes (playoffs after a team leaves or a result cha
     const a = d.teams.find((x: any) => x.seat === g.a.seat).players[0].name;
     const b = d.teams.find((x: any) => x.seat === g.b.seat).players[0].name;
     expect((await play(ctx, b, g.num, 'lost')).status).toBe(200);
-    expect((await play(ctx, a, g.num, 'won')).status).toBe(200);
+    const r = await play(ctx, a, g.num, 'won');
+    expect(r.status).toBe(409);
+    expect(r.text).toContain(`${b} said`);
+    expect((await play(ctx, b, g.num, 'lost')).status).toBe(200);
   });
   it('the plan check card can change the courts (before the teams are published)', async () => {
     const ctx = await world(6, { courts: 2 });

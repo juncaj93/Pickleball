@@ -11,8 +11,8 @@ import './tournament-admin.css';
 
 const STAGES = [
   // Zip 71 (🎾71.teams): partner taps on game night (the first answer from a side counts) and Projected teams on the Levels card.
-  { stage: 'zip71_taps', label: 'Partner taps (start here)', line: 'Tonight, Game 1: Vic said Net Ninjas won a minute ago. View as Wren: the waiting line, no buttons. View as Parker: Did you win? Home: Waiting with Confirm.' },
-  { stage: 'zip71_am', label: 'Partner taps: Americano', line: 'Tonight, Round 1: Vic entered 11 to 8 a minute ago. View as Vic: Round 1 is With his partner; view as that partner: the waiting line, no Enter score.' },
+  { stage: 'zip71_taps', label: 'First answer counts (start here)', line: 'Tonight, Game 1, no answers yet. View as Vic: We won (5 seconds to Undo). Then view as Wren or Parker: Game 1 is in, no buttons, nothing to confirm. Home: Done, Fix.' },
+  { stage: 'zip71_am', label: 'First score counts: Americano', line: 'Tonight, Round 1, no scores yet. View as Vic: Enter score, Submit. Then view as anyone in his game: the score is in, no Enter score, no Is this right?.' },
   { stage: 'zip71_teams', label: 'Projected teams', line: 'The pictures’ 8 on the list, the vote open. Home: open the card, Edit, then the last row of Levels: Projected teams. Change a level with the pencil: the open list follows.' },
   // Zip 70 (🎾70.time): The Cold Open as it is on live ($18, credits $0, 2 courts, 7:30 to 10 PM, a Tuesday a week or more out). The format above does not apply.
   { stage: 'zip70_start', label: 'Time and Plan (start here)', line: 'Like live: 6 locked in of 8, Vic and Zoe unpaid. Home: open the card: Time 7:30 to 10 PM, Plan 8 players, You make if it fills +$6. Tap Time (move the end, Save), tap Plan (Expect, Courts, Save). View as Vic: 7:30 PM / to 10 PM on the ticket.' },
@@ -23,14 +23,14 @@ const STAGES = [
   // Zip 58 (🎾58.tourney4): ties, the Final, End tournament and the records. "The Cold Open", Locked doubles, the four teams (Net Ninjas Vic and
   // Wren, Third Shot Gang Parker and Quinn, Kitchen Crew Rowan and Zoe, Dill With It Sage and Christopher), tonight. The format above does not apply.
   { stage: 'tie3', label: 'Tie among three teams (start here)', line: 'Kitchen Crew 3-0, the other three 1-2 in a circle. Home: the wheel, tap it to spin (or view as Rowan). Then Game A and Game B to 5. View as Vic: Tied for the final, then Playoff.' },
-  { stage: 'final_on', label: 'Final', line: 'The Final (Net Ninjas vs Third Shot Gang) and 3rd place on court 2. View as Vic: We won and Also now · Court 2 · 3rd place. Then confirm it on Home.' },
+  { stage: 'final_on', label: 'Final', line: 'The Final (Net Ninjas vs Third Shot Gang) and 3rd place on court 2. View as Vic: We won and Also now · Court 2 · 3rd place. His We won is the result at once: Home shows End tournament.' },
   { stage: 'final_done', label: 'Final done: End tournament', line: 'Net Ninjas won the Final, Dill With It 3rd place. Home: Final is done, End tournament, Edit awards, Confirm winners and end.' },
   { stage: 'ended', label: 'Tournament ended', line: 'Ended by the real Confirm: Vic and Wren each have $14 credit and a medal. View as Vic: the ticker, You won The Cold Open, the medal by the name.' },
   { stage: 'history', label: 'History with tournaments', line: 'Ended, plus Summer Slam and Spring Fling. History > Tournaments; Players > Vic: TOURNAMENTS. Vic has two medals.' },
   { stage: 'am_done', label: 'Americano: last round in', line: 'Every round in, Vic first. Home: Round 6 is done, End tournament with 1st and 2nd place, Edit awards.' },
   // Zip 61 (🎾61.americano): the Americano night. "The Cold Open", Americano, all 10 names locked in, courts 1 and 2, 2.5 hours (6 rounds to 11,
   // 2 sit each round). Vic plays Rounds 1 to 3, sits Round 4, plays 5 and 6. The format above does not apply.
-  { stage: 'am_round3', label: 'Americano: Round 3 (start here)', line: 'Tonight, Round 3 on both courts; a Round 2 score still waits for a Yes (Home: Confirm). View as Vic: Enter score, Submit (the motion, Undo). Then view as one of Vic’s opponents: Is this right?' },
+  { stage: 'am_round3', label: 'Americano: Round 3 (start here)', line: 'Tonight, Round 3 on both courts; every Round 2 score is in. View as Vic: Enter score, Submit (the motion, Undo). Then view as one of Vic’s opponents: the score is in, nothing to answer.' },
   { stage: 'am_before', label: 'Americano: before the night', line: 'Two days from now. View as Vic: the ticket, then Your rounds (Round 4 is a break).' },
   { stage: 'am_round1', label: 'Americano: Round 1', line: 'Tonight, started a minute ago, nothing entered. View as Vic: Round 1 with Enter score.' },
   { stage: 'am_break', label: 'Americano: a break', line: 'Rounds 1 to 3 in, Round 4 on. View as Vic: On break until Round 5, who else sits, every court under Currently playing.' },
@@ -38,11 +38,11 @@ const STAGES = [
   { stage: 'am_switched', label: 'Americano: switched from Locked doubles', line: 'Locked doubles, 9 locked in after Pay by (Reese did not pay), two days from now: it switches to Americano. View as Vic: Tournament style is now Americano, and Your rounds.' },
   // Zip 57 (🎾57.tourney3): teams and game day. "The Cold Open", Locked doubles, 8 locked in: Net Ninjas (Vic, Wren), Dill With It (Sage,
   // Christopher), Kitchen Crew (Rowan, Zoe), Third Shot Gang (Parker, Quinn); courts 1 and 2. The format above does not apply.
-  { stage: 'day_ready', label: 'Game night, no teams yet (start here)', line: 'Tonight, started 10 minutes ago, 8 locked in. Home: Draft teams, then Publish teams. View as Vic: Game 1 with We won. View as Parker: Confirm.' },
+  { stage: 'day_ready', label: 'Game night, no teams yet (start here)', line: 'Tonight, started 10 minutes ago, 8 locked in. Home: Draft teams, then Publish teams. View as Vic: Game 1 with We won. View as Parker: Game 1 is in, nothing to confirm.' },
   { stage: 'teams_drafted', label: 'Teams drafted', line: 'The four teams drafted, not published (mock 15). Swap, rename a team, Redo the draw, Publish teams.' },
   { stage: 'teams_published', label: 'Teams published (two days before)', line: 'Published, the night two days from now. View as Vic: Your team, Your games with courts, All teams (mock 16).' },
   { stage: 'game1', label: 'Game 1', line: 'Tonight, started a minute ago, no results. View as Vic: Game 1 with We won and Third Shot Gang won (mock 17).' },
-  { stage: 'mid', label: 'Mid-tournament (running behind)', line: 'Started 45 minutes ago, 7:30 to 9:30 PM. Vic said Net Ninjas won Game 1; view as Parker to confirm (mock 19). Home: the Time check with one tap (mock 48).' },
+  { stage: 'mid', label: 'Mid-tournament (running behind)', line: 'Started 45 minutes ago, 7:30 to 9:30 PM. Vic said Net Ninjas won Game 1: it is in (view as Parker: nothing to confirm). Home: the Time check with one tap (mock 48).' },
   { stage: 'pools_done', label: 'All pool games done', line: 'Every round robin game in: final standings; the Final and the 3rd place game are set.' },
   { stage: 'backed_out', label: 'Player backed out (odd count)', line: 'Teams published, then Zoe backed out after Pay by: 7 locked in. Home: switched to Americano with Copy text for the group. Players: Tournament style is now Americano, no teams.' },
   // Zip 66 (🎾66.admincard): the organizer's card (one closed line, Votes, Not signed up) and the in-or-out alert.

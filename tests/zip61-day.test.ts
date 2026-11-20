@@ -175,7 +175,7 @@ describe('zip 61: before the night', () => {
 });
 
 describe('zip 61: game night, scores', () => {
-  it('Enter score counts at once; the partner sees it; the other side is asked "Is this right?"; Yes stands it; the table moves', async () => {
+  it('Enter score is the result at once (zip 71: no confirming); the partner and the other side see it, nothing to answer; the table moves', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS - 20 * 60_000;
     const { g, a, a2, b } = await firstGame(ctx);
@@ -193,54 +193,32 @@ describe('zip 61: game night, scores', () => {
     expect(r.status, r.text).toBe(200);
     expect(rowCount(ctx)).toBe(12);
     const mine = (await card(ctx, a2)).day;
-    expect(myRound(mine, 1)).toMatchObject({ state: 'done', won: true, claimed: true, score: { mine: 11, theirs: 8 } });
+    expect(myRound(mine, 1)).toMatchObject({ state: 'done', won: true, score: { mine: 11, theirs: 8 } });
     expect(mine.progress.label).toBe('Round 2 of 6');
     const top = mine.standings[0];
     expect([top.record, top.points]).toEqual(['1-0', 11]);
     const theirs = (await card(ctx, b)).day;
-    expect(myRound(theirs, 1)).toMatchObject({ won: false, ask: { by: a, mine: 8, theirs: 11, winners: `${g.a.names[0]} + ${g.a.names[1]}` } });
-    expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'waiting', scoreA: 11, scoreB: 8, by: a });
-    // A player not in the game cannot answer it.
-    const outsider = ALL.slice(0, 10).find((x) => ![...g.a.names, ...g.b.names].includes(x))!;
-    expect((await play(ctx, outsider, { num: g.num, action: 'confirm' })).status).toBe(409);
-    expect((await play(ctx, b, { num: g.num, action: 'confirm' })).status).toBe(200);
+    expect(myRound(theirs, 1)).toMatchObject({ state: 'done', won: false, score: { mine: 8, theirs: 11 } });
+    expect(myRound(theirs, 1).ask).toBeUndefined();
     expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'done', scoreA: 11, scoreB: 8 });
-    expect(myRound((await card(ctx, b)).day, 1).ask).toBeUndefined();
-    // Undo is gone once the other side said Yes. No money moved.
-    expect((await play(ctx, a, { num: g.num, action: 'undo' })).data.result).toBe('nothing');
+    // A player not in the game cannot answer it; nobody in it can confirm or take it back (only the organizer changes it). No money moved.
+    const outsider = ALL.slice(0, 10).find((x) => ![...g.a.names, ...g.b.names].includes(x))!;
+    expect((await play(ctx, outsider, { num: g.num, action: 'score', mine: 11, theirs: 2 })).status).toBe(409);
+    expect((await play(ctx, b, { num: g.num, action: 'confirm' })).status).toBe(409);
+    expect((await play(ctx, a, { num: g.num, action: 'undo' })).status).toBe(409);
     expect(moneyRows(ctx)).toBe(before);
     books(ctx);
   });
 
-  it('"No, fix it": their score replaces it (it counts), the side that entered first is asked, and Yes stands it', async () => {
+  it('zip 71: a second score from anyone is refused, the same or another, from either side; the first one stands', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS + 60_000;
     const { g, a, b, b2 } = await firstGame(ctx);
     expect((await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 8 })).status).toBe(200);
-    expect((await play(ctx, b, { num: g.num, action: 'fix', mine: 11, theirs: 9 })).status).toBe(200);
-    expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'changed', scoreA: 9, scoreB: 11, by: b });
-    expect(myRound((await card(ctx, b2)).day, 1)).toMatchObject({ won: true, claimed: true });
-    const back = myRound((await card(ctx, a)).day, 1);
-    expect(back.ask).toEqual({ by: b, mine: 9, theirs: 11, winners: `${g.b.names[0]} + ${g.b.names[1]}` });
-    expect((await play(ctx, a, { num: g.num, action: 'confirm' })).status).toBe(200);
-    expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'done', scoreA: 9, scoreB: 11 });
-  });
-
-  it('Undo takes back our score while the other side has not said Yes; the same score from both sides is a Yes', async () => {
-    const ctx = await world(10);
-    ctx.app.now = START_MS + 60_000;
-    const { g, a, b } = await firstGame(ctx);
-    await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 4 });
-    expect((await play(ctx, a, { num: g.num, action: 'undo' })).status).toBe(200);
-    expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'playing', scoreA: null });
-    await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 4 });
-    // The other side enters the same score: it stands.
-    expect((await play(ctx, b, { num: g.num, action: 'score', mine: 4, theirs: 11 })).status).toBe(200);
-    expect((await dash(ctx)).rounds.games[0].status).toBe('done');
-    // A different score from the other side is refused (their screen asks "Is this right?" instead).
-    const g2 = (await dash(ctx)).rounds.games[1];
-    await play(ctx, g2.a.names[0], { num: g2.num, action: 'score', mine: 11, theirs: 6 });
-    expect((await play(ctx, g2.b.names[0], { num: g2.num, action: 'score', mine: 11, theirs: 6 })).status).toBe(409);
+    expect((await play(ctx, b, { num: g.num, action: 'score', mine: 8, theirs: 11 })).status).toBe(409);
+    expect((await play(ctx, b2, { num: g.num, action: 'score', mine: 11, theirs: 9 })).status).toBe(409);
+    expect((await play(ctx, b, { num: g.num, action: 'fix', mine: 11, theirs: 9, shown: { mine: 8, theirs: 11 } })).status).toBe(409);
+    expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'done', scoreA: 11, scoreB: 8 });
   });
 
   it('bad scores are refused: a tie, a negative, over 30; and a schedule that changed in between says look again', async () => {
@@ -258,16 +236,16 @@ describe('zip 61: game night, scores', () => {
     expect(rowCount(ctx)).toBe(0);
   });
 
-  it('the organizer: Confirm, Fix with two numbers, Clear; a tap on a game that changed since does nothing', async () => {
+  it('the organizer: Fix with two numbers, Clear; a tap on a game that changed since does nothing', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS + 60_000;
     const { g, a } = await firstGame(ctx);
+    const w0 = (await dash(ctx)).rounds.games[0];
     await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 3 });
-    const w = (await dash(ctx)).rounds.games[0];
-    expect((await admin(ctx, { action: 'confirm', num: g.num, seen: w.stamp })).status).toBe(200);
+    // Zip 71: the score is in at once (nothing to confirm).
     expect((await dash(ctx)).rounds.games[0].status).toBe('done');
-    // Stale: the stamp from before the Confirm.
-    expect((await admin(ctx, { action: 'score', num: g.num, a: 9, b: 11, seen: w.stamp })).status).toBe(409);
+    // Stale: the stamp from before the player's score.
+    expect((await admin(ctx, { action: 'score', num: g.num, a: 9, b: 11, seen: w0.stamp })).status).toBe(409);
     const now = (await dash(ctx)).rounds.games[0];
     expect((await admin(ctx, { action: 'score', num: g.num, a: 9, b: 11, seen: now.stamp })).status).toBe(200);
     expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'done', scoreA: 9, scoreB: 11 });
@@ -280,14 +258,15 @@ describe('zip 61: game night, scores', () => {
     expect((await dash(ctx)).rounds.games[1].status).toBe('done');
   });
 
-  it('late: a score waiting for a Yes more than 5 minutes, and a round playing past its time, are flagged on the organizer card', async () => {
+  it('late: a round playing past its time is flagged on the organizer card (zip 71: a score in is done, never waiting)', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS + 60_000;
     const { g, a } = await firstGame(ctx);
     await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 3 });
     ctx.app.now = START_MS + 8 * 60_000;
     const d = (await dash(ctx)).rounds;
-    expect(d.games[0].late).toBe('Waiting 7 min');
+    expect(d.games[0]).toMatchObject({ status: 'done' });
+    expect(d.games[0].late).toBeUndefined();
     expect(d.games[1].late).toBeUndefined();
     ctx.app.now = START_MS + 31 * 60_000;
     expect((await dash(ctx)).rounds.games[1].late).toBe('8 min over');
@@ -494,15 +473,14 @@ describe('zip 61: the preview test page, the Americano stages', () => {
     const d = (await dash(c)).rounds;
     expect(d.round).toBe(3);
     expect(d.games.filter((g: any) => g.round === 3).map((g: any) => g.status)).toEqual(['playing', 'playing']);
-    // A Round 2 score still waits for a Yes, entered 8 minutes ago: late on the organizer's card.
-    expect(d.games.filter((g: any) => g.round === 2).map((g: any) => g.status).sort()).toEqual(['done', 'waiting']);
-    expect(d.games.find((g: any) => g.status === 'waiting').late).toBe('Waiting 8 min');
+    // Zip 71, no confirming: every Round 2 score is in (nothing waits for a Yes).
+    expect(d.games.filter((g: any) => g.round === 2).map((g: any) => g.status)).toEqual(['done', 'done']);
     expect(v.live).toHaveLength(1);
-    // Alex's taps: Vic enters the score, one of Vic's opponents is asked.
+    // Alex's taps: Vic enters the score; one of Vic's opponents sees it in (zip 71: nothing to answer).
     const mine = v.rounds[2];
     expect((await play(c, 'Vic', { num: mine.num, key: mine.key, action: 'score', mine: 11, theirs: 8 })).status).toBe(200);
     const opp = (await card(c, mine.opponents[0])).day;
-    expect(opp.rounds.find((r: any) => r.round === 3).ask).toMatchObject({ by: 'Vic', mine: 8, theirs: 11 });
+    expect(opp.rounds.find((r: any) => r.round === 3)).toMatchObject({ state: 'done', won: false, score: { mine: 8, theirs: 11 } });
     await stage('am_break');
     v = (await card(c, 'Vic')).day;
     expect(v.progress.label).toBe('Round 4 of 6');
@@ -523,21 +501,15 @@ describe('zip 61: the preview test page, the Americano stages', () => {
 });
 
 describe('zip 61: the independent review, each finding', () => {
-  it('a stale Yes: the score changed after the screen showed it, so Yes and No, fix it say look again', async () => {
+  it('zip 71: Yes and No, fix it are gone: refused with who entered the score (and a Yes with no score shown is still a bad request)', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS + 60_000;
     const { g, a, b } = await firstGame(ctx);
     await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 8 });
-    const shown = myRound((await card(ctx, b)).day, 1).ask;
-    await play(ctx, a, { num: g.num, action: 'undo' });
-    await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 1 });
-    const r = await play(ctx, b, { num: g.num, action: 'confirm', shown: { mine: shown.mine, theirs: shown.theirs } });
-    expect([r.status, r.data.message]).toEqual([409, 'The score just changed. Look again.']);
-    expect((await play(ctx, b, { num: g.num, action: 'fix', mine: 11, theirs: 9, shown: { mine: shown.mine, theirs: shown.theirs } })).status).toBe(409);
-    expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'waiting', scoreA: 11, scoreB: 1 });
-    // A Yes with no shown score is refused too.
-    const phone = await playerPhone(ctx, b);
-    expect((await phone.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num: g.num, key: myRound((await card(ctx, b)).day, 1).key, action: 'confirm' })).status).toBe(400);
+    const r = await play(ctx, b, { num: g.num, action: 'confirm', shown: { mine: 8, theirs: 11 } });
+    expect([r.status, r.data.message]).toEqual([409, `${a} entered 11 to 8. Ask Alex to fix it.`]);
+    expect((await play(ctx, b, { num: g.num, action: 'fix', mine: 11, theirs: 9, shown: { mine: 8, theirs: 11 } })).status).toBe(409);
+    expect((await dash(ctx)).rounds.games[0]).toMatchObject({ status: 'done', scoreA: 11, scoreB: 8 });
   });
 
   it('a partner\'s score never overwrites the one waiting (zip 71: not even the same score; the first answer from a side counts)', async () => {

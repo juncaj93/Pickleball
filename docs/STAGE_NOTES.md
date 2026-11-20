@@ -7114,29 +7114,29 @@ payment details for a phone with no name changed whatever the TOURNAMENTS switch
   9:50 PM (an odd count plans as Americano); Courts $120 · Tickets $144 · You +$24 ("You make if it fills +$24"); Locked in 1 of 6.
 
 
-## Zip 71: Partner taps, Projected teams, one banner (🎾71.teams), Fri Nov 20, 2026
+## Zip 71: No confirming (first answer counts), Projected teams, one banner (🎾71.teams), Fri Nov 20, 2026
 Branch `claude/new-session-pjtr6m` (the session is named "🎾71.teams"; the build system pins the branch name). Built on main `ad02027` (Zip 70 live,
 main equal to live). Same switch, TOURNAMENTS (on for everyone on live); no new switch: part 1 is a rule fix Alex decided (Nov 20), part 2 is an
 organizer-only row, part 3 a duplicate banner. **NO database change**: no table, column or migration. `tournament_games.claim_by` (from 0028, live)
 now also records who said We won in Locked doubles. No money, ticket or credit path is touched.
 
-### 1. Partner taps (found by the 🎾69 dry run)
-- The FIRST answer from a side counts, Locked doubles and Americano. Before: Vic's We won, then Wren's "<other team> won" on a phone that had not
-  refreshed overwrote it (last tap won); an Americano partner's same score went through.
-- Server (`server/tournamentDay.ts` playerGameAction, `server/americanoDay.ts` americanoGameAction): once a side has answered, a second answer from
-  that side is refused, 409 `already_answered` with the line as the message ("Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to
-  confirm." / "Vic entered 11 to 8. Waiting for Quinn, Reese or Alex to confirm."). The one who answered may repeat it (a refresh) and take it back
-  (Undo); nobody else on that side can. Either player on the other side confirms or says No (No, fix it); a fix makes the fixer's side the one
-  waiting (its partner refused, the first side asked). The organizer's Confirm and Fix are unchanged. Two phones at once: the stamp guard lets one
-  write land; the other re-reads and gets the line (or ok, when it was the same player and the same answer).
-- A disputed Locked doubles game ("No, we won"): only the organizer settles it. Every player tap on it is refused ("Net Ninjas and Third Shot Gang
-  both say they won. Alex will decide."), and all four phones show that line right above the game card, with no buttons on it. (Fresh review findings 1 and
-  2: before, the disputing team's partner could overturn the dispute with "<other team> won", and the claiming side could concede.)
-- Players' Home: the partner's line (`waiting` on the game or round, the finished words from the server, so the player download carries no new
-  wording) shows as a blue strip above the big card, and that game shows no buttons. A claim from before this zip (no claim_by) reads "Your team
-  said ...".
-- The player script grew 55 bytes gzipped; main sat 23 bytes under the 141 KB budget, so tests/zip48-split.test.ts's budget is now 141.2 KB (on
-  purpose, with the reason in the file).
+### 1. NO CONFIRMING: the first answer counts (found by the 🎾69 dry run; Alex's change, Nov 20, replaces the brief's partner-taps rule)
+- Before: Vic's We won waited for the other team's "Did you win?" (Americano: "Is this right?" / No, fix it), and a partner's later tap on a
+  phone that had not refreshed overwrote it (the last tap won).
+- Now, both styles: the FIRST answer from ANY of the 4 players in the game is the result, at once (`server/tournamentDay.ts` playerGameAction:
+  winner set, who answered in `claim_by`, result_by 'players'; `server/americanoDay.ts` americanoGameAction: the score and the winner the same
+  way). The one who answered has the 5 second Undo on their phone (nothing is sent until it runs out). A second answer from anyone is refused,
+  409 `decided`, with who answered: "Vic said Net Ninjas won. Ask Alex to fix it." / "Vic entered 11 to 8. Ask Alex to fix it." ("You said ..."
+  for the one who answered; "Alex set ..." after a Fix). The same player sending the same answer again (a refresh, two phones) is fine. The old
+  confirm, dispute, fix and undo actions are refused (409 `no_confirm` when there is no result yet). Two phones at once: the stamp guard lets one
+  write land; the other re-reads and gets who answered (or ok, when it was the same player and the same answer).
+- Gone from the players' screens: "Did you win?" (Yes, they won / No, we won), the "says they won · Answer" strip, "Is this right?" (Yes /
+  No, fix it), the "entered the score · Check" strip, the score sheet's fix mode, and the earlier draft's waiting lines. Everyone else in the game
+  sees the result on the next refresh: Game 1 Won or Lost, the next game in the big card, the standings moved.
+- The organizer: Fix and Clear as before (the Fix now also clears `claim_by`). No answer waits any more, so the night card shows no Waiting /
+  Confirm rows; that admin code stays only for a We won saved before this zip (none on live: no tournament game rows there yet), which counts as
+  the result.
+- Standings, the next game, End tournament and the motion follow the first answer at once (End tournament is still the organizer's own tap).
 - The words live in `shared/partnerTaps.ts` (server only).
 
 ### 2. Projected teams (pictures pair-01 and pair-02)
@@ -7157,8 +7157,9 @@ now also records who said We won in Locked doubles. No money, ticket or credit p
   the date card sees the style banner alone, as before.
 
 ### Preview stages (Tournament test page; preview only)
-`zip71_taps` (the calm start: tonight, Game 1, Vic's We won a minute ago), `zip71_am` (Americano Round 1, Vic entered 11 to 8), `zip71_teams` (the
-pictures' 8 and levels, the vote open). The `mid` stage now records Vic as the one who said it.
+`zip71_taps` (the calm start: tonight, Game 1 being played, no answers yet: View as Vic, We won; then Wren or Parker), `zip71_am` (Americano
+Round 1, no scores yet), `zip71_teams` (the pictures' 8 and levels, the vote open). `mid`, `am_round3` and the Final stages now write results
+the way a first answer does (no waiting answers).
 
 ### Admin speed (ADMIN SPEED RULE)
 Local, the calm world, "Fewer database trips" on (`scripts/zip68-admin-speed.ts`), before and after: dashboard 4 trips, 61 statements; the
@@ -7166,19 +7167,26 @@ Local, the calm world, "Fewer database trips" on (`scripts/zip68-admin-speed.ts`
 time 9 to 11 ms before, 8.5 to 10 ms after. Bytes the same (am_round3 +20).
 
 ### Review
-A fresh reviewer (no part in the build) read the diff with probe tests. Fixed: findings 1 and 2 above (the disputed game); a legacy claim's
-wording; the Americano line read from the held overlay; the same player on two phones; every waiting line shows (not only the first). Left as
-noted: Projected teams follows the brief (no 16 cap); a reschedule can show the style news again with a fresh date card (news repeated, never lost).
+A fresh reviewer (no part in the build) read the first draft (the partner rule with confirming) with probe tests. Its two real findings were
+in the disputed game (the disputing team's partner could overturn the dispute; the claiming side kept buttons that always failed); Alex's
+no-confirming change removes disputes altogether. Its notes on wording, the held overlay and two waiting lines went with the waiting lines.
+Left as noted: Projected teams follows the brief (no 16 cap); a reschedule can show the style news again with a fresh date card (news repeated,
+never lost).
 
 ### Tests
-- Unit: tests/zip71-partner.test.ts (12: the partner refused with the line for every action, both styles; either other player confirms; No and
-  the organizer decides; the organizer's Confirm and Fix; Undo by the one who answered, then the partner; two phones at once; a stale screen; a
-  claim from before the zip; no money moves, the books balance), tests/zip71-projected.test.ts (7: the pictures, Draft's pairing for 20 shuffles,
-  a level change, odd counts, hidden cases, who it uses at each stage, steady ties). tests/zip61-day.test.ts updated on purpose (a partner's same
-  score is now refused too).
-- Browser: e2e/zip71.cjs (A Wren's line and no buttons at 390/360/320 light and dark, Vic none, Parker asked, Home Waiting with Confirm; A2 the
-  disputed game; B the stale screen refused; C Americano; D Projected teams at 390/360/320 light and dark, fold, body font, no overlap; D the pencil
-  updates the open list with no reload; E hidden for Americano and an odd count, nothing for players; F one banner, X hides both).
+- Unit: tests/zip71-partner.test.ts (13: the first answer from any of the 4 is the result and all four phones show it with nothing to
+  confirm; a second answer from anyone, any button, refused with who answered; the same player again is fine; the losing side can be first;
+  confirm/dispute/undo with no result refused; Undo on the phone then someone else first; the organizer's Fix and Clear, then a first answer
+  again; two phones at once, both styles; an old waiting We won counts; no money moves, the books balance), tests/zip71-projected.test.ts (7).
+  Rewritten on purpose for the new rule: tests/zip57-day.test.ts (game night: We won is the result, Fix and Clear, the losing team first; the
+  review's stale Fix; a second answer refused even when it agrees), tests/zip61-day.test.ts (Enter score is the result; a second score
+  refused; Fix and Clear; late is only a round past its time; the stages; Yes and No, fix it refused), tests/zip58-stages.test.ts (the Final's
+  first answer brings End tournament). tests/zip48-split.test.ts: the player script budget 141 to 141.2 KB (the one-banner fix, about 60 bytes).
+- Browser: e2e/zip71.cjs (A Vic's We won with the 5 second Undo, then Wren, Parker and Quinn see Game 1 in with nothing to confirm, 390/360/320
+  light and dark; Home has no Confirm; A Undo sends nothing, then Parker is first; B the stale screen refused with who answered; C Americano;
+  D Projected teams at 390/360/320 light and dark, fold, body font, no overlap; D the pencil updates the open list with no reload; E hidden for
+  Americano and an odd count, nothing for players; F one banner, X hides both). e2e/zip57.cjs, e2e/zip61.cjs rewritten where they tapped Yes /
+  No; e2e/zip64.cjs follows the one-banner card.
 
 ### Preview (Fri Nov 20, 2026, about 9:40 AM Eastern)
 `pickleball-preview` (fake): Time Travel bookmark first `000001b0-00000000-00005129-188624b55f5217c7b1e310907bbcb659`; deployment `a3b0b4ba`,

@@ -9,9 +9,9 @@
  *   C  Enter score (picture 33) and the win motion (picture 36): lime "✓ Let's go!", the slide to the break card, Round 4 of 6, the Won tag,
  *      the banner with Undo and the drain line, sent after 5 seconds
  *   D  a losing score (picture 37): the white glow and "Onto the next!", the slide, the Lost tag; Undo sends nothing
- *   E  the other side (picture 34): "Is this right?", Yes, that's right; and No, fix it opens the score sheet
+ *   E  the other side (zip 71, no confirming): the score is in at once; no "Is this right?", no Enter score for that round
  *   F  a break (picture 35): the dark card, who else sits, Currently playing shows every court
- *   G  the organizer: the rounds before the night; on the night the round's scores, Confirm, Fix with two numbers, Player left, Pause
+ *   G  the organizer: the rounds before the night; on the night the round's scores, Fix with two numbers, Player left, Pause (no Confirm)
  *   H  switched from Locked doubles: "Tournament style is now Americano." and the rounds
  *   I  reduced motion (no glow, no slide), who may see it (switched off: nothing), no em dashes, nothing wider than the screen, no page errors
  * Screenshots: .data/zip61-shots (not in git).
@@ -316,7 +316,7 @@ async function main() {
       await v.page.waitForTimeout(3900);
       assert(posted === 1, `sent after 5 seconds: ${posted}`);
       const g = (await dash()).tournament.rounds.games.find((x) => x.num === r3.num);
-      assert(g.status === 'waiting' && Math.max(g.scoreA, g.scoreB) === 11 && Math.min(g.scoreA, g.scoreB) === 8 && g.by === 'Vic', JSON.stringify(g));
+      assert(g.status === 'done' && Math.max(g.scoreA, g.scoreB) === 11 && Math.min(g.scoreA, g.scoreB) === 8 && g.by === 'Vic', JSON.stringify(g));
       assert(v.errors.length === 0, v.errors.join(' | '));
       await v.ctx.close();
     });
@@ -362,34 +362,20 @@ async function main() {
     await v.ctx.close();
   });
 
-  // ---------------------------------------------------------------- E  the other side confirms
+  // ---------------------------------------------------------------- E  the other side sees it in (zip 71: no confirming)
   for (const scheme of SCHEMES)
-    await check(`E the other side (${scheme}): "Is this right?", the words, Yes, that's right; No, fix it opens the score sheet`, async () => {
+    await check(`E the other side (${scheme}): Vic's score is in at once; no "Is this right?", no Enter score for Round 3`, async () => {
       await stage('am_round3');
       const r3 = await vicRound(3);
       const sent = await postAs('Vic', '/api/tournament/game', { tournamentId: (await dash()).tournament.id, num: r3.num, key: r3.key, action: 'score', mine: 11, theirs: 8 });
       assert(sent.status === 200, sent.body);
-      const q = await playerPage(r3.opponents[0], { scheme });
-      await q.page.locator('[data-tc-day-confirm]').waitFor({ timeout: 15000 });
-      const words = flat(await q.page.locator('.tc-gd-ask-text').innerText());
-      assert(words === `Vic says Round 3 ended 11 to 8 for Vic + ${r3.partner}.`, words);
-      for (const w of SIZES) {
-        await q.page.setViewportSize({ width: w, height: 844 });
-        await fits(q.page, '[data-tc-day-confirm]');
-        await oneLine(q.page, '[data-tc-day-yes], [data-tc-day-no]');
-        await SH(q.page, `E-confirm-${w}-${scheme}`);
-      }
-      // No, fix it: the score sheet with the numbers from their side.
-      await q.page.locator('[data-tc-day-no]').click();
-      await q.page.locator('[data-tc-score-sheet]').waitFor();
-      assert((await q.page.locator('[data-tc-score-num="mine"]').inputValue()) === '8' && (await q.page.locator('[data-tc-score-num="theirs"]').inputValue()) === '11', 'their side first');
-      await q.page.keyboard.press('Escape');
-      await q.page.waitForTimeout(400);
-      await q.page.locator('[data-tc-day-ask-open]').click();
-      await q.page.locator('[data-tc-day-yes]').click();
-      await q.page.waitForTimeout(900);
       const g = (await dash()).tournament.rounds.games.find((x) => x.num === r3.num);
-      assert(g.status === 'done', `confirmed: ${g.status}`);
+      assert(g.status === 'done', `in at once: ${g.status}`);
+      const q = await playerPage(r3.opponents[0], { scheme });
+      await q.page.waitForTimeout(800);
+      assert((await q.page.locator('[data-tc-day-confirm], [data-tc-day-yes], [data-tc-day-no], [data-tc-day-ask]').count()) === 0, 'nothing to answer');
+      assert((await q.page.locator('[data-tc-round-card="3"]').count()) === 0, 'Round 3 is done on their screen');
+      await SH(q.page, `E-other-side-${scheme}`);
       assert(q.errors.length === 0, q.errors.join(' | '));
       await q.ctx.close();
     });
@@ -433,7 +419,7 @@ async function main() {
       await a.ctx.close();
     });
   for (const scheme of SCHEMES)
-    await check(`G the organizer on the night (${scheme}): Round 6 scores, Fix with two numbers, Confirm, Player left, Pause`, async () => {
+    await check(`G the organizer on the night (${scheme}): Round 6 scores, Fix with two numbers, Player left, Pause`, async () => {
       await stage('am_standings');
       const a = await adminPage({ scheme });
       await a.page.locator('[data-tm-am-night]').waitFor({ timeout: 15000 });
@@ -474,14 +460,13 @@ async function main() {
       assert(a.errors.length === 0, a.errors.join(' | '));
       await a.ctx.close();
     });
-  await check('G Confirm: a late score waiting for a Yes (Round 2) shows on the Round 3 card and stands with one tap', async () => {
+  await check('G zip 71: no score waits for a Yes, so the night card has no Confirm (Round 2 is in on the Round 3 card)', async () => {
     await stage('am_round3');
     const a = await adminPage({});
-    await a.page.locator('[data-tm-am-confirm]').first().waitFor({ timeout: 15000 });
-    await a.page.locator('[data-tm-am-confirm]').first().click();
-    await a.page.waitForTimeout(900);
+    await a.page.locator('[data-tm-am-night]').waitFor({ timeout: 15000 });
+    assert((await a.page.locator('[data-tm-am-confirm]').count()) === 0, 'no Confirm');
     const d = (await dash()).tournament.rounds;
-    assert(d.games.filter((g) => g.round === 2 && g.status === 'done').length === 2, 'the late Round 2 score confirmed');
+    assert(d.games.filter((g) => g.round === 2 && g.status === 'done').length === 2, 'Round 2 in');
     await a.ctx.close();
   });
 

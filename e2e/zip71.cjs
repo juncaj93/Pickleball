@@ -4,11 +4,10 @@
  *   node e2e/zip71.cjs
  *
  * The world is the preview's calm profile as of Thu Nov 19 2026, 10:00 AM Eastern, and the Tournament test page's Zip 71 stages.
- *   A  Locked doubles (zip71_taps): Wren sees "Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to confirm." and no buttons for Game 1;
- *      Vic does not; Parker gets Did you win?; organizer Home: Waiting with Confirm. 390/360/320, light and dark, nothing wider than the screen.
- *   B  a stale screen: Wren's phone still shows the buttons, Vic answers first, Wren's "Third Shot Gang won" is refused with the waiting line and
- *      her screen then shows it; the game is still Vic's We won.
- *   C  Americano (zip71_am): Vic's partner sees "Vic entered 11 to 8. Waiting for ... or Alex to confirm." and no Enter score for Round 1.
+ *   A  NO CONFIRMING (zip71_taps): Vic's We won (5 second Undo, then sent) is the result; Wren, Parker and Quinn see Game 1 in, no buttons,
+ *      nothing to answer; organizer Home: Done, no Confirm. Undo sends nothing, then Parker can answer first. 390/360/320, light and dark.
+ *   B  a stale screen: Parker answered first; Wren's tap is refused ("Parker said Third Shot Gang won. Ask Alex to fix it.").
+ *   C  Americano (zip71_am): Vic's score is in at once; the other three see it, no Enter score for Round 1, no "Is this right?".
  *   D  Projected teams (zip71_teams, pictures pair-01 and pair-02): the row at the bottom of Levels with 4; tap opens the pictures' list in place,
  *      tap again folds it; body font; the pencil changes Quinn's level and the open list follows with no reload; 390/360/320 light and dark.
  *   E  hidden for Americano (picked, or an odd count); players never see the row or a level.
@@ -150,98 +149,107 @@ async function main() {
     assert(w[0] <= w[1], `${what}: the page is ${w[0]} px wide on a ${w[1]} px screen`);
   };
 
-  const WREN_LINE = 'Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to confirm.';
+  const tapGame = async (who, action) => {
+    const ctx = await phone(who);
+    const tid = (await (await ctx.request.get(BASE + '/api/group')).json()).tournament.id;
+    const r = await ctx.request.post(BASE + '/api/tournament/game', { data: { tournamentId: tid, num: 1, action }, headers: { Origin: BASE } });
+    const out = { ok: () => r.ok(), status: () => r.status(), body: await r.text() };
+    out.text = async () => out.body;
+    await ctx.close();
+    return out;
+  };
+  const game1 = async () => (await call('GET', '/api/admin/dashboard')).tournament.day.games.find((g) => g.num === 1);
 
-  await check('A: Wren gets the waiting line and no buttons; Vic does not; Parker is asked; Home has Waiting with Confirm (390/360/320, light and dark)', async () => {
+  await check('A: no confirming: Vic taps We won (5 second Undo, then sent); Wren, Parker and Quinn see Game 1 in with no buttons and nothing to answer; Home has Done and Fix (390/360/320, light and dark)', async () => {
     await stage('zip71_taps');
-    for (const width of SIZES)
-      for (const scheme of SCHEMES) {
-        const w = await playerPage('Wren', { width, scheme });
-        const line = w.page.locator('[data-tc-day-waiting]');
-        assert((await line.count()) === 1, `${width} ${scheme}: one waiting line`);
-        assert(flat(await line.innerText()) === WREN_LINE, `${width} ${scheme}: the line says: ${await line.innerText()}`);
-        assert((await w.page.locator('[data-tc-day-wewon], [data-tc-day-theywon]').count()) === 0, `${width} ${scheme}: no We won buttons for Wren`);
-        await noWider(w.page, `Wren ${width} ${scheme}`);
-        await w.page.screenshot({ path: path.join(SHOTS, `A-wren-${width}-${scheme}.png`) });
-        assert(w.errors.length === 0, w.errors.join('; '));
-        await w.ctx.close();
-      }
     const v = await playerPage('Vic');
-    assert((await v.page.locator('[data-tc-day-waiting]').count()) === 0, 'Vic sees no waiting line (he answered)');
+    await v.page.locator('[data-tc-day-wewon]').click();
+    await v.page.locator('.toast-action').first().waitFor({ timeout: 3000 });
+    await v.page.waitForTimeout(6500);
+    const g = await game1();
+    assert(g.winner === 'a' && !g.claim, `the result at once: ${JSON.stringify(g)}`);
     await v.ctx.close();
-    const p = await playerPage('Parker');
-    await p.page.locator('[data-tc-day-confirm]').waitFor({ timeout: 5000 });
-    assert((await p.page.locator('[data-tc-day-waiting]').count()) === 0, 'Parker: no waiting line');
-    await p.ctx.close();
+    for (const who of ['Wren', 'Parker', 'Quinn'])
+      for (const width of SIZES)
+        for (const scheme of SCHEMES) {
+          if (who !== 'Wren' && (width !== 390 || scheme !== 'light')) continue;
+          const p = await playerPage(who, { width, scheme });
+          const row = p.page.locator('[data-tc-day-game="Game 1"]');
+          assert(flat(await row.innerText()).includes(who === 'Wren' ? 'Won' : 'Lost'), `${who}: Game 1 ${await row.innerText()}`);
+          assert((await p.page.locator('[data-tc-day-next]').getAttribute('data-tc-day-next')) !== '1', `${who}: the big card moved on from Game 1`);
+          assert((await p.page.locator('[data-tc-day-confirm], [data-tc-day-ask], [data-tc-day-yes], [data-tc-day-no], [data-tc-day-waiting]').count()) === 0, `${who}: nothing to confirm`);
+          await noWider(p.page, `${who} ${width} ${scheme}`);
+          await p.page.screenshot({ path: path.join(SHOTS, `A-${who}-${width}-${scheme}.png`) });
+          assert(p.errors.length === 0, p.errors.join('; '));
+          await p.ctx.close();
+        }
     const a = await adminHome();
-    const txt = flat(await a.page.locator('body').innerText());
-    assert(/Waiting/.test(txt) && /Confirm/.test(txt), 'organizer Home: Waiting with Confirm');
+    assert((await a.page.locator('[data-tm-confirm]').count()) === 0, 'no Confirm on Home');
+    assert(/Done/.test(flat(await a.page.locator('body').innerText())), 'Home: Done');
     await a.page.screenshot({ path: path.join(SHOTS, 'A-admin.png') });
     await a.ctx.close();
   });
 
-  await check('B: a stale screen: Wren taps after Vic answered: refused with the waiting line, and then her screen shows it', async () => {
-    await stage('game1');
+  await check('A: Undo inside the 5 seconds sends nothing, then someone else answers first', async () => {
+    await stage('zip71_taps');
+    const v = await playerPage('Vic');
+    let posted = 0;
+    v.page.on('request', (r) => r.method() === 'POST' && r.url().includes('/api/tournament/game') && posted++);
+    await v.page.locator('[data-tc-day-wewon]').click();
+    await v.page.locator('.toast-action').first().click();
+    await v.page.waitForTimeout(5800);
+    assert(posted === 0, `Undo sends nothing: ${posted}`);
+    const r = await tapGame('Parker', 'won');
+    assert(r.ok(), `Parker answers first: ${r.status()} ${await r.text()}`);
+    assert((await game1()).winner === 'b', 'Third Shot Gang won');
+    await v.ctx.close();
+  });
+
+  await check('B: a stale screen: Parker answered first; Wren still had the buttons and taps We won: refused with who answered, and her screen shows the result', async () => {
+    await stage('zip71_taps');
     const w = await playerPage('Wren');
-    await w.page.locator('[data-tc-day-theywon]').waitFor({ timeout: 5000 });
-    // Vic answers first, from his own phone.
-    const vic = await phone('Vic');
-    const r = await vic.request.post(BASE + '/api/tournament/game', { data: { tournamentId: (await (await vic.request.get(BASE + '/api/group')).json()).tournament.id, num: 1, action: 'won' }, headers: { Origin: BASE } });
-    assert(r.ok(), `Vic's We won: ${r.status()} ${await r.text()}`);
-    await w.page.locator('[data-tc-day-theywon]').click();
-    // The 5 second Undo, then the server says no.
-    const toast = w.page.getByText(WREN_LINE).first();
-    await toast.waitFor({ timeout: 12000 });
-    await w.page.locator('[data-tc-day-waiting]').waitFor({ timeout: 8000 });
-    const dash = await call('GET', '/api/admin/dashboard');
-    const g1 = dash.tournament.day.games.find((g) => g.num === 1);
-    assert(g1.claim === 'a' && !g1.winner, `still Vic's We won: ${JSON.stringify(g1)}`);
+    await w.page.locator('[data-tc-day-wewon]').waitFor({ timeout: 5000 });
+    const r = await tapGame('Parker', 'won');
+    assert(r.ok(), `Parker: ${r.status()}`);
+    await w.page.locator('[data-tc-day-wewon]').click();
+    await w.page.getByText('Parker said Third Shot Gang won. Ask Alex to fix it.').first().waitFor({ timeout: 12000 });
+    await w.page.waitForTimeout(1500);
+    assert(flat(await w.page.locator('[data-tc-day-game="Game 1"]').innerText()).includes('Lost'), 'Game 1 Lost on her screen');
+    assert((await game1()).winner === 'b', 'still Parker\'s answer');
     await w.page.screenshot({ path: path.join(SHOTS, 'B-wren-refused.png') });
     await w.ctx.close();
-    await vic.close();
   });
 
-  await check('A2: both teams say they won (Parker said No): Vic and Quinn get the line instead of the buttons; only Alex decides', async () => {
-    await stage('zip71_taps');
-    const parker = await phone('Parker');
-    const tid = (await (await parker.request.get(BASE + '/api/group')).json()).tournament.id;
-    const r = await parker.request.post(BASE + '/api/tournament/game', { data: { tournamentId: tid, num: 1, action: 'dispute' }, headers: { Origin: BASE } });
-    assert(r.ok(), `Parker's No: ${r.status()} ${await r.text()}`);
-    const both = 'Net Ninjas and Third Shot Gang both say they won. Alex will decide.';
-    for (const who of ['Vic', 'Quinn'])
-      for (const scheme of SCHEMES) {
-        const p = await playerPage(who, { scheme });
-        const line = p.page.locator('[data-tc-day-waiting]');
-        assert((await line.count()) === 1, `${who} ${scheme}: the line`);
-        assert(flat(await line.innerText()) === both, `${who} ${scheme}: ${await line.innerText()}`);
-        assert((await p.page.locator('[data-tc-day-wewon], [data-tc-day-theywon]').count()) === 0, `${who} ${scheme}: no buttons`);
-        await noWider(p.page, `${who} ${scheme}`);
-        await p.page.screenshot({ path: path.join(SHOTS, `A2-${who}-${scheme}.png`) });
-        await p.ctx.close();
-      }
-    await parker.close();
-  });
-
-  await check("C: Americano: Vic's partner sees the waiting line and no Enter score for Round 1", async () => {
+  await check('C: Americano: Vic enters 11 to 8 and it is in; his partner and both opponents see the score, no Enter score for Round 1, no Is this right?', async () => {
     await stage('zip71_am');
     const dash = await call('GET', '/api/admin/dashboard');
     const g = dash.tournament.rounds.games.find((x) => x.round === 1 && [...x.a.names, ...x.b.names].includes('Vic'));
-    const mine = g.a.names.includes('Vic') ? g.a.names : g.b.names;
-    const them = g.a.names.includes('Vic') ? g.b.names : g.a.names;
-    const partner = mine.find((n) => n !== 'Vic');
-    const want = `Vic entered 11 to 8. Waiting for ${them[0]}, ${them[1]} or Alex to confirm.`;
-    for (const scheme of SCHEMES) {
-      const p = await playerPage(partner, { scheme });
-      const line = p.page.locator('[data-tc-day-waiting]');
-      assert((await line.count()) === 1, `${scheme}: one line`);
-      assert(flat(await line.innerText()) === want, `${scheme}: ${await line.innerText()} (want ${want})`);
-      assert((await p.page.locator(`[data-tc-day-next] button:has-text("Enter score")`).count()) === 0 || !(await p.page.locator('[data-tc-day-next]').innerText()).includes('Round 1'), 'no Enter score for Round 1');
-      await p.page.screenshot({ path: path.join(SHOTS, `C-partner-${scheme}.png`) });
-      await p.ctx.close();
-    }
     const v = await playerPage('Vic');
-    assert((await v.page.locator('[data-tc-day-waiting]').count()) === 0, 'Vic: no line');
+    await v.page.locator('[data-tc-day-next] button', { hasText: 'Enter score' }).first().click();
+    await v.page.locator('[data-tc-score-sheet], .tc-gd-sheet').first().waitFor({ timeout: 5000 });
     await v.ctx.close();
+    // The sheet works as before (zip 61's checks); here the score goes in from Vic's phone as his Submit sends it.
+    const vp = await phone('Vic');
+    const day = (await (await vp.request.get(BASE + '/api/group')).json()).tournament;
+    const mine = day.day.rounds.find((r) => r.round === 1);
+    const r = await vp.request.post(BASE + '/api/tournament/game', { data: { tournamentId: day.id, num: mine.num, key: mine.key, action: 'score', mine: 11, theirs: 8 }, headers: { Origin: BASE } });
+    assert(r.ok(), `Vic's score: ${r.status()} ${await r.text()}`);
+    await vp.close();
+    for (const who of [...g.a.names, ...g.b.names].filter((n) => n !== 'Vic'))
+      for (const scheme of SCHEMES) {
+        const p = await playerPage(who, { scheme });
+        assert((await p.page.locator('[data-tc-day-confirm], [data-tc-day-ask], [data-tc-day-yes], [data-tc-day-no], [data-tc-day-waiting]').count()) === 0, `${who}: nothing to answer`);
+        assert((await p.page.locator('[data-tc-round-card="1"]').count()) === 0, `${who}: no Round 1 card`);
+        const r1 = flat(await p.page.locator('[data-tc-round="1"]').first().innerText());
+        const won = g.a.names.includes('Vic') === g.a.names.includes(who);
+        assert(r1.includes(won ? 'Won' : 'Lost'), `${who}: Round 1 ${won ? 'Won' : 'Lost'}: ${r1}`);
+        const ph = await phone(who);
+        const sc = (await (await ph.request.get(BASE + '/api/group')).json()).tournament.day.rounds.find((x) => x.round === 1).score;
+        await ph.close();
+        assert(JSON.stringify(sc) === JSON.stringify(won ? { mine: 11, theirs: 8 } : { mine: 8, theirs: 11 }), `${who}: the score ${JSON.stringify(sc)}`);
+        await p.page.screenshot({ path: path.join(SHOTS, `C-${who}-${scheme}.png`) });
+        await p.ctx.close();
+      }
   });
 
   const PICTURE = ['Sage 3.4 + Christopher Vanderberg 3.0 6.4', 'Vic 3.2 + Wren 3.2 6.4', 'Rowan 3.5 + Zoe 2.7 6.25', 'Parker 3.6 + Quinn 2.5 6.1'];

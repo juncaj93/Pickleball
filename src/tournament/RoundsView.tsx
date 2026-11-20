@@ -4,7 +4,8 @@
 // "Onto the next!" on a loss, the slide, the Undo banner).
 //   Before the night (31): Your rounds under the ticket.
 //   The night (32 to 36): the hero ("Round 3 of 6"), the VS card with Enter score (or the dark break card), the Time check, Your rounds,
-//   Standings (wins, then points), Currently playing. Enter score is 57's sheet with two numbers; the other side gets "Is this right?".
+//   Standings (wins, then points), Currently playing. Enter score is 57's sheet with two numbers; Zip 71: the first score from any
+//   of the 4 players is the result (no "Is this right?").
 // Names only. No clock times except "Begins at" on Round 1.
 import { useState } from 'react';
 import type { PlayerRound, PlayerRoundsView, PlayerTournamentView } from '../../shared/tournament';
@@ -212,17 +213,14 @@ function ScoreSheet({ r, open, start, busy, onClose, onSubmit }: { r: PlayerRoun
 
 /** Everything the Americano night shows on Home (pictures 31 to 37). */
 export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentView; day: PlayerRoundsView; onChanged: () => Promise<unknown> }) {
-  const { busy, held, hold, send } = useHeldResult(t, onChanged);
+  const { busy, held, hold } = useHeldResult(t, onChanged);
   const [score, setScore] = useState<{ mine: number; theirs: number } | null>(null);
   const shown = withHeld(real, held && score ? { ...held, ...score } : null);
   const [noteSeen, hideNote] = useSeen(shown.leftNote?.key ?? null);
   // The score sheet, held to the round it was opened for (a refresh while it is open never moves it to another round).
-  const [sheet, setSheet] = useState<{ mode: 'enter' | 'fix'; r: PlayerRound } | null>(null);
-  const [askSeen, setAskSeen] = useState<number | null>(null);
+  const [sheet, setSheet] = useState<{ r: PlayerRound } | null>(null);
   const litRound = held?.lit ? (real.rounds.find((r) => r.num === held.num) ?? null) : null;
   const next = litRound ?? shown.rounds.find((r) => r.state === 'next') ?? null;
-  const ask = shown.rounds.find((r) => r.ask && r.state === 'done') ?? null;
-  const askOpen = !!ask && askSeen !== ask.num && !held && sheet === null;
 
   function submit(r: PlayerRound, mine: number, theirs: number) {
     setSheet(null);
@@ -230,10 +228,6 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
     const won = mine > theirs;
     const winners = won ? pair('You', r.partner!) : pair(r.opponents![0], r.opponents![1]);
     hold(r.num!, won, { num: r.num, key: r.key, action: 'score', mine, theirs }, `${winners} won ${Math.max(mine, theirs)} to ${Math.min(mine, theirs)}`);
-  }
-  async function fix(r: PlayerRound, mine: number, theirs: number) {
-    setSheet(null);
-    if (await send({ num: r.num, key: r.key, action: 'fix', mine, theirs, shown: { mine: r.ask!.mine, theirs: r.ask!.theirs } })) setAskSeen(r.num);
   }
 
   if (!shown.today) {
@@ -259,28 +253,12 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
           Paused. Hang tight.
         </p>
       )}
-      {ask && !held && askSeen === ask.num && (
-        <section className="tc-gd-ask" role="status" data-tc-day-ask={ask.num}>
-          <span>{ask.ask!.by} entered the Round {ask.round} score.</span>
-          <button type="button" className="tc-gd-ask-btn" onClick={() => setAskSeen(null)} data-tc-day-ask-open>
-            Check
-          </button>
-        </section>
-      )}
-      {/* Zip 71 (partner taps): the partner entered the score first. No score sheet for this round on this phone, only the line. */}
-      {real.rounds
-        .filter((r) => r.waiting)
-        .map((r) => (
-          <p key={r.round} className="tc-gd-ask" role="status" data-tc-day-waiting>
-            {r.waiting}
-          </p>
-        ))}
       {next && (
         <Slide k={`${next.round}`}>
           {next.num === null ? (
             <BreakCard r={next} total={shown.progress.total} />
           ) : (
-            <RoundCard r={next} day={shown} busy={busy || (!!held && !litRound)} lit={litRound ? (held!.won ? 'mine' : 'theirs') : null} onEnter={() => setSheet({ mode: 'enter', r: next })} />
+            <RoundCard r={next} day={shown} busy={busy || (!!held && !litRound)} lit={litRound ? (held!.won ? 'mine' : 'theirs') : null} onEnter={() => setSheet({ r: next })} />
           )}
         </Slide>
       )}
@@ -295,45 +273,13 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
       <ScoreSheet
         r={sheet?.r ?? null}
         open={sheet !== null}
-        start={sheet?.mode === 'fix' && sheet.r.ask ? { mine: sheet.r.ask.mine, theirs: sheet.r.ask.theirs } : { mine: sheet?.r.playTo ?? 11, theirs: 0 }}
+        start={{ mine: sheet?.r.playTo ?? 11, theirs: 0 }}
         busy={busy}
         onClose={() => setSheet(null)}
         onSubmit={(mine, theirs) => {
-          if (!sheet) return;
-          if (sheet.mode === 'fix') void fix(sheet.r, mine, theirs);
-          else submit(sheet.r, mine, theirs);
+          if (sheet) submit(sheet.r, mine, theirs);
         }}
       />
-      <Sheet calmFocus open={askOpen} title="Is this right?" onClose={() => ask && setAskSeen(ask.num)} className="tc-gd-sheet">
-        {ask?.ask && (
-          <div className="stack" data-tc-day-confirm={ask.num}>
-            <p className="tc-gd-ask-text">
-              {ask.ask.by} says Round {ask.round} ended{' '}
-              <b>
-                {Math.max(ask.ask.mine, ask.ask.theirs)} to {Math.min(ask.ask.mine, ask.ask.theirs)}
-              </b>{' '}
-              for {ask.ask.winners}.
-            </p>
-            <div className="tc-gd-two">
-              <button type="button" className="btn big" disabled={busy} onClick={() => void send({ num: ask.num, key: ask.key, action: 'confirm', shown: { mine: ask.ask!.mine, theirs: ask.ask!.theirs } }).then((ok) => ok && setAskSeen(ask.num))} data-tc-day-yes>
-                Yes, that’s right
-              </button>
-              <button
-                type="button"
-                className="btn big tc-gd-no"
-                disabled={busy}
-                onClick={() => {
-                  setAskSeen(ask.num);
-                  setSheet({ mode: 'fix', r: ask });
-                }}
-                data-tc-day-no
-              >
-                No, fix it
-              </button>
-            </div>
-          </div>
-        )}
-      </Sheet>
     </div>
   );
 }
