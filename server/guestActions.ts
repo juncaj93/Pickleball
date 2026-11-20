@@ -65,7 +65,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
   assertChangeable(session, ctx.nowMs);
   const playerId = v.id(body.playerId, 'playerId');
   const name = cleanGuestName(body.name);
-  if (!name) throw new HttpError(400, 'invalid_guest_name', `Type the guest's first name (letters only, up to ${GUEST_NAME_MAX}).`);
+  if (!name) throw new HttpError(400, 'invalid_guest_name', `Type the guest’s first name (letters only, up to ${GUEST_NAME_MAX}).`);
   const roster = await loadRoster(ctx.db, session.id);
   const host = roster.find((r) => r.player_id === playerId);
   if (!host || (host.status !== 'confirmed' && host.status !== 'waitlisted')) throw new HttpError(409, 'not_in_session', 'Only someone who is in this game can bring a guest.');
@@ -265,7 +265,7 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
   const covered = isPaid ? (row.payment_amount_cents ?? 0) : seat.usedCents + seat.cashCents;
   const now = ctx.nowIso;
   const guestName = row.guest_name ?? 'Guest';
-  const label = who === 'guest' ? `${guestName} (${row.display_name}'s guest)` : row.display_name;
+  const label = who === 'guest' ? `${guestName} (${row.display_name}’s guest)` : row.display_name;
   const state = isPaid ? { host: true, guest: true } : sharesPaid(covered, price, row.guest_first === 1);
   const mine = who === 'guest' ? state.guest : state.host;
   const other = who === 'guest' ? state.host : state.guest;
@@ -292,18 +292,18 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
       // ... then held against the seat, which owes only the other share (the same move as a price going up after a payment).
       ...holdShortCashStatements(ctx.db, { sessionId: session.id, feeCents: price, nowIso: now, playerId, organizerId, seatWhere: (sp) => `${sp}.payment_updated_at = ?1` }),
     ]);
-    if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+    if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}’s payment just changed. Look again.`);
     await audit(ctx.db, group.id, session.id, 'marked_paid', { player: label, playerId, ...(who === 'guest' ? { guest: guestName } : {}), amountCents: half, share: true }, now);
     return { ok: true, changed: true };
   }
   // Unmark one person's share.
   if (!mine) return { ok: true, changed: false };
-  if (isPaid && row.self_paid_at) throw new HttpError(409, 'unconfirmed_paid', `${row.display_name} tapped I paid for both. Use Unmark on ${row.display_name}'s row.`);
+  if (isPaid && row.self_paid_at) throw new HttpError(409, 'unconfirmed_paid', `${row.display_name} tapped I paid for both. Use Unmark on ${row.display_name}’s row.`);
   if (isPaid) {
     // Paid in full: only the latest cash can come off this way (credit on the seat stays as it is; Unmark on the host's row takes all of it).
     const latestCash = (row.payment_amount_cents ?? 0) - seat.usedCents - seat.cashCents;
     if (session.finalized_at || latestCash < half)
-      throw new HttpError(409, 'use_host_unmark', `Part of this was paid with credit${session.finalized_at ? ', or the game is finalized' : ''}. Use Unmark on ${row.display_name}'s row.`);
+      throw new HttpError(409, 'use_host_unmark', `Part of this was paid with credit${session.finalized_at ? ', or the game is finalized' : ''}. Use Unmark on ${row.display_name}’s row.`);
     const out = await ctx.db.batch([
       ctx.db
         .prepare(
@@ -315,7 +315,7 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
         .bind(now, half, session.id, playerId, row.payment_amount_cents ?? 0, who === 'host' ? 1 : 0),
       ...holdShortCashStatements(ctx.db, { sessionId: session.id, feeCents: price, nowIso: now, playerId, organizerId, seatWhere: (sp) => `${sp}.payment_updated_at = ?1` }),
     ]);
-    if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+    if (out[0].meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}’s payment just changed. Look again.`);
   } else if (seat.cashCents > 0 && seat.usedCents === 0) {
     // One share held as cash: it goes (the payment never happened). The pot does not change (the pair nets to nothing).
     const out = await ctx.db.batch([
@@ -328,10 +328,10 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
         .bind(now, session.id, playerId),
       ctx.db.prepare('UPDATE session_players SET guest_first = NULL, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3').bind(now, session.id, playerId),
     ]);
-    if (out[0].meta.changes === 0) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+    if (out[0].meta.changes === 0) throw new HttpError(409, 'changed', `${row.display_name}’s payment just changed. Look again.`);
   } else {
     // Credit on the seat (used at sign-up, or with Use credit): the ordinary Unmark on the host's row puts it back in the pot.
-    throw new HttpError(409, 'use_host_unmark', `That share was paid with credit. Use Unmark on ${row.display_name}'s row.`);
+    throw new HttpError(409, 'use_host_unmark', `That share was paid with credit. Use Unmark on ${row.display_name}’s row.`);
   }
   await audit(ctx.db, group.id, session.id, 'marked_unpaid', { player: label, playerId, ...(who === 'guest' ? { guest: guestName } : {}), amountCents: half, share: true }, now);
   return { ok: true, changed: true };

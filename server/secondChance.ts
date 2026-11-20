@@ -317,7 +317,7 @@ export async function secondChanceAction(
   }
   if (moved) {
     const clash = await ctx.db.prepare('SELECT 1 AS x FROM sessions WHERE group_id = ? AND starts_at = ? AND id <> ?').bind(group.id, newStart, session.id).first();
-    if (clash) throw new HttpError(409, 'time_taken', "There's already a game at that time. Pick another time.");
+    if (clash) throw new HttpError(409, 'time_taken', "There’s already a game at that time. Pick another time.");
   }
   // Booking hours on: the move goes FIRST, while the game is still canceled (one all-or-nothing save: refused means nothing changed, the
   // game stays canceled and no money moves), then the reopen. A reopen that does not go through puts the original time back.

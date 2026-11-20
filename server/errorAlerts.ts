@@ -284,7 +284,7 @@ export async function errorAlertTest(ctx: Ctx) {
   if (Date.now() - lastTestAt < 10_000) throw new HttpError(429, 'too_fast', 'Sent a moment ago. Check Telegram.');
   lastTestAt = Date.now();
   const adminUrl = adminUrlOf(ctx.env, ctx.url);
-  if (!(await sendErrorTelegram(ctx.env, adminUrl, errorText.test(adminUrl)))) throw new HttpError(502, 'telegram_failed', "Telegram didn't take it. Try again in a minute.");
+  if (!(await sendErrorTelegram(ctx.env, adminUrl, errorText.test(adminUrl)))) throw new HttpError(502, 'telegram_failed', "Telegram didn’t take it. Try again in a minute.");
   return { ok: true };
 }
 

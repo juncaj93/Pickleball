@@ -26,7 +26,7 @@ const byWhen = (iso: string, tz: string, nowMs: number) => (dayGap(iso, tz, nowM
 /** "tomorrow's game", "tonight's game", "today's game", or "the Tue Nov 17 game". */
 export function whichGame(iso: string, tz: string, nowMs: number): string {
   const w = dayWordR2(iso, tz, nowMs);
-  return w === 'tomorrow' || w === 'tonight' || w === 'today' ? `${w}'s game` : `the ${w} game`;
+  return w === 'tomorrow' || w === 'tonight' || w === 'today' ? `${w}’s game` : `the ${w} game`;
 }
 
 /** 4 or more in: is everyone still in, is anyone else in. Opens with no recipients (the group chat). */

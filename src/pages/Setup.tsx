@@ -29,7 +29,7 @@ export function SetupPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (pin !== pin2) return setError("The two PINs don't match.");
+    if (pin !== pin2) return setError("The two PINs don’t match.");
     const filled = players.filter((p) => p.name.trim());
     if (filled.length === 0) return setError('Add at least one player.');
     const weeks = parseWhole(horizonWeeks, 1, 12);
@@ -63,7 +63,7 @@ export function SetupPage() {
             <h2>Share this link with your players</h2>
             <p className="muted">Anyone with this link can see the schedule and pick a name, so share it only with the group.</p>
             <code className="link">{done}</code>
-            <button className="btn" onClick={async () => toast((await copyText(done)) ? 'Link copied' : "Couldn't copy")}>
+            <button className="btn" onClick={async () => toast((await copyText(done)) ? 'Link copied' : "Couldn’t copy")}>
               Copy player link
             </button>
           </div>
@@ -98,7 +98,7 @@ export function SetupPage() {
 
           <div className="card stack">
             <h2>Organizer PIN</h2>
-            <p className="small muted">6 to 12 digits. Only you use it. It's stored scrambled (hashed), so nobody can read it back, including you.</p>
+            <p className="small muted">6 to 12 digits. Only you use it. It’s stored scrambled (hashed), so nobody can read it back, including you.</p>
             <label className="field">
               PIN
               <input type="password" inputMode="numeric" autoComplete="new-password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} maxLength={12} required />
@@ -146,7 +146,7 @@ export function SetupPage() {
           </div>
 
           {error && (
-            <Notice tone="danger" title="Can't finish setup">
+            <Notice tone="danger" title="Can’t finish setup">
               {error}
             </Notice>
           )}

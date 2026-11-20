@@ -160,7 +160,7 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
         role="button"
         tabIndex={0}
         aria-expanded="false"
-        aria-label={`${date}, ${canceled ? 'canceled' : `${countText(names.length, cleanup ? Number.POSITIVE_INFINITY : ctx.d.group.settings.maxPlayers)}, ${SWITCH_LABEL[switchValue]}`}${mine ? ", you're in" : ''}. Open.`}
+        aria-label={`${date}, ${canceled ? 'canceled' : `${countText(names.length, cleanup ? Number.POSITIVE_INFINITY : ctx.d.group.settings.maxPlayers)}, ${SWITCH_LABEL[switchValue]}`}${mine ? ", you’re in" : ''}. Open.`}
         data-session={s.id}
         data-court={court.kind}
         data-switch={switchValue}

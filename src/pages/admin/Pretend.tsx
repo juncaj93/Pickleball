@@ -56,7 +56,7 @@ export function PretendPicker({ d, onPicked }: { d: AdminDashboard; onPicked: ()
   const typed = fromLocalInputValue(value, tz);
   return (
     <section className="stack pretend-pick" aria-labelledby="pretend-title">
-      <h3 id="pretend-title">Pretend it's…</h3>
+      <h3 id="pretend-title">Pretend it’s…</h3>
       <p className="small muted">Taps work, nothing is saved. Ends in 30 minutes.</p>
       {game && (
         <>

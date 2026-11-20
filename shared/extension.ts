@@ -117,8 +117,8 @@ export function extApplied(r: Partial<ExtSeat>): number {
 /** "tonight's game" (same evening), "yesterday's game" (the next day), else "the Nov 10 game". */
 export function gameWhenWords(gameStartIso: string, nowMs: number, tz: string): string {
   const d = dayDiff(gameStartIso, nowMs, tz);
-  if (d <= 0) return "tonight's game";
-  if (d === 1) return "yesterday's game";
+  if (d <= 0) return "tonight’s game";
+  if (d === 1) return "yesterday’s game";
   return `the ${formatMonthDay(gameStartIso, tz)} game`;
 }
 
@@ -133,8 +133,8 @@ function dayDiff(gameStartIso: string, nowMs: number, tz: string): number {
 /** The short form the alerts use (Alex, after the preview: two lines at the money card's size): "tonight's extra 30 min", "the extra 1 hr on Nov 10". */
 export function extraWhenWords(gameStartIso: string, minutes: number, nowMs: number, tz: string): string {
   const d = dayDiff(gameStartIso, nowMs, tz);
-  if (d <= 0) return `tonight's extra ${extraWords(minutes)}`;
-  if (d === 1) return `yesterday's extra ${extraWords(minutes)}`;
+  if (d <= 0) return `tonight’s extra ${extraWords(minutes)}`;
+  if (d === 1) return `yesterday’s extra ${extraWords(minutes)}`;
   return `the extra ${extraWords(minutes)} on ${formatMonthDay(gameStartIso, tz)}`;
 }
 
@@ -182,9 +182,9 @@ export function extAlerts(shares: ExtShareView[], nowMs: number, tz: string): Ex
     const ids = owing.map((s) => s.sessionId);
     if (owing.length === 1) {
       const s = owing[0];
-      out.push({ kind: 'owe', sessionIds: ids, cents, text: { before: 'You owe ', amount: formatPrice(cents), after: ` for ${extraWhenWords(s.startsAt, s.minutes, nowMs, tz)}. It's added to your next game.` } });
+      out.push({ kind: 'owe', sessionIds: ids, cents, text: { before: 'You owe ', amount: formatPrice(cents), after: ` for ${extraWhenWords(s.startsAt, s.minutes, nowMs, tz)}. It’s added to your next game.` } });
     } else {
-      out.push({ kind: 'owe', sessionIds: ids, cents, text: { before: 'You owe ', amount: formatPrice(cents), after: " for extra time on past games. It's added to your next game." } });
+      out.push({ kind: 'owe', sessionIds: ids, cents, text: { before: 'You owe ', amount: formatPrice(cents), after: " for extra time on past games. It’s added to your next game." } });
     }
   }
   return out;

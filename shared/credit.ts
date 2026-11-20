@@ -312,7 +312,7 @@ export function unconfirmedPaidWarning(names: string[]): string | null {
 
 /** Why Reopen waits: a pending refund request is holding credit this game gave back. */
 export const reopenRequestedReason = (names: string[]) =>
-  `Can't reopen: ${names.join(' and ')} asked for this credit back. Answer the cash out request on Home first.`;
+  `Can’t reopen: ${names.join(' and ')} asked for this credit back. Answer the cash out request on Home first.`;
 
 // ---------- What a player reads when their money moves (Oct 31, 2026) ----------
 // Nothing happens to a player's money without the screen saying so in plain words.

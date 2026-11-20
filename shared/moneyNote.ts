@@ -56,7 +56,7 @@ export function moneyNoteText(f: MoneyNoteFacts): string {
     case 'moved':
       return `${f.day ?? 'The'}${f.day ? "'s" : ''} game moved. Your late drop is cleared.`;
     case 'back_in':
-      return "You're back in. Your late drop is cleared.";
+      return "You’re back in. Your late drop is cleared.";
   }
 }
 

@@ -203,7 +203,7 @@ export function LevelList({
  */
 export function VoteList({ value, onPick }: { value: FormatVote; onPick: (v: FormatVote) => void }) {
   return (
-    <div className="tm-levels tm-votes" role="radiogroup" aria-label="Format you'd like" data-tm-votes>
+    <div className="tm-levels tm-votes" role="radiogroup" aria-label="Format you’d like" data-tm-votes>
       {VOTE_ROWS.map((r) => (
         <button key={r.vote} type="button" role="radio" aria-checked={value === r.vote} className={`tm-level${value === r.vote ? ' tm-level-on' : ''}`} data-vote={r.vote} onClick={() => onPick(r.vote)}>
           <span className="tm-vote-text">

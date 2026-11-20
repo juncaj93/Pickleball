@@ -148,7 +148,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
       await ctx.reload();
       toast(`${label}: ready`);
     } catch {
-      toast("That didn't work. Try again.", 'error');
+      toast("That didn’t work. Try again.", 'error');
     } finally {
       setBusy(null);
     }
@@ -161,7 +161,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
       await ctx.reload();
       toast(visibility === 'all' ? 'Everyone can see it' : 'Only you can see it');
     } catch {
-      toast("That didn't work. Try again.", 'error');
+      toast("That didn’t work. Try again.", 'error');
     } finally {
       setBusy(null);
     }

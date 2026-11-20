@@ -34,7 +34,7 @@ export type StatusLabel =
   | 'on_track';
 
 export const STATUS_TEXT: Record<StatusLabel, string> = {
-  court_not_opened: "Court didn't open",
+  court_not_opened: "Court didn’t open",
   court_waitlist: 'Waiting on the court',
   canceled: 'Canceled',
   completed: 'Played',

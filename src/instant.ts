@@ -238,7 +238,7 @@ export function drawPatches<T>(data: T, patches: ((d: T) => T)[]): T {
 /** Plain words for a failed save: the server's own reason when it gave one, else a short "nothing changed". */
 export function failureWords(err: unknown, what?: string): string {
   const e = err as { status?: number; message?: string } | null;
-  if (e && e.status === 0) return what ? `No signal. ${what} didn't save, nothing changed.` : 'No signal. Nothing changed.';
+  if (e && e.status === 0) return what ? `No signal. ${what} didn’t save, nothing changed.` : 'No signal. Nothing changed.';
   if (e && typeof e.status === 'number' && e.status >= 400 && e.status < 500 && e.message) return e.message;
-  return what ? `${what} didn't save. Nothing changed.` : "Couldn't save, nothing changed";
+  return what ? `${what} didn’t save. Nothing changed.` : "Couldn’t save, nothing changed";
 }

@@ -116,7 +116,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
       },
       (r: { result: string; creditUsedCents: number; dueCents: number }) => {
         const used = r.creditUsedCents > 0 ? ` ${formatPrice(r.creditUsedCents)} credit used.` : '';
-        if (r.result === 'locked') return `You're locked in.${used}`;
+        if (r.result === 'locked') return `You’re locked in.${used}`;
         if (r.result === 'held') return `Your spot is held.${used}`;
         return r.creditUsedCents > 0 ? `${formatPrice(r.creditUsedCents)} credit used. ${formatPrice(r.dueCents)} left to pay.` : `Pay ${org} ${formatPrice(r.dueCents)}`;
       },
@@ -147,7 +147,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
   }
 
   async function joinWaitlist() {
-    const ok = await run(() => api('POST', '/api/tournament/waitlist', { tournamentId: t.id }), "You're on standby");
+    const ok = await run(() => api('POST', '/api/tournament/waitlist', { tournamentId: t.id }), "You’re on standby");
     if (ok) setSheet('overlay');
   }
 
@@ -172,7 +172,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         <div className="tc-strip" role="note" data-tc-strip>
           <div className="tc-strip-text">
             <p className="tc-strip-title">Only you can see this</p>
-            <p className="tc-strip-sub">Players don't see {theName(t.name)} yet.</p>
+            <p className="tc-strip-sub">Players don’t see {theName(t.name)} yet.</p>
           </div>
           <button type="button" className="btn" onClick={() => setAskShow(true)} data-tc-show>
             Show to everyone
@@ -207,7 +207,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
             onHold={() => void lock('hold')}
             onKeep={() => {
               setSheet(null);
-              toast("You're on standby");
+              toast("You’re on standby");
             }}
           />
         </Sheet>
@@ -236,7 +236,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
           const save = () => api('POST', '/api/tournament/signup', { tournamentId: t.id, level, dates, ...(vote ? { formatVote: vote } : {}) });
           // Reduced motion: no punch, straight to "You're on the list" (the toast and the card).
           if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            const ok = await run(save, "You're on the list");
+            const ok = await run(save, "You’re on the list");
             if (ok) setSheet(null);
             return;
           }
@@ -295,11 +295,11 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
             // Zip 70: what this sheet said about the money; the server refuses if the rule now says the other (someone else dropped first).
             () => api('POST', '/api/tournament/back-out', { tournamentId: t.id, ...(k ? { backCents, keeps } : {}) }),
             (r: { creditBackCents?: number; creditReturnedCents?: number; waitingCents?: number; keptCents?: number }) => {
-              if ((r?.keptCents ?? 0) > 0) return "You're off the list. No credit back unless someone takes your spot.";
+              if ((r?.keptCents ?? 0) > 0) return "You’re off the list. No credit back unless someone takes your spot.";
               const back = (r?.creditBackCents ?? 0) + (r?.creditReturnedCents ?? 0);
-              if ((r?.waitingCents ?? 0) > 0) return `You're off the list. Your ${formatPrice((r.waitingCents ?? 0) + back)} comes back as credit.`;
-              if (back > 0) return (r.creditBackCents ?? 0) > 0 ? `You're off the list. ${formatPrice(back)} back as credit.` : `You're off the list. ${formatPrice(back)} credit returned.`;
-              return "You're off the list";
+              if ((r?.waitingCents ?? 0) > 0) return `You’re off the list. Your ${formatPrice((r.waitingCents ?? 0) + back)} comes back as credit.`;
+              if (back > 0) return (r.creditBackCents ?? 0) > 0 ? `You’re off the list. ${formatPrice(back)} back as credit.` : `You’re off the list. ${formatPrice(back)} credit returned.`;
+              return "You’re off the list";
             },
           );
           if (ok) {
@@ -819,7 +819,7 @@ function WhoIn({ t }: { t: PlayerTournamentView }) {
   const canLock = ticketStateOf(t) === 'lock';
   const all = [...rows.gold.map((p) => ({ ...p, gold: true })), ...rows.rest.map((p) => ({ ...p, gold: false }))];
   return (
-    <section className="tc-tw-card" aria-label="Who's in" data-tw-in>
+    <section className="tc-tw-card" aria-label="Who’s in" data-tw-in>
       <div className="tc-tw-head">
         <h3 className="tc-tw-label">Who’s in</h3>
       </div>
@@ -1053,7 +1053,7 @@ function EditSheet({
 
 function WhoSheet({ t, open, onClose }: { t: PlayerTournamentView; open: boolean; onClose: () => void }) {
   return (
-    <Sheet calmFocus open={open} title="Who's signed up" onClose={onClose} className="tm-sheet">
+    <Sheet calmFocus open={open} title="Who’s signed up" onClose={onClose} className="tm-sheet">
       <ol className="tm-who" aria-label="Signed up">
         <li className="tm-who-head" aria-hidden="true">
           <span className="tm-head-label">Signed up</span>

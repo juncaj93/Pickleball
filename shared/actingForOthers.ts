@@ -109,7 +109,7 @@ function usualName(counts: Map<string, { name: string; n: number }>, total: numb
 
 /** The note History adds to a flagged line: "from Mitchel's phone" or "from a new phone". */
 export function fromNote(f: From): string {
-  return f.kind === 'phone' ? `from ${f.name}'s phone` : 'from a new phone';
+  return f.kind === 'phone' ? `from ${f.name}’s phone` : 'from a new phone';
 }
 
 /** The verb on the Home card: "Mitchel signed up for Brandon", "A new phone marked paid for Nathan". */

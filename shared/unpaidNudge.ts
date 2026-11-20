@@ -112,7 +112,7 @@ export function oweLine(due: readonly { startsAt: string; amountCents: number }[
 /** The toast after I'm in with 1 or 2 unpaid games. */
 export function nudgeToast(count: number, cents: number): { title: string; sub: string } {
   return {
-    title: "You're in!",
+    title: "You’re in!",
     sub: count === 1 ? `Please pay the ${formatPrice(cents)} you still owe for your previous game.` : `Please pay the ${formatPrice(cents)} you still owe for your ${count} previous games.`,
   };
 }
@@ -121,14 +121,14 @@ export function nudgeToast(count: number, cents: number): { title: string; sub: 
 export function blockSheet(count: number, cents: number): { title: string; line: string; pay: string } {
   return {
     title: `You owe ${formatPrice(cents)}`,
-    line: `For your last ${count} games. Once it's paid, you can sign up again.`,
+    line: `For your last ${count} games. Once it’s paid, you can sign up again.`,
     pay: `Pay ${formatPrice(cents)}`,
   };
 }
 
 /** The server's refusal, word for word (a phone with an old screen shows it as the toast). */
 export function blockedMessage(count: number, cents: number): string {
-  return `You owe ${formatPrice(cents)} for your last ${count} games. Once it's paid, you can sign up again.`;
+  return `You owe ${formatPrice(cents)} for your last ${count} games. Once it’s paid, you can sign up again.`;
 }
 
 /** The refusal's code (the screen opens the sheet when it sees it). */

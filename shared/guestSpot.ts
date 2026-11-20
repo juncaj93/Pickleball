@@ -168,15 +168,15 @@ export function hostDropText(
   moneyLine = '',
 ): string {
   if (!late) return `Your guest ${guest} drops out too. Both spots open up for someone else.${moneyLine}`;
-  if (late.spots <= 0) return `Your guest ${guest} drops out too. Both spots open up. You don't owe anything because the game still has 4 players.${moneyLine}`;
+  if (late.spots <= 0) return `Your guest ${guest} drops out too. Both spots open up. You don’t owe anything because the game still has 4 players.${moneyLine}`;
   // Zip 76: already paid: the money stays on the game, nothing more is owed.
   if (late.spots === 1)
     return late.paid
-      ? `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your spot.${late.backCents ? ` Your guest's ${fmt(late.backCents)} comes back as credit.` : " Your guest's spot isn't needed."}`
-      : `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your spot, you still owe ${fmt(late.owesCents)}. Your guest's spot isn't needed.`;
+      ? `It’s past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your spot.${late.backCents ? ` Your guest’s ${fmt(late.backCents)} comes back as credit.` : " Your guest’s spot isn’t needed."}`
+      : `It’s past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your spot, you still owe ${fmt(late.owesCents)}. Your guest’s spot isn’t needed.`;
   return late.paid
-    ? `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your 2 spots.`
-    : `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your 2 spots, you still owe ${fmt(late.owesCents)}.`;
+    ? `It’s past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your 2 spots.`
+    : `It’s past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your 2 spots, you still owe ${fmt(late.owesCents)}.`;
 }
 
 /**
@@ -186,9 +186,9 @@ export function hostDropText(
 export function removeGuestText(guest: string, guestShareCents: number, paid: boolean, fmt: (cents: number) => string, late: { cancelBy: string } | null = null): string {
   if (late)
     return paid
-      ? `It's past the ${late.cancelBy} cancel-by and the game would drop below 4. ${guest}'s ${fmt(guestShareCents)} stays on this game unless someone takes the spot.`
-      : `It's past the ${late.cancelBy} cancel-by and the game would drop below 4. If no one takes ${guest}'s spot, you still owe ${fmt(guestShareCents)}.`;
-  return paid ? `${guest} comes off your tab. ${guest}'s ${fmt(guestShareCents)} goes to your credit.` : `${guest} comes off your tab. You owe ${fmt(guestShareCents)} less.`;
+      ? `It’s past the ${late.cancelBy} cancel-by and the game would drop below 4. ${guest}’s ${fmt(guestShareCents)} stays on this game unless someone takes the spot.`
+      : `It’s past the ${late.cancelBy} cancel-by and the game would drop below 4. If no one takes ${guest}’s spot, you still owe ${fmt(guestShareCents)}.`;
+  return paid ? `${guest} comes off your tab. ${guest}’s ${fmt(guestShareCents)} goes to your credit.` : `${guest} comes off your tab. You owe ${fmt(guestShareCents)} less.`;
 }
 
 /**
@@ -203,7 +203,7 @@ export function guestLine(list: readonly { name: string; guestOf?: string }[]): 
   list.forEach((p, i) => {
     const prev = list[i - 1];
     const paired = !!p.guestOf && !!prev && !prev.guestOf && prev.name === p.guestOf;
-    names.push(p.guestOf && !paired ? `${p.name} (${p.guestOf}'s guest)` : p.name);
+    names.push(p.guestOf && !paired ? `${p.name} (${p.guestOf}’s guest)` : p.name);
     guestAt.push(paired);
   });
   return { names, guestAt };
@@ -272,6 +272,6 @@ export function whoPlayedNotes(
   };
   return pairs.flatMap((p) =>
     // (The organizer pays the venue, never the group: no "owes" for them.)
-    !p.hostPlayed ? [`${p.host} didn't play, so ${p.guest} didn't either.${p.organizer ? '' : owes(p.host)}`] : p.guestOut ? [`${p.guest} didn't play. ${p.host} pays for 1 share.`] : [],
+    !p.hostPlayed ? [`${p.host} didn’t play, so ${p.guest} didn’t either.${p.organizer ? '' : owes(p.host)}`] : p.guestOut ? [`${p.guest} didn’t play. ${p.host} pays for 1 share.`] : [],
   );
 }

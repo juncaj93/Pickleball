@@ -27,7 +27,7 @@ export const MAX_ALERTS_PER_HOUR = 20;
 export const MAX_PLAYER_ALERTS_PER_HOUR = 15;
 const SEND_TIMEOUT_MS = 5000;
 /** What deliver() says when Telegram took too long: the message may still have arrived. */
-export const TIMEOUT_ERROR = "Telegram didn't answer in time.";
+export const TIMEOUT_ERROR = "Telegram didn’t answer in time.";
 /** How deliver() starts its message when the hour's alert limit is used up (nothing went to Telegram). */
 export const PAUSED_PREFIX = 'Paused:';
 const HOUR_MS = 3600_000;
@@ -147,7 +147,7 @@ async function takeSlot(ctx: Ctx, max: number, fromPlayer: boolean): Promise<boo
 /** Plain words for what went wrong. Never includes the token. */
 function telegramProblem(status: number, description: string): string {
   if (status === 401 || status === 404) return 'Telegram refused the bot token. Check TELEGRAM_BOT_TOKEN on Cloudflare.';
-  if (status === 403) return "The bot can't message you yet. Open the bot in Telegram and tap Start.";
+  if (status === 403) return "The bot can’t message you yet. Open the bot in Telegram and tap Start.";
   if (status === 400 && /chat not found/i.test(description)) return 'Telegram could not find your chat. Check TELEGRAM_CHAT_ID on Cloudflare.';
   if (status === 429) return 'Telegram asked us to slow down. Try again in a minute.';
   return `Telegram said no (error ${status}).`;
@@ -177,7 +177,7 @@ async function sendTelegram(env: Env, siteUrl: string, text: string, links: bool
     });
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-    return { ok: false, error: timedOut ? TIMEOUT_ERROR : "Couldn't reach Telegram." };
+    return { ok: false, error: timedOut ? TIMEOUT_ERROR : "Couldn’t reach Telegram." };
   }
   if (res.ok) return { ok: true };
   const data = (await res.json().catch(() => ({}))) as { description?: unknown };

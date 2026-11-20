@@ -707,7 +707,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
       const { results: waiting } = await ctx.db
         .prepare(`SELECT p.display_name AS name FROM session_players u JOIN players p ON p.id = u.player_id WHERE ${unconfirmedShort.replace(/^SELECT 1 FROM session_players u WHERE /, '')} ORDER BY p.display_name`)
         .all<{ name: string }>();
-      if (waiting.length) throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${waiting.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+      if (waiting.length) throw new HttpError(409, 'unconfirmed_paid', `Can’t reopen: ${waiting.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
     }
     const reopened = `(SELECT canceled_at FROM sessions WHERE id = ${sqlText(session.id)}) IS NULL AND (SELECT updated_at FROM sessions WHERE id = ${sqlText(session.id)}) = ${sqlText(ctx.nowIso)}`;
     const [opened] = await ctx.db.batch([
@@ -1315,7 +1315,7 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileC
       await move.run();
     }
   } catch (err) {
-    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'time_taken', "There's already a session at that time.");
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'time_taken', "There’s already a session at that time.");
     throw err;
   }
   await audit(ctx.db, group.id, session.id, 'session_rescheduled', { from: session.starts_at, to: startsAt }, ctx.nowIso);
@@ -1637,7 +1637,7 @@ export async function applyPayment(
       // the screen showed is the confirm itself. Nothing to change, not an error. Anything else: look again.
       const onlyConfirmed = paid && !row.self_paid_at && row.status === 'confirmed' && row.payment_status === 'paid' && !row.refunded_at && summary(true) === seen;
       if (onlyConfirmed) return { ok: true, changed: false };
-      throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+      throw new HttpError(409, 'changed', `${row.display_name}’s payment just changed. Look again.`);
     }
   }
 
@@ -1717,7 +1717,7 @@ export async function applyPayment(
           .bind(session.id, playerId)
           .first<{ status: string; payment_status: string; refunded_at: string | null; self_paid_at: string | null }>();
         if ((now?.status === 'confirmed' || fee) && now?.payment_status === 'paid' && !now.refunded_at && !now.self_paid_at) return { ok: true, changed: false };
-        throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+        throw new HttpError(409, 'changed', `${row.display_name}’s payment just changed. Look again.`);
       }
       await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
       // Zip 49 (M-1, F-4): the confirmed money now matches what the seat owes today (charged, shown and kept agree).
@@ -1849,11 +1849,11 @@ export async function applyPayment(
     ]);
     if (unpaid.meta.changes !== 1) {
       const fresh = await getSession(ctx.db, group.id, session.id);
-      if (`${fresh?.finalized_at ?? ''}:${fresh?.final_price_cents ?? -1}` !== finalizeAsRead) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+      if (`${fresh?.finalized_at ?? ''}:${fresh?.final_price_cents ?? -1}` !== finalizeAsRead) throw new HttpError(409, 'changed', `${row.display_name}’s payment just changed. Look again.`);
       if ((await creditBackLeft(ctx.db, session.id, playerId)) > 0 || (await trimBackLeft(ctx.db, session.id, playerId)) > 0) {
         if (await hasPendingRequest(ctx.db, playerId))
-          throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can't be unmarked. Answer the cash out request on Home first.`);
-        throw new HttpError(409, 'credit_spent', `${row.display_name} already used the credit from this game, so this payment can't be unmarked.`);
+          throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can’t be unmarked. Answer the cash out request on Home first.`);
+        throw new HttpError(409, 'credit_spent', `${row.display_name} already used the credit from this game, so this payment can’t be unmarked.`);
       }
       return { ok: true, changed: false };
     }
@@ -2414,7 +2414,7 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
     throw new HttpError(
       409,
       'game_exists',
-      clash.status === 'canceled' ? `There's already a canceled game at ${when}. Reopen it instead.` : `There's already a game at ${when}.`,
+      clash.status === 'canceled' ? `There’s already a canceled game at ${when}. Reopen it instead.` : `There’s already a game at ${when}.`,
     );
   }
   const settings = settingsOf(group);
@@ -2435,7 +2435,7 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
       .bind(id, group.id, startsAt, endsAt, plannedTaken ? null : startsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso, ...(court !== null ? [court] : []))
       .run();
   } catch (err) {
-    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'game_exists', `There's already a game at ${formatDateTime(startsAt, tz)}.`);
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'game_exists', `There’s already a game at ${formatDateTime(startsAt, tz)}.`);
     throw err;
   }
   await audit(ctx.db, group.id, id, 'session_added', { startsAt, note, ...(court !== null ? { court } : {}) }, ctx.nowIso);
@@ -2785,7 +2785,7 @@ export async function hidePlayerFromAdmin(ctx: Ctx, body: Record<string, unknown
   if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
   if (hidden) {
     if (!adminR2Allowed(ctx.env.ADMIN_R2)) throw new HttpError(400, 'not_available', 'Hide player is not available right now.');
-    if (id === (await organizerIdOf(ctx.db, group))) throw new HttpError(400, 'cannot_hide_self', "You can't hide yourself.");
+    if (id === (await organizerIdOf(ctx.db, group))) throw new HttpError(400, 'cannot_hide_self', "You can’t hide yourself.");
   }
   await setAdminHiddenPlayer(ctx.db, group.id, id, hidden, ctx.nowIso);
   await audit(ctx.db, group.id, null, hidden ? 'player_admin_hidden' : 'player_admin_unhidden', { name: p.display_name }, ctx.nowIso);

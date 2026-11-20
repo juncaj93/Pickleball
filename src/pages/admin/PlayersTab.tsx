@@ -417,7 +417,7 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
         action: {
           label: 'Undo',
           onClick: () => {
-            void api('POST', `/api/admin/players/${player.id}/admin-hide`, { hidden: false }).then(() => ctx.reload(), () => toast("Couldn't unhide. Use Settings > Advanced > Hidden players.", 'error'));
+            void api('POST', `/api/admin/players/${player.id}/admin-hide`, { hidden: false }).then(() => ctx.reload(), () => toast("Couldn’t unhide. Use Settings > Advanced > Hidden players.", 'error'));
           },
         },
       });
@@ -534,7 +534,7 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
       <ConfirmDialog
         open={askRemove}
         title={`Remove ${player?.name ?? ''}?`}
-        body="If they never signed up or paid, the name is deleted. If they have any history, it's hidden instead so old sessions and payments stay correct."
+        body="If they never signed up or paid, the name is deleted. If they have any history, it’s hidden instead so old sessions and payments stay correct."
         confirmLabel="Remove"
         danger
         busy={busy}

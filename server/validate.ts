@@ -120,6 +120,6 @@ export function optionalDate(v: unknown, field: string): string | null {
 export function venmoHandle(v: unknown): string | null | undefined {
   if (v === undefined) return undefined;
   const r = parseVenmoHandle(v);
-  if (!r.ok) throw new HttpError(400, 'invalid_venmo', "I couldn't read that. Paste the link from the Venmo app (your profile's Share button), or type @Name.");
+  if (!r.ok) throw new HttpError(400, 'invalid_venmo', "I couldn’t read that. Paste the link from the Venmo app (your profile’s Share button), or type @Name.");
   return r.handle;
 }

@@ -862,7 +862,7 @@ export async function setCourtPaid(db: D1Database, session: SessionRow, playerId
 export async function confirmAttendance(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
-  if (existing?.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', "You're not in this game.");
+  if (existing?.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', "You’re not in this game.");
   const nowIso = new Date(nowMs).toISOString();
   await db
     .prepare(
@@ -893,7 +893,7 @@ export async function moveToWaitlist(db: D1Database, session: SessionRow, player
   if (g) {
     const own = await db.prepare('SELECT guest_status FROM session_players WHERE id = ?').bind(existing.id).first<{ guest_status: string | null }>();
     if (own?.guest_status === 'late' && existing.status === 'confirmed')
-      throw new HttpError(409, 'late_fee_open', "Their guest's spot is still owed (removed late). Clear it in the Players sheet first.");
+      throw new HttpError(409, 'late_fee_open', "Their guest’s spot is still owed (removed late). Clear it in the Players sheet first.");
   }
   const NEXT_CLAIM_SEQ = NEXT_CLAIM_SEQ_OF(g);
   try {

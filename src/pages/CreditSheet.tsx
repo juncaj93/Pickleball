@@ -202,7 +202,7 @@ export function CreditSheet({ open, credit, tz, organizerName = 'the organizer',
             ))}
           </ul>
         )}
-        <p className="small muted">Your credit goes on a game by itself when you tap I'm in.</p>
+        <p className="small muted">Your credit goes on a game by itself when you tap I’m in.</p>
       </div>
     </Sheet>
   );

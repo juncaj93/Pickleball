@@ -223,7 +223,7 @@ export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, sho
   if (d.result === 'waitlisted') return `You’re ${ordinal(d.position ?? 1)} on the waitlist`;
   if (!noCourt && d.result === 'standby') return `You’re ${ordinal(d.position ?? 1)} on standby`;
   // `showDue`: the card shows "$ due" for this game (a booked court, or "Ask for payment on every game" is on).
-  return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
+  return joinedCreditText("You’re in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
 }
 
 /**
@@ -450,7 +450,7 @@ export function PlayerHome({
   type Al = { key: string; title: string; sub: string };
   const td = view?.tournament?.day as { shortAlert?: Al; finalAlert?: Al } | undefined;
   const dayAlerts = [
-    td?.finalAlert && <FormatAlertCard key="f" a={td.finalAlert} label="You're in the Final" data="data-final-alert" icon="trophy" />,
+    td?.finalAlert && <FormatAlertCard key="f" a={td.finalAlert} label="You’re in the Final" data="data-final-alert" icon="trophy" />,
     td?.shortAlert && <FormatAlertCard key="s" a={td.shortAlert} label="Shorter games" data="data-short-alert" tone="amber" icon="clock" filled />,
   ].filter(Boolean);
 
@@ -589,7 +589,7 @@ export function PlayerHome({
         const next = await finishNotes(
           ok,
           (id) => settled.push(id),
-          () => toast("Your drop out wasn't sent: the money changed. You're still in. Look again.", 'error'),
+          () => toast("Your drop out wasn’t sent: the money changed. You’re still in. Look again.", 'error'),
         );
         if (!ok()) return;
         // The screen stops drawing those drops (and their credit); the real data shows.
@@ -672,7 +672,7 @@ export function PlayerHome({
       <>
         <TopBar eyebrow="" title="Link not working" />
         <main className="page">
-          <Notice tone="danger" title="This group link isn't valid">
+          <Notice tone="danger" title="This group link isn’t valid">
             It may have been replaced with a new one. Ask the organizer for the current link.
           </Notice>
         </main>
@@ -936,7 +936,7 @@ export function PlayerHome({
               )}
               {g.sessions.length > 0 && mineOnly && filtered.length === 0 && (
                 <div className="card empty-mine" role="status">
-                  <p>You're not in any games yet</p>
+                  <p>You’re not in any games yet</p>
                   <button className="link-btn quiet-link" onClick={() => setFilter('all')}>
                     See all games
                   </button>
@@ -1175,7 +1175,7 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
           ))}
         </div>
         <button className="btn block" disabled={busy} onClick={() => submit(true)}>
-          No, I'm new
+          No, I’m new
         </button>
         {/* Zip 76: back to the name box with the typed name kept, so a typo can be fixed. */}
         <button className="btn ghost block" type="button" disabled={busy} data-is-this-you-back onClick={() => setState({ step: 'name' })}>
@@ -1444,7 +1444,7 @@ function FeeNotices({ g }: { g: GroupView }) {
               title={credit ? `Your ${credit} is back as credit` : n.guest ? `You no longer owe ${fee} for ${n.guest}` : `You no longer owe ${fee}`}
               // The date never splits across lines, and "spot" stays with it (non-breaking spaces; the same words). Zip 49: a sub who took only
               // the guest's spot says so ("Someone took Sam's Tue, Nov 3 spot").
-              sub={n.why === 'sub' ? `Someone took ${n.guest ? `${n.guest}'s` : 'your'} ${day.replace(/ /g, '\u00a0')}\u00a0spot` : `For ${day.replace(/ /g, '\u00a0')}`}
+              sub={n.why === 'sub' ? `Someone took ${n.guest ? `${n.guest}’s` : 'your'} ${day.replace(/ /g, '\u00a0')}\u00a0spot` : `For ${day.replace(/ /g, '\u00a0')}`}
               data={{ 'data-fee-notice': n.why }}
               action={
                 <button type="button" className="ac-btn ac-out" onClick={() => dismiss(n.id)}>
@@ -1508,8 +1508,8 @@ function usePaid(owed: { sessionId: string; cents: number; extCents?: number }[]
           }
         },
         saved: paid ? (demoOn() ? DEMO_PAID_TOAST : 'Marked paid') : 'Marked not paid',
-        what: paid ? 'I paid' : "Didn't pay",
-        failText: () => (went > 0 ? `Saved for ${went} of ${owed.length} games; the rest didn't save. Tap again.` : null),
+        what: paid ? 'I paid' : "Didn’t pay",
+        failText: () => (went > 0 ? `Saved for ${went} of ${owed.length} games; the rest didn’t save. Tap again.` : null),
       });
       done();
       return;
@@ -2050,7 +2050,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
             <span>
               Send {formatPrice(total)} with the note <strong>{note}</strong>
             </span>
-            <button type="button" className="ac-link" onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn't copy the note.", 'error'))}>
+            <button type="button" className="ac-link" onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn’t copy the note.", 'error'))}>
               Copy note
             </button>
           </div>
@@ -2168,7 +2168,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
           <span className="small">
             Send {formatPrice(total)} with the note <strong>{note}</strong>
           </span>
-          <button className="btn small secondary" onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn't copy the note.", 'error'))}>
+          <button className="btn small secondary" onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn’t copy the note.", 'error'))}>
             Copy note
           </button>
         </div>
@@ -2262,7 +2262,7 @@ function SuggestionCard({
     const title = standby ? wantInTitle(s.startsAt, tz, Date.parse(g.now), false) : short ? `${when} needs ${MIN_PLAYERS - n} more` : `${when} has ${n} in`;
     if (hidden) return null;
     const atLimit = cleanup && n >= g.group.maxPlayers;
-    const sub = standby ? undefined : short ? <AcBalls inCount={n} /> : waitlistForm ? "You'd be on the waitlist" : atLimit ? undefined : `You'd make it ${n + 1}`;
+    const sub = standby ? undefined : short ? <AcBalls inCount={n} /> : waitlistForm ? "You’d be on the waitlist" : atLimit ? undefined : `You’d make it ${n + 1}`;
     return (
       <AlertCard
         as="section"
@@ -2283,7 +2283,7 @@ function SuggestionCard({
             disabled={busy}
             onClick={() => answer(true)}
           >
-            {waitlistForm ? 'Join waitlist' : "I'm in"}
+            {waitlistForm ? 'Join waitlist' : "I’m in"}
           </button>
         }
         onX={() => {
@@ -2479,7 +2479,7 @@ function RowPay({
           )}
           {mine.selfPaid && !mine.paidWithCredit && (
             <button className="link-btn quiet-link didnt-pay" disabled={paid.busy || paid.blocked || credit.blocked} onClick={() => paid.set(false)}>
-              Didn't pay?
+              Didn’t pay?
             </button>
           )}
           {drop}
@@ -2833,7 +2833,7 @@ export function ScheduleRow({
 
   /** Undo tapped after the drop had already been sent (page hid, or the last instant): say so, never pretend. */
   const tooLateToast = (undone: boolean) => {
-    if (!undone) toast("Too late, you're already out. Tap I'm in to rejoin.", 'error');
+    if (!undone) toast("Too late, you’re already out. Tap I’m in to rejoin.", 'error');
   };
 
   /** I'm in: the card fills at once; if the server says no, it goes back and the banner says why. */
@@ -2841,7 +2841,7 @@ export function ScheduleRow({
     if (working.current) return;
     // Tapping I'm in while a drop is still waiting for Undo just takes the drop back.
     if (undoHold(s.id)) {
-      toast("You're back in");
+      toast("You’re back in");
       return;
     }
     if (nudge?.state.blocked) return nudge.openBlock();
@@ -2894,7 +2894,7 @@ export function ScheduleRow({
     if (Date.parse(s.startsAt) - Date.now() < 10_000 || (deadline > Date.now() - 1_000 && deadline < soon)) {
       void run(
         'withdraw',
-        (d) => (d?.lateFee ? lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid) : droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You're out.")),
+        (d) => (d?.lateFee ? lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid) : droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You’re out.")),
         undefined,
         body,
       );
@@ -3069,7 +3069,7 @@ export function ScheduleRow({
     status = (
       <>
         <span className="st-lead">
-          <strong className="st-in">You're in</strong>
+          <strong className="st-in">You’re in</strong>
         </span>
         <span className="st-tail">{calLink}</span>
       </>
@@ -3079,7 +3079,7 @@ export function ScheduleRow({
     status = (
       <>
         <span className="st-lead">
-          <strong className="st-in">You're in</strong>
+          <strong className="st-in">You’re in</strong>
           <span className="st-sep">·</span>
         </span>
         <span className="st-tail">
@@ -3111,7 +3111,7 @@ export function ScheduleRow({
       aria-busy={busy}
       onClick={join}
     >
-      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
+      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I’m in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I’m in" : 'Join waitlist'}
     </button>
   );
   const leaveBtn = !held && waiting && open && (
@@ -3179,7 +3179,7 @@ export function ScheduleRow({
       </div>
       <h2 id={`s-${s.id}`} className="sr-only">
         {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}
-        {isIn ? ". You're in" : ''}
+        {isIn ? ". You’re in" : ''}
       </h2>
       <div className="sched-body" ref={bodyRef}>
         {status !== null && (
@@ -3209,13 +3209,13 @@ export function ScheduleRow({
           {!s.canceled && !waiting && !simple && !cleanup && (
             <NamesLine {...guestLine(s.waitlist)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
-          {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You're in if someone drops.</p>}
+          {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You’re in if someone drops.</p>}
           {/* Zip 42 round 3: a guest removed late whose spot is still owed. */}
           {isIn && mine?.guestOwed && (
             <p className="sched-sub" data-guest-owed>
               {mine.guestOwed.paid
-                ? `${mine.guestOwed.name}'s spot: your ${formatPrice(mine.guestOwed.cents)} stays on this game unless someone takes it.`
-                : `${mine.guestOwed.name}'s spot: ${formatPrice(mine.guestOwed.cents)} owed unless someone takes it.`}
+                ? `${mine.guestOwed.name}’s spot: your ${formatPrice(mine.guestOwed.cents)} stays on this game unless someone takes it.`
+                : `${mine.guestOwed.name}’s spot: ${formatPrice(mine.guestOwed.cents)} owed unless someone takes it.`}
             </p>
           )}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
@@ -3224,7 +3224,7 @@ export function ScheduleRow({
               Canceled late. {mine.lateFee.oweCents > 0 ? `You still owe ${formatPrice(mine.lateFee.oweCents)}.` : `Your ${formatPrice(mine.lateFee.priceCents ?? viewFlat(s, g.group.priceCents))} stays on this game.`}
             </p>
           ) : (
-            s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>
+            s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it’s now your credit.</p>
           )}
 
           {s.extra && <span className="sr-only">Extra game</span>}
@@ -3293,15 +3293,15 @@ export function ScheduleRow({
                 `Your spot opens up for someone else.${mine ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, firstNameOf(g.group.organizerName)) : ''}`}
           </>
         }
-        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : myGuest ? 'Drop out both' : 'Drop out'}
+        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can’t make it" : myGuest ? 'Drop out both' : 'Drop out'}
         danger
         busy={busy}
         onConfirm={() => {
           // From the notice the banner never says "dropped out": "You're out. $14 credit returned." (same money words).
-          const lead = fromNotice ? "You're out." : undefined;
+          const lead = fromNotice ? "You’re out." : undefined;
           if (waiting) {
             setFromNotice(false);
-            void run('withdraw', () => "You're off the list", g.me ? leaveWaitlistPatch(s.id, g.me.name) : undefined);
+            void run('withdraw', () => "You’re off the list", g.me ? leaveWaitlistPatch(s.id, g.me.name) : undefined);
           } else void confirmDrop(lead);
         }}
         onCancel={() => {

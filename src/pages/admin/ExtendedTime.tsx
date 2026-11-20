@@ -127,7 +127,7 @@ export function WhoPlayedTiles({
                 className={`xt-tile xt-guest${gOn || locked ? ' on' : ' off'}${locked ? ' locked' : ''}`}
                 aria-pressed={gOn}
                 aria-disabled={locked || undefined}
-                aria-label={`${g.name}, ${r.name}'s guest, ${gOn ? 'played' : 'did not play'}${locked ? ` (${r.name} did not play)` : ''}`}
+                aria-label={`${g.name}, ${r.name}’s guest, ${gOn ? 'played' : 'did not play'}${locked ? ` (${r.name} did not play)` : ''}`}
                 data-tile={g.name}
                 data-guest-tile={g.name}
                 onClick={() => {
@@ -139,7 +139,7 @@ export function WhoPlayedTiles({
                 </span>
                 <span className="xt-name">
                   <b>{g.name}</b>
-                  <span className="xt-guest-of">{r.name}'s guest</span>
+                  <span className="xt-guest-of">{r.name}’s guest</span>
                 </span>
                 {(gOn || locked) && (
                   <span className="xt-check" aria-hidden="true">
@@ -245,11 +245,11 @@ function OwedCard({ ctx, rows }: { ctx: AdminCtx; rows: Owed[] }) {
           <div className="vr-title-wrap">
             {cards ? (
               <AcTitle as="h3" className="vr-title">
-                Extra time: {rows.length} {rows.length === 1 ? "hasn't" : "haven't"} paid
+                Extra time: {rows.length} {rows.length === 1 ? "hasn’t" : "haven’t"} paid
               </AcTitle>
             ) : (
               <h3 className="vr-title">
-                Extra time: {rows.length} {rows.length === 1 ? "hasn't" : "haven't"} paid
+                Extra time: {rows.length} {rows.length === 1 ? "hasn’t" : "haven’t"} paid
               </h3>
             )}
           </div>

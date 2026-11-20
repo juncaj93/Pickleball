@@ -701,7 +701,7 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
                   await ctx.reload();
                   toast(`${formatShortDate(h.startsAt, tz)} is showing`);
                 } catch (err) {
-                  toast(err instanceof ApiError ? err.message : "Couldn't show it.", 'error');
+                  toast(err instanceof ApiError ? err.message : "Couldn’t show it.", 'error');
                 } finally {
                   setBusy(false);
                 }

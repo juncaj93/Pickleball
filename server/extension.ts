@@ -458,7 +458,7 @@ export async function adminExtensionPayment(ctx: Ctx, group: GroupRow, session: 
     .prepare(`UPDATE session_players SET ${sql}, updated_at = ?1 WHERE id = ${sqlText(r.id)} AND ext_last_cents = ${int(last)} AND ${seatAsRead(r)}`)
     .bind(...binds)
     .run();
-  if (res.meta.changes !== 1) throw new HttpError(409, 'changed', `${r.display_name}'s extra time payment just changed. Look again.`);
+  if (res.meta.changes !== 1) throw new HttpError(409, 'changed', `${r.display_name}’s extra time payment just changed. Look again.`);
   await audit(ctx.db, group.id, session.id, what, { player: r.display_name, playerId, amountCents: cents }, ctx.nowIso);
   return { ok: true, changed: true };
 }
@@ -549,7 +549,7 @@ export async function unmarkBlockedBy(db: D1Database, sessionId: string, playerI
     .first<{ name: string; cents: number }>()
     .catch(oldDatabase);
   if (!row) return null;
-  return `Can't unmark: ${row.name}'s ${formatPrice(row.cents)} for extra time, paid with this game, came back as credit after a change and was already used or cashed out.`;
+  return `Can’t unmark: ${row.name}’s ${formatPrice(row.cents)} for extra time, paid with this game, came back as credit after a change and was already used or cashed out.`;
 }
 
 /**

@@ -230,7 +230,7 @@ function WhoPlayed({ s, gp, busy, onConfirm, lateFees = false }: { s: AdminSessi
                     <span className="set-label">
                       <span className="set-name">{r.guest!.name}</span>
                       <span className="set-hint">
-                        {r.name}'s guest · {guestOn(r) ? 'played' : 'did not play'}
+                        {r.name}’s guest · {guestOn(r) ? 'played' : 'did not play'}
                       </span>
                     </span>
                     <input
@@ -379,7 +379,7 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
     run(() => api('POST', `/api/admin/sessions/${c.sessionId}/claim`, { playerId: c.playerId, paid }), msg, {
       key: `claim:${c.sessionId}:${c.playerId}`,
       patch: (d) => ({ ...d, paymentClaims: (d.paymentClaims ?? []).filter((x) => !(x.sessionId === c.sessionId && x.playerId === c.playerId)) }),
-      what: paid ? 'Paid' : "Didn't pay",
+      what: paid ? 'Paid' : "Didn’t pay",
       ...(ctx.d.adminUndo === true ? { undo: true } : {}),
     });
   // Zip 11, Alert cards: an amber (owes) card: the same words as a title and the rest, Paid and Didn't pay under it.
@@ -396,11 +396,11 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
         sub={rest || undefined}
         actions={
           <>
-            <button className="ac-btn" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}'s ${formatPrice(c.cents)} is credit now`)}>
+            <button className="ac-btn" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}’s ${formatPrice(c.cents)} is credit now`)}>
               Paid
             </button>
             <button className="ac-btn ac-out" disabled={busy} data-claim-not-paid onClick={() => answer(false, 'Cleared')}>
-              Didn't pay
+              Didn’t pay
             </button>
           </>
         }
@@ -411,11 +411,11 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
     <article className="card stack payment-claim" aria-label={`${c.name} payment not confirmed`} data-payment-claim={c.name}>
       <h3>{paymentClaimText(c.name, c.cents, c.why, c.startsAt, ctx.d.group.timezone)}</h3>
       <div className="finalize-btns">
-        <button className="btn secondary" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}'s ${formatPrice(c.cents)} is credit now`)}>
+        <button className="btn secondary" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}’s ${formatPrice(c.cents)} is credit now`)}>
           Paid
         </button>
         <button className="link-btn not-now" disabled={busy} data-claim-not-paid onClick={() => answer(false, 'Cleared')}>
-          Didn't pay
+          Didn’t pay
         </button>
       </div>
     </article>

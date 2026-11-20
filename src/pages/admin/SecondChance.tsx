@@ -403,7 +403,7 @@ export function UnpaidTextSheet({ ctx }: { ctx: AdminCtx }) {
   };
   if (!sc || !id) return null;
   return (
-    <Sheet open title="Text who hasn't paid" onClose={close}>
+    <Sheet open title="Text who hasn’t paid" onClose={close}>
       <div className="stack" data-sc-unpaid-sheet>
         {!s ? (
           <p className="small muted">That game is not on the list any more.</p>

@@ -292,7 +292,7 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
     try {
       copy = await demoCopy();
     } catch (err) {
-      throw new ApiError(0, 'demo_failed', err instanceof Error ? err.message : "Couldn't start the demo.");
+      throw new ApiError(0, 'demo_failed', err instanceof Error ? err.message : "Couldn’t start the demo.");
     }
     return answer<T>(await copy.request(method, path, body, headers, appNow()));
   }

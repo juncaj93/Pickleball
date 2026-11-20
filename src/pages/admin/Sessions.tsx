@@ -294,7 +294,7 @@ export function useOrganizerInOut(ctx: AdminCtx, s: AdminSessionView) {
   const set = (goingIn: boolean) =>
     run(async () => {
       const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
-      toast(!goingIn ? "You're out" : res.result === 'waitlisted' || res.result === 'standby' ? `You’re ${ordinal(res.position ?? 1)} on the waitlist` : "You're in");
+      toast(!goingIn ? "You’re out" : res.result === 'waitlisted' || res.result === 'standby' ? `You’re ${ordinal(res.position ?? 1)} on the waitlist` : "You’re in");
     });
   return { busy, mine, day, set };
 }
@@ -309,14 +309,14 @@ function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, mine, day, set } = useOrganizerInOut(ctx, s);
   if (!mine) {
     return (
-      <button className="btn small secondary me-in" disabled={busy} aria-label={`I'm in for ${day}`} onClick={() => set(true)}>
-        {busy ? 'Saving…' : "I'm in"}
+      <button className="btn small secondary me-in" disabled={busy} aria-label={`I’m in for ${day}`} onClick={() => set(true)}>
+        {busy ? 'Saving…' : "I’m in"}
       </button>
     );
   }
   return (
     <span className="me-state">
-      <span className="me-in-text">{mine.status === 'confirmed' ? "You're in" : 'Waitlist'}</span>
+      <span className="me-in-text">{mine.status === 'confirmed' ? "You’re in" : 'Waitlist'}</span>
       <button className="link-btn me-out" disabled={busy} aria-label={`Out of ${day}`} onClick={() => set(false)}>
         Out
       </button>
@@ -658,7 +658,7 @@ export function useRosterOps(ctx: AdminCtx, s: AdminSessionView) {
     const back = r.dropCreditCents + r.dropCashCents;
     const said =
       r.dropClaimCents > 0
-        ? `${r.name} removed. Their ${formatPrice(r.dropClaimCents)} I paid waits for your Paid or Didn't pay.`
+        ? `${r.name} removed. Their ${formatPrice(r.dropClaimCents)} I paid waits for your Paid or Didn’t pay.`
         : back > 0
           ? `${r.name} removed. ${formatPrice(back)} ${r.dropCashCents > 0 ? 'back as credit' : 'credit returned'}.`
           : `${r.name} removed.`;
@@ -746,7 +746,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       <ConfirmDialog
         open={!!removing}
         title={`Remove ${removing?.name}?`}
-        body="They'll show as withdrawn. If they held a spot, it opens up for someone else."
+        body="They’ll show as withdrawn. If they held a spot, it opens up for someone else."
         confirmLabel="Remove"
         danger
         busy={busy}
@@ -958,7 +958,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                           className="btn small secondary"
                           disabled={busy}
                           data-unmark-credit={r.name}
-                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`, opTap({ kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }, 'Unmark credit', ctx.d.adminUndo === true))}
+                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}’s credit put back`, opTap({ kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }, 'Unmark credit', ctx.d.adminUndo === true))}
                         >
                           Unmark
                         </button>
@@ -984,7 +984,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           </button>
           {s.reopenBlockedBy.length > 0 && (
             <p className="small muted" data-reopen-blocked>
-              Can't reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
+              Can’t reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
             </p>
           )}
           {s.reopenBlockedBy.length === 0 && s.reopenRequestedBy.length > 0 && (
@@ -1220,7 +1220,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 patch: (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, status: 'canceled', cancelReason: why, state: { ...x.state, flags: { ...x.state.flags, canceled: true } } } : x)) }),
                 // Once saved: the text for the group, unless another sheet is open by then (it is never pushed away).
                 onSaved: () => {
-                  if (document.querySelector('dialog[open]')) toast('Canceled. Text the group from the game\'s menu.');
+                  if (document.querySelector('dialog[open]')) toast('Canceled. Text the group from the game’s menu.');
                   else ctx.open('canceled', s.id);
                 },
               }

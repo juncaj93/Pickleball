@@ -587,7 +587,7 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
   // Spam guard: a few new names per phone per hour, even when many arrive at once.
   const slot = await claimSlot(ctx, 'self_add', 3600_000, SELF_ADDS_PER_HOUR);
   if (!slot) {
-    throw new HttpError(429, 'too_many_names', `You've added a few names already. Try again in an hour, or ask ${orgFirstName(group)} to add you.`);
+    throw new HttpError(429, 'too_many_names', `You’ve added a few names already. Try again in an hour, or ask ${orgFirstName(group)} to add you.`);
   }
   const id = newId();
   try {
@@ -739,7 +739,7 @@ export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
     // The screen showed extra time and it was switched off since: look again (never record $14 when $17 was sent).
     if (!(await extendedTimeFor(ctx, who.group.id))) throw new HttpError(409, 'changed', 'This just changed. Look again.');
     const seatId = await seatIdOf(ctx.db, who.session.id, who.playerId);
-    if (!seatId) throw new HttpError(409, 'not_in_session', "You're not in this game.");
+    if (!seatId) throw new HttpError(409, 'not_in_session', "You’re not in this game.");
     await claimShares(ctx, who.playerId, extCents, seatId);
     try {
       const out = await applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name, shown);
@@ -830,7 +830,7 @@ export async function playerStillIn(ctx: Ctx, body: Record<string, unknown>) {
     .prepare("SELECT time_confirmed FROM session_players WHERE session_id = ? AND player_id = ? AND status = 'confirmed'")
     .bind(who.session.id, who.playerId)
     .first<{ time_confirmed: string | null }>();
-  if (!seat) throw new HttpError(409, 'not_in_session', "You're not in this game.");
+  if (!seat) throw new HttpError(409, 'not_in_session', "You’re not in this game.");
   // Only if nothing changed the answer in between (a second tap or another phone): then this one has nothing to add.
   const res = await ctx.db
     .prepare("UPDATE session_players SET time_confirmed = ? WHERE session_id = ? AND player_id = ? AND status = 'confirmed' AND time_confirmed IS ?")
@@ -838,7 +838,7 @@ export async function playerStillIn(ctx: Ctx, body: Record<string, unknown>) {
     .run();
   if (!res.meta.changes) {
     const now = await ctx.db.prepare("SELECT time_confirmed FROM session_players WHERE session_id = ? AND player_id = ? AND status = 'confirmed'").bind(who.session.id, who.playerId).first<{ time_confirmed: string | null }>();
-    if (!now) throw new HttpError(409, 'not_in_session', "You're not in this game.");
+    if (!now) throw new HttpError(409, 'not_in_session', "You’re not in this game.");
     if (isWaitingOnTime(now.time_confirmed, who.session.starts_at)) throw new HttpError(409, 'try_again', 'That did not work. Try again.');
     return { result: 'confirmed_time' };
   }

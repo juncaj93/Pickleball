@@ -636,7 +636,7 @@ function PlayerLeftSheet({ ctx, t, d, open, onClose, round }: { ctx: AdminCtx; t
               <span className="tm-gd-option-text">
                 <b>Swap in {s.name}</b>
                 <span>
-                  {s.standby ? 'From standby. ' : ''}Takes over {who.name}'s games from Round {round}.
+                  {s.standby ? 'From standby. ' : ''}Takes over {who.name}’s games from Round {round}.
                 </span>
               </span>
               <span className="tm-gd-option-mark">{choice === s.id ? 'Picked' : 'Pick'}</span>
@@ -645,7 +645,7 @@ function PlayerLeftSheet({ ctx, t, d, open, onClose, round }: { ctx: AdminCtx; t
           <button type="button" className="tm-gd-option" aria-pressed={choice === null} onClick={() => setSwapIn(null)} data-tm-left-remove>
             <span className="tm-gd-option-text">
               <b>Remove {who.name}</b>
-              <span>Finished games stay. The team's later games are skipped.</span>
+              <span>Finished games stay. The team’s later games are skipped.</span>
             </span>
             <span className="tm-gd-option-mark">{choice === null ? 'Picked' : 'Pick'}</span>
           </button>
@@ -654,7 +654,7 @@ function PlayerLeftSheet({ ctx, t, d, open, onClose, round }: { ctx: AdminCtx; t
             className="btn block big"
             disabled={busy}
             onClick={async () => {
-              const ok = await save(() => gamesCall(t, { action: 'left', playerId: who.id, ...(choice ? { swapIn: choice } : {}) }), choice ? 'Swapped in' : `${who.name}'s team sits out`);
+              const ok = await save(() => gamesCall(t, { action: 'left', playerId: who.id, ...(choice ? { swapIn: choice } : {}) }), choice ? 'Swapped in' : `${who.name}’s team sits out`);
               if (ok) close();
             }}
             data-tm-left-confirm

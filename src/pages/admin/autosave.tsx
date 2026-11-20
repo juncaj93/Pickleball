@@ -70,7 +70,7 @@ export function SaveProblem({ state }: { state: RowState | undefined }) {
   if (state?.status === 'failed')
     return (
       <button type="button" className="save-retry" onClick={state.retry}>
-        Couldn't save. Tap to retry.
+        Couldn’t save. Tap to retry.
       </button>
     );
   return null;

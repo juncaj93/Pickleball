@@ -163,7 +163,7 @@ function TimeBar({ s, tz, onChanged, onShowAll, card }: { s: PlayerSessionView; 
               {confirmed ? 'Confirmed' : state === 'saving' ? 'Saving…' : 'Still in'}
             </button>
             <button type="button" className="ac-btn ac-out ts-no" disabled={busy} onClick={cant}>
-              Can't make it
+              Can’t make it
             </button>
           </>
         }
@@ -200,7 +200,7 @@ function TimeBar({ s, tz, onChanged, onShowAll, card }: { s: PlayerSessionView; 
           )}
         </button>
         <button type="button" className="btn ts-no" disabled={busy} onClick={cant}>
-          Can't make it
+          Can’t make it
         </button>
       </div>
     </div>

@@ -348,10 +348,10 @@ function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions)
     { id: 'session', label: 'Cancel the session', done: s.canceled, enabled: true, buttons: [{ id: 'cancel', label: 'Cancel the session', action: { type: 'cancel' } }] },
     {
       id: 'text',
-      label: "Text everyone it's canceled",
+      label: "Text everyone it’s canceled",
       done: textDone,
       enabled: s.canceled,
-      buttons: [{ id: 'canceled-text', label: "Text everyone it's canceled", action: { type: 'text', text: 'canceled', mark: 'canceled_text' } }],
+      buttons: [{ id: 'canceled-text', label: "Text everyone it’s canceled", action: { type: 'text', text: 'canceled', mark: 'canceled_text' } }],
     },
   ];
   const alerts: TaskAlert[] = [];

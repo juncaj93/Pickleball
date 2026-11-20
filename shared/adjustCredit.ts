@@ -73,8 +73,8 @@ export function planAdjust(i: AdjustInput): AdjustPlan {
         ok: false,
         error:
           i.reservedCents > 0 && c <= i.potCents
-            ? `Can't remove ${formatPrice(c)}: ${formatPrice(i.reservedCents)} of ${i.name}'s credit is held for a cash-out request.`
-            : `Can't remove more than the ${formatPrice(usable)} credit ${i.name} has.`,
+            ? `Can’t remove ${formatPrice(c)}: ${formatPrice(i.reservedCents)} of ${i.name}’s credit is held for a cash-out request.`
+            : `Can’t remove more than the ${formatPrice(usable)} credit ${i.name} has.`,
       };
     }
   }

@@ -91,7 +91,7 @@ export function useReworkRun(ctx: AdminCtx): ((op: ReworkOp, save: () => Promise
     if (res.status === 'failed') {
       // The read-only PIN's refusal (and the demo's) is a plain note, not a red error.
       if (isDemo(res.error)) toast((res.error as Error).message);
-      else toast(hold && (res.error as { status?: number })?.status === 409 ? (res.error as Error).message : "Couldn't save, nothing changed", 'error');
+      else toast(hold && (res.error as { status?: number })?.status === 409 ? (res.error as Error).message : "Couldn’t save, nothing changed", 'error');
     }
     return res.status === 'ok';
   };

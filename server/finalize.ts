@@ -365,12 +365,12 @@ async function reopenPrecheck(ctx: Ctx, group: GroupRow, session: SessionRow) {
     .all<{ pid: string; name: string; back: number; pot: number; reserved: number }>();
   const pot = (x: (typeof results)[number]) => x.pot + (back.get(x.pid) ?? 0);
   const spent = results.filter((x) => pot(x) < x.back).map((x) => x.name);
-  if (spent.length) throw new HttpError(409, 'credit_spent', `Can't reopen: ${spent.join(' and ')} already used or got back credit from this game.`);
+  if (spent.length) throw new HttpError(409, 'credit_spent', `Can’t reopen: ${spent.join(' and ')} already used or got back credit from this game.`);
   const requested = results.filter((x) => pot(x) >= x.back && pot(x) - x.reserved < x.back).map((x) => x.name);
   if (requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(requested));
   const flat = flatOf(session, settingsOf(group));
   const unconfirmed = roster.filter((x) => x.status === 'confirmed' && x.payment_status === 'paid' && !x.refunded_at && x.self_paid_at && (x.payment_amount_cents ?? 0) < flat).map((x) => x.display_name).sort();
-  if (unconfirmed.length) throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${unconfirmed.join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+  if (unconfirmed.length) throw new HttpError(409, 'unconfirmed_paid', `Can’t reopen: ${unconfirmed.join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
   const extClaims = roster.filter((x) => (x.ext_claim_cents ?? 0) > 0).map((x) => x.display_name);
   if (extClaims.length) throw new HttpError(409, 'unconfirmed_ext', `${extClaims.join(' and ')} tapped I paid for the extra time, not confirmed yet. Confirm it (Mark paid) or clear it first.`);
 }
@@ -378,7 +378,7 @@ async function reopenPrecheck(ctx: Ctx, group: GroupRow, session: SessionRow) {
 async function reopenChecked(ctx: Ctx, group: GroupRow, session: SessionRow) {
   const blockers = await reopenBlockers(ctx, session.id);
   if (blockers.spent.length) {
-    throw new HttpError(409, 'credit_spent', `Can't reopen: ${blockers.spent.join(' and ')} already used or got back credit from this game.`);
+    throw new HttpError(409, 'credit_spent', `Can’t reopen: ${blockers.spent.join(' and ')} already used or got back credit from this game.`);
   }
   if (blockers.requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(blockers.requested));
   // A seat paid below the flat price with an I paid nobody confirmed would come out short and its cash would be
@@ -392,7 +392,7 @@ async function reopenChecked(ctx: Ctx, group: GroupRow, session: SessionRow) {
     .bind(session.id, flatOf(session, settingsOf(group)))
     .all<{ name: string }>();
   if (unconfirmed.length) {
-    throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${unconfirmed.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+    throw new HttpError(409, 'unconfirmed_paid', `Can’t reopen: ${unconfirmed.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
   }
   // One batch, all or nothing. The credit this game gave back is taken back only while every player still has
   // all of theirs (beyond a pending cash out); the game is unfinalized only once none of it is left; seats paid
@@ -443,11 +443,11 @@ async function reopenChecked(ctx: Ctx, group: GroupRow, session: SessionRow) {
         .bind(now, session.id, session.finalized_at, flatOf(session, settingsOf(group)))
         .all<{ name: string }>()
     ).results;
-    if (late.length) throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${late.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+    if (late.length) throw new HttpError(409, 'unconfirmed_paid', `Can’t reopen: ${late.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
     if (taken.meta.changes === 0) {
       const late = await reopenBlockers(ctx, session.id);
       if (late.requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(late.requested));
-      if (late.spent.length) throw new HttpError(409, 'credit_spent', `Can't reopen: ${late.spent.join(' and ')} already used or got back credit from this game.`);
+      if (late.spent.length) throw new HttpError(409, 'credit_spent', `Can’t reopen: ${late.spent.join(' and ')} already used or got back credit from this game.`);
     }
     throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   }

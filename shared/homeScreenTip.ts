@@ -86,5 +86,5 @@ export interface TipStep {
 export const TIP_STEPS: readonly TipStep[] = [
   { n: 1, title: 'Tap the Share button', ring: { leftPct: 48.7, topPct: 47.5, px: 54 } },
   { n: 2, title: 'Tap View More', ring: { leftPct: 87.8, topPct: 33.2, px: 78 } },
-  { n: 3, title: 'Tap Add to Home Screen', hint: "Scroll down if you don't see it", ring: { rowOutline: true } },
+  { n: 3, title: 'Tap Add to Home Screen', hint: "Scroll down if you don’t see it", ring: { rowOutline: true } },
 ];

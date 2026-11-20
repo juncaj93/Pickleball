@@ -297,7 +297,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
         acts.push({
           label: 'Unmark',
           attrs: { 'data-unmark-credit': r.name },
-          onClick: () => void run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`, { kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }),
+          onClick: () => void run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}’s credit put back`, { kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }),
         });
       }
     }
@@ -335,7 +335,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
             </button>
             {s.reopenBlockedBy.length > 0 && (
               <p className="small muted" data-reopen-blocked>
-                Can't reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
+                Can’t reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
               </p>
             )}
             {s.reopenBlockedBy.length === 0 && s.reopenRequestedBy.length > 0 && (
@@ -429,7 +429,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
           </button>
           {s.reopenBlockedBy.length > 0 && (
             <p className="small muted" data-reopen-blocked>
-              Can't reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
+              Can’t reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
             </p>
           )}
           {s.reopenBlockedBy.length === 0 && s.reopenRequestedBy.length > 0 && (

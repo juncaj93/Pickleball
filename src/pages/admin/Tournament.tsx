@@ -725,7 +725,7 @@ function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView;
   const answer = (action: 'confirm' | 'reject') =>
     save(
       () => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId: k.playerId, action, cents: k.claimCents }),
-      action === 'reject' ? 'Cleared' : t.status === 'canceled' || k.out ? `${k.name}'s ${formatPrice(k.claimCents)} is credit now` : `${k.name}'s ${formatPrice(k.claimCents)} is in`,
+      action === 'reject' ? 'Cleared' : t.status === 'canceled' || k.out ? `${k.name}’s ${formatPrice(k.claimCents)} is credit now` : `${k.name}’s ${formatPrice(k.claimCents)} is in`,
     );
   return (
     <AlertCard
@@ -742,7 +742,7 @@ function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView;
             Paid
           </button>
           <button className="ac-btn ac-out" disabled={busy} data-claim-not-paid onClick={() => void answer('reject')}>
-            Didn't pay
+            Didn’t pay
           </button>
         </>
       }
@@ -996,11 +996,11 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
           </div>
           {k && k.claimCents > 0 ? (
             <div className="btn-row confirm-row">
-              <button type="button" className="btn confirm-safe" disabled={busy} onClick={() => void act('confirm', k.claimCents, `${name}'s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-paid>
+              <button type="button" className="btn confirm-safe" disabled={busy} onClick={() => void act('confirm', k.claimCents, `${name}’s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-paid>
                 Paid
               </button>
               <button type="button" className="btn danger confirm-out" disabled={busy} onClick={() => void act('reject', k.claimCents, 'Cleared')} data-tm-ticket-not-paid>
-                Didn't pay
+                Didn’t pay
               </button>
             </div>
           ) : (
@@ -1024,7 +1024,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
           <ConfirmDialog
             open={askOff}
             title={`Take ${name} off?`}
-            body={<p>{backCents > 0 ? `${name}'s ${formatPrice(backCents)} comes back as credit. ` : ''}{k?.place === 'spot' ? 'The spot goes to the first paid player in line.' : `${name} comes off the list.`}</p>}
+            body={<p>{backCents > 0 ? `${name}’s ${formatPrice(backCents)} comes back as credit. ` : ''}{k?.place === 'spot' ? 'The spot goes to the first paid player in line.' : `${name} comes off the list.`}</p>}
             cancelLabel="Keep"
             confirmLabel="Take off"
             danger
@@ -1432,7 +1432,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
                 </b>
                 {/* A canceled tournament's levels stay as they are (the server refuses a change). */}
                 {!canceled && (
-                  <button type="button" className="tm-pencil" aria-label={`Change ${s.name}'s level`} onClick={() => setLevelFor(s.playerId)} data-tm-pencil>
+                  <button type="button" className="tm-pencil" aria-label={`Change ${s.name}’s level`} onClick={() => setLevelFor(s.playerId)} data-tm-pencil>
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 20h4L19 9l-4-4L4 16v4z" />
                       <path d="M13.5 6.5l4 4" />
