@@ -73,7 +73,13 @@ export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: s
     const cols = (raw.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
     // Zip 42 round 2: a kept game's 'cash' pairs stay ("paid $14 of $28" on a guest's host: the pair nets to nothing in every pot, so no
     // credit chip or card appears). Every other credit entry and cash-out request goes, as before.
-    if (t === 'credit_ledger') raw.exec(`DELETE FROM credit_ledger WHERE NOT (reason = 'cash' AND session_id IN (${keep.map((k) => `'${k}'`).join(',') || "''"}))`);
+    // Zip 76: the calm start's tournament keeps its own money rows (tickets paid with the stage's test credit, the award credit), so Money >
+    // Totals and the champions' pots read as the stage made them.
+    if (t === 'credit_ledger')
+      raw.exec(
+        `DELETE FROM credit_ledger WHERE NOT (reason = 'cash' AND session_id IN (${keep.map((k) => `'${k}'`).join(',') || "''"}))
+           AND COALESCE(reason, '') NOT LIKE 'tour:%' AND COALESCE(reason, '') <> 'adjusted:Ticket stage credit'`,
+      );
     else if (t === 'refund_requests') raw.exec(`DELETE FROM ${t}`);
     else if (cols.includes('session_id')) raw.exec(`DELETE FROM ${t} WHERE session_id IN ${doomed}`);
   }
