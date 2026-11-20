@@ -7098,10 +7098,17 @@ payment details for a phone with no name changed whatever the TOURNAMENTS switch
   two lines, fixes 2, 3 and 6). Older: zip55 91, zip56 57, zip57 21, zip58 24, zip59 12, zip60 29, zip61 19, zip62 17, zip63 64, zip64 83, zip66 84,
   all passing after their expectations followed the new words. Switch OFF equals main `9b6839e`: zip55-off 47 of 47, zip56-off 47 of 47.
 
-### Live: NOT done
-This session's permission guard refused live database access (a read-only SELECT of the live Cold Open's counts), so the deploy checklist's first
-steps (SQL export, Time Travel bookmark, integrity checks on `pickleball`) could not run here, and nothing was deployed. No migration is needed.
-To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`; the three integrity checks (the tournament file now has
-`tour_kept_wrong_stage` and `info_kept_late_drops`); fast-forward main to this branch and push; `npm run deploy` from main; the checks again; the
-read-only live check. Rollback: deployment `0b0f0e1d` (Zip 68). No database undo needed (task_log rows and a 'kept' status are only written by
-the new code; old code reads 'kept' as off the list).
+### Live: shipped Fri Nov 20, 2026, about 7:45 AM Eastern (Alex: "ship it"; a quiet window), no database change
+- Alex's answers: the late drop rule only on 2 court nights (as built); he texts the group before Mon Nov 30; $18 on picture 3 is right.
+- Restore points first: Time Travel bookmark `000019cd-00000000-00005129-dd0dbb3a08d187b8dd7bbacfe24fc2eb`; SQL export of `pickleball` (311 KB)
+  saved as `export-20261120123610` in `pickleball-backups`, checked against the file, local copy deleted (phone numbers).
+- Integrity checks before and after: 21, extension 8, tournament 13 columns, every problem column 0 (info_kept_late_drops 0, open claims 0).
+- Main fast-forwarded `9b6839e` to `896f4c1` and pushed; `npm run deploy` from main (all five guard rules passed): deployment
+  `b828b43f-adac-4031-aedf-2d995b001221` (bundle `index-DWXxLmUq.js`). No migration, no Worker deploy.
+- Rollback: site deployment `0b0f0e1d-8959-4036-9098-12cbc09d18e6` (Zip 68, `77d12dd`). No database undo needed. Note: old code reads a 'kept'
+  sign-up as off the list, so after a rollback any kept money would come back as credit at the end of the night (the players' favor).
+- Read-only live look (the pages.dev address; the custom domain does not resolve from the build container): Home and /admin 200, the bundle the
+  one built, no page errors; the organizer dashboard and check 401 without a PIN; a phone with no name gets no Venmo link and no Zelle number.
+- The Cold Open on live, read-only counts (no names): Tue Dec 1, 7:30 to 10 PM, 2 courts, $18, credits $0, Pay by Mon Nov 30 7:00 PM, 10 on the
+  list, 9 can make the date, 1 paid spot (Alex's seat). The new card: Plan 9 players · 2 courts · 2.5 hrs; Americano for 9: games to 11, done about
+  9:50 PM (an odd count plans as Americano); Courts $120 · Tickets $144 · You +$24 ("You make if it fills +$24"); Locked in 1 of 6.
