@@ -118,7 +118,7 @@ export function cardVerb(action: string): string {
     case 'join':
       return 'signed up';
     case 'withdraw':
-      return 'backed out';
+      return 'dropped out';
     case 'still_in':
       return 'said still in';
     case 'check_in':
@@ -138,9 +138,9 @@ export function cardVerb(action: string): string {
     case 'cash_out_used':
       return 'used cash-out credit';
     case 'refund_requested':
-      return 'asked for a refund';
+      return 'asked to cash out';
     case 'refund_request_canceled':
-      return 'took back a refund request';
+      return 'took back a cash out request';
     default:
       return 'acted';
   }

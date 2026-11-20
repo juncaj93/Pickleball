@@ -1852,7 +1852,7 @@ export async function applyPayment(
       if (`${fresh?.finalized_at ?? ''}:${fresh?.final_price_cents ?? -1}` !== finalizeAsRead) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
       if ((await creditBackLeft(ctx.db, session.id, playerId)) > 0 || (await trimBackLeft(ctx.db, session.id, playerId)) > 0) {
         if (await hasPendingRequest(ctx.db, playerId))
-          throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can't be unmarked. Answer the refund request on Home first.`);
+          throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can't be unmarked. Answer the cash out request on Home first.`);
         throw new HttpError(409, 'credit_spent', `${row.display_name} already used the credit from this game, so this payment can't be unmarked.`);
       }
       return { ok: true, changed: false };

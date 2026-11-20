@@ -118,11 +118,11 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'credit_back':
       return `${player} got ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'money'} back as credit${forDay}${d.reason === 'dropped' ? ' (dropped out)' : d.reason === 'canceled' ? (d.split === true ? ' (canceled late, fee split)' : ' (canceled)') : d.reason === 'not_played' ? ' (did not play)' : d.reason === 'guest_removed' ? ' (guest removed)' : ''}`;
     case 'refund_requested':
-      return `${player} asked for ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'a'} refund of their credit`;
+      return typeof d.amountCents === 'number' ? `${player} asked to cash out ${formatPrice(d.amountCents)}` : `${player} asked to cash out credit`;
     case 'refund_request_canceled':
-      return `${player} took back their refund request`;
+      return `${player} took back their cash out request`;
     case 'refund_request_declined':
-      return `${who} put off ${player}'s refund request`;
+      return `${who} put off ${player}'s cash out request`;
     case 'late_drop_done':
       return opts.names && player !== 'someone' ? `${who} handled ${player}'s late drop${forDay}` : `${who} handled a late drop${forDay}`;
     case 'roster_confirm':
@@ -282,7 +282,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_back_out':
       // Zip 70: a late drop below 8 keeps the money until someone takes the spot.
       if (num(d.keptCents) > 0) return `${player} dropped out of ${theTour(d)} late (${cents(d.keptCents)} kept: no credit back unless someone takes the spot)`;
-      return `${player} backed out of ${theTour(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+      return `${player} dropped out of ${theTour(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     case 'tournament_kept_returned':
       return `${player}'s spot in ${theTour(d)} was taken${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     // Zip 56 "Tournaments" piece 2 (server/tournamentTickets.ts): tickets, the waitlist and their money.

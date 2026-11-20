@@ -296,10 +296,10 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
       <AlertCard
         tone="blue"
         icon="credit"
-        label={`${r.name} requested a refund`}
+        label={`${r.name} asked to cash out`}
         titleAs="h3"
         data={{ 'data-refund-request': r.name }}
-        title={`${r.name} requested a refund of ${formatPrice(r.cents)}`}
+        title={`${r.name} asked to cash out ${formatPrice(r.cents)}`}
         sub={pay.addressed ? 'Cash out request' : `Cash out request · ${pickInVenmo(r.name, r.venmo)}`}
         actions={
           <>
@@ -310,7 +310,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
               data-refund-venmo
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Refund ${r.name} ${formatPrice(r.cents)} with Venmo`}
+              aria-label={`Pay ${r.name} ${formatPrice(r.cents)} with Venmo`}
               onClick={(e) => {
                 openVenmo(e, pay);
                 storageSet(`pb_refund_request_opened_${r.id}`, '1');
@@ -320,7 +320,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
               Venmo
             </a>
             {tapped && (
-              <button className="ac-btn ac-out" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} refunded`)}>
+              <button className="ac-btn ac-out" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} cashed out`)}>
                 Mark refunded
               </button>
             )}
@@ -333,9 +333,9 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
     );
   }
   return (
-    <article className="card stack refund-request" aria-label={`${r.name} requested a refund`} data-refund-request={r.name}>
+    <article className="card stack refund-request" aria-label={`${r.name} asked to cash out`} data-refund-request={r.name}>
       <h3>
-        {r.name} requested a refund of {formatPrice(r.cents)}
+        {r.name} asked to cash out {formatPrice(r.cents)}
       </h3>
       <div className="finalize-btns">
         <a
@@ -345,17 +345,17 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
           data-refund-venmo
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Refund ${r.name} ${formatPrice(r.cents)} with Venmo`}
+          aria-label={`Pay ${r.name} ${formatPrice(r.cents)} with Venmo`}
           onClick={(e) => {
             openVenmo(e, pay);
             storageSet(`pb_refund_request_opened_${r.id}`, '1');
             bump((x) => x + 1);
           }}
         >
-          Refund
+          Cash out
         </a>
         {tapped && (
-          <button className="btn secondary" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} refunded`)}>
+          <button className="btn secondary" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} cashed out`)}>
             Mark refunded
           </button>
         )}

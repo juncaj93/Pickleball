@@ -271,13 +271,13 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
       <WhoSheet t={t} open={sheet === 'who'} onClose={() => setSheet(null)} />
       <ConfirmDialog
         open={askOut}
-        title={`Back out of ${theName(t.name)}?`}
+        title={`Drop out of ${theName(t.name)}?`}
         body={
           // Zip 74 (picture pair-6): the real name in the title (never "the The Cold Open"). After Pay by, when the drop would take a 2 court
           // night below 8 (the "kept" case), the body is only the money line; before that, the same meaning as before, shorter.
           keeps ? (
             <p className="tm-confirm-text tc-keep-note" data-tm-backout-keeps>
-              Backing out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.
+              Dropping out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.
             </p>
           ) : (
             <p className="tm-confirm-text" data-tm-backout-text>
@@ -286,7 +286,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
           )
         }
         cancelLabel="Stay signed up"
-        confirmLabel="Yes, back out"
+        confirmLabel="Yes, drop out"
         danger
         busy={busy}
         onCancel={() => setAskOut(false)}
@@ -1044,7 +1044,7 @@ function EditSheet({
           {busy ? 'Saving…' : 'Save changes'}
         </button>
         <button type="button" className="tm-quiet-link" onClick={onBackOut} data-tm-backout>
-          Back out of tournament
+          Drop out of tournament
         </button>
       </SheetBottom>
     </Sheet>

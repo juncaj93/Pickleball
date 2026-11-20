@@ -614,7 +614,7 @@ type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'refundRequests' | 'smartAle
 const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
   { key: 'drop36', label: 'Someone drops within 36 hours' },
   { key: 'belowMin', label: 'A game falls below 4' },
-  { key: 'refundRequests', label: 'Refund requests' },
+  { key: 'refundRequests', label: 'Cash out requests' },
   { key: 'smartAlerts', label: 'Smart alerts ("Do this now" reminders)' },
 ];
 
@@ -1508,7 +1508,7 @@ function ExtendedTimeRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 
 /** Zip 30, "Acting for others" (ACTING_FOR_OTHERS, server/actingForOthers.ts): a note in History and a card on Home when a player taps for someone else. Organizer only, look only. Off: only /admin?actingothers=on. */
 function ActingOthersRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="actingOthersAll" path="/api/admin/acting-others-switch" name="Acting for others" hint="Home and History show when a player signs up, backs out or pays for someone else. Nothing is blocked. Organizer only" flag={!!ctx.d.actingOthersForAll} dataAttr="data-acting-others-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="actingOthersAll" path="/api/admin/acting-others-switch" name="Acting for others" hint="Home and History show when a player signs up, drops out or pays for someone else. Nothing is blocked. Organizer only" flag={!!ctx.d.actingOthersForAll} dataAttr="data-acting-others-all" />;
 }
 
 /** Zip 39, "Made cheaper after paying" (CHEAPER_FIX, server/cheaperFix.ts): a late fee on a game made cheaper after people paid keeps only the fee (the rest back as credit), and a new Price per player reprices open seats (Audit A, A-18). Moves money. Off: only /admin?cheaperfix=on on an organizer phone. */

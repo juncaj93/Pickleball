@@ -102,7 +102,7 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
                     )}
                     {!isMe && heldCents(ctx.d, p.id) > 0 && <span className="p-held"><RollText text={`${formatPrice(heldCents(ctx.d, p.id))} held`} /></span>}
                     {!isMe && owedCents > 0 && pot > 0 && <span className="p-held p-pot"><RollText text={`${formatPrice(pot)} credit`} /></span>}
-                    {!isMe && ctx.d.refundRequests.some((r) => r.playerId === p.id) && <span className="p-held p-pot">refund requested</span>}
+                    {!isMe && ctx.d.refundRequests.some((r) => r.playerId === p.id) && <span className="p-held p-pot">cash out requested</span>}
                     <span className="p-played">{p.played} played</span>
                   </span>
                   <button className="btn small secondary p-edit" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
@@ -178,7 +178,7 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
       const latest = [...ledger!.entries].reverse().find((e) => e.kind === 'refunded' && !e.endedAt);
       return void (await instantAct.run(
         () => api('POST', `/api/admin/players/${player.id}/credit-refund`, refunded ? { refunded: true, cents: refundCents } : { refunded: false, ...(latest ? { ledgerId: latest.id } : {}) }),
-        refunded ? 'Credit marked refunded' : 'Credit refund undone',
+        refunded ? 'Credit cashed out' : 'Cash out undone',
         { key: `refund:${player.id}`, what: refunded ? 'Mark refunded' : 'Undo', ...(ctx.d.adminUndo === true ? { undo: true } : {}) },
       ));
     }
@@ -188,7 +188,7 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
       const latest = [...ledger!.entries].reverse().find((e) => e.kind === 'refunded' && !e.endedAt);
       await api('POST', `/api/admin/players/${player.id}/credit-refund`, refunded ? { refunded: true, cents: refundCents } : { refunded: false, ...(latest ? { ledgerId: latest.id } : {}) });
       await ctx.reload();
-      toast(refunded ? 'Credit marked refunded' : 'Credit refund undone');
+      toast(refunded ? 'Credit cashed out' : 'Cash out undone');
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
     } finally {
@@ -205,14 +205,14 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
           data-app-href={pay.appUrl}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Refund ${player.name} ${formatPrice(refundCents)} credit with Venmo`}
+          aria-label={`Cash out ${player.name} ${formatPrice(refundCents)} with Venmo`}
           onClick={(e) => {
             openVenmo(e, pay);
             storageSet(`pb_credit_refund_opened_${player.id}`, String(refundCents));
             bump((n) => n + 1);
           }}
         >
-          Refund {formatPrice(refundCents)} credit
+          Cash out {formatPrice(refundCents)}
         </a>
       )}
       {tapped && (
@@ -240,7 +240,7 @@ function CreditSection({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
       <h3 className="credit-title">Credit</h3>
       <p className="credit-balance" data-credit-balance>
         <strong>Credit {formatPrice(ledger.balanceCents)}</strong>
-        {ledger.reservedCents > 0 && <span className="muted"> · {formatPrice(ledger.reservedCents)} refund requested</span>}
+        {ledger.reservedCents > 0 && <span className="muted"> · {formatPrice(ledger.reservedCents)} cash out requested</span>}
       </p>
       <CreditActions ctx={ctx} player={player} />
       <ul className="credit-history" aria-label="Credit history" data-credit-history>
@@ -493,7 +493,7 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
           spellCheck={false}
           placeholder="@Name or venmo.com/u/Name"
         />
-        <span className="small muted">{ctx.d.secondChance ? 'For refunds and requests. Only you see this.' : 'For refunds. Only you see this.'}</span>
+        <span className="small muted">{ctx.d.secondChance ? 'For cash outs and requests. Only you see this.' : 'For cash outs. Only you see this.'}</span>
       </label>
       {/* The Players redo (Zip 13) has no Plays here: it keeps what was saved (sent back unchanged). */}
       {!noPlays && <><div className="stack" style={{ gap: 6 }}>

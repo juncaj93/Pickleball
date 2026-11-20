@@ -107,11 +107,11 @@ export function alertMessage(a: AlertInput): string | null {
   return lines.length ? lines.join(' ') : null;
 }
 
-/** "Refund requested: Mitchel wants $14 back." (the only alert that names an amount) */
+/** "Cash out: Mitchel wants $14 back." (the only alert that names an amount) */
 export function refundRequestMessage(name: string, cents: number): string {
   // First name and amount only ("Ryan S." is "Ryan").
   const first = name.trim().split(/\s+/)[0] || 'A player';
-  return `Refund requested: ${first} wants $${Math.floor(cents / 100)} back.`;
+  return `Cash out: ${first} wants $${Math.floor(cents / 100)} back.`;
 }
 
 /**

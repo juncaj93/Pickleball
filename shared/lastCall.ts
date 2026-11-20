@@ -32,7 +32,7 @@ export function whichGame(iso: string, tz: string, nowMs: number): string {
 /** 4 or more in: is everyone still in, is anyone else in. Opens with no recipients (the group chat). */
 export function checkInTextLastCall(s: SessionLike, tz: string, nowMs: number, signedUp: number, link: string): string {
   return lines(
-    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in so far. Is everyone still in? Anyone else in?`, `Need to back out? Do it ${byWhen(s.startsAt, tz, nowMs)} to avoid cancel fees.`],
+    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in so far. Is everyone still in? Anyone else in?`, `Need to drop out? Do it ${byWhen(s.startsAt, tz, nowMs)} to avoid cancel fees.`],
     link,
   );
 }

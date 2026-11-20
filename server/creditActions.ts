@@ -140,7 +140,7 @@ export async function useCashOutOn(ctx: Ctx, group: GroupRow, session: SessionRo
 export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string, name: string, body: Record<string, unknown>) {
   const cents = v.cents(body.cents, 'cents');
   if (cents === null || cents <= 0 || cents % 100 !== 0) throw new HttpError(400, 'invalid_cents', 'Enter a whole-dollar amount.');
-  if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You have no credit to refund.');
+  if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You have no credit to cash out.');
   const { usableCents, reservedCents } = await usableFor(ctx, group, playerId);
   if (reservedCents > 0) throw new HttpError(409, 'request_open', 'You already asked for a cash out. Cancel it to make a new one.');
   if (cents > usableCents) throw new HttpError(409, 'not_enough_credit', `You have ${Math.floor(usableCents / 100)} dollars of credit.`);

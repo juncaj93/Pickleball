@@ -50,7 +50,7 @@ const STAGES = [
   { stage: 'game1', label: 'Game 1', line: 'Tonight, started a minute ago, no results. View as Vic: Game 1 with Enter score (mock 17).' },
   { stage: 'mid', label: 'Mid-tournament (running behind)', line: 'Started 45 minutes ago, 7:30 to 9:30 PM. Vic entered 11 to 7 in Game 1: it is in (view as Parker: Lost 7–11, nothing to answer). Home: the Time check with one tap (mock 48).' },
   { stage: 'pools_done', label: 'All pool games done', line: 'Every round robin game in, with scores: final standings with pts; the Final and the 3rd place game are set.' },
-  { stage: 'backed_out', label: 'Player backed out (odd count)', line: 'Teams published, then Zoe backed out after Pay by: 7 locked in. Home: switched to Americano with Copy text for the group. Players: Tournament style is now Americano, no teams.' },
+  { stage: 'backed_out', label: 'Player dropped out (odd count)', line: 'Teams published, then Zoe dropped out after Pay by: 7 locked in. Home: switched to Americano with Copy text for the group. Players: Tournament style is now Americano, no teams.' },
   // Zip 66 (🎾66.admincard): the organizer's card (one closed line, Votes, Not signed up) and the in-or-out alert.
   { stage: 'zip66_start', label: 'Start: the card, Votes, Not signed up', line: 'The Cold Open, the vote open, 8 on the list (Vic and Reese are not). Home: the card is one closed line. Tap it open, tap Votes, tap Not signed up, Copy reminder text. Edit: Plan, Levels (a pencil shows the dates), Pick the date (folded), Settings.' },
   { stage: 'missed_date', label: 'Date picked, Sage missed it', line: 'Finalized on a date Sage did not pick. View as Sage: The Cold Open is that day, Can you make it? I’m in opens the pay sheet; Can’t make it takes her off. Home: Not signed up lists Sage.' },
@@ -71,8 +71,8 @@ const STAGES = [
   { stage: 'pay_today', label: 'Countdown: due today', line: 'Pay by is tonight, 6.5 hours or more from now: red Payment due today.' },
   { stage: 'pay_hours', label: 'Countdown: due in 5 hours', line: 'Pay by is 5 hours 20 minutes from now: red Due in 5 hours.' },
   { stage: 'pay_minutes', label: 'Countdown: due in 42 minutes', line: 'Pay by is 42 minutes from now: red Due in 42 minutes, counting down while Home is open.' },
-  { stage: 'pay_late', label: 'Countdown: late', line: 'Pay by passed an hour ago and Wren backed out after it (a spot is free): red Your payment is late, Pay now.' },
-  { stage: 'pay_closed', label: 'Countdown: late, spots open', line: 'Pay by passed an hour ago, no back out: since Zip 64 a spot is still open, so Vic sees Your payment is late with Pay now.' },
+  { stage: 'pay_late', label: 'Countdown: late', line: 'Pay by passed an hour ago and Wren dropped out after it (a spot is free): red Your payment is late, Pay now.' },
+  { stage: 'pay_closed', label: 'Countdown: late, spots open', line: 'Pay by passed an hour ago, no drop out: since Zip 64 a spot is still open, so Vic sees Your payment is late with Pay now.' },
   // Zip 62 (🎾62.speed): The Cold Open as it is on live, to feel the speed (the format above does not apply).
   { stage: 'speed_check', label: 'Speed check (like live)', line: 'The Cold Open as on live: Everyone, the vote open, 9 on the list (everyone but you). Open Home and View as Vic: the card draws with the rest.' },
   // Zip 60 (🎾60.formatvote): the players vote the format. These build "The Cold Open" on Let players vote; the format above does not apply.

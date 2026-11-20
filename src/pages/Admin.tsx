@@ -477,7 +477,7 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
       <SecondChanceHome ctx={ctx} />
       <UnpaidTextSheet ctx={ctx} />
       {refunds.length > 0 && (
-        <section className="stack" aria-label="Refund requests">
+        <section className="stack" aria-label="Cash out requests">
           {refunds.map((item) => (
             <TodoCard key={key(item)} ctx={ctx} item={item} />
           ))}

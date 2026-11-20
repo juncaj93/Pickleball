@@ -721,7 +721,7 @@ function paidWords(k: AdminTicketView): string {
 /** Zip 56: an I paid on a ticket, waiting for the organizer (the same amber card and words as a game's I paid). */
 function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k: AdminTicketView }) {
   const { busy, save } = useSave(ctx);
-  const where = t.status === 'canceled' ? `${t.name} was canceled.` : k.out ? `Backed out of ${theName(t.name)}.` : `${t.name} ticket.`;
+  const where = t.status === 'canceled' ? `${t.name} was canceled.` : k.out ? `Dropped out of ${theName(t.name)}.` : `${t.name} ticket.`;
   const answer = (action: 'confirm' | 'reject') =>
     save(
       () => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId: k.playerId, action, cents: k.claimCents }),
@@ -868,7 +868,7 @@ function CancelOrReschedule({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournam
               Cancel tournament
             </button>
           </div>
-          <p className="tm-cor-note">Reschedule: pick new dates. Players can back out and get their money back as credit. Cancel: everyone gets their money back as credit.</p>
+          <p className="tm-cor-note">Reschedule: pick new dates. Players can drop out and get their money back as credit. Cancel: everyone gets their money back as credit.</p>
         </div>
       </Sheet>
       <ConfirmDialog
@@ -1534,7 +1534,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
         )}
       </Card>
 
-      {t.backedOut.length > 0 && <p className="tm-card-note tm-backed">Backed out: {t.backedOut.map((b) => b.name).join(', ')}</p>}
+      {t.backedOut.length > 0 && <p className="tm-card-note tm-backed">Dropped out: {t.backedOut.map((b) => b.name).join(', ')}</p>}
 
       {/* Zip 56: once the date is picked, Cancel or reschedule (picture 30); before it (and after a Reschedule), Cancel tournament. */}
       {!canceled &&
@@ -1961,7 +1961,7 @@ function OddSwitchCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k
   const cutoffMs = t.finalDate ? salesCutoffMs(startMsOf(t.finalDate, t.start, tz)) : null;
   const cutoff = cutoffMs !== null && Date.parse(ctx.d.now) < cutoffMs ? payByLabel(new Date(cutoffMs).toISOString(), tz, t.finalDate) : null;
   const text = [
-    who ? `${who} backed out of ${t.name}.` : `A spot opened in ${t.name}.`,
+    who ? `${who} dropped out of ${t.name}.` : `A spot opened in ${t.name}.`,
     `One spot is open${t.finalDate ? ` on ${dayWords(t.finalDate)}` : ''}: ${formatPrice(t.ticketCents)}${cutoff ? `, pay by ${cutoff}` : ''}.`,
     siteAddress(ctx.d.group.playerLink),
   ].join(' ');
