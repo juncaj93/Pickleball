@@ -7214,3 +7214,14 @@ Net Ninjas 1-0, nothing to confirm (light and dark); then the stage was put back
 - Live access worked on the retry: Time Travel bookmark `000019ed-00000000-00005129-22a862edd1fee994860c61a1dfff5e7d`; SQL export of
   `pickleball` (310 KB) saved as `export-20261120145748` in `pickleball-backups`, checked against the file, local copy deleted (phone numbers).
 - Integrity checks before: integrity-checks 21 columns, extension 8, tournament 13, every problem column 0 (info_kept_late_drops 0, open claims 0).
+- Main fast-forwarded `ad02027` to `1a6a048` and pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **c01a5c12-8374-428b-b62b-a2abe2e0fcca** (bundle `index-u1zU4OJt.js`). No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **b828b43f-adac-4031-aedf-2d995b001221** (Zip 70, `896f4c1`), Cloudflare Deployments > Rollback. No database undo needed
+  (no schema change; old code reads a first answer as a result with a winner, which it already understood).
+- Integrity checks after: 21, extension 8, tournament 13 columns, every problem column 0.
+- Read-only live look (pages.dev address; the custom domain does not resolve from the build container): Home 200 at 390 light and dark, no
+  page errors, only GET requests, nothing wider than the screen, the new bundle on three fetches; /admin 200; the organizer dashboard and check
+  401 without a PIN; public `motion` is on (so the Undo circle shows). The organizer-only screens were not opened on live (no read-only PIN in
+  this session).
+- Tests at ship: unit 4,108 passed, 2 skipped, 0 failed (full run on `f7a30aa`; after it only CSS, one toast option and browser checks
+  changed: the size test and the Zip 71 unit tests rerun green); browser zip71 11, zip57 21, zip61 19, zip58 24, zip64 and zip70 green.
