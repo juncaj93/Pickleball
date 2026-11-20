@@ -308,7 +308,7 @@ async function main() {
   }
 
   const run = async (label, fn) => {
-    if (ONLY && !label.includes(ONLY)) return;
+    if (ONLY && !new RegExp(ONLY).test(label)) return;
     if (ONLY_SKIP_ADMIN && label.startsWith('O-')) return;
     try {
       await fn();
@@ -453,25 +453,16 @@ async function main() {
   await adminScreen('zip70_loss', 'card-loss', openCard);
   await adminScreen('zip70_moved', 'card-moved', openCard);
   await adminScreen('zip70_late', 'card-late', openCard);
+  let finInfo = null;
   await adminScreen('zip70_finalize', 'finalize', async (pg) => {
     await openCard(pg);
     await click(pg, '[data-tm-open-dates]');
-    const days = pg.locator('button[data-day]');
-    const n = await days.count();
-    let best = null;
-    let bestN = -1;
-    for (let i = 0; i < n; i++) {
-      const tx = await days.nth(i).innerText().catch(() => '');
-      const k = Number((/(\d+)\s*$/.exec(tx.trim()) || [0, 0])[1]);
-      if (k > bestN && (await days.nth(i).isVisible())) {
-        bestN = k;
-        best = i;
-      }
-    }
-    await days.nth(best ?? 0).click();
+    const f = Date.parse(finInfo.firstDate + 'T12:00:00Z') + 7 * 86400000;
+    const day = new Date(f).toISOString().slice(0, 10);
+    await pg.locator(`button[data-day="${day}"]`).first().click();
     await pg.locator('[data-tm-finalize]').waitFor({ timeout: 10000 });
     await pg.waitForTimeout(400);
-  });
+  }, { before: async () => { finInfo = await stage('zip70_finalize'); } });
   await adminScreen('zip66_start', 'card-vote', async (pg) => {
     await openCard(pg);
     await click(pg, '[data-tm-votes-toggle]');
