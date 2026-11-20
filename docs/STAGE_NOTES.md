@@ -7188,14 +7188,19 @@ never lost).
   Americano and an odd count, nothing for players; F one banner, X hides both). e2e/zip57.cjs, e2e/zip61.cjs rewritten where they tapped Yes /
   No; e2e/zip64.cjs follows the one-banner card.
 
-### Preview (Fri Nov 20, 2026, about 9:40 AM Eastern)
-`pickleball-preview` (fake): Time Travel bookmark first `000001b0-00000000-00005129-188624b55f5217c7b1e310907bbcb659`; deployment `a3b0b4ba`,
-https://claude-new-session-pjtr6m.pickleball-club-9h0.pages.dev; re-seeded (`npm run db:seed:preview`, calm start zip71_taps). First screen at 390,
-light and dark: organizer Home shows The Cold Open's night, "Round 1 · Results" with Net Ninjas "says they beat" Third Shot Gang and Confirm;
-View as Wren shows "Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to confirm." above Up next · Game 2. No page errors. Switches as
-on live (TOURNAMENTS on).
-- Cloudflare timing (e2e/zip68-time.cjs, medians of 11): main's preview (`claude-new-session-491iok`) dashboard 198 ms (all_locked) / 178 ms (mid),
-  check 109 / 95 ms; this preview 205 / 180 ms (zip71_taps 189), check 105 / 102 ms (zip71_taps 102). Same 4 and 2 trips; the difference is noise.
+### Preview (Fri Nov 20, 2026; redeployed with no confirming)
+`pickleball-preview` (fake): Time Travel bookmark first `000001b0-00000000-00005129-188624b55f5217c7b1e310907bbcb659`; deployment `7f2b4d85`
+(first `a3b0b4ba`), https://claude-new-session-pjtr6m.pickleball-club-9h0.pages.dev; re-seeded (`npm run db:seed:preview`, calm start zip71_taps).
+First screen at 390, light and dark: organizer Home shows The Cold Open's night, "Round 1 · Results 0 of 2 in", both courts Playing with Set;
+no page errors. Walked on the preview: View as Vic, We won, 7 seconds later Parker's Home shows Game 1 Lost, Game 2 up next, standings
+Net Ninjas 1-0, nothing to confirm (light and dark); then the stage was put back to zip71_taps. Switches as on live (TOURNAMENTS on).
+- Cloudflare timing (e2e/zip68-time.cjs, medians of 11, first build of this branch): main's preview (`claude-new-session-491iok`) dashboard
+  198 ms (all_locked) / 178 ms (mid), check 109 / 95 ms; this preview 205 / 180 ms (zip71_taps 189), check 105 / 102 ms. Same 4 and 2 trips (local
+  count rechecked after no confirming: 4 and 2, 61 and 16 statements, at all_locked, mid, am_round3, zip71_taps, zip71_am).
+- Second fresh review (no confirming): nothing blocking. Fixed: an old disputed game showed buttons (now none; the organizer settles it);
+  a second answer that agrees says "Vic said Net Ninjas won. It is in." (still refused, nothing to fix); Undo with no result says "Nothing to
+  take back."; leftover comments. Left as is: Locked doubles has no server check on the round being played (the screen only offers the buttons
+  for the game on now; not new).
 
 ### Live: NOT shipped
 Live is deployment `b828b43f` (Zip 70, commit `896f4c1`; main `ad02027` is that plus notes). Before the deploy, the live SQL export (the
