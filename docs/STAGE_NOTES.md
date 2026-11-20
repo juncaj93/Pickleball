@@ -7302,3 +7302,28 @@ In-process A/B, main and branch called in turn (scripts/zip58-admin-ab.ts, 400 c
 9.06/9.04, 7.01/6.98 ms; mid 7.60/8.13, 9.13/8.36, 7.08/7.60 ms (main/branch): the same within noise. Cloudflare (e2e/zip68-time.cjs, 4 passes
 each, main's preview `claude-new-session-pjtr6m` and this one in turn): dashboard medians 176 to 265 ms on both, the spread between passes of the
 same code larger than any difference.
+
+### Tests at ship
+Unit: 212 files, 4,131 passed, 2 skipped (the one failure in the full run was tests/zip48-split's name for the shared file, which now carries
+shared/scores.ts and is named after it: expectation updated on purpose, the file passes); new: tests/zip72-ties.test.ts (10), zip72-scores (14),
+zip72-dryrun (3); `npx tsc -b` clean; the player download inside its budget. Browser: e2e/zip72.cjs 8 of 8 (A to H: pictures pair-1, 2, 4, 5 at
+390/360/320 light and dark, the hint, the circle, one count, Americano scores), zip71 11, zip57 21, zip61 19, zip58 24 (all updated to Enter
+score); switch OFF equals main `e8d4b1b`: zip55-off 47 of 47, zip56-off 47 of 47.
+
+### Preview
+`pickleball-preview` (fake): Time Travel bookmark first `000001b6-00000000-00005129-51ac5880ccefa16754b7867f1272f6ae`; final deployment `76158459`,
+https://claude-new-session-6wjl39.pickleball-club-9h0.pages.dev; re-seeded at the calm start (zip72_scores). First screen at 390, light and dark:
+organizer Home is the Tournament test row, "The Cold Open · Round 1 of 4" and "Round 1 · Results 0 of 2 in" with Set on both courts; Vic's Home is
+the date card, the bar "Game 1 of 3" and the VS card with one Enter score. No page errors. Switches as on live (TOURNAMENTS on).
+
+### Live (Fri Nov 20, 2026, about 11:05 AM Eastern, a quiet window; the brief: ship when green and the audit is clean)
+- Restore points first: Time Travel bookmark `000019fc-00000000-00005129-eb9eb397cdc1e55032fa19a93933664c`; SQL export of `pickleball` (311 KB)
+  saved as `export-20261120160043` in `pickleball-backups`, checked against the file, local copy deleted (phone numbers).
+- Integrity checks before and after: integrity-checks 21 columns, extension 8, tournament 13, every problem column 0.
+- Main fast-forwarded `e8d4b1b` to `1bca2a0` and pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **324e0caa-764a-47d2-895c-df45a577d97e** (bundle `index-CXQk8y9g.js`). No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **c01a5c12-8374-428b-b62b-a2abe2e0fcca** (Zip 71, `1a6a048`), Cloudflare Deployments > Rollback. No database undo
+  needed (no schema change; old code reads a scored result as a result with a winner).
+- Read-only live look (pages.dev address): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen,
+  the new bundle; /admin and /api/status 200; the organizer dashboard and check 401 without a PIN. The organizer screens were not opened on
+  live (no read-only PIN in this session).
