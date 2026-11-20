@@ -21,5 +21,7 @@ export function zip10Allowed(flag: string | undefined | null): boolean {
 /** With the switch on, the most one game can hold: the database's hard limit (migration 0013's trigger), not a setting. */
 export const NO_CAP_MAX = MAX_PLAYERS_LIMIT;
 
-/** The refusal a 13th tap gets with the switch on (the database holds 12). Never the word "full" or "waitlist". */
-export const DB_LIMIT_MESSAGE = `${NO_CAP_MAX} is the most one game can hold right now. Ask Alex.`;
+/** The refusal a 13th tap gets with the switch on (the database holds 12). Never the word "waitlist". Zip 76: the organizer's own name. */
+export const dbLimitMessage = (org: string | null): string => `${NO_CAP_MAX} is the most one game can hold right now.${org ? ` Ask ${org}.` : ''}`;
+/** The organizer's own screens (and the default before the player's route puts the name in). */
+export const DB_LIMIT_MESSAGE = dbLimitMessage(null);

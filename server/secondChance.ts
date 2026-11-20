@@ -412,6 +412,8 @@ export async function checkPings(ctx: Ctx, sessionId: string | null, group: Grou
     const prefs = prefsOf(await ctx.db.prepare('SELECT * FROM organizer_alerts WHERE group_id = ?').bind(g.id).first<AlertRow>());
     if (!prefs.enabled) return 0;
   }
+  // Zip 76 (the 🎾75 audit): Settings > Alerts > Smart alerts OFF pauses these Telegrams too (the tick already checked it; a tap checks here).
+  if (sessionId && (await ctx.db.prepare("SELECT 1 AS x FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = 'smart_alerts' AND kind = 'off' LIMIT 1").bind(g.id).first())) return 0;
   const nowMs = await scNowMs(ctx, g);
   const tz = g.timezone;
   // Never in the night: nothing before 7:00 AM (the 7:00 AM tick sends what came due overnight).

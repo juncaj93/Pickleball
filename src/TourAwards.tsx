@@ -7,7 +7,8 @@
 import { Fragment, useState } from 'react';
 import type { TickerView, TourAwardsView } from '../shared/tournament';
 import { AlertCard } from './AlertCard';
-import { api } from './lib';
+import { api, ApiError, isDemo } from './lib';
+import { useToast } from './ui';
 import { Medals } from './Medals';
 import './tour-awards.css';
 
@@ -67,6 +68,7 @@ export function WinnersTicker({ t }: { t: TickerView }) {
 export function CongratsCard({ c, onChanged }: { c: NonNullable<TourAwardsView['congrats']>; onChanged: () => Promise<unknown> }) {
   const [gone, setGone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   if (gone) return null;
   return (
     <AlertCard
@@ -89,8 +91,10 @@ export function CongratsCard({ c, onChanged }: { c: NonNullable<TourAwardsView['
               await api('POST', '/api/tournament/award-seen', { tournamentId: c.tournamentId });
               setGone(true);
               void onChanged();
-            } catch {
-              // View as, or the connection: the card stays; the next tap tries again.
+            } catch (err) {
+              // View as, or the connection: the card stays; the next tap tries again. Zip 76: said like every other button.
+              if (isDemo(err)) toast(err.message);
+              else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
             } finally {
               setBusy(false);
             }

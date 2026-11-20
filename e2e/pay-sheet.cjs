@@ -5,7 +5,7 @@
  * Off (the ship state): Pay is exactly what it was (a link to Venmo, no sheet). ?paysheet=on turns it on for that phone
  * only (?paysheet=off ends it); Settings > Feature switches > "Pay sheet" turns it on for everyone with no deploy. On: both
  * Pay buttons (the "Tonight: you owe" card at the top and a game card) open a small bottom sheet: title "Pay Alex $14", two
- * equal buttons ("Have the Venmo app? Click here" = the same Venmo link, "Copy Venmo @handle"), a gray Apple Pay / Zelle /
+ * equal buttons ("Open Venmo" = the same Venmo link, "Copy Venmo @handle"), a gray Apple Pay / Zelle /
  * cash line, and "I paid". Nothing else. The Zelle number is Settings > Money (Zip 50: no built-in number; this script saves a fake one).
  * The real Venmo app cannot be opened here: the link's address is checked, the tap itself is the owner's phone test.
  *
@@ -115,7 +115,7 @@ async function main() {
     assert((await sheet(a.page).locator('h2').innerText()) === 'Pay Alex $14', `title: ${await sheet(a.page).locator('h2').innerText()}`);
     const buttons = sheet(a.page).locator('.sheet-body .btn');
     assert((await buttons.count()) === 3, `${await buttons.count()} buttons`);
-    assert(squash(await buttons.nth(0).innerText()) === 'Have the Venmo app? Click here', 'first button');
+    assert(squash(await buttons.nth(0).innerText()) === 'Open Venmo', 'first button');
     assert(squash(await buttons.nth(1).innerText()) === 'Copy Venmo @organizer', `second button: ${await buttons.nth(1).innerText()}`);
     assert(squash(await buttons.nth(2).innerText()) === 'I paid', 'third button');
     assert(squash(await sheet(a.page).locator('.pay-alt').innerText()) === 'No Venmo? Apple Pay or Zelle (313) 555-0100, or cash.', 'gray line');
@@ -124,7 +124,7 @@ async function main() {
     assert(/amount=14/.test(href) && /note=Pickleball/.test(href), 'the amount and note');
     // Nothing else in the sheet.
     const words = await body(a.page);
-    assert(words === 'Pay Alex $14 ✕ Have the Venmo app? Click here Copy Venmo @organizer No Venmo? Apple Pay or Zelle (313) 555-0100, or cash. I paid', `sheet text: ${words}`);
+    assert(words === 'Pay Alex $14 ✕ Open Venmo Copy Venmo @organizer No Venmo? Apple Pay or Zelle (313) 555-0100, or cash. I paid', `sheet text: ${words}`);
     assert((await sheet(a.page).locator('a[href]').count()) === 1, 'only the Venmo link, no web link');
     // Another phone is not switched on.
     const other = await open(L.NOSPACE);

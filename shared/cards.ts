@@ -1,4 +1,5 @@
 import type { GroupSettings } from './settings';
+import { CANCEL_BY_HOURS } from './time';
 
 // When the day-before and last-call cards show on the organizer's Home.
 // Worked out from stored times on every page load; nothing runs in the
@@ -16,7 +17,8 @@ export interface CardInput {
 export function deadlineMs(s: Pick<CardInput, 'startsAt' | 'cancellationDeadlineAt'>, settings: GroupSettings): number {
   return s.cancellationDeadlineAt
     ? Date.parse(s.cancellationDeadlineAt)
-    : Date.parse(s.startsAt) - settings.defaultDeadlineHours * 3600_000;
+    : Date.parse(s.startsAt) - CANCEL_BY_HOURS * 3600_000; // Zip 76: one clock (start minus 12 hours), whatever the old setting says
+  void settings;
 }
 
 /**

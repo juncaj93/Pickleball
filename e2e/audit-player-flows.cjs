@@ -1065,20 +1065,20 @@ async function main() {
       console.log(`      (stale Undo on a canceled game says: "${b}")`);
       await ctx.close();
     });
-    await check('stale Drop out on a game canceled after the page loaded: after the hold, "This session was canceled." and the card shows Canceled; money untouched', async () => {
+    await check('stale Drop out on a game canceled after the page loaded: after the hold, "This game was canceled." and the card shows Canceled; money untouched', async () => {
       const { ctx, page } = await stale('Rex');
       await post(areq, `/api/admin/sessions/${X.X3.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Thanksgiving' });
       await tapDrop(page, X.X3);
-      await waitBanner(page, /This session was canceled/, 9000);
+      await waitBanner(page, /This game was canceled/, 9000);
       await card(page, X.X3).getByText('Canceled - Thanksgiving').waitFor({ timeout: 4000 });
       assert((await potOf('Rex')) === 1400, 'pot changed');
       await ctx.close();
     });
-    await check('stale I\'m in on a game canceled after the page loaded: "This session was canceled.", no seat, card shows the reason', async () => {
+    await check('stale I\'m in on a game canceled after the page loaded: "This game was canceled.", no seat, card shows the reason', async () => {
       const { ctx, page } = await stale('Rex');
       await post(areq, `/api/admin/sessions/${X.X1.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Court closed' });
       await card(page, X.X1).getByRole('button', { name: "I'm in" }).click();
-      await waitBanner(page, /This session was canceled/);
+      await waitBanner(page, /This game was canceled/);
       await card(page, X.X1).getByText('Canceled - Court closed').waitFor({ timeout: 4000 });
       assert((await statusOf('Rex', X.X1)) === null, 'seat on a canceled game');
       assert((await potOf('Rex')) === 1400, 'credit spent on a canceled game');
@@ -1126,7 +1126,7 @@ async function main() {
       assert(/organizer|Alex/i.test(b), b);
       await ctx.close();
     });
-    await check('stale "I paid" on a game canceled after the page loaded: "This session was canceled.", nothing recorded', async () => {
+    await check('stale "I paid" on a game canceled after the page loaded: "This game was canceled.", nothing recorded', async () => {
       await join('Frankie', X.X9);
       const { ctx, page } = await open('Frankie');
       await page.route('**/api/group/version', (r) => r.abort('internetdisconnected'));
@@ -1134,7 +1134,7 @@ async function main() {
       await iPaid.waitFor();
       await post(areq, `/api/admin/sessions/${X.X9.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Rain' });
       await iPaid.click();
-      await waitBanner(page, /This session was canceled/);
+      await waitBanner(page, /This game was canceled/);
       await card(page, X.X9).getByText('Canceled - Rain').waitFor({ timeout: 4000 });
       const m = await mineOf('Frankie', X.X9);
       assert(!m || m.paymentStatus !== 'paid', `recorded: ${JSON.stringify(m)}`);
@@ -1587,27 +1587,27 @@ async function main() {
       assert((await statusOf('Ned', G[1])) === 'withdrawn', 'not sent');
       await ctx.close();
     });
-    await check('stale Drop out after the start: "This session already started." and the card keeps me in', async () => {
+    await check('stale Drop out after the start: "This game already started." and the card keeps me in', async () => {
       await setClock(startT - 30_000);
       const { ctx, page } = await open('Olive', { clockAt: startT - 30_000 });
       await page.route('**/api/group/version', (r) => r.abort('internetdisconnected'));
       await setClock(startT + 3000);
       await tapDrop(page, G[1]);
       const b = await waitBanner(page, /started|try again/i, 9000);
-      assert(/This session already started\./.test(b), b);
+      assert(/This game already started\./.test(b), b);
       await sleep(800);
       assert((await statusOf('Olive', G[1])) === 'confirmed', 'seat changed after start');
       assert(await isIn(page, G[1]), 'card shows out');
       await ctx.close();
     });
-    await check('stale I\'m in after the start: "This session already started." and no seat', async () => {
+    await check('stale I\'m in after the start: "This game already started." and no seat', async () => {
       await setClock(startT - 30_000);
       const { ctx, page } = await open('Rex', { clockAt: startT - 30_000 });
       await page.route('**/api/group/version', (r) => r.abort('internetdisconnected'));
       await setClock(startT + 3000);
       await card(page, G[1]).getByRole('button', { name: "I'm in" }).click();
       const b = await waitBanner(page, /started|try again/i, 6000);
-      assert(/This session already started\./.test(b), b);
+      assert(/This game already started\./.test(b), b);
       assert((await statusOf('Rex', G[1])) === null, 'seat after start');
       await ctx.close();
     });

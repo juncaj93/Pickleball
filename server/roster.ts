@@ -68,8 +68,8 @@ interface ExistingRow {
 const isOpenLateDrop = (r: ExistingRow | null | undefined) => !!r && r.status === 'withdrawn' && r.played === 0 && !!r.late_drop_at && !r.late_drop_done_at;
 
 function assertOpen(session: SessionRow, nowMs: number) {
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
-  if (nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
+  if (nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This game already started.');
 }
 
 async function existingRow(db: D1Database, sessionId: string, playerId: string) {
@@ -244,7 +244,7 @@ async function tryConfirm(
     return out[0].meta.changes === 1 ? 'new' : false;
   } catch (err) {
     if (isTriggerError(err, 'session_full')) return false;
-    if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This game was canceled.');
     // A second tap racing the first can hit the unique (session, player) key.
     if (err instanceof Error && /UNIQUE/i.test(err.message)) {
       return (await existingRow(db, session.id, playerId))?.status === 'confirmed' ? 'already' : false;
@@ -301,7 +301,7 @@ async function addToWaitlist(db: D1Database, session: SessionRow, playerId: stri
         .run();
     }
   } catch (err) {
-    if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This game was canceled.');
     if (!(err instanceof Error && /UNIQUE/i.test(err.message))) throw err;
   }
 }
@@ -862,7 +862,7 @@ export async function setCourtPaid(db: D1Database, session: SessionRow, playerId
 export async function confirmAttendance(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
-  if (existing?.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', "You don't have a spot in this session.");
+  if (existing?.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', "You're not in this game.");
   const nowIso = new Date(nowMs).toISOString();
   await db
     .prepare(
@@ -887,7 +887,7 @@ export async function moveToWaitlist(db: D1Database, session: SessionRow, player
   if (!existing) return addToWaitlist(db, session, playerId, nowIso);
   if (existing.status === 'waitlisted') return;
   // An open late-drop debt (shared/lateFees.ts) is not a seat to move: it would wipe the debt or strand its money.
-  if (isOpenLateDrop(existing)) throw new HttpError(409, 'late_fee_open', 'They dropped late and still owe their $14. Clear it on the Money tab first.');
+  if (isOpenLateDrop(existing)) throw new HttpError(409, 'late_fee_open', 'They dropped late and still owe for this game. Clear it on the Money tab first.');
   const g = await hasGuestColumns(db);
   // Zip 42 round 3: a host still owing a guest's spot removed late is not a seat to move either (the move would wipe that $14).
   if (g) {
@@ -924,7 +924,7 @@ export async function moveToWaitlist(db: D1Database, session: SessionRow, player
         .bind(nowIso, session.id, playerId),
     ]);
   } catch (err) {
-    if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This game was canceled.');
     throw err;
   }
 }

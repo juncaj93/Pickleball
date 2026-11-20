@@ -39,6 +39,8 @@ export interface PlayerSessionView {
   countText: string;
   /** At the max: anyone else waits. */
   full: boolean;
+  /** Zip 76: no waitlist (no cap) and the game holds the most it can (12, the database's limit): the card says "Full", no I'm in. */
+  atLimit?: boolean;
   /** What the big button does for someone not in yet. */
   joinAs: 'in' | 'waitlist';
   /** US holiday on this date, e.g. "Thanksgiving". */

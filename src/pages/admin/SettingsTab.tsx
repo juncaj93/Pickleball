@@ -129,7 +129,6 @@ function Section({
 const ADVANCED_SETTINGS: { key: WholeKey; label: string; hint?: string }[] = [
   { key: 'horizonWeeks', label: 'Plan sessions ahead (weeks)' },
   { key: 'bookingLeadDays', label: 'Booking reminder (days before play)' },
-  { key: 'defaultDeadlineHours', label: 'Cancellation deadline for new sessions (hours before play)', hint: "Northville's rule: 12" },
 ];
 
 export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
@@ -759,7 +758,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
             )}
           </div>
           {smartTest?.status === 'failed' && <Notice tone="danger">{smartTest.message}</Notice>}
-          <p className="set-hint">Only you get these. Player names and game times only (a refund request also says the amount). Smart alerts say what to do next (night before, booking day, after the game), checked every 5 minutes, and stay quiet once you tap the button on Home.</p>
+          <p className="set-hint">Only you get these: names, game times and amounts. Smart alerts say what to do next and stop once you tap the button on Home. Smart alerts off also pauses the Second Chance alerts.</p>
         </>
       )}
     </>

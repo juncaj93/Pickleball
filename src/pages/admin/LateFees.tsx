@@ -47,7 +47,7 @@ export function ClearChoices({ ctx, s, r, onDone }: { ctx: AdminCtx; s: AdminSes
     );
   }
   return (
-    <span className="inline-links" role="group" aria-label={`Clear ${r.name}'s $14: why?`} data-clear-choices={r.name}>
+    <span className="inline-links" role="group" aria-label={`Clear ${r.name}'s late drop: why?`} data-clear-choices={r.name}>
       {CLEAR_CHOICES.map((c) => (
         <button key={c.why} type="button" className="btn small secondary" disabled={busy} data-clear-why={c.why} onClick={() => void clear(c.why)}>
           {c.label}

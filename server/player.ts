@@ -21,6 +21,7 @@ import {
   type GroupRow,
   loadRoster,
   organizerIdOf,
+  orgFirstName,
   settingsOf,
 } from './repo';
 import { holidayFor } from '../shared/holidays';
@@ -127,6 +128,7 @@ import { changeStamp, changeStampAndTour } from './stamp';
 import { hiddenFromPlayers } from './hideGame';
 import { cardTimeFor } from './zip9';
 import { cardCleanupLook } from './zip10';
+import { dbLimitMessage } from '../shared/zip10';
 import { alertCardsFor } from './zip11';
 import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
@@ -581,11 +583,11 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
   if (all.some((p) => nameKey(p.display_name) === nameKey(name))) {
     throw new HttpError(409, 'name_taken', `Someone already uses "${name}". Add your last initial, like "${name} S."`);
   }
-  if (all.length >= 30) throw new HttpError(409, 'too_many_players', 'The list is full. Ask the organizer to add you.');
+  if (all.length >= 30) throw new HttpError(409, 'too_many_players', `The list is full. Ask ${orgFirstName(group)} to add you.`);
   // Spam guard: a few new names per phone per hour, even when many arrive at once.
   const slot = await claimSlot(ctx, 'self_add', 3600_000, SELF_ADDS_PER_HOUR);
   if (!slot) {
-    throw new HttpError(429, 'too_many_names', "You've added a few names already. Try again in an hour, or ask the organizer to add you.");
+    throw new HttpError(429, 'too_many_names', `You've added a few names already. Try again in an hour, or ask ${orgFirstName(group)} to add you.`);
   }
   const id = newId();
   try {
@@ -627,7 +629,7 @@ async function actingOn(ctx: Ctx) {
   refuseDemo(ctx, who);
   if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const session = await getSession(ctx.db, who.group.id, v.id(ctx.params.id, 'session'));
-  if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
+  if (!session) throw new HttpError(404, 'session_not_found', 'That game is gone. Look again.');
   return { ...who, playerId: who.playerId, session };
 }
 
@@ -658,7 +660,10 @@ export async function playerJoin(ctx: Ctx) {
   // Zip 17, Unpaid nudge (off: only its switch row is read): at 3 unpaid games a new sign-up waits until they pay.
   await refuseOverLimit(ctx, who.group, who.session, who.playerId);
   const watch = await watchTap(ctx, who.group, who.session, who.playerId);
-  const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto', settingsOf(who.group));
+  // Zip 76: the database's 12 limit names the organizer from Settings (joinSession has no group).
+  const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto', settingsOf(who.group)).catch((err) => {
+    throw err instanceof HttpError && err.code === 'game_limit' ? new HttpError(409, 'game_limit', dbLimitMessage(orgFirstName(who.group))) : err;
+  });
   await clearLateDrop(ctx.db, who.session.id, who.playerId);
   if (res.result !== 'already_confirmed') await logAction(ctx, who, 'join', res.result);
   await afterTap(ctx, watch);
@@ -711,7 +716,7 @@ export async function playerWithdraw(ctx: Ctx, body: Record<string, unknown> = {
 /** POST /api/sessions/:id/remove-guest: Zip 42 "Guest spot", the host's own "Remove guest" (switch on for this phone). */
 export async function playerRemoveGuest(ctx: Ctx) {
   const who = await actingOn(ctx);
-  if (!(await guestSpotFlags(ctx, who.group.id)).on) throw new HttpError(403, 'guest_spot_off', 'Ask Alex to remove your guest.');
+  if (!(await guestSpotFlags(ctx, who.group.id)).on) throw new HttpError(403, 'guest_spot_off', `Ask ${orgFirstName(who.group)} to remove your guest.`);
   const res = await removeGuestCore(ctx, who.group, who.session, who.playerId, 'host');
   return { result: 'removed', guest: res.guest, creditBackCents: res.creditBackCents, ...(res.lateOwesCents ? { lateOwesCents: res.lateOwesCents } : {}) };
 }
@@ -868,7 +873,7 @@ export async function sessionCalendarFile(ctx: Ctx): Promise<Response> {
     ends_at: string;
     venue_name: string | null;
   }>();
-  if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
+  if (!session) throw new HttpError(404, 'session_not_found', 'That game is gone. Look again.');
   const group = await ctx.db.prepare('SELECT timezone, venue_name, venue_address FROM groups WHERE id = ?').bind(session.group_id).first<{
     timezone: string;
     venue_name: string | null;

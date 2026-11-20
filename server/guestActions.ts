@@ -13,14 +13,14 @@ import { requireAdmin } from './auth';
 import { HttpError } from './http';
 import * as v from './validate';
 import { holdShortCashStatements } from './credit';
-import { audit, flatOf, getSession, type GroupRow, loadRoster, organizerIdOf, type SessionRow, settingsOf, sharesFor } from './repo';
+import { audit, flatOf, getSession, type GroupRow, loadRoster, organizerIdOf, orgFirstName, type SessionRow, settingsOf, sharesFor } from './repo';
 import { applyPayment } from './admin';
 import { moneyPicture } from './credit';
 import { seatCredit } from '../shared/credit';
 import { auditSubClears, settle, subClearStatements, subCleared } from './roster';
 import { confirmedHeads, guestSpotFlags, hasGuestColumns, nextClaimSeq, setGuestSpotForAll, trimSeatStatements } from './guestSpot';
 import { capOf } from '../shared/settings';
-import { DB_LIMIT_MESSAGE } from '../shared/zip10';
+import { dbLimitMessage } from '../shared/zip10';
 import { cleanGuestName, GUEST_NAME_MAX, guestIn, guestOwed, guestWaiting, headCount, seatUnits, sharesPaid } from '../shared/guestSpot';
 import { FEE_MIN_PLAYERS, lateFeeCutoffMs } from '../shared/lateFees';
 import { LEAVES_SHORT, lateFeesFor } from './lateFees';
@@ -61,7 +61,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
   if (!(await guestSpotFlags(ctx, group.id)).on) throw new HttpError(403, 'guest_spot_off', 'Guest spot is off.');
   await needColumns(ctx);
   const session = await getSession(ctx.db, group.id, v.id(ctx.params.id, 'session'));
-  if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
+  if (!session) throw new HttpError(404, 'session_not_found', 'That game is gone. Look again.');
   assertChangeable(session, ctx.nowMs);
   const playerId = v.id(body.playerId, 'playerId');
   const name = cleanGuestName(body.name);
@@ -75,7 +75,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
   const settings = settingsOf(group);
   const max = capOf(settings);
   const noWaitlist = settings.noCap === true;
-  if (noWaitlist && headCount(confirmedOf(roster)) >= max) throw new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE);
+  if (noWaitlist && headCount(confirmedOf(roster)) >= max) throw new HttpError(409, 'game_limit', dbLimitMessage(orgFirstName(group)));
   const flat = flatOf(session, settings);
   const organizerId = await organizerIdOf(ctx.db, group);
   const now = ctx.nowIso;
@@ -108,7 +108,7 @@ export async function addGuest(ctx: Ctx, body: Record<string, unknown>) {
   if (out[0].meta.changes !== 1) {
     const fresh = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
     if (fresh && (guestIn(fresh) || guestWaiting(fresh))) throw new HttpError(409, 'has_guest', `${host.display_name} already has a guest for this game.`);
-    if (noWaitlist) throw new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE);
+    if (noWaitlist) throw new HttpError(409, 'game_limit', dbLimitMessage(orgFirstName(group)));
     throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   }
   if (!ownSpot && subCleared(out, out.length - 6, true)) await auditSubClears(ctx.db, group.id, session.id, playerId, now, flat);
@@ -125,7 +125,7 @@ export async function removeGuestCore(ctx: Ctx, group: GroupRow, session: Sessio
   await needColumns(ctx);
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   if (session.finalized_at) throw new HttpError(409, 'finalized', 'This game is finalized. Reopen it to change who played.');
-  if (by === 'host' && ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This game already started. Ask Alex.');
+  if (by === 'host' && ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', `This game already started. Ask ${orgFirstName(group)}.`);
   const roster = await loadRoster(ctx.db, session.id);
   const host = roster.find((r) => r.player_id === playerId);
   // Round 3: the organizer can also take off a guest whose spot is still owed (removed late): that clears the $14 like a Clear would.
@@ -135,7 +135,7 @@ export async function removeGuestCore(ctx: Ctx, group: GroupRow, session: Sessio
     throw new HttpError(
       409,
       'unconfirmed_paid',
-      by === 'host' ? 'Your I paid is still waiting for the organizer. Ask the organizer to remove your guest.' : `${host.display_name} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it first.`,
+      by === 'host' ? `Your I paid is still waiting for ${orgFirstName(group)}. Ask ${orgFirstName(group)} to remove your guest.` : `${host.display_name} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it first.`,
     );
   const guest = host.guest_name ?? 'Guest';
   const wasIn = guestIn(host);
@@ -211,7 +211,7 @@ async function creditBackAt(ctx: Ctx, sessionId: string, playerId: string, now: 
 export async function adminRemoveGuest(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const session = await getSession(ctx.db, group.id, v.id(ctx.params.id, 'session'));
-  if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
+  if (!session) throw new HttpError(404, 'session_not_found', 'That game is gone. Look again.');
   return removeGuestCore(ctx, group, session, v.id(body.playerId, 'playerId'), 'organizer');
 }
 
@@ -243,7 +243,7 @@ export async function setGuestShare(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   await needColumns(ctx);
   const session = await getSession(ctx.db, group.id, v.id(ctx.params.id, 'session'));
-  if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
+  if (!session) throw new HttpError(404, 'session_not_found', 'That game is gone. Look again.');
   const playerId = v.id(body.playerId, 'playerId');
   const who = v.oneOf(body.who, 'who', ['host', 'guest'] as const);
   const paid = v.bool(body.paid, 'paid');

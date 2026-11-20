@@ -1,7 +1,7 @@
 import { type SeatPrice, seatPrices } from '../shared/pricing';
 import { type GamePrice, gameMinutes, gamePrice, lengthRow } from '../shared/gameLength';
 import { planSessions } from '../shared/schedule';
-import { localParts, zonedTimeToUtc } from '../shared/time';
+import { CANCEL_BY_HOURS, localParts, zonedTimeToUtc } from '../shared/time';
 import { type GroupSettings, normalizeSettings } from '../shared/settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } from '../shared/status';
 import type { PaymentStatus, RosterStatus } from '../shared/api';
@@ -408,9 +408,12 @@ export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: num
   return missing.length;
 }
 
-/** The cancellation deadline a new or moved session starts with. */
-export function defaultDeadline(startsAtIso: string, settings: GroupSettings): string {
-  return new Date(Date.parse(startsAtIso) - settings.defaultDeadlineHours * 3600_000).toISOString();
+/**
+ * The cancellation deadline a new or moved session starts with. Zip 76 (the 🎾75 audit): always start minus 12 hours (CANCEL_BY_HOURS), the one
+ * clock the cards and the cancel question use; the old Settings > Schedule hours row is gone (games already saved keep their time).
+ */
+export function defaultDeadline(startsAtIso: string, _settings?: GroupSettings): string {
+  return new Date(Date.parse(startsAtIso) - CANCEL_BY_HOURS * 3600_000).toISOString();
 }
 
 /**
@@ -692,4 +695,9 @@ export async function lookbackIso(db: D1Database, groupId: string, nowMs: number
     });
   // Sessions are loaded with ends_at > since, so step just before the oldest.
   return row?.oldest ? new Date(Date.parse(row.oldest) - 1).toISOString() : usual;
+}
+
+/** Zip 76 (the 🎾75 audit): the organizer's first name from Settings for every player refusal ("Ask Alex."), else "the organizer". One wording. */
+export function orgFirstName(group: Pick<GroupRow, 'organizer_name'>): string {
+  return (group.organizer_name ?? '').trim().split(/\s+/)[0] || 'the organizer';
 }

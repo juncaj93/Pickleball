@@ -11,7 +11,7 @@ import { newId } from './crypto';
 import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, USABLE, useCashOutOnSeat, seatUnitsOf } from './credit';
 import { HttpError } from './http';
 import { lateFeeKind } from '../shared/lateFees';
-import { audit, type GroupRow, loadRoster, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
+import { audit, type GroupRow, loadRoster, organizerIdOf, orgFirstName, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 import { flatOf } from './repo';
 import { phoneTagOf } from './phoneTag';
@@ -35,7 +35,7 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
   const row = roster.find((r) => r.player_id === playerId);
   // An open late fee (shared/lateFees.ts) is paid like any game, also on a seat that left or a game canceled late.
   const fee = row ? lateFeeKind(row, session) : null;
-  if (session.status === 'canceled' && !fee) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled' && !fee) throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   const price = pricesFor(session, roster, settingsOf(group)).get(playerId);
   if (!row || (row.status !== 'confirmed' && !fee) || row.payment_status !== 'unpaid' || !price) {
     throw new HttpError(409, 'nothing_owed', 'You do not owe anything for this game.');
@@ -72,7 +72,7 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
 export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, name: string) {
   // After Finalize the credit on the seat is part of the final price and may have money back from it: only the
   // organizer's Unmark (which takes that back too) can change it now.
-  if (session.finalized_at) throw new HttpError(409, 'finalized', 'This game is finalized. Ask the organizer to change it.');
+  if (session.finalized_at) throw new HttpError(409, 'finalized', `This game is finalized. Ask ${orgFirstName(group)} to change it.`);
   const roster = await loadRoster(ctx.db, session.id);
   const row = roster.find((r) => r.player_id === playerId);
   if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');

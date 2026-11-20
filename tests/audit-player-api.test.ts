@@ -466,7 +466,7 @@ describe('1. Sign up', () => {
     await cancelGame(w, g.id);
     const r = await joinRaw(w, g.id, 'Casey');
     friendly(r, 409);
-    expect(r.data.message).toBe('This session was canceled.');
+    expect(r.data.message).toBe('This game was canceled.');
     expect(await pot(w, 'Casey')).toBe(1400);
   });
 
@@ -627,7 +627,7 @@ describe('2. Drop out', () => {
       w.app.now = Date.parse(g.startsAt) + offset;
       const r = await drop(w, g.id, 'Casey');
       friendly(r, 409);
-      expect(r.data.message).toBe('This session already started.');
+      expect(r.data.message).toBe('This game already started.');
       expect(seatRow(w, g.id, 'Casey').status).toBe('confirmed');
       expect(liveUsed(w, g.id, 'Casey')).toBe(1400);
       expect(await pot(w, 'Casey')).toBe(0);

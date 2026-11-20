@@ -4,6 +4,7 @@
 // secret; it reuses the site's own Telegram secrets and the same task brain
 // as the card (shared/tasks.ts), so the two always say the same thing.
 // A failed tick or a failed send never touches any other data or any tap.
+import { CANCEL_BY_HOURS } from '../shared/time';
 import { holidayFor } from '../shared/holidays';
 import { hasGuestColumns, SEAT_HEADS } from './guestSpot';
 import { textsR2Allowed } from '../shared/textsR2';
@@ -48,7 +49,7 @@ export function taskOptions(ctx: Ctx, group: GroupRow): TaskOptions {
   return {
     tz: group.timezone,
     bookingLeadDays: settings.bookingLeadDays,
-    defaultDeadlineHours: settings.defaultDeadlineHours,
+    defaultDeadlineHours: CANCEL_BY_HOURS, // Zip 76: one clock, start minus 12 hours
     links: { admin: `${siteUrlOf(ctx)}/admin`, book: COURTRESERVE_BOOKING_URL, cancel: COURTRESERVE_CANCEL_URL },
   };
 }
@@ -271,16 +272,17 @@ async function tickJobs(ctx: Ctx, watch: TickWatch): Promise<TickResult> {
   if (!group) return { ok: true, sent: 0, failed: 0, skipped: 'no_group' };
   if (!connected(ctx.env)) return { ok: true, sent: 0, failed: 0, skipped: 'not_connected' };
   if (!prefsOf((alertRows.results[0] as unknown as AlertRow | undefined) ?? null).enabled) return { ok: true, sent: 0, failed: 0, skipped: 'alerts_off' };
+  // Zip 76 (the 🎾75 audit): Smart alerts OFF pauses the Second Chance Telegrams too, so the check comes first.
+  if (offRows.results.length > 0) return { ok: true, sent: 0, failed: 0, skipped: 'smart_off' };
   // Zip 15 (server/secondChance.ts): today's not-booked games, Telegram 1 (4 in) and 2 (4 paid), each once. Off: one switch read.
   await tickPings(ctx, group);
-  if (offRows.results.length > 0) return { ok: true, sent: 0, failed: 0, skipped: 'smart_off' };
   // Zip 37 (server/gameDayText.ts): the hour-before "Text the players" Telegram. It looks only at the games this tick already read, and asks for
   // its switch row only while a booked game is 15 to 60 minutes from its start, so every other tick asks the database exactly what it did before.
   await tickGameText(ctx, group, sessionRows.results as unknown as SessionRow[]);
 
   const settings = settingsOf(group);
   const textsR2 = textsR2Allowed(ctx.env.TEXTS_R2) && textsR2Rows.results.length > 0;
-  const o = { tz: group.timezone, bookingLeadDays: settings.bookingLeadDays, defaultDeadlineHours: settings.defaultDeadlineHours, ...(textsR2 ? { textsR2: true } : {}) };
+  const o = { tz: group.timezone, bookingLeadDays: settings.bookingLeadDays, defaultDeadlineHours: CANCEL_BY_HOURS, ...(textsR2 ? { textsR2: true } : {}) }; // Zip 76: one clock, start minus 12 hours
   // Quick check first (plain arithmetic, see mayAlertSoon): only games that could have an alert due now go on.
   const rows = (sessionRows.results as unknown as SessionRow[]).filter(
     (s) => Date.parse(s.starts_at) <= ctx.nowMs + (settings.bookingLeadDays + 1) * DAY_MS && mayAlertSoon(rowFacts(s), null, ctx.nowMs, o),

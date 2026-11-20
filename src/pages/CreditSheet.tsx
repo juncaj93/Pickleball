@@ -90,7 +90,7 @@ export function CreditChip({ credit, onOpen, startFrom, enter, leave }: { credit
  * is reserved until the organizer answers), and one gray line. Opening Venmo
  * is the organizer's side; nothing here moves money by itself.
  */
-export function CreditSheet({ open, credit, tz, organizerName = 'Alex', nowIso, onClose, onChanged }: { open: boolean; credit: CreditView; tz: string; organizerName?: string; /** The server's now, for "recent" (an adjustment note shows for 14 days). */ nowIso?: string; onClose: () => void; onChanged: () => Promise<void> }) {
+export function CreditSheet({ open, credit, tz, organizerName = 'the organizer', nowIso, onClose, onChanged }: { open: boolean; credit: CreditView; tz: string; organizerName?: string; /** The server's now, for "recent" (an adjustment note shows for 14 days). */ nowIso?: string; onClose: () => void; onChanged: () => Promise<void> }) {
   const toast = useToast();
   const [asking, setAsking] = useState(false);
   const [amount, setAmount] = useState('');

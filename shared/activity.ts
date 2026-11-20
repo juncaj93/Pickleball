@@ -250,89 +250,89 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournaments_off':
       return `${who} switched "Tournaments" off`;
     case 'tournament_created':
-      return `${who} opened sign-up for the ${tourName(d)}${d.visibility === 'all' ? '' : ' (only you can see it)'}`;
+      return `${who} opened sign-up for ${theTour(d)}${d.visibility === 'all' ? '' : ' (only you can see it)'}`;
     case 'tournament_edited':
-      return `${who} changed the ${tourName(d)}${typeof d.trimmed === 'number' && d.trimmed > 0 ? ` (${d.trimmed} ${d.trimmed === 1 ? 'player' : 'players'} lost a picked date)` : ''}`;
+      return `${who} changed ${theTour(d)}${typeof d.trimmed === 'number' && d.trimmed > 0 ? ` (${d.trimmed} ${d.trimmed === 1 ? 'player' : 'players'} lost a picked date)` : ''}`;
     case 'tournament_shown':
-      return `${who} showed the ${tourName(d)} to everyone`;
+      return `${who} showed ${theTour(d)} to everyone`;
     case 'tournament_hidden':
-      return `${who} set the ${tourName(d)} to Only me`;
+      return `${who} set ${theTour(d)} to Only me`;
     case 'tournament_level':
-      return `${who} set ${player}'s level to ${typeof d.level === 'string' ? d.level : '?'} for the ${tourName(d)}`;
+      return `${who} set ${player}'s level to ${typeof d.level === 'string' ? d.level : '?'} for ${theTour(d)}`;
     case 'tournament_date':
-      return typeof d.date === 'string' ? `${who} picked ${d.date} for the ${tourName(d)}` : `${who} took back the date for the ${tourName(d)}`;
+      return typeof d.date === 'string' ? `${who} picked ${d.date} for ${theTour(d)}` : `${who} took back the date for ${theTour(d)}`;
     // Zip 60: how the format was set. The players' vote (with the counts), the tie rule, or the organizer.
     case 'tournament_format': {
       const fmt = d.format === 'americano' ? 'Americano' : 'Locked doubles';
       const counts = typeof d.locked === 'number' ? ` (Locked ${d.locked}, Americano ${num(d.americano)}, Either ${num(d.either)})` : '';
-      if (d.how === 'vote') return `The players' vote made the ${tourName(d)} ${fmt}${counts}`;
-      if (d.how === 'tie') return `No majority, so the tie rule made the ${tourName(d)} ${fmt}${counts}`;
-      if (d.how === 'vote_open') return `${who} let the players vote the ${tourName(d)} format`;
+      if (d.how === 'vote') return `The players' vote made ${theTour(d)} ${fmt}${counts}`;
+      if (d.how === 'tie') return `No majority, so the tie rule made ${theTour(d)} ${fmt}${counts}`;
+      if (d.how === 'vote_open') return `${who} let the players vote ${theTour(d)} format`;
       // Zip 64: the style rules once tickets close (an odd number locked in plays Americano; the organizer can switch back).
       if (d.how === 'odd') return `${tourName(d)} switched to Americano (${num(d.lockedIn)} locked in, an odd number)`;
-      if (d.how === 'back') return `${who} switched the ${tourName(d)} back to Locked doubles (${num(d.lockedIn)} locked in)`;
-      return `${who} set the ${tourName(d)} format to ${fmt}`;
+      if (d.how === 'back') return `${who} switched ${theTour(d)} back to Locked doubles (${num(d.lockedIn)} locked in)`;
+      return `${who} set ${theTour(d)} format to ${fmt}`;
     }
     case 'tournament_canceled':
-      return `${who} canceled the ${tourName(d)}${typeof d.returned === 'number' && d.returned > 0 ? ` (${d.returned} ${d.returned === 1 ? 'ticket' : 'tickets'}, ${cents(d.amountCents)} back as credit)` : ''}`;
+      return `${who} canceled ${theTour(d)}${typeof d.returned === 'number' && d.returned > 0 ? ` (${d.returned} ${d.returned === 1 ? 'ticket' : 'tickets'}, ${cents(d.amountCents)} back as credit)` : ''}`;
     case 'tournament_signup':
-      return `${player} signed up for the ${tourName(d)}${typeof d.level === 'string' ? ` (${d.level})` : ''}`;
+      return `${player} signed up for ${theTour(d)}${typeof d.level === 'string' ? ` (${d.level})` : ''}`;
     case 'tournament_signup_edited':
-      return `${player} changed their sign-up for the ${tourName(d)}`;
+      return `${player} changed their sign-up for ${theTour(d)}`;
     case 'tournament_back_out':
       // Zip 70: a late drop below 8 keeps the money until someone takes the spot.
-      if (num(d.keptCents) > 0) return `${player} dropped out of the ${tourName(d)} late (${cents(d.keptCents)} kept: no credit back unless someone takes the spot)`;
-      return `${player} backed out of the ${tourName(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+      if (num(d.keptCents) > 0) return `${player} dropped out of ${theTour(d)} late (${cents(d.keptCents)} kept: no credit back unless someone takes the spot)`;
+      return `${player} backed out of ${theTour(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     case 'tournament_kept_returned':
-      return `${player}'s spot in the ${tourName(d)} was taken${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+      return `${player}'s spot in ${theTour(d)} was taken${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     // Zip 56 "Tournaments" piece 2 (server/tournamentTickets.ts): tickets, the waitlist and their money.
     // Since Alex's changes, picking the date opens tickets (no spots count: the smart plan follows the players).
     case 'tournament_tickets_opened':
-      return `Tickets opened for the ${tourName(d)} (${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''}${typeof d.plays === 'string' ? `, plays ${d.plays}` : ''})`;
+      return `Tickets opened for ${theTour(d)} (${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''}${typeof d.plays === 'string' ? `, plays ${d.plays}` : ''})`;
     // Zip 70: the Time box and the Plan box.
     case 'tournament_time':
-      return `${who} moved the ${tourName(d)} to ${typeof d.to === 'string' ? d.to : '?'}${typeof d.from === 'string' ? ` (was ${d.from})` : ''}`;
+      return `${who} moved ${theTour(d)} to ${typeof d.to === 'string' ? d.to : '?'}${typeof d.from === 'string' ? ` (was ${d.from})` : ''}`;
     case 'tournament_plan':
-      return `${who} set the ${tourName(d)} plan to ${num(d.expected)} players on ${num(d.courts)} ${num(d.courts) === 1 ? 'court' : 'courts'}`;
+      return `${who} set ${theTour(d)} plan to ${num(d.expected)} players on ${num(d.courts)} ${num(d.courts) === 1 ? 'court' : 'courts'}`;
     case 'tournament_pay_by':
-      return `${who} set Pay by for the ${tourName(d)} to ${typeof d.payBy === 'string' ? d.payBy : '?'}`;
+      return `${who} set Pay by for ${theTour(d)} to ${typeof d.payBy === 'string' ? d.payBy : '?'}`;
     case 'tournament_ticket': {
       const used = num(d.creditUsedCents) > 0 ? ` (${cents(d.creditUsedCents)} credit used)` : '';
-      if (d.result === 'locked') return `${player} locked in for the ${tourName(d)}${used}`;
+      if (d.result === 'locked') return `${player} locked in for ${theTour(d)}${used}`;
       if (d.result === 'held') return `${player} paid to hold a standby spot for ${tourName(d)}${used}`;
-      return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock my spot'} for the ${tourName(d)}${used}`;
+      return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock my spot'} for ${theTour(d)}${used}`;
     }
     case 'tournament_i_paid':
       return `${player} tapped I paid (${cents(d.amountCents)}) for a ${tourName(d)} ticket`;
     case 'tournament_waitlist':
       return `${player} joined standby for ${tourName(d)}`;
     case 'tournament_ticket_confirmed':
-      return `${who} confirmed ${player}'s ${cents(d.amountCents)} for the ${tourName(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
+      return `${who} confirmed ${player}'s ${cents(d.amountCents)} for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
     case 'tournament_ticket_rejected':
-      return `${who} said ${player} didn't pay (${cents(d.amountCents)}) for the ${tourName(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
+      return `${who} said ${player} didn't pay (${cents(d.amountCents)}) for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
     case 'tournament_ticket_marked_paid':
-      return `${who} marked ${player} paid ${cents(d.amountCents)} for the ${tourName(d)}`;
+      return `${who} marked ${player} paid ${cents(d.amountCents)} for ${theTour(d)}`;
     case 'tournament_taken_off':
-      return `${who} took ${player} off the ${tourName(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+      return `${who} took ${player} off ${theTour(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     case 'tournament_rescheduled':
-      return `${who} rescheduled the ${tourName(d)}${typeof d.date === 'string' ? ` (was ${d.date})` : ''}${num(d.held) > 0 ? `, ${d.held} ${d.held === 1 ? 'ticket' : 'tickets'} held` : ''}`;
+      return `${who} rescheduled ${theTour(d)}${typeof d.date === 'string' ? ` (was ${d.date})` : ''}${num(d.held) > 0 ? `, ${d.held} ${d.held === 1 ? 'ticket' : 'tickets'} held` : ''}`;
     case 'tournament_holds_returned':
       return `${num(d.count)} unused ${tourName(d)} ${d.count === 1 ? 'hold' : 'holds'} came back as credit (${cents(d.amountCents)})`;
     // Zip 57 "Tournaments" piece 3 (server/tournamentDay.ts): teams and game night. Team names with their two players; no levels, no money.
     case 'tournament_teams_drafted':
-      return `${who} ${d.redo === true ? 'drew the teams again' : 'drafted the teams'} for the ${tourName(d)} (${num(d.teams)} teams)`;
+      return `${who} ${d.redo === true ? 'drew the teams again' : 'drafted the teams'} for ${theTour(d)} (${num(d.teams)} teams)`;
     case 'tournament_teams_published':
-      return `${who} published the teams for the ${tourName(d)} (${num(d.teams)} teams, ${num(d.games)} games)`;
+      return `${who} published the teams for ${theTour(d)} (${num(d.teams)} teams, ${num(d.games)} games)`;
     case 'tournament_teams_unpublished':
-      return `${who} took the ${tourName(d)} teams back to the draft`;
+      return `${who} took ${theTour(d)} teams back to the draft`;
     case 'tournament_teams_swapped':
-      return `${who} swapped ${typeof d.players === 'string' ? d.players : 'two players'} in the ${tourName(d)} teams`;
+      return `${who} swapped ${typeof d.players === 'string' ? d.players : 'two players'} in ${theTour(d)} teams`;
     case 'tournament_teams_fixed':
-      return `${who} paired the left-over players for the ${tourName(d)}${typeof d.paired === 'string' && d.paired ? ` (${d.paired})` : ''}`;
+      return `${who} paired the left-over players for ${theTour(d)}${typeof d.paired === 'string' && d.paired ? ` (${d.paired})` : ''}`;
     case 'tournament_team_named':
       return `${typeof d.player === 'string' ? d.player : who} named a ${tourName(d)} team ${typeof d.team === 'string' ? `"${d.team}"` : ''}${typeof d.players === 'string' ? ` (${d.players})` : ''}${typeof d.was === 'string' ? ` (was ${d.was})` : ''}`;
     case 'tournament_courts':
-      return typeof d.count === 'number' ? `${who} planned the ${tourName(d)} on ${d.count} ${d.count === 1 ? 'court' : 'courts'}` : `${who} set the ${tourName(d)} courts to ${typeof d.courts === 'string' ? d.courts : '?'}`;
+      return typeof d.count === 'number' ? `${who} planned ${theTour(d)} on ${d.count} ${d.count === 1 ? 'court' : 'courts'}` : `${who} set ${theTour(d)} courts to ${typeof d.courts === 'string' ? d.courts : '?'}`;
     case 'tournament_result':
       return d.by === 'player'
         ? `${player}: ${typeof d.result === 'string' ? d.result : 'a result'} (${tourName(d)}, game ${num(d.game)})`
@@ -342,24 +342,24 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_time_check':
       return `${who} set ${tourName(d)} pool games to ${num(d.to)} from round ${num(d.round)}`;
     case 'tournament_paused':
-      return `${who} paused the ${tourName(d)}`;
+      return `${who} paused ${theTour(d)}`;
     case 'tournament_resumed':
-      return `${who} resumed the ${tourName(d)}`;
+      return `${who} resumed ${theTour(d)}`;
     case 'tournament_player_left':
       return typeof d.swapIn === 'string'
-        ? `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${d.swapIn} took over on ${typeof d.team === 'string' ? d.team : 'the team'}${d.holdToSpot === true ? ' (their standby hold is their spot now)' : d.holdToSpot === false ? ' (every spot is taken: their hold stays on standby)' : ''}`
-        : `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left the ${tourName(d)}, ${typeof d.team === 'string' ? d.team : 'the team'} sits out (${num(d.skipped)} games skipped)`;
+        ? `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left ${theTour(d)}, ${d.swapIn} took over on ${typeof d.team === 'string' ? d.team : 'the team'}${d.holdToSpot === true ? ' (their standby hold is their spot now)' : d.holdToSpot === false ? ' (every spot is taken: their hold stays on standby)' : ''}`
+        : `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left ${theTour(d)}, ${typeof d.team === 'string' ? d.team : 'the team'} sits out (${num(d.skipped)} games skipped)`;
     // Zip 58 "Tournaments" piece 4 (server/tournamentDay.ts, server/tournamentEnd.ts): the wheel, the organizer's picks, the awards, the end.
     case 'tournament_wheel':
-      return `${d.by === 'organizer' ? who : 'A player'} spun the wheel for the ${tourName(d)} tie (${typeof d.tied === 'string' ? d.tied : 'three teams'}): ${typeof d.bye === 'string' ? d.bye : 'a team'} got the bye`;
+      return `${d.by === 'organizer' ? who : 'A player'} spun the wheel for ${theTour(d)} tie (${typeof d.tied === 'string' ? d.tied : 'three teams'}): ${typeof d.bye === 'string' ? d.bye : 'a team'} got the bye`;
     case 'tournament_wheel_spun':
       return `${player} spun the wheel (${tourName(d)})`;
     case 'tournament_tie_pick':
-      return `${who} picked ${typeof d.team === 'string' ? d.team : 'a team'} for place ${num(d.place)} in the ${tourName(d)} tie`;
+      return `${who} picked ${typeof d.team === 'string' ? d.team : 'a team'} for place ${num(d.place)} in ${theTour(d)} tie`;
     case 'tournament_awards':
-      return `${who} edited the ${tourName(d)} awards${typeof d.words === 'string' && d.words ? ` (${d.words})` : ''}`;
+      return `${who} edited ${theTour(d)} awards${typeof d.words === 'string' && d.words ? ` (${d.words})` : ''}`;
     case 'tournament_ended':
-      return `${who} confirmed the winners and ended the ${tourName(d)}${typeof d.words === 'string' && d.words ? `: ${d.words}` : ''}`;
+      return `${who} confirmed the winners and ended ${theTour(d)}${typeof d.words === 'string' && d.words ? `: ${d.words}` : ''}`;
     case 'tournament_award_seen':
       return `${player} saw their ${tourName(d)} award`;
     case 'guest_spot_on':
@@ -582,6 +582,12 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
 /** Zip 55: the tournament's name as the line was written ("Winter Classic"), or a plain word for an old line without one. */
 function tourName(d: Record<string, unknown>): string {
   return typeof d.tournament === 'string' && d.tournament ? d.tournament : 'tournament';
+}
+
+/** Zip 76 (the 🎾75 audit): "the Winter Classic", but "The Cold Open" (never "the The Cold Open"); shared/credit.ts theName's rule. */
+function theTour(d: Record<string, unknown>): string {
+  const name = tourName(d);
+  return /^the\s/i.test(name.trim()) ? name : `the ${name}`;
 }
 
 /** Zip 56: a number from a line's details (0 when missing). */

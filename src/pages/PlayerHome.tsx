@@ -1032,7 +1032,7 @@ export function PlayerHome({
           <NudgePay key={nudge.games.map((o) => o.sessionId).join('_')} g={view} games={nudge.games} open={nudgePay} onClose={() => setNudgePay(false)} onChanged={load.reload} />
         </>
       )}
-      {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} nowIso={g.now} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
+      {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={firstNameOf(g.group.organizerName)} nowIso={g.now} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </InstantContext.Provider>
   );
 }
@@ -1176,6 +1176,10 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
         </div>
         <button className="btn block" disabled={busy} onClick={() => submit(true)}>
           No, I'm new
+        </button>
+        {/* Zip 76: back to the name box with the typed name kept, so a typo can be fixed. */}
+        <button className="btn ghost block" type="button" disabled={busy} data-is-this-you-back onClick={() => setState({ step: 'name' })}>
+          Back
         </button>
       </section>
     );
@@ -2187,6 +2191,9 @@ function SuggestionCard({
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
+  // Zip 76 (the 🎾75 audit): the alert card's X only hides the card on this phone (no "declined" is sent; the organizer never sees one).
+  const hideKey = `pb_want_in_hidden_${s.sessionId}`;
+  const [hidden, setHidden] = useState(() => storageGet(hideKey) === '1');
   // Zip 17, Unpaid nudge (null when off): the same block as the game cards' I'm in.
   const nudge = useNudge();
   const nudgeBlocked = !!nudge?.state.blocked;
@@ -2246,7 +2253,10 @@ function SuggestionCard({
     const n = s.confirmedCount;
     const short = n < MIN_PLAYERS;
     // (A venue-waitlist game, "standby": no count, as before.)
-    const title = standby ? wantInTitle(s.startsAt, tz, Date.parse(g.now), false) : short ? `${day} needs ${MIN_PLAYERS - n} more` : `${day} has ${n} in`;
+    // Zip 76: the title says which game ("Tonight 9:30 PM needs 1 more"), so nobody commits to a game without seeing its time.
+    const when = `${day} ${formatTime(s.startsAt, tz)}`;
+    const title = standby ? wantInTitle(s.startsAt, tz, Date.parse(g.now), false) : short ? `${when} needs ${MIN_PLAYERS - n} more` : `${when} has ${n} in`;
+    if (hidden) return null;
     const atLimit = cleanup && n >= g.group.maxPlayers;
     const sub = standby ? undefined : short ? <AcBalls inCount={n} /> : waitlistForm ? "You'd be on the waitlist" : atLimit ? undefined : `You'd make it ${n + 1}`;
     return (
@@ -2272,8 +2282,12 @@ function SuggestionCard({
             {waitlistForm ? 'Join waitlist' : "I'm in"}
           </button>
         }
-        onX={() => !busy && void answer(false)}
-        xLabel={`No thanks, ${title}`}
+        onX={() => {
+          if (busy) return;
+          storageSet(hideKey, '1');
+          setHidden(true);
+        }}
+        xLabel={`Hide ${title}`}
       />
     );
   }
@@ -3078,7 +3092,12 @@ export function ScheduleRow({
       </span>
     );
 
-  const joinBtn = notIn && (
+  // Zip 76: a game at the most it can hold (12, no waitlist) says Full; the I'm in it replaces would always be refused.
+  const joinBtn = notIn && s.atLimit ? (
+    <button className="btn sched-btn outline" data-full disabled>
+      Full
+    </button>
+  ) : notIn && (
     <button
       className={`btn sched-btn${flatLater ? ' outline' : ''}${nudgeBlocked ? ' nudge-dim' : ''}`}
       data-join

@@ -64,7 +64,7 @@ import {
   visibleFrom,
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
-import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
+import { balanceAfterEntry, CHARGE_ASK_HOURS, theName, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoSeatBackStatements, TRIM_BACK_LIVE, trimBackLeft, moneyPictureFirstReads, pendingRequestsRead, tourFields, tourNamesOf, tourNamesRead, ledgerRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { adminPlayerView, adminSessionView } from './views';
@@ -1438,7 +1438,7 @@ export async function lateDropDone(ctx: Ctx, body: Record<string, unknown>) {
     .bind(ctx.nowIso, session.id, playerId)
     .run();
   if (res.meta.changes === 0 && lateFeeKind((await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId) ?? { status: '', played: null, late_drop_at: null, late_drop_done_at: null, payment_status: '', refunded_at: null }, session)) {
-    throw new HttpError(409, 'late_fee_open', 'They still owe their $14. Use Clear (or Mark paid on the Money tab).');
+    throw new HttpError(409, 'late_fee_open', `They still owe their ${formatPrice(flatOf(session, settingsOf(group)))}. Use Clear (or Mark paid on the Money tab).`);
   }
   // The Money page rework names who it was in the log; with it off the entry is exactly what it always was.
   const dropper = (await moneyReworkFor(ctx, group.id)) ? await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(playerId, group.id).first<{ display_name: string }>() : null;
@@ -1979,7 +1979,7 @@ export async function removePlayer(ctx: Ctx) {
   const started = (d: string | null, s: number | null) => !!d && ctx.nowMs >= startMsOf(d, s ?? NIGHT_START_MINUTES, group.timezone);
   const holds = tickets.find((k) => k.claim > 0 || (k.status !== 'canceled' && !started(k.final_date, k.start_minutes) && (k.place !== 'none' || k.money > 0)));
   if (holds) {
-    throw new HttpError(409, 'player_has_ticket', `${p.display_name} holds a ticket for the ${holds.name}. Take ${p.display_name} off its list first (the tournament's Tickets), then remove the name.`);
+    throw new HttpError(409, 'player_has_ticket', `${p.display_name} holds a ticket for ${theName(holds.name)}. Take ${p.display_name} off its Tickets list first.`);
   }
   const ticket = { n: tickets.length };
   const history = await ctx.db
@@ -2419,16 +2419,20 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
   }
   const settings = settingsOf(group);
   const id = newId();
+  // Zip 76: a game moved away from this exact time still holds it as its planned start (unique per group): then this one plans nothing.
+  const plannedTaken = await ctx.db.prepare('SELECT 1 AS x FROM sessions WHERE group_id = ? AND planned_starts_at = ?').bind(group.id, startsAt).first();
   // Before the first session date, a game still shows (like "Show this session").
   const early = startsAt < visibleFrom(group) ? 1 : 0;
   try {
     await ctx.db
       .prepare(
         // One insert. The court column is named only when a court was picked, so a game added without one is exactly the old insert.
-        `INSERT INTO sessions (id, group_id, starts_at, ends_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at${court !== null ? ', court' : ''})
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?${court !== null ? ', ?' : ''})`,
+        // Zip 76 (the 🎾75 audit): planned_starts_at is the game's own start, so the schedule counts it as that day's game: a Tue or Thu extra
+        // game added beyond the horizon never gets the usual game added next to it when the horizon reaches the day (ensureSessions matches by day).
+        `INSERT INTO sessions (id, group_id, starts_at, ends_at, planned_starts_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at${court !== null ? ', court' : ''})
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?${court !== null ? ', ?' : ''})`,
       )
-      .bind(id, group.id, startsAt, endsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso, ...(court !== null ? [court] : []))
+      .bind(id, group.id, startsAt, endsAt, plannedTaken ? null : startsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso, ...(court !== null ? [court] : []))
       .run();
   } catch (err) {
     if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'game_exists', `There's already a game at ${formatDateTime(startsAt, tz)}.`);

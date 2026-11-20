@@ -12,6 +12,7 @@ import { holidayFor } from '../shared/holidays';
 import { courtSplit, flatAtFinalize } from '../shared/pricing';
 import { capOf, type GroupSettings } from '../shared/settings';
 import { countText, joinOutcome, openSpots } from '../shared/spots';
+import { NO_CAP_MAX } from '../shared/zip10';
 import { computeSessionState } from '../shared/status';
 import {
   confirmedOf,
@@ -185,6 +186,8 @@ export function playerSessionView(
     openSpots: canceled || started ? 0 : openSpots(heads, capOf(settings)),
     countText: countText(heads, noWaitlist ? Number.POSITIVE_INFINITY : settings.maxPlayers),
     full: !noWaitlist && heads >= settings.maxPlayers,
+    // Zip 76 (the 🎾75 audit): with no waitlist, a game at the database's limit (12) shows "Full" instead of an I'm in that always fails.
+    ...(noWaitlist && heads >= NO_CAP_MAX && !canceled && !started ? { atLimit: true } : {}),
     joinAs: noWaitlist ? 'in' : joinOutcome(heads, settings.maxPlayers),
     holiday: holidayFor(session.starts_at, tz),
     courtState: session.court_state,

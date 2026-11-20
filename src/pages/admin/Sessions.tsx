@@ -1046,7 +1046,8 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
               {!s.state.flags.started && (
                 <Notice tone="warn" title="This does not cancel your court">
                   Cancel the reservation with the venue yourself.
-                  {` Cancel by ${cancelByShort(s.startsAt, tz)}.`}
+                  {/* Zip 76 (the 🎾75 audit): past the cancel-by, say it passed instead of asking for a time already gone. */}
+                  {Date.parse(cancelByIso(s.startsAt)) <= serverNow ? ` The free cancel time passed (${cancelByShort(s.startsAt, tz)}).` : ` Cancel by ${cancelByShort(s.startsAt, tz)}.`}
                 </Notice>
               )}
               {s.bookingStatus === 'booked' && (

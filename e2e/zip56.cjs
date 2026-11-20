@@ -284,7 +284,7 @@ async function main() {
     const pay = p.page.locator('[data-pay-sheet]');
     await pay.waitFor({ timeout: 10000 });
     const sheet = flat(await sheetOpen(p.page).innerText());
-    assert(sheet.includes('Pay Alex $16') && sheet.includes('Have the Venmo app? Click here') && /Copy Venmo/.test(sheet) && sheet.includes('I paid'), sheet);
+    assert(sheet.includes('Pay Alex $16') && sheet.includes('Open Venmo') && /Copy Venmo/.test(sheet) && sheet.includes('I paid'), sheet);
     await shot(p.page, 'C-pay-sheet');
     await p.page.locator('[data-sheet-paid]').click();
     // Zip 63 (Alex, the trust rule): after I paid the player sees "You're locked in" at once; Alex still confirms or undoes it on Home.

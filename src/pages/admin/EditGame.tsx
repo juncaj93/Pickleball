@@ -90,7 +90,8 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
     const easing = motion && canMove();
     const ok = await run(async () => {
       // The move first (it can be turned down: a time already taken, in the past), then the status.
-      if (timeChanged) moved = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed;
+      // Zip 76 (the 🎾75 audit): only a new START opens the "Moved" text; a new end time alone saves with no moved text.
+      if (timeChanged) moved = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed && minute(startsAt) !== minute(s.startsAt);
       if (statusChanged) await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status });
       if (labelChanged) await api('PUT', `/api/admin/sessions/${s.id}/note`, { note: label.trim() });
       if (courtChanged) await api('PUT', `/api/admin/sessions/${s.id}/court-number`, { court });

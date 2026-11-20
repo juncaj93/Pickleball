@@ -1,5 +1,5 @@
 // The site's Pay sheet (PAY_SHEET), in its own file since Zip 56 so the tournament's ticket screens (src/tournament/, their own download) show
-// exactly the same sheet as a game card: "Pay Alex $16", "Have the Venmo app? Click here", "Copy Venmo @handle", the Apple Pay / Zelle / cash
+// exactly the same sheet as a game card: "Pay Alex $16", "Open Venmo", "Copy Venmo @handle", the Apple Pay / Zelle / cash
 // line and "I paid". Moved from src/pages/PlayerHome.tsx word for word; the only change is that it needs just the three group facts it reads
 // (a game card still passes the whole screen's data).
 import type { GroupView } from '../shared/api';
@@ -66,7 +66,7 @@ export function PaySheet({
               openVenmo(e, pay);
             }}
           >
-            Have the Venmo app? Click here
+            Open Venmo
           </a>
           {handle && (
             <button
