@@ -526,7 +526,9 @@ async function main() {
       await a.page.locator('[data-tm-fix-game]').first().click();
       await a.page.locator('[data-tm-fix-sheet]').waitFor();
       await SH(a.page, `D-fix-${scheme}`);
-      await a.page.locator('[data-tm-fix-pick="b"]').click();
+      // Zip 72: the Fix sheet has two numbers (the team names with − and +). Game 1 holds 11 to 7: two less and four more make it 9 to 11.
+      for (let i = 0; i < 2; i++) await a.page.locator('[data-tm-am-minus="a"]').click();
+      for (let i = 0; i < 4; i++) await a.page.locator('[data-tm-am-plus="b"]').click();
       await a.page.locator('[data-tm-fix-save]').click();
       await a.page.waitForTimeout(700);
       await a.page.locator('[data-tm-time-apply]').click();

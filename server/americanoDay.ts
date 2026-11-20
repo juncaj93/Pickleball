@@ -474,7 +474,8 @@ async function ensureRows(ctx: Ctx, t: TournamentRow, n: Awaited<ReturnType<type
 
 /** A score from the screen: two whole numbers 0 to 30, not equal (a game has a winner). Zip 72: Locked doubles uses the same check. */
 function readScore(raw: unknown, label: string): number {
-  const n = Number(raw);
+  // Zip 72 (review): a real number only; null, "", [] or true never read as 0 or 1.
+  const n = typeof raw === 'number' ? raw : NaN;
   if (!Number.isInteger(n) || n < 0 || n > MAX_SCORE) throw new HttpError(400, 'invalid_score', `Pick a score from 0 to ${MAX_SCORE}.`);
   void label;
   return n;

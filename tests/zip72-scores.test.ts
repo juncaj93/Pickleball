@@ -115,6 +115,10 @@ describe('zip 72: Enter score in Locked doubles (the first score counts)', () =>
       [-1, 11],
       ['x', 3],
       [11, undefined],
+      [11, null],
+      [11, ''],
+      ['11', 3],
+      [true, 3],
       [11.5, 3],
     ] as [unknown, unknown][]) {
       const r = await enter(ctx, a, num, m, t);

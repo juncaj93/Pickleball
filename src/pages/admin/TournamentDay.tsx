@@ -552,7 +552,9 @@ function FixSheet({ ctx, t, g, onClose }: { ctx: AdminCtx; t: AdminTournamentVie
     setB(g.scoreB ?? (won === 'b' ? g.playTo : 0));
   }
   const ready = !!g?.a && !!g?.b;
-  const hint = g && ready ? scoreHint(a, b, g.playTo) : null;
+  // Zip 72 (review): a result saved before scores existed has a winner and no score: say so, so Save is never an accidental 11 to 0.
+  const noScore = !!g && !!g.winner && !g.skipped && g.scoreA === null;
+  const hint = g && ready ? (noScore ? 'No score was saved for this game. Enter it, then Save.' : scoreHint(a, b, g.playTo)) : null;
   return (
     <Sheet calmFocus open={!!g} title={g ? `Fix ${stageName(g)} · ${where(g)}` : 'Fix'} onClose={onClose} className="tm-gd-sheet">
       {g && (

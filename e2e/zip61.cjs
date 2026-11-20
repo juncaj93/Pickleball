@@ -235,7 +235,7 @@ async function main() {
       for (const n of [1, 2]) {
         const row = v.page.locator(`[data-tc-round="${n}"]`);
         assert((await row.getAttribute('data-state')) === 'done', `round ${n} done`);
-        assert(/^(Won|Lost)$/.test(flat(await row.locator('.tc-gd-tag').innerText())), 'a tag');
+        assert(/^(Won|Lost) \d+\u2013\d+$/.test(flat(await row.locator('.tc-gd-tag').innerText())), `a tag with the score (Zip 72): ${await row.locator('.tc-gd-tag').innerText()}`);
       }
       assert((await v.page.locator('[data-tc-round="3"]').getAttribute('data-state')) === 'next', 'round 3 next');
       const stand = await v.page.locator('[data-tc-day-stand]').count();
@@ -314,7 +314,7 @@ async function main() {
       assert((await v.page.locator('[data-tc-break="4"]').count()) === 1, 'the break card');
       assert((await bar(v.page)) === 'ROUND 4 OF 6', await bar(v.page));
       const row3 = v.page.locator('[data-tc-round="3"]');
-      assert((await row3.getAttribute('data-state')) === 'done' && flat(await row3.locator('.tc-gd-tag-won').innerText()) === 'Won', 'Round 3 Won');
+      assert((await row3.getAttribute('data-state')) === 'done' && /^Won \d+\u2013\d+$/.test(flat(await row3.locator('.tc-gd-tag-won').innerText())), 'Round 3 Won with the score');
       assert((await v.page.locator('[data-tc-round="4"]').getAttribute('data-state')) === 'next', 'the highlight on Round 4');
       assert(posted === 0, 'nothing sent yet');
       await SH(v.page, `C-break-${scheme}`);
@@ -354,7 +354,7 @@ async function main() {
     await SH(v.page, 'D-onto-next');
     await v.page.locator('.tc-gd-slide-out').waitFor({ timeout: 2500 });
     await v.page.waitForTimeout(600);
-    assert(flat(await v.page.locator('[data-tc-round="3"] .tc-gd-tag').innerText()) === 'Lost', 'Lost tag (gray)');
+    assert(/^Lost \d+\u2013\d+$/.test(flat(await v.page.locator('[data-tc-round="3"] .tc-gd-tag').innerText())), 'Lost tag with the score');
     const tagBg = await v.page.locator('[data-tc-round="3"] .tc-gd-tag').evaluate((el) => el.className);
     assert(!tagBg.includes('tc-gd-tag-won'), 'gray, not green');
     await toastBox(v.page).locator('.toast-action').click();

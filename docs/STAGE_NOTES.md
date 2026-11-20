@@ -7225,3 +7225,80 @@ Net Ninjas 1-0, nothing to confirm (light and dark); then the stage was put back
   this session).
 - Tests at ship: unit 4,108 passed, 2 skipped, 0 failed (full run on `f7a30aa`; after it only CSS, one toast option and browser checks
   changed: the size test and the Zip 71 unit tests rerun green); browser zip71 11, zip57 21, zip61 19, zip58 24, zip64 and zip70 green.
+
+## Zip 72: Scores in Locked doubles, one tie rule everywhere (🎾72.scores), Fri Nov 20, 2026
+Branch `claude/new-session-6wjl39` (the session is named "🎾72.scores"; the build system pins the branch name). Built on main `e8d4b1b` (Zip 71 live,
+main equal to live). Same switch, TOURNAMENTS (on for everyone on live); no new switch. **NO database change**: Locked doubles uses the
+`score_a` / `score_b` columns 0028 already added to `tournament_games` (live since Zip 61). No money, ticket or credit path is touched. No Locked
+doubles game has been played on live, so nothing needed back-filling (a result saved before this zip has a winner and no score: 0 points).
+
+### 1. Scores in Locked doubles (pictures pair-1, pair-2, pair-4, pair-5)
+- The VS card has ONE lime "Enter score" button (the old We won / "<team> won" pair is gone). It opens the shared "Final score" sheet
+  (`ScoreSheet`, now in src/tournament/GameDayView.tsx, used by both styles): the two team names, ours first, − and + each (the number can be
+  typed), Submit score. Then 57/61's motion: "✓ Let's go!" on a win, the white glow and "Onto the next!" on a loss, the slide, the banner
+  "Net Ninjas won 11 to 7" with Undo and its countdown circle, sent after 5 seconds. Zip 71's looks kept (no drain line; lost rows soft red).
+- Server (`server/tournamentDay.ts` playerGameAction): action 'score' {mine, theirs}. The first score from any of the 4 players is the result
+  (score, winner, who in claim_by); a second is refused with who entered it ("Vic entered Net Ninjas 11 to 7. Ask Alex to fix it.", or
+  "... It is in." when it agrees); the same player's same score again is fine. 'won', 'lost', 'confirm', 'dispute', 'undo' are refused (409)
+  and write nothing. Scores: whole numbers 0 to 30, never equal, real numbers only (null, "" and true are refused since the review).
+- Every Locked doubles game takes a score: pool games, semifinals, the Final, 3rd place, a tie's Game A / Game B (to 5).
+- An odd score is never blocked: one gentle line under the numbers (shared/scores.ts `scoreHint`: "Games are to 11. Fine if it ended early.",
+  "A game is won by 2. Check the score.", "Past 11, a game ends 2 ahead. Check the score."), the same line on the organizer's Fix sheet.
+- Your games: "Won 11–7" / "Lost 7–11" at the right of the row (never cut, never wraps). Standings: W-L and the "+4 pts" chip (point
+  difference; "0 pts", "−4 pts" with a real minus) on every row once any pool game has a score; with pools it takes the place of "Court 9" /
+  "Sits". Americano rows show the score too ("Won 11–8").
+- Alex's night screen: rows say "Net Ninjas 11 to 7 Third Shot Gang"; Set (no result: a court with no phones) or Fix opens "Fix Game 1 ·
+  Court 1" with the two team names and the organizer's steppers, Save, Clear the result. A winner without a score is refused (400). The Fix is
+  guarded on what the screen showed (winner and score). A result saved before scores existed says "No score was saved for this game. Enter it,
+  then Save." (review), so a Save is never an accidental 11 to 0.
+
+### 2. One tie rule (shared/tournamentSchedule.ts `standings` / `settle`)
+Wins; then head to head, only when exactly 2 teams are level and they played; then point difference; then points scored; teams still level
+after a split go through the same steps again (so two left level after point difference are settled by their game); teams level on all of it
+are "Tied": the wheel (three) or the organizer's picks (four or more). Pools use it inside each pool. It is THE function behind the players'
+Standings, Alex's night screen (resolveGames, the tie cards), the semifinal / Final / 3rd place seeding, End tournament (doublesOutcome; across
+pools: wins, then point difference, then points scored) and so History, and the test stages. Americano is unchanged (wins, win % when game
+counts differ, then total points).
+
+### 3. No confirm left anywhere
+Players: no We won / "<team> won" buttons, no "Did you win?", "Is this right?", "No, fix it" (already gone in 71). Organizer: the Locked doubles
+Waiting / Disputed rows and Confirm button are gone, and so are the Americano 'confirm' action, its Confirm button and its Waiting / Changed
+statuses (a score saved before Zip 71 counts as done). The dead drain-line banner option (`drain` in src/ui.tsx and its style) is removed. The
+test stages and their descriptions say Enter score. No Telegram alert carries a game result. The DB columns `claim` and `disputed_at` stay (old
+rows only; dropping them needs a migration). The "claim" words still in admin code are the money "I paid" answers, not game results.
+
+### 4. Small fixes (🎾69's dry run)
+- The pay countdown rounds to the nearest hour (`Math.round`): 4 h 59 m says "Due in 5 hours" (5 h 59 m says 6).
+- One locked-in count on Alex's rows: the Home card's "Locked in 8 of 10", its pill, the Tickets chip and the Plan chip use the server's
+  `lockedIn` (every spot plus every whole-ticket I paid still waiting, Zip 63's trust rule), the same number "8 locked in. Draft the teams.",
+  the style and the players use. The spots ("of 10") are counted as before. Left as is: Remind all unpaid's Paid / Not paid lines (not asked).
+
+### Preview stages
+`zip72_scores` (THE CALM START: tonight, Game 1 on both courts, no scores yet) and `zip72_circle` (every round robin game in, Kitchen Crew 3-0,
+the other three 1-2 in a circle settled by point difference: 0, −2, −9 pts, no wheel; Final Kitchen Crew vs Net Ninjas). `mid`, `pools_done`,
+`final_*` now write scores; `tie3` writes every game 11 to 7 (level on every rule), so the wheel still shows as the last resort.
+
+### Audit (🎾69's dry run nights, tests/zip72-dryrun.test.ts, on the real server code)
+Night 1: 10 players Locked doubles, scores by players, a head-to-head tie (2-2 teams; the winner of their game goes first though the other has the
+far better difference), Alex enters every game of one team (no phones), a second score refused, Undo (nothing sent), Final and 3rd place, End:
+$14 to each champion. Night 2: 9 players, the first read after Pay by switches to Americano, every round by a player's score (the other side
+refused), End: 1st $14, 2nd $7. Night 3: 8 players, a three-way circle settled by point difference (no wheel, no tie game), an upset Final,
+End: $14 each; the saved finish order follows the night. Money to the cent on all three: every ticket and every ledger row the same before and
+after the night, every pot exactly what it was plus the award, the books checks 0. Undo in a real browser: e2e/zip72.cjs B (nothing sent).
+Nothing wrong found in the code by the audit; two slips in the audit's own first draft (an arithmetic expectation, a read order) were the tests'.
+
+### Review
+A fresh reviewer (no part in the build) read the diff: nothing blocking. Fixed: e2e/zip57.cjs still tapped the old winner picker; the Fix
+sheet's no-score note (above); scores must be real numbers. Kept as notes: (1) after point difference splits three, the two still level go back
+to head to head (a choice: the brief can be read either way; the alternative goes straight to points scored); (2) results saved before scores
+(none on live) make a 3+ level block "Tied" more often than the old mini table did; (3) any score edit after the playoffs can create or remove a
+dead-level tie (as a winner change could); (4) the player's sheet starts at 11 to 0, as the Americano sheet always has (the banner and Undo
+show it); (5) across pools of 4 and 3 the order uses totals, as wins did before.
+
+### Admin speed (ADMIN SPEED RULE)
+Local, the calm world, "Fewer database trips" on (scripts/zip68-admin-speed.ts), before and after: dashboard 4 trips and 61 statements, the
+5-second check 2 trips and 16 statements, at all_locked, mid, am_round3, zip71_taps, zip71_am, day_ready (and zip72_scores, zip72_circle after).
+In-process A/B, main and branch called in turn (scripts/zip58-admin-ab.ts, 400 calls each, three runs): dashboard day_ready 7.78/7.83,
+9.06/9.04, 7.01/6.98 ms; mid 7.60/8.13, 9.13/8.36, 7.08/7.60 ms (main/branch): the same within noise. Cloudflare (e2e/zip68-time.cjs, 4 passes
+each, main's preview `claude-new-session-pjtr6m` and this one in turn): dashboard medians 176 to 265 ms on both, the spread between passes of the
+same code larger than any difference.
