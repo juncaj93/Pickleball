@@ -7179,3 +7179,18 @@ noted: Projected teams follows the brief (no 16 cap); a reschedule can show the 
 - Browser: e2e/zip71.cjs (A Wren's line and no buttons at 390/360/320 light and dark, Vic none, Parker asked, Home Waiting with Confirm; A2 the
   disputed game; B the stale screen refused; C Americano; D Projected teams at 390/360/320 light and dark, fold, body font, no overlap; D the pencil
   updates the open list with no reload; E hidden for Americano and an odd count, nothing for players; F one banner, X hides both).
+
+### Preview (Fri Nov 20, 2026, about 9:40 AM Eastern)
+`pickleball-preview` (fake): Time Travel bookmark first `000001b0-00000000-00005129-188624b55f5217c7b1e310907bbcb659`; deployment `a3b0b4ba`,
+https://claude-new-session-pjtr6m.pickleball-club-9h0.pages.dev; re-seeded (`npm run db:seed:preview`, calm start zip71_taps). First screen at 390,
+light and dark: organizer Home shows The Cold Open's night, "Round 1 · Results" with Net Ninjas "says they beat" Third Shot Gang and Confirm;
+View as Wren shows "Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to confirm." above Up next · Game 2. No page errors. Switches as
+on live (TOURNAMENTS on).
+- Cloudflare timing (e2e/zip68-time.cjs, medians of 11): main's preview (`claude-new-session-491iok`) dashboard 198 ms (all_locked) / 178 ms (mid),
+  check 109 / 95 ms; this preview 205 / 180 ms (zip71_taps 189), check 105 / 102 ms (zip71_taps 102). Same 4 and 2 trips; the difference is noise.
+
+### Live: NOT shipped
+Live is deployment `b828b43f` (Zip 70, commit `896f4c1`; main `ad02027` is that plus notes). Before the deploy, the live SQL export (the
+backup step) was refused by this session's permission check, so nothing went to live: no deploy, main not moved, no live data read or touched.
+The live Time Travel bookmark read just before was `000019dd-00000000-00005129-88413914b80ca960ccd6a74673e6ddda`. To ship: allow the export (or
+run it), then the usual DEPLOY.md steps from main; rollback would be `b828b43f`.
