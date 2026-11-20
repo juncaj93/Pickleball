@@ -181,6 +181,31 @@ async function main() {
     }, sel);
     assert(bad.length === 0, `wraps: ${bad.slice(0, 4).join(' | ')}`);
   }
+  /** Zip 74 (the 🎾73 audit: names are never cut): text under `sel` may wrap, but only between words, and nothing is cut with an ellipsis. */
+  async function wholeWords(page, sel) {
+    const bad = await page.evaluate((s) => {
+      const out = [];
+      for (const root of document.querySelectorAll(s)) {
+        for (const el of [root, ...root.querySelectorAll('*')]) {
+          if (getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1) out.push(`cut: "${el.textContent.trim()}"`);
+        }
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const re = /\S+/g;
+          let m;
+          while ((m = re.exec(n.textContent))) {
+            const range = document.createRange();
+            range.setStart(n, m.index);
+            range.setEnd(n, m.index + m[0].length);
+            const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+            if (tops.size > 1) out.push(`"${m[0]}" split in "${n.textContent.trim()}"`);
+          }
+        }
+      }
+      return out;
+    }, sel);
+    assert(bad.length === 0, `names: ${bad.slice(0, 4).join(' | ')}`);
+  }
   const SH = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
   const noDash = async (page, where) => {
     const text = await page.evaluate(() => document.body.innerText);
@@ -217,7 +242,8 @@ async function main() {
       for (const w of SIZES) {
         await v.page.setViewportSize({ width: w, height: 844 });
         await fits(v.page, '.tc-gd');
-        await oneLine(v.page, '[data-tc-day-stand] .tc-gd-chip, [data-tc-tie-wait], .tc-tie-line');
+        await oneLine(v.page, '[data-tc-day-stand] .tc-gd-chip');
+        await wholeWords(v.page, '[data-tc-tie-wait], .tc-tie-line'); // Zip 74: "<team>: spin the wheel" wraps between words, never cut
         await SH(v.page, `A-tie-${w}-${scheme}`);
       }
       await v.page.setViewportSize({ width: 390, height: 1900 });

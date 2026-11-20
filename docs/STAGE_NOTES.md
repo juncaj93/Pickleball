@@ -7403,3 +7403,39 @@ taps that would pass 16.
 ### Preview stages
 `zip74_short` (THE CALM START: mid's night, Game 1 in, and the Time check applied from Round 2 to 9: View as Vic). One tap away: Final
 (`final_on`, Vic's Final alert), Teams published (Edit name), Time and Plan (`zip70_start`) and Late drop (`zip70_late`) for the back out sheet.
+
+### Review
+A fresh reviewer (no part in the build) read the diff. One blocking finding, fixed: Join standby opens once 16 are locked in, but the line's
+fill (server/tournamentMoney.ts fillSpotsStatement) counted spots only, so a standby I paid confirmed (or a hold paid with credit) could take
+the 16th place a waiting I paid already held: 17. The fill's limit is now 16 minus every player locked in (spots and waiting whole-ticket I
+paids); tests cover both orders and a Didn't pay that opens the place to the line. Also fixed: a repeat Lock from a player whose whole-ticket I
+paid waits is a no-op (not "Every spot just filled"). Kept as notes: (1) the pills show for any game shorter than 11, as the brief says (a night
+planned at 9, pools for 12 and up, shows them on every pool game; the old "· to 9" text did the same); (2) the Americano alert says "all games",
+though the last round stays at 11 (the brief's words); (3) the organizer's own $0 seat goes through the same fill, so at 16 locked in it waits
+in line like anyone.
+
+### Admin speed (ADMIN SPEED RULE)
+Local, the calm world, "Fewer database trips" on (scripts/zip68-admin-speed.ts), before and after: dashboard 4 trips and 61 statements, the
+5-second check 2 trips and 16 statements, at all_locked, mid, am_round3, zip72_scores, day_ready (and zip74_short, final_on after). Dashboard
+local time 8.1 to 10.2 ms before, 6.7 to 9.5 ms after; bytes the same (am_round3 differs by its random draw). Nothing on the organizer's screens
+or the refresh reads anything new: the alerts, the pills and the cap ride on reads the player screens and taps already make.
+
+### Tests at ship
+Unit: 215 files, 4,166 passed, 2 skipped, 0 failed; `npx tsc -b` clean. New: tests/zip74-polish.test.ts (12: the cap before Pay by, both
+confirm orders, standby with credit, Draft never 500, the words, the alert keys, the Time check keeps the Final, Locked doubles 8 players
+shortened to 9 then 7 with the Final alert for exactly the 4 finalists and no money moved, Americano 9 players, Randomize saves nothing),
+tests/zip74-americano7.test.ts (20). tests/zip48-split.test.ts: the player script budget 141.2 to 141.5 KB on purpose (the two game night
+alerts and the trophy badge, about 230 bytes gzipped). The dry run nights (tests/zip72-dryrun.test.ts: 10 Locked doubles, 9 Americano, 8 with
+a circle) pass on this branch, money to the cent.
+Browser: e2e/zip74.cjs 7 of 7 (A names whole at 420/390/320 light and dark in both styles, B the organizer's All rounds and Fix at 320, C Copy
+Venmo dark, D Edit name and the sheet, E Play to 9 for everyone with X and the to 7 alert, Americano too, F the Final alert for the 4 only, G the
+back out sheet before and after Pay by); zip57 21, zip61 19, zip72 8, zip70 74, zip58 24, zip71 11, zip55 91, zip56 57. Updated on purpose:
+zip61 and zip58 checked that names stay on one line (cut with an ellipsis); they now check names wrap only between words and are never cut,
+with scores, courts and chips still on one line; zip57 (Edit name), zip55, zip56, zip70 (the back out words).
+
+### Preview (Fri Nov 20, 2026)
+`pickleball-preview` (fake): Time Travel bookmark first `000001b9-00000000-00005129-c2c5b098aa92b9b9ca6ec038f8afdd32`; deployment `6b32db09`,
+https://claude-new-session-oipdqa.pickleball-club-9h0.pages.dev; re-seeded (`npm run db:seed:preview`, calm start zip74_short). First screen
+at 390, light and dark: Vic's Home is the amber "Starting Round 2, all games go to 9 points." alert, the night's bar "Game 2 of 3", the Up
+next card with "Play to 9 points", and Your games with the two pills; organizer Home is the Tournament test row, the night's bar and the Time
+check card (to 7 from Round 3, one tap). No page errors. Switches as on live (TOURNAMENTS on).

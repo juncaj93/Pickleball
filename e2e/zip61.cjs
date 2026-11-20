@@ -181,6 +181,31 @@ async function main() {
     }, sel);
     assert(bad.length === 0, `wraps: ${bad.slice(0, 4).join(' | ')}`);
   }
+  /** Zip 74 (the 🎾73 audit: names are never cut): text under `sel` may wrap, but only between words, and nothing is cut with an ellipsis. */
+  async function wholeWords(page, sel) {
+    const bad = await page.evaluate((s) => {
+      const out = [];
+      for (const root of document.querySelectorAll(s)) {
+        for (const el of [root, ...root.querySelectorAll('*')]) {
+          if (getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1) out.push(`cut: "${el.textContent.trim()}"`);
+        }
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const re = /\S+/g;
+          let m;
+          while ((m = re.exec(n.textContent))) {
+            const range = document.createRange();
+            range.setStart(n, m.index);
+            range.setEnd(n, m.index + m[0].length);
+            const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+            if (tops.size > 1) out.push(`"${m[0]}" split in "${n.textContent.trim()}"`);
+          }
+        }
+      }
+      return out;
+    }, sel);
+    assert(bad.length === 0, `names: ${bad.slice(0, 4).join(' | ')}`);
+  }
   const SH = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
   const noDash = async (page, where) => {
     const text = await page.evaluate(() => document.body.innerText);
@@ -210,7 +235,8 @@ async function main() {
       for (const w of SIZES) {
         await v.page.setViewportSize({ width: w, height: 844 });
         await fits(v.page, '.tc-wrap');
-        await oneLine(v.page, '[data-tc-round]');
+        await wholeWords(v.page, '[data-tc-round]'); // Zip 74: names wrap between words, never cut
+        await oneLine(v.page, '[data-tc-round] [data-tc-day-result], [data-tc-round] .tc-gd-court');
         await SH(v.page, `A-before-${w}-${scheme}`);
       }
       await noDash(v.page, 'before the night');
@@ -249,7 +275,8 @@ async function main() {
       for (const w of SIZES) {
         await v.page.setViewportSize({ width: w, height: 844 });
         await fits(v.page, '.tc-gd');
-        await oneLine(v.page, '[data-tc-round], [data-tc-day-stand], .tc-gd-hero-top');
+        await wholeWords(v.page, '[data-tc-round], [data-tc-day-stand]'); // Zip 74: names wrap between words, never cut
+        await oneLine(v.page, '.tc-gd-hero-top, [data-tc-round] [data-tc-day-result], [data-tc-day-stand] .tc-gd-rec, [data-tc-day-stand] .tc-gd-pts');
         await SH(v.page, `B-round3-${w}-${scheme}`);
       }
       await v.page.setViewportSize({ width: 390, height: 2400 });
@@ -279,7 +306,7 @@ async function main() {
       for (const w of SIZES) {
         await v.page.setViewportSize({ width: w, height: 844 });
         await fits(v.page, '[data-tc-score-sheet]');
-        await oneLine(v.page, '.tc-gd-score-name');
+        await wholeWords(v.page, '.tc-gd-score-name'); // Zip 74: names wrap between words, never cut
         await SH(v.page, `C-sheet-${w}-${scheme}`);
       }
       await v.page.setViewportSize({ width: 390, height: 844 });
