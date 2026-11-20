@@ -2,19 +2,20 @@
 // (src/tournament/TournamentHome.tsx), so a phone without a tournament never fetches it.
 //   Before the night: Your team, Your games (only theirs, each with its court), All teams; with pools (12 players and up), Pool A and Pool B with
 //   where each team plays the first round, and The night's times.
-//   Game night: the short card (the name, "Game 2 of 3", a slim bar), Up next with We won and "<other team> won" (a 5 second Undo on this
-//   phone, then it is the result: Zip 71, no confirming, the first answer from any of the 4 players counts), "<team> won Game 1" with Undo,
-//   the Time check, Your games, Standings (or the pools), Currently playing.
+//   Game night: the short card (the name, "Game 2 of 3", a slim bar), Up next with one Enter score button (Zip 72: the Final score sheet with
+//   the two team names; a 5 second Undo on this phone, then it is the result: Zip 71, no confirming, the first score from any of the 4 players
+//   counts), "Net Ninjas won 11 to 7" with Undo, the Time check, Your games ("Won 11–7"), Standings ("+4 pts") or the pools, Currently playing.
 // No clock times except "Game 1 begins at" (and The night's times with pools, as mock 51 draws them). Names only.
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { PlayerDayGame, PlayerDayView, PlayerTournamentView } from '../../shared/tournament';
 import { api, ApiError, storageGet, storageSet, VIEW_ONLY_MESSAGE } from '../lib';
 import { CourtMap } from '../GameDay';
-import { useToast } from '../ui';
+import { Sheet, useToast } from '../ui';
+import { diffLabel, MAX_SCORE, resultTag, scoreHint } from '../../shared/scores';
 import { AlsoNowCard, PlayoffCard, TieCard, WheelPickedCard } from './TieCards';
 import './gameday-tour.css';
 
-/** How long We won waits before it is sent (the card's Undo). */
+/** How long a score waits on the phone before it is sent (the card's Undo). */
 export const UNDO_MS = 5000;
 
 export function errorText(err: unknown): string {
@@ -84,22 +85,22 @@ export function Court({ n, set }: { n: number | null; set: boolean }) {
 }
 
 /** The words of one game row (mock 16): "vs Third Shot Gang" and the players, or what decides a playoff. */
-function rowWords(g: PlayerDayGame, org: string): { title: string; sub: string } {
+function rowWords(g: PlayerDayGame): { title: string; sub: string } {
   if (g.skipped) return { title: g.opponent ? `vs ${g.opponent.name}` : g.label, sub: 'Not played' };
   if (!g.opponent) return { title: g.pending ?? 'Not decided yet', sub: g.stage === 'final' ? 'Against the other finalist' : g.stage === 'semi' ? 'Against the other pool' : '' };
   const players = g.opponent.players.join(' + ');
   if (g.state === 'done' && g.won !== undefined) return { title: `vs ${g.opponent.name}`, sub: players };
-  return { title: `vs ${g.opponent.name}`, sub: g.disputed ? `Both teams say they won. ${org} decides.` : g.playTo !== 11 && g.stage === 'pool' ? `${players} · to ${g.playTo}` : players };
+  return { title: `vs ${g.opponent.name}`, sub: g.playTo !== 11 && g.stage === 'pool' ? `${players} · to ${g.playTo}` : players };
 }
 
-function GamesCard({ day, org }: { day: PlayerDayView; org: string }) {
+function GamesCard({ day }: { day: PlayerDayView }) {
   if (!day.games.length) return null;
   return (
     <section className="tc-gd-card" aria-label="Your games" data-tc-day-games>
       <h3 className="tc-gd-label">Your games</h3>
       <ul className="tc-gd-rows">
         {day.games.map((g) => {
-          const w = rowWords(g, org);
+          const w = rowWords(g);
           return (
             <li key={`${g.stage}-${g.num}`} className={`tc-gd-row tc-gd-game tc-gd-s-${g.state}${g.state === 'done' && g.won === false ? ' tc-gd-lost' : ''}`} data-tc-day-game={g.label} data-state={g.state}>
               <span className="tc-gd-left">
@@ -109,7 +110,11 @@ function GamesCard({ day, org }: { day: PlayerDayView; org: string }) {
               <span className="tc-gd-main">
                 <b>
                   {w.title}
-                  {g.state === 'done' && g.won !== undefined && <span className={g.won ? 'tc-gd-tag tc-gd-tag-won' : 'tc-gd-tag'}>{g.won ? 'Won' : 'Lost'}</span>}
+                  {g.state === 'done' && g.won !== undefined && (
+                    <span className={g.won ? 'tc-gd-tag tc-gd-tag-won' : 'tc-gd-tag'} data-tc-day-result>
+                      {resultTag(g.won, g.score)}
+                    </span>
+                  )}
                 </b>
                 {w.sub && <span>{w.sub}</span>}
               </span>
@@ -143,6 +148,10 @@ function StandingsCard({ day }: { day: PlayerDayView }) {
             ) : r.through ? (
               <span className="tc-gd-chip tc-gd-through" data-tc-day-through={r.through}>
                 {r.through === 'semi' ? 'In the semis' : 'In the final'}
+              </span>
+            ) : r.diff !== undefined ? (
+              <span className="tc-gd-chip tc-gd-pts" data-tc-day-diff={r.diff}>
+                {diffLabel(r.diff)}
               </span>
             ) : r.me ? (
               <span className="tc-gd-chip">You</span>
@@ -179,6 +188,10 @@ function PoolsCards({ day }: { day: PlayerDayView }) {
                 ) : r.through ? (
                   <span className="tc-gd-chip tc-gd-through" data-tc-day-through={r.through}>
                     {r.through === 'semi' ? 'In the semis' : 'In the final'}
+                  </span>
+                ) : r.diff !== undefined ? (
+                  <span className="tc-gd-chip tc-gd-pts" data-tc-day-diff={r.diff}>
+                    {diffLabel(r.diff)}
                   </span>
                 ) : r.where ? (
                   <span className="tc-gd-chip">{r.where}</span>
@@ -240,7 +253,7 @@ function TeamName({ name, players, big }: { name: string; players: string[]; big
 
 /**
  * Two teams (or two pairs) side by side with VS between them, each with its players under (Americano: names only). `lit` (the result motion):
- * 'mine' lights our side lime with a check (we won); 'theirs' gives the winners a soft white glow and dims our side (picture 37: a loss).
+ * 'mine' lights our side lime with a check (our side won); 'theirs' gives the winners a soft white glow and dims our side (picture 37: a loss).
  */
 export function Matchup({ a, b, big, lit }: { a: { name: string; players: string[] }; b: { name: string; players: string[] }; big?: boolean; lit?: 'mine' | 'theirs' | null }) {
   return (
@@ -344,14 +357,102 @@ function YourTeamCard({ t, day, onChanged }: { t: PlayerTournamentView; day: Pla
   );
 }
 
+/** One side's number with − and + (44 px), and the number itself can be typed. */
+function ScoreRow({ label, value, onChange, testId }: { label: string; value: number; onChange: (next: (n: number) => number) => void; testId: string }) {
+  const clamp = (n: number) => Math.max(0, Math.min(MAX_SCORE, Math.round(n)));
+  // − and + work on the number as it is now (quick taps all count); typing sets it.
+  const set = (n: number) => onChange(() => clamp(n));
+  const step = (d: number) => onChange((n) => clamp(n + d));
+  return (
+    <div className="tc-gd-score-row" data-tc-score-row={testId}>
+      <span className="tc-gd-score-name">{label}</span>
+      <span className="tc-gd-score-ctl">
+        <button type="button" className="tc-gd-round tc-gd-step" aria-label={`${label}: one less`} onClick={() => step(-1)} disabled={value <= 0} data-tc-score-minus={testId} data-tap-repeat>
+          −
+        </button>
+        <input
+          className="tc-gd-score-num"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          aria-label={`${label} score`}
+          value={String(value)}
+          onChange={(e) => set(Number(e.target.value.replace(/\D/g, '') || 0))}
+          onFocus={(e) => e.target.select()}
+          data-tc-score-num={testId}
+        />
+        <button type="button" className="tc-gd-round tc-gd-step" aria-label={`${label}: one more`} onClick={() => step(1)} disabled={value >= MAX_SCORE} data-tc-score-plus={testId} data-tap-repeat>
+          +
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * THE score sheet (picture 33, and Zip 72's picture pair-2): "Final score", each side with − and +, Submit score. Both styles: Locked doubles
+ * names the two teams (ours first), Americano the two pairs ("You + Parker"). Equal scores cannot be sent (a game has a winner); an odd score
+ * gets one gentle line under the numbers (Alex can fix it) and can still be sent.
+ */
+export function ScoreSheet({
+  num,
+  open,
+  labels,
+  playTo,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  num: number | null;
+  open: boolean;
+  labels: [string, string];
+  playTo: number;
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (mine: number, theirs: number) => void;
+}) {
+  const [mine, setMine] = useState(playTo);
+  const [theirs, setTheirs] = useState(0);
+  const [key, setKey] = useState('');
+  const k = `${num ?? ''}:${playTo}:${open}`;
+  if (k !== key) {
+    setKey(k);
+    setMine(playTo);
+    setTheirs(0);
+  }
+  const hint = scoreHint(mine, theirs, playTo);
+  return (
+    <Sheet calmFocus open={open && num !== null} title="Final score" onClose={onClose} className="tc-gd-sheet">
+      {num !== null && (
+        <div className="stack" data-tc-score-sheet={num}>
+          <div className="tc-gd-score">
+            <ScoreRow label={labels[0]} value={mine} onChange={setMine} testId="mine" />
+            <ScoreRow label={labels[1]} value={theirs} onChange={setTheirs} testId="theirs" />
+          </div>
+          {hint && (
+            <p className="tc-gd-score-hint" role="status" data-tc-score-hint>
+              {hint}
+            </p>
+          )}
+          <button type="button" className="btn big block" disabled={busy || mine === theirs} onClick={() => onSubmit(mine, theirs)} data-tc-score-submit>
+            Submit score
+          </button>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 /** How long the lit card (our side lime, "✓ Let's go!"; or their side's white glow, "Onto the next!") holds before it slides to the next game. */
 export const LIT_MS = 1000;
 
 /** A result held on this phone for its 5 seconds: which game, won or lost, and whether the card is still lit (the first second). */
 export type Held = { num: number; won: boolean; lit: boolean };
+/** Zip 72: a held result with its score (mine first), so Your games shows "Won 11–7" during the 5 seconds too. */
+export type HeldScore = Held & { mine: number; theirs: number };
 
 /**
- * THE result motion, shared by Locked doubles (We won, "<other team> won") and Americano (Submit score): zip 57's code, the one copy. The card
+ * THE result motion, shared by Locked doubles and Americano (Submit score; Zip 72: both styles enter a score): zip 57's code, the one copy. The card
  * lights for a second (won: our side lime and "✓ Let's go!"; lost: their side's white glow and "Onto the next!"), then slides to the next game;
  * the bottom banner says who won with Undo and its 5 second countdown circle; the result is sent after 5 seconds unless Undo. Leaving Home or locking
  * the phone inside the 5 seconds still sends it. Reduced motion: no light and no slide (the card just changes).
@@ -426,11 +527,11 @@ export function useHeldResult(t: PlayerTournamentView, onChanged: () => Promise<
  * What the screen shows while a result is held for its 5 seconds (Alex's add-on, picture 04): the game is done (won or lost), the next game is
  * the one up next, and the bar counts it. Only on this phone, only until the result is sent or undone; the standings wait for the real answer.
  */
-function withHeld(day: PlayerDayView, held: Held | null): PlayerDayView {
+function withHeld(day: PlayerDayView, held: HeldScore | null): PlayerDayView {
   if (!held || held.lit) return day;
   let first = true;
   const games = day.games.map((g) => {
-    if (g.num === held.num) return { ...g, state: 'done' as const, won: held.won, onNow: false, claimed: undefined };
+    if (g.num === held.num) return { ...g, state: 'done' as const, won: held.won, score: { mine: held.mine, theirs: held.theirs }, onNow: false };
     if (g.state === 'done') return g;
     const state = first ? ('next' as const) : ('later' as const);
     first = false;
@@ -451,12 +552,18 @@ function withHeld(day: PlayerDayView, held: Held | null): PlayerDayView {
  */
 export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentView; day: PlayerDayView; org: string; onChanged: () => Promise<unknown> }) {
   const { busy, held, hold: holdResult } = useHeldResult(t, onChanged);
-  const day = withHeld(real, held);
+  const [score, setScore] = useState<{ mine: number; theirs: number } | null>(null);
+  const day = withHeld(real, held && score ? { ...held, ...score } : null);
   const [noteSeen, hideNote] = useSeen(day.partnerNote?.key ?? null);
-  function hold(g: PlayerDayGame, action: 'won' | 'lost') {
-    const mine = day.team?.name ?? 'Your team';
-    const theirs = g.opponent?.name ?? 'The other team';
-    holdResult(g.num, action === 'won', { num: g.num, action }, `${action === 'won' ? mine : theirs} won ${g.label}`);
+  // Zip 72: the Final score sheet, held to the game it was opened for (a refresh while it is open never moves it to another game).
+  const [sheet, setSheet] = useState<PlayerDayGame | null>(null);
+  const myName = day.team?.name ?? 'Your team';
+  function submit(g: PlayerDayGame, mine: number, theirs: number) {
+    setSheet(null);
+    setScore({ mine, theirs });
+    const won = mine > theirs;
+    const winners = won ? myName : (g.opponent?.name ?? 'The other team');
+    holdResult(g.num, won, { num: g.num, action: 'score', mine, theirs }, `${winners} won ${Math.max(mine, theirs)} to ${Math.min(mine, theirs)}`);
   }
   const litGame = held?.lit ? (real.games.find((g) => g.num === held.num) ?? null) : null;
   const next = litGame ?? day.games.find((g) => g.state === 'next') ?? null;
@@ -471,7 +578,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
     return (
       <div className="tc-gd stack" data-tc-day="before">
         <YourTeamCard t={t} day={day} onChanged={onChanged} />
-        <GamesCard day={day} org={org} />
+        <GamesCard day={day} />
         {pools ? <PoolsCards day={day} /> : <TeamsCard day={day} />}
         {pools && <NightCard day={day} />}
       </div>
@@ -508,8 +615,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
             first={!day.games.some((g) => g.state === 'done') && !held}
             busy={busy || (!!held && !litGame)}
             lit={litGame ? (held!.won ? 'mine' : 'theirs') : null}
-            onWon={() => hold(next, 'won')}
-            onLost={() => hold(next, 'lost')}
+            onEnter={() => setSheet(next)}
           />
         </Slide>
       )}
@@ -521,7 +627,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           <b>Time check.</b> {day.timeNote}
         </p>
       )}
-      {tiePhase === null && <GamesCard day={day} org={org} />}
+      {tiePhase === null && <GamesCard day={day} />}
       {tiePhase === null && (pools ? <PoolsCards day={day} /> : <StandingsCard day={day} />)}
       {tiePhase === null && day.live.length > 0 && (
         <section className="tc-gd-card" aria-label="Currently playing" data-tc-day-live>
@@ -540,6 +646,17 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
         </section>
       )}
       {tiePhase === null && pools && <NightCard day={day} />}
+      <ScoreSheet
+        num={sheet?.num ?? null}
+        open={sheet !== null}
+        labels={[myName, sheet?.opponent?.name ?? 'The other team']}
+        playTo={sheet?.playTo ?? 11}
+        busy={busy}
+        onClose={() => setSheet(null)}
+        onSubmit={(mine, theirs) => {
+          if (sheet) submit(sheet, mine, theirs);
+        }}
+      />
     </div>
   );
 }
@@ -577,8 +694,10 @@ export function Slide({ k, children }: { k: number | string; children: ReactNode
 }
 
 /**
- * The one big card (mocks 17 and 18, Alex's PM): the game being played now (with We won and "<other team> won"), or Up next with the court. The
- * two teams side by side with VS, each with its players under. Game 1 says when it begins.
+ * The one big card (mocks 17 and 18, Alex's PM; Zip 72's picture pair-1): the game being played now with ONE lime Enter score button, or Up next
+ * with the court. The two teams side by side with VS, each with its players under. Game 1 says when it begins. After Submit score the card
+ * lights for a second: a win lights our side lime and the button says "✓ Let's go!"; a loss gives the winners the soft white glow and the
+ * button says "Onto the next!".
  */
 function UpNext({
   g,
@@ -586,21 +705,17 @@ function UpNext({
   first,
   busy,
   lit,
-  onWon,
-  onLost,
+  onEnter,
 }: {
   g: PlayerDayGame;
   day: PlayerDayView;
   first: boolean;
   busy: boolean;
-  /** We won was just tapped: our side lights lime with a check, the button says "✓ Let's go!", the rest dims (about a second). Zip 61: the
-   *  other team's button was tapped: their side glows soft white, ours and We won dim, the button says "Onto the next!". */
   lit?: 'mine' | 'theirs' | null;
-  onWon: () => void;
-  onLost: () => void;
+  onEnter: () => void;
 }) {
   const court = g.court !== null ? ` · Court ${g.court}` : '';
-  const kicker = first && !day.started ? `${g.label} · Begins at ${day.beginsAt}` : g.onNow ? `${g.label}${court}` : `Up next · ${g.label}${court}`;
+  const kicker = first && !day.started ? `${g.label} · Begins at ${day.beginsAt}` : g.onNow || lit ? `${g.label}${court}` : `Up next · ${g.label}${court}`;
   const mine = day.team ?? { name: 'Your team', players: [] };
   return (
     <section className="tc-gd-next" aria-label={kicker} data-tc-day-next={g.num}>
@@ -608,13 +723,10 @@ function UpNext({
       {g.opponent ? (
         <>
           <Matchup a={{ name: mine.name, players: mine.players }} b={g.opponent} big lit={lit} />
-          {g.onNow && (
+          {(g.onNow || lit) && (
             <div className={lit === 'mine' ? 'tc-gd-next-btns tc-gd-next-lit' : lit === 'theirs' ? 'tc-gd-next-btns tc-gd-next-lost' : 'tc-gd-next-btns'}>
-              <button type="button" className="tc-gd-wewon" disabled={busy || !!lit} onClick={onWon} data-tc-day-wewon>
-                {lit === 'mine' ? '✓ Let’s go!' : 'We won'}
-              </button>
-              <button type="button" className="tc-gd-theywon" disabled={busy || !!lit} onClick={onLost} data-tc-day-theywon>
-                {lit === 'theirs' ? 'Onto the next!' : `${g.opponent.name} won`}
+              <button type="button" className={lit === 'theirs' ? 'tc-gd-theywon' : 'tc-gd-wewon'} disabled={busy || !!lit} onClick={onEnter} data-tc-enter-score>
+                {lit === 'mine' ? '✓ Let’s go!' : lit === 'theirs' ? 'Onto the next!' : 'Enter score'}
               </button>
             </div>
           )}

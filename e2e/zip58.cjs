@@ -262,13 +262,13 @@ async function main() {
     await vic.page.reload();
     await vic.page.locator('[data-tc-tie-picked]').waitFor({ timeout: 20000 });
     assert((await vic.page.locator('[data-tc-tie] [data-wheel]').count()) === 0, 'no spin again after a reload');
-    // A team in Game A sees its game as the big card with We won.
+    // A team in Game A sees its game as the big card with Enter score (Zip 72).
     const ans = (await answerOf('Vic')).data.tournament.day;
     const mine = ans.games.find((g) => g.state === 'next');
     if (mine && mine.stage === 'tie') {
       const k = flat(await vic.page.locator('.tc-gd-next-kicker').innerText()).toUpperCase();
       assert(k.startsWith(mine.label.toUpperCase()), k);
-      assert((await vic.page.locator('[data-tc-day-wewon]').count()) === 1, 'We won on Game A');
+      assert((await vic.page.locator('[data-tc-enter-score]').count()) === 1, 'Enter score on Game A');
     }
     await SH(vic.page, 'B-vic-playoff');
     assert(vic.errors.length === 0 && r.errors.length === 0, [...vic.errors, ...r.errors].join(' | '));
@@ -309,7 +309,7 @@ async function main() {
       const k = flat(await v.page.locator('.tc-gd-next-kicker').innerText()).toUpperCase();
       assert(k === 'FINAL · COURT 1', k);
       assert(flat(await v.page.locator('[data-tc-day-next] .tc-gd-vs').innerText()) === 'Net Ninjas Vic + Wren VS Third Shot Gang Parker + Quinn', 'the VS card');
-      assert((await v.page.locator('[data-tc-day-wewon]').count()) === 1, 'We won');
+      assert((await v.page.locator('[data-tc-enter-score]').count()) === 1, 'Enter score');
       const also = flat(await v.page.locator('[data-tc-also-now]').innerText());
       assert(/^ALSO NOW · COURT 2 · 3RD PLACE Kitchen Crew vs Dill With It Rowan \+ Zoe vs Sage \+ Christopher( Vanderberg)?/i.test(also), also);
       for (const w of SIZES) {

@@ -491,7 +491,7 @@ export async function tournamentBackOut(ctx: Ctx, body: Record<string, unknown>)
   return playerTournamentBackOut(ctx, await viewer(ctx), body);
 }
 
-/** Zip 57 (server/tournamentDay.ts): POST /api/tournament/game { tournamentId, num, action }: We won, the other team won, Confirm, No we won, Undo. */
+/** Zip 57 (server/tournamentDay.ts): POST /api/tournament/game { tournamentId, num, action: 'score', mine, theirs }: Enter score (Zip 72; both styles). */
 export async function tournamentGame(ctx: Ctx, body: Record<string, unknown>) {
   return playerGameAction(ctx, await viewer(ctx), body);
 }

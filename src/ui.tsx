@@ -178,8 +178,6 @@ export interface ToastOptions {
    */
   sub?: string;
   nudge?: boolean;
-  /** Zip 57 (the tournament's We won): a thin green line along the banner's foot that drains over this many ms (the Undo window). */
-  drain?: number;
 }
 type ToastFn = (msg: string, kind?: ToastKind, opts?: ToastOptions) => void;
 
@@ -406,7 +404,6 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
           {shown.opts.action.label}
         </button>
       )}
-      {shown.opts.drain && <span className="toast-drain" aria-hidden="true" style={{ '--drain-ms': `${shown.opts.drain}ms`, ...(spentAtDraw > 0 ? { '--drain-delay': `-${spentAtDraw}ms` } : {}) } as React.CSSProperties} />}
     </div>
   );
 }

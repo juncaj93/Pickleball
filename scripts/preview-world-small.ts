@@ -719,13 +719,14 @@ export async function buildSmallPreview(
       // shows the wheel; one tap spins it. The other stages (Final, End tournament, Tournament ended, History) are one tap away.
       // Zip 70 (🎾70.time): the calm start is The Cold Open as it is on live (Locked doubles, $18, credits $0, 2 courts, 7:30 to 10:00 PM, a
       // Tuesday a week or more out): 6 locked in of 8, Vic and Zoe unpaid. Organizer Home: open the card, tap Time or Plan. Zip 58's tie is one tap away.
-      // Zip 71 (🎾71.teams): the calm start is game night, Game 1 being played, no answers yet (zip71_taps): View as Vic, We won; then any
-      // other player in the game sees it in, with nothing to confirm. Projected teams and the Americano stage are one tap away.
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip71_taps' });
+      // Zip 71 (🎾71.teams): the calm start was game night, Game 1 being played, no answers yet (zip71_taps).
+      // Zip 72 (🎾72.scores): the calm start is the same night (zip72_scores): View as Vic, Enter score (the team names, Submit score); then
+      // Parker sees Lost 7–11 and −4 pts; organizer Home: Fix any game with two numbers. The circle settled by points is one tap away.
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip72_scores' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 71 (on, the calm start): "The Cold Open", Locked doubles, tonight, Game 1 being played, no answers yet. View as Vic: We won; then Wren or Parker: Game 1 is in, nothing to confirm. The Tournament test page has First score counts: Americano and Projected teams');
+    summary.push('Zip 72 (on, the calm start): "The Cold Open", Locked doubles, tonight, Game 1 on both courts, no scores yet. View as Vic: Enter score, Submit score; then Parker: Lost 7–11, −4 pts. Organizer Home: Fix Game 1 · Court 1 with two numbers. The Tournament test page has the three-way circle settled by points, First score counts: Americano and Projected teams');
     summary.push('Zip 70 (one tap away): "The Cold Open" as on live, Locked doubles, $18, credits $0, Tue 7:30 to 10 PM on 2 courts, 6 locked in of 8 (Vic and Zoe unpaid), Reese on the list without the date. Organizer Home: the card with Time and Plan (You make if it fills +$6). The Tournament test page has the loss, the moved time, the late drop and Finalize for 9');
     summary.push('Zip 58 (one tap away): "The Cold Open", Locked doubles, the four teams, tonight, every pool game in: Kitchen Crew 3-0, Net Ninjas, Third Shot Gang and Dill With It tied 1-2 in a circle (the wheel on organizer Home). The Tournament test page has Final, Final done, Tournament ended, History and Americano: last round in');
     summary.push('Zip 61 Americano (one tap away): "The Cold Open", Americano, all 10 names locked in, tonight at Round 3 (rounds 1 and 2 in, every score in the moment it was entered), courts 1 and 2; View as Vic: Enter score. The Tournament test page has every Americano stage and zip 57\'s');

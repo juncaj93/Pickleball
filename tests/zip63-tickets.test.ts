@@ -85,7 +85,11 @@ describe('the pay countdown words (mocks 08 to 13)', () => {
     expect(today).toMatchObject({ tone: 'red', icon: 'clock', title: 'Payment due today' });
     expect(today.sub.replace(/\s/g, ' ')).toBe('Pay by 7:00 PM tonight');
     expect(payCountdown(PAY_BY, PAY_BY_MS - 6 * HOUR, TZ, 'X')!.title).toBe('Payment due today');
-    expect(payCountdown(PAY_BY, PAY_BY_MS - 6 * HOUR + 1000, TZ, 'X')!.title).toBe('Due in 5 hours');
+    // Zip 72: the nearest hour (5 hours 59 minutes left is "6 hours"; 4 hours 59 minutes is "5 hours", the dry run's case).
+    expect(payCountdown(PAY_BY, PAY_BY_MS - 6 * HOUR + 1000, TZ, 'X')!.title).toBe('Due in 6 hours');
+    expect(payCountdown(PAY_BY, PAY_BY_MS - 5 * HOUR + 60_000, TZ, 'X')!.title).toBe('Due in 5 hours');
+    expect(payCountdown(PAY_BY, PAY_BY_MS - 5 * HOUR, TZ, 'X')!.title).toBe('Due in 5 hours');
+    expect(payCountdown(PAY_BY, PAY_BY_MS - HOUR - 40 * 60_000, TZ, 'X')!.title).toBe('Due in 2 hours');
     expect(payCountdown(PAY_BY, PAY_BY_MS - 5 * HOUR - 20 * 60_000, TZ, 'X')!.title).toBe('Due in 5 hours');
     expect(payCountdown(PAY_BY, PAY_BY_MS - HOUR - 1, TZ, 'X')!.title).toBe('Due in 1 hour');
     expect(payCountdown(PAY_BY, PAY_BY_MS - 42 * 60_000 - 30_000, TZ, 'X')!.title).toBe('Due in 42 minutes');

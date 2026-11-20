@@ -51,13 +51,13 @@ describe('zip 58: the preview stages', () => {
     // The organizer sets Game A and Game B; the Final is set.
     for (const label of ['Game A', 'Game B']) {
       const g = (await dash()).tournament.day.games.find((x: any) => x.tieLabel === label);
-      expect((await ctx.organizer.call('POST', `/api/admin/tournament/${tid}/games`, { action: 'result', num: g.num, winner: 'a' })).status).toBe(200);
+      expect((await ctx.organizer.call('POST', `/api/admin/tournament/${tid}/games`, { action: 'result', num: g.num, a: 5, b: 3 })).status).toBe(200);
     }
     const fin = (await dash()).tournament.day.games.find((x: any) => x.stage === 'final');
     expect(fin.a.name).toBe('Kitchen Crew');
     expect(fin.b).not.toBeNull();
   });
-  it('Final: Vic sees the Final with We won and Also now · Court 2 · 3rd place; the first answer brings End tournament (zip 71: no confirming)', async () => {
+  it('Final: Vic sees the Final with Enter score and Also now · Court 2 · 3rd place; the first answer brings End tournament (zip 71: no confirming)', async () => {
     const { c, stage, dash, group } = await previewWorld();
     const tid = await stage('final_on');
     const vic = (await group('Vic')).tournament.day;
@@ -65,11 +65,11 @@ describe('zip 58: the preview stages', () => {
     const next = vic.games.find((g: any) => g.state === 'next');
     expect(next).toMatchObject({ stage: 'final', onNow: true, opponent: { name: 'Third Shot Gang' } });
     expect(vic.alsoNow).toMatchObject({ label: '3rd place', court: 2, a: { name: 'Kitchen Crew' }, b: { name: 'Dill With It' } });
-    // Vic: We won (after the card's 5 seconds). Zip 71, no confirming: it is the result at once, so End tournament shows (the organizer still
+    // Vic: Enter score, 11 to 7 (after the card's 5 seconds). Zip 71, no confirming: it is the result at once, so End tournament shows (the organizer still
     // taps End tournament himself; nothing moves money until then).
-    expect((await (await playerPhone(c, 'Vic')).call('POST', '/api/tournament/game', { tournamentId: tid, num: next.num, action: 'won' })).status).toBe(200);
+    expect((await (await playerPhone(c, 'Vic')).call('POST', '/api/tournament/game', { tournamentId: tid, num: next.num, action: 'score', mine: 11, theirs: 7 })).status).toBe(200);
     const fin = (await dash()).tournament.day.games.find((g: any) => g.stage === 'final');
-    expect([fin.winner, fin.claim]).toEqual(['a', null]);
+    expect([fin.winner, fin.scoreA, fin.scoreB]).toEqual(['a', 11, 7]);
     const end = (await dash()).tournament.end;
     expect(end).toMatchObject({ hero: 'Final', first: { name: 'Net Ninjas', players: ['Vic', 'Wren'] }, championCents: 1400, weeks: 1 });
     expect(end.done).toEqual({ kicker: 'Final is done', title: 'Net Ninjas won', sub: 'Vic + Wren beat Third Shot Gang (Parker + Quinn).' });

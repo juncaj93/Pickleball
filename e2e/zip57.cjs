@@ -348,6 +348,14 @@ async function main() {
 
   // ---------------------------------------------------------------- C  game night as Vic and Parker (mocks 17 to 19) and the add-on's motion (D)
   const toastBox = (page) => page.locator('.pop.toast');
+  /** Zip 72: a Locked doubles result is a score: Enter score, the Final score sheet's two numbers (ours first), Submit score. */
+  const enterScore = async (page, mine, theirs) => {
+    await page.locator('[data-tc-enter-score]').first().click();
+    await page.locator('[data-tc-score-sheet]').waitFor({ timeout: 5000 });
+    await page.locator('[data-tc-score-num="mine"]').fill(String(mine));
+    await page.locator('[data-tc-score-num="theirs"]').fill(String(theirs));
+    await page.locator('[data-tc-score-submit]').click();
+  };
   await stage('game1');
   for (const scheme of SCHEMES)
     await check(`C Game 1 (${scheme}): We won lights up, slides on, toast with Undo, sent after 5 s, it is the result (zip 71)`, async () => {
@@ -379,10 +387,10 @@ async function main() {
       await v.page.setViewportSize({ width: 390, height: 844 });
       let posted = 0;
       v.page.on('request', (r) => r.method() === 'POST' && r.url().endsWith('/api/tournament/game') && posted++);
-      // Tap We won: our side lights lime with a check, the button says "✓ Let's go!", the other side and button dim.
-      await v.page.locator('[data-tc-day-wewon]').click();
+      // Zip 72: Enter score, 11 to 7: our side lights lime with a check, the button says "✓ Let's go!", the other side dims.
+      await enterScore(v.page, 11, 7);
       await v.page.waitForTimeout(350);
-      const btn = flat(await v.page.locator('[data-tc-day-next="1"] [data-tc-day-wewon]').innerText());
+      const btn = flat(await v.page.locator('[data-tc-day-next="1"] [data-tc-enter-score]').innerText());
       assert(btn === '✓ Let\u2019s go!', `button: ${btn}`);
       const lit = await v.page.evaluate(() => {
         const card = document.querySelector('[data-tc-day-next="1"]');
@@ -392,14 +400,13 @@ async function main() {
           check: !!card.querySelector('.tc-gd-litcheck'),
           litBg: mine && getComputedStyle(mine).backgroundColor,
           otherOpacity: theirs && Number(getComputedStyle(theirs).opacity),
-          otherBtn: Number(getComputedStyle(card.querySelector('[data-tc-day-theywon]')).opacity),
         };
       });
-      assert(lit.check && /216, 240, 59/.test(lit.litBg) && lit.otherOpacity < 1 && lit.otherBtn < 1, `lit: ${JSON.stringify(lit)}`);
-      // The real bottom banner: "Net Ninjas won Game 1", Undo with its 5 second circle (Zip 71: no drain line).
+      assert(lit.check && /216, 240, 59/.test(lit.litBg) && lit.otherOpacity < 1, `lit: ${JSON.stringify(lit)}`);
+      // The real bottom banner: "Net Ninjas won 11 to 7", Undo with its 5 second circle (Zip 71: no drain line).
       await toastBox(v.page).waitFor();
       const tText = flat(await toastBox(v.page).innerText());
-      assert(tText.startsWith('Net Ninjas won Game 1') && tText.includes('Undo'), `toast: ${tText}`);
+      assert(tText.startsWith('Net Ninjas won 11 to 7') && tText.includes('Undo'), `toast: ${tText}`);
       // Zip 71 (Alex): no draining line along the banner; the countdown circle on Undo stays (5 seconds).
       assert((await toastBox(v.page).locator('.toast-drain').count()) === 0, 'no drain line');
       // The circle is drawn while the site's Motion switch is on (it is on live; this world has it off): when drawn, it runs the 5 seconds.
@@ -417,7 +424,7 @@ async function main() {
       assert(/^(Up next · )?Game 2/i.test(flat(await v.page.locator('.tc-gd-next-kicker').innerText())), await v.page.locator('.tc-gd-next-kicker').innerText());
       assert((await bar()) === 'GAME 2 OF 3', await bar());
       const g1 = v.page.locator('[data-tc-day-game="Game 1"]');
-      assert((await g1.getAttribute('data-state')) === 'done' && flat(await g1.locator('.tc-gd-tag-won').innerText()) === 'Won', 'Game 1 Won tag');
+      assert((await g1.getAttribute('data-state')) === 'done' && flat(await g1.locator('.tc-gd-tag-won').innerText()) === 'Won 11\u20137', 'Game 1 Won 11–7 tag');
       assert((await v.page.locator('[data-tc-day-game="Game 2"]').getAttribute('data-state')) === 'next', 'the highlight moves to Game 2');
       assert(posted === 0, 'nothing sent yet');
       await SH(v.page, `C-game2-${scheme}`);
@@ -431,7 +438,7 @@ async function main() {
       assert(stand.includes('Net Ninjas Vic + Wren 1-0'), stand);
       assert(v.errors.length === 0, v.errors.join(' | '));
       await v.ctx.close();
-      // Zip 71, no confirming: Vic's We won is the result. Parker sees Game 1 lost, nothing to answer.
+      // Zip 71, no confirming: Vic's score is the result. Parker sees Game 1 lost, nothing to answer.
       const d = await dash();
       assert(d.tournament.day.games[0].winner === 'a', 'the result at once');
       const p = await playerPage('Parker', { scheme });
@@ -443,39 +450,38 @@ async function main() {
       await p.ctx.close();
     });
   // Zip 61 (picture 37, Alex Nov 19): a loss is no longer just a slide. The winners' side glows soft white (white at 16%, a 2 px white ring at
-  // 35%), our side and We won dim, the tapped button says "Onto the next!"; then the same slide, the gray Lost tag, the banner with Undo.
-  await check('C "<other team> won": the white glow and "Onto the next!", then the slide; the banner names them; Undo puts Game 1 back', async () => {
+  // 35%), our side dims, the button says "Onto the next!"; then the same slide, the soft red Lost tag, the banner with Undo. Zip 72: a losing score.
+  await check('C a losing score: the white glow and "Onto the next!", then the slide; the banner names the winners; Undo puts Game 1 back', async () => {
     await stage('game1');
     const v = await playerPage('Vic', { reducedMotion: 'no-preference' });
-    await v.page.locator('[data-tc-day-theywon]').waitFor({ timeout: 15000 });
+    await v.page.locator('[data-tc-enter-score]').waitFor({ timeout: 15000 });
     let posted = 0;
     v.page.on('request', (r) => r.method() === 'POST' && r.url().endsWith('/api/tournament/game') && posted++);
-    await v.page.locator('[data-tc-day-theywon]').click();
+    await enterScore(v.page, 7, 11);
     await v.page.waitForTimeout(350);
     assert((await v.page.locator('.tc-gd-litcheck, .tc-gd-next-lit').count()) === 0, 'no lime');
     const lost = await v.page.evaluate(() => {
       const card = document.querySelector('[data-tc-day-next="1"]');
       const winners = card.querySelector('.tc-gd-vs > .tc-gd-tn:last-child');
       return {
-        btn: card.querySelector('[data-tc-day-theywon]').innerText.trim(),
+        btn: card.querySelector('[data-tc-enter-score]').innerText.trim(),
         bg: getComputedStyle(winners).backgroundColor,
         ring: getComputedStyle(winners).boxShadow,
         mine: Number(getComputedStyle(card.querySelector('.tc-gd-side-a')).opacity),
-        weWon: Number(getComputedStyle(card.querySelector('[data-tc-day-wewon]')).opacity),
       };
     });
-    assert(lost.btn === 'Onto the next!' && /255, 255, 255, 0\.16/.test(lost.bg) && /255, 255, 255, 0\.35\) 0px 0px 0px 2px/.test(lost.ring) && lost.mine < 1 && lost.weWon < 1, `lost: ${JSON.stringify(lost)}`);
+    assert(lost.btn === 'Onto the next!' && /255, 255, 255, 0\.16/.test(lost.bg) && /255, 255, 255, 0\.35\) 0px 0px 0px 2px/.test(lost.ring) && lost.mine < 1, `lost: ${JSON.stringify(lost)}`);
     await SH(v.page, 'C-onto-next');
     const tText = flat(await toastBox(v.page).innerText());
-    assert(tText.startsWith('Third Shot Gang won Game 1') && tText.includes('Undo'), `toast: ${tText}`);
+    assert(tText.startsWith('Third Shot Gang won 11 to 7') && tText.includes('Undo'), `toast: ${tText}`);
     await v.page.locator('.tc-gd-slide-out').waitFor({ timeout: 2500 });
     await v.page.waitForTimeout(600);
-    assert((await v.page.locator('[data-tc-day-game="Game 1"] .tc-gd-tag').innerText()) === 'Lost', 'Lost tag');
+    assert((await v.page.locator('[data-tc-day-game="Game 1"] .tc-gd-tag').innerText()) === 'Lost 7\u201311', 'Lost 7–11 tag');
     await SH(v.page, 'C-theywon');
     await toastBox(v.page).locator('.toast-action').click();
     await v.page.waitForTimeout(600);
     assert((await v.page.locator('[data-tc-day-next]').getAttribute('data-tc-day-next')) === '1', 'Undo puts Game 1 back');
-    assert(flat(await v.page.locator('[data-tc-day-wewon]').innerText()) === 'We won', 'with We won');
+    assert(flat(await v.page.locator('[data-tc-enter-score]').innerText()) === 'Enter score', 'with Enter score');
     assert((await bar2(v.page)) === 'GAME 1 OF 3', 'the bar goes back');
     await v.page.waitForTimeout(5200);
     assert(posted === 0, `Undo sends nothing: ${posted}`);
@@ -484,8 +490,8 @@ async function main() {
   await check('C leaving Home inside the 5 seconds still sends it; reduced motion has no glow or slide', async () => {
     await stage('game1');
     const v = await playerPage('Vic', { reducedMotion: 'reduce' });
-    await v.page.locator('[data-tc-day-wewon]').waitFor({ timeout: 15000 });
-    await v.page.locator('[data-tc-day-wewon]').click();
+    await v.page.locator('[data-tc-enter-score]').waitFor({ timeout: 15000 });
+    await enterScore(v.page, 11, 7);
     await v.page.waitForTimeout(80);
     assert((await v.page.locator('.tc-gd-litcheck, .tc-gd-next-lit, .tc-gd-slide-out').count()) === 0, 'no glow or slide');
     assert((await v.page.locator('[data-tc-day-next]').getAttribute('data-tc-day-next')) !== '1' && /Game 2/i.test(await v.page.locator('.tc-gd-next-kicker').innerText()), 'the card just changes');

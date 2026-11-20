@@ -77,7 +77,7 @@
   background: #d8f03b;
 }
 
-/* Up next (mock 17): the bright green card, We won in lime, the other team's button in clear white. */
+/* Up next (mock 17): the bright green card, Enter score in lime (Zip 72: one button); after a loss the button turns clear white. */
 .tc-gd-next {
   padding: 18px 16px 16px;
   border-radius: 22px;
@@ -606,7 +606,7 @@
   }
 }
 
-/* Alex's add-on (picture 04): We won lights our side lime with a check, the button says "✓ Let's go!", the rest dims; then the card slides
+/* Alex's add-on (picture 04): a win lights our side lime with a check, the button says "✓ Let's go!", the rest dims; then the card slides
    out to the left and the next game slides in from the right. Reduced motion: no slide, no glow (the site's global rule and the block below). */
 .tc-gd-side-a {
   position: relative;
@@ -763,6 +763,22 @@
 }
 .tc-gd-game .tc-gd-main > b > .tc-gd-tag {
   flex: none;
+}
+/* Zip 72 (picture pair-4): "Won 11–7" sits at the right of the row; a long team name wraps beside it. Never cut. */
+.tc-gd-game .tc-gd-main > b {
+  gap: 8px;
+}
+.tc-gd-game .tc-gd-main > b > .tc-gd-tag[data-tc-day-result] {
+  margin-left: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Zip 72: the gentle score check under the numbers (never blocks: Alex can fix any score). */
+.tc-gd-score-hint {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+  text-align: center;
 }
 .tc-gd-game .tc-gd-main > span {
   overflow: hidden;

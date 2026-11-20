@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'vitest';
 import { playerPhone, setupGroup } from './harness';
+import { asScore, withScore } from './zip72-taps';
 
 export const DATE = '2026-11-12';
 const DATES = ['2026-11-05', DATE, '2026-11-19'];
@@ -79,9 +80,9 @@ export const adminTour = async (ctx: World) => (await dash(ctx)).tournament;
 export const group = async (ctx: World, name: string) => (await (await playerPhone(ctx, name)).call('GET', '/api/group')).data;
 export const card = async (ctx: World, name: string) => (await group(ctx, name)).tournament;
 export const teams = (ctx: World, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/teams`, body);
-export const games = (ctx: World, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, body);
+export const games = (ctx: World, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, withScore(body));
 export const awards = (ctx: World, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/awards`, body);
-export const play = async (ctx: World, name: string, num: number, action: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, action });
+export const play = async (ctx: World, name: string, num: number, action: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, ...asScore(action) });
 export const spin = async (ctx: World, name: string, key: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/spin', { tournamentId: ctx.tid, key });
 
 /** Every money check of the site and of tournaments reads zero. */

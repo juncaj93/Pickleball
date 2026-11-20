@@ -1,7 +1,8 @@
 // Zip 57 (🎾57.tourney3), "Tournaments" piece 3, the ORGANIZER side (server/tournamentDay.ts): Draft teams (mock 15) with Swap, a team's
 // name, Redo the draw and Publish teams; the published teams with the venue's court numbers; the check when tickets close; Fix teams after a
-// back out; and game night (mocks 48 to 50, for Locked doubles: who won, not scores): the round's results with Confirm and Fix, the Time
-// check with one tap, Pause and Player left. Only drawn while the switch is on and a tournament has tickets open.
+// back out; and game night (mocks 48 to 50; Zip 72: every Locked doubles game has a score): the round's results ("Net Ninjas 11 to 7 Third Shot
+// Gang") with Set and Fix (picture pair-5: the two team names with − and +, Save; any game, also when nobody in it has a phone), the Time check
+// with one tap, Pause and Player left. Nothing waits for a Yes (Zip 71). Only drawn while the switch is on and a tournament has tickets open.
 import { lazy, Suspense, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDayGame, AdminDayTeam, AdminDayView, AdminTournamentView } from '../../../shared/tournament';
 import { levelShort } from '../../../shared/tournament';
@@ -12,7 +13,8 @@ import { AlertCard } from '../../AlertCard';
 import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import './tournament-day.css';
-import { AmericanoCards } from './AmericanoDay';
+import { AmericanoCards, Stepper } from './AmericanoDay';
+import { scoreHint } from '../../../shared/scores';
 import { AdminTieCards, EndCards } from './TournamentEnd';
 
 // The court picker (the site's court map) is loaded when the published card draws it, not with this file: a static import here would pull
@@ -389,15 +391,22 @@ const sidePlayers = (g: AdminDayGame, s: 'a' | 'b') => (s === 'a' ? g.a?.players
 const where = (g: AdminDayGame) => (g.courtNumber ? `Court ${g.courtNumber}` : `Court ${g.court}`);
 const stageName = (g: AdminDayGame) => (g.tieLabel ? g.tieLabel : g.stage === 'semi' ? 'Semifinal' : g.stage === 'final' ? 'Final' : g.stage === 'third' ? '3rd place' : `Game ${g.num}`);
 
-/** What a game row says and which button it has. */
-function rowOf(g: AdminDayGame): { status: string; first: 'a' | 'b'; word: string; button: 'fix' | 'confirm' | 'set' | 'decide' | null } {
+/** What a game row says and which button it has (Zip 71/72: a result is in or it is not; nothing waits for a Yes). */
+function rowOf(g: AdminDayGame): { status: string; first: 'a' | 'b'; word: string; button: 'fix' | 'set' | null } {
   if (g.skipped) return { status: 'Skipped', first: 'a', word: 'vs', button: 'fix' };
-  if (g.winner) return { status: 'Done', first: g.winner, word: 'beat', button: 'fix' };
-  if (g.disputed) return { status: 'Disputed', first: g.claim ?? 'a', word: 'or', button: 'decide' };
-  if (g.claim) return { status: 'Waiting', first: g.claim, word: 'says they beat', button: 'confirm' };
+  if (g.winner) {
+    const loser = g.winner === 'a' ? 'b' : 'a';
+    const w = g.winner === 'a' ? g.scoreA : g.scoreB;
+    const l = loser === 'a' ? g.scoreA : g.scoreB;
+    // "11 to 7" (Zip 72); a result from before Zip 72 has no score: "beat".
+    return { status: 'Done', first: g.winner, word: w !== null && l !== null ? `${w} to ${l}` : 'beat', button: 'fix' };
+  }
   if (!g.a || !g.b) return { status: 'Later', first: 'a', word: 'vs', button: null };
   return { status: 'Playing', first: 'a', word: 'vs', button: 'set' };
 }
+
+/** What the organizer's screen showed for a game (sent back with Fix and Clear, so a change in between is caught). */
+const seenOf = (g: AdminDayGame) => ({ winner: g.skipped ? null : g.winner, scoreA: g.scoreA, scoreB: g.scoreB });
 
 function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d: AdminDayView }) {
   const { busy, save } = useSave(ctx);
@@ -409,7 +418,6 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
   const rounds = Math.max(1, ...d.games.map((g) => g.round));
   const round = d.round ?? (d.games.every((g) => g.winner || g.skipped) ? rounds : 1);
   const inRound = d.games.filter((g) => g.round === round);
-  const disputedElsewhere = d.games.filter((g) => g.disputed && g.round !== round);
   const doneIn = inRound.filter((g) => g.winner || g.skipped).length;
   const tc = d.timeCheck && d.timeCheck.key !== skipTc ? d.timeCheck : null;
   return (
@@ -457,8 +465,8 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
           </span>
         </div>
         <ul className="tm-gd-results">
-          {[...inRound, ...disputedElsewhere].map((g) => (
-            <ResultRow key={g.num} g={g} busy={busy} onFix={() => setFix(g)} onConfirm={() => void save(() => gamesCall(t, { action: 'result', num: g.num, winner: g.claim, seen: { claim: g.claim, winner: g.winner } }), 'Confirmed')} />
+          {inRound.map((g) => (
+            <ResultRow key={g.num} g={g} busy={busy} onFix={() => setFix(g)} />
           ))}
         </ul>
         <span className="tm-gd-links">
@@ -482,7 +490,7 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
       <Sheet calmFocus open={all} title="All games" onClose={() => setAll(false)} className="tm-gd-sheet">
         <ul className="tm-gd-results" data-tm-all-sheet>
           {d.games.map((g) => (
-            <ResultRow key={g.num} g={g} busy={busy} label onFix={() => setFix(g)} onConfirm={() => void save(() => gamesCall(t, { action: 'result', num: g.num, winner: g.claim, seen: { claim: g.claim, winner: g.winner } }), 'Confirmed')} />
+            <ResultRow key={g.num} g={g} busy={busy} label onFix={() => setFix(g)} />
           ))}
         </ul>
       </Sheet>
@@ -494,7 +502,7 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
   );
 }
 
-function ResultRow({ g, busy, onFix, onConfirm, label }: { g: AdminDayGame; busy: boolean; onFix: () => void; onConfirm: () => void; label?: boolean }) {
+function ResultRow({ g, busy, onFix, label }: { g: AdminDayGame; busy: boolean; onFix: () => void; label?: boolean }) {
   const r = rowOf(g);
   const other = r.first === 'a' ? 'b' : 'a';
   return (
@@ -508,66 +516,79 @@ function ResultRow({ g, busy, onFix, onConfirm, label }: { g: AdminDayGame; busy
           <b>{sideName(g, r.first)}</b>
           {sidePlayers(g, r.first) && <span>{sidePlayers(g, r.first)}</span>}
         </span>
-        <span className="tm-gd-word">{r.status === 'Playing' ? `${r.word} · to ${g.playTo}` : r.word}</span>
+        <span className="tm-gd-word" data-tm-score={g.scoreA !== null ? `${g.scoreA}-${g.scoreB}` : undefined}>
+          {r.status === 'Playing' ? `${r.word} · to ${g.playTo}` : r.word}
+        </span>
         <span className="tm-gd-side">
           <b>{sideName(g, other)}</b>
           {sidePlayers(g, other) && <span>{sidePlayers(g, other)}</span>}
         </span>
       </span>
-      {r.button === 'confirm' ? (
-        <button type="button" className="btn tm-gd-confirm" disabled={busy} onClick={onConfirm} data-tm-confirm={g.num}>
-          Confirm
-        </button>
-      ) : r.button ? (
+      {r.button ? (
         <button type="button" className="tm-gd-swap" disabled={busy} onClick={onFix} data-tm-fix-game={g.num}>
-          {r.button === 'set' ? 'Set' : r.button === 'decide' ? 'Decide' : 'Fix'}
+          {r.button === 'set' ? 'Set' : 'Fix'}
         </button>
       ) : null}
     </li>
   );
 }
 
-/** Mock 49 for Locked doubles: who won (no scores in piece 3). Clear takes the result off. */
+/**
+ * Zip 72 (picture pair-5): "Fix Game 1 · Court 1", the two team names with − and + (the organizer's steppers, as on an Americano night), Save.
+ * Any game whose two teams are known, with or without a result (Set on a game nobody in it entered, for a court with no phones). The score is
+ * the result. Clear takes it off (the game is to play again). An odd score gets one gentle line and can still be saved.
+ */
 function FixSheet({ ctx, t, g, onClose }: { ctx: AdminCtx; t: AdminTournamentView; g: AdminDayGame | null; onClose: () => void }) {
   const { busy, save } = useSave(ctx);
-  const [pick, setPick] = useState<'a' | 'b' | null>(null);
-  const [seen, setSeen] = useState<number | null>(null);
-  if (g && seen !== g.num) {
-    setSeen(g.num);
-    setPick(g.winner ?? g.claim ?? null);
+  const [a, setA] = useState(11);
+  const [b, setB] = useState(0);
+  const [seen, setSeen] = useState<string | null>(null);
+  const stamp = g ? `${g.num}:${g.winner ?? ''}:${g.scoreA ?? ''}:${g.scoreB ?? ''}:${g.skipped ? 1 : 0}` : null;
+  if (g && seen !== stamp) {
+    setSeen(stamp);
+    // The score as it stands; with none, the winner (or side a) at the game's length.
+    const won = g.winner ?? 'a';
+    setA(g.scoreA ?? (won === 'a' ? g.playTo : 0));
+    setB(g.scoreB ?? (won === 'b' ? g.playTo : 0));
   }
+  const ready = !!g?.a && !!g?.b;
+  const hint = g && ready ? scoreHint(a, b, g.playTo) : null;
   return (
-    <Sheet calmFocus open={!!g} title={g ? `Fix · ${g.courtNumber ? `Court ${g.courtNumber}` : stageName(g)}` : 'Fix'} onClose={onClose} className="tm-gd-sheet">
+    <Sheet calmFocus open={!!g} title={g ? `Fix ${stageName(g)} · ${where(g)}` : 'Fix'} onClose={onClose} className="tm-gd-sheet">
       {g && (
         <div className="stack" data-tm-fix-sheet={g.num}>
-          {(['a', 'b'] as const).map((s) => (
-            <button key={s} type="button" className="tm-gd-pick" aria-pressed={pick === s} disabled={!g[s]} onClick={() => setPick(s)} data-tm-fix-pick={s}>
-              <span className="tm-gd-side">
-                <b className="tm-gd-pick-name">{sideName(g, s)}</b>
-                {sidePlayers(g, s) && <span>{sidePlayers(g, s)}</span>}
-              </span>
-              <span className="tm-gd-pick-mark">{pick === s ? 'Won' : 'Pick'}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn block big"
-            disabled={busy || !pick}
-            onClick={async () => {
-              const ok = await save(() => gamesCall(t, { action: 'result', num: g.num, winner: pick, seen: { claim: g.claim, winner: g.winner } }), 'Saved');
-              if (ok) onClose();
-            }}
-            data-tm-fix-save
-          >
-            Save
-          </button>
-          {(g.winner || g.claim || g.skipped) && (
+          {ready ? (
+            <>
+              <Stepper label={sideName(g, 'a')} value={a} onChange={setA} id="a" />
+              <Stepper label={sideName(g, 'b')} value={b} onChange={setB} id="b" />
+              {hint && (
+                <p className="tm-am-hint" role="status" data-tm-score-hint>
+                  {hint}
+                </p>
+              )}
+              <button
+                type="button"
+                className="btn block big"
+                disabled={busy || a === b}
+                onClick={async () => {
+                  const ok = await save(() => gamesCall(t, { action: 'result', num: g.num, a, b, seen: seenOf(g) }), 'Saved');
+                  if (ok) onClose();
+                }}
+                data-tm-fix-save
+              >
+                Save
+              </button>
+            </>
+          ) : (
+            <p className="tm-card-note">Both teams of this game are not known yet.</p>
+          )}
+          {(g.winner || g.skipped) && (
             <button
               type="button"
               className="btn block ghost"
               disabled={busy}
               onClick={async () => {
-                const ok = await save(() => gamesCall(t, { action: 'result', num: g.num, winner: null, seen: { claim: g.claim, winner: g.winner } }), 'Result cleared');
+                const ok = await save(() => gamesCall(t, { action: 'result', num: g.num, winner: null, seen: seenOf(g) }), 'Result cleared');
                 if (ok) onClose();
               }}
               data-tm-fix-clear

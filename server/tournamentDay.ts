@@ -5,8 +5,8 @@
 //   The organizer: Draft teams (from the players locked in, once tickets close and only for Locked doubles with an even count), Swap, a team's
 //   name, Redo the draw, Publish teams (the games are made then), the courts' numbers, a result for any game (Fix), the Time check's Apply,
 //   Pause, Player left (swap in, or the team sits out), and Fix teams when a back out after publishing leaves the teams out of step.
-//   A player: We won (sent after the card's 5 second Undo), "<other team> won", Confirm ("Yes, they won") or "No, we won" (the organizer
-//   decides), Undo while the other team has not confirmed.
+//   A player: Enter score (Zip 72: every Locked doubles game has a score; sent after the card's 5 second Undo). The first score from any of
+//   the 4 players is the result (Zip 71, no confirming); only the organizer changes it afterward.
 //
 // Who sees what: everything rides on the tournament view, which a player gets only while the tournament is visible to them (Only me, the switch
 // and Who can see it, server/tournament.ts visibleTo). A player gets names only: their own games, the games being played now, the standings and the
@@ -30,7 +30,7 @@ import {
   type TournamentFormat,
   MAX_SPOTS,
 } from '../shared/tournament';
-import { firstAnswer, saidWon } from '../shared/partnerTaps';
+import { firstAnswer, saidTeamScore, saidWon } from '../shared/partnerTaps';
 import { about, clockLabel, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES } from '../shared/tournamentPlan';
 import {
   draftNote,
@@ -63,7 +63,7 @@ import {
 } from '../shared/tournamentSchedule';
 import { startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
-import { americanoGameAction, americanoGamesAction } from './americanoDay';
+import { americanoGameAction, americanoGamesAction, readPair } from './americanoDay';
 import {
   firstName,
   logPlayer,
@@ -114,6 +114,9 @@ export interface GameRow {
   result_at: string | null;
   result_by: string | null;
   skipped: number;
+  /** Zip 72 (columns from 0028): the points each side scored. Null on a result from before Zip 72 (who won only). */
+  score_a?: number | null;
+  score_b?: number | null;
   /** The seats in the game when it got its result (frozen), or null. */
   seat_a?: number | null;
   seat_b?: number | null;
@@ -230,11 +233,18 @@ const byPlay = (x: GameRow, y: GameRow) => x.round - y.round || (STAGE_ORDER[x.s
 // What the rows mean
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** The result that counts for the standings: the winner when one stands; else a team's "We won" (players are trusted) unless the other team said no. */
+/** Zip 72: the score as the standings read it (both numbers, or none: a result from before Zip 72 is who won only). */
+const scoresOf = (g: GameRow): { scoreA: number; scoreB: number } | null =>
+  typeof g.score_a === 'number' && typeof g.score_b === 'number' ? { scoreA: g.score_a, scoreB: g.score_b } : null;
+
+/**
+ * The result that counts for the standings: the winner (and Zip 72's score) when one stands. A We won saved before Zip 71 that was never
+ * answered counts as the result (nothing waits now); one the other team said no to before Zip 71 is the organizer's to settle.
+ */
 export function resultOf(g: GameRow): GameResult {
   if (g.skipped) return { num: g.num, winner: null, skipped: true };
-  if (g.winner === 'a' || g.winner === 'b') return { num: g.num, winner: g.winner };
-  if ((g.claim === 'a' || g.claim === 'b') && !g.disputed_at) return { num: g.num, winner: g.claim };
+  if (g.winner === 'a' || g.winner === 'b') return { num: g.num, winner: g.winner, ...scoresOf(g) };
+  if ((g.claim === 'a' || g.claim === 'b') && !g.disputed_at) return { num: g.num, winner: g.claim, ...scoresOf(g) };
   return { num: g.num, winner: null };
 }
 const decided = (g: GameRow) => !!g.skipped || !!resultOf(g).winner;
@@ -491,11 +501,13 @@ export function adminDayView(
       ...(r?.a ? {} : { waitA: r?.tied ? 'Tied' : slotName(g.slot_a) }),
       ...(r?.b ? {} : { waitB: r?.tied ? 'Tied' : slotName(g.slot_b) }),
       playTo: g.play_to,
-      winner: g.winner === 'a' || g.winner === 'b' ? g.winner : null,
-      claim: g.claim === 'a' || g.claim === 'b' ? g.claim : null,
-      disputed: !!g.disputed_at && !g.winner,
+      // Zip 71/72: no answer waits. The result is the winner (an unanswered We won from before Zip 71 counts as one), with its score.
+      winner: f.results.get(g.num)?.winner ?? null,
+      scoreA: typeof g.score_a === 'number' && !g.skipped ? g.score_a : null,
+      scoreB: typeof g.score_b === 'number' && !g.skipped ? g.score_b : null,
       skipped: !!g.skipped,
       resultBy: g.result_by,
+      ...(g.claim_by && g.result_by === 'players' ? { by: names.get(g.claim_by) ?? 'A player' } : {}),
       ...(f.tieLabel.get(g.num) ? { tieLabel: f.tieLabel.get(g.num) } : {}),
     };
   });
@@ -622,9 +634,11 @@ export function playerDayView(
       ...(opp ? {} : { pending: r.tied ? 'Decided by the tie' : 'Not decided yet' }),
       state: done ? 'done' : firstOpen ? 'next' : 'later',
       ...(done && res.winner ? { won: res.winner === side } : {}),
+      // Zip 72: the score from their side (mine first): "Won 11–7", "Lost 7–11".
+      ...(done && res.winner && typeof res.scoreA === 'number' && typeof res.scoreB === 'number'
+        ? { score: side === 'a' ? { mine: res.scoreA, theirs: res.scoreB } : { mine: res.scoreB, theirs: res.scoreA } }
+        : {}),
       playTo: g.play_to,
-      ...(g.claim === side && !g.winner && !g.disputed_at ? { claimed: true as const } : {}),
-      ...(g.disputed_at && !g.winner ? { disputed: true as const } : {}),
       ...(g.skipped ? { skipped: true as const } : {}),
       // Zip 58: a tie game is played as soon as both its teams are known (a pool can be done while the other still plays).
       // Zip 71: an old disputed game (from before no confirming) is the organizer's to settle: no buttons on it.
@@ -717,9 +731,11 @@ export function playerDayView(
   const third = f.games.find((g) => g.stage === 'third' && !decided(g));
   const thirdR = third ? f.resolved.get(third.num) : undefined;
   const alsoNow = nextMine?.stage === 'final' && nextMine.opponent && third && thirdR?.a && thirdR?.b ? { label: '3rd place', court: courtNo(t, third.court), a: side(thirdR.a), b: side(thirdR.b) } : undefined;
-  // Standings: wins, then head to head; with pools, where each team plays the round now (or round 1 before the night).
+  // Standings: THE TIE RULE (shared/tournamentSchedule.ts standings); with pools, where each team plays the round now (or round 1 before the
+  // night). Zip 72: once any pool game has a score, each row has its point difference chip ("+4 pts"), which takes the place of "where".
   const showRound = Number.isFinite(roundNow) ? roundNow : 1;
   const planned = f.games.map(asPlanned);
+  const scored = f.games.some((g) => g.stage === 'pool' && !g.skipped && !!scoresOf(g) && !!f.results.get(g.num)?.winner);
   const standingsOut = groupsOf(rows.teams.length).map((grp) => ({
     pool: grp.pool,
     rows: groupTable(rows.teams.length, planned, f.results, f.out, f.records, (grp.pool ?? 'P') as GroupKey, f.gone).rows.map((r) => {
@@ -730,10 +746,11 @@ export function playerDayView(
         name: x.name,
         players: playersOf(x),
         record: recordLabel(r),
+        ...(scored ? { diff: r.diff } : {}),
         ...(r.seat === seat ? { me: true as const } : {}),
         ...(r.tied ? { tied: true as const } : {}),
         ...(x.out_at ? { out: true as const } : {}),
-        ...(pools && showRound <= poolRounds ? { where: here ? `Court ${courtNo(t, here.court)}` : 'Sits' } : {}),
+        ...(pools && showRound <= poolRounds && !scored ? { where: here ? `Court ${courtNo(t, here.court)}` : 'Sits' } : {}),
         ...(through.get(r.seat) ? { through: through.get(r.seat) } : {}),
       };
     }),
@@ -1056,7 +1073,8 @@ export async function teamsAction(ctx: Ctx, body: Record<string, unknown>) {
 
 /**
  * POST /api/admin/tournament/:id/games { action, ... }: the organizer on game night (mocks 48 to 50).
- *   result { num, winner: 'a' | 'b' | null }   set or clear any game's result (Fix; also settles "No, we won")
+ *   result { num, a, b, seen }                  Zip 72: set or fix any game's score (picture pair-5: two numbers); it is the result
+ *   result { num, winner: null, seen }          clear it (the game is to play again)
  *   apply { fromRound, to }                      the Time check: pool games from that round on are played to 9 or 7
  *   pause / resume
  *   left { playerId, swapIn? }                   a player left: swap in another player, or (no swapIn) the team sits out its later games
@@ -1099,20 +1117,38 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     const num = Number(body.num);
     const g = day.games.find((x) => x.num === num);
     if (!g) bad('tournament_changed', 'That game is not on the schedule.');
-    const winner = body.winner === null ? null : v.oneOf(body.winner, 'winner', ['a', 'b'] as const);
+    // Zip 72: a result is a score (two numbers, not equal); `winner: null` clears it. A winner without a score is refused (every game has one).
+    const clear = body.winner === null && body.a === undefined && body.b === undefined;
+    const pair = clear ? null : readPair(body, 'a', 'b');
+    const winner = pair ? (pair[0] > pair[1] ? 'a' : 'b') : null;
     const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
     const r = f.resolved.get(num);
     if (winner && (!r?.a || !r?.b)) bad('not_ready', 'Both teams of that game are not known yet.');
-    // What the organizer saw (the screen sends the claim and the winner it showed): a tap on a game that changed since does nothing ("look again").
-    const seen = body.seen && typeof body.seen === 'object' ? (body.seen as { claim?: unknown; winner?: unknown }) : null;
-    const seenOk = (x: unknown) => x === null || x === 'a' || x === 'b';
-    if (seen && (!seenOk(seen.claim ?? null) || !seenOk(seen.winner ?? null))) throw new HttpError(400, 'invalid_seen', 'Look again.');
+    // What the organizer saw (the screen sends the result it showed: who won and the score): a tap on a game that changed since does nothing.
+    const seen = body.seen && typeof body.seen === 'object' ? (body.seen as { winner?: unknown; scoreA?: unknown; scoreB?: unknown }) : null;
+    const sideOk = (x: unknown) => x === null || x === 'a' || x === 'b';
+    const numOk = (x: unknown) => x === null || x === undefined || (Number.isInteger(x) && (x as number) >= 0);
+    if (seen && (!sideOk(seen.winner ?? null) || !numOk(seen.scoreA) || !numOk(seen.scoreB))) throw new HttpError(400, 'invalid_seen', 'Look again.');
     const res = await ctx.db
       .prepare(
-        `UPDATE tournament_games SET winner = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, skipped = 0, result_at = ?, result_by = ?, seat_a = ?, seat_b = ?, updated_at = ?
-         WHERE id = ? AND updated_at = ? ${seen ? 'AND claim IS ? AND winner IS ?' : ''} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
+        `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, skipped = 0, result_at = ?, result_by = ?,
+           seat_a = ?, seat_b = ?, updated_at = ?
+         WHERE id = ? AND updated_at = ? ${seen ? "AND (CASE WHEN skipped = 1 THEN NULL WHEN winner IS NOT NULL THEN winner WHEN disputed_at IS NULL THEN claim END) IS ? AND score_a IS ? AND score_b IS ?" : ''}
+           AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
       )
-      .bind(winner, winner ? nowIso : null, winner ? 'organizer' : null, winner ? r!.a : null, winner ? r!.b : null, nowIso, g!.id, g!.updated_at, ...(seen ? [seen.claim ?? null, seen.winner ?? null] : []))
+      .bind(
+        winner,
+        pair ? pair[0] : null,
+        pair ? pair[1] : null,
+        winner ? nowIso : null,
+        winner ? 'organizer' : null,
+        winner ? r!.a : null,
+        winner ? r!.b : null,
+        nowIso,
+        g!.id,
+        g!.updated_at,
+        ...(seen ? [seen.winner ?? null, seen.scoreA ?? null, seen.scoreB ?? null] : []),
+      )
       .run();
     if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
     const nameOf = (seat: number | null | undefined) => (seat ? (f.bySeat.get(seat)?.name ?? 'A team') : 'A team');
@@ -1124,7 +1160,14 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
       group.id,
       null,
       'tournament_result',
-      { tournament: t.name, game: num, winner: winner ? nameOf(winSeat) : null, ...(winTeam ? { winnerPlayers: [winTeam.player_a, winTeam.player_b].map((id) => (id ? (pnames.get(id) ?? 'A player') : '')).filter(Boolean).join(' + ') } : {}), by: 'organizer' },
+      {
+        tournament: t.name,
+        game: num,
+        winner: winner ? nameOf(winSeat) : null,
+        ...(pair ? { score: `${Math.max(...pair)} to ${Math.min(...pair)}` } : {}),
+        ...(winTeam ? { winnerPlayers: [winTeam.player_a, winTeam.player_b].map((id) => (id ? (pnames.get(id) ?? 'A player') : '')).filter(Boolean).join(' + ') } : {}),
+        by: 'organizer',
+      },
       nowIso,
     );
     return { ok: true };
@@ -1184,7 +1227,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     ...skip.map((g) =>
       ctx.db
         .prepare(
-          `UPDATE tournament_games SET skipped = 1, winner = NULL, claim = NULL, disputed_at = NULL, result_by = 'skipped', result_at = ?, seat_a = ?, seat_b = ?, updated_at = ? WHERE id = ? AND winner IS NULL`,
+          `UPDATE tournament_games SET skipped = 1, winner = NULL, claim = NULL, disputed_at = NULL, score_a = NULL, score_b = NULL, result_by = 'skipped', result_at = ?, seat_a = ?, seat_b = ?, updated_at = ? WHERE id = ? AND winner IS NULL`,
         )
         .bind(nowIso, f.resolved.get(g.num)?.a ?? null, f.resolved.get(g.num)?.b ?? null, nowIso, g.id),
     ),
@@ -1248,7 +1291,8 @@ export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowM
     record.get(win)!.wins++;
     record.get(lose)!.losses++;
   }
-  // The rest in table order: with pools, 3rd of each pool, then 4th, ... (better record first); a semifinal loser with no 3rd place game is 3rd.
+  // The rest in table order: with pools, 3rd of each pool, then 4th, ... (Zip 72: better record first, then point difference, then points
+  // scored, the tie rule's steps that work across pools); a semifinal loser with no 3rd place game is 3rd.
   const placed = [champion, runnerUp, p3, p4].filter((x): x is number => x !== null);
   const semiLosers = f.games
     .filter((g) => g.stage === 'semi')
@@ -1264,7 +1308,7 @@ export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowM
     const atRank = tables
       .map((x) => x[rank - 1])
       .filter((x) => !!x)
-      .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.seat - b.seat);
+      .sort((a, b) => b.wins - a.wins || a.losses - b.losses || b.diff - a.diff || b.pointsFor - a.pointsFor || a.seat - b.seat);
     for (const r of atRank) if (!placed.includes(r.seat) && !semiLosers.includes(r.seat) && !f.out.has(r.seat) && !rest.includes(r.seat)) rest.push(r.seat);
   }
   const order = [...placed, ...semiLosers, ...rest, ...[...f.out].filter((x) => !placed.includes(x))];
@@ -1386,20 +1430,21 @@ export async function playerSpin(ctx: Ctx, who: TournamentActor, body: Record<st
 // ---------------------------------------------------------------------------------------------------------------------
 
 /**
- * POST /api/tournament/game { tournamentId, num, action }: on game night, a player in that game (either team).
- *   won       "We won" (the card's 5 second Undo already ran on the phone)
- *   lost      "<other team> won"
- * Zip 71, NO CONFIRMING (Alex, Nov 20): the FIRST answer from ANY of the 4 players is the result, at once (who answered is kept in claim_by).
- * Nobody confirms it. A second answer from anyone is refused with who answered ("Vic said Net Ninjas won. Ask Alex to fix it."); the same
- * player sending the same answer again (a refresh, two phones) is fine. Only the organizer changes a result afterward (Fix, or clear it).
- * The old 'confirm', 'dispute' and 'undo' are refused: there is nothing to confirm, and the Undo is the 5 seconds on the phone.
+ * POST /api/tournament/game { tournamentId, num, action: 'score', mine, theirs }: on game night, a player in that game (either team).
+ * Zip 72: every Locked doubles game has a score (picture pair-2: "Final score", the two team names, Submit score; sent after the card's 5
+ * second Undo). The winner is the side with more points.
+ * Zip 71, NO CONFIRMING (Alex, Nov 20): the FIRST score from ANY of the 4 players is the result, at once (who entered it is kept in claim_by).
+ * Nobody confirms it. A second score from anyone is refused with who entered it ("Vic entered 11 to 7. Ask Alex to fix it."); the same player
+ * sending the same score again (a refresh, two phones) is fine. Only the organizer changes a result afterward (Fix, or clear it).
+ * The old 'won', 'lost', 'confirm', 'dispute' and 'undo' are refused: a result needs a score, there is nothing to confirm, and the Undo is the
+ * 5 seconds on the phone.
  */
 export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
   const { t, playerId } = await playerTarget(ctx, who, body);
   // Zip 61: on an Americano night a player enters a score (server/americanoDay.ts), once tickets have closed on Americano.
   if (t.format === 'americano' && styleDecided(t, ctx.nowMs)) return americanoGameAction(ctx, who, t, playerId, body);
   if (!t.teams_at) bad('tournament_changed', 'This just changed. Look again.');
-  const action = v.oneOf(body.action, 'action', ['won', 'lost', 'confirm', 'dispute', 'undo'] as const);
+  const action = v.oneOf(body.action, 'action', ['score', 'won', 'lost', 'confirm', 'dispute', 'undo'] as const);
   const num = Number(body.num);
   const day = await loadDay(ctx.db, t.id);
   const tz = who.group.timezone;
@@ -1412,48 +1457,55 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
   // Results open 15 minutes before the start (a team warming up early) and stay open through the night.
   const real = realTimes(t);
   if (ctx.nowMs < startMsOf(t.final_date!, real.start, tz) - 15 * 60_000) bad('not_started', `Games begin at ${clockLabel(real.start)}.`);
-  const other = side === 'a' ? 'b' : 'a';
   if (t.format === 'americano') bad('tournament_changed', 'The style is Americano now. Look again.');
   const org = firstName(who.group);
   const nameOfSide = (x: string | null) => (x === 'a' || x === 'b' ? (f.bySeat.get(x === 'a' ? r!.a! : r!.b!)?.name ?? 'A team') : 'A team');
-  // What a refused answer says: who gave the result that stands.
+  // What a refused answer says: who gave the result that stands (with its score; a result from before Zip 72 says who won).
   const standing = async (game: GameRow) => {
     if (game.skipped) return `That game is off. Ask ${org}.`;
     const w = game.winner ?? game.claim;
-    if (game.result_by === 'organizer') return firstAnswer(`${org} set ${nameOfSide(w)} as the winner.`, org);
+    const sc = scoresOf(game);
     const by = !game.claim_by ? null : game.claim_by === playerId ? 'You' : ((await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(game.claim_by).first<{ display_name: string }>())?.display_name ?? 'A player');
+    if (game.result_by === 'organizer') return firstAnswer(sc ? saidTeamScore(org, 'set', nameOfSide(w), sc.scoreA, sc.scoreB) : `${org} set ${nameOfSide(w)} as the winner.`, org);
+    if (sc) return firstAnswer(saidTeamScore(by ?? 'Someone', 'entered', nameOfSide(w), sc.scoreA, sc.scoreB), org);
     return firstAnswer(by ? saidWon(by, nameOfSide(w)) : `${nameOfSide(w)} won.`, org);
   };
-  const answer = action === 'won' ? side : action === 'lost' ? other : null;
-  // A result stands (a winner; a skipped game; or a We won from before Zip 71 still waiting, which counts): the same player's same answer is
-  // fine, anything else is refused.
-  if (g!.winner || g!.skipped || g!.claim) {
-    if (answer && (g!.winner ?? g!.claim) === answer && g!.claim_by === playerId) return { ok: true, result: action };
-    // Someone else's answer that says the same thing: refused (it is the second answer), but nothing needs fixing.
-    if (answer && !g!.skipped && (g!.winner ?? g!.claim) === answer) bad('decided', (await standing(g!)).replace(` Ask ${org} to fix it.`, ' It is in.'));
+  const decidedNow = (x: GameRow) => !!x.winner || !!x.skipped || !!x.claim;
+  if (action !== 'score') {
+    if (decidedNow(g!)) bad('decided', await standing(g!));
+    bad('no_confirm', action === 'undo' ? 'Nothing to take back.' : action === 'won' || action === 'lost' ? 'Enter the score. Pull down to refresh.' : 'Nothing to confirm. Enter the score.');
+  }
+  // A bad score is refused before anything is written ("mine" is this player's team).
+  const sent = readPair(body, 'mine', 'theirs');
+  const [x, y] = side === 'a' ? sent : [sent[1], sent[0]];
+  const answer: 'a' | 'b' = x > y ? 'a' : 'b';
+  const same = (z: GameRow) => z.claim_by === playerId && z.score_a === x && z.score_b === y;
+  // A result stands: the same player's same score is fine, anything else is refused.
+  if (decidedNow(g!)) {
+    if (same(g!) && !g!.skipped) return { ok: true, result: 'score' };
+    // Someone else's score that says the same thing: refused (it is the second answer), but nothing needs fixing.
+    if (!g!.skipped && g!.score_a === x && g!.score_b === y) bad('decided', (await standing(g!)).replace(` Ask ${org} to fix it.`, ' It is in.'));
     bad('decided', await standing(g!));
   }
-  if (!answer) bad('no_confirm', action === 'undo' ? 'Nothing to take back.' : 'Nothing to confirm. Tap who won.');
   // Every result keeps the two teams it was given for (seat_a, seat_b), so a later change to an earlier game never moves it to other teams.
   const res = await ctx.db
     .prepare(
-      `UPDATE tournament_games SET winner = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ?
+      `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ?
        WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND claim IS NULL
          AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
     )
-    .bind(answer, playerId, ctx.nowIso, r!.a, r!.b, ctx.nowIso, g!.id, g!.updated_at)
+    .bind(answer, x, y, playerId, ctx.nowIso, r!.a, r!.b, ctx.nowIso, g!.id, g!.updated_at)
     .run();
   if ((res.meta?.changes ?? 0) === 0) {
-    // Two phones at once: another answer landed first. The same player with the same answer: it is in. Anyone else: who answered.
+    // Two phones at once: another score landed first. The same player with the same score: it is in. Anyone else: who entered it.
     const now = await ctx.db.prepare('SELECT * FROM tournament_games WHERE id = ?').bind(g!.id).first<GameRow>().catch(() => null);
-    if (now && now.winner === answer && now.claim_by === playerId) return { ok: true, result: action };
-    if (now && (now.winner || now.skipped || now.claim)) bad('decided', await standing(now));
+    if (now && same(now) && now.winner === answer) return { ok: true, result: 'score' };
+    if (now && decidedNow(now)) bad('decided', await standing(now));
     bad('tournament_changed', 'This just changed. Look again.');
   }
-  await logPlayer(ctx, who.group, playerId, 'tournament_result', { tournament: t.name, game: num, result: `${nameOfSide(answer)} won`, by: 'player' });
-  return { ok: true, result: action };
+  await logPlayer(ctx, who.group, playerId, 'tournament_result', { tournament: t.name, game: num, result: `${nameOfSide(answer)} won ${Math.max(x, y)} to ${Math.min(x, y)}`, by: 'player' });
+  return { ok: true, result: 'score' };
 }
-
 
 /**
  * POST /api/tournament/team-name { tournamentId, name? }: either partner names their team (the pencil), or rolls the dice (no `name`: a new

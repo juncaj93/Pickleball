@@ -4,9 +4,9 @@
  *   node e2e/zip71.cjs
  *
  * The world is the preview's calm profile as of Thu Nov 19 2026, 10:00 AM Eastern, and the Tournament test page's Zip 71 stages.
- *   A  NO CONFIRMING (zip71_taps): Vic's We won (5 second Undo, then sent) is the result; Wren, Parker and Quinn see Game 1 in, no buttons,
+ *   A  NO CONFIRMING (zip71_taps): Vic's score (Zip 72; 5 second Undo, then sent) is the result; Wren, Parker and Quinn see Game 1 in, no buttons,
  *      nothing to answer; organizer Home: Done, no Confirm. Undo sends nothing, then Parker can answer first. 390/360/320, light and dark.
- *   B  a stale screen: Parker answered first; Wren's tap is refused ("Parker said Third Shot Gang won. Ask Alex to fix it.").
+ *   B  a stale screen: Parker answered first; Wren's score is refused ("Parker entered Third Shot Gang 11 to 7. Ask Alex to fix it.").
  *   C  Americano (zip71_am): Vic's score is in at once; the other three see it, no Enter score for Round 1, no "Is this right?".
  *   D  Projected teams (zip71_teams, pictures pair-01 and pair-02): the row at the bottom of Levels with 4; tap opens the pictures' list in place,
  *      tap again folds it; body font; the pencil changes Quinn's level and the open list follows with no reload; 390/360/320 light and dark.
@@ -152,18 +152,28 @@ async function main() {
   const tapGame = async (who, action) => {
     const ctx = await phone(who);
     const tid = (await (await ctx.request.get(BASE + '/api/group')).json()).tournament.id;
-    const r = await ctx.request.post(BASE + '/api/tournament/game', { data: { tournamentId: tid, num: 1, action }, headers: { Origin: BASE } });
+    // Zip 72: an answer is a score ('won': this player's team 11 to 7).
+    const body = action === 'won' ? { action: 'score', mine: 11, theirs: 7 } : action === 'lost' ? { action: 'score', mine: 7, theirs: 11 } : { action };
+    const r = await ctx.request.post(BASE + '/api/tournament/game', { data: { tournamentId: tid, num: 1, ...body }, headers: { Origin: BASE } });
     const out = { ok: () => r.ok(), status: () => r.status(), body: await r.text() };
     out.text = async () => out.body;
     await ctx.close();
     return out;
   };
   const game1 = async () => (await call('GET', '/api/admin/dashboard')).tournament.day.games.find((g) => g.num === 1);
+  /** Zip 72: a Locked doubles result is a score: Enter score, the Final score sheet's two numbers (ours first), Submit score. */
+  const enterScore = async (page, mine, theirs) => {
+    await page.locator('[data-tc-enter-score]').first().click();
+    await page.locator('[data-tc-score-sheet]').waitFor({ timeout: 5000 });
+    await page.locator('[data-tc-score-num="mine"]').fill(String(mine));
+    await page.locator('[data-tc-score-num="theirs"]').fill(String(theirs));
+    await page.locator('[data-tc-score-submit]').click();
+  };
 
-  await check('A: no confirming: Vic taps We won (5 second Undo, then sent); Wren, Parker and Quinn see Game 1 in with no buttons and nothing to answer; Home has Done and Fix (390/360/320, light and dark)', async () => {
+  await check('A: no confirming: Vic enters 11 to 7 (5 second Undo, then sent); Wren, Parker and Quinn see Game 1 in with no buttons and nothing to answer; Home has Done and Fix (390/360/320, light and dark)', async () => {
     await stage('zip71_taps');
     const v = await playerPage('Vic');
-    await v.page.locator('[data-tc-day-wewon]').click();
+    await enterScore(v.page, 11, 7);
     await v.page.locator('.toast-action').first().waitFor({ timeout: 3000 });
     await v.page.waitForTimeout(6500);
     const g = await game1();
@@ -195,7 +205,7 @@ async function main() {
     const v = await playerPage('Vic');
     let posted = 0;
     v.page.on('request', (r) => r.method() === 'POST' && r.url().includes('/api/tournament/game') && posted++);
-    await v.page.locator('[data-tc-day-wewon]').click();
+    await enterScore(v.page, 11, 7);
     await v.page.locator('.toast-action').first().click();
     await v.page.waitForTimeout(5800);
     assert(posted === 0, `Undo sends nothing: ${posted}`);
@@ -205,14 +215,14 @@ async function main() {
     await v.ctx.close();
   });
 
-  await check('B: a stale screen: Parker answered first; Wren still had the buttons and taps We won: refused with who answered, and her screen shows the result', async () => {
+  await check('B: a stale screen: Parker answered first; Wren still had Enter score and sends hers: refused with who answered, and her screen shows the result', async () => {
     await stage('zip71_taps');
     const w = await playerPage('Wren');
-    await w.page.locator('[data-tc-day-wewon]').waitFor({ timeout: 5000 });
+    await w.page.locator('[data-tc-enter-score]').waitFor({ timeout: 5000 });
     const r = await tapGame('Parker', 'won');
     assert(r.ok(), `Parker: ${r.status()}`);
-    await w.page.locator('[data-tc-day-wewon]').click();
-    await w.page.getByText('Parker said Third Shot Gang won. Ask Alex to fix it.').first().waitFor({ timeout: 12000 });
+    await enterScore(w.page, 11, 7);
+    await w.page.getByText('Parker entered Third Shot Gang 11 to 7. Ask Alex to fix it.').first().waitFor({ timeout: 12000 });
     await w.page.waitForTimeout(1500);
     assert(flat(await w.page.locator('[data-tc-day-game="Game 1"]').innerText()).includes('Lost'), 'Game 1 Lost on her screen');
     assert((await game1()).winner === 'b', 'still Parker\'s answer');
@@ -372,7 +382,7 @@ async function main() {
   await check('G banner: the Undo circle stays, no draining line along the bottom (Locked doubles and Americano)', async () => {
     await stage('zip71_taps');
     const v = await playerPage('Vic', { reducedMotion: 'no-preference', query: '&motion=on' });
-    await v.page.locator('[data-tc-day-wewon]').click();
+    await enterScore(v.page, 11, 7);
     const box = v.page.locator('.pop.toast').first();
     await box.waitFor({ timeout: 3000 });
     assert((await box.locator('.m-undo-ring').count()) === 1, 'the circle on Undo');

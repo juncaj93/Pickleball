@@ -82,17 +82,23 @@ export const ZIP66_STAGES = ['zip66_start', 'missed_date'] as const;
 //   day_ready        TODAY, the night started 10 minutes ago, no teams yet: Home says "8 locked in. Draft the teams." (the calm start)
 //   teams_drafted    the same with the four teams drafted (mock 15), not published: Publish teams or Redo the draw
 //   teams_published  published, the night two days from now: Vic sees Your team, Your games, All teams (mock 16)
-//   game1            published, the night started a minute ago, no results: Vic sees Game 1 with We won (mock 17)
-//   mid              started 45 minutes ago (7:30 to 9:30 PM): Vic said Net Ninjas won Game 1 (zip 71: it is in at once), Kitchen Crew vs Dill With
-//                    It still playing, the night behind: the Time check on Home (mocks 18, 19, 48)
-//   pools_done       every round robin game in: standings final, the Final and the 3rd place game set
+//   game1            published, the night started a minute ago, no results: Vic sees Game 1 with Enter score (mock 17; Zip 72)
+//   mid              started 45 minutes ago (7:30 to 9:30 PM): Vic entered Net Ninjas 11 to 7 in Game 1 (zip 71: it is in at once), Kitchen Crew
+//                    vs Dill With It still playing, the night behind: the Time check on Home (mocks 18, 19, 48)
+//   pools_done       every round robin game in (with scores): standings final, the Final and the 3rd place game set
 //   backed_out       published before the night, then Zoe backed out after Pay by: 7 locked in, the style switched to Americano (the amber card
 //                    with Copy text for the group); players see "Tournament style is now Americano." and no teams
 // The 12 players pools look (mock 51) cannot be made with the 10 names: GET /api/tournament/pools-look draws it (look only, a preview link).
 // Zip 71 (🎾71.teams), partner taps:
-//   zip71_taps       Zip 71 (no confirming): game1's night, started 20 minutes ago, no answers yet. View as Vic: We won (5 second Undo);
+//   zip71_taps       Zip 71 (no confirming): game1's night, started 20 minutes ago, no answers yet. View as Vic: Enter score (5 second Undo);
 //                    then view as Wren or Parker: Game 1 is in, no buttons, nothing to confirm. Organizer Home: Done with Fix.
-export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out', 'zip71_taps'] as const;
+// Zip 72 (🎾72.scores), scores in Locked doubles and one tie rule:
+//   zip72_scores     THE CALM START. The same night as zip71_taps (Game 1 on both courts, no scores yet). View as Vic: Enter score, the Final
+//                    score sheet with the two team names, Submit score ("✓ Let's go!", Undo). View as Parker: Game 1 "Lost 7–11", Standings
+//                    "−4 pts". Organizer Home: Fix on any game (Fix Game 1 · Court 1, two numbers, Save).
+//   zip72_circle     every round robin game in: Kitchen Crew 3-0, then Net Ninjas, Third Shot Gang and Dill With It 1-2 each in a circle, settled
+//                    by point difference (0, −2, −9 pts): no wheel; the Final (Kitchen Crew vs Net Ninjas) and 3rd place are set.
+export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out', 'zip71_taps', 'zip72_scores', 'zip72_circle'] as const;
 type DayStage = (typeof DAY_STAGES)[number];
 const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[]).includes(s);
 // Zip 61 (🎾61.americano): the Americano night. "The Cold Open", Americano, all 10 names locked in (Alex's own $0 seat), Pay by passed, courts 1
@@ -109,15 +115,16 @@ const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[
 //                 Americano (zip 64): players see "Tournament style is now Americano." and their new rounds
 //   am_done       every round in (Vic wins every game he plays): the organizer's End tournament card (picture 37)
 //   zip71_am      Zip 71 (no confirming): tonight, Round 1 started 20 minutes ago, no scores yet. View as Vic: Enter score; then view as any of
-//                 the other three: the score is in, no Enter score, no "Is this right?".
+//                 the other three: the score is in, no Enter score, nothing to answer.
 export const AM_STAGES = ['am_round3', 'am_before', 'am_round1', 'am_break', 'am_standings', 'am_switched', 'am_done', 'zip71_am'] as const;
 // Zip 58 (🎾58.tourney4): ties, the Final, End tournament and the records. "The Cold Open", Locked doubles, the brief's four teams (zip 57's
 // stage: Net Ninjas Vic and Wren, Third Shot Gang Parker and Quinn, Kitchen Crew Rowan and Zoe, Dill With It Sage and Christopher), tonight,
-// started 100 minutes ago, courts 1 and 2. Every pool game in, as the players' Confirm writes it.
-//   tie3        Kitchen Crew 3-0; Net Ninjas, Third Shot Gang and Dill With It each beat one of the others (1-2): tied for the final (picture
-//               20). Kitchen Crew spins (view as Rowan or Zoe), or the organizer does on Home. Then Game A and Game B (picture 21).
+// started 100 minutes ago, courts 1 and 2. Every pool game in, as a player's first score writes it (Zip 72: with scores).
+//   tie3        Kitchen Crew 3-0; Net Ninjas, Third Shot Gang and Dill With It each beat one of the others (1-2), every game 11 to 7, so point
+//               difference and points scored are level too: tied for the final, the wheel's last resort (picture 20). Kitchen Crew spins (view
+//               as Rowan or Zoe), or the organizer does on Home. Then Game A and Game B (picture 21).
 //   final_on    Net Ninjas 3-0, Third Shot Gang 2-1, Kitchen Crew 1-2, Dill With It 0-3: the Final (Net Ninjas vs Third Shot Gang) and 3rd place
-//               (Kitchen Crew vs Dill With It) on now (picture 22). View as Vic: We won: it is in at once (zip 71), Home shows End tournament.
+//               (Kitchen Crew vs Dill With It) on now (picture 22). View as Vic: Enter score: it is in at once (zip 71), Home shows End tournament.
 //   final_done  the same with both games in (Net Ninjas won the Final, Dill With It 3rd place): Home shows End tournament (picture 43).
 //   ended       final_done, then Confirm winners and end, the real code: the ticker, medals and credit (Vic and Wren get $14 each; pictures 38, 40).
 //   history     ended, plus two older finished Americano nights (Summer Slam: Vic 1st, Parker 2nd; Spring Fling: Parker 1st, Vic 2nd): History >
@@ -296,6 +303,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   if (stage === 'none') return { ok: true, stage };
   if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
   if (isZip58Stage(stage)) return zip58Stage(ctx, group, stage);
+  if (stage === 'zip72_circle') return dayStage(ctx, group, stage, TIE3, CIRCLE_SCORE);
   if (isDayStage(stage)) return dayStage(ctx, group, stage);
   if (isAmStage(stage)) return americanoStage(ctx, group, stage);
   if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date' || stage === 'zip71_teams') return voteStage(ctx, group, stage);
@@ -582,7 +590,21 @@ const DAY_TEAMS: { name: string; a: string; b: string; la: number; lb: number }[
   { name: 'Dill With It', a: 'Sage', b: 'Christopher Vanderberg', la: 340, lb: 300 },
 ];
 
-async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: DayStage, win?: (a: number, b: number) => number) {
+/**
+ * Zip 72: the score of a pool game the stages write (winner first). The usual: 11 to 3..9, made up from the game number (a re-run gives the same
+ * table). `even`: every game 11 to 7 (tie3: a circle level on every rule, the wheel's last resort).
+ */
+type StageScore = (num: number, win: number, lose: number) => [number, number];
+const USUAL_SCORE: StageScore = (num) => [11, 3 + ((num * 5) % 7)];
+const EVEN_SCORE: StageScore = () => [11, 7];
+/** zip72_circle: Kitchen Crew (3) 11-5 / 11-9 / 11-8; the circle Net Ninjas 11-3 Dill With It, Dill With It 11-9 Third Shot Gang, Third Shot Gang 11-9 Net Ninjas. */
+const CIRCLE_SCORE: StageScore = (_num, win, lose) => {
+  const k = `${win}>${lose}`;
+  const table: Record<string, [number, number]> = { '3>1': [11, 5], '3>2': [11, 9], '3>4': [11, 8], '1>4': [11, 3], '4>2': [11, 9], '2>1': [11, 9] };
+  return table[k] ?? [11, 7];
+};
+
+async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: DayStage, win?: (a: number, b: number) => number, score: StageScore = USUAL_SCORE) {
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
   const tz = group.timezone;
@@ -592,7 +614,7 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
   const later = stage === 'teams_published' || stage === 'backed_out';
   const date = later ? dayAfter(ctx.nowMs + 86_400_000, tz) : today;
   // The night: started 10 minutes ago (45 for mid, a minute for game1), on the 5 minutes; 7:30 PM two days from now for the later ones.
-  const ago = stage === 'mid' ? 45 : stage === 'game1' ? 1 : stage === 'zip71_taps' ? 20 : stage === 'pools_done' ? 100 : 10;
+  const ago = stage === 'mid' ? 45 : stage === 'game1' ? 1 : stage === 'zip71_taps' || stage === 'zip72_scores' ? 20 : stage === 'pools_done' || stage === 'zip72_circle' ? 100 : 10;
   const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
   // The whole plan (2.5 hours; 2 hours for mid, so the Time check shows), also when that runs past midnight (a late test).
   const minutes = stage === 'mid' ? 120 : 150;
@@ -642,29 +664,30 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
   await ctx.db.batch(writeTeamsAndGames(ctx.db, row, teams, published ? plan.games : null, plan.playTo, ctx.nowIso, '1 = 1', []));
   const iso = (minsAgo: number) => new Date(ctx.nowMs - minsAgo * 60_000).toISOString();
   if (stage === 'mid') {
-    // Game 1 (Net Ninjas, seat 1, side a): Vic's We won 2 minutes ago. Zip 71, no confirming: the first answer is the result, written the way
-    // Vic's tap writes it (winner, and who answered in claim_by).
+    // Game 1 (Net Ninjas, seat 1, side a): Vic entered 11 to 7 two minutes ago. Zip 71, no confirming: the first score is the result, written
+    // the way Vic's Submit score writes it (the score, the winner, and who entered it in claim_by).
     const ago2 = 2;
     await ctx.db
-      .prepare("UPDATE tournament_games SET winner = 'a', claim_by = ?, result_at = ?, result_by = 'players', seat_a = CAST(substr(slot_a, 2) AS INTEGER), seat_b = CAST(substr(slot_b, 2) AS INTEGER), updated_at = ? WHERE tournament_id = ? AND num = 1")
+      .prepare(
+        "UPDATE tournament_games SET winner = 'a', score_a = 11, score_b = 7, claim_by = ?, result_at = ?, result_by = 'players', seat_a = CAST(substr(slot_a, 2) AS INTEGER), seat_b = CAST(substr(slot_b, 2) AS INTEGER), updated_at = ? WHERE tournament_id = ? AND num = 1",
+      )
       .bind(idOf.get('Vic') ?? null, iso(ago2), iso(ago2), id)
       .run();
   }
-  if (stage === 'pools_done') {
-    // Every round robin game in, as the players' Confirm writes it: seat 1 wins everything, seat 2 beats 3 and 4, seat 3 beats 4.
+  if (stage === 'pools_done' || stage === 'zip72_circle') {
+    // Every round robin game in, as a player's first score writes it: seat 1 wins everything, seat 2 beats 3 and 4, seat 3 beats 4 (or `win`).
     const games = (await ctx.db.prepare("SELECT num, slot_a, slot_b FROM tournament_games WHERE tournament_id = ? AND stage = 'pool' ORDER BY num").bind(id).all<{ num: number; slot_a: string; slot_b: string }>()).results;
+    const by = new Map(DAY_TEAMS.map((x, i) => [i + 1, idOf.get(x.a) ?? null]));
     await ctx.db.batch(
-      games.map((g, i) =>
-        ctx.db
-          .prepare("UPDATE tournament_games SET winner = ?, result_at = ?, result_by = 'players', updated_at = ? WHERE tournament_id = ? AND num = ?")
-          .bind(
-            (win ? win(Number(g.slot_a.slice(1)), Number(g.slot_b.slice(1))) === Number(g.slot_a.slice(1)) : Number(g.slot_a.slice(1)) < Number(g.slot_b.slice(1))) ? 'a' : 'b',
-            iso(90 - i * 12),
-            iso(90 - i * 12),
-            id,
-            g.num,
-          ),
-      ),
+      games.map((g, i) => {
+        const a = Number(g.slot_a.slice(1));
+        const b = Number(g.slot_b.slice(1));
+        const aWins = win ? win(a, b) === a : a < b;
+        const [w, l] = score(g.num, aWins ? a : b, aWins ? b : a);
+        return ctx.db
+          .prepare("UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim_by = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
+          .bind(aWins ? 'a' : 'b', aWins ? w : l, aWins ? l : w, by.get(aWins ? a : b) ?? null, iso(90 - i * 12), a, b, iso(90 - i * 12), id, g.num);
+      }),
     );
   }
   if (stage === 'backed_out') {
@@ -877,17 +900,17 @@ const ORDER = [1, 2, 3, 4];
 const BY_ORDER = (a: number, b: number) => (ORDER.indexOf(a) < ORDER.indexOf(b) ? a : b);
 
 async function zip58Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip58Stage) {
-  const made = await dayStage(ctx, group, 'pools_done', stage === 'tie3' ? TIE3 : BY_ORDER);
+  const made = await dayStage(ctx, group, 'pools_done', stage === 'tie3' ? TIE3 : BY_ORDER, stage === 'tie3' ? EVEN_SCORE : USUAL_SCORE);
   const id = made.id!;
   if (stage === 'tie3' || stage === 'final_on') return { ...made, stage };
-  // The Final (Net Ninjas beat Third Shot Gang) and 3rd place (Dill With It beat Kitchen Crew), as the players' Confirm writes them.
+  // The Final (Net Ninjas beat Third Shot Gang 11 to 6) and 3rd place (Dill With It beat Kitchen Crew 11 to 8), as a first score writes them.
   const iso = (minsAgo: number) => new Date(ctx.nowMs - minsAgo * 60_000).toISOString();
   const day = (await ctx.db.prepare("SELECT num, stage FROM tournament_games WHERE tournament_id = ? AND stage IN ('final', 'third')").bind(id).all<{ num: number; stage: string }>()).results;
   await ctx.db.batch(
     day.map((g) =>
       ctx.db
-        .prepare("UPDATE tournament_games SET winner = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
-        .bind(g.stage === 'final' ? 'a' : 'b', iso(4), g.stage === 'final' ? 1 : 3, g.stage === 'final' ? 2 : 4, iso(4), id, g.num),
+        .prepare("UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
+        .bind(g.stage === 'final' ? 'a' : 'b', g.stage === 'final' ? 11 : 8, g.stage === 'final' ? 6 : 11, iso(4), g.stage === 'final' ? 1 : 3, g.stage === 'final' ? 2 : 4, iso(4), id, g.num),
     ),
   );
   if (stage === 'final_done') return { ...made, stage };

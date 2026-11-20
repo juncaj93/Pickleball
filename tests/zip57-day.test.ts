@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { playerPhone, setupGroup } from './harness';
+import { asScore, withScore } from './zip72-taps';
 
 // Zip 57 (🎾57.tourney3): teams, the schedule and game day on the real server code (the test harness). The clock starts Monday Oct 26, 2026,
 // 12 PM Eastern. The tournament is Thu Nov 12, 7:30 to 10:00 PM; Pay by is Wed Nov 11, 7:00 PM (the night before).
@@ -61,8 +62,8 @@ async function lockWithCredit(ctx: Ctx, name: string) {
 const dash = async (ctx: Ctx) => (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament;
 const card = async (ctx: Ctx, name: string) => (await (await playerPhone(ctx, name)).call('GET', '/api/group')).data.tournament;
 const teams = (ctx: Ctx, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/teams`, body);
-const games = (ctx: Ctx, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, body);
-const play = async (ctx: Ctx, name: string, num: number, action: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, action });
+const games = (ctx: Ctx, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, withScore(body));
+const play = async (ctx: Ctx, name: string, num: number, action: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, ...asScore(action) });
 function books(ctx: Ctx) {
   for (const sql of [OLD_SQL, TOUR_SQL]) {
     const r = ctx.app.db.raw.prepare(sql).get() as Record<string, number>;
@@ -256,7 +257,7 @@ describe('zip 57: game night', () => {
     await play(ctx, nameA, g1.num, 'won');
     expect((await games(ctx, { action: 'result', num: g1.num, winner: 'b' })).status).toBe(200);
     const g = (await dash(ctx)).day.games[0];
-    expect([g.winner, g.disputed, g.resultBy]).toEqual(['b', false, 'organizer']);
+    expect([g.winner, g.scoreA, g.scoreB, g.resultBy]).toEqual(['b', 7, 11, 'organizer']);
     expect((await card(ctx, nameA)).day.standings[0].rows.find((r: any) => r.me).record).toBe('0-1');
     expect((await games(ctx, { action: 'result', num: g1.num, winner: null })).status).toBe(200);
     expect((await dash(ctx)).day.games[0].winner).toBeNull();
@@ -377,8 +378,8 @@ describe('zip 57: the review fixes (playoffs after a team leaves or a result cha
     void b;
     await play(ctx, a, g.num, 'won');
     // Zip 71, no confirming: A's We won is the result. The organizer's screen showed "A won"; meanwhile it was fixed to B (another tap).
-    expect((await games(ctx, { action: 'result', num: g.num, winner: 'b', seen: { claim: null, winner: 'a' } })).status).toBe(200);
-    expect((await games(ctx, { action: 'result', num: g.num, winner: null, seen: { claim: null, winner: 'a' } })).status).toBe(409);
+    expect((await games(ctx, { action: 'result', num: g.num, winner: 'b', seen: { winner: 'a', scoreA: 11, scoreB: 7 } })).status).toBe(200);
+    expect((await games(ctx, { action: 'result', num: g.num, winner: null, seen: { winner: 'a', scoreA: 11, scoreB: 7 } })).status).toBe(409);
     expect((await dash(ctx)).day.games[0].winner).toBe('b');
   });
   it('zip 71: a second answer is refused even when it agrees (the first one is the result)', async () => {
@@ -392,7 +393,7 @@ describe('zip 57: the review fixes (playoffs after a team leaves or a result cha
     expect((await play(ctx, b, g.num, 'lost')).status).toBe(200);
     const r = await play(ctx, a, g.num, 'won');
     expect(r.status).toBe(409);
-    expect(r.text).toContain(`${b} said`);
+    expect(r.text).toContain(`${b} entered`);
     expect((await play(ctx, b, g.num, 'lost')).status).toBe(200);
   });
   it('the plan check card can change the courts (before the teams are published)', async () => {

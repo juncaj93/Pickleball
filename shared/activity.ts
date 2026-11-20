@@ -337,7 +337,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return d.by === 'player'
         ? `${player}: ${typeof d.result === 'string' ? d.result : 'a result'} (${tourName(d)}, game ${num(d.game)})`
         : typeof d.winner === 'string'
-          ? `${who} set ${d.winner}${typeof d.winnerPlayers === 'string' ? ` (${d.winnerPlayers})` : ''} as the winner of ${tourName(d)} game ${num(d.game)}`
+          ? `${who} set ${d.winner}${typeof d.winnerPlayers === 'string' ? ` (${d.winnerPlayers})` : ''} as the winner of ${tourName(d)} game ${num(d.game)}${typeof d.score === 'string' ? `, ${d.score}` : ''}`
           : `${who} cleared the result of ${tourName(d)} game ${num(d.game)}`;
     case 'tournament_time_check':
       return `${who} set ${tourName(d)} pool games to ${num(d.to)} from round ${num(d.round)}`;

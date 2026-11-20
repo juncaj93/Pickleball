@@ -185,7 +185,8 @@ export function payCountdown(payByIso: string, nowMs: number, tz: string, tourna
   const sub = `Pay by ${time} ${b.hour >= 17 ? 'tonight' : 'today'}`;
   if (left >= DUE_IN_HOURS_FROM_MS) return { tone: 'red', icon: 'clock', title: 'Payment due today', sub, late: false };
   if (left >= 3_600_000) {
-    const h = Math.floor(left / 3_600_000);
+    // Zip 72 (dry run): the nearest hour, so 4 hours 59 minutes left says "Due in 5 hours" (it used to round down to 4).
+    const h = Math.round(left / 3_600_000);
     return { tone: 'red', icon: 'clock', title: `Due in ${h} ${h === 1 ? 'hour' : 'hours'}`, sub, late: false };
   }
   const m = Math.max(1, Math.floor(left / 60_000));

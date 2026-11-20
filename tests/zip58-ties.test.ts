@@ -239,5 +239,6 @@ describe('zip 58: a tied team leaves (review)', () => {
 
 async function play(ctx: Awaited<ReturnType<typeof world>>, name: string, num: number, action: string) {
   const { playerPhone } = await import('./harness');
-  return (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, action });
+  const { asScore } = await import('./zip72-taps');
+  return (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, ...asScore(action) });
 }

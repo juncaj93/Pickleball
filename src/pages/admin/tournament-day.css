@@ -284,10 +284,6 @@ span.tm-gd-team-text {
 .tm-gd-result + .tm-gd-result {
   border-top: 1.5px dashed var(--line);
 }
-.tm-gd-result.tm-gd-waiting,
-.tm-gd-result.tm-gd-disputed {
-  background: var(--info-bg);
-}
 .tm-gd-court {
   flex: none;
   width: 92px;
@@ -311,11 +307,6 @@ span.tm-gd-team-text {
   gap: 2px;
 }
 
-.tm-gd-confirm {
-  flex: none;
-  min-height: 44px;
-  padding: 0 16px;
-}
 .tm-gd-all {
   display: block;
   margin: 6px 0 4px;
@@ -565,6 +556,12 @@ span.tm-gd-team-text {
 .tm-am-late {
   color: var(--warn-fg);
   font-weight: 700;
+}
+/* Zip 72: the gentle score check under the Fix sheet's numbers (never blocks a save). */
+.tm-am-hint {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.92rem;
 }
 .tm-am-sits {
   margin: 8px 0 0;

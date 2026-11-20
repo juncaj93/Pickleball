@@ -3,7 +3,8 @@
 //   draftTeams     auto-pair the locked-in players by level so team totals are close (strongest with weakest), with "Redo the draw"
 //   poolsOf        which teams go in Pool A and Pool B (6 teams and more), balanced by team total
 //   schedule       the games: round, court (1 or 2), stage, pool and who plays (a team, a place in a pool, the winner of a game)
-//   standings      wins, then head to head; a tie that is still a tie says "Tied" (piece 4 breaks it)
+//   standings      THE ranking (Zip 72, one tie rule everywhere): wins, then head to head (only exactly 2 level, and they played), then point
+//                  difference, then points scored; still level says "Tied" (the wheel, or the organizer's picks, break it)
 //   resolveGames   who is in each playoff game once the pool games are done
 //   timeCheck      is the night running late, and from which round shorter games finish it on time
 // The structure (how many rounds, which courts) is shared/tournamentPlan.ts's doublesStructure, the game plan table.
@@ -379,29 +380,50 @@ export function backToBack(games: readonly PlannedGame[], seat: number): number 
 // Results and standings
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** A game's result as the standings see it: which side won ('a' or 'b'), or none yet; skipped games count for nobody. */
+/**
+ * A game's result as the standings see it: which side won ('a' or 'b'), or none yet; skipped games count for nobody. Zip 72: the points each side
+ * scored (Locked doubles keeps scores now; a result from before has none, and counts as a win with no points).
+ */
 export interface GameResult {
   num: number;
   winner: 'a' | 'b' | null;
   skipped?: boolean;
+  scoreA?: number | null;
+  scoreB?: number | null;
 }
 
 export interface StandingRow {
   seat: number;
   wins: number;
   losses: number;
+  /** Zip 72: points scored and given up in this group's pool games, and the difference (scored minus given up). */
+  pointsFor: number;
+  pointsAgainst: number;
+  diff: number;
   /** 1, 2, 3 in order (tied teams keep their seat order). */
   rank: number;
-  /** Still level with another team after head to head, once every game of the group is in. */
+  /** Still level with another team on every rule, once every game of the group is in. */
   tied: boolean;
   /** Zip 58: which run of still-level teams this row is in (rows with the same `block` are tied with each other). */
   block?: number;
 }
 
-/** Wins and losses from pool games (a game whose teams are seats). */
-function record(games: readonly PlannedGame[], results: ReadonlyMap<number, GameResult>, seats: readonly number[]) {
-  const w = new Map(seats.map((s) => [s, 0]));
-  const l = new Map(seats.map((s) => [s, 0]));
+/** Each team's numbers from pool games (a game whose teams are seats): wins, losses, points, and who beat whom. */
+interface Record_ {
+  w: Map<number, number>;
+  l: Map<number, number>;
+  pf: Map<number, number>;
+  pa: Map<number, number>;
+  beat: Map<string, true>;
+}
+
+/** Wins, losses and points from pool games (a game whose teams are seats). */
+function record(games: readonly PlannedGame[], results: ReadonlyMap<number, GameResult>, seats: readonly number[]): Record_ {
+  const zero = () => new Map(seats.map((s) => [s, 0]));
+  const w = zero();
+  const l = zero();
+  const pf = zero();
+  const pa = zero();
   const beat = new Map<string, true>();
   for (const g of games) {
     if (g.stage !== 'pool') continue;
@@ -414,8 +436,14 @@ function record(games: readonly PlannedGame[], results: ReadonlyMap<number, Game
     w.set(win, w.get(win)! + 1);
     l.set(lose, l.get(lose)! + 1);
     beat.set(`${win}>${lose}`, true);
+    if (typeof r.scoreA === 'number' && typeof r.scoreB === 'number') {
+      pf.set(x, pf.get(x)! + r.scoreA);
+      pa.set(x, pa.get(x)! + r.scoreB);
+      pf.set(y, pf.get(y)! + r.scoreB);
+      pa.set(y, pa.get(y)! + r.scoreA);
+    }
   }
-  return { w, l, beat };
+  return { w, l, pf, pa, beat };
 }
 
 /** Every pool game of these seats has a result or was skipped. */
@@ -428,11 +456,35 @@ export function groupDone(games: readonly PlannedGame[], results: ReadonlyMap<nu
 }
 
 /**
- * Standings for one group (a pool, or all teams in a round robin): most wins first; teams level on wins are ordered by head to head (wins against
- * each other); still level, they stay in seat order and, once every game of the group is in, are marked tied (piece 4 breaks a tie that matters).
+ * Zip 72, THE TIE RULE (Alex, Nov 20; one rule everywhere): teams level on wins are split by
+ *   1. head to head, only when exactly 2 teams are level and they played each other (the winner of that game goes first);
+ *   2. point difference (points scored minus points given up, pool games of the group);
+ *   3. points scored;
+ * and any teams still level after a split go through the same steps again (so two left level after point difference are settled by their
+ * game). Teams level on all of it stay level: the wheel (three) or the organizer's picks (four or more) settle it. Returns the runs still level,
+ * in order (each run in seat order).
+ */
+function settle(block: readonly number[], rec: Record_): number[][] {
+  if (block.length <= 1) return [[...block]];
+  if (block.length === 2) {
+    const [x, y] = block;
+    if (rec.beat.has(`${x}>${y}`) !== rec.beat.has(`${y}>${x}`)) return rec.beat.has(`${x}>${y}`) ? [[x], [y]] : [[y], [x]];
+  }
+  const diff = (s: number) => rec.pf.get(s)! - rec.pa.get(s)!;
+  for (const key of [diff, (s: number) => rec.pf.get(s)!]) {
+    const values = [...new Set(block.map(key))].sort((p, q) => q - p);
+    if (values.length > 1) return values.flatMap((v) => settle(block.filter((s) => key(s) === v), rec));
+  }
+  return [[...block].sort((p, q) => p - q)];
+}
+
+/**
+ * Standings for one group (a pool, or all teams in a round robin): most wins first; teams level on wins are ordered by THE TIE RULE (settle
+ * above); still level, they stay in seat order and, once every game of the group is in, are marked tied.
  */
 export function standings(games: readonly PlannedGame[], results: ReadonlyMap<number, GameResult>, seats: readonly number[], out: ReadonlySet<number> = new Set()): StandingRow[] {
-  const { w, l, beat } = record(games, results, seats);
+  const rec = record(games, results, seats);
+  const { w, l, pf, pa } = rec;
   const done = groupDone(games, results, seats);
   // A team that left during the night goes below every team still playing (it cannot take a playoff place).
   const byWins = [...seats].sort((x, y) => Number(out.has(x)) - Number(out.has(y)) || w.get(y)! - w.get(x)! || x - y);
@@ -442,27 +494,24 @@ export function standings(games: readonly PlannedGame[], results: ReadonlyMap<nu
   while (i < byWins.length) {
     let j = i;
     while (j < byWins.length && w.get(byWins[j]) === w.get(byWins[i]) && out.has(byWins[j]) === out.has(byWins[i])) j++;
-    // Head to head inside the block (Zip 58: again inside any part still level, so two teams level on wins are always split by the game they
-    // played each other; three teams that each beat one of the others stay level: the wheel's tie).
-    for (const level of headToHead(byWins.slice(i, j), beat)) {
+    for (const level of settle(byWins.slice(i, j), rec)) {
       blockNo++;
-      for (const s of level) rows.push({ seat: s, wins: w.get(s)!, losses: l.get(s)!, rank: rows.length + 1, tied: done && level.length > 1 && !out.has(s), block: blockNo });
+      for (const s of level)
+        rows.push({
+          seat: s,
+          wins: w.get(s)!,
+          losses: l.get(s)!,
+          pointsFor: pf.get(s)!,
+          pointsAgainst: pa.get(s)!,
+          diff: pf.get(s)! - pa.get(s)!,
+          rank: rows.length + 1,
+          tied: done && level.length > 1 && !out.has(s),
+          block: blockNo,
+        });
     }
     i = j;
   }
   return rows;
-}
-
-/**
- * Zip 58: teams level on wins, ordered by head to head: wins against the others in the group, and again among any that are still level (a
- * mini table each time), until nothing splits. Returns the runs still level, in order (each run in seat order).
- */
-function headToHead(block: readonly number[], beat: ReadonlyMap<string, true>): number[][] {
-  if (block.length <= 1) return [[...block]];
-  const h2h = new Map(block.map((s) => [s, block.filter((o) => beat.has(`${s}>${o}`)).length]));
-  const counts = [...new Set(block.map((s) => h2h.get(s)!))].sort((x, y) => y - x);
-  if (counts.length === 1) return [[...block].sort((x, y) => x - y)];
-  return counts.flatMap((c) => headToHead(block.filter((s) => h2h.get(s) === c), beat));
 }
 
 /** "1-0" (wins-losses). */
@@ -473,7 +522,7 @@ export interface Resolved {
   num: number;
   a: number | null;
   b: number | null;
-  /** A place this game needs is tied after head to head (the screens say "Tied"; piece 4 settles it). */
+  /** A place this game needs is still tied after the tie rule (the screens say "Tied"; the wheel or the picks settle it). */
   tied: boolean;
   /** A side can never be filled (its team left, or the game it waited on was not played): the game is not played; the team there goes on. */
   never: boolean;
@@ -661,9 +710,10 @@ export function timeCheckWords(behind: number, fromRound: number, to: GameTo, cl
 // ---------------------------------------------------------------------------------------------------------------------
 // Zip 58: ties for a playoff place
 // ---------------------------------------------------------------------------------------------------------------------
-// Locked doubles counts only wins, so a tie is by record. After head to head (standings above) two teams level on wins are always split by the
-// game they played each other. Three teams that each beat one of the others stay level: THE WHEEL picks one of them for a bye, the other two
-// play Game A to 5, and (when the tie decides more than which two go on) the winner of A plays the bye team to 5 in Game B. Four or more level:
+// Zip 72: a tie is what is left after THE TIE RULE (standings above: wins, head to head for exactly 2, point difference, points scored). With
+// scores a three-way circle is almost always settled by point difference; teams still level on all of it are the last resort: THE WHEEL picks
+// one of three for a bye, the other two play Game A to 5, and (when the tie decides more than which two go on) the winner of A plays the bye
+// team to 5 in Game B. Four or more level:
 // the organizer picks, one tap per place. A tie only matters when the places it shares lead to different games (1st and 2nd tied before a Final
 // between 1st and 2nd: both are in either way, no tie).
 
@@ -783,8 +833,8 @@ export function groupTable(
     return `${tieKeyOf(group, tied)}${shape ? `:${shape}` : ''}`;
   };
   // Review: a team that left after the pools. Before the wheel spins it drops to the bottom of its tie and the teams still playing settle it
-  // (head to head among them); once the wheel has spun the tie stays as it was and the leaver's playoff game is a walkover (tieGameOutcome).
-  const { beat } = record(games, results, seats);
+  // (the tie rule among them); once the wheel has spun the tie stays as it was and the leaver's playoff game is a walkover (tieGameOutcome).
+  const rec = record(games, results, seats);
   const rows: StandingRow[] = [];
   let extra = 1000;
   for (let i = 0; i < raw.length; ) {
@@ -795,7 +845,7 @@ export function groupTable(
     const spun = records.some((x) => x.key === keyOf(tiedSeats, run[0].rank));
     if (run.length > 1 && run.some((r) => gone.has(r.seat)) && !spun) {
       const live = run.filter((r) => !gone.has(r.seat)).map((r) => r.seat);
-      const parts = headToHead(live, beat);
+      const parts = settle(live, rec);
       for (const part of parts) {
         extra++;
         for (const seat of part) rows.push({ ...run.find((r) => r.seat === seat)!, rank: rows.length + 1, tied: done && part.length > 1, block: extra });

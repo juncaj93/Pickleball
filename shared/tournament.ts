@@ -660,15 +660,13 @@ export interface PlayerDayGame {
   state: 'done' | 'next' | 'later';
   /** Their team won it (done games only). */
   won?: boolean;
+  /** Zip 72: the score from their side (mine first), done games with a score: "Won 11–7", "Lost 7–11". */
+  score?: { mine: number; theirs: number };
   /** Played to this (the Time check can make pool games shorter). */
   playTo: number;
-  /** Before Zip 71 only: this team said it won and the other team had not confirmed (a saved answer from then; never set now). */
-  claimed?: boolean;
-  /** The other team said "No, we won": the organizer decides. */
-  disputed?: boolean;
   /** Never played (a team left). */
   skipped?: boolean;
-  /** Its round is being played now: We won and "<other team> won" show on it. */
+  /** Its round is being played now: Enter score shows on it (Zip 72). */
   onNow?: boolean;
 }
 
@@ -734,8 +732,12 @@ export interface PlayerDayView {
   /** Zip 70: `label` names the game: "Round 2" for a pool game, else "Semifinal", "Final", "3rd place" (or a tie's "Game A"). */
   live: { round: number; label?: string; court: number | null; a: { name: string; players: string[] }; b: { name: string; players: string[] } }[];
   /** Standings: one group, or Pool A and Pool B. Each row: record, theirs, a tie, and (pools) where the team plays this round. Zip 58: `through`,
-   *  the team is already in the Final (or the semifinals) while a tie is being settled ("In the final"). */
-  standings: { pool: 'A' | 'B' | null; rows: { rank: number; name: string; players: string[]; record: string; me?: true; tied?: true; out?: true; where?: string; through?: 'final' | 'semi' }[] }[];
+   *  the team is already in the Final (or the semifinals) while a tie is being settled ("In the final"). Zip 72: `diff`, the point difference
+   *  ("+4 pts"), on every row once any pool game has a score (it then takes the place of `where`). */
+  standings: {
+    pool: 'A' | 'B' | null;
+    rows: { rank: number; name: string; players: string[]; record: string; diff?: number; me?: true; tied?: true; out?: true; where?: string; through?: 'final' | 'semi' }[];
+  }[];
   /** Zip 58: a tie for a playoff place (the first one still being settled). */
   tie?: PlayerTieView;
   /** Zip 58: the Playoff card while the wheel's games are played (Game A, Game B, then the games they feed). */
@@ -777,11 +779,15 @@ export interface AdminDayGame {
   waitA?: string;
   waitB?: string;
   playTo: number;
+  /** The result: who won (Zip 71: the first answer counts; nothing waits). */
   winner: 'a' | 'b' | null;
-  claim: 'a' | 'b' | null;
-  disputed: boolean;
+  /** Zip 72: the score (null on a result from before Zip 72, or none yet). */
+  scoreA: number | null;
+  scoreB: number | null;
   skipped: boolean;
   resultBy: string | null;
+  /** The player who entered the result (a player's score). */
+  by?: string;
   /** Zip 58: a tie playoff game: 'Game A' or 'Game B'. */
   tieLabel?: string;
 }
@@ -861,8 +867,6 @@ export interface PlayerRound {
   /** The score from their side (mine first). */
   score?: { mine: number; theirs: number };
   playTo: number;
-  /** Before Zip 71 only: their side entered the score and the other side had not said Yes (never set now: no confirming). */
-  claimed?: true;
   /** Never played (someone left). */
   skipped?: true;
   /** Its round is being played now: Enter score shows on it. */
@@ -905,13 +909,13 @@ export interface AdminRoundGame {
   playTo: number;
   scoreA: number | null;
   scoreB: number | null;
-  /** done (the score stands), waiting (entered, the other side has not said Yes), changed (the other side changed it), playing, later, skipped. */
-  status: 'done' | 'waiting' | 'changed' | 'playing' | 'later' | 'skipped';
+  /** done (the score stands: Zip 71, the first score counts), playing, later, skipped. */
+  status: 'done' | 'playing' | 'later' | 'skipped';
   /** Who entered the score (or who left, on a skipped game). */
   by?: string;
-  /** Late: waiting for a Yes for more than 5 minutes, or playing past the round's time. The words say how long. */
+  /** Late: playing past the round's time. The words say how long ("8 min over"). */
   late?: string;
-  /** What the screen showed (sent back with Confirm and Fix, so a change in between is caught). */
+  /** What the screen showed (sent back with Fix, so a change in between is caught). */
   stamp: string;
 }
 

@@ -1,6 +1,6 @@
 // Zip 61 (🎾61.americano), the Americano night, the ORGANIZER side (server/americanoDay.ts), built from zip 57's game-day controls
-// (src/pages/admin/TournamentDay.tsx and its styles): the hero with the round, Pause, the Time check with one tap, the round's results with
-// Confirm and Fix (two numbers here, scores not who won), Player left, and All rounds. Before the night: the rounds card with the courts' numbers.
+// (src/pages/admin/TournamentDay.tsx and its styles): the hero with the round, Pause, the Time check with one tap, the round's scores with
+// Set and Fix (two numbers), Player left, and All rounds. Nothing waits for a Yes (Zip 71). Before the night: the rounds card with the courts' numbers.
 // Only drawn while the switch is on and the tournament is Americano with tickets closed.
 import { lazy, Suspense, useState } from 'react';
 import type { AdminRoundGame, AdminRoundsView, AdminTournamentView } from '../../../shared/tournament';
@@ -8,6 +8,7 @@ import { startMsOf } from '../../../shared/tournamentTickets';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { AlertCard } from '../../AlertCard';
 import { Sheet, useToast } from '../../ui';
+import { MAX_SCORE, scoreHint } from '../../../shared/scores';
 import type { AdminCtx } from '../Admin';
 import './tournament-day.css';
 
@@ -43,7 +44,7 @@ function useSave(ctx: AdminCtx) {
 const gamesCall = (t: AdminTournamentView, body: Record<string, unknown>) => api('POST', `/api/admin/tournament/${t.id}/games`, body);
 const pair = (names: string[]) => names.join(' + ');
 const where = (g: AdminRoundGame) => `Court ${g.courtNumber ?? g.court}`;
-const STATUS: Record<AdminRoundGame['status'], string> = { done: 'Done', waiting: 'Waiting', changed: 'Changed', playing: 'Playing', later: 'Later', skipped: 'Off' };
+const STATUS: Record<AdminRoundGame['status'], string> = { done: 'Done', playing: 'Playing', later: 'Later', skipped: 'Off' };
 
 /** The night is on (or about to be): from 30 minutes before the real start. */
 function nightOn(ctx: AdminCtx, t: AdminTournamentView): boolean {
@@ -104,7 +105,7 @@ function RoundsCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: A
 }
 
 /** Every round: its games and who sits (the organizer sees the whole night). */
-function AllRoundsSheet({ r, open, onClose, onFix, busy, onConfirm }: { r: AdminRoundsView; open: boolean; onClose: () => void; onFix?: (g: AdminRoundGame) => void; busy?: boolean; onConfirm?: (g: AdminRoundGame) => void }) {
+function AllRoundsSheet({ r, open, onClose, onFix, busy }: { r: AdminRoundsView; open: boolean; onClose: () => void; onFix?: (g: AdminRoundGame) => void; busy?: boolean }) {
   const rounds = [...new Set(r.games.map((g) => g.round))];
   return (
     <Sheet calmFocus open={open} title="All rounds" onClose={onClose} className="tm-gd-sheet">
@@ -116,7 +117,7 @@ function AllRoundsSheet({ r, open, onClose, onFix, busy, onConfirm }: { r: Admin
               {r.games
                 .filter((g) => g.round === n)
                 .map((g) => (
-                  <ScoreRow key={g.num} g={g} busy={!!busy} onFix={onFix ? () => onFix(g) : undefined} onConfirm={onConfirm ? () => onConfirm(g) : undefined} />
+                  <ScoreRow key={g.num} g={g} busy={!!busy} onFix={onFix ? () => onFix(g) : undefined} />
                 ))}
             </ul>
             {(r.sits.find((s) => s.round === n)?.names.length ?? 0) > 0 && <p className="tm-card-note tm-am-sits">Sitting: {r.sits.find((s) => s.round === n)!.names.join(', ')}</p>}
@@ -128,18 +129,18 @@ function AllRoundsSheet({ r, open, onClose, onFix, busy, onConfirm }: { r: Admin
 }
 
 /** One game: where and how it stands, the two pairs (the winners first once there is a score), the score, the button it needs. */
-function ScoreRow({ g, busy, onFix, onConfirm, round }: { g: AdminRoundGame; busy: boolean; onFix?: () => void; onConfirm?: () => void; round?: number }) {
+function ScoreRow({ g, busy, onFix, round }: { g: AdminRoundGame; busy: boolean; onFix?: () => void; round?: number }) {
   const scored = g.scoreA !== null && g.scoreB !== null;
   const aFirst = !scored || g.scoreA! > g.scoreB!;
   const [first, second] = aFirst ? [g.a, g.b] : [g.b, g.a];
   const [s1, s2] = aFirst ? [g.scoreA, g.scoreB] : [g.scoreB, g.scoreA];
-  const button = g.status === 'waiting' || g.status === 'changed' ? 'confirm' : g.status === 'done' ? 'Fix' : g.status === 'playing' || g.status === 'later' ? 'Set' : null;
+  const button = g.status === 'done' ? 'Fix' : g.status === 'playing' || g.status === 'later' ? 'Set' : null;
   const status = STATUS[g.status];
   return (
-    <li className={`tm-gd-result tm-gd-${g.status === 'changed' ? 'disputed' : g.status}`} data-tm-am-game={g.num} data-status={g.status}>
+    <li className={`tm-gd-result tm-gd-${g.status}`} data-tm-am-game={g.num} data-status={g.status}>
       <span className="tm-gd-court">
         <b>{round !== undefined && g.round !== round ? `Round ${g.round} · ${where(g)}` : where(g)}</b>
-        {/* Late says how long instead of the plain status ("Waiting 8 min", "8 min over"). */}
+        {/* Late says how long instead of the plain status ("8 min over"). */}
         <span className={g.late ? 'tm-am-late' : undefined}>{g.late ?? status}</span>
       </span>
       <span className="tm-gd-result-text">
@@ -150,18 +151,14 @@ function ScoreRow({ g, busy, onFix, onConfirm, round }: { g: AdminRoundGame; bus
           {g.status === 'skipped'
             ? `${g.by ?? 'A player'} left`
             : scored
-              ? `${s1} to ${s2}${g.status === 'waiting' ? ` · by ${g.by}` : g.status === 'changed' ? ` · changed by ${g.by}` : ''}`
+              ? `${s1} to ${s2}`
               : `vs · to ${g.playTo}`}
         </span>
         <span className="tm-gd-side">
           <b>{pair(second.names)}</b>
         </span>
       </span>
-      {button === 'confirm' && onConfirm ? (
-        <button type="button" className="btn tm-gd-confirm" disabled={busy} onClick={onConfirm} data-tm-am-confirm={g.num}>
-          Confirm
-        </button>
-      ) : button && button !== 'confirm' && onFix ? (
+      {button && onFix ? (
         <button type="button" className="tm-gd-swap" disabled={busy} onClick={onFix} data-tm-am-fix={g.num}>
           {button}
         </button>
@@ -180,11 +177,9 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
   const rounds = Math.max(1, r.plan.rounds);
   const round = r.round ?? (r.games.length && r.games.every((g) => g.status === 'done' || g.status === 'skipped') ? rounds : 1);
   const inRound = r.games.filter((g) => g.round === round);
-  const changedElsewhere = r.games.filter((g) => g.round !== round && (g.status === 'changed' || (g.status === 'waiting' && g.late)));
   const doneIn = inRound.filter((g) => g.status === 'done' || g.status === 'skipped').length;
   const sits = r.sits.find((s) => s.round === round)?.names ?? [];
   const tc = r.timeCheck && r.timeCheck.key !== skipTc ? r.timeCheck : null;
-  const confirm = (g: AdminRoundGame) => void save(() => gamesCall(t, { action: 'confirm', num: g.num, seen: g.stamp }), 'Confirmed');
   const allDone = r.games.length > 0 && r.games.every((g) => g.status === 'done' || g.status === 'skipped');
   return (
     <>
@@ -227,8 +222,8 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
           </span>
         </div>
         <ul className="tm-gd-results">
-          {[...inRound, ...changedElsewhere].map((g) => (
-            <ScoreRow key={g.num} g={g} busy={busy} round={round} onFix={() => setFix(g)} onConfirm={() => confirm(g)} />
+          {inRound.map((g) => (
+            <ScoreRow key={g.num} g={g} busy={busy} round={round} onFix={() => setFix(g)} />
           ))}
         </ul>
         {sits.length > 0 && (
@@ -251,16 +246,16 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
         </button>
       </div>
       <FixSheet ctx={ctx} t={t} g={fix} onClose={() => setFix(null)} />
-      <AllRoundsSheet r={r} open={all} onClose={() => setAll(false)} busy={busy} onFix={(g) => setFix(g)} onConfirm={confirm} />
+      <AllRoundsSheet r={r} open={all} onClose={() => setAll(false)} busy={busy} onFix={(g) => setFix(g)} />
       <LeftSheet ctx={ctx} t={t} r={r} open={left} onClose={() => setLeft(false)} round={round} />
     </>
   );
 }
 
-/** One side's number with − and + (44 px). */
-function Stepper({ label, value, onChange, id }: { label: string; value: number; onChange: (next: (n: number) => number) => void; id: string }) {
+/** One side's number with − and + (44 px). Zip 72: Locked doubles' Fix sheet uses it too (src/pages/admin/TournamentDay.tsx). */
+export function Stepper({ label, value, onChange, id }: { label: string; value: number; onChange: (next: (n: number) => number) => void; id: string }) {
   // One more or one less than the number as it is now (never a number from an earlier draw, so quick taps all count).
-  const step = (d: number) => onChange((n) => Math.max(0, Math.min(30, n + d)));
+  const step = (d: number) => onChange((n) => Math.max(0, Math.min(MAX_SCORE, n + d)));
   return (
     <div className="tm-am-step-row" data-tm-am-step={id}>
       <span className="tm-am-step-name">{label}</span>
@@ -271,7 +266,7 @@ function Stepper({ label, value, onChange, id }: { label: string; value: number;
         <b className="tm-am-step-num" data-tm-am-num={id}>
           {value}
         </b>
-        <button type="button" className="tm-am-step" aria-label={`${label}: one more`} onClick={() => step(1)} disabled={value >= 30} data-tm-am-plus={id} data-tap-repeat>
+        <button type="button" className="tm-am-step" aria-label={`${label}: one more`} onClick={() => step(1)} disabled={value >= MAX_SCORE} data-tm-am-plus={id} data-tap-repeat>
           +
         </button>
       </span>
@@ -296,6 +291,11 @@ function FixSheet({ ctx, t, g, onClose }: { ctx: AdminCtx; t: AdminTournamentVie
         <div className="stack" data-tm-am-fix-sheet={g.num}>
           <Stepper label={pair(g.a.names)} value={a} onChange={setA} id="a" />
           <Stepper label={pair(g.b.names)} value={b} onChange={setB} id="b" />
+          {scoreHint(a, b, g.playTo) && (
+            <p className="tm-am-hint" role="status" data-tm-score-hint>
+              {scoreHint(a, b, g.playTo)}
+            </p>
+          )}
           <button
             type="button"
             className="btn block big"

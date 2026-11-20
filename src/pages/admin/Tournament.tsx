@@ -92,7 +92,7 @@ const statusLine = (t: AdminTournamentView) =>
   t.status === 'canceled'
     ? 'Canceled'
     : t.status === 'tickets' && t.finalDate
-      ? `${dayLong(t.finalDate)} · ${lockedOf(t).length} of ${t.spots ?? t.size} locked in`
+      ? `${dayLong(t.finalDate)} · ${lockedNum(t)} of ${t.spots ?? t.size} locked in`
       : t.status === 'date_picked' && t.finalDate
         ? `${dayLong(t.finalDate)} · ${t.signups.length} signed up`
         : t.status === 'rescheduled'
@@ -101,6 +101,12 @@ const statusLine = (t: AdminTournamentView) =>
 
 /** Zip 56: the tickets in a spot (Who's in), in the order they were taken. */
 const lockedOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.place === 'spot' && !k.out);
+/**
+ * Zip 72 (dry run): THE locked-in number on every organizer row ("7 of 10", "8 locked in", the Tickets chip, the Plan chip): the server's count
+ * (Zip 63's trust rule: every spot and every I paid for a whole ticket still waiting), the same one "8 locked in. Draft the teams." and the
+ * style use, and what players see. The spots ("of 10") are counted as before.
+ */
+const lockedNum = (t: AdminTournamentView): number => t.lockedIn ?? lockedOf(t).length;
 /** Zip 56: the waitlist, in the order they joined it. */
 const lineOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.place === 'line' && !k.out);
 /** Zip 56: I paid taps waiting for the organizer's answer. */
@@ -478,7 +484,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const datesPassed = !ticketsStage && !t.finalDate && !t.offeredDates.some((d) => d >= today);
   const ns = t.notSignedUp && t.notSignedUp.players.length > 0 ? t.notSignedUp : null;
   const evens = evensOf(t, ctx.d.now);
-  const locked = lockedOf(t).length;
+  const locked = lockedNum(t);
   const line = lineOf(t);
   const bodyId = `tm-hc-body-${t.id}`;
   // Zip 70: the Time row, once the date is finalized with real times (tickets open).
@@ -932,8 +938,8 @@ function TicketsCard({ ctx, t, scrollRef }: { ctx: AdminCtx; t: AdminTournamentV
     <section className="tm-card" aria-label="Tickets" data-tm-card="tickets" ref={scrollRef}>
       <div className="tm-card-head tm-head-line">
         <h3 className="tm-label">Tickets</h3>
-        <span className={locked.length >= (t.spots ?? t.size) ? 'tm-chip tm-chip-ok' : 'tm-chip'} data-tm-locked-chip>
-          {locked.length} of {t.spots ?? t.size} locked in
+        <span className={lockedNum(t) >= (t.spots ?? t.size) ? 'tm-chip tm-chip-ok' : 'tm-chip'} data-tm-locked-chip>
+          {lockedNum(t)} of {t.spots ?? t.size} locked in
         </span>
       </div>
       {evens && (
@@ -1312,7 +1318,7 @@ const costWords = (cents: number) => (cents < 0 ? `-${formatPrice(-cents)}` : fo
  * and hours, and the organizer's cost: the court bill, minus the tickets, plus the winners' credits. The site never books anything.
  */
 function PlanCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
-  const locked = lockedOf(t).length;
+  const locked = lockedNum(t);
   // 2.5 and 3 hour games need Booking hours on (the same gate as their prices).
   const needsBooking = t.minutes > 120 && ctx.d.longGames !== true;
   // Zip 66 (mock 03): the plan as three pills, then one cost line: "$8 ($88 with 0 paid)".

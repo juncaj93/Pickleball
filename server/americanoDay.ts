@@ -19,6 +19,7 @@ import * as v from './validate';
 import { audit } from './repo';
 import type { AdminRoundGame, AdminRoundsView, PlayerRound, PlayerRoundsView } from '../shared/tournament';
 import { firstAnswer, saidScore } from '../shared/partnerTaps';
+import { MAX_SCORE } from '../shared/scores';
 import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
 import { americanoPlan, clockLabel, type GameTo, ROUND_MINUTES } from '../shared/tournamentPlan';
 import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournamentSchedule';
@@ -27,10 +28,10 @@ import type { TicketWithName } from './tournamentMoney';
 import { courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds } from './tournamentDay';
 import { firstName, logPlayer, nightOver, organizerOn, openById, realTimes, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
 
-/** A score saved before Zip 71 still waiting for the other side's Yes this long is late on the organizer's card (no score waits now). */
+/** A game still playing this many minutes past its round's time is late on the organizer's card ("8 min over"). */
 export const LATE_WAIT_MIN = 5;
-/** Highest score a side can enter (a game to 11 that runs on, win by 2). */
-export const MAX_SCORE = 30;
+/** Highest score a side can enter (a game to 11 that runs on, win by 2): one number for the server and both screens (shared/scores.ts). */
+export { MAX_SCORE };
 
 /** One game of the night, stored or worked out (`stored`: a row exists). Scores are side a / side b. */
 export interface AmGame {
@@ -45,7 +46,6 @@ export interface AmGame {
   claim: 'a' | 'b' | null;
   claimBy: string | null;
   claimAt: string | null;
-  disputed: boolean;
   winner: 'a' | 'b' | null;
   resultAt: string | null;
   skipped: boolean;
@@ -83,7 +83,7 @@ const courtsOf = (t: TournamentRow): number => (t.courts === 1 ? 1 : 2);
 const stampOf = (g: AmGame): string => (g.row ? `${g.row.updated_at}|${g.claim ?? ''}|${g.winner ?? ''}|${g.scoreA ?? ''}-${g.scoreB ?? ''}|${g.skipped ? 1 : 0}` : `plan:${gameKey(g)}`);
 const courtNo = (t: TournamentRow, court: number): number => courtNumbersOf(t)?.[court - 1] ?? court;
 const decided = (g: AmGame) => g.skipped || !!g.winner || !!g.claim;
-/** A score that counts for the table: one that stands, or one waiting for the other side (players are trusted, as in zip 57). */
+/** A score that counts for the table (Zip 71: the first score counts; a score saved before Zip 71 that was never answered counts too). */
 const counts = (g: AmGame) => !g.skipped && (!!g.winner || !!g.claim) && g.scoreA !== null && g.scoreB !== null;
 const sideOf = (g: AmGame, id: string): 'a' | 'b' | null => (g.a.includes(id) ? 'a' : g.b.includes(id) ? 'b' : null);
 
@@ -101,7 +101,6 @@ function fromRow(r: GameRow): AmGame {
     claim: r.claim === 'a' || r.claim === 'b' ? r.claim : null,
     claimBy: x.claim_by ?? null,
     claimAt: r.claim_at,
-    disputed: !!r.disputed_at,
     winner: r.winner === 'a' || r.winner === 'b' ? r.winner : null,
     resultAt: r.result_at,
     skipped: !!r.skipped,
@@ -165,7 +164,6 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
       claim: null,
       claimBy: null,
       claimAt: null,
-      disputed: false,
       winner: null,
       resultAt: null,
       skipped: false,
@@ -369,12 +367,10 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
   const f = amFacts(t, signups, tickets, rows, tz, nowMs);
   const nowMin = t.final_date ? minuteOf(t, tz, nowMs) : 0;
   const games: AdminRoundGame[] = f.games.map((g) => {
-    const status: AdminRoundGame['status'] = g.skipped ? 'skipped' : g.winner ? 'done' : g.claim ? (g.disputed ? 'changed' : 'waiting') : f.started && g.round <= f.roundNow ? 'playing' : 'later';
+    // Zip 71/72: no score waits. A score saved before Zip 71 that was never answered is the result (done), like any first score.
+    const status: AdminRoundGame['status'] = g.skipped ? 'skipped' : g.winner || g.claim ? 'done' : f.started && g.round <= f.roundNow ? 'playing' : 'later';
     let late: string | undefined;
-    if ((status === 'waiting' || status === 'changed') && g.claimAt) {
-      const mins = Math.floor((nowMs - Date.parse(g.claimAt)) / 60_000);
-      if (mins >= LATE_WAIT_MIN) late = `Waiting ${mins} min`;
-    } else if (status === 'playing') {
+    if (status === 'playing') {
       const over = Math.floor(nowMin - ((f.roundStart.get(g.round) ?? f.start) + ROUND_MINUTES[g.playTo as GameTo]));
       if (over >= LATE_WAIT_MIN) late = `${over} min over`;
     }
@@ -476,14 +472,14 @@ async function ensureRows(ctx: Ctx, t: TournamentRow, n: Awaited<ReturnType<type
   return day.games;
 }
 
-/** A score from the screen: two whole numbers 0 to 30, not equal (a game has a winner). */
+/** A score from the screen: two whole numbers 0 to 30, not equal (a game has a winner). Zip 72: Locked doubles uses the same check. */
 function readScore(raw: unknown, label: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 0 || n > MAX_SCORE) throw new HttpError(400, 'invalid_score', `Pick a score from 0 to ${MAX_SCORE}.`);
   void label;
   return n;
 }
-function readPair(body: Record<string, unknown>, first: string, second: string): [number, number] {
+export function readPair(body: Record<string, unknown>, first: string, second: string): [number, number] {
   const x = readScore(body[first], first);
   const y = readScore(body[second], second);
   if (x === y) throw new HttpError(400, 'invalid_score', 'A game has a winner. Fix the score.');
@@ -566,8 +562,8 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
 /**
  * POST /api/admin/tournament/:id/games on an Americano night (the organizer; zip 57's controls):
  *   score { num, a, b, seen }    set or fix a game's score (both numbers); it stands
- *   confirm { num, seen }         the score waiting for a Yes stands
  *   clear { num, seen }           take the score off (the game is to play again)
+ * (Zip 72: 'confirm' is gone; nothing waits for a Yes since Zip 71.)
  *   apply { fromRound, to }       the Time check: games from that round on are played to 9 or 7 (never the last round)
  *   pause / resume
  *   left { playerId }             a player left: their games still to play are skipped (the others in them get a note)
@@ -575,7 +571,7 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
 export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
-  const action = v.oneOf(body.action, 'action', ['score', 'confirm', 'clear', 'apply', 'pause', 'resume', 'left'] as const);
+  const action = v.oneOf(body.action, 'action', ['score', 'clear', 'apply', 'pause', 'resume', 'left'] as const);
   const nowIso = ctx.nowIso;
   if (action === 'pause' || action === 'resume') {
     await ctx.db.prepare(`UPDATE tournaments SET paused_at = ${action === 'pause' ? '?' : 'NULL'}, updated_at = ? WHERE id = ?`).bind(...(action === 'pause' ? [nowIso] : []), nowIso, t.id).run();
@@ -589,7 +585,7 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   const night = await readNight(ctx.db, t);
   const before = amFacts(t, night.signups, night.tickets, night.games, group.timezone, ctx.nowMs);
   // Bad input is refused before the night's rows are written.
-  if ((action === 'score' || action === 'confirm' || action === 'clear') && typeof body.seen !== 'string') throw new HttpError(400, 'invalid_seen', 'Look again.');
+  if ((action === 'score' || action === 'clear') && typeof body.seen !== 'string') throw new HttpError(400, 'invalid_seen', 'Look again.');
   const pair = action === 'score' ? readPair(body, 'a', 'b') : null;
   if (action === 'apply') {
     const from = Number(body.fromRound);
@@ -656,10 +652,6 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
     const [x, y] = pair!;
     res = await run("score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'organizer'", x, y, x > y ? 'a' : 'b', nowIso);
     details = { score: `${Math.max(x, y)} to ${Math.min(x, y)}`, winnerPlayers: pairNames(before, x > y ? g!.a : g!.b).join(' + ') };
-  } else if (action === 'confirm') {
-    if (!g!.claim || g!.scoreA === null || g!.scoreB === null) bad('tournament_changed', 'No score is waiting. Look again.');
-    res = await run("winner = ?, disputed_at = NULL, result_at = ?, result_by = 'organizer'", g!.scoreA! > g!.scoreB! ? 'a' : 'b', nowIso);
-    details = { score: `${Math.max(g!.scoreA!, g!.scoreB!)} to ${Math.min(g!.scoreA!, g!.scoreB!)}`, winnerPlayers: pairNames(before, g!.scoreA! > g!.scoreB! ? g!.a : g!.b).join(' + '), confirmed: true };
   } else {
     res = await run('score_a = NULL, score_b = NULL, winner = NULL, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_at = NULL, result_by = NULL');
     details = { cleared: true };

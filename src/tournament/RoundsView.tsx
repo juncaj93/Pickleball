@@ -4,13 +4,13 @@
 // "Onto the next!" on a loss, the slide, the Undo banner).
 //   Before the night (31): Your rounds under the ticket.
 //   The night (32 to 36): the hero ("Round 3 of 6"), the VS card with Enter score (or the dark break card), the Time check, Your rounds,
-//   Standings (wins, then points), Currently playing. Enter score is 57's sheet with two numbers; Zip 71: the first score from any
-//   of the 4 players is the result (no "Is this right?").
+//   Standings (wins, then points), Currently playing. Enter score is the shared Final score sheet (GameDayView's ScoreSheet, Zip 72); Zip 71:
+//   the first score from any of the 4 players is the result.
 // Names only. No clock times except "Begins at" on Round 1.
 import { useState } from 'react';
 import type { PlayerRound, PlayerRoundsView, PlayerTournamentView } from '../../shared/tournament';
-import { Sheet } from '../ui';
-import { Court, DayHero, type Held, Matchup, Slide, useHeldResult, useSeen } from './GameDayView';
+import { resultTag } from '../../shared/scores';
+import { Court, DayHero, type HeldScore, Matchup, ScoreSheet, Slide, useHeldResult, useSeen } from './GameDayView';
 import './gameday-tour.css';
 
 const pair = (a: string, b: string) => `${a} + ${b}`;
@@ -19,7 +19,7 @@ const pair = (a: string, b: string) => `${a} + ${b}`;
  * While a score is held for its 5 seconds (and after its lit second), this phone shows the round as done and the next one up, and the bar moves
  * on. The table waits for the real answer.
  */
-function withHeld(day: PlayerRoundsView, held: (Held & { mine: number; theirs: number }) | null): PlayerRoundsView {
+function withHeld(day: PlayerRoundsView, held: HeldScore | null): PlayerRoundsView {
   if (!held || held.lit) return day;
   let first = true;
   const rounds = day.rounds.map((r): PlayerRound => {
@@ -49,7 +49,11 @@ function RoundRow({ r, set, plain }: { r: PlayerRound; set: boolean; plain?: boo
           <>
             <b>
               <span className="tc-gd-with">With {r.partner}</span>
-              {r.state === 'done' && r.won !== undefined && <span className={r.won ? 'tc-gd-tag tc-gd-tag-won' : 'tc-gd-tag'}>{r.won ? 'Won' : 'Lost'}</span>}
+              {r.state === 'done' && r.won !== undefined && (
+                <span className={r.won ? 'tc-gd-tag tc-gd-tag-won' : 'tc-gd-tag'} data-tc-day-result>
+                  {resultTag(r.won, r.score)}
+                </span>
+              )}
             </b>
             <span>{r.skipped ? 'Off' : `vs ${pair(r.opponents![0], r.opponents![1])}`}</span>
           </>
@@ -151,66 +155,6 @@ function BreakCard({ r, total }: { r: PlayerRound; total: number }) {
   );
 }
 
-/** One side's number with − and + (44 px), and the number itself can be typed. */
-function ScoreRow({ label, value, onChange, testId }: { label: string; value: number; onChange: (next: (n: number) => number) => void; testId: string }) {
-  const clamp = (n: number) => Math.max(0, Math.min(30, Math.round(n)));
-  // − and + work on the number as it is now (quick taps all count); typing sets it.
-  const set = (n: number) => onChange(() => clamp(n));
-  const step = (d: number) => onChange((n) => clamp(n + d));
-  return (
-    <div className="tc-gd-score-row" data-tc-score-row={testId}>
-      <span className="tc-gd-score-name">{label}</span>
-      <span className="tc-gd-score-ctl">
-        <button type="button" className="tc-gd-round tc-gd-step" aria-label={`${label}: one less`} onClick={() => step(-1)} disabled={value <= 0} data-tc-score-minus={testId} data-tap-repeat>
-          −
-        </button>
-        <input
-          className="tc-gd-score-num"
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          aria-label={`${label} score`}
-          value={String(value)}
-          onChange={(e) => set(Number(e.target.value.replace(/\D/g, '') || 0))}
-          onFocus={(e) => e.target.select()}
-          data-tc-score-num={testId}
-        />
-        <button type="button" className="tc-gd-round tc-gd-step" aria-label={`${label}: one more`} onClick={() => step(1)} disabled={value >= 30} data-tc-score-plus={testId} data-tap-repeat>
-          +
-        </button>
-      </span>
-    </div>
-  );
-}
-
-/** Enter score (picture 33): "Final score", each side with − and +, Submit score. The same sheet for "No, fix it" (it says the same). */
-function ScoreSheet({ r, open, start, busy, onClose, onSubmit }: { r: PlayerRound | null; open: boolean; start: { mine: number; theirs: number }; busy: boolean; onClose: () => void; onSubmit: (mine: number, theirs: number) => void }) {
-  const [mine, setMine] = useState(start.mine);
-  const [theirs, setTheirs] = useState(start.theirs);
-  const [key, setKey] = useState('');
-  const k = `${r?.num ?? ''}:${start.mine}:${start.theirs}:${open}`;
-  if (k !== key) {
-    setKey(k);
-    setMine(start.mine);
-    setTheirs(start.theirs);
-  }
-  return (
-    <Sheet calmFocus open={open && !!r} title="Final score" onClose={onClose} className="tc-gd-sheet">
-      {r && r.opponents && (
-        <div className="stack" data-tc-score-sheet={r.num ?? undefined}>
-          <div className="tc-gd-score">
-            <ScoreRow label={pair('You', r.partner!)} value={mine} onChange={setMine} testId="mine" />
-            <ScoreRow label={pair(r.opponents[0], r.opponents[1])} value={theirs} onChange={setTheirs} testId="theirs" />
-          </div>
-          <button type="button" className="btn big block" disabled={busy || mine === theirs} onClick={() => onSubmit(mine, theirs)} data-tc-score-submit>
-            Submit score
-          </button>
-        </div>
-      )}
-    </Sheet>
-  );
-}
-
 /** Everything the Americano night shows on Home (pictures 31 to 37). */
 export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentView; day: PlayerRoundsView; onChanged: () => Promise<unknown> }) {
   const { busy, held, hold } = useHeldResult(t, onChanged);
@@ -271,9 +215,10 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
       <PointsCard day={shown} />
       <LiveCard day={shown} />
       <ScoreSheet
-        r={sheet?.r ?? null}
+        num={sheet?.r.num ?? null}
         open={sheet !== null}
-        start={{ mine: sheet?.r.playTo ?? 11, theirs: 0 }}
+        labels={[pair('You', sheet?.r.partner ?? ''), sheet?.r.opponents ? pair(sheet.r.opponents[0], sheet.r.opponents[1]) : '']}
+        playTo={sheet?.r.playTo ?? 11}
         busy={busy}
         onClose={() => setSheet(null)}
         onSubmit={(mine, theirs) => {

@@ -96,9 +96,9 @@ describe('zip 58: End tournament, Locked doubles', () => {
     expect((await phone.call('POST', '/api/tournament/award-seen', { tournamentId: ctx.tid })).data.changed).toBe(true);
     expect((await phone.call('POST', '/api/tournament/award-seen', { tournamentId: ctx.tid })).data.changed).toBe(false);
     expect((await group(ctx, winner)).tourAwards.congrats).toBeUndefined();
-    // Locked: results, Fix, Time check, Player left, a player's We won, renames, a second End and Edit awards.
+    // Locked: results, Fix, Time check, Player left, a player's score, renames, a second End and Edit awards.
     expect((await games(ctx, { action: 'result', num: fin.num, winner: 'b' })).status).toBe(409);
-    expect((await (await playerPhone(ctx, winner)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num: fin.num, action: 'won' })).status).toBe(404);
+    expect((await (await playerPhone(ctx, winner)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num: fin.num, action: 'score', mine: 11, theirs: 7 })).status).toBe(404);
     expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/teams`, { action: 'rename', teamId: d.teams[0].id, name: 'Changed' })).status).toBe(409);
     expect((await awards(ctx, { action: 'save', first: '2', championCents: 1400, weeks: 2 })).status).toBe(409);
     expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/cancel`, {})).status).toBe(409);
