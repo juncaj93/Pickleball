@@ -7112,3 +7112,70 @@ payment details for a phone with no name changed whatever the TOURNAMENTS switch
 - The Cold Open on live, read-only counts (no names): Tue Dec 1, 7:30 to 10 PM, 2 courts, $18, credits $0, Pay by Mon Nov 30 7:00 PM, 10 on the
   list, 9 can make the date, 1 paid spot (Alex's seat). The new card: Plan 9 players · 2 courts · 2.5 hrs; Americano for 9: games to 11, done about
   9:50 PM (an odd count plans as Americano); Courts $120 · Tickets $144 · You +$24 ("You make if it fills +$24"); Locked in 1 of 6.
+
+
+## Zip 71: Partner taps, Projected teams, one banner (🎾71.teams), Fri Nov 20, 2026
+Branch `claude/new-session-pjtr6m` (the session is named "🎾71.teams"; the build system pins the branch name). Built on main `ad02027` (Zip 70 live,
+main equal to live). Same switch, TOURNAMENTS (on for everyone on live); no new switch: part 1 is a rule fix Alex decided (Nov 20), part 2 is an
+organizer-only row, part 3 a duplicate banner. **NO database change**: no table, column or migration. `tournament_games.claim_by` (from 0028, live)
+now also records who said We won in Locked doubles. No money, ticket or credit path is touched.
+
+### 1. Partner taps (found by the 🎾69 dry run)
+- The FIRST answer from a side counts, Locked doubles and Americano. Before: Vic's We won, then Wren's "<other team> won" on a phone that had not
+  refreshed overwrote it (last tap won); an Americano partner's same score went through.
+- Server (`server/tournamentDay.ts` playerGameAction, `server/americanoDay.ts` americanoGameAction): once a side has answered, a second answer from
+  that side is refused, 409 `already_answered` with the line as the message ("Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to
+  confirm." / "Vic entered 11 to 8. Waiting for Quinn, Reese or Alex to confirm."). The one who answered may repeat it (a refresh) and take it back
+  (Undo); nobody else on that side can. Either player on the other side confirms or says No (No, fix it); a fix makes the fixer's side the one
+  waiting (its partner refused, the first side asked). The organizer's Confirm and Fix are unchanged. Two phones at once: the stamp guard lets one
+  write land; the other re-reads and gets the line (or ok, when it was the same player and the same answer).
+- A disputed Locked doubles game ("No, we won"): only the organizer settles it. Every player tap on it is refused ("Net Ninjas and Third Shot Gang
+  both say they won. Alex will decide."), and all four phones show that line right above the game card, with no buttons on it. (Fresh review findings 1 and
+  2: before, the disputing team's partner could overturn the dispute with "<other team> won", and the claiming side could concede.)
+- Players' Home: the partner's line (`waiting` on the game or round, the finished words from the server, so the player download carries no new
+  wording) shows as a blue strip above the big card, and that game shows no buttons. A claim from before this zip (no claim_by) reads "Your team
+  said ...".
+- The player script grew 55 bytes gzipped; main sat 23 bytes under the 141 KB budget, so tests/zip48-split.test.ts's budget is now 141.2 KB (on
+  purpose, with the reason in the file).
+- The words live in `shared/partnerTaps.ts` (server only).
+
+### 2. Projected teams (pictures pair-01 and pair-02)
+- The last row of the Levels card on the tournament's Edit page: "Projected teams" and the count. Tap opens it in place (no caret), tap again
+  folds it. Each team "Sage 3.4 + Christopher Vanderberg 3.0" and its total, highest total first; body font; a long name wraps, the level stays
+  glued to its name.
+- `shared/projectedTeams.ts` (admin download only), worked out on the organizer's phone from the page's own data: no server call, no database
+  trip. Same pairing as Draft teams' first draw (strongest with weakest); equal levels go by name so the list never jumps (Draft breaks those ties
+  at random). Players: everyone on the list before a date is picked; who can make the picked date until tickets close; then who is locked in (a
+  spot, or a whole-ticket I paid waiting: the server's lockedInIds rule). A pencil save reloads the page data and the open list follows at once.
+- Hidden: Americano picked, an odd count, under 2, canceled, and once real teams are drafted or published (the Teams card shows those).
+- Where it differs from the pictures (the code is the truth): Zoe's 2.75 shows as "2.7", the site's own label for that level everywhere.
+- Not capped at 16 (the review's note 7): between the date pick and Pay by it lists everyone who can make the date, as the brief says.
+
+### 3. One banner
+- After a style switch a player saw "Tournament style is now Americano." and, under it, "The Cold Open is scheduled for Thu Dec 17. Format:
+  Americano". Now, while the date card is still showing, the news is its second line (one card); its X hides both. A player who already closed
+  the date card sees the style banner alone, as before.
+
+### Preview stages (Tournament test page; preview only)
+`zip71_taps` (the calm start: tonight, Game 1, Vic's We won a minute ago), `zip71_am` (Americano Round 1, Vic entered 11 to 8), `zip71_teams` (the
+pictures' 8 and levels, the vote open). The `mid` stage now records Vic as the one who said it.
+
+### Admin speed (ADMIN SPEED RULE)
+Local, the calm world, "Fewer database trips" on (`scripts/zip68-admin-speed.ts`), before and after: dashboard 4 trips, 61 statements; the
+5-second check 2 trips, 16 statements, at all_locked, mid, am_round3, zip70_start, day_ready (and zip71_taps, zip71_am after). Dashboard local
+time 9 to 11 ms before, 8.5 to 10 ms after. Bytes the same (am_round3 +20).
+
+### Review
+A fresh reviewer (no part in the build) read the diff with probe tests. Fixed: findings 1 and 2 above (the disputed game); a legacy claim's
+wording; the Americano line read from the held overlay; the same player on two phones; every waiting line shows (not only the first). Left as
+noted: Projected teams follows the brief (no 16 cap); a reschedule can show the style news again with a fresh date card (news repeated, never lost).
+
+### Tests
+- Unit: tests/zip71-partner.test.ts (12: the partner refused with the line for every action, both styles; either other player confirms; No and
+  the organizer decides; the organizer's Confirm and Fix; Undo by the one who answered, then the partner; two phones at once; a stale screen; a
+  claim from before the zip; no money moves, the books balance), tests/zip71-projected.test.ts (7: the pictures, Draft's pairing for 20 shuffles,
+  a level change, odd counts, hidden cases, who it uses at each stage, steady ties). tests/zip61-day.test.ts updated on purpose (a partner's same
+  score is now refused too).
+- Browser: e2e/zip71.cjs (A Wren's line and no buttons at 390/360/320 light and dark, Vic none, Parker asked, Home Waiting with Confirm; A2 the
+  disputed game; B the stale screen refused; C Americano; D Projected teams at 390/360/320 light and dark, fold, body font, no overlap; D the pencil
+  updates the open list with no reload; E hidden for Americano and an odd count, nothing for players; F one banner, X hides both).

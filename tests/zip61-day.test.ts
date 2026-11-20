@@ -540,13 +540,13 @@ describe('zip 61: the independent review, each finding', () => {
     expect((await phone.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num: g.num, key: myRound((await card(ctx, b)).day, 1).key, action: 'confirm' })).status).toBe(400);
   });
 
-  it('a partner\'s different score never overwrites the one waiting (the same score is fine)', async () => {
+  it('a partner\'s score never overwrites the one waiting (zip 71: not even the same score; the first answer from a side counts)', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS + 60_000;
     const { g, a, a2 } = await firstGame(ctx);
     await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 8 });
     expect((await play(ctx, a2, { num: g.num, action: 'score', mine: 11, theirs: 2 })).status).toBe(409);
-    expect((await play(ctx, a2, { num: g.num, action: 'score', mine: 11, theirs: 8 })).status).toBe(200);
+    expect((await play(ctx, a2, { num: g.num, action: 'score', mine: 11, theirs: 8 })).status).toBe(409);
     expect((await dash(ctx)).rounds.games[0]).toMatchObject({ scoreA: 11, scoreB: 8, by: a });
   });
 

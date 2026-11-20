@@ -30,6 +30,7 @@ import {
   type TournamentFormat,
   MAX_SPOTS,
 } from '../shared/tournament';
+import { bothSayWon, saidWon, waitingLine } from '../shared/partnerTaps';
 import { about, clockLabel, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES } from '../shared/tournamentPlan';
 import {
   draftNote,
@@ -106,6 +107,8 @@ export interface GameRow {
   play_to: number;
   claim: string | null;
   claim_at: string | null;
+  /** Zip 61 (Americano) and Zip 71 (Locked doubles): the player who answered for the side in `claim`. */
+  claim_by?: string | null;
   disputed_at: string | null;
   winner: string | null;
   result_at: string | null;
@@ -578,6 +581,7 @@ export function playerDayView(
   playerId: string,
   tz: string,
   nowMs: number,
+  org = 'the organizer',
 ): PlayerDayView {
   const names = new Map(signups.map((s) => [s.player_id, s.display_name]));
   const f = facts(t, rows.teams, rows.games, tz, nowMs, rows.ties ?? []);
@@ -622,6 +626,13 @@ export function playerDayView(
       playTo: g.play_to,
       ...(g.claim === side && !g.winner && !g.disputed_at ? { claimed: true as const } : {}),
       ...(g.claim && g.claim !== side && !g.winner && !g.disputed_at ? { askConfirm: true as const } : {}),
+      // Zip 71: a line instead of the buttons: a teammate answered first (this phone did not), or both teams say they won (the organizer decides).
+      ...(g.claim === side && !g.winner && !g.disputed_at && g.claim_by && g.claim_by !== playerId && mine && opp
+        ? { waiting: waitingLine(saidWon(names.get(g.claim_by) ?? 'Your partner', mine.name), [opp.name], org) }
+        : {}),
+      ...(g.disputed_at && !g.winner && !g.skipped && mine && opp
+        ? { waiting: bothSayWon(g.claim === side ? mine.name : opp.name, g.claim === side ? opp.name : mine.name, org) }
+        : {}),
       ...(g.disputed_at && !g.winner ? { disputed: true as const } : {}),
       ...(g.skipped ? { skipped: true as const } : {}),
       // Zip 58: a tie game is played as soon as both its teams are known (a pool can be done while the other still plays).
@@ -1417,6 +1428,26 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
     bad('decided', `That game has a result. Ask ${firstName(who.group)}.`);
   }
   const stamp = g!.updated_at;
+  const org = firstName(who.group);
+  const otherName = f.bySeat.get(other === 'a' ? r!.a! : r!.b!)?.name ?? 'The other team';
+  // Zip 71 (partner taps): the FIRST answer from a team counts. Once one player of a side said We won, a second answer from that side is
+  // refused (the partner's phone shows the waiting line instead of the buttons); only the one who answered may take it back (Undo). The other
+  // side confirms or says No, or the organizer confirms or fixes it.
+  const waitWords = async (game: GameRow) => {
+    if (game.disputed_at) return bothSayWon(game.claim === side ? team!.name : otherName, game.claim === side ? otherName : team!.name, org);
+    const mate = !game.claim_by || game.claim_by === playerId ? null : await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(game.claim_by).first<{ display_name: string }>();
+    // A claim from before Zip 71 has no claim_by: "Your team said ...".
+    const by = !game.claim_by ? 'Your team' : game.claim_by === playerId ? 'You' : (mate?.display_name ?? 'Your partner');
+    return waitingLine(saidWon(by, team!.name), [otherName], org);
+  };
+  // Both teams say they won ("No, we won"): only the organizer settles it. No second answer from either side (either one would overrule its
+  // own side's first answer), so neither side gets buttons for it.
+  if (g!.disputed_at) bad('disputed', await waitWords(g!));
+  if (g!.claim === side) {
+    const mineClaim = !g!.claim_by || g!.claim_by === playerId;
+    if (action === 'won' && mineClaim) return { ok: true, result: 'claimed' };
+    if (!(action === 'undo' && mineClaim)) bad('already_answered', await waitWords(g!));
+  }
   // Every result keeps the two teams it was given for (seat_a, seat_b), so a later change to an earlier game never moves it to other teams.
   const run = (sql: string, ...values: unknown[]) =>
     ctx.db
@@ -1425,11 +1456,10 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
       .run();
   let res;
   if (action === 'won') {
-    if (g!.claim === side && !g!.disputed_at) return { ok: true, result: 'claimed' };
-    if (g!.claim) bad('already_claimed', `${f.bySeat.get(other === 'a' ? r!.a! : r!.b!)?.name ?? 'The other team'} says they won. Look again.`);
-    res = await run('claim = ?, claim_at = ?', side, ctx.nowIso);
+    if (g!.claim) bad('already_claimed', `${otherName} says they won. Look again.`);
+    res = await run('claim = ?, claim_by = ?, claim_at = ?', side, playerId, ctx.nowIso);
   } else if (action === 'lost') {
-    res = await run("winner = ?, claim = NULL, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'players'", other, ctx.nowIso);
+    res = await run("winner = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'players'", other, ctx.nowIso);
   } else if (action === 'confirm') {
     if (g!.claim !== other || g!.disputed_at) bad('tournament_changed', 'This just changed. Look again.');
     res = await run("winner = claim, result_at = ?, result_by = 'players'", ctx.nowIso);
@@ -1438,9 +1468,16 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
     res = await run('disputed_at = ?', ctx.nowIso);
   } else {
     if (g!.claim !== side || g!.disputed_at) return { ok: true, result: 'nothing' };
-    res = await run('claim = NULL, claim_at = NULL');
+    res = await run('claim = NULL, claim_by = NULL, claim_at = NULL');
   }
-  if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
+  if ((res.meta?.changes ?? 0) === 0) {
+    // Two phones at once: the other one landed first. When it was the partner, say so (the waiting line), not just "look again".
+    const now = await ctx.db.prepare('SELECT * FROM tournament_games WHERE id = ?').bind(g!.id).first<GameRow>().catch(() => null);
+    if (now && now.claim === side && !now.winner && !now.skipped && now.claim_by && now.claim_by !== playerId) bad('already_answered', await waitWords(now));
+    // The same player on two phones at once, the same We won: it is in.
+    if (now && action === 'won' && now.claim === side && now.claim_by === playerId && !now.winner && !now.disputed_at) return { ok: true, result: 'claimed' };
+    bad('tournament_changed', 'This just changed. Look again.');
+  }
   const mineName = team!.name;
   const theirs = f.bySeat.get(other === 'a' ? r!.a! : r!.b!)?.name ?? 'the other team';
   const words = { won: `${mineName} won`, lost: `${theirs} won`, confirm: `${theirs} won (confirmed)`, dispute: `${mineName} says they won, not ${theirs}`, undo: `${mineName} took back their win` }[action];

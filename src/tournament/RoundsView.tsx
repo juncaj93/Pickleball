@@ -267,6 +267,14 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
           </button>
         </section>
       )}
+      {/* Zip 71 (partner taps): the partner entered the score first. No score sheet for this round on this phone, only the line. */}
+      {real.rounds
+        .filter((r) => r.waiting)
+        .map((r) => (
+          <p key={r.round} className="tc-gd-ask" role="status" data-tc-day-waiting>
+            {r.waiting}
+          </p>
+        ))}
       {next && (
         <Slide k={`${next.round}`}>
           {next.num === null ? (

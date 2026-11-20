@@ -1506,3 +1506,71 @@ a.tm-hc-copy {
     font-size: 0.88rem;
   }
 }
+
+/* Zip 71 (pictures pair-01 and pair-02): Projected teams, the last row of the Levels card. The row folds open in place (no caret); the teams sit
+   in a soft inset box. Body font for names and numbers. */
+.tm-proj {
+  margin: 0 -16px;
+  border-top: 1px dashed var(--line);
+}
+.tm-proj-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 16px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--body);
+  font-size: 1.02rem;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tm-proj-row b {
+  color: var(--ink);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.tm-proj-row:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+  border-radius: 12px;
+}
+.tm-proj-list {
+  margin: 2px 16px 10px;
+  padding: 4px 14px;
+  list-style: none;
+  border-radius: 14px;
+  background: var(--muted-bg);
+}
+.tm-proj-team {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  font-family: var(--body);
+  font-size: 0.98rem;
+  color: var(--ink);
+}
+.tm-proj-names {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-block: 6px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+/* A long name never hides a level or runs into the total: the line wraps, and each level stays glued to its name (a no-break space). */
+.tm-proj-lvl,
+.tm-proj-plus {
+  color: var(--ink-2);
+}
+.tm-proj-total {
+  flex: 0 0 auto;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}

@@ -824,11 +824,22 @@ export function PlayerHome({
                     <>
                       {/* Zip 70 (picture 6): the organizer moved the start or the end: first, dismissed per player. */}
                       {view!.tournament.timeNote && <FormatAlertCard a={view!.tournament.timeNote} label="Time changed" data="data-time-note" />}
-                      {/* Zip 64: the style changed after tickets closed: one short banner, dismissed per player. */}
-                      {view!.tournament.styleNote && (
-                        <FormatAlertCard a={{ key: view!.tournament.styleNote.key, title: view!.tournament.styleNote.text }} label="Tournament style" data="data-style-note" />
+                      {/* Zip 64: the style changed after tickets closed: one short banner, dismissed per player. Zip 71: while the date alert is
+                          still showing, the style news is ITS second line (one card, not two saying the same thing); its X hides both. */}
+                      {view!.tournament.styleNote && view!.tournament.formatAlert && !readFormatAlertSeen().includes(view!.tournament.formatAlert.key) ? (
+                        <FormatAlertCard
+                          a={{ ...view!.tournament.formatAlert, sub: view!.tournament.styleNote.text }}
+                          also={[view!.tournament.styleNote.key]}
+                          data="data-style-note"
+                        />
+                      ) : (
+                        <>
+                          {view!.tournament.styleNote && (
+                            <FormatAlertCard a={{ key: view!.tournament.styleNote.key, title: view!.tournament.styleNote.text }} label="Tournament style" data="data-style-note" />
+                          )}
+                          {view!.tournament.formatAlert && <FormatAlertCard a={view!.tournament.formatAlert} />}
+                        </>
                       )}
-                      {view!.tournament.formatAlert && <FormatAlertCard a={view!.tournament.formatAlert} />}
                     </>
                   ) : undefined
                 }
@@ -1240,7 +1251,18 @@ function readFormatAlertSeen(): string[] {
   }
 }
 /** The alert card with the tournament's name and date, and the format (who decided it) under it. The X hides it for good on this phone. */
-function FormatAlertCard({ a, label = 'Tournament scheduled', data = 'data-format-alert' }: { a: { key: string; title: string; sub?: string }; label?: string; data?: string }) {
+function FormatAlertCard({
+  a,
+  label = 'Tournament scheduled',
+  data = 'data-format-alert',
+  also = [],
+}: {
+  a: { key: string; title: string; sub?: string };
+  label?: string;
+  data?: string;
+  /** Zip 71: other alerts this card carries (their keys are hidden with it). */
+  also?: string[];
+}) {
   const [seen, setSeen] = useState<string[]>(readFormatAlertSeen);
   if (seen.includes(a.key)) return null;
   return (
@@ -1254,7 +1276,8 @@ function FormatAlertCard({ a, label = 'Tournament scheduled', data = 'data-forma
       data={{ [data]: true }}
       xLabel={a.title}
       onX={() => {
-        const next = [...readFormatAlertSeen().filter((x) => x !== a.key), a.key].slice(-50);
+        const mine = [a.key, ...also];
+        const next = [...readFormatAlertSeen().filter((x) => !mine.includes(x)), ...mine].slice(-50);
         try {
           storageSet(FORMAT_ALERT_SEEN_KEY, JSON.stringify(next));
         } catch {

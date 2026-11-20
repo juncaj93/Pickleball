@@ -498,7 +498,8 @@ async function main() {
     const v = await vicCard({ who: 'Parker' });
     const note = v.page.locator('[data-style-note]');
     await note.waitFor({ timeout: 10000 });
-    assert(flat(await note.innerText()).startsWith('Tournament style is now Americano.'), await note.innerText());
+    // Zip 71: while the date card still shows, the style news is its second line (one card, not two).
+    assert(flat(await note.innerText()).includes('Tournament style is now Americano.') && (await v.page.getByText('Tournament style is now Americano.').count()) === 1, await note.innerText());
     assert(flat(await v.page.locator('.tc-short .tc-format').innerText()) === 'Americano (new partner every round)', 'the card');
     await shot(v.page, 'G-odd-player');
     await v.ctx.close();
@@ -525,7 +526,8 @@ async function main() {
     const v = await vicCard({ who: 'Parker' });
     const note = v.page.locator('[data-style-note]');
     await note.waitFor({ timeout: 10000 });
-    assert(flat(await note.innerText()).startsWith('Tournament style is back to Locked doubles.'), await note.innerText());
+    // Zip 71: while the date card still shows, the style news is its second line (one card, not two).
+    assert(flat(await note.innerText()).includes('Tournament style is back to Locked doubles.') && (await v.page.getByText('Tournament style is back to Locked doubles.').count()) === 1, await note.innerText());
     await v.ctx.close();
   });
 

@@ -51,6 +51,8 @@ import { type DayLook, LevelList, MonthCalendar } from '../../tournament/parts';
 import type { AdminCtx } from '../Admin';
 import { TournamentDayCards } from './TournamentDay';
 import { fitWords, nightPlan } from '../../../shared/tournamentPlan';
+import { type ProjectedTeam, projectedTeams } from '../../../shared/projectedTeams';
+import { totalLabel } from '../../../shared/tournamentSchedule';
 import './tournament-admin.css';
 
 const todayKeyOf = (nowIso: string, tz: string) => {
@@ -1386,6 +1388,8 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
     return { '--heat-bg': c.light.bg, '--heat-edge': c.light.edge, '--heat-bg-dark': c.dark.bg, '--heat-edge-dark': c.dark.edge } as CSSProperties;
   };
   const who = t.signups.find((s) => s.playerId === levelFor) ?? null;
+  // Zip 71: worked out from the levels on this screen each time it draws, so a level saved with the pencil shows in the open list at once.
+  const projected = useMemo(() => projectedTeams(t), [t]);
   // Open on the part the Home card asked for, ONCE: a later redraw (a save, a live update) never scrolls the page back there.
   const scrolled = useRef(false);
   const scrollRef = (el: HTMLElement | null) => {
@@ -1432,6 +1436,8 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
             ))}
           </ul>
         )}
+        {/* Zip 71 (pictures pair-01 and pair-02): Projected teams, the last row of Levels. Tap opens it in place, tap again folds it. */}
+        {projected && <ProjectedTeams teams={projected} />}
       </section>
 
       {/* Zip 66: Pick the date starts folded (one line with "34 offered"); tap the line to open the calendar, tap it again to close. Opened
@@ -1561,6 +1567,42 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
           if (ok) onClosed();
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * Zip 71 (pictures pair-01 and pair-02): "Projected teams" and how many, one row at the bottom of the Levels card. Tap: the likely teams open in
+ * place (strongest with weakest, the same pairing as Draft teams, highest team total first); tap the row again to fold it. No caret. Names and
+ * numbers in the body font.
+ */
+function ProjectedTeams({ teams }: { teams: ProjectedTeam[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="tm-proj" data-tm-projected data-tm-projected-open={open}>
+      <button type="button" className="tm-proj-row" aria-expanded={open} onClick={() => setOpen((x) => !x)} data-tm-projected-toggle>
+        <span>Projected teams</span>
+        <b data-tm-projected-count>{teams.length}</b>
+      </button>
+      {open && (
+        <ul className="tm-proj-list" aria-label="Projected teams">
+          {teams.map((x) => (
+            <li key={`${x.players[0].id}+${x.players[1].id}`} className="tm-proj-team" data-tm-projected-team>
+              <span className="tm-proj-names">
+                {x.players.map((p, i) => (
+                  <span key={p.id} className="tm-proj-p">
+                    {i > 0 && <span className="tm-proj-plus"> + </span>}
+                    {p.name}
+                    {'\u00a0'}
+                    <span className="tm-proj-lvl">{levelShort(p.level)}</span>
+                  </span>
+                ))}
+              </span>
+              <b className="tm-proj-total">{totalLabel(x.total)}</b>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

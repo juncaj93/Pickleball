@@ -10,6 +10,10 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 71 (🎾71.teams): partner taps on game night (the first answer from a side counts) and Projected teams on the Levels card.
+  { stage: 'zip71_taps', label: 'Partner taps (start here)', line: 'Tonight, Game 1: Vic said Net Ninjas won a minute ago. View as Wren: the waiting line, no buttons. View as Parker: Did you win? Home: Waiting with Confirm.' },
+  { stage: 'zip71_am', label: 'Partner taps: Americano', line: 'Tonight, Round 1: Vic entered 11 to 8 a minute ago. View as Vic: Round 1 is With his partner; view as that partner: the waiting line, no Enter score.' },
+  { stage: 'zip71_teams', label: 'Projected teams', line: 'The pictures’ 8 on the list, the vote open. Home: open the card, Edit, then the last row of Levels: Projected teams. Change a level with the pencil: the open list follows.' },
   // Zip 70 (🎾70.time): The Cold Open as it is on live ($18, credits $0, 2 courts, 7:30 to 10 PM, a Tuesday a week or more out). The format above does not apply.
   { stage: 'zip70_start', label: 'Time and Plan (start here)', line: 'Like live: 6 locked in of 8, Vic and Zoe unpaid. Home: open the card: Time 7:30 to 10 PM, Plan 8 players, You make if it fills +$6. Tap Time (move the end, Save), tap Plan (Expect, Courts, Save). View as Vic: 7:30 PM / to 10 PM on the ticket.' },
   { stage: 'zip70_loss', label: 'Time and Plan: it would cost you', line: 'The same, 7:00 to 10:00 PM (3 hours): Your cost if it fills, in red, no minus.' },

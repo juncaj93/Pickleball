@@ -89,7 +89,11 @@ export const ZIP66_STAGES = ['zip66_start', 'missed_date'] as const;
 //   backed_out       published before the night, then Zoe backed out after Pay by: 7 locked in, the style switched to Americano (the amber card
 //                    with Copy text for the group); players see "Tournament style is now Americano." and no teams
 // The 12 players pools look (mock 51) cannot be made with the 10 names: GET /api/tournament/pools-look draws it (look only, a preview link).
-export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out'] as const;
+// Zip 71 (🎾71.teams), partner taps:
+//   zip71_taps       game1's night, started 20 minutes ago: Vic said Net Ninjas won Game 1 a minute ago (Third Shot Gang has not confirmed). View
+//                    as Wren: "Vic said Net Ninjas won. Waiting for Third Shot Gang or Alex to confirm." and no buttons; view as Parker: Did you
+//                    win?; organizer Home: Waiting with Confirm.
+export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out', 'zip71_taps'] as const;
 type DayStage = (typeof DAY_STAGES)[number];
 const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[]).includes(s);
 // Zip 61 (🎾61.americano): the Americano night. "The Cold Open", Americano, all 10 names locked in (Alex's own $0 seat), Pay by passed, courts 1
@@ -105,7 +109,9 @@ const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[
 //   am_switched   Locked doubles with 9 locked in (Reese did not pay) after Pay by, two days from now: the first screen that reads it switches to
 //                 Americano (zip 64): players see "Tournament style is now Americano." and their new rounds
 //   am_done       every round in (Vic wins every game he plays): the organizer's End tournament card (picture 37)
-export const AM_STAGES = ['am_round3', 'am_before', 'am_round1', 'am_break', 'am_standings', 'am_switched', 'am_done'] as const;
+//   zip71_am      Zip 71 (partner taps): tonight, Round 1 started 20 minutes ago; Vic entered 11 to 8 for his side a minute ago (the other side has
+//                 not said Yes). View as Vic's partner: "Vic entered 11 to 8. Waiting for ... or Alex to confirm." and no Enter score.
+export const AM_STAGES = ['am_round3', 'am_before', 'am_round1', 'am_break', 'am_standings', 'am_switched', 'am_done', 'zip71_am'] as const;
 // Zip 58 (🎾58.tourney4): ties, the Final, End tournament and the records. "The Cold Open", Locked doubles, the brief's four teams (zip 57's
 // stage: Net Ninjas Vic and Wren, Third Shot Gang Parker and Quinn, Kitchen Crew Rowan and Zoe, Dill With It Sage and Christopher), tonight,
 // started 100 minutes ago, courts 1 and 2. Every pool game in, as the players' Confirm writes it.
@@ -134,7 +140,7 @@ const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).
 export const ZIP70_STAGES = ['zip70_start', 'zip70_loss', 'zip70_moved', 'zip70_late', 'zip70_finalize'] as const;
 type Zip70Stage = (typeof ZIP70_STAGES)[number];
 const isZip70Stage = (s: string): s is Zip70Stage => (ZIP70_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
+export const TEST_STAGES = [...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -293,7 +299,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   if (isZip58Stage(stage)) return zip58Stage(ctx, group, stage);
   if (isDayStage(stage)) return dayStage(ctx, group, stage);
   if (isAmStage(stage)) return americanoStage(ctx, group, stage);
-  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date') return voteStage(ctx, group, stage);
+  if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date' || stage === 'zip71_teams') return voteStage(ctx, group, stage);
 
   const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
@@ -447,7 +453,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
  * Zip 60: the vote stages. The date is locked by the very code the organizer's Pick date runs (lockDate), so the count and the alert are the real ones.
  * Zip 62 (🎾62.speed): `speed_check` is The Cold Open as it is on live: Everyone, the vote open, every fixed name but the organizer on the list.
  */
-type VoteStage = 'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize' | 'speed_check' | 'zip64_start' | 'zip66_start' | 'missed_date';
+type VoteStage = 'vote_open' | 'vote_majority' | 'vote_tie' | 'vote_finalize' | 'speed_check' | 'zip64_start' | 'zip66_start' | 'missed_date' | 'zip71_teams';
 const ZIP64_VOTERS: { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[] = [
   { name: 'Parker', level: 360, vote: 'locked' },
   { name: 'Rowan', level: 350, vote: 'americano' },
@@ -461,6 +467,17 @@ const ZIP64_VOTERS: { name: string; level: number; vote: 'locked' | 'americano' 
 const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 'americano' | 'either' }[]> = {
   zip64_start: ZIP64_VOTERS,
   zip66_start: ZIP64_VOTERS,
+  // Zip 71 (pictures pair-01 and pair-02): the 8 on the list and their levels, Doubles 2, Americano 0, Either 6.
+  zip71_teams: [
+    { name: 'Parker', level: 360, vote: 'locked' },
+    { name: 'Rowan', level: 350, vote: 'either' },
+    { name: 'Sage', level: 340, vote: 'either' },
+    { name: 'Vic', level: 320, vote: 'locked' },
+    { name: 'Wren', level: 320, vote: 'either' },
+    { name: 'Christopher Vanderberg', level: 300, vote: 'either' },
+    { name: 'Zoe', level: 275, vote: 'either' },
+    { name: 'Quinn', level: 250, vote: 'either' },
+  ],
   missed_date: ZIP64_VOTERS,
   vote_open: [
     { name: 'Parker', level: 360, vote: 'locked' },
@@ -510,7 +527,7 @@ async function voteStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin
   const idOf = new Map(players.map((p) => [p.display_name, p.id]));
   const all = testDates(todayKey(ctx.nowMs, group.timezone));
   // Zip 64: the calm start offers next month only, like The Cold Open on live (the stub then reads "DEC", as in the mocks).
-  const dates = stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date' ? all.filter((d) => d.slice(0, 7) === all[0].slice(0, 7)) : all;
+  const dates = stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date' || stage === 'zip71_teams' ? all.filter((d) => d.slice(0, 7) === all[0].slice(0, 7)) : all;
   const thursdays = dates.filter((d) => dayParts(d).weekday === 4);
   const best = thursdays[2] ?? dates[Math.floor(dates.length / 2)];
   const id = newId();
@@ -576,7 +593,7 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
   const later = stage === 'teams_published' || stage === 'backed_out';
   const date = later ? dayAfter(ctx.nowMs + 86_400_000, tz) : today;
   // The night: started 10 minutes ago (45 for mid, a minute for game1), on the 5 minutes; 7:30 PM two days from now for the later ones.
-  const ago = stage === 'mid' ? 45 : stage === 'game1' ? 1 : stage === 'pools_done' ? 100 : 10;
+  const ago = stage === 'mid' ? 45 : stage === 'game1' ? 1 : stage === 'zip71_taps' ? 20 : stage === 'pools_done' ? 100 : 10;
   const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
   // The whole plan (2.5 hours; 2 hours for mid, so the Time check shows), also when that runs past midnight (a late test).
   const minutes = stage === 'mid' ? 120 : 150;
@@ -625,9 +642,14 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
   // Draft (not published): the same rows Draft teams writes. Published: the same rows Publish writes, games and all.
   await ctx.db.batch(writeTeamsAndGames(ctx.db, row, teams, published ? plan.games : null, plan.playTo, ctx.nowIso, '1 = 1', []));
   const iso = (minsAgo: number) => new Date(ctx.nowMs - minsAgo * 60_000).toISOString();
-  if (stage === 'mid') {
-    // Game 1 (Net Ninjas, seat 1, side a): Vic's We won 2 minutes ago, not confirmed yet.
-    await ctx.db.prepare("UPDATE tournament_games SET claim = 'a', claim_at = ?, updated_at = ? WHERE tournament_id = ? AND num = 1").bind(iso(2), iso(2), id).run();
+  if (stage === 'mid' || stage === 'zip71_taps') {
+    // Game 1 (Net Ninjas, seat 1, side a): Vic's We won 2 minutes ago (zip71_taps: 1), not confirmed yet. Zip 71: who said it (claim_by), so
+    // Wren's phone shows the waiting line.
+    const ago2 = stage === 'mid' ? 2 : 1;
+    await ctx.db
+      .prepare("UPDATE tournament_games SET claim = 'a', claim_by = ?, claim_at = ?, updated_at = ? WHERE tournament_id = ? AND num = 1")
+      .bind(idOf.get('Vic') ?? null, iso(ago2), iso(ago2), id)
+      .run();
   }
   if (stage === 'pools_done') {
     // Every round robin game in, as the players' Confirm writes it: seat 1 wins everything, seat 2 beats 3 and 4, seat 3 beats 4.
@@ -766,7 +788,7 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
   const date = later ? dayAfter(ctx.nowMs + 86_400_000, tz) : todayKey(ctx.nowMs, tz);
   // Rounds played before now: 0 (Round 1), 2 (Round 3), 3 (Round 4), 5 (Round 6); each round 23 minutes, plus a few minutes into the next one.
   const done = stage === 'am_round3' ? 2 : stage === 'am_break' ? 3 : stage === 'am_standings' ? 5 : stage === 'am_done' ? 6 : 0;
-  const ago = later ? 0 : done * 23 + (done ? 6 : 1);
+  const ago = later ? 0 : stage === 'zip71_am' ? 20 : done * 23 + (done ? 6 : 1);
   const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
   const switched = stage === 'am_switched';
   const names = AM_NAMES.filter((n) => idOf.has(n) && !(switched && n === 'Reese'));
@@ -813,7 +835,7 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
     );
   }
   await ctx.db.batch(statements);
-  if (later || done === 0) return { ok: true, stage, id, date, signedUp: n };
+  if (later || (done === 0 && stage !== 'zip71_am')) return { ok: true, stage, id, date, signedUp: n };
   // The night's rows (as the first save writes them), then the rounds before now in, as Enter score and the other side's Yes write them.
   const night = americanoNight(locked, 2, 150, id);
   const nowIso = ctx.nowIso;
@@ -845,6 +867,16 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
             .prepare("UPDATE tournament_games SET claim = 'a', claim_by = ?, claim_at = ?, score_a = ?, score_b = ?, winner = ?, result_at = ?, result_by = 'players', updated_at = ? WHERE tournament_id = ? AND num = ?")
             .bind(g.a[0], when, sa, sb, aWins ? 'a' : 'b', when, when, id, g.num);
     });
+  // Zip 71: Vic's Round 1 score, entered a minute ago for his side (11 to 8), waiting for the other side's Yes.
+  const vicGame = stage === 'zip71_am' && vic ? night.games.find((g) => g.round === 1 && [...g.a, ...g.b].includes(vic)) : undefined;
+  if (vicGame) {
+    const side = vicGame.a.includes(vic!) ? 'a' : 'b';
+    scores.push(
+      ctx.db
+        .prepare('UPDATE tournament_games SET claim = ?, claim_by = ?, claim_at = ?, score_a = ?, score_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?')
+        .bind(side, vic, new Date(ctx.nowMs - 60_000).toISOString(), side === 'a' ? 11 : 8, side === 'a' ? 8 : 11, nowIso, id, vicGame.num),
+    );
+  }
   await ctx.db.batch([...rows, ...scores]);
   return { ok: true, stage, id, date, signedUp: n };
 }

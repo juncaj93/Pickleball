@@ -14,8 +14,10 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-/** Zip 48 sizes, gzipped (Sun Nov 15, 2026): script 136.6 KB, style 35.0 KB, page 0.9 KB. Budget = that plus about 3%. */
-export const BUDGET = { scriptKB: 141, styleKB: 36.5, pageKB: 1.5, totalKB: 177 };
+/** Zip 48 sizes, gzipped (Sun Nov 15, 2026): script 136.6 KB, style 35.0 KB, page 0.9 KB. Budget = that plus about 3%.
+ *  Zip 71 (Nov 20): script 141 -> 141.2 on purpose. Main sat 23 bytes under 141; the partner-taps line on game night and the one-banner fix
+ *  add 55 bytes gzipped to the player script (the wording itself stays on the server, shared/partnerTaps.ts). */
+export const BUDGET = { scriptKB: 141.2, styleKB: 36.5, pageKB: 1.5, totalKB: 177 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

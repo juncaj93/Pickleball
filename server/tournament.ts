@@ -920,10 +920,10 @@ export async function playerTournamentFor(
   // Zip 57: the teams and game day, once the organizer published the teams, while the style is Locked doubles (an Americano night has no teams).
   const dayView =
     statusOf(t2) === 'tickets' && t2.teams_at && t2.final_date && base.format === 'doubles'
-      ? playerDayView(t2, all, readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id), playerId, group.timezone, ctx.nowMs)
+      ? playerDayView(t2, all, readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id), playerId, group.timezone, ctx.nowMs, firstName(group))
       : // Zip 61: the Americano night, once tickets close on Americano, for a player in it (their rounds, the games now, the points table).
         statusOf(t2) === 'tickets' && t2.final_date && base.format === 'americano' && decided
-        ? playerRoundsView(t2, all, tickets, (readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id)).games, playerId, group.timezone, ctx.nowMs)
+        ? playerRoundsView(t2, all, tickets, (readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id)).games, playerId, group.timezone, ctx.nowMs, firstName(group))
         : null;
   return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf, readTickets ? pre?.freed : undefined), ...(dayView ? { day: dayView } : {}) };
 }

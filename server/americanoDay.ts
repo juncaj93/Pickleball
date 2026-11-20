@@ -18,6 +18,7 @@ import { newId } from './crypto';
 import * as v from './validate';
 import { audit } from './repo';
 import type { AdminRoundGame, AdminRoundsView, PlayerRound, PlayerRoundsView } from '../shared/tournament';
+import { saidScore, waitingLine } from '../shared/partnerTaps';
 import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
 import { americanoPlan, clockLabel, type GameTo, ROUND_MINUTES } from '../shared/tournamentPlan';
 import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournamentSchedule';
@@ -269,6 +270,7 @@ export function playerRoundsView(
   playerId: string,
   tz: string,
   nowMs: number,
+  org = 'the organizer',
 ): PlayerRoundsView | null {
   const f = amFacts(t, signups, tickets, rows, tz, nowMs);
   if (!f.roster.includes(playerId) && !f.gone.has(playerId)) return null;
@@ -307,6 +309,10 @@ export function playerRoundsView(
       ...(scored ? { won: mine! > theirs!, score: { mine: mine!, theirs: theirs! } } : {}),
       playTo: g.playTo,
       ...(g.claim === side && !g.winner && !g.skipped ? { claimed: true as const } : {}),
+      // Zip 71: the partner entered it: this phone shows the waiting line instead of Enter score.
+      ...(g.claim === side && !g.winner && !g.skipped && scored && g.claimBy && g.claimBy !== playerId
+        ? { waiting: waitingLine(saidScore(nameOf(f, g.claimBy), mine!, theirs!), pairNames(f, opp), org) }
+        : {}),
       ...(askMe
         ? { ask: { by: nameOf(f, g.claimBy ?? (g.claim === 'a' ? g.a[0] : g.b[0])), mine: mine!, theirs: theirs!, winners: pairNames(f, claimerFirst(mine! > theirs! ? (side === 'a' ? g.a : g.b) : opp, g.claimBy)).join(' + ') } }
         : {}),
@@ -537,6 +543,20 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   const run = (sql: string, ...values: unknown[]) =>
     ctx.db.prepare(`UPDATE tournament_games SET ${sql}, updated_at = ? WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`).bind(...values, ctx.nowIso, row!.id, stamp).run();
   const asAB = (mine: number, theirs: number): [number, number] => (side === 'a' ? [mine, theirs] : [theirs, mine]);
+  // Zip 71 (partner taps): the FIRST answer from a side counts. Once one player of a side entered the score (or said No, fix it), a second
+  // answer from that side is refused (the partner's phone shows "Vic entered 11 to 8. Waiting for Quinn, Reese or Alex to confirm."); only the
+  // one who answered may take it back. Either player on the other side says Yes or No, fix it; the organizer can always confirm or fix.
+  const org = firstName(who.group);
+  const waitWords = (x: AmGame) =>
+    waitingLine(saidScore(!x.claimBy ? 'Your side' : x.claimBy === playerId ? 'You' : nameOf(before, x.claimBy), x.scoreA ?? 0, x.scoreB ?? 0), pairNames(before, side === 'a' ? x.b : x.a), org);
+  if (!g.winner && g.claim === side) {
+    const mineClaim = !g.claimBy || g.claimBy === playerId;
+    if (action === 'score' && mineClaim && sent) {
+      const [x, y] = asAB(...sent);
+      if (x === g.scoreA && y === g.scoreB) return { ok: true, result: 'score' };
+    }
+    if (!(action === 'undo' && mineClaim)) bad('already_answered', waitWords(g));
+  }
   if (g.winner) {
     if (action === 'undo') return { ok: true, result: 'nothing' };
     // The same score again (both sides entered it): nothing to change.
@@ -555,10 +575,6 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
       // The other side already entered one: the same score is their Yes; another score waits for the screen to ask.
       if (x === g.scoreA && y === g.scoreB) res = await run("winner = ?, disputed_at = NULL, result_at = ?, result_by = 'players'", x > y ? 'a' : 'b', ctx.nowIso);
       else bad('already_claimed', `${nameOf(before, g.claimBy ?? '')} entered a score. Look again.`);
-    } else if (g.claim === side) {
-      // Our side already entered one (a partner): the same score changes nothing; another one is refused (the screen shows what is in).
-      if (x === g.scoreA && y === g.scoreB) return { ok: true, result: 'score' };
-      bad('already_claimed', `${nameOf(before, g.claimBy ?? '')} entered ${Math.max(g.scoreA ?? 0, g.scoreB ?? 0)} to ${Math.min(g.scoreA ?? 0, g.scoreB ?? 0)}. Look again.`);
     } else res = await run('claim = ?, claim_by = ?, claim_at = ?, score_a = ?, score_b = ?, disputed_at = NULL', side, playerId, ctx.nowIso, x, y);
     words = `${pairNames(before, x > y ? g.a : g.b).join(' + ')} won ${Math.max(x, y)} to ${Math.min(x, y)}`;
   } else if (action === 'confirm') {
@@ -578,7 +594,18 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
     res = await run('claim = NULL, claim_by = NULL, claim_at = NULL, score_a = NULL, score_b = NULL, disputed_at = NULL');
     words = 'took back their score';
   }
-  if ((res?.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
+  if ((res?.meta?.changes ?? 0) === 0) {
+    // Two phones at once: the other one landed first. When it was the partner, say so (the waiting line), not just "look again".
+    const nowRow = await ctx.db.prepare('SELECT * FROM tournament_games WHERE id = ?').bind(row!.id).first<GameRow>().catch(() => null);
+    const now = nowRow ? fromRow(nowRow) : null;
+    if (now && now.claim === side && !now.winner && !now.skipped && now.claimBy && now.claimBy !== playerId) bad('already_answered', waitWords(now));
+    // The same player on two phones at once, the same score: it is in.
+    if (now && action === 'score' && sent && now.claim === side && now.claimBy === playerId && !now.winner) {
+      const [x, y] = asAB(...sent);
+      if (x === now.scoreA && y === now.scoreB) return { ok: true, result: 'score' };
+    }
+    bad('tournament_changed', 'This just changed. Look again.');
+  }
   await logPlayer(ctx, who.group, playerId, 'tournament_result', { tournament: t.name, game: num, round: g.round, result: words, by: 'player' });
   return { ok: true, result: action };
 }

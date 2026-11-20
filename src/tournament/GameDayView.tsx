@@ -506,6 +506,15 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           </button>
         </section>
       )}
+      {/* Zip 71 (partner taps): a teammate answered first. No buttons for this game on this phone, only who said it and who can confirm. */}
+      {/* Zip 71: a teammate answered first, or both teams say they won: the line, and no buttons for that game. */}
+      {real.games
+        .filter((g) => g.waiting)
+        .map((g) => (
+          <p key={g.num} className="tc-gd-ask" role="status" data-tc-day-waiting>
+            {g.waiting}
+          </p>
+        ))}
       {tiePhase === 'tie' && tie && (
         <>
           {pools ? <PoolsCards day={day} /> : <StandingsCard day={day} />}
@@ -636,7 +645,7 @@ function UpNext({
       {g.opponent ? (
         <>
           <Matchup a={{ name: mine.name, players: mine.players }} b={g.opponent} big lit={lit} />
-          {g.onNow && (
+          {g.onNow && !(g.waiting && !lit) && (
             <div className={lit === 'mine' ? 'tc-gd-next-btns tc-gd-next-lit' : lit === 'theirs' ? 'tc-gd-next-btns tc-gd-next-lost' : 'tc-gd-next-btns'}>
               <button type="button" className="tc-gd-wewon" disabled={busy || !!lit} onClick={onWon} data-tc-day-wewon>
                 {lit === 'mine' ? '✓ Let’s go!' : 'We won'}
