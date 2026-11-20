@@ -328,10 +328,12 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     group: {
       name: group.name,
       timezone: group.timezone,
-      venmoUrl: group.venmo_url,
+      // Zip 70 (dry run fix 4): the organizer's Venmo link and Zelle number go only to a phone that has picked a name (a phone on "Who are you?"
+      // gets neither: it has nothing to pay yet).
+      venmoUrl: me ? group.venmo_url : null,
       organizerName: group.organizer_name,
       // The Apple Pay / Zelle number on the Pay sheet (Settings > Money).
-      ...(paySheetOn ? { zelleNumber: zelleNumberOf(group.settings_json) } : {}),
+      ...(paySheetOn && me ? { zelleNumber: zelleNumberOf(group.settings_json) } : {}),
       priceCents: settings.pricePerPlayerCents,
       // "Card cleanup" (Zip 10): no cap, so the screen's notes count to the database's 12 (capOf); off: the setting, as before.
       maxPlayers: capOf(settings),

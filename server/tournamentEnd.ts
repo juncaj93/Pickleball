@@ -38,7 +38,7 @@ import {
 } from '../shared/tournament';
 import { americanoOutcome } from './americanoDay';
 import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
-import { loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
+import { keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
 import { logPlayer, organizerOn, openById, styleDecided, type SignupRow, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
 import { organizerSignedIn } from './zip13';
 import { ADMIN_COOKIE } from './context';
@@ -295,7 +295,8 @@ export async function writeEnd(ctx: Ctx, group: GroupRow, t: EndRow, night: Awai
   const played = t.teams_at
     ? (x: string) => ` AND NOT EXISTS (SELECT 1 FROM tournament_teams tm WHERE tm.tournament_id = ${x}.tournament_id AND (tm.player_a = ${x}.player_id OR tm.player_b = ${x}.player_id))`
     : () => '';
-  const when = (x: string) => `(${x}.place <> 'spot' AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.end_key = ${sqlText(key)})${played(x)})`;
+  // Zip 70: a kept late drop's money stays with the night (never an unused hold).
+  const when = (x: string) => `(${x}.place <> 'spot' AND NOT ${keptOff(x)} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.end_key = ${sqlText(key)})${played(x)})`;
   const awards = plan.results.filter((r) => r.award && r.creditCents > 0);
   const statements = [
     ctx.db

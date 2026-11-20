@@ -372,10 +372,10 @@ describe('review fixes', () => {
 
 describe('part 8: the plan follows the players signed up', () => {
   const EIGHT = SIGNED.slice(0, 8);
-  it('8 signed up, 0 paid (before tickets open): a 10 player plan, 2 courts, 7:30 to 10 PM; Finalize says the same', async () => {
+  it('8 signed up, 0 paid (before tickets open): a 10 player plan; Zip 70: the Plan expects 8 (2 courts, 2 hours, 7:30 PM); Finalize fits 10', async () => {
     const ctx = await world({ signUp: EIGHT, finalize: false });
     const d = await dash(ctx);
-    expect([d.size, d.courts, d.minutes, d.start]).toEqual([10, 2, 150, 19 * 60 + 30]);
+    expect([d.size, d.expected, d.courts, d.minutes, d.start]).toEqual([10, 8, 2, 120, 19 * 60 + 30]);
     const f = (await ctx.organizer.call('GET', `/api/admin/tournament/${ctx.tid}/finalize?date=${DATE}`)).data;
     expect([f.fits, f.courts]).toEqual([10, 2]);
   });

@@ -234,9 +234,10 @@ async function main() {
     await a.page.locator('[data-tm-tickets]').waitFor({ timeout: 15000 });
     assert((await a.page.locator('[data-tm-open-tickets]').count()) === 0, 'no Open tickets button');
     // Zip 66 (mock 02): the open card's Plan row.
-    assert(flat(await a.page.locator('[data-tm-row="plan"]').innerText()) === '10 players · 2 courts · 2.5 hrs', 'the plan line');
-    // $120 court - 9 x $16 + $28 credits = $4.
-    assert(flat(await a.page.locator('[data-tm-row="cost"]').innerText()) === '$4', 'your cost if it fills');
+    // Zip 70: the Plan's expected players (the 8 who can make the date), and THE money line: 7 x $16 - $120 - $28 credits = -$36.
+    assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()) === '8 players · 2 courts · 2.5 hrs', 'the plan line');
+    assert(flat(await a.page.locator('[data-tm-money-label]').innerText()) === 'Your cost if it fills', 'the money label');
+    assert(flat(await a.page.locator('[data-tm-row-money]').innerText()) === '$36', 'your cost if it fills');
     assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/10', 'the Home line');
     await shot(a.page, 'A-admin-29');
     assert(a.errors.length === 0, a.errors.join(' | '));
@@ -565,7 +566,8 @@ async function main() {
     const words = flat(await card.innerText());
     // Zip 64 part 8: 9 can make the date: a 12 player plan. $120 - 11 x $16 + $28 = -$28; 6 paid now: $120 - $96 + $28 = $52.
     // Zip 66 (mock 03): the plan as pills ("12 players", "2 courts", "2.5 hrs") and one cost line "-$28 ($52 with 6 paid)".
-    assert(words.includes('12 players') && (await card.locator('[data-tm-plan]').getAttribute('data-tm-plan')) === '2 courts · 2.5 hours' && words.includes('Your cost if it fills -$28 ($52 with 6 paid)'), words);
+    // Zip 70: the Plan expects the 9 who can make the date: 8 x $16 - $120 - $28 = -$20 ("Your cost if it fills $20", red, no minus).
+    assert(words.includes('9 players') && (await card.locator('[data-tm-plan]').getAttribute('data-tm-plan')) === '2 courts · 2.5 hours' && words.includes('Your cost if it fills $20 ($52 with 6 paid)'), words);
     await shot(a.page, 'K-plan-8');
     await a.ctx.close();
     // 10 locked in: 12 players, 2 courts, 3 hours. With Booking hours off the plan says to turn it on.
@@ -577,8 +579,9 @@ async function main() {
       await b.page.locator('dialog[open] [data-tm-card="plan"]').waitFor({ timeout: 10000 });
       const w2 = flat(await b.page.locator('dialog[open] [data-tm-card="plan"]').innerText());
       // 10 locked in: 12 spots, 2 courts, the real 2.5 hours. $120 - 11 x $16 + $28 = -$28; 9 paid now: $120 - $144 + $28 = $4.
-      assert(w2.includes('12 players') && w2.includes('2.5 hrs') && w2.includes('Turn on Booking hours'), w2);
-      assert(w2.includes('Your cost if it fills -$28 ($4 with 9 paid)'), w2);
+      // Zip 70: 10 expected (all locked in): 9 x $16 - $120 - $28 = -$4.
+      assert(w2.includes('10 players') && w2.includes('2.5 hrs') && w2.includes('Turn on Booking hours'), w2);
+      assert(w2.includes('Your cost if it fills $4 ($4 with 9 paid)'), w2);
       await shot(b.page, 'K-plan-12-booking-off');
       await b.ctx.close();
     } finally {

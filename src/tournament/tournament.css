@@ -1587,6 +1587,15 @@ dialog.sheet.tc-tw-overlay {
 .tc-short .tc-time {
   margin-top: 6px;
 }
+/* Zip 70 (picture 5): the end under the start ("to 10 PM", "to 9:30 PM"), a little smaller and softer; never cut at 320. */
+.tc-time-end {
+  margin-top: 1px;
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  opacity: 0.86;
+}
 /* The tear line runs from under the notch down to the bar. */
 .tc-short .tc-stub::after {
   top: 10px;
@@ -1940,4 +1949,12 @@ dialog.sheet.tc-tw-overlay {
   .tc-wh-fill {
     transition: none;
   }
+}
+
+/* Zip 70: the late drop rule's two short lines in the Back out? sheet, each on its own line. */
+.tc-keep-note span {
+  display: block;
+}
+.tc-keep-note span + span {
+  margin-top: 4px;
 }

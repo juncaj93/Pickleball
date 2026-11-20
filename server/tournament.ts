@@ -48,7 +48,7 @@ import {
   NAME_MAX,
   NIGHT_END_MINUTES,
   NIGHT_START_MINUTES,
-  organizerCost,
+  suggestedPlan,
   prizeCentsOf,
   smartPlan,
   planCount,
@@ -60,14 +60,15 @@ import {
   type TournamentStatus,
   type Visibility,
 } from '../shared/tournament';
+import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, moneyLine, savedExpect, timeMoveWords } from '../shared/tournamentMoney';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
-import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, loadDay, playerDayView, teamsSqlFor, tiesFromJson } from './tournamentDay';
+import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, LIVE_BEFORE_MS, loadDay, playerDayView, teamsSqlFor, tiesFromJson } from './tournamentDay';
 import { adminRoundsView, americanoStarted, playerRoundsView } from './americanoDay';
 import { fitWords, nightPlan } from '../shared/tournamentPlan';
 import { adminEndView, type AwardsPre, awardsFrom, awardsReads } from './tournamentEnd';
-import { fillSpotsStatement, loadTickets, offList, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
+import { fillSpotsStatements, KEPT, keptOff, LATE_DROP_FLOOR, loadTickets, offListBack, organizerSeatStatement, sqlText, ticketBackStatements, ticketOf, ticketsSqlFor, type TicketWithName, tournamentCanceled } from './tournamentMoney';
 
 // Zip 55: TOURNAMENTS (shared/tournament.ts), piece 1. On for a request when:
 //  - its wrangler.toml var is not "off" (the kill switch, needs a deploy), and
@@ -144,6 +145,10 @@ export interface TournamentRow {
   teams_at?: string | null;
   court_numbers?: string | null;
   paused_at?: string | null;
+  /** Zip 70: the Plan's saved Expect number (task_log detail, read in the same statement as the row), when the screen's read carried it. */
+  expect_saved?: string | null;
+  /** Zip 70: the last time move players are told about (task_log detail, JSON), when the screen's read carried it. */
+  time_moved?: string | null;
 }
 
 export interface SignupRow {
@@ -177,6 +182,17 @@ const FIRST_LEVEL_SQL = (s: string) =>
  */
 const tiesJsonSql = (alias: string): string =>
   `(SELECT json_group_array(json_array(x.id, x.tie_key, x.kind, x.bye_seat, x.picks, x.game_a, x.game_b, x.spun_at, x.created_at)) FROM tournament_ties x WHERE x.tournament_id = ${alias}.id) AS ties_json`;
+
+/**
+ * Zip 70: two small per-tournament facts kept as one task_log row each (kind 'mark', no game), exactly how a hidden tournament is kept: no new
+ * table or column. 'tournament_expect:<id>' holds the Plan's saved Expect number in `detail`; 'tournament_time:<id>' holds the last time move
+ * players are told about (JSON: from start and minutes, to start and minutes). Read as a column of the tournament row's own statement (the
+ * task_log_once index), so no screen makes an extra trip.
+ */
+export const EXPECT_TASK = 'tournament_expect:';
+export const TIME_TASK = 'tournament_time:';
+const markDetailSql = (prefix: string, idRef: string) =>
+  `(SELECT h.detail FROM task_log h WHERE h.session_id IS NULL AND h.task = '${prefix}' || ${idRef} AND h.kind IN ('mark', 'sent') AND h.kind = 'mark' LIMIT 1)`;
 
 /** The stages a tournament is open in: piece 1's two, then piece 2's (Zip 56) tickets and rescheduled. Later pieces add theirs here. */
 const OPEN = "('signup', 'date_picked', 'tickets', 'rescheduled')";
@@ -233,7 +249,7 @@ const WAITING = 'EXISTS (SELECT 1 FROM tournament_tickets k WHERE k.tournament_i
 /** The organizer's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately, else one with an I paid waiting. */
 const SHOWN_WHERE = `group_id = ?1 AND (status IN ${OPEN} OR ${shownCanceled()} OR (status = 'canceled' AND ${WAITING}))
        ORDER BY CASE WHEN status = 'canceled' THEN 1 ELSE 0 END, created_at DESC, id LIMIT 1`;
-const SHOWN_SQL = `SELECT *, (status = 'canceled' AND ${WAITING}) AS claims_waiting, ${tiesJsonSql('tournaments')} FROM tournaments
+const SHOWN_SQL = `SELECT *, (status = 'canceled' AND ${WAITING}) AS claims_waiting, ${tiesJsonSql('tournaments')}, ${markDetailSql(EXPECT_TASK, 'tournaments.id')} AS expect_saved FROM tournaments
        WHERE ${SHOWN_WHERE}`;
 type ShownRow = TournamentRow & { claims_waiting: number; ties_json?: string };
 
@@ -274,7 +290,7 @@ type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string
 /** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately. */
 const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownCanceled('t.')})
        ORDER BY CASE WHEN t.status = 'canceled' THEN 1 ELSE 0 END, t.created_at DESC, t.id LIMIT 1`;
-const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')},
+const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')}, ${markDetailSql(TIME_TASK, 't.id')} AS time_moved,
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ?4 AND group_id = t.group_id) END AS viewer_name,
          CASE WHEN t.status = 'canceled' THEN (SELECT status FROM tournament_signups WHERE tournament_id = t.id AND player_id = ?4) ELSE NULL END AS my_signup
@@ -777,7 +793,7 @@ async function upgradeDatePicked(ctx: Ctx, group: GroupRow, t: TournamentRow, up
         .prepare("UPDATE tournaments SET status = 'tickets', pay_by = ?, updated_at = ? WHERE id = ? AND status = 'date_picked' AND final_date = ? AND visibility = ? AND ticket_cents = ?")
         .bind(payBy, ctx.nowIso, t.id, t.final_date, t.visibility, t.ticket_cents),
       ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
-      fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
+      ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso),
     ]);
     if ((res.meta?.changes ?? 0) !== 1) return t;
     // The same History line a date pick writes now.
@@ -870,6 +886,9 @@ export async function playerTournamentFor(
   const banner = decided ? styleBannerWords(t2.format_source) : null;
   const real = startSetOf(t) ? realTimes(t) : null;
   const alert = formatAlertFor(t2, group, playerId, ctx.nowMs, styleTbd);
+  // Zip 70 (picture 6): the organizer moved the time after Finalize: everyone on the list gets one card per change until they dismiss it.
+  const moved = mine && real && statusOf(t) === 'tickets' && !nightOver(t, group.timezone, ctx.nowMs) ? readTimeMove(t.time_moved) : null;
+  const movedWords = moved && moved.to.start === real!.start && moved.to.minutes === real!.minutes ? timeMoveWords(t.name, moved.from, moved.to) : null;
   const base: PlayerTournamentView = {
     id: t.id,
     name: t.name,
@@ -880,6 +899,7 @@ export async function playerTournamentFor(
     ...(real ? { startSet: true as const } : {}),
     ...(styleTbd ? { styleTbd: true as const } : {}),
     ...(banner ? { styleNote: { key: `style:${t.id}:${t2.format_source}:${playerId}`, text: banner } } : {}),
+    ...(movedWords ? { timeNote: { key: `time:${t.id}:${real!.start}-${real!.minutes}:${playerId}`, ...movedWords } } : {}),
     openDates: openDatesOf(t, todayKey(ctx.nowMs, group.timezone)),
     finalDate: shownDate(t),
     names: rows.map((r) => r.display_name),
@@ -931,6 +951,15 @@ async function playerTicketsView(
   // while one is open (the cap of 16); only with every spot taken are tickets closed for them then.
   const holding = !!own && (own.place === 'spot' || own.claim_cents > 0 || (own.place === 'line' && own.credit_cents + own.paid_cents >= own.price_cents));
   const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && lockedInCount(tickets) >= MAX_SPOTS))));
+  // Zip 70: Drop out closes 3 hours before the start; the late drop rule (the same test the back out runs in its statement, lateDropKeepsSql).
+  const dropClosed = statusOf(t) === 'tickets' && dropClosedAt(t, group.timezone, ctx.nowMs);
+  const ownLockedIn =
+    !!own &&
+    own.signup_status === 'in' &&
+    own.credit_cents + own.paid_cents + own.claim_cents > 0 &&
+    (own.place === 'spot' || (own.place !== 'line' && own.claim_cents > 0 && ticketOwed(money(own)) === 0));
+  const dropKeeps =
+    !dropClosed && statusOf(t) === 'tickets' && t.courts === 2 && !!t.pay_by && ctx.nowMs >= Date.parse(t.pay_by) && ownLockedIn && lockedInCount(tickets) <= LATE_DROP_FLOOR;
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at the cap (16, Zip 63).
     size: smartPlan(locked).size,
@@ -942,6 +971,8 @@ async function playerTicketsView(
     // (a player already on the waitlist, or with an I paid waiting, can still finish what they started).
     ...(closed ? { closed: true as const } : { closed: false as const }),
     started: statusOf(t) === 'tickets' && salesClosed(t, group.timezone, ctx.nowMs),
+    ...(dropClosed ? { dropClosed: true as const } : {}),
+    ...(dropKeeps ? { dropKeeps: true as const } : {}),
     freed,
     // Zip 63 (Alex, the trust rule): what players see as locked in is every spot AND every I paid for a spot that waits for the organizer, in the
     // order they paid (a spot by when it was taken, an I paid by when it was tapped). Players never see "waiting"; the organizer confirms or
@@ -992,7 +1023,8 @@ async function returnUnusedHolds(ctx: Ctx, group: GroupRow, t: TournamentRow, ti
   if (!night || ctx.nowMs < night.end) return tickets;
   // Zip 57 (Alex): a standby player who took over on a team during the night played for their hold: it never comes back as credit.
   const onTeam = new Set(t.teams_at ? (await loadDay(ctx.db, t.id)).teams.flatMap((x) => [x.player_a, x.player_b]).filter((x): x is string => !!x) : []);
-  const due = tickets.filter((k) => k.place !== 'spot' && k.claim_cents === 0 && (k.credit_cents > 0 || k.paid_cents > 0) && !onTeam.has(k.player_id));
+  // Zip 70: a kept late drop's money stays with the night (it paid for the second court); it never comes back as an unused hold.
+  const due = tickets.filter((k) => k.place !== 'spot' && k.claim_cents === 0 && (k.credit_cents > 0 || k.paid_cents > 0) && !onTeam.has(k.player_id) && k.signup_status !== KEPT);
   if (due.length === 0) return tickets;
   if (upkeep) upkeep.tried = true;
   const endIso = new Date(night.end).toISOString();
@@ -1000,7 +1032,7 @@ async function returnUnusedHolds(ctx: Ctx, group: GroupRow, t: TournamentRow, ti
     ? (x: string) => ` AND NOT EXISTS (SELECT 1 FROM tournament_teams tm WHERE tm.tournament_id = ${x}.tournament_id AND (tm.player_a = ${x}.player_id OR tm.player_b = ${x}.player_id))`
     : () => '';
   const when = (x: string) =>
-    `(${x}.place <> 'spot' AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets') AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)}${played(x)})`;
+    `(${x}.place <> 'spot' AND NOT ${keptOff(x)} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets') AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)}${played(x)})`;
   try {
     const res = await ctx.db.batch(ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId: null, why: 'unused', endedReason: 'canceled', nowIso: ctx.nowIso, when }));
     if ((res[2]?.meta?.changes ?? 0) > 0) {
@@ -1042,18 +1074,30 @@ export async function adminTournamentFor(
   // up before tickets open (nobody has paid yet), then from the larger of those who can make the picked date and those locked in.
   const locked = tickets.filter((k) => k.place === 'spot' && k.signup_status === 'in');
   const listed = rows.filter((r) => r.status === 'in');
-  const plan = smartPlan(
-    planCount({
-      signedUp: listed.length,
-      going: t.final_date ? listed.filter((r) => storedDays(r.dates).includes(t.final_date!)).length : listed.length,
-      locked: locked.length,
-      ticketsOpen: statusOf(t) === 'tickets',
-    }),
-  );
+  const count = planCount({
+    signedUp: listed.length,
+    going: t.final_date ? listed.filter((r) => storedDays(r.dates).includes(t.final_date!)).length : listed.length,
+    locked: locked.length,
+    ticketsOpen: statusOf(t) === 'tickets',
+  });
+  const plan = smartPlan(count);
   const paidNow = locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).length;
   const prize = prizeCentsOf(formatOf(ts), t.champion_credit_cents, t.second_credit_cents ?? 0);
+  // Zip 70: the Plan's expected players: the organizer's saved Expect number, else the site's suggestion (the real count above), never fewer
+  // than the players locked in, 6 to 16. Before the date is finalized the courts and hours are the table's suggestion for that many (the saved
+  // courts once the organizer saved a plan).
+  const savedN = savedExpect(shown.expect_saved);
+  const suggested = Math.min(EXPECT_MAX, Math.max(EXPECT_MIN, count));
+  const expected = expectedPlayers({ saved: savedN, suggested, locked: nIn });
+  const sug = suggestedPlan(expected);
   // Zip 57: once the date is finalized the plan line, the cost and the venue card use the courts the organizer chose there (and the real hours).
-  const courts = real ? (t.courts === 1 ? 1 : 2) : plan.courts;
+  const courts = real || savedN !== null ? (t.courts === 1 ? 1 : 2) : sug.courts;
+  const planMinutes = real ? real.minutes : sug.minutes;
+  // Zip 70: THE money line (shared/tournament.ts moneyLine) for the expected players: the card, the Time and Plan boxes and the Plan card.
+  const money = moneyLine({ expected, courts, minutes: planMinutes, ticketCents: t.ticket_cents, prizeCents: prize });
+  // Zip 70: Time and Plan can change until the night starts: the teams are published, or the night window opens (30 minutes before the start).
+  const changeOpen =
+    statusOf(t) !== 'canceled' && !nightOver(t, tz, ctx.nowMs) && !t.teams_at && !(real && t.final_date && ctx.nowMs >= startMsOf(t.final_date, real.start, tz) - LIVE_BEFORE_MS);
   const shownFormat: TournamentFormat = decided && !salesClosed(t, tz, ctx.nowMs) ? styleAtClose(formatOf(ts), nIn) : formatOf(ts);
   // Zip 57: the check when tickets close, with the players really locked in (amber): under 6, too tight, or a court no longer needed.
   let closeCheck: AdminTournamentView['closeCheck'] = null;
@@ -1109,11 +1153,20 @@ export async function adminTournamentFor(
     status: statusOf(t),
     visibility: t.visibility === 'all' ? 'all' : 'me',
     size: plan.size,
+    // Zip 70: the spots players see ("6 of 8"), the Plan's expected players and how they were set, and the money line for them.
+    spots: smartPlan(locked.length).size,
+    expected,
+    suggested,
+    expectSaved: savedN !== null,
+    money,
+    timeOpen: !!real && statusOf(t) === 'tickets' && changeOpen,
+    planOpen: changeOpen,
     courts,
-    minutes: real ? real.minutes : plan.minutes,
-    start: real ? real.start : plan.start,
-    // Zip 64: once the date is finalized the court bill follows the real hours ("Plays"); Zip 57: on the courts chosen there.
-    cost: { ...organizerCost(real ? { ...plan, courts, minutes: real.minutes } : plan, t.ticket_cents, prize, paidNow), paidNow },
+    minutes: planMinutes,
+    start: real ? real.start : sug.start,
+    // Zip 64: once the date is finalized the court bill follows the real hours ("Plays"); Zip 57: on the courts chosen there. Zip 70 (dry run
+    // fix 5): "if it fills" is the money line for the Plan's expected players, not the plan size.
+    cost: { courtCents: money.courtCents, ifFillsCents: -money.youCents, nowCents: money.courtCents - paidNow * t.ticket_cents + prize, paidNow },
     ...(real ? { chosenCourts: courts } : {}),
     closeCheck,
     ...(dayRows ? { day: adminDayView(ts, shownFormat, rows, tickets, dayRows, tz, ctx.nowMs) } : {}),
@@ -1492,6 +1545,125 @@ export async function switchBackStyle(ctx: Ctx) {
   return { ok: true, changed: true };
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 70 (🎾70.time): move the start or the end after Finalize, and the Plan (expected players and courts)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Zip 70: a stored time move ('tournament_time:<id>' detail): where the times were before the first move players were told about, and now. */
+export interface TimeMove {
+  from: { start: number; minutes: number };
+  to: { start: number; minutes: number };
+}
+export function readTimeMove(detail: string | null | undefined): TimeMove | null {
+  if (typeof detail !== 'string') return null;
+  try {
+    const j = JSON.parse(detail) as { fs?: unknown; fm?: unknown; ts?: unknown; tm?: unknown };
+    const ok = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x <= 1440;
+    if (!ok(j.fs) || !ok(j.fm) || !ok(j.ts) || !ok(j.tm)) return null;
+    return { from: { start: j.fs, minutes: j.fm }, to: { start: j.ts, minutes: j.tm } };
+  } catch {
+    return null;
+  }
+}
+
+/** Zip 70: the start, the end, or both can move until the teams are published or the night window opens (30 minutes before the start). */
+function changeClosed(t: TournamentRow, tz: string, nowMs: number): string | null {
+  if (t.teams_at) return 'The teams are published. The time and the plan stay.';
+  if (nightOver(t, tz, nowMs)) return 'The tournament night is over.';
+  if (t.final_date && startSetOf(t) && nowMs >= startMsOf(t.final_date, realTimes(t).start, tz) - LIVE_BEFORE_MS) return 'The night has started. The time and the plan stay.';
+  return null;
+}
+/** SQL: no game of the night has been written (Locked doubles publishes them; Americano writes them at the night's first save). */
+const NO_GAMES_SQL = 'NOT EXISTS (SELECT 1 FROM tournament_games g WHERE g.tournament_id = tournaments.id) AND teams_at IS NULL';
+
+/**
+ * PUT /api/admin/tournament/:id/time { start, minutes }: the Time box on the organizer's card (pictures 1 and 2). After Finalize the start and the end
+ * can move until the night starts. Everything that reads the real times follows by itself (the plan and fit line, the Time check, the 3 hour
+ * cutoff, the night on Home, the court cost, the venue card); Pay by does not move. Players on the list get one dismissible card per change
+ * ("The Cold Open now ends at 9:30 PM (was 10 PM)."), kept as one task_log row: "was" is the time before the first move they were told about.
+ */
+export async function moveTournamentTime(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await organizerOn(ctx);
+  const t = await openById(ctx, group);
+  const tz = group.timezone;
+  if (statusOf(t) !== 'tickets' || !t.final_date || !startSetOf(t)) throw new HttpError(409, 'not_finalized', 'Finalize the date first.');
+  const was = realTimes(t);
+  const ok = (x: unknown, lo: number, hi: number): x is number => typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi && x % 5 === 0;
+  if (!ok(body.start, 6 * 60, 23 * 60) || !ok(body.minutes, 60, 360) || (body.start as number) + (body.minutes as number) > 24 * 60) {
+    bad('invalid_plays', 'Pick a start and an end on the same night, 1 to 6 hours apart.');
+  }
+  const next = { start: body.start as number, minutes: body.minutes as number };
+  if (next.start === was.start && next.minutes === was.minutes) return { ok: true, changed: false, ...next };
+  const closed = changeClosed(t, tz, ctx.nowMs);
+  if (closed) throw new HttpError(409, 'time_locked', closed);
+  const newStart = startMsOf(t.final_date, next.start, tz);
+  if (ctx.nowMs >= newStart - LIVE_BEFORE_MS) bad('too_soon', 'That start is too soon. Pick a later one.');
+  // Pay by never moves by itself: a start that would close tickets (3 hours before it) before Pay by asks for Pay by first.
+  if (t.pay_by && Date.parse(t.pay_by) > ctx.nowMs && Date.parse(t.pay_by) > salesCutoffMs(newStart)) {
+    throw new HttpError(409, 'pay_by_late', `Pay by is ${payByLabel(t.pay_by, tz, t.final_date)}, less than 3 hours before that start. Move Pay by first.`);
+  }
+  // "was" stays the time players were first told (the record's own "from"), so a second move still says the time they knew.
+  const prior = readTimeMove(
+    (await ctx.db
+      .prepare("SELECT detail FROM task_log WHERE session_id IS NULL AND task = ? AND kind IN ('mark', 'sent') AND kind = 'mark' LIMIT 1")
+      .bind(TIME_TASK + t.id)
+      .first<{ detail: string | null }>()
+      .catch(() => null))?.detail,
+  );
+  const from = prior ? prior.from : was;
+  const same = from.start === next.start && from.minutes === next.minutes;
+  const landed = `EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND start_minutes = ${next.start} AND minutes = ${next.minutes} AND updated_at = ?)`;
+  const res = await ctx.db.batch([
+    ctx.db
+      .prepare(
+        `UPDATE tournaments SET start_minutes = ?, minutes = ?, updated_at = ? WHERE id = ? AND status = 'tickets' AND final_date = ? AND start_minutes = ? AND minutes = ?
+           AND ${NO_GAMES_SQL}`,
+      )
+      .bind(next.start, next.minutes, ctx.nowIso, t.id, t.final_date, was.start, was.minutes),
+    ctx.db.prepare(`DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark' AND ${landed}`).bind(group.id, TIME_TASK + t.id, t.id, ctx.nowIso),
+    // Back to the time players were told first: no card (nothing changed for them).
+    ...(same
+      ? []
+      : [
+          ctx.db
+            .prepare(`INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) SELECT ?, ?, NULL, ?, 'mark', ?, ? WHERE ${landed}`)
+            .bind(newId(), group.id, TIME_TASK + t.id, JSON.stringify({ fs: from.start, fm: from.minutes, ts: next.start, tm: next.minutes }), ctx.nowIso, t.id, ctx.nowIso),
+        ]),
+  ]);
+  changedOrLookAgain(res[0]);
+  await audit(ctx.db, group.id, null, 'tournament_time', { tournament: t.name, from: planRange(was.start, was.minutes), to: planRange(next.start, next.minutes) }, ctx.nowIso);
+  return { ok: true, changed: true, ...next };
+}
+
+/**
+ * PUT /api/admin/tournament/:id/plan { expected, courts }: the Plan box (picture 7). Expect (6 to 16, never fewer than the players locked in) is
+ * kept as one task_log row; the courts are the night's real courts (the tournament's existing courts field). The site keeps suggesting the number
+ * on its own until a number is saved. Until the night starts (the same moment as the Time box).
+ */
+export async function saveTournamentPlan(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await organizerOn(ctx);
+  const t = await openById(ctx, group);
+  const n = body.expected;
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < EXPECT_MIN || n > EXPECT_MAX) bad('invalid_expected', `Pick ${EXPECT_MIN} to ${EXPECT_MAX} players.`);
+  if (body.courts !== 1 && body.courts !== 2) bad('invalid_courts', 'Pick 1 or 2 courts.');
+  const courts = body.courts as 1 | 2;
+  const closed = changeClosed(t, group.timezone, ctx.nowMs);
+  if (closed) throw new HttpError(409, 'plan_locked', closed);
+  const locked = ticketsEverOpened(t) ? lockedInCount(await loadTickets(ctx.db, t.id)) : 0;
+  if ((n as number) < locked) throw new HttpError(409, 'expect_below_locked', `${locked} are locked in. Expect at least ${locked}.`);
+  const landed = `EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND courts = ${courts} AND updated_at = ?)`;
+  const res = await ctx.db.batch([
+    ctx.db.prepare(`UPDATE tournaments SET courts = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD} AND ${NO_GAMES_SQL}`).bind(courts, ctx.nowIso, t.id),
+    ctx.db.prepare(`DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark' AND ${landed}`).bind(group.id, EXPECT_TASK + t.id, t.id, ctx.nowIso),
+    ctx.db
+      .prepare(`INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) SELECT ?, ?, NULL, ?, 'mark', ?, ? WHERE ${landed}`)
+      .bind(newId(), group.id, EXPECT_TASK + t.id, String(n), ctx.nowIso, t.id, ctx.nowIso),
+  ]);
+  changedOrLookAgain(res[0]);
+  await audit(ctx.db, group.id, null, 'tournament_plan', { tournament: t.name, expected: n, courts }, ctx.nowIso);
+  return { ok: true, expected: n, courts };
+}
+
 /** PUT /api/admin/tournament/:id/level { playerId, level }: the organizer's level for one player (kept in the level history too). */
 export async function setTournamentLevel(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
@@ -1674,7 +1846,7 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
       )
       .bind(date, ctx.nowIso, payBy, ctx.nowIso, setFormat, setSource, ticketCents, t.id, date, t.format_source ?? null, t.ticket_cents, decided?.stamp ?? null, decided?.stamp ?? null),
     ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
-    fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
+    ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso),
   ]);
   changedOrLookAgain(res[0]);
   await audit(ctx.db, group.id, null, 'tournament_date', { tournament: t.name, date: dayLong(date as string), day: date }, ctx.nowIso);
@@ -1827,7 +1999,7 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
       .bind(newId(), t.id, playerId, level, JSON.stringify(dates), ctx.nowIso, ...unchangedValues(t), vote),
     // Zip 56: the organizer signing up while tickets are open takes their own $0 seat at once (a spot if one is open, else first paid in line).
     ...(statusOf(t) === 'tickets' && playerId === (await organizerIdOf(ctx.db, who.group))
-      ? [organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]
+      ? [organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), ...fillSpotsStatements(ctx.db, who.group.id, t.id, ctx.nowIso)]
       : []),
   ]);
   changedOrLookAgain(listRow);
@@ -1874,26 +2046,40 @@ export async function playerTournamentBackOut(ctx: Ctx, who: TournamentActor, bo
   const k = ticketsEverOpened(t) ? await ticketOf(ctx.db, t.id, playerId) : null;
   const holds = !!k && (k.place === 'spot' || k.credit_cents + k.paid_cents + k.claim_cents > 0);
   if (holds && salesClosed(t, who.group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', `The tournament has started. Ask ${firstName(who.group)}.`);
+  // Zip 70 (Alex): Drop out closes 3 hours before the start (the moment tickets close). After that players text the organizer, who uses Player left.
+  if (statusOf(t) === 'tickets' && dropClosedAt(t, who.group.timezone, ctx.nowMs)) {
+    throw new HttpError(409, 'drop_closed', `Drop out has closed. Text ${firstName(who.group)}.`);
+  }
   if (body.backCents !== undefined) {
     const shown = v.cents(body.backCents, 'backCents') ?? 0;
     if (shown !== (k ? k.credit_cents + k.paid_cents + k.claim_cents : 0)) throw new HttpError(409, 'amount_changed', 'Your ticket just changed. Look again.');
   }
   // The money-back statements always run (they do nothing without a ticket): a Lock that lands between the read above and this batch still has
   // its money come back (review, Zip 56). Never after a Cancel: that already gave every ticket back.
+  // Zip 70 (Alex, the late drop rule): after Pay by, a drop that takes the number locked in below 8 on a 2 court night gives no credit back
+  // (the sign-up becomes 'kept': off the list, the money stays on the ticket) until the spots are back to 8. Worked out IN the statement from the
+  // rows as they are when it lands (lateDropKeepsSql), so two taps or a join landing at the same moment can never both win.
   const res = await ctx.db.batch([
     ctx.db
       .prepare(
-        "UPDATE tournament_signups SET status = 'out', backed_out_at = ?, updated_at = ? WHERE id = ? AND status = 'in' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND status <> 'canceled')",
+        `UPDATE tournament_signups SET status = CASE WHEN ${lateDropKeepsSql(t.id, playerId, ctx.nowIso)} THEN '${KEPT}' ELSE 'out' END, backed_out_at = ?, updated_at = ?
+         WHERE id = ? AND status = 'in' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND status <> 'canceled')`,
       )
       .bind(ctx.nowIso, ctx.nowIso, before.id, t.id),
     ...(ticketsEverOpened(t)
       ? [
-          ...ticketBackStatements(ctx.db, { groupId: who.group.id, tournamentId: t.id, playerId, why: 'back', endedReason: 'dropped', nowIso: ctx.nowIso, when: offList }),
-          fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
+          ...ticketBackStatements(ctx.db, { groupId: who.group.id, tournamentId: t.id, playerId, why: 'back', endedReason: 'dropped', nowIso: ctx.nowIso, when: offListBack }),
+          // A kept ticket keeps its money but gives up its spot (or place in line), so the spot is open for someone else.
+          ctx.db
+            .prepare(`UPDATE tournament_tickets SET place = 'none', place_at = NULL, updated_at = ?1 WHERE tournament_id = ?2 AND player_id = ?3 AND place <> 'none' AND ${keptOff('tournament_tickets')}`)
+            .bind(ctx.nowIso, t.id, playerId),
+          ...fillSpotsStatements(ctx.db, who.group.id, t.id, ctx.nowIso),
         ]
       : []),
   ]);
   if ((res[0].meta?.changes ?? 0) === 0) return { ok: true, result: 'not_signed_up' };
+  // Kept, and not released by a paid standby taking the spot in this same batch: no credit back now.
+  const keptNow = ticketsEverOpened(t) ? await keptCents(ctx.db, t.id, playerId) : 0;
   // What this very batch moved (the ledger rows it wrote at this moment), and what waits for the organizer's answer to an I paid.
   const moved = ticketsEverOpened(t) ? await movedBack(ctx.db, t.id, playerId, 'back', 'dropped', ctx.nowIso) : { cash: 0, credit: 0, waiting: 0 };
   const { waiting, cash, credit } = moved;
@@ -1902,10 +2088,45 @@ export async function playerTournamentBackOut(ctx: Ctx, who: TournamentActor, bo
     tournamentId: t.id,
     ...(heldSpotSincePayBy(t, k) ? { freedSpot: true } : {}),
     ...(cash + credit > 0 ? { amountCents: cash + credit } : {}),
-    ...(waiting ? { waitingCents: waiting } : {}),
+    ...(waiting && !keptNow ? { waitingCents: waiting } : {}),
+    ...(keptNow ? { keptCents: keptNow } : {}),
   });
   // creditBackCents: cash that became credit; creditReturnedCents: credit that went back; waitingCents: held until the organizer answers an I paid.
+  // Zip 70: keptCents: kept by the late drop rule (comes back as credit if the spots are back to 8).
+  if (keptNow) return { ok: true, result: 'backed_out', creditBackCents: 0, creditReturnedCents: 0, waitingCents: 0, keptCents: keptNow };
   return { ok: true, result: 'backed_out', creditBackCents: cash, creditReturnedCents: credit, waitingCents: waiting };
+}
+
+/** Zip 70: Drop out has closed: 3 hours before the real start (the moment tickets close), or the night has started. */
+export function dropClosedAt(t: TournamentRow, tz: string, nowMs: number): boolean {
+  if (!t.final_date) return false;
+  return nowMs >= salesCutoffMs(startMsOf(t.final_date, realTimes(t).start, tz));
+}
+
+/**
+ * Zip 70: SQL, true when THIS drop keeps the dropper's money (the late drop rule): the tournament has tickets open on 2 courts and Pay by has
+ * passed; the dropper is locked in (a spot, or an I paid for the whole ticket waiting) and has money on the ticket; and the number locked in,
+ * the dropper included, is 8 or fewer (so the drop takes it below 8). Read inside the statement that takes them off the list.
+ */
+export function lateDropKeepsSql(tournamentId: string, playerId: string, nowIso: string): string {
+  const t = sqlText(tournamentId);
+  return `(EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${t} AND tt.status = 'tickets' AND tt.courts = 2 AND tt.pay_by IS NOT NULL AND tt.pay_by <= ${sqlText(nowIso)})
+    AND EXISTS (SELECT 1 FROM tournament_tickets kk WHERE kk.tournament_id = ${t} AND kk.player_id = ${sqlText(playerId)}
+      AND kk.credit_cents + kk.paid_cents + kk.claim_cents > 0
+      AND (kk.place = 'spot' OR (kk.place <> 'line' AND kk.claim_cents > 0 AND kk.credit_cents + kk.paid_cents + kk.claim_cents >= kk.price_cents)))
+    AND ${lockedInSql(t)} <= ${LATE_DROP_FLOOR})`;
+}
+
+/** Zip 70: the money a kept late drop holds now (0 when they are not kept, or it already came back). */
+async function keptCents(db: D1Database, tournamentId: string, playerId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT k.credit_cents + k.paid_cents + k.claim_cents AS c FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id
+       WHERE k.tournament_id = ? AND k.player_id = ? AND s.status = '${KEPT}'`,
+    )
+    .bind(tournamentId, playerId)
+    .first<{ c: number }>();
+  return Number(row?.c ?? 0);
 }
 
 /**

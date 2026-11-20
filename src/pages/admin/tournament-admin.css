@@ -1390,3 +1390,119 @@ a.tm-hc-copy {
     color: #f0b54a;
   }
 }
+
+/* ---------- Zip 70 (🎾70.time): the money row, the Time and Plan boxes (pictures 1, 2, 3 and 7) ---------- */
+/* "+$6" in green when the organizer makes money; "$30" in red (no minus) when it costs them. */
+.tm-money-up {
+  color: var(--ok-fg);
+}
+.tm-money-down {
+  color: var(--danger-fg);
+}
+.tm-hc-rows .tm-row b.tm-money-up,
+.tm-hc-rows .tm-row b.tm-money-down {
+  font-weight: 800;
+}
+/* "Courts $96 · Tickets $126 · You +$30": gray words, the amounts in the ink color, the last one green or red. */
+.tm-money-line {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+.tm-ml-pair {
+  white-space: nowrap;
+}
+.tm-money-line b {
+  font-weight: 750;
+  color: var(--ink);
+}
+.tm-money-line b.tm-money-up {
+  color: var(--ok-fg);
+}
+.tm-money-line b.tm-money-down {
+  color: var(--danger-fg);
+}
+/* The box under Time or Plan: the pickers (or Expect and Courts), the fit line, the money line, Save. */
+.tm-hc-box.tm-hc-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+.tm-hc-edit .tm-fin-fit,
+.tm-hc-edit .tm-money-line {
+  margin: 0;
+}
+/* Zip 70: the fit line never leaves one word alone on its last line. */
+.tm-fin-fit {
+  text-wrap: pretty;
+}
+.tm-hc-times {
+  flex-wrap: nowrap;
+}
+.tm-hc-edit .tm-select.tm-fin-box {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.tm-hc-save {
+  margin-top: 4px;
+  min-height: 46px;
+}
+.tm-hc-plan-row {
+  padding: 2px 0;
+}
+.tm-hc-edit .tm-hc-plan-row + .tm-hc-plan-row {
+  border-top: 0;
+}
+/* Expect: a round - and + with the number between them. */
+.tm-step {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tm-step-btn {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+  -webkit-tap-highlight-color: transparent;
+}
+.tm-step-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tm-step-btn:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+:root[data-theme='dark'] .tm-step-btn {
+  background: var(--line-strong);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tm-step-btn {
+    background: var(--line-strong);
+  }
+}
+.tm-step-n {
+  min-width: 2.2ch;
+  font-family: var(--display);
+  font-size: 1.3rem;
+  font-weight: 750;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 339px) {
+  .tm-money-line {
+    font-size: 0.88rem;
+  }
+}

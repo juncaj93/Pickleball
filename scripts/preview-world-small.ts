@@ -717,10 +717,13 @@ export async function buildSmallPreview(
       // Vic, Enter score. Zip 57's game night is one tap away on the Tournament test page.
       // Zip 58 (🎾58.tourney4): the calm start is a three-way tie for the final (Kitchen Crew 3-0, the others 1-2 in a circle): organizer Home
       // shows the wheel; one tap spins it. The other stages (Final, End tournament, Tournament ended, History) are one tap away.
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'tie3' });
+      // Zip 70 (🎾70.time): the calm start is The Cold Open as it is on live (Locked doubles, $18, credits $0, 2 courts, 7:30 to 10:00 PM, a
+      // Tuesday a week or more out): 6 locked in of 8, Vic and Zoe unpaid. Organizer Home: open the card, tap Time or Plan. Zip 58's tie is one tap away.
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip70_start' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
+    summary.push('Zip 70 (on, the calm start): "The Cold Open" as on live, Locked doubles, $18, credits $0, Tue 7:30 to 10 PM on 2 courts, 6 locked in of 8 (Vic and Zoe unpaid), Reese on the list without the date. Organizer Home: the card with Time and Plan (You make if it fills +$6). The Tournament test page has the loss, the moved time, the late drop and Finalize for 9');
     summary.push('Zip 58 (on): "The Cold Open", Locked doubles, the four teams, tonight, every pool game in: Kitchen Crew 3-0, Net Ninjas, Third Shot Gang and Dill With It tied 1-2 in a circle (the wheel on organizer Home). The Tournament test page has Final, Final done, Tournament ended, History and Americano: last round in');
     summary.push('Zip 61 Americano (one tap away): "The Cold Open", Americano, all 10 names locked in, tonight at Round 3 (rounds 1 and 2 in, the other court\'s Round 2 score still waiting for a Yes), courts 1 and 2; View as Vic: Enter score. The Tournament test page has every Americano stage and zip 57\'s');
     summary.push('Zip 57 game day (one tap away): "The Cold Open", Locked doubles, 8 locked in (Net Ninjas Vic and Wren, Dill With It Sage and Christopher, Kitchen Crew Rowan and Zoe, Third Shot Gang Parker and Quinn), tonight, started 10 minutes before the seed, courts 1 and 2; organizer Home: Draft teams. The Tournament test page puts it back to tonight (Game night, no teams yet) or any other stage');

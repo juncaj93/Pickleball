@@ -162,11 +162,14 @@ export const about = (mins: number): number => Math.round(mins / 5) * 5;
 export const clockLabel = clock;
 
 /**
- * The Finalize line (mocks 60 and 61), and the same check when tickets close. Fits: "Fits 12 players. Pool games to 9, done about 9:30 PM."
- * (pools; "Games to 11" otherwise) in the accent color. Not: "Too tight for 12 players on 1 court. Use 2 courts or add court time." in amber.
+ * The Finalize line (mocks 60 and 61), and the same check when tickets close. Zip 70: "Locked doubles for 12: pool games to 9, done about
+ * 9:30 PM." ("games to 11" when there are no pools) in the accent color. Not: "Locked doubles for 12: too tight on 1 court. Use 2 courts or add
+ * court time." in amber.
  */
 export function fitWords(p: NightPlan, start: number): { fits: boolean; text: string } {
-  if (!p.fits) return { fits: false, text: `Too tight for ${p.players} players on ${p.courts} ${p.courts === 1 ? 'court' : 'courts'}. Use 2 courts or add court time.` };
-  const what = p.doubles?.shape === 'pools' ? 'Pool games' : 'Games';
-  return { fits: true, text: `Fits ${p.players} players. ${what} to ${p.gameTo}, done about ${clock(about(start + p.minutesUsed))}.` };
+  // Zip 70: the line names the style that will really be played (an odd count is Americano): "Americano for 9: games to 11, done about 9:50 PM."
+  const who = `${p.style === 'americano' ? 'Americano' : 'Locked doubles'} for ${p.players}`;
+  if (!p.fits) return { fits: false, text: `${who}: too tight on ${p.courts} ${p.courts === 1 ? 'court' : 'courts'}. Use 2 courts or add court time.` };
+  const what = p.doubles?.shape === 'pools' ? 'pool games' : 'games';
+  return { fits: true, text: `${who}: ${what} to ${p.gameTo}, done about ${clock(about(start + p.minutesUsed))}.` };
 }

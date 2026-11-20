@@ -567,12 +567,12 @@ async function main() {
       await a.page.waitForTimeout(400);
       await SH(a.page, `F-fits-420-${scheme}`);
       const fit = flat(await a.page.locator('[data-tm-fin-fit]').innerText());
-      assert(fit.startsWith('Fits 8 players.'), fit);
+      assert(fit.startsWith('Locked doubles for 8:'), fit);
       await a.page.locator('[data-tm-fin-courts="1"]').click();
       await a.page.locator('[data-tm-fin-end]').selectOption(String(19 * 60 + 30 + 60));
       await a.page.waitForTimeout(200);
       const tight = flat(await a.page.locator('[data-tm-fin-fit]').innerText());
-      assert(tight === 'Too tight for 8 players on 1 court. Use 2 courts or add court time.', tight);
+      assert(tight === 'Locked doubles for 8: too tight on 1 court. Use 2 courts or add court time.', tight);
       await SH(a.page, `F-tight-420-${scheme}`);
       const go = await a.page.locator('[data-tm-finalize-go]').boundingBox();
       assert(go && go.y + go.height <= 912, `Finalize date on one screen: ${JSON.stringify(go)}`);

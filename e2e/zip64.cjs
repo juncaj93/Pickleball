@@ -416,7 +416,7 @@ async function main() {
         assert(/8 can play/.test(text), text.slice(0, 120));
         // Part 8: the plan line, the same count as the organizer's card (8 can play: a 10 player plan).
         // Zip 57: the plan line became the Fits / Too tight line under the rows (mocks 60 and 61).
-        assert(/^Fits 8 players\. /.test(flat(await sheet.locator('[data-tm-fin-fit]').innerText())), await sheet.locator('[data-tm-fin-fit]').innerText());
+        assert(/^(Locked doubles|Americano) for 8: /.test(flat(await sheet.locator('[data-tm-fin-fit]').innerText())), await sheet.locator('[data-tm-fin-fit]').innerText());
         assert(/STYLE|Style/.test(text) && /Auto/.test(text) && /Doubles/.test(text) && /Americano/.test(text), 'the three styles');
         assert(/Votes: Doubles 3 · Americano 2 · Either 3/.test(text), `votes: ${text}`);
         assert(!/plan fits|Nobody picked|Ticket price/.test(text), 'removed lines');
@@ -472,15 +472,15 @@ async function main() {
 
   // ---------------------------------------------------------------- J  part 8: the plan follows the players signed up
   for (const scheme of SCHEMES)
-    await check(`J part 8 (${scheme}): 8 signed up, nobody paid: the organizer's card says "Plan: 10 players · 2 courts · 2.5 hours"`, async () => {
+    await check(`J part 8 (${scheme}): 8 signed up, nobody paid: Zip 70: the card's Plan expects the 8 (2 courts, 2 hours, the table's suggestion)`, async () => {
       await stage('zip64_start');
       const t = (await dash()).tournament;
-      assert(t.signups.length === 8 && t.size === 10 && t.courts === 2 && t.minutes === 150, JSON.stringify([t.signups.length, t.size, t.courts, t.minutes]));
+      assert(t.signups.length === 8 && t.size === 10 && t.expected === 8 && t.courts === 2 && t.minutes === 120, JSON.stringify([t.signups.length, t.size, t.expected, t.courts, t.minutes]));
       const a = await adminPage({ width: 390, scheme });
       const card = a.page.locator('[data-tm-home]');
       await card.waitFor({ timeout: 15000 });
-      // Zip 66 (mock 02): the open card's Plan row, "10 players · 2 courts · 2.5 hrs".
-      assert(/Plan 10 players · 2 courts · 2\.5 hrs/.test(flat(await card.innerText())), flat(await card.innerText()));
+      // Zip 66 (mock 02): the open card's Plan row; Zip 70: the expected players, "8 players · 2 courts · 2 hrs".
+      assert(/Plan 8 players · 2 courts · 2 hrs/.test(flat(await card.innerText())), flat(await card.innerText()));
       await shot(a.page, `J-plan-${scheme}`);
       await a.ctx.close();
     });

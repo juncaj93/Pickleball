@@ -36,7 +36,9 @@ import {
   DEFAULT_SECOND_CREDIT_CENTS,
   MAX_SPOTS,
   type TournamentSignupView,
+  prizeCentsOf,
 } from '../../../shared/tournament';
+import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, type MoneyLine, moneyLine, moneyRowLabel } from '../../../shared/tournamentMoney';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { evensWarning, payByAt, payByDays, payByLabel, payByParts, salesCutoffMs, startMsOf, tournamentRemindText } from '../../../shared/tournamentTickets';
 import { siteAddress, smsHref } from '../../../shared/messages';
@@ -88,7 +90,7 @@ const statusLine = (t: AdminTournamentView) =>
   t.status === 'canceled'
     ? 'Canceled'
     : t.status === 'tickets' && t.finalDate
-      ? `${dayLong(t.finalDate)} · ${lockedOf(t).length} of ${t.size} locked in`
+      ? `${dayLong(t.finalDate)} · ${lockedOf(t).length} of ${t.spots ?? t.size} locked in`
       : t.status === 'date_picked' && t.finalDate
         ? `${dayLong(t.finalDate)} · ${t.signups.length} signed up`
         : t.status === 'rescheduled'
@@ -184,7 +186,170 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
 /** Zip 66: "Doubles 2 · Americano 0 · Either 6" (the card's Votes row; Doubles, not Locked). */
 const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Doubles ${v.locked} · Americano ${v.americano} · Either ${v.either}`;
 /** Zip 66: "6 players · 1 court · 2.5 hrs" (the card's Plan row). */
-const planShort = (t: AdminTournamentView) => `${t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
+// Zip 70: the Plan's expected players (the saved Expect number, else the site's suggestion), not the plan size.
+const planShort = (t: AdminTournamentView) => `${t.expected ?? t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
+
+/** Zip 70: the winners' credits now set, as the server's money line counted them (Tickets minus Courts minus You). */
+const prizeOf = (t: AdminTournamentView) => (t.money ? t.money.ticketsCents - t.money.courtCents - t.money.youCents : 0);
+
+/** Zip 70 (pictures 1 and 3): "+$6" in green when the organizer makes money, "$30" in red (no minus) when it costs them. */
+function MoneyValue({ cents, data }: { cents: number; data?: string }) {
+  return (
+    <b className={cents >= 0 ? 'tm-money-up' : 'tm-money-down'} {...(data ? { [data]: cents >= 0 ? 'up' : 'down' } : {})}>
+      {cents >= 0 ? `+${formatPrice(cents)}` : formatPrice(-cents)}
+    </b>
+  );
+}
+
+/** Zip 70 (pictures 2, 4 and 7): "Courts $96 · Tickets $126 · You +$30" (or "Your cost $30" in red), from THE money line. */
+function MoneyLineText({ m }: { m: MoneyLine }) {
+  return (
+    <p className="tm-money-line" data-tm-money-line={`${m.courtCents}/${m.ticketsCents}/${m.youCents}`}>
+      {/* Each word stays with its amount on a narrow phone. */}
+      <span className="tm-ml-pair">
+        Courts <b>{formatPrice(m.courtCents)}</b>
+      </span>{' '}
+      · <span className="tm-ml-pair">
+        Tickets <b>{formatPrice(m.ticketsCents)}</b>
+      </span>{' '}
+      · <span className="tm-ml-pair">
+        {m.youCents >= 0 ? 'You' : 'Your cost'} <MoneyValue cents={m.youCents} />
+      </span>
+    </p>
+  );
+}
+
+/** Zip 70: the fit line for a count, courts and hours, naming the style really played (an odd count is Americano). */
+function FitLine({ n, courts, minutes, start, format }: { n: number; courts: number; minutes: number; start: number; format: TournamentFormat }) {
+  const fit = fitWords(nightPlan(n, courts, minutes, format), start);
+  return (
+    <p className={fit.fits ? 'tm-fin-fit' : 'tm-fin-fit tm-fin-tight'} role="status" data-tm-box-fit={fit.fits ? 'fits' : 'tight'}>
+      {fit.text}
+    </p>
+  );
+}
+
+/**
+ * Zip 70 (picture 2): tap Time: the start and the end (the Finalize pickers' steps), the fit line and the money line as they change, Save.
+ * Everything that depends on the time follows on the server; the "Call the venue" card shows again with the new times.
+ */
+function TimeBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; onDone: () => void }) {
+  const { busy, save } = useSave(ctx);
+  const [start, setStart] = useState(t.start);
+  const [end, setEnd] = useState(t.start + t.minutes);
+  const starts = PLAY_STARTS.includes(start) ? PLAY_STARTS : [...PLAY_STARTS, start].sort((a, b) => a - b);
+  const ends = playEnds(start, end);
+  const n = t.expected ?? t.size;
+  const m = moneyLine({ expected: n, courts: t.courts, minutes: end - start, ticketCents: t.ticketCents, prizeCents: prizeOf(t) });
+  return (
+    <div className="tm-hc-box tm-hc-edit" data-tm-time-box>
+      <span className="tm-fin-boxes tm-hc-times" role="group" aria-label="Time">
+        <select
+          className="tm-select tm-fin-box"
+          aria-label="Start"
+          value={start}
+          disabled={busy}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            // Keep the length when the start moves (never past midnight), as on Finalize.
+            setEnd(Math.min(next + (end - start), 24 * 60, next + 360));
+            setStart(next);
+          }}
+          data-tm-time-start
+        >
+          {starts.map((x) => (
+            <option key={x} value={x}>
+              {timeWords(x)}
+            </option>
+          ))}
+        </select>
+        <span className="tm-fin-to">to</span>
+        <select className="tm-select tm-fin-box" aria-label="End" value={end} disabled={busy} onChange={(e) => setEnd(Number(e.target.value))} data-tm-time-end>
+          {ends.map((x) => (
+            <option key={x} value={x}>
+              {timeWords(x % (24 * 60))}
+            </option>
+          ))}
+        </select>
+      </span>
+      <FitLine n={n} courts={t.courts} minutes={end - start} start={start} format={t.format} />
+      <MoneyLineText m={m} />
+      <button
+        type="button"
+        className="btn block tm-hc-save"
+        disabled={busy}
+        onClick={async () => {
+          const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/time`, { start, minutes: end - start }), 'Time saved');
+          if (ok) {
+            if (t.finalDate) venueAsk(t.id, t.finalDate, start, end - start);
+            onDone();
+          }
+        }}
+        data-tm-time-save
+      >
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Zip 70 (picture 7): tap Plan: Expect with - and + (6 to 16, never fewer than locked in) and Courts 1 | 2, the fit line and the money line,
+ * Save. The site keeps suggesting the number until one is saved; the saved courts are the night's real courts.
+ */
+function PlanBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; onDone: () => void }) {
+  const { busy, save } = useSave(ctx);
+  const low = Math.max(EXPECT_MIN, t.lockedIn ?? 0);
+  const [n, setN] = useState(Math.min(EXPECT_MAX, Math.max(low, t.expected ?? t.size)));
+  const [courts, setCourts] = useState<1 | 2>(t.courts === 1 ? 1 : 2);
+  const m = moneyLine({ expected: n, courts, minutes: t.minutes, ticketCents: t.ticketCents, prizeCents: prizeOf(t) });
+  return (
+    <div className="tm-hc-box tm-hc-edit" data-tm-plan-box>
+      <div className="tm-fin-row tm-hc-plan-row" role="group" aria-label="Expect">
+        <span className="tm-fin-row-label">Expect</span>
+        <span className="tm-step">
+          <button type="button" className="tm-step-btn" aria-label="One fewer" disabled={busy || n <= low} onClick={() => setN((x) => Math.max(low, x - 1))} data-tm-expect-minus>
+            −
+          </button>
+          <b className="tm-step-n" aria-live="polite" data-tm-expect>
+            {n}
+          </b>
+          <button type="button" className="tm-step-btn" aria-label="One more" disabled={busy || n >= EXPECT_MAX} onClick={() => setN((x) => Math.min(EXPECT_MAX, x + 1))} data-tm-expect-plus>
+            +
+          </button>
+        </span>
+      </div>
+      <div className="tm-fin-row tm-hc-plan-row" role="group" aria-label="Courts">
+        <span className="tm-fin-row-label">Courts</span>
+        <span className="segmented tm-fin-courts">
+          {([1, 2] as const).map((c) => (
+            <button key={c} type="button" aria-pressed={courts === c} disabled={busy} onClick={() => setCourts(c)} data-tm-plan-courts={c}>
+              {c}
+            </button>
+          ))}
+        </span>
+      </div>
+      <FitLine n={n} courts={courts} minutes={t.minutes} start={t.start} format={t.format} />
+      <MoneyLineText m={m} />
+      <button
+        type="button"
+        className="btn block tm-hc-save"
+        disabled={busy}
+        onClick={async () => {
+          const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/plan`, { expected: n, courts }), 'Plan saved');
+          if (ok) {
+            // The venue card follows the courts (once the date is finalized).
+            if (t.finalDate && t.startSet && courts !== t.courts) venueAsk(t.id, t.finalDate, t.start, t.minutes);
+            onDone();
+          }
+        }}
+        data-tm-plan-save
+      >
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+    </div>
+  );
+}
 /** Zip 66: the Style row ("Players vote" while the vote is open). */
 const styleWords = (t: AdminTournamentView) => (t.formatPending ? 'Players vote' : formatName(t.format));
 /** Zip 66: the players whose votes the counts are: everyone on the list before a date, then those who can make the picked date. */
@@ -300,6 +465,8 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const [showVotes, setShowVotes] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
   const [showUnpaid, setShowUnpaid] = useState(false);
+  // Zip 70: the Time and Plan boxes (one open at a time; tap the row again to close).
+  const [edit, setEdit] = useState<null | 'time' | 'plan'>(null);
   const [page, setPage] = useState<null | 'dates' | 'edit' | 'tickets'>(null);
   const tz = ctx.d.group.timezone;
   const canceled = t.status === 'canceled';
@@ -312,6 +479,8 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const locked = lockedOf(t).length;
   const line = lineOf(t);
   const bodyId = `tm-hc-body-${t.id}`;
+  // Zip 70: the Time row, once the date is finalized with real times (tickets open).
+  const timeRow = t.status === 'tickets' && !!t.startSet && !!t.finalDate;
   // Zip 66b: who can make the date and has not paid (only while a spot can still be bought: tickets open, before Pay by, spots left).
   const unpaid = unpaidOf(t, ctx.d.now);
   // The pill (picture A3): "8 signed up" before tickets; once they are open "3 unpaid" (amber) while anyone has not paid, else "7 locked in".
@@ -380,30 +549,53 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
               <div className="tm-row">
                 <span>Date</span>
                 <b className="tm-hc-val tm-hc-fit" data-tm-row="date">
-                  {dateRow(t)}
+                  {timeRow ? dateOnly(t) : dateRow(t)}
                 </b>
               </div>
             )}
-            {!canceled && (!ticketsStage || t.status === 'tickets') && (
-              <div className="tm-row">
-                <span>Plan</span>
-                <b className="tm-hc-val tm-hc-fit" data-tm-row="plan" data-tm-home-plan>
-                  {planShort(t)}
-                </b>
-              </div>
-            )}
+            {/* Zip 70 (pictures 1 and 2): Time, its own row once the date is finalized; tap it to move the start or the end (until the night). */}
+            {timeRow &&
+              (t.timeOpen ? (
+                <>
+                  <TapRow label="Time" value={planRange(t.start, t.minutes)} open={edit === 'time'} onTap={() => setEdit((e) => (e === 'time' ? null : 'time'))} data="data-tm-time-toggle" valueData="data-tm-row-time" fit />
+                  {edit === 'time' && <TimeBox key={`${t.start}-${t.minutes}`} ctx={ctx} t={t} onDone={() => setEdit(null)} />}
+                </>
+              ) : (
+                <div className="tm-row">
+                  <span>Time</span>
+                  <b className="tm-hc-val tm-hc-fit" data-tm-row-time>
+                    {planRange(t.start, t.minutes)}
+                  </b>
+                </div>
+              ))}
+            {!canceled && (!ticketsStage || t.status === 'tickets') &&
+              (t.planOpen ? (
+                <>
+                  {/* Zip 70 (picture 7): tap Plan: Expect and Courts. */}
+                  <TapRow label="Plan" value={planShort(t)} open={edit === 'plan'} onTap={() => setEdit((e) => (e === 'plan' ? null : 'plan'))} data="data-tm-plan-toggle" valueData="data-tm-home-plan" fit />
+                  {edit === 'plan' && <PlanBox key={`${t.expected}-${t.courts}`} ctx={ctx} t={t} onDone={() => setEdit(null)} />}
+                </>
+              ) : (
+                <div className="tm-row">
+                  <span>Plan</span>
+                  <b className="tm-hc-val tm-hc-fit" data-tm-row="plan" data-tm-home-plan>
+                    {planShort(t)}
+                  </b>
+                </div>
+              ))}
             {t.status === 'tickets' && (
               <>
-                {t.cost && (
+                {/* Zip 70 (pictures 1 and 3, dry run fix 5): THE money line for the Plan's expected players. */}
+                {t.money && (
                   <div className="tm-row">
-                    <span>Your cost if it fills</span>
-                    <b data-tm-row="cost">{costWords(t.cost.ifFillsCents)}</b>
+                    <span data-tm-money-label>{moneyRowLabel(t.money.youCents)}</span>
+                    <MoneyValue cents={t.money.youCents} data="data-tm-row-money" />
                   </div>
                 )}
                 <div className="tm-row">
                   <span>Locked in</span>
                   <b data-tm-row="locked">
-                    {locked} of {t.size}
+                    {locked} of {t.spots ?? t.size}
                   </b>
                 </div>
                 {/* Zip 66b (picture A4): Not paid yet, hidden at 0; tap: the names and Remind all unpaid. */}
@@ -500,6 +692,12 @@ const dateRow = (t: AdminTournamentView) => {
   if (!t.finalDate) return 'Not picked';
   const s = stubParts(t.finalDate);
   return `${s.weekday.charAt(0)}${s.weekday.slice(1).toLowerCase()} ${s.month.charAt(0)}${s.month.slice(1).toLowerCase()} ${s.day} · ${startLabel(t.start)}`;
+};
+
+/** Zip 70 (picture 1): "Tue Dec 1" (the Date row once the Time row has the times). */
+const dateOnly = (t: AdminTournamentView) => {
+  const s = stubParts(t.finalDate!);
+  return `${s.weekday.charAt(0)}${s.weekday.slice(1).toLowerCase()} ${s.month.charAt(0)}${s.month.slice(1).toLowerCase()} ${s.day}`;
 };
 
 /** How a ticket was paid, in a few words (the organizer sees everyone's money). */
@@ -732,8 +930,8 @@ function TicketsCard({ ctx, t, scrollRef }: { ctx: AdminCtx; t: AdminTournamentV
     <section className="tm-card" aria-label="Tickets" data-tm-card="tickets" ref={scrollRef}>
       <div className="tm-card-head tm-head-line">
         <h3 className="tm-label">Tickets</h3>
-        <span className={locked.length >= t.size ? 'tm-chip tm-chip-ok' : 'tm-chip'} data-tm-locked-chip>
-          {locked.length} of {t.size} locked in
+        <span className={locked.length >= (t.spots ?? t.size) ? 'tm-chip tm-chip-ok' : 'tm-chip'} data-tm-locked-chip>
+          {locked.length} of {t.spots ?? t.size} locked in
         </span>
       </div>
       {evens && (
@@ -1116,7 +1314,8 @@ function PlanCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   // 2.5 and 3 hour games need Booking hours on (the same gate as their prices).
   const needsBooking = t.minutes > 120 && ctx.d.longGames !== true;
   // Zip 66 (mock 03): the plan as three pills, then one cost line: "$8 ($88 with 0 paid)".
-  const pills = [`${t.size} players`, `${t.courts} ${t.courts === 1 ? 'court' : 'courts'}`, `${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`];
+  // Zip 70: the Plan's expected players (the same number as the Home card's Plan row).
+  const pills = [`${t.expected ?? t.size} players`, `${t.courts} ${t.courts === 1 ? 'court' : 'courts'}`, `${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`];
   return (
     <section className="tm-card tm-plan-card" aria-label="Plan" data-tm-card="plan">
       <div className="tm-card-head">
@@ -1125,18 +1324,19 @@ function PlanCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
           {locked} locked in
         </span>
       </div>
-      <p className="tm-plan-pills" aria-label={`${t.size} players, ${planTitle(t)}`} data-tm-plan={planTitle(t)}>
+      <p className="tm-plan-pills" aria-label={`${t.expected ?? t.size} players, ${planTitle(t)}`} data-tm-plan={planTitle(t)}>
         {pills.map((x) => (
           <span key={x} className="tm-plan-pill">
             {x}
           </span>
         ))}
       </p>
-      {t.cost && (
+      {t.cost && t.money && (
         <div className="tm-row tm-plan-cost">
-          <span>Your cost if it fills</span>
+          {/* Zip 70: THE money line's label and amount (green "+$6", red "$30"), the same as the Home card. */}
+          <span>{moneyRowLabel(t.money.youCents)}</span>
           <span className="tm-plan-cost-val">
-            <b data-tm-cost-fills>{costWords(t.cost.ifFillsCents)}</b>{' '}
+            <MoneyValue cents={t.money.youCents} data="data-tm-cost-fills" />{' '}
             <span className="tm-plan-cost-now" data-tm-cost-now>
               ({costWords(t.cost.nowCents)} with {t.cost.paidNow} paid)
             </span>
@@ -1528,10 +1728,18 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
   const picked = choice === 'doubles' || choice === 'americano' ? choice : 'vote';
   // Zip 57 (mocks 60 and 61): the game plan for the players who can make this date, the courts and the hours (shared/tournamentPlan.ts, the one
   // source). Never blocks Finalize.
-  const fit =
-    view.players.length >= 6
-      ? fitWords(nightPlan(view.players.length, courts, end - start, picked === 'vote' ? autoFormat : picked), start)
-      : { fits: false, text: `${view.players.length} can play. A tournament needs at least 6.` };
+  // Zip 70: the count the Plan expects (Alex's saved Expect number, else who can make this date); the fit line names the style really played,
+  // and the money line (THE money line) follows Time and Courts as they change (picture 4).
+  const count = t.expectSaved && t.expected ? t.expected : view.players.length;
+  const plan = nightPlan(count, courts, end - start, picked === 'vote' ? autoFormat : picked);
+  const fit = count >= 6 ? fitWords(plan, start) : { fits: false, text: `${view.players.length} can play. A tournament needs at least 6.` };
+  const money = moneyLine({
+    expected: expectedPlayers({ saved: t.expectSaved ? (t.expected ?? null) : null, suggested: view.players.length, locked: 0 }),
+    courts,
+    minutes: end - start,
+    ticketCents: view.ticketCents,
+    prizeCents: prizeCentsOf(plan.style, t.championCreditCents, t.secondCreditCents),
+  });
   return (
     <div className="stack tm-finalize tm-fin1" data-tm-finalize={day}>
       <section className="tm-fin-who" aria-label="Players for this date" data-tm-fin-players>
@@ -1562,8 +1770,8 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         )}
       </section>
       <div className="tm-fin-rows" data-tm-fin-settings>
-        <div className="tm-fin-row" role="group" aria-label="Plays">
-          <span className="tm-fin-row-label">Plays</span>
+        <div className="tm-fin-row" role="group" aria-label="Time">
+          <span className="tm-fin-row-label">Time</span>
           <span className="tm-fin-boxes">
             <select
               className="tm-select tm-fin-box"
@@ -1646,6 +1854,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
           {fit.text}
         </p>
       )}
+      <MoneyLineText m={money} />
       {notice && (
         <p className="tm-card-note tm-fin-notice" role="status" data-tm-fin-notice>
           {notice}
@@ -1699,7 +1908,9 @@ function OddSwitchCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k
   if (seen) return null;
   const tz = ctx.d.group.timezone;
   const who = t.backedOut[0]?.name ?? null;
-  const cutoff = t.finalDate ? payByLabel(new Date(salesCutoffMs(startMsOf(t.finalDate, t.start, tz))).toISOString(), tz, t.finalDate) : null;
+  // Zip 70 (dry run fix 3): the last moment to join is 3 hours before the start; once that has passed the text leaves the pay line out.
+  const cutoffMs = t.finalDate ? salesCutoffMs(startMsOf(t.finalDate, t.start, tz)) : null;
+  const cutoff = cutoffMs !== null && Date.parse(ctx.d.now) < cutoffMs ? payByLabel(new Date(cutoffMs).toISOString(), tz, t.finalDate) : null;
   const text = [
     who ? `${who} backed out of ${t.name}.` : `A spot opened in ${t.name}.`,
     `One spot is open${t.finalDate ? ` on ${dayWords(t.finalDate)}` : ''}: ${formatPrice(t.ticketCents)}${cutoff ? `, pay by ${cutoff}` : ''}.`,
@@ -1716,7 +1927,8 @@ function OddSwitchCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k
       data={{ 'data-tm-odd-switch': true }}
       xLabel="Close"
       onX={hide}
-      action={
+      // Zip 70 (dry run fix 2): the button sits under the words (the actions row), so the text keeps the card's width at 390 and narrower.
+      actions={
         <button
           type="button"
           className="ac-btn"
@@ -1791,7 +2003,14 @@ function venueAsk(id: string, day: string, start: number, minutes: number) {
   } catch {
     /* no reminder on this phone: nothing else depends on it */
   }
+  // Zip 70: a card already on screen reads it again (a Time or Plan save shows the reminder with the new times at once).
+  try {
+    window.dispatchEvent(new Event(VENUE_EVENT));
+  } catch {
+    /* it shows on the next Home load */
+  }
 }
+const VENUE_EVENT = 'pb-venue-ask';
 function readVenueAsk(): VenueAsk | null {
   try {
     const v = JSON.parse(storageGet(VENUE_KEY) ?? 'null');
@@ -1802,6 +2021,11 @@ function readVenueAsk(): VenueAsk | null {
 }
 export function VenueAlertCard({ t }: { t: AdminTournamentView }) {
   const [ask, setAsk] = useState<VenueAsk | null>(readVenueAsk);
+  useEffect(() => {
+    const again = () => setAsk(readVenueAsk());
+    window.addEventListener(VENUE_EVENT, again);
+    return () => window.removeEventListener(VENUE_EVENT, again);
+  }, []);
   if (!ask || ask.id !== t.id || t.status !== 'tickets' || t.finalDate !== ask.day) return null;
   return (
     <AlertCard

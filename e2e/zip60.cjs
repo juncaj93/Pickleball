@@ -459,7 +459,7 @@ async function main() {
         assert((await a.page.locator('[data-tm-fin-winner]').count()) === 0, 'no winner sentence');
         // Zip 64 part 8: the plan line is back, the same count as the organizer's card (10 can play: a 12 player plan).
         // Zip 57: the plan line became the Fits / Too tight line under the rows (mocks 60 and 61).
-        assert(/^Fits 10 players\. /.test(flat(await a.page.locator('[data-tm-fin-fit]').innerText())), await a.page.locator('[data-tm-fin-fit]').innerText());
+        assert(/^(Locked doubles|Americano) for 10: /.test(flat(await a.page.locator('[data-tm-fin-fit]').innerText())), await a.page.locator('[data-tm-fin-fit]').innerText());
         assert((await a.page.locator('[data-tm-fin-over]').count()) === 0, 'no over line with 10 players');
         assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Doubles 4 · Americano 6 · Either 0', await a.page.locator('[data-tm-fin-counts]').innerText());
         assert((await a.page.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true', 'the chooser starts on Auto');

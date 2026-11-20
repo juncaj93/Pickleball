@@ -10,6 +10,12 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 70 (🎾70.time): The Cold Open as it is on live ($18, credits $0, 2 courts, 7:30 to 10 PM, a Tuesday a week or more out). The format above does not apply.
+  { stage: 'zip70_start', label: 'Time and Plan (start here)', line: 'Like live: 6 locked in of 8, Vic and Zoe unpaid. Home: open the card: Time 7:30 to 10 PM, Plan 8 players, You make if it fills +$6. Tap Time (move the end, Save), tap Plan (Expect, Courts, Save). View as Vic: 7:30 PM / to 10 PM on the ticket.' },
+  { stage: 'zip70_loss', label: 'Time and Plan: it would cost you', line: 'The same, 7:00 to 10:00 PM (3 hours): Your cost if it fills, in red, no minus.' },
+  { stage: 'zip70_moved', label: 'Time moved (players’ card)', line: 'The end moved to 9:30 PM. View as Vic: The Cold Open now ends at 9:30 PM (was 10 PM), with an X; the ticket says to 9:30 PM.' },
+  { stage: 'zip70_late', label: 'Late drop (8 locked in, Pay by passed)', line: 'Pay by an hour ago, 8 locked in. View as Parker, Drop out: no credit back unless someone takes your spot (two lines). Dropping keeps the $18 until someone pays for the spot.' },
+  { stage: 'zip70_finalize', label: 'Finalize for 9', line: 'Sign-up open, 9 can make one date. As you: Edit, Pick the date, tap it: Time, Courts, Pay by, Americano for 9 and the money line.' },
   // Zip 58 (🎾58.tourney4): ties, the Final, End tournament and the records. "The Cold Open", Locked doubles, the four teams (Net Ninjas Vic and
   // Wren, Third Shot Gang Parker and Quinn, Kitchen Crew Rowan and Zoe, Dill With It Sage and Christopher), tonight. The format above does not apply.
   { stage: 'tie3', label: 'Tie among three teams (start here)', line: 'Kitchen Crew 3-0, the other three 1-2 in a circle. Home: the wheel, tap it to spin (or view as Rowan). Then Game A and Game B to 5. View as Vic: Tied for the final, then Playoff.' },

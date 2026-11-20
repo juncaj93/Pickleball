@@ -9,7 +9,7 @@
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormatVote, PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
-import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, monthsBetween, monthSpan, startLabel, stubParts } from '../../shared/tournament';
+import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, monthsBetween, monthSpan, shortClock, startLabel, stubParts } from '../../shared/tournament';
 import { payCountdown, placeWord } from '../../shared/tournamentTickets';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, useNow, VIEW_ONLY_MESSAGE } from '../lib';
@@ -155,6 +155,8 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
   const backCents = mine ? mine.creditCents + mine.paidCents + mine.claimCents : 0;
   // Zip 63: no waiting words for players (an I paid still waiting comes back as credit when the organizer answers it, as before).
   const backLine = !mine || backCents === 0 ? '' : ` Your ${formatPrice(backCents)} comes back as credit.`;
+  // Zip 70 (Alex, the late drop rule): after Pay by, a drop below 8 on 2 courts gives no credit back unless someone takes the spot.
+  const keeps = k?.dropKeeps === true;
   const venmo = venmoPayUrl(pay.group.venmoUrl, paying ?? 0, `${t.name} ticket${pay.meName ? ` - ${pay.meName}` : ''}`);
 
   return (
@@ -270,9 +272,17 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         open={askOut}
         title="Back out?"
         body={
-          <p className="tm-confirm-text" data-tm-backout-text>
-            Are you sure you want to back out of the {t.name}? You come off the list. You can sign up again if you change your mind.{backLine}
-          </p>
+          <>
+            <p className="tm-confirm-text" data-tm-backout-text>
+              Are you sure you want to back out of the {t.name}? You come off the list. You can sign up again if you change your mind.{keeps ? '' : backLine}
+            </p>
+            {keeps && (
+              <p className="tm-confirm-text tc-keep-note" data-tm-backout-keeps>
+                <span>Dropping now means no credit back unless someone takes your spot.</span>{' '}
+                <span>Below 8 players we lose the second court, and it's already paid for.</span>
+              </p>
+            )}
+          </>
         }
         cancelLabel="Stay signed up"
         confirmLabel="Yes, back out"
@@ -282,7 +292,8 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         onConfirm={async () => {
           const ok = await run(
             () => api('POST', '/api/tournament/back-out', { tournamentId: t.id, ...(k ? { backCents } : {}) }),
-            (r: { creditBackCents?: number; creditReturnedCents?: number; waitingCents?: number }) => {
+            (r: { creditBackCents?: number; creditReturnedCents?: number; waitingCents?: number; keptCents?: number }) => {
+              if ((r?.keptCents ?? 0) > 0) return "You're off the list. No credit back unless someone takes your spot.";
               const back = (r?.creditBackCents ?? 0) + (r?.creditReturnedCents ?? 0);
               if ((r?.waitingCents ?? 0) > 0) return `You're off the list. Your ${formatPrice((r.waitingCents ?? 0) + back)} comes back as credit.`;
               if (back > 0) return (r.creditBackCents ?? 0) > 0 ? `You're off the list. ${formatPrice(back)} back as credit.` : `You're off the list. ${formatPrice(back)} credit returned.`;
@@ -524,8 +535,10 @@ function Stub({ t }: { t: PlayerTournamentView }) {
   const s = t.finalDate ? stubParts(t.finalDate) : null;
   const months = monthSpan(t.openDates.length ? t.openDates : t.me?.dates ?? []);
   const time = `${s && t.startSet ? '' : '~'}${startLabel(t.start)}`;
+  // Zip 70 (picture 5): once the times are real, the end under the start ("to 10 PM").
+  const end = s && t.startSet ? `to ${shortClock(t.start + t.minutes)}` : null;
   return (
-    <div className="tc-stub" aria-label={s ? `On ${s.weekday} ${s.month} ${s.day} at ${startLabel(t.start)}` : `Date not picked yet, around ${startLabel(t.start)}`} data-tc-stub>
+    <div className="tc-stub" aria-label={s ? `On ${s.weekday} ${s.month} ${s.day} at ${startLabel(t.start)}${end ? ` ${end}` : ''}` : `Date not picked yet, around ${startLabel(t.start)}`} data-tc-stub>
       <span className="tc-wd" aria-hidden="true">
         {s ? s.weekday : 'Date'}
       </span>
@@ -538,6 +551,11 @@ function Stub({ t }: { t: PlayerTournamentView }) {
       <span className="tc-time" aria-hidden="true">
         {time}
       </span>
+      {end && (
+        <span className="tc-time-end" aria-hidden="true" data-tc-stub-end>
+          {end}
+        </span>
+      )}
     </div>
   );
 }
@@ -677,7 +695,8 @@ export function TicketCard({
           {label}
         </span>
       );
-    const canDrop = s !== 'closed' && !k.started;
+    // Zip 70 (Alex): Drop out hides 3 hours before the start (the moment tickets close); after that players text the organizer.
+    const canDrop = s !== 'closed' && !k.started && !k.dropClosed;
     const bar = (
       <>
         {main}

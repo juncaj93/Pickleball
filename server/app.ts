@@ -221,6 +221,9 @@ route('PUT', '/api/admin/tournament/:id/visibility', tournament.setTournamentVis
 route('POST', '/api/admin/tournament/:id/switch-back', tournament.switchBackStyle);
 route('PUT', '/api/admin/tournament/:id/level', tournament.setTournamentLevel);
 route('PUT', '/api/admin/tournament/:id/date', tournament.setTournamentDate);
+// Zip 70: move the start or the end after Finalize (the Time box), and the Plan (expected players and courts).
+route('PUT', '/api/admin/tournament/:id/time', tournament.moveTournamentTime);
+route('PUT', '/api/admin/tournament/:id/plan', tournament.saveTournamentPlan);
 // Zip 60: the Finalize screen's facts for one date (reads only).
 route('GET', '/api/admin/tournament/:id/finalize', tournament.finalizeView);
 route('POST', '/api/admin/tournament/:id/cancel', (ctx) => tournament.cancelTournament(ctx));

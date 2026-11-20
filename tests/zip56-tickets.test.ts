@@ -217,16 +217,18 @@ describe('the smart plan on the organizer\'s screens', () => {
       const t = (await dash(ctx)).tournament;
       return { size: t.size, courts: t.courts, minutes: t.minutes, start: t.start, cost: t.cost };
     };
-    // 12 can make the date: a 14 player plan, the 12-player plan's 2 courts, the real 2.5 hours. $120 - 13 x $16 + $28 = -$60; nobody paid: $148.
-    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: -6000, nowCents: 14800, paidNow: 0 } });
+    // 12 can make the date: a 14 player plan, the 12-player plan's 2 courts, the real 2.5 hours. Zip 70 (dry run fix 5): "if it fills" is for the
+    // Plan's expected players (the real count, 12), not the plan size: $120 - 11 x $16 + $28 = -$28 (the organizer makes $28); nobody paid: $148.
+    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: -2800, nowCents: 14800, paidNow: 0 } });
+    expect((await dash(ctx)).tournament).toMatchObject({ expected: 12, suggested: 12, expectSaved: false, money: { courtCents: 12000, ticketsCents: 17600, youCents: 2800 } });
     for (const n of names.slice(0, 5)) await payCash(ctx, n);
     // Paying does not move the plan (12 can make it); the players' spots still follow the locked in (6: 8 spots).
-    expect(await plan()).toMatchObject({ size: 14, courts: 2, cost: { courtCents: 12000, ifFillsCents: -6000, nowCents: 6800, paidNow: 5 } });
+    expect(await plan()).toMatchObject({ size: 14, courts: 2, cost: { courtCents: 12000, ifFillsCents: -2800, nowCents: 6800, paidNow: 5 } });
     expect((await card(ctx, 'Kai')).tickets).toMatchObject({ size: 8, full: false });
     expect((await card(ctx, 'Kai'))).toMatchObject({ start: 1170, minutes: 150, startSet: true });
     for (const n of names.slice(5, 10)) await payCash(ctx, n);
     // 10 paid now: $120 - $160 + $28 = -$12.
-    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: -6000, nowCents: -1200, paidNow: 10 } });
+    expect(await plan()).toEqual({ size: 14, courts: 2, minutes: 150, start: 1170, cost: { courtCents: 12000, ifFillsCents: -2800, nowCents: -1200, paidNow: 10 } });
     // A back out moves it down at once (11 can make it: still 14; 10: 12; 9: 12).
     await backOut(ctx, 'Blair');
     expect(await plan()).toMatchObject({ size: 14, minutes: 150 });
@@ -723,6 +725,8 @@ describe('the books', () => {
       ],
       ['tour_money_on_canceled', `UPDATE tournaments SET status = 'canceled' WHERE id = '${ctx.tid}'`],
       ['tour_money_on_left', `UPDATE tournament_signups SET status = 'out' WHERE player_id = '${ctx.byName.Blair}'`],
+      // Zip 70: a kept late drop on a canceled tournament (a cancel gives every ticket back).
+      ['tour_kept_wrong_stage', `UPDATE tournament_signups SET status = 'kept' WHERE player_id = '${ctx.byName.Blair}'; UPDATE tournaments SET status = 'rescheduled' WHERE id = '${ctx.tid}'`],
       ['tour_place_left', `UPDATE tournament_signups SET status = 'out' WHERE player_id = '${ctx.byName.Blair}'`],
       ['tour_organizer_paid', `UPDATE tournament_tickets SET price_cents = 1600, paid_cents = 1600 WHERE id = ${tk('Alex')}`],
       ['tour_paid_line_with_open_spot', `UPDATE tournament_tickets SET place = 'line' WHERE id = ${tk('Devon')}`],

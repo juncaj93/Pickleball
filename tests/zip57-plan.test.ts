@@ -88,13 +88,13 @@ describe('zip 57: the starting suggestion, the plan line and the words', () => {
     expect(planFit(19)).toEqual({ fits: 16, over: 3 });
   });
   it('fit words: mocks 60 and 61', () => {
-    expect(fitWords(nightPlan(12, 2, 180, 'doubles'), 19 * 60)).toEqual({ fits: true, text: 'Fits 12 players. Pool games to 11, done about 8:55 PM.' });
-    expect(fitWords(nightPlan(12, 1, 120, 'doubles'), 19 * 60 + 30)).toEqual({ fits: false, text: 'Too tight for 12 players on 1 court. Use 2 courts or add court time.' });
-    expect(fitWords(nightPlan(8, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Fits 8 players. Games to 11, done about 9:00 PM.');
-    expect(fitWords(nightPlan(9, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Fits 9 players. Games to 11, done about 9:50 PM.');
+    expect(fitWords(nightPlan(12, 2, 180, 'doubles'), 19 * 60)).toEqual({ fits: true, text: 'Locked doubles for 12: pool games to 11, done about 8:55 PM.' });
+    expect(fitWords(nightPlan(12, 1, 120, 'doubles'), 19 * 60 + 30)).toEqual({ fits: false, text: 'Locked doubles for 12: too tight on 1 court. Use 2 courts or add court time.' });
+    expect(fitWords(nightPlan(8, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Locked doubles for 8: games to 11, done about 9:00 PM.');
+    expect(fitWords(nightPlan(9, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Americano for 9: games to 11, done about 9:50 PM.');
     // 14 and 16 (mocks 52 and 53): semifinals about 8:55 PM, done about 9:40 to 9:45.
-    expect(fitWords(nightPlan(14, 2, 180, 'doubles'), 19 * 60).text).toBe('Fits 14 players. Pool games to 11, done about 9:40 PM.');
-    expect(fitWords(nightPlan(16, 2, 180, 'doubles'), 19 * 60).text).toBe('Fits 16 players. Pool games to 9, done about 9:40 PM.');
+    expect(fitWords(nightPlan(14, 2, 180, 'doubles'), 19 * 60).text).toBe('Locked doubles for 14: pool games to 11, done about 9:40 PM.');
+    expect(fitWords(nightPlan(16, 2, 180, 'doubles'), 19 * 60).text).toBe('Locked doubles for 16: pool games to 9, done about 9:40 PM.');
   });
   it('an odd count on Locked doubles plans as Americano (zip 64: odd plays Americano)', () => {
     expect(nightPlan(9, 2, 150, 'doubles').style).toBe('americano');

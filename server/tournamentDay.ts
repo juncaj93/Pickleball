@@ -674,7 +674,9 @@ export function playerDayView(
     .map((g) => {
       const r = f.resolved.get(g.num)!;
       const team = (seat: number) => ({ name: f.bySeat.get(seat)!.name, players: playersOf(f.bySeat.get(seat)!) });
-      return r.a && r.b ? { round: g.round, court: courtNo(t, g.court), a: team(r.a), b: team(r.b) } : null;
+      // Zip 70 (dry run fix 6): a playoff game is named for what it is ("Final", "3rd place", "Semifinal", "Game A"), a pool game by its round.
+      const label = g.stage === 'pool' ? `Round ${g.round}` : g.stage === 'tie' ? (f.tieLabel.get(g.num) ?? 'Playoff') : stageLabel(g.stage);
+      return r.a && r.b ? { round: g.round, label, court: courtNo(t, g.court), a: team(r.a), b: team(r.b) } : null;
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
   // Zip 58: a tie for a playoff place still being settled (this player's group first), and who is already through while it is.

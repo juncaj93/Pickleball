@@ -43,9 +43,11 @@ import {
   type TournamentRow,
 } from './tournament';
 import {
-  fillSpotsStatement,
+  fillSpotsStatements,
+  keptOff,
+  offListBack,
   loadTickets,
-  offList,
+  onList,
   organizerSeatStatement,
   payWithCreditStatements,
   sqlText,
@@ -136,7 +138,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   if (k && (k.place === 'spot' || ticketPaid(money(k)))) return { ok: true, creditUsedCents: 0, ...answerOf(k) };
   if (organizer) {
     // Their $0 seat: in line and paid, so the line gives them the open spot (or keeps them first in line).
-    const res = await ctx.db.batch([organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]).catch(lookAgainOn);
+    const res = await ctx.db.batch([organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), ...fillSpotsStatements(ctx.db, who.group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
     if ((res[0].meta?.changes ?? 0) === 0) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
     const after = await ticketOf(ctx.db, t.id, playerId);
     await logPlayer(ctx, who.group, playerId, 'tournament_ticket', { tournament: t.name, creditUsedCents: 0, result: answerOf(after).result });
@@ -235,7 +237,7 @@ export async function playerTicketWaitlist(ctx: Ctx, who: TournamentActor, body:
             )
             .bind(newId(), t.id, playerId, ctx.nowIso, t.ticket_cents),
         ];
-  const res = await ctx.db.batch([...statements, fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]).catch(lookAgainOn);
+  const res = await ctx.db.batch([...statements, ...fillSpotsStatements(ctx.db, who.group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
   if ((res[0].meta?.changes ?? 0) === 0) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   await logPlayer(ctx, who.group, playerId, 'tournament_waitlist', { tournament: t.name });
   return { ok: true, result: 'waitlist', position: await linePosition(ctx, t, playerId) };
@@ -289,8 +291,11 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
   // When the money on a ticket comes back as credit at once: its player is off the list, the tournament is canceled, or the night is over and
   // it never got a spot.
   const settle = (x: string) =>
-    `(${offList(x)} OR ${tournamentCanceled(x)}${
-      endIso ? ` OR (${x}.place <> 'spot' AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets'))` : ''
+    // Zip 70: a kept late drop's money comes back only when the spot is taken again (or on a Cancel), never with an answer to an I paid.
+    `(${offListBack(x)} OR ${tournamentCanceled(x)}${
+      endIso
+        ? ` OR (${x}.place <> 'spot' AND NOT ${keptOff(x)} AND ${sqlText(ctx.nowIso)} >= ${sqlText(endIso)} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${x}.tournament_id AND tt.status = 'tickets'))`
+        : ''
     })`;
   // Why the money comes back is worked out when the answer lands (a Cancel or a Back out in between counts), not from the read above.
   const back = ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why: 'auto', endedReason: 'auto', nowIso: ctx.nowIso, when: settle });
@@ -305,14 +310,14 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
             .prepare(
               `UPDATE tournament_tickets SET paid_cents = paid_cents + claim_cents, claim_cents = 0, claim_at = NULL,
                  paid_at = CASE WHEN credit_cents + paid_cents + claim_cents >= price_cents THEN ?1 ELSE paid_at END,
-                 place = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents THEN 'line' ELSE place END,
-                 place_at = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents THEN COALESCE(claim_at, ?1) ELSE place_at END,
+                 place = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN 'line' ELSE place END,
+                 place_at = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN COALESCE(claim_at, ?1) ELSE place_at END,
                  updated_at = ?1
                WHERE id = ?2 AND ${ticketAsRead(k)}`,
             )
             .bind(ctx.nowIso, k.id)
         : ctx.db.prepare(`UPDATE tournament_tickets SET claim_cents = 0, claim_at = NULL, updated_at = ?1 WHERE id = ?2 AND ${ticketAsRead(k)}`).bind(ctx.nowIso, k.id);
-    const res = await ctx.db.batch([answer, ...back, fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]).catch(lookAgainOn);
+    const res = await ctx.db.batch([answer, ...back, ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
     if ((res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', `${name}'s ticket just changed. Look again.`);
     const after = await ticketOf(ctx.db, t.id, playerId);
     // What came back as credit at once (the ticket was settled because they left, a cancel, or the night is over).
@@ -356,7 +361,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
              SELECT ?1, ?2, ?3, 'line', ?4, ?5, ?5, ?4, ?4, ?4 WHERE ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}`,
           )
           .bind(newId(), t.id, playerId, ctx.nowIso, price);
-    const res = await ctx.db.batch([write, fillSpotsStatement(ctx.db, t.id, ctx.nowIso)]).catch(lookAgainOn);
+    const res = await ctx.db.batch([write, ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
     if ((res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', `${name}'s ticket just changed. Look again.`);
     await audit(ctx.db, group.id, null, 'tournament_ticket_marked_paid', { tournament: t.name, player: name, playerId, amountCents: owed }, ctx.nowIso);
     return { ok: true, changed: true, ...answerOf(await ticketOf(ctx.db, t.id, playerId)) };
@@ -373,8 +378,8 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
       ctx.db
         .prepare(`UPDATE tournament_signups SET status = 'off', backed_out_at = ?1, updated_at = ?1 WHERE id = ?2 AND status = 'in' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?3 AND status <> 'canceled')`)
         .bind(ctx.nowIso, signup.id, t.id),
-      ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why: 'off', endedReason: 'dropped', nowIso: ctx.nowIso, when: offList }),
-      fillSpotsStatement(ctx.db, t.id, ctx.nowIso),
+      ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why: 'off', endedReason: 'dropped', nowIso: ctx.nowIso, when: offListBack }),
+      ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso),
     ])
     .catch(lookAgainOn);
   if ((res[0].meta?.changes ?? 0) === 0) return { ok: true, changed: false };

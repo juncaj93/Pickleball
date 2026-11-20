@@ -543,7 +543,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
             {day.live.map((x) => (
               <li key={`${x.round}-${x.court}-${x.a.name}`} className="tc-gd-row tc-gd-game">
                 <span className="tc-gd-left">
-                  <b>Round {x.round}</b>
+                  <b>{x.label ?? `Round ${x.round}`}</b>
                   <Court n={x.court} set={day.courtsSet} />
                 </span>
                 <Matchup a={x.a} b={x.b} />

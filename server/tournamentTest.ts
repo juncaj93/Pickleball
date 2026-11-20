@@ -122,7 +122,19 @@ type Zip58Stage = (typeof ZIP58_STAGES)[number];
 const isZip58Stage = (s: string): s is Zip58Stage => (ZIP58_STAGES as readonly string[]).includes(s);
 type AmStage = (typeof AM_STAGES)[number];
 const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
+// Zip 70 (🎾70.time): The Cold Open as it is on live (Locked doubles, $18, credits $0, 2 courts, 7:30 to 10:00 PM, a Tuesday at least a week
+// out, Pay by the night before at 7:00 PM). 9 on the list: Alex, Parker, Rowan, Sage, Christopher, Wren, Vic and Zoe can make the date, Reese
+// cannot (Not signed up 1). Alex's $0 seat and 5 paid: 6 locked in of 8; Vic and Zoe have not paid (2 unpaid).
+//   zip70_start   the calm start (pictures 1, 2, 7): Time 7:30 to 10 PM, Plan 8 players, "You make if it fills +$6". Tap Time or Plan.
+//   zip70_loss    the same, 7:00 to 10:00 PM (3 hours): "Your cost if it fills $18" in red (picture 3)
+//   zip70_moved   the same, after Alex moved the end to 9:30 PM (the very rows the Time box writes): Vic sees "The Cold Open now ends at 9:30 PM
+//                 (was 10 PM)." (picture 6) and "7:30 PM / to 9:30 PM" on the ticket
+//   zip70_late    Pay by an hour ago, 8 locked in (Quinn on the list too, Vic paid late, Zoe not): view as Parker, Drop out: the two lines of the late drop rule
+//   zip70_finalize sign-up open, 9 on the list who can make one date (Quinn too; Reese cannot): Alex taps it: Finalize says "Americano for 9" (picture 4)
+export const ZIP70_STAGES = ['zip70_start', 'zip70_loss', 'zip70_moved', 'zip70_late', 'zip70_finalize'] as const;
+type Zip70Stage = (typeof ZIP70_STAGES)[number];
+const isZip70Stage = (s: string): s is Zip70Stage => (ZIP70_STAGES as readonly string[]).includes(s);
+export const TEST_STAGES = [...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -273,8 +285,11 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM credit_ledger WHERE group_id = ? AND (reason LIKE 'tour:%' OR reason = ?)").bind(group.id, TEST_CREDIT),
     ctx.db.prepare('DELETE FROM tournaments WHERE group_id = ?').bind(group.id),
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
+    // Zip 70: the Plan's saved Expect number and the time card of the last stage's tournament.
+    ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
   if (isZip58Stage(stage)) return zip58Stage(ctx, group, stage);
   if (isDayStage(stage)) return dayStage(ctx, group, stage);
   if (isAmStage(stage)) return americanoStage(ctx, group, stage);
@@ -910,4 +925,108 @@ function todayKeyMinus(nowMs: number, tz: string, days: number): string {
   const p = dayParts(todayKey(nowMs, tz));
   const d = new Date(Date.UTC(p.year, p.month - 1, p.day - days));
   return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+
+/** Zip 70: the first Tuesday at least 7 days from today (Eastern), as 'YYYY-MM-DD' (The Cold Open is a Tuesday). */
+function tuesdayAhead(nowMs: number, tz: string): string {
+  const t = dayParts(todayKey(nowMs, tz));
+  for (let i = 7; i < 14; i++) {
+    const d = new Date(Date.UTC(t.year, t.month - 1, t.day + i));
+    if (d.getUTCDay() === 2) return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+  return todayKey(nowMs, tz);
+}
+
+/** Zip 70's stages (see ZIP70_STAGES): The Cold Open as on live, with real money rows on the fake database (confirmed cash, Alex's $0 seat). */
+async function zip70Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip70Stage) {
+  const tz = group.timezone;
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const date = tuesdayAhead(ctx.nowMs, tz);
+  const p = dayParts(date);
+  const offered = [-7, 0, 2, 7].map((n) => {
+    const d = new Date(Date.UTC(p.year, p.month - 1, p.day + n));
+    return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  });
+  const finalize = stage === 'zip70_finalize';
+  const plays = stage === 'zip70_loss' ? { start: 19 * 60, minutes: 180 } : { start: 19 * 60 + 30, minutes: 150 };
+  const payBy = stage === 'zip70_late' ? new Date(ctx.nowMs - 3_600_000).toISOString() : defaultPayBy(date, plays.start, tz, ctx.nowMs);
+  const id = newId();
+  const t0 = ctx.nowMs - 3 * 86_400_000;
+  const at = (minutes: number) => new Date(t0 + minutes * 60_000).toISOString();
+  const statements = [
+    ctx.db
+      .prepare(
+        `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
+           status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, pay_by, format_source)
+         VALUES (?, ?, 'The Cold Open', ${STORED_PLAN.size}, 2, ?, ?, 1800, 0, ?, ?, ?, 'all', ?, ?, ?, ?, 'doubles', 0, ?, NULL)`,
+      )
+      .bind(
+        id,
+        group.id,
+        finalize ? STORED_PLAN.minutes : plays.minutes,
+        finalize ? STORED_PLAN.start : plays.start,
+        JSON.stringify(offered),
+        finalize ? null : date,
+        finalize ? 'signup' : 'tickets',
+        at(0),
+        ctx.nowIso,
+        finalize ? null : at(5),
+        at(1),
+        finalize ? null : payBy,
+      ),
+  ];
+  // 8 can make the date (zip70_late adds Quinn, paid, so 8 are locked in there).
+  const going = ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Wren', 'Vic', 'Zoe', ...(stage === 'zip70_late' || stage === 'zip70_finalize' ? ['Quinn'] : [])];
+  const listed = [...going, 'Reese'];
+  let n = 0;
+  for (const name of listed) {
+    const pid = idOf.get(name);
+    if (!pid) continue;
+    n++;
+    const level = CAST.find((c) => c.name === name)?.level ?? MORE_CAST[name] ?? 320;
+    const dates = name === 'Reese' ? offered.filter((d) => d !== date) : [date];
+    statements.push(
+      ctx.db
+        .prepare("INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at) VALUES (?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?)")
+        .bind(newId(), id, pid, level, JSON.stringify(dates), at(10 + n * 7), at(10 + n * 7), at(10 + n * 7)),
+      ctx.db.prepare("INSERT INTO tournament_level_history (id, tournament_id, player_id, level, set_by, created_at) VALUES (?, ?, ?, ?, 'player', ?)").bind(newId(), id, pid, level, at(10 + n * 7)),
+    );
+  }
+  if (!finalize) {
+    const organizerId = await organizerIdOf(ctx.db, group);
+    // zip70_late: 8 locked in (Vic paid late, Zoe did not): a drop now takes it below 8.
+    const paid = stage === 'zip70_late' ? going.filter((x) => x !== 'Zoe') : going.filter((x) => x !== 'Vic' && x !== 'Zoe');
+    let k = 0;
+    for (const name of paid) {
+      const pid = idOf.get(name);
+      if (!pid) continue;
+      k++;
+      const free = pid === organizerId;
+      const paidAt = at(200 + k * 11);
+      statements.push(
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, credit_cents, paid_cents, paid_at, created_at, updated_at)
+             VALUES (?, ?, ?, 'spot', ?, ?, 0, ?, ?, ?, ?)`,
+          )
+          .bind(newId(), id, pid, paidAt, free ? 0 : 1800, free ? 0 : 1800, paidAt, paidAt, paidAt),
+      );
+    }
+  }
+  if (stage === 'zip70_moved') {
+    // The very rows the Time box writes (server/tournament.ts moveTournamentTime): the new end, the players' card (was 10 PM), a History line.
+    statements.push(
+      ctx.db.prepare('UPDATE tournaments SET minutes = 120 WHERE id = ?').bind(id),
+      ctx.db
+        .prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, NULL, ?, 'mark', ?, ?)")
+        .bind(newId(), group.id, `tournament_time:${id}`, JSON.stringify({ fs: plays.start, fm: plays.minutes, ts: plays.start, tm: 120 }), ctx.nowIso),
+      ctx.db
+        .prepare("INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at) VALUES (?, ?, NULL, 'organizer', 'tournament_time', ?, ?)")
+        .bind(newId(), group.id, JSON.stringify({ tournament: 'The Cold Open', from: '7:30 to 10 PM', to: '7:30 to 9:30 PM' }), ctx.nowIso),
+    );
+  }
+  await ctx.db.batch(statements);
+  return { ok: true, stage, format: 'doubles', id, signedUp: n, date: finalize ? null : date, firstDate: offered[0] };
 }

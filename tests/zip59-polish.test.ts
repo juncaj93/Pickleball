@@ -118,10 +118,10 @@ describe('tickets close the night before (Pay by)', () => {
     expect((await lock(ctx, 'Blair')).data.result).toBe('locked');
     ctx.app.now = AFTER_PAY_BY;
     expect((await lock(ctx, 'Casey')).data.result).toBe('locked');
-    // A back out after Pay by gives the money back as before.
+    // Zip 70: a back out after Pay by that leaves fewer than 8 locked in on 2 courts keeps the money (the late drop rule; tests/zip70-time.test.ts).
     const potBlair = pot(ctx, 'Blair');
     expect((await backOut(ctx, 'Blair')).status).toBe(200);
-    expect(pot(ctx, 'Blair')).toBe(potBlair + 1600);
+    expect(pot(ctx, 'Blair')).toBe(potBlair);
     expect((await lock(ctx, 'Devon')).data.result).toBe('locked');
     // 4:00 PM (3 hours before the old fixed 7:00 PM) still sells: the cutoff follows the real start, 7:30 PM, so 4:30 PM.
     ctx.app.now = CUTOFF_MS;

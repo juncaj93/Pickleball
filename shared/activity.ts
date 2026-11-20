@@ -280,11 +280,20 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_signup_edited':
       return `${player} changed their sign-up for the ${tourName(d)}`;
     case 'tournament_back_out':
+      // Zip 70: a late drop below 8 keeps the money until someone takes the spot.
+      if (num(d.keptCents) > 0) return `${player} dropped out of the ${tourName(d)} late (${cents(d.keptCents)} kept: no credit back unless someone takes the spot)`;
       return `${player} backed out of the ${tourName(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+    case 'tournament_kept_returned':
+      return `${player}'s spot in the ${tourName(d)} was taken${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     // Zip 56 "Tournaments" piece 2 (server/tournamentTickets.ts): tickets, the waitlist and their money.
     // Since Alex's changes, picking the date opens tickets (no spots count: the smart plan follows the players).
     case 'tournament_tickets_opened':
       return `Tickets opened for the ${tourName(d)} (${cents(d.priceCents)}${typeof d.payBy === 'string' ? `, pay by ${d.payBy}` : ''}${typeof d.plays === 'string' ? `, plays ${d.plays}` : ''})`;
+    // Zip 70: the Time box and the Plan box.
+    case 'tournament_time':
+      return `${who} moved the ${tourName(d)} to ${typeof d.to === 'string' ? d.to : '?'}${typeof d.from === 'string' ? ` (was ${d.from})` : ''}`;
+    case 'tournament_plan':
+      return `${who} set the ${tourName(d)} plan to ${num(d.expected)} players on ${num(d.courts)} ${num(d.courts) === 1 ? 'court' : 'courts'}`;
     case 'tournament_pay_by':
       return `${who} set Pay by for the ${tourName(d)} to ${typeof d.payBy === 'string' ? d.payBy : '?'}`;
     case 'tournament_ticket': {

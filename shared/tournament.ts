@@ -402,6 +402,12 @@ export function planRange(start: number, minutes: number): string {
   return a.half === b.half ? `${a.text} to ${b.text} ${b.half}` : `${a.text} ${a.half} to ${b.text} ${b.half}`;
 }
 
+/** Zip 70: "10 PM", "9:30 PM" (the pictures' short clock: no ":00"). */
+export function shortClock(mins: number): string {
+  const c = clockParts(mins);
+  return `${c.text} ${c.half}`;
+}
+
 /** "7:30 PM", "7:00 PM" (the site's own time format, for the ticket stub and "Games start around"). */
 export function startLabel(start: number): string {
   const h = Math.floor(start / 60) % 24;
@@ -567,6 +573,11 @@ export interface PlayerTicketsView {
   closed: boolean;
   /** Zip 59: the tournament night has started (the words under "Tickets closed"). */
   started: boolean;
+  /** Zip 70: Drop out is over (3 hours before the start, the moment tickets close): players text the organizer instead. */
+  dropClosed?: true;
+  /** Zip 70: the late drop rule applies to this player right now (after Pay by, 2 courts, locked in, 8 or fewer locked in): no credit back
+   *  unless someone takes the spot. The Drop out sheet says so. */
+  dropKeeps?: true;
   /** Zip 59: spots freed by a back out since Pay by that nobody has claimed (only counted after Pay by). */
   freed: number;
   /** Locked in, in the order they paid: every spot, and (Zip 63, the trust rule) every I paid for a spot still waiting for the organizer. */
@@ -606,6 +617,8 @@ export interface PlayerTournamentView {
   /** Zip 64: the date is finalized but tickets have not closed (Pay by): the card still says "Tournament style TBD" (the vote is over, so the
    *  sign-up does not ask "Format you'd like"). */
   styleTbd?: true;
+  /** Zip 70 (picture 6): the organizer moved the start or the end: one card at the top of Home for everyone on the list, dismissed per player. */
+  timeNote?: { key: string; title: string; sub: string };
   /** Zip 64: the style changed after tickets closed: one short banner on Home, dismissed per player ("Tournament style is now Americano."). */
   styleNote?: { key: string; text: string };
   /** Zip 60: the date was locked (the vote or the organizer set the format): the alert at the top of Home, dismissed per player. */
@@ -720,7 +733,8 @@ export interface PlayerDayView {
   /** The header: "Game 2 of 3", "Final", "Pool play · Round 1 of 3", "Done". And the bar (0 to 1). */
   progress: { label: string; done: number; total: number };
   /** Games being played now that are not theirs. */
-  live: { round: number; court: number | null; a: { name: string; players: string[] }; b: { name: string; players: string[] } }[];
+  /** Zip 70: `label` names the game: "Round 2" for a pool game, else "Semifinal", "Final", "3rd place" (or a tie's "Game A"). */
+  live: { round: number; label?: string; court: number | null; a: { name: string; players: string[] }; b: { name: string; players: string[] } }[];
   /** Standings: one group, or Pool A and Pool B. Each row: record, theirs, a tie, and (pools) where the team plays this round. Zip 58: `through`,
    *  the team is already in the Final (or the semifinals) while a tie is being settled ("In the final"). */
   standings: { pool: 'A' | 'B' | null; rows: { rank: number; name: string; players: string[]; record: string; me?: true; tied?: true; out?: true; where?: string; through?: 'final' | 'semi' }[] }[];
@@ -1063,8 +1077,23 @@ export interface AdminTournamentView {
   courts: number;
   minutes: number;
   start: number;
-  /** Zip 56 (Alex): the organizer's cost for that plan. `paidNow`: players who have paid (the organizer's own seat is not one). */
+  /** Zip 56 (Alex): the organizer's cost for that plan. `paidNow`: players who have paid (the organizer's own seat is not one). Zip 70: for the
+   *  Plan's expected players (the money line, turned around: a cost is above 0). */
   cost?: { courtCents: number; ifFillsCents: number; nowCents: number; paidNow: number };
+  /** Zip 70: the spots players see ("Locked in 6 of 8"), from the players locked in. */
+  spots?: number;
+  /** Zip 70: the Plan's expected players (the saved Expect number, else the suggestion, never fewer than locked in; 6 to 16). */
+  expected?: number;
+  /** Zip 70: the site's own suggestion (the real count), what Expect shows until a number is saved. */
+  suggested?: number;
+  /** Zip 70: the organizer saved an Expect number (and the courts). */
+  expectSaved?: boolean;
+  /** Zip 70: THE money line for the expected players, the courts and the hours. */
+  money?: import('./tournamentMoney').MoneyLine;
+  /** Zip 70: the start and end can still move (finalized, tickets open, before the teams are published and the night window opens). */
+  timeOpen?: boolean;
+  /** Zip 70: the Plan box can still be saved (the same moment). */
+  planOpen?: boolean;
   ticketCents: number;
   /** Doubles: each of the 2 winners. Americano: 1st place (plus a medal). */
   championCreditCents: number;

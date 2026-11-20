@@ -820,8 +820,10 @@ export function PlayerHome({
                 onChanged={load.reload}
                 pay={{ group: g.group, meName: g.me?.name ?? null }}
                 notice={
-                  view!.tournament.formatAlert || view!.tournament.styleNote ? (
+                  view!.tournament.formatAlert || view!.tournament.styleNote || view!.tournament.timeNote ? (
                     <>
+                      {/* Zip 70 (picture 6): the organizer moved the start or the end: first, dismissed per player. */}
+                      {view!.tournament.timeNote && <FormatAlertCard a={view!.tournament.timeNote} label="Time changed" data="data-time-note" />}
                       {/* Zip 64: the style changed after tickets closed: one short banner, dismissed per player. */}
                       {view!.tournament.styleNote && (
                         <FormatAlertCard a={{ key: view!.tournament.styleNote.key, title: view!.tournament.styleNote.text }} label="Tournament style" data="data-style-note" />

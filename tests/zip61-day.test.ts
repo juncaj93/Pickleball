@@ -377,19 +377,20 @@ describe('zip 61: Time check, Pause, Player left, back outs', () => {
     expect((await admin(ctx, { action: 'left', playerId: leaver.id })).data.skipped).toBe(0);
   });
 
-  it('a back out during the night (after the first score) skips that player\'s later games the same way', async () => {
+  it('Zip 70: a back out in the last 3 hours is refused (Drop out has closed); nothing changes (the organizer uses Player left)', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS - 10 * 60_000;
     const { g, a } = await firstGame(ctx);
     expect((await play(ctx, a, { num: g.num, action: 'score', mine: 11, theirs: 2 })).status).toBe(200);
     // Ticket taps stop at the start; the organizer takes a player off (the same rows a back out writes).
     const out = (await dash(ctx)).rounds.players.find((p: any) => p.name !== a && !g.a.names.includes(p.name) && !g.b.names.includes(p.name));
+    const before = JSON.stringify((await dash(ctx)).rounds.games);
     const r = await (await playerPhone(ctx, out.name)).call('POST', '/api/tournament/back-out', { tournamentId: ctx.tid });
-    expect(r.status, r.text).toBe(200);
+    expect(r.status, r.text).toBe(409);
+    expect(r.data.error).toBe('drop_closed');
     const d = (await dash(ctx)).rounds;
-    expect(d.players.find((p: any) => p.id === out.id).left).toBe(true);
-    expect(d.games.filter((x: any) => [...x.a.ids, ...x.b.ids].includes(out.id)).every((x: any) => x.status === 'skipped')).toBe(true);
-    expect(d.byPercent).toBe(true);
+    expect(d.players.find((p: any) => p.id === out.id).left).toBeUndefined();
+    expect(JSON.stringify(d.games)).toBe(before);
   });
 });
 

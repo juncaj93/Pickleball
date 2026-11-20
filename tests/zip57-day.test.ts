@@ -90,7 +90,7 @@ describe('zip 57: Finalize has Courts, saved in the courts field; the plan line 
   });
   it('when tickets close: too tight (12 on 1 court, 2 hours), a court no longer needed (6 on 2 courts), under 6', async () => {
     const tight = await world(12, { courts: 1, start: 19 * 60 + 30, minutes: 120 });
-    expect((await dash(tight)).closeCheck).toEqual({ kind: 'tight', text: 'Too tight for 12 players on 1 court. Use 2 courts or add court time.' });
+    expect((await dash(tight)).closeCheck).toEqual({ kind: 'tight', text: 'Locked doubles for 12: too tight on 1 court. Use 2 courts or add court time.' });
     const extra = await world(6, { courts: 2 });
     expect((await dash(extra)).closeCheck).toEqual({ kind: 'extra_court', text: '6 locked in: 1 court is enough. Call the venue to cancel court 2.' });
     const few = await world(4, { courts: 1 });

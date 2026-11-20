@@ -59,6 +59,60 @@ export const onList = (x: string): string =>
 export const offList = (x: string): string =>
   `EXISTS (SELECT 1 FROM tournament_signups s WHERE s.tournament_id = ${x}.tournament_id AND s.player_id = ${x}.player_id AND s.status <> 'in')`;
 
+/**
+ * Zip 70 (🎾70.time, the late drop rule): after Pay by, a drop that takes the number locked in below 8 on a 2 court night keeps the dropper's
+ * money (below 8 the second court is wasted, and it is paid for). Their sign-up becomes 'kept' (off the list everywhere, like 'out'), their
+ * ticket keeps its money with no place, and nothing comes back yet. When the spots taken are back to 8 or more (someone took the spot and
+ * paid), every kept ticket comes back as credit by the usual back-out rules, once, in the same step that filled the spot (releaseKeptStatements).
+ * A Cancel gives it back like every other ticket. The end of the night, End tournament and the organizer's answers never give it back.
+ */
+export const LATE_DROP_FLOOR = 8;
+export const KEPT = 'kept';
+
+/** SQL over a ticket alias: its player dropped out late and their money is kept (Zip 70). */
+export const keptOff = (x: string): string =>
+  `EXISTS (SELECT 1 FROM tournament_signups s WHERE s.tournament_id = ${x}.tournament_id AND s.player_id = ${x}.player_id AND s.status = '${KEPT}')`;
+
+/** SQL over a ticket alias: off the list, and NOT a kept late drop (backed out or taken off: their money comes back now). */
+export const offListBack = (x: string): string =>
+  `EXISTS (SELECT 1 FROM tournament_signups s WHERE s.tournament_id = ${x}.tournament_id AND s.player_id = ${x}.player_id AND s.status NOT IN ('in', '${KEPT}'))`;
+
+/** SQL: the spots taken by players on the list are back to 8 or more (a kept late drop's money then comes back). */
+const refilledSql = (t: string) =>
+  `((SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
+     WHERE k.tournament_id = ${t} AND k.place = 'spot') >= ${LATE_DROP_FLOOR} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${t} AND tt.status = 'tickets'))`;
+
+/**
+ * Zip 70: every kept late drop of a tournament comes back as credit once the spots are back to 8 or more: one History line each (written first,
+ * while the ticket still shows the amount), the usual back-out money statements, then the sign-up goes from 'kept' to 'out'. Each statement is
+ * guarded by the rows as they are when it runs, so a second batch (a double tap, a refresh, another phone) finds nothing kept and moves nothing.
+ * Runs right after fillSpotsStatement in every batch that can fill a spot.
+ */
+export function releaseKeptStatements(db: D1Database, groupId: string, tournamentId: string, nowIso: string): D1PreparedStatement[] {
+  const t = sqlText(tournamentId);
+  const when = (x: string) => `(${keptOff(x)} AND ${refilledSql(t)})`;
+  return [
+    db
+      .prepare(
+        `INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at)
+         SELECT ${SQL_ID}, ?1, NULL, 'organizer', 'tournament_kept_returned',
+           json_object('tournament', (SELECT name FROM tournaments WHERE id = ${t}), 'tournamentId', ${t}, 'player', p.display_name, 'playerId', x.player_id,
+             'amountCents', x.credit_cents + x.paid_cents, 'waitingCents', x.claim_cents), ?2
+         FROM tournament_tickets x JOIN players p ON p.id = x.player_id WHERE x.tournament_id = ${t} AND ${when('x')}`,
+      )
+      .bind(groupId, nowIso),
+    ...ticketBackStatements(db, { groupId, tournamentId, playerId: null, why: 'back', endedReason: 'dropped', nowIso, when }),
+    db
+      .prepare(`UPDATE tournament_signups SET status = 'out', updated_at = ?1 WHERE tournament_id = ${t} AND status = '${KEPT}' AND ${refilledSql(t)}`)
+      .bind(nowIso),
+  ];
+}
+
+/** fillSpotsStatement, then the kept late drops it may release (Zip 70): what every batch that can fill a spot runs. */
+export function fillSpotsStatements(db: D1Database, groupId: string, tournamentId: string, nowIso: string): D1PreparedStatement[] {
+  return [fillSpotsStatement(db, tournamentId, nowIso), ...releaseKeptStatements(db, groupId, tournamentId, nowIso)];
+}
+
 /** SQL over a ticket alias: its tournament is canceled. */
 export const tournamentCanceled = (x: string): string => `EXISTS (SELECT 1 FROM tournaments t WHERE t.id = ${x}.tournament_id AND t.status = 'canceled')`;
 
@@ -182,7 +236,7 @@ export function payWithCreditStatements(
            WHERE id = ${k} AND ${guard}`,
         )
         .bind(nowIso),
-      fillSpotsStatement(db, tournamentId, nowIso),
+      ...fillSpotsStatements(db, groupId, tournamentId, nowIso),
     ],
     ticketStatement: 1,
   };

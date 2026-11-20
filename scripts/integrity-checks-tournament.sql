@@ -34,9 +34,13 @@ SELECT
   -- Money still on a ticket of a canceled tournament (an I paid still waiting for the organizer is a to-do, below, not a problem).
   ,(SELECT COUNT(*) FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
      WHERE t.status = 'canceled' AND k.claim_cents = 0 AND k.credit_cents + k.paid_cents > 0) AS tour_money_on_canceled
-  -- Money still on the ticket of someone who is off the list (backed out, or taken off by the organizer).
+  -- Money still on the ticket of someone who is off the list (backed out, or taken off by the organizer). Zip 70: a late drop below 8 ('kept')
+  -- keeps its money on purpose until someone takes the spot (counted below, as a to-do).
   ,(SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id
-     WHERE s.status <> 'in' AND k.claim_cents = 0 AND k.credit_cents + k.paid_cents > 0) AS tour_money_on_left
+     WHERE s.status NOT IN ('in', 'kept') AND k.claim_cents = 0 AND k.credit_cents + k.paid_cents > 0) AS tour_money_on_left
+  -- Zip 70: a kept late drop on a tournament that is not open any more with tickets (a cancel gives it back; only 'tickets' and 'ended' keep it).
+  ,(SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'kept'
+     JOIN tournaments t ON t.id = k.tournament_id WHERE t.status NOT IN ('tickets', 'ended') AND k.credit_cents + k.paid_cents > 0) AS tour_kept_wrong_stage
   -- A spot or a place in line for someone off the list, or on a canceled tournament.
   ,(SELECT COUNT(*) FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
      LEFT JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id
@@ -50,4 +54,6 @@ SELECT
      AND EXISTS (SELECT 1 FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
                  WHERE k.tournament_id = t.id AND k.place = 'line' AND k.credit_cents + k.paid_cents >= k.price_cents)) AS tour_paid_line_with_open_spot
   -- Not a problem, a to-do: I paid taps on tickets still waiting for the organizer's answer.
-  ,(SELECT COUNT(*) FROM tournament_tickets WHERE claim_cents > 0) AS info_open_ticket_claims;
+  ,(SELECT COUNT(*) FROM tournament_tickets WHERE claim_cents > 0) AS info_open_ticket_claims
+  -- Not a problem: Zip 70 late drops whose money is kept until someone takes the spot.
+  ,(SELECT COUNT(*) FROM tournament_signups WHERE status = 'kept') AS info_kept_late_drops;
