@@ -232,7 +232,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       {/* Round 3: a guest removed late whose spot no one has taken yet. */}
                       {r.guest?.status === 'late' && r.status === 'confirmed' ? <span className="ps-with-guest" data-ps-guest-owed> (incl. {r.guest.name}'s spot)</span> : null}
                       {/* Zip 31: extra time riding on this game; Mark paid takes both. */}
-                      {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extension)` : ''}
+                      {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extra time)` : ''}
                       {r.lateFee ? <span className="ps-fee"> · {lateFeeLine(r)?.split(' · ')[0]}</span> : null}
                     </span>
                   ) : (

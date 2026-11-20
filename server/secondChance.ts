@@ -280,7 +280,7 @@ export async function secondChanceAction(
     const card = secondChanceCards([game], nowMs, tz, '', pretendNoon(ctx) ? dayKey(ctx.nowMs, tz) : null)[0];
     if (!card || card.kind !== 'open' || card.step !== 'cutoff') throw new HttpError(409, 'changed', 'This game just changed. Look again.');
     // Once 4 had paid (Telegram 2 went), the court may have been booked on CourtReserve: the usual cancel asks about the fee instead.
-    if (sentMarks.has(SC.pingPaid)) throw new HttpError(409, 'maybe_booked', 'Four had paid, so the court may be booked. Use the gear menu > Cancel session to answer the fee question.');
+    if (sentMarks.has(SC.pingPaid)) throw new HttpError(409, 'maybe_booked', 'Four had paid, so the court may be booked. Use the gear menu > Cancel game to answer the fee question.');
     // Never booked, so no fee: the plain cancel (everyone's money back as credit), with the late-fee question answered for it.
     const out = await tools.decide(ctx, { decision: 'cancel', confirm: true, venueWaived: true, chargedCents: 0 });
     await mark(ctx.db, group.id, session.id, SC.cut, null, ctx.nowIso);

@@ -49,7 +49,7 @@ const STAGES = [
   { stage: 'teams_published', label: 'Teams published (two days before)', line: 'Published, the night two days from now. View as Vic: Your team, Your games with courts, All teams (mock 16).' },
   { stage: 'game1', label: 'Game 1', line: 'Tonight, started a minute ago, no results. View as Vic: Game 1 with Enter score (mock 17).' },
   { stage: 'mid', label: 'Mid-tournament (running behind)', line: 'Started 45 minutes ago, 7:30 to 9:30 PM. Vic entered 11 to 7 in Game 1: it is in (view as Parker: Lost 7–11, nothing to answer). Home: the Time check with one tap (mock 48).' },
-  { stage: 'pools_done', label: 'All pool games done', line: 'Every round robin game in, with scores: final standings with pts; the Final and the 3rd place game are set.' },
+  { stage: 'pools_done', label: 'All group games done', line: 'Every round robin game in, with scores: final standings with pts; the Final and the 3rd place game are set.' },
   { stage: 'backed_out', label: 'Player dropped out (odd count)', line: 'Teams published, then Zoe dropped out after Pay by: 7 locked in. Home: switched to Americano with Copy text for the group. Players: Tournament style is now Americano, no teams.' },
   // Zip 66 (🎾66.admincard): the organizer's card (one closed line, Votes, Not signed up) and the in-or-out alert.
   { stage: 'zip66_start', label: 'Start: the card, Votes, Not signed up', line: 'The Cold Open, the vote open, 8 on the list (Vic and Reese are not). Home: the card is one closed line. Tap it open, tap Votes, tap Not signed up, Copy reminder text. Edit: Plan, Levels (a pencil shows the dates), Pick the date (folded), Settings.' },

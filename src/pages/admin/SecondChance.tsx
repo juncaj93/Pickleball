@@ -67,6 +67,9 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
   const noTime = times.length === 0;
   const dismiss = () => act.run(() => tap(c.sessionId, { action: 'dismiss' }), 'Hidden for today');
   const when = dayTime(c.startsAt, tz);
+  // Zip 78: "today" for a game before 5 PM, "tonight" from 5 PM on.
+  const day = dayWord(c.startsAt, tz, nowMs).toLowerCase();
+  const openQ = `Court open ${day}?`;
   if (c.step === 1) {
     return (
       <Card
@@ -74,7 +77,7 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
         tone="blue"
         icon="clock"
         title={`${when} was 1 short`}
-        sub="Check if a court is open tonight."
+        sub={`Check if a court is open ${day}.`}
         onX={dismiss}
         xLabel={`${when} was 1 short`}
         data={{ 'data-sc-card': 'chance', 'data-sc-step': '1', 'data-session': c.sessionId }}
@@ -100,10 +103,10 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
       ctx={ctx}
       tone="blue"
       icon="clock"
-      title="Court open tonight?"
+      title={openQ}
       sub={noTime ? 'No time fits inside the venue hours for a game this long. Nothing was reopened.' : `Reopen ${when}, or pick a new time.`}
       onX={dismiss}
-      xLabel="Court open tonight?"
+      xLabel={openQ}
       data={{ 'data-sc-card': 'chance', 'data-sc-step': '2', 'data-session': c.sessionId }}
       actions={
         <>

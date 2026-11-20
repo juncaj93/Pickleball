@@ -190,8 +190,8 @@ export function extAlerts(shares: ExtShareView[], nowMs: number, tz: string): Ex
   return out;
 }
 
-/** The small grey note on the next game's card: "incl. $3 extension". */
-export const inclNote = (cents: number) => `incl. ${formatPrice(cents)} extension`;
+/** The small grey note on the next game's card: "incl. $3 extra time". */
+export const inclNote = (cents: number) => `incl. ${formatPrice(cents)} extra time`;
 
 /** The ledger's `reason` text for credit moved by an extension: "ext:<game id>" (no session_id, so no seat ever counts it). */
 export const EXT_PREFIX = 'ext:';

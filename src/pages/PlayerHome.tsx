@@ -209,8 +209,8 @@ type JoinResponse = {
 };
 
 const GOOD_NEWS = {
-  spot_opened: "Good news, a spot opened up, so you're in.",
-  court_opened: "Good news, the court opened, so you're in.",
+  spot_opened: 'A spot opened. You’re in.',
+  court_opened: 'The court opened. You’re in.',
 };
 
 /**
@@ -220,8 +220,8 @@ const GOOD_NEWS = {
  */
 export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, showDue = !noCourt): string {
   // A really full game has a real waitlist, court or no court: say so.
-  if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
-  if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
+  if (d.result === 'waitlisted') return `You’re ${ordinal(d.position ?? 1)} on the waitlist`;
+  if (!noCourt && d.result === 'standby') return `You’re ${ordinal(d.position ?? 1)} on standby`;
   // `showDue`: the card shows "$ due" for this game (a booked court, or "Ask for payment on every game" is on).
   return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
 }
@@ -492,7 +492,7 @@ export function PlayerHome({
     const cash = planCashOut(g.credit.history, cashOutSeen(), Date.parse(g.now));
     if (cash.show) rememberCashOuts(cash.next);
     const notices: { msg: string; ball?: boolean; ok?: boolean }[] = [];
-    if (cash.show) notices.push({ msg: `${g.group.organizerName ?? 'The organizer'} sent your ${formatPrice(cash.show.cents)}`, ...(g.alertCards === true ? { ok: true } : {}) });
+    if (cash.show) notices.push({ msg: `${upFirst(firstNameOf(g.group.organizerName))} sent your ${formatPrice(cash.show.cents)}`, ...(g.alertCards === true ? { ok: true } : {}) });
     if (plan.now.length) notices.push({ msg: `Game on! ${plan.now[0].confirmed.length} in`, ball: true });
     // Zip 11, Alert cards: "Alex sent your $10" carries an OK (it only closes the banner, which still goes by itself).
     const optsOf = (n: { ball?: boolean; ok?: boolean }) => (n.ok ? { ball: n.ball, action: { label: 'OK', onClick: () => {} } } : { ball: n.ball });
@@ -1213,6 +1213,9 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
 function firstNameOf(name: string | null | undefined): string {
   return (name ?? '').trim().split(/\s+/)[0] || 'the organizer';
 }
+
+/** "The organizer" at the start of a sentence (a name stays as it is). */
+const upFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Hand adjustments to this player's credit this phone closed with the X (Zip 11, Alert cards). Remembered on this phone only. */
 const ADJUST_SEEN_KEY = 'pb_adjust_seen';
@@ -1946,7 +1949,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   // (On this card the amounts are already after any credit; each game's own line says what is left.)
   // The organizer's latest hand adjustment to their credit (recent ones only), with the reason.
   const adjustNote = latestAdjustment(g.credit.history, Date.parse(g.now));
-  const who = g.group.organizerName ?? 'The organizer';
+  const who = firstNameOf(g.group.organizerName);
   // Zip 11, Alert cards: the same card as one amber action card. The same buttons with the same rules: Pay on the right (the Pay
   // sheet or Venmo, exactly as below), and I paid / Use credit as links under the title whenever the card below would show them.
   if (g.alertCards === true) {
@@ -2944,7 +2947,7 @@ export function ScheduleRow({
     // Says what happens to their money: "You dropped out. $14 credit returned." (nothing is sent until Undo runs out).
     // Late fees on and the game would go short: "You're out. You owe $14 unless someone takes your spot." (shared/lateFees.ts).
     const lateOwes = mine?.lateDrop?.owes ? mine.lateDrop : null;
-    toast(lateOwes ? lateDropToast(formatPrice(lateOwes.feeCents), lateOwes.paid) : droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, lead, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
+    toast(lateOwes ? lateDropToast(formatPrice(lateOwes.feeCents), lateOwes.paid) : droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, lead, mine?.dropClaimCents ?? 0, firstNameOf(g.group.organizerName)), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);
@@ -3060,7 +3063,7 @@ export function ScheduleRow({
   const reasonShown = s.canceled && s.courtState !== 'not_opened' && !!s.cancelReason;
   if (s.canceled) status = <span className={`st-canceled${reasonShown ? ` ${noteLook(s.cancelReason!)}` : ''}`}>{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
   else if (waiting)
-    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
+    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">{ordinal(mine.waitlistPosition ?? 1)} on {courtWait ? 'standby' : 'the waitlist'}</span>;
   else if (isIn && simple)
     // PLAYER_CARDS_SIMPLE: "You're in" and the calendar icon, nothing about the court.
     status = (

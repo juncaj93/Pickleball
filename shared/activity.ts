@@ -88,6 +88,8 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} went on the court waitlist${forDay}`;
     case 'court_not_opened':
       return `${who} marked the court didn't open${forDay}`;
+    case 'court_not_booked':
+      return `${who} marked the court not booked${forDay}`;
     case 'booking_updated':
       if (changes.booking_status?.to === 'booked') return `${who} booked${day ? ` ${day}` : ' a court'}`;
       return `${who} edited a booking${forDay}`;
@@ -257,6 +259,8 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} showed ${theTour(d)} to everyone`;
     case 'tournament_hidden':
       return `${who} set ${theTour(d)} to Only me`;
+    case 'tournament_restored':
+      return `${who} restored ${theTour(d)}`;
     case 'tournament_level':
       return `${who} set ${player}'s level to ${typeof d.level === 'string' ? d.level : '?'} for ${theTour(d)}`;
     case 'tournament_date':
@@ -264,7 +268,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     // Zip 60: how the format was set. The players' vote (with the counts), the tie rule, or the organizer.
     case 'tournament_format': {
       const fmt = d.format === 'americano' ? 'Americano' : 'Locked doubles';
-      const counts = typeof d.locked === 'number' ? ` (Locked ${d.locked}, Americano ${num(d.americano)}, Either ${num(d.either)})` : '';
+      const counts = typeof d.locked === 'number' ? ` (Locked doubles ${d.locked}, Americano ${num(d.americano)}, Either ${num(d.either)})` : '';
       if (d.how === 'vote') return `The players' vote made ${theTour(d)} ${fmt}${counts}`;
       if (d.how === 'tie') return `No majority, so the tie rule made ${theTour(d)} ${fmt}${counts}`;
       if (d.how === 'vote_open') return `${who} let the players vote ${theTour(d)} format`;
@@ -300,7 +304,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       const used = num(d.creditUsedCents) > 0 ? ` (${cents(d.creditUsedCents)} credit used)` : '';
       if (d.result === 'locked') return `${player} locked in for ${theTour(d)}${used}`;
       if (d.result === 'held') return `${player} paid to hold a standby spot for ${tourName(d)}${used}`;
-      return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock my spot'} for ${theTour(d)}${used}`;
+      return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock in'} for ${theTour(d)}${used}`;
     }
     case 'tournament_i_paid':
       return `${player} tapped I paid (${cents(d.amountCents)}) for a ${tourName(d)} ticket`;
@@ -566,6 +570,22 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} restored${day ? ` ${day}` : ' a game'} to the lists`;
     case 'charge_edited':
       return `${who} changed the venue charge${forDay}${typeof d.chargedCents === 'number' ? (d.chargedCents > 0 ? ` to ${formatPrice(d.chargedCents)}` : ' to none') : ''}`;
+    case 'time_shift_on':
+      return `${who} switched "Moved-game notice" on`;
+    case 'time_shift_off':
+      return `${who} switched "Moved-game notice" off`;
+    case 'pay_always_on':
+      return `${who} switched "Payment on every game" on`;
+    case 'pay_always_off':
+      return `${who} switched "Payment on every game" off`;
+    case 'money_note_on':
+      return `${who} switched "Money change note" on`;
+    case 'money_note_off':
+      return `${who} switched "Money change note" off`;
+    case 'cheaper_fix_on':
+      return `${who} switched "Made cheaper after paying" on`;
+    case 'cheaper_fix_off':
+      return `${who} switched "Made cheaper after paying" off`;
     case 'money_rework_on':
       return `${who} switched the Money page rework on`;
     case 'money_rework_off':

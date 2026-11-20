@@ -193,7 +193,7 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
 }
 
 /** Zip 66: "Doubles 2 · Americano 0 · Either 6" (the card's Votes row; Doubles, not Locked). */
-const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Doubles ${v.locked} · Americano ${v.americano} · Either ${v.either}`;
+const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Locked doubles ${v.locked} · Americano ${v.americano} · Either ${v.either}`;
 /** Zip 66: "6 players · 1 court · 2.5 hrs" (the card's Plan row). */
 // Zip 70: the Plan's expected players (the saved Expect number, else the site's suggestion), not the plan size.
 const planShort = (t: AdminTournamentView) => `${t.expected ?? t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
@@ -874,7 +874,7 @@ function CancelOrReschedule({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournam
       <ConfirmDialog
         open={ask === 'reschedule'}
         title="Reschedule?"
-        body={<p>Are you sure? The date comes off and everyone picks their dates again. Paid tickets stay held.</p>}
+        body={<p>The date comes off and everyone picks their dates again. Paid tickets stay held.</p>}
         confirmLabel="Reschedule"
         busy={busy}
         onCancel={() => setAsk(null)}
@@ -892,7 +892,7 @@ function CancelOrReschedule({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournam
         title="Cancel the tournament?"
         body={
           <p>
-            Are you sure? Players see it canceled.
+            Players see it canceled.
             {back.length > 0 ? ` ${back.length} paid ${back.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(backCents)}).` : ' Nothing was paid, so nothing comes back.'}
           </p>
         }
@@ -1557,9 +1557,9 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
         body={
           <p>
             {held.length > 0
-              ? `Are you sure? Players see it canceled. ${held.length} paid ${held.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(heldCents)}).`
+              ? `Players see it canceled. ${held.length} paid ${held.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(heldCents)}).`
               : t.finalDate
-                ? 'Are you sure? Players on the list see it canceled. Nothing was paid, so nothing comes back.'
+                ? 'Players on the list see it canceled. Nothing was paid, so nothing comes back.'
                 : `Players stop seeing ${theName(t.name)}. The list stays saved. Nothing was paid, so nothing comes back.`}
           </p>
         }

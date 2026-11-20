@@ -34,7 +34,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const [start, setStart] = useState(startLocal.slice(11));
   const [end, setEnd] = useState(toLocalInputValue(s.endsAt, tz).slice(11));
   const [error, setError] = useState<string | null>(null);
-  // The short label ("Veteran's Day", "Court 3"): the new layout only (ADMIN_V2). It is the game's note, changed with Save.
+  // The short label ("Veterans Day", "Court 3"): the new layout only (ADMIN_V2). It is the game's note, changed with Save.
   const labelOn = ctx.d.adminV2 === true;
   const [label, setLabel] = useState(s.note ?? '');
   const labelChanged = labelOn && label.trim() !== (s.note ?? '');
@@ -172,7 +172,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
         {labelOn && (
           <label className="bh-card bh-note" data-label-field>
             <span className="bh-lab">Label</span>
-            <input className="bh-box" type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder={courtOn ? "Veteran's Day" : "Veteran's Day, Court 3"} autoComplete="off" />
+            <input className="bh-box" type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder={courtOn ? "Veterans Day" : "Veterans Day, Court 3"} autoComplete="off" />
           </label>
         )}
         {error && <p className="field-error">{error}</p>}
@@ -232,7 +232,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
       {labelOn && (
         <label className="field" data-label-field>
           Label
-          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder={courtOn ? "Veteran's Day" : "Veteran's Day, Court 3"} autoComplete="off" />
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder={courtOn ? "Veterans Day" : "Veterans Day, Court 3"} autoComplete="off" />
         </label>
       )}
       {error && <p className="field-error">{error}</p>}

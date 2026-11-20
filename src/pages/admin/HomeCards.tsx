@@ -90,7 +90,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           {under ? (
             <>
               <button className="ac-btn ac-out" data-ac-tone="red" disabled={busy} onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
-                Cancel session
+                Cancel game
               </button>
               <button className="ac-btn ac-out" disabled={busy} onClick={() => finalize(inNow.map((r) => r.playerId))}>
                 Finalize anyway
@@ -133,7 +133,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         {under ? (
           <>
             <button className="btn danger" disabled={busy} onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
-              Cancel session
+              Cancel game
             </button>
             <button className="btn secondary" disabled={busy} onClick={() => finalize(inNow.map((r) => r.playerId))}>
               Finalize anyway

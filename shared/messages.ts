@@ -135,7 +135,7 @@ export function paymentMessage(name: string, totalCents: number, games: SessionL
 
 /** One group text to everyone who has not paid. */
 export function remindAllMessage(link: string): string {
-  return `Hey, looks like you haven't paid for pickleball yet. Pay here: ${link}`;
+  return `Hey, you haven’t paid for pickleball yet. Pay here: ${link}`;
 }
 
 export function normalizePhone(phone: string): string {
@@ -205,7 +205,7 @@ export function courtStillBookedMessage(phone: string = COURTS_PHONE, game: stri
 
 /** After a cancel inside 12 hours where the venue did NOT waive the fee: everyone who was in still owes their share. */
 export function canceledFeeKeptMessage(priceCents: number, link: string, game: string = "today's game"): string {
-  return `Heads up: ${game} is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your ${formatPrice(priceCents)} share still applies (if you already paid, you're all set). You can pay on the site: ${link}. Sorry about that!`;
+  return `${game.charAt(0).toUpperCase()}${game.slice(1)} is canceled. It’s inside 12 hours, so the venue charges us. If you were signed up, your ${formatPrice(priceCents)} share still applies (if you already paid, you’re all set). You can pay on the site: ${link}`;
 }
 
 /** After a cancel inside 12 hours where the venue waived the fee: the usual credit text, saying "today" (sent on game day). */

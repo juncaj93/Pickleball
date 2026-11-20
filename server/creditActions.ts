@@ -11,6 +11,7 @@ import { newId } from './crypto';
 import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, USABLE, useCashOutOnSeat, seatUnitsOf } from './credit';
 import { HttpError } from './http';
 import { lateFeeKind } from '../shared/lateFees';
+import { formatPrice } from '../shared/money';
 import { audit, type GroupRow, loadRoster, organizerIdOf, orgFirstName, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 import { flatOf } from './repo';
@@ -143,7 +144,7 @@ export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string,
   if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You have no credit to cash out.');
   const { usableCents, reservedCents } = await usableFor(ctx, group, playerId);
   if (reservedCents > 0) throw new HttpError(409, 'request_open', 'You already asked for a cash out. Cancel it to make a new one.');
-  if (cents > usableCents) throw new HttpError(409, 'not_enough_credit', `You have ${Math.floor(usableCents / 100)} dollars of credit.`);
+  if (cents > usableCents) throw new HttpError(409, 'not_enough_credit', `You have ${formatPrice(usableCents)} credit.`);
   const id = newId();
   try {
     // Saved only while the credit is still there: an I'm in at the same moment may have just used it.
@@ -203,7 +204,7 @@ export async function resolveRefundRequest(ctx: Ctx, body: Record<string, unknow
   }
   // The card showed an amount; the player may have put part of it toward a game since.
   if (body.cents !== undefined && v.cents(body.cents, 'cents') !== req.amount_cents) {
-    throw new HttpError(409, 'request_changed', `${req.display_name} now asks for ${Math.floor(req.amount_cents / 100)} dollars. Look again.`);
+    throw new HttpError(409, 'request_changed', `${req.display_name} now asks for ${formatPrice(req.amount_cents)}. Look again.`);
   }
   const done = await refundCredit(ctx.db, { groupId: group.id, playerId: req.player_id, cents: req.amount_cents, requestId: id, nowIso: ctx.nowIso });
   if (!done) throw new HttpError(409, 'credit_changed', 'Their credit changed. Look again.');

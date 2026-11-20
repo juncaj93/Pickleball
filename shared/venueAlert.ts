@@ -23,6 +23,7 @@
 
 import { formatPrice } from './money';
 import { localParts, zonedTimeToUtc } from './time';
+import { DEFAULT_VENUE_NAME } from './settings';
 
 export const VENUE_ALERT = { task: 'venue_alert_on', header: 'X-Venue-Alert', sinceHeader: 'X-Venue-Alert-Since', link: 'venuealert', env: 'VENUE_ALERT', name: 'Venue charge alert' } as const;
 
@@ -222,9 +223,9 @@ export interface VenueInput {
    * own charge day, so marking a newer month paid never trims (or hides) an older unpaid card. Missing: courtPaidThrough, used the same way.
    */
   courtPaidDates?: readonly string[];
+  /** Zip 78: Settings > Venue name (blank: the default club name), in the card's words. */
+  venueName?: string | null;
 }
-
-const COURT_NAME = 'Northville Pickleball';
 
 /** The first month a scan has to look at: the month the switch went on (an earlier charge day can never be at or after it). */
 export function scanMonths(onAtMs: number, nowMs: number, tz: string): { year: number; month: number }[] {
@@ -359,6 +360,7 @@ export function venuePlan(input: Omit<VenueInput, 'games'>): PlannedCharge[] {
  */
 export function dueAlerts(input: VenueInput): VenueAlert[] {
   const { tz } = input;
+  const COURT_NAME = input.venueName?.trim() || DEFAULT_VENUE_NAME;
   const due: { date: string; kind: ChargeKind; month: string; key: string; cents: number; line: string }[] = [];
   for (const c of venuePlan(input)) {
     if (c.kind === 'court') {

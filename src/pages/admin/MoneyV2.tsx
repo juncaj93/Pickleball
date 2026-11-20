@@ -25,6 +25,7 @@ import { RequestPair, requestUrlFor, VenmoRequestLink } from './VenmoLink';
 import { useReworkBusy, useReworkRun } from './ReworkOps';
 import type { ReworkOp } from './reworkOptimistic';
 import { viewFlat } from '../../../shared/gameLength';
+import { DEFAULT_VENUE_NAME } from '../../../shared/settings';
 
 type View = 'who' | 'totals';
 type Tone = 'ok' | 'info' | 'warn' | 'muted';
@@ -198,6 +199,8 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
 
 export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessionView; r2?: boolean; rework?: boolean }) {
   const tz = ctx.d.group.timezone;
+  // Zip 78: the venue's name from Settings (blank: the default club name), never a fixed name.
+  const venue = ctx.d.group.venueName?.trim() || DEFAULT_VENUE_NAME;
   const { busy: actionBusy, run: plainRun, pending: plainPending } = useAction(ctx);
   const instantOn = useInstant() !== null;
   // The Money page rework draws every tap at once and saves in the background (ReworkOps.tsx); everywhere else a tap waits as it always did.
@@ -254,7 +257,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
     if (rework) return <ClosedBody ctx={ctx} s={s} hideable={canHide(s)} />;
     return (
       <div className="mv2-body stack">
-        <Notice tone="muted" title="Session canceled">
+        <Notice tone="muted" title="Game canceled">
           Nobody owes for it. Anyone who paid has it as credit.
           {s.chargedCents ? ` The venue charged you ${formatPrice(s.chargedCents)}.` : ''}
         </Notice>
@@ -407,8 +410,8 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
             court
             attrs={{ 'data-court': s.id }}
             name={`Court ${formatPrice(s.court.costCents)}`}
-            short={r2 ? (myId ? '' : 'Add your name in Settings to mark paid') : myId ? (s.court.covered ? 'Northville, players cover' : `Northville, you pay ${formatPrice(s.court.yourShareCents)}`) : 'Add your name in Settings to mark paid'}
-            full={r2 ? '' : `You pay Northville Pickleball ${formatPrice(s.court.costCents)} · ${s.court.covered ? 'Players cover the court' : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}`}
+            short={r2 ? (myId ? '' : 'Add your name in Settings to mark paid') : myId ? (s.court.covered ? `${venue}, players cover` : `${venue}, you pay ${formatPrice(s.court.yourShareCents)}`) : 'Add your name in Settings to mark paid'}
+            full={r2 ? '' : `You pay ${venue} ${formatPrice(s.court.costCents)} · ${s.court.covered ? 'Players cover the court' : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}`}
             chip={{ tone: s.court.paid ? 'ok' : r2 ? 'muted' : 'warn', label: s.court.paid ? 'Paid' : 'Due', srPrefix: 'Court ' }}
             primary={myId ? { label: s.court.paid ? 'Unmark' : 'Mark paid', onClick: () => void setCourtPaid(!s.court!.paid) } : undefined}
             note={myId ? undefined : 'Add your name in Settings (Group > Your name) to mark this paid.'}

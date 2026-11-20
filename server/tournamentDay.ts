@@ -38,6 +38,7 @@ import {
   draftTeams,
   type DraftPlayer,
   type GameResult,
+  groupName,
   groupsOf,
   type Pair,
   type PlannedGame,
@@ -375,12 +376,12 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, start: real.start, end: real.start + real.minutes };
 }
 
-/** "1st of Pool A", "2nd", "Winner of game 9". */
+/** "1st of the Dink group", "2nd", "Winner of game 9". */
 function slotName(slot: string): string {
   const k = slot[0];
   const n = Number(slot.slice(1));
   const nth = n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`;
-  if (k === 'A' || k === 'B') return `${nth} of Pool ${k}`;
+  if (k === 'A' || k === 'B') return `${nth} of the ${groupName(k)}`;
   if (k === 'P') return nth;
   if (k === 'W') return `Winner of game ${n}`;
   if (k === 'L') return `Loser of game ${n}`;
@@ -684,7 +685,7 @@ export function playerDayView(
   let done = poolDone;
   let total = Math.max(1, poolGames.length);
   if (pools && Number.isFinite(roundNow) && roundNow <= poolRounds) {
-    label = `Pool play · Round ${roundNow} of ${poolRounds}`;
+    label = `Group play · Round ${roundNow} of ${poolRounds}`;
     done = roundNow - 1;
     total = poolRounds;
   } else if (next && next.stage === 'pool') label = `${next.label} of ${poolGames.length}`;
@@ -773,7 +774,7 @@ export function playerDayView(
       at += list.every((g) => g.stage === 'pool') ? ROUND_MINUTES[Math.max(...list.map((g) => g.play_to)) as GameTo] : ROUND_MINUTES[PLAYOFF_TO];
       void round;
     }
-    night.push({ label: `Pool play · ${poolRounds} rounds`, time: clockLabel(real.start) });
+    night.push({ label: `Group play · ${poolRounds} rounds`, time: clockLabel(real.start) });
     if (semiAt !== null) night.push({ label: 'Semifinals', time: clockLabel(about(semiAt)) });
     if (finalAt !== null) night.push({ label: f.games.some((g) => g.stage === 'third') ? 'Final and 3rd place' : 'Final', time: clockLabel(about(finalAt)) });
   }

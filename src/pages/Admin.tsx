@@ -707,7 +707,7 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
                 }
               }}
             >
-              Show this session
+              Show this game
             </button>
           </li>
         ))}

@@ -603,6 +603,15 @@ export function resolveGames(
 
 const range = (from: number, to: number) => Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
 
+/**
+ * Zip 78: what people read for a pool (12 or more players, two groups, one per court): pool A is the "Dink group" (Court 1), pool B
+ * the "Drive group" (Court 2). `short`: just "Dink" / "Drive" where space is tight. The code keeps 'A' and 'B'.
+ */
+export function groupName(pool: PoolName | string | null | undefined, short = false): string {
+  const word = pool === 'B' ? 'Drive' : 'Dink';
+  return short ? word : `${word} group`;
+}
+
 /** The seats of each group (Pool A, Pool B, or everyone). */
 export function groupsOf(teams: number): { pool: PoolName | null; seats: number[] }[] {
   const sizes = poolSizes(teams);
@@ -611,7 +620,7 @@ export function groupsOf(teams: number): { pool: PoolName | null; seats: number[
 
 /** What a playoff slot means in words, before it is decided ("If you finish in the top 2"). */
 export function slotWords(stage: GameStage, pool: PoolName | null): string {
-  if (stage === 'semi') return pool ? `If you finish in the top 2 of Pool ${pool}` : 'If you finish in the top 2 of your pool';
+  if (stage === 'semi') return pool ? `If you finish in the top 2 of the ${groupName(pool)}` : 'If you finish in the top 2 of your group';
   if (stage === 'third') return 'If you finish 3rd or 4th';
   return 'If you finish in the top 2';
 }

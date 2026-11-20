@@ -617,6 +617,8 @@ const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
   { key: 'refundRequests', label: 'Cash out requests' },
   { key: 'smartAlerts', label: 'Smart alerts ("Do this now" reminders)' },
 ];
+/** Zip 78: the toast after an Alerts switch saves, the same kind as the Feature switches' ("Smart alerts off"). */
+const ALERT_TOAST: Record<AlertKey, string> = { enabled: 'Telegram alerts', drop36: 'Late drop alerts', belowMin: 'Below 4 alerts', refundRequests: 'Cash out alerts', smartAlerts: 'Smart alerts' };
 
 /**
  * Settings > Alerts: Telegram messages to the organizer only. The switches
@@ -645,12 +647,15 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   function flip(key: AlertKey, value: boolean) {
     if (instant && savingAlert.current.has(key)) return;
     setOn((cur) => ({ ...cur, [key]: value }));
-    if (!instant) return void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts');
+    const saved = () => toast(`${ALERT_TOAST[key]} ${value ? 'on' : 'off'}`);
+    // The toast shows when the Feature switches' does (Round 3 or Instant taps), so both kinds of switch answer the same way.
+    if (!instant) return void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts').then((ok) => void (ok && r3 && saved()));
     savingAlert.current.add(key);
     void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts').then((ok) => {
       savingAlert.current.delete(key);
       if (ok) {
         confirmedAlerts.current = { ...confirmedAlerts.current, [key]: value };
+        saved();
         return;
       }
       setOn((cur) => ({ ...cur, [key]: confirmedAlerts.current[key] }));
@@ -724,7 +729,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           {/* Round 3 (ADMIN_R3): one button. It sends the smart-alert test (a short test message, with the link to the next game). */}
           <div className="alert-test">
             <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending'}>
-              {smartTest?.status === 'sending' ? 'Sending…' : 'Test smart alert'}
+              {smartTest?.status === 'sending' ? 'Sending…' : 'Send test'}
             </button>
             {smartTest?.status === 'sent' && (
               <span className="alert-result ok" role="status">
@@ -738,7 +743,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         <>
           <div className="alert-test">
             <button type="button" className="btn small secondary" onClick={sendTest} disabled={test?.status === 'sending'}>
-              {test?.status === 'sending' ? 'Sending…' : 'Send test alert'}
+              {test?.status === 'sending' ? 'Sending…' : 'Send test'}
             </button>
             {test?.status === 'sent' && (
               <span className="alert-result ok" role="status">
@@ -749,7 +754,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           {test?.status === 'failed' && <Notice tone="danger">{test.message}</Notice>}
           <div className="alert-test">
             <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending' || !on.enabled || !on.smartAlerts}>
-              {smartTest?.status === 'sending' ? 'Sending…' : 'Send TEST smart alert'}
+              {smartTest?.status === 'sending' ? 'Sending…' : 'Send smart test'}
             </button>
             {smartTest?.status === 'sent' && (
               <span className="alert-result ok" role="status">
@@ -1523,7 +1528,7 @@ function SpentTotalsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 
 /** Zip 43, "Venue charge alert" (VENUE_ALERT, server/venueAlert.ts): an amber Home card on the venue's charge days with what it should have charged. Organizer only, display only. Off: only /admin?venuealert=on. */
 function VenueAlertRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="venueAlertAll" path="/api/admin/venue-alert-switch" name="Venue charge alert" hint="Home card on the venue's charge days: what Northville Pickleball should have charged you, with Mark paid. Only charge days after you turn it on" flag={!!ctx.d.venueAlertForAll} dataAttr="data-venue-alert-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="venueAlertAll" path="/api/admin/venue-alert-switch" name="Venue charge alert" hint="Home card on the venue's charge days: what the venue should have charged you, with Mark paid. Only charge days after you turn it on" flag={!!ctx.d.venueAlertForAll} dataAttr="data-venue-alert-all" />;
 }
 
 /**
@@ -1613,7 +1618,7 @@ function ErrorAlertsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       <SaveProblem state={auto.rows.errorAlertsAll} />
       <div className="alert-test">
         <button type="button" className="btn small secondary" data-error-alert-test onClick={sendTest} disabled={test?.status === 'sending'}>
-          {test?.status === 'sending' ? 'Sending…' : 'Send TEST error alert'}
+          {test?.status === 'sending' ? 'Sending…' : 'Send test'}
         </button>
         {test?.status === 'sent' && (
           <span className="alert-result ok" role="status">

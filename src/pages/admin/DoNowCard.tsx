@@ -283,7 +283,7 @@ const AC_BUTTON: Record<string, { label: string; tone: AcTone; out?: boolean }> 
   text: { label: 'Text', tone: 'purple' },
   'court-link': { label: 'Cancel court', tone: 'blue' },
   'court-done': { label: 'Court canceled', tone: 'blue', out: true },
-  cancel: { label: 'Cancel session', tone: 'red', out: true },
+  cancel: { label: 'Cancel game', tone: 'red', out: true },
   'canceled-text': { label: 'Text everyone', tone: 'red', out: true },
   finalize: { label: 'Finalize', tone: 'green' },
 };

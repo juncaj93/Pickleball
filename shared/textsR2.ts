@@ -133,13 +133,16 @@ function gameOf(iso: string, tz: string, nowMs: number): string {
   return `the ${textDay(iso, tz)} game`;
 }
 
+/** "Today’s game": the first letter up, for a text that starts with the game. */
+const capFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** 6b. CANCELED, the fee-kept version (the venue did not waive it): the live words with line breaks and the reason. */
 export function canceledFeeKeptTextR2(s: SessionLike, tz: string, nowMs: number, priceCents: number, link: string, reason?: string | null): string {
   return lines(
     [
-      withReason(`Heads up: ${gameOf(s.startsAt, tz, nowMs)} is canceled, and since it's inside 12 hours the venue is charging us for the court.`, reason),
+      withReason(`${capFirst(gameOf(s.startsAt, tz, nowMs))} is canceled. It’s inside 12 hours, so the venue charges us.`, reason),
       `If you were signed up, your ${formatPrice(priceCents)} share still applies (if you already paid, you're all set).`,
-      'Sorry about that! You can pay on the site:',
+      'You can pay on the site:',
     ],
     link,
   );
@@ -170,7 +173,7 @@ export function guestPaymentText(host: string, guest: string, cents: number, sta
 
 /** 9. REMIND ALL UNPAID. */
 export function remindAllTextR2(link: string): string {
-  return lines(["Hey, looks like you haven't paid for pickleball yet.", 'Pay here:'], link);
+  return lines(["Hey, you haven’t paid for pickleball yet.", 'Pay here:'], link);
 }
 
 /**

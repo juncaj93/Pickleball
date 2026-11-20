@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import type { AdminDayView, AdminEndView, AdminTieView, AdminTournamentView, AwardPick } from '../../../shared/tournament';
 import { BANNER_WEEKS, bannerLabel } from '../../../shared/tournament';
+import { groupName } from '../../../shared/tournamentSchedule';
 import { formatPrice } from '../../../shared/money';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { Sheet, useToast } from '../../ui';
@@ -62,7 +63,7 @@ function WheelCard({ ctx, t, tie }: { ctx: AdminCtx; t: AdminTournamentView; tie
   const [busy, setBusy] = useState(false);
   const [spun, setSpun] = useState<number | null>(null);
   const names = tie.teams.map((x) => x.name);
-  const label = tie.pool ? `${tieTitle(tie.teams.length)} · Pool ${tie.pool}` : tieTitle(tie.teams.length);
+  const label = tie.pool ? `${tieTitle(tie.teams.length)} · ${groupName(tie.pool)}` : tieTitle(tie.teams.length);
   if (tie.bye && spun === null) {
     return (
       <section className="tm-card tm-gd-card tm-tie" aria-label="The wheel picked" data-tm-tie-picked={tie.key}>

@@ -17,7 +17,7 @@
 import { MIN_PLAYERS } from './spots';
 import { lengthFits } from './bookingHours';
 import { formatTime, formatWeekdayShort, localParts, zonedTimeToUtc } from './time';
-import { dayGap, dayLabelR2, dayWordR2 } from './textsR2';
+import { dayGap, dayLabelR2, dayWordR2, shortTime } from './textsR2';
 
 export const SECOND_CHANCE = { task: 'second_chance_on', header: 'X-Second-Chance', link: 'secondchance', env: 'SECOND_CHANCE', name: 'Second Chance' } as const;
 
@@ -75,9 +75,9 @@ export function noonOf(key: string, tz: string): number {
   return zonedTimeToUtc(y, m, d, 12, 0, tz);
 }
 
-/** "7:30" or "8:00": the texts' time (the site's 12-hour clock without AM/PM). */
+/** "7:30pm" or "11am": the group texts' short time (Zip 78, the same "@ 11am" as the other texts). */
 export function textTime(iso: string, tz: string): string {
-  return formatTime(iso, tz).replace(/\s?[AP]M$/i, '');
+  return shortTime(iso, tz);
 }
 /** "Thu 7:30 PM" */
 export function dayTime(iso: string, tz: string): string {
@@ -201,19 +201,19 @@ export function reopenText(startsAt: string, wasStartsAt: string | null, tz: str
   const at = textTime(startsAt, tz);
   const moved = wasStartsAt !== null && wasStartsAt !== startsAt;
   const first = moved
-    ? `Hey guys, we canceled to avoid fees since we were down 1. A few courts are open ${when} at ${at} (instead of ${textTime(wasStartsAt!, tz)}), so I reopened signups for ${at}.`
-    : `Hey guys, we canceled to avoid fees since we were down 1. A few courts are open ${when} at ${at}, so I reopened signups.`;
+    ? `Hey guys, we canceled to avoid fees since we were down 1. A few courts are open ${when} @ ${at} (instead of ${textTime(wasStartsAt!, tz)}), so I reopened signups for ${at}.`
+    : `Hey guys, we canceled to avoid fees since we were down 1. A few courts are open ${when} @ ${at}, so I reopened signups.`;
   return withLink([first, `If 4 sign up and pay, I'll book a court for ${when}.`, 'Already paid for the canceled game? Tap Use Credit.'], link);
 }
 
 /** The group text for a game added on its own day. */
 export function sameDayText(startsAt: string, tz: string, nowMs: number, link: string): string {
-  return withLink([`Hey guys, anyone want to play ${dayWordR2(startsAt, tz, nowMs)} at ${textTime(startsAt, tz)}? I added it to the site. If 4 sign up and pay, I'll book a court.`], link);
+  return withLink([`Hey guys, anyone want to play ${dayWordR2(startsAt, tz, nowMs)} @ ${textTime(startsAt, tz)}? I added it to the site. If 4 sign up and pay, I'll book a court.`], link);
 }
 
 /** The text Telegram 1's link opens, to ONLY the unpaid players. */
 export function unpaidText(startsAt: string, inCount: number, tz: string, nowMs: number, link: string): string {
-  return withLink([`Hey, we have ${inCount} in for ${dayWordR2(startsAt, tz, nowMs)} at ${textTime(startsAt, tz)}. Please pay on the site and I'll book the court.`], link);
+  return withLink([`Hey, we have ${inCount} in for ${dayWordR2(startsAt, tz, nowMs)} @ ${textTime(startsAt, tz)}. Please pay on the site and I'll book the court.`], link);
 }
 
 /** "Tonight 7:30 PM" */
