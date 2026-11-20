@@ -126,7 +126,10 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   const intent = body.intent === undefined ? 'lock' : v.oneOf(body.intent, 'intent', ['lock', 'hold'] as const);
   const { t, playerId, phase } = await ticketsTarget(ctx, who, body, intent);
   // Zip 64: after Pay by the claim itself checks that a spot is still open (under the cap of 16), in the very statements that take it.
-  const claimOk = phase === 'after' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS} AND ${lockedInSql(sqlText(t.id))} < ${MAX_SPOTS}` : '';
+  // Zip 74 (the 🎾73 audit): Lock in uses that full rule before Pay by too (spots taken AND every whole-ticket I paid still waiting), so the
+  // players locked in never pass 16. A standby Hold before Pay by stays open when every spot is taken (that is what the line is for).
+  const capOk = ` AND ${spotsSql(t.id)} < ${MAX_SPOTS} AND ${lockedInSql(sqlText(t.id))} < ${MAX_SPOTS}`;
+  const claimOk = phase === 'after' || intent === 'lock' ? capOk : '';
   // The organizer pays the venue, never the group: their own seat is $0.
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
   const price = organizer ? 0 : t.ticket_cents;
@@ -134,8 +137,9 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
     throw new HttpError(409, 'amount_changed', `The ticket is ${formatPrice(price)}. Look again.`);
   }
   const k = await ticketOf(ctx.db, t.id, playerId);
-  // Locked in already, or paid and holding a place (a second tap, another phone): nothing to do.
-  if (k && (k.place === 'spot' || ticketPaid(money(k)))) return { ok: true, creditUsedCents: 0, ...answerOf(k) };
+  // Locked in already, or paid and holding a place (a second tap, another phone): nothing to do. Zip 74 (review): a whole-ticket I paid
+  // waiting outside the line counts as locked in too, so a repeat tap never reads as "Every spot just filled".
+  if (k && (k.place === 'spot' || ticketPaid(money(k)) || (k.place !== 'line' && k.claim_cents > 0 && ticketOwed(money(k)) === 0))) return { ok: true, creditUsedCents: 0, ...answerOf(k) };
   if (organizer) {
     // Their $0 seat: in line and paid, so the line gives them the open spot (or keeps them first in line).
     const res = await ctx.db.batch([organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso), ...fillSpotsStatements(ctx.db, who.group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
@@ -145,7 +149,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
     return { ok: true, creditUsedCents: 0, ...answerOf(after) };
   }
   const tickets = await loadTickets(ctx.db, t.id);
-  if (intent === 'lock' && tickets.filter((x) => x.place === 'spot').length >= MAX_SPOTS) {
+  if (intent === 'lock' && (tickets.filter((x) => x.place === 'spot').length >= MAX_SPOTS || lockedInCount(tickets) >= MAX_SPOTS)) {
     if (phase === 'after') throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
     throw new HttpError(409, 'spots_full', 'Every spot just filled. Join standby.');
   }
@@ -175,7 +179,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
     read = k;
   }
   // Lock: only while a spot is open at that very moment (a race for the last spot never spends credit on a spot that is gone).
-  const guard = `${ticketAsRead(read)} AND ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}${intent === 'lock' ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS}` : ''}`;
+  const guard = `${ticketAsRead(read)} AND ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}`;
   const usedId = newId();
   const pay = payWithCreditStatements(ctx.db, { groupId: who.group.id, tournamentId: t.id, playerId, ticketId, usedId, nowIso: ctx.nowIso, guard });
   const at = statements.length + pay.ticketStatement;
@@ -197,7 +201,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
  * (Paid or Didn't pay on their Home card) like every I paid on the site; it holds no spot until then. A second tap changes nothing.
  */
 export async function playerTicketPaid(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
-  const { t, playerId } = await ticketsTarget(ctx, who, body, 'paid');
+  const { t, playerId, phase } = await ticketsTarget(ctx, who, body, 'paid');
   const cents = v.cents(body.cents, 'cents') ?? 0;
   const k = await ticketOf(ctx.db, t.id, playerId);
   if (!k) throw new HttpError(409, 'nothing_owed', 'There is nothing to pay. Look again.');
@@ -205,11 +209,21 @@ export async function playerTicketPaid(ctx: Ctx, who: TournamentActor, body: Rec
   // Already claimed or paid (a second tap, another phone): nothing new.
   if (owed === 0) return { ok: true, ...answerOf(k), claimCents: k.claim_cents };
   if (cents !== owed) throw new HttpError(409, 'amount_changed', `The amount changed to ${formatPrice(owed)}. Look again.`);
+  // Zip 74 (the 🎾73 audit): this I paid pays the whole ticket, and a whole-ticket I paid outside the line counts as locked in at once (the trust
+  // rule). So, before Pay by as after it, it needs a place under the cap: the same full rule Lock in uses (spots AND waiting I paids under 16),
+  // checked in the very statement that saves it. A spot holder's own I paid and a standby hold's I paid never add one, so they always finish.
+  const adds = k.place === 'none';
+  const full = () => (phase === 'after' ? new HttpError(409, 'tickets_closed', 'Tickets are closed.') : new HttpError(409, 'spots_full', 'Every spot just filled. Join standby.'));
+  if (adds && lockedInCount(await loadTickets(ctx.db, t.id)) >= MAX_SPOTS) throw full();
+  const capOk = adds ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS} AND ${lockedInSql(sqlText(t.id))} < ${MAX_SPOTS}` : '';
   const res = await ctx.db
-    .prepare(`UPDATE tournament_tickets SET claim_cents = claim_cents + ?1, claim_at = ?2, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}`)
+    .prepare(`UPDATE tournament_tickets SET claim_cents = claim_cents + ?1, claim_at = ?2, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}${capOk}`)
     .bind(owed, ctx.nowIso, k.id)
     .run();
-  if ((res.meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
+  if ((res.meta?.changes ?? 0) !== 1) {
+    if (adds && lockedInCount(await loadTickets(ctx.db, t.id)) >= MAX_SPOTS) throw full();
+    throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
+  }
   await logPlayer(ctx, who.group, playerId, 'tournament_i_paid', { tournament: t.name, amountCents: owed });
   return { ok: true, ...answerOf(await ticketOf(ctx.db, t.id, playerId)), claimCents: owed };
 }
@@ -223,7 +237,8 @@ export async function playerTicketWaitlist(ctx: Ctx, who: TournamentActor, body:
   const k = await ticketOf(ctx.db, t.id, playerId);
   if (k && (k.place === 'line' || k.place === 'spot')) return { ok: true, result: k.place === 'spot' ? 'locked' : 'waitlist', position: await linePosition(ctx, t, playerId) };
   const tickets = await loadTickets(ctx.db, t.id);
-  if (tickets.filter((x) => x.place === 'spot').length < MAX_SPOTS) throw new HttpError(409, 'spots_open', 'A spot is open. Lock it now.');
+  // Zip 74: full by the same count the player's card shows (every spot, and every whole-ticket I paid still waiting).
+  if (tickets.filter((x) => x.place === 'spot').length < MAX_SPOTS && lockedInCount(tickets) < MAX_SPOTS) throw new HttpError(409, 'spots_open', 'A spot is open. Lock it now.');
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
   const statements = organizer
     ? [organizerSeatStatement(ctx.db, t.id, playerId, ctx.nowIso)]

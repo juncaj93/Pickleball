@@ -10,8 +10,11 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 74 (🎾74.polish): game night polish. The team name, the Final alert and the back out sheet use the stages below (Teams published,
+  // Final, Time and Plan, Late drop).
+  { stage: 'zip74_short', label: 'Play to 9 (start here)', line: 'Tonight, Game 1 in, and from Round 2 on games go to 9. View as Vic: the amber alert at the top (X hides it), Play to 9 points on the Up next card, Play to 9 on Games 2 and 3. Also: Final (Vic: You’re in the Final!), Teams published (Edit name), Time and Plan and Late drop (Parker: Drop out).' },
   // Zip 72 (🎾72.scores): scores in Locked doubles, one tie rule everywhere.
-  { stage: 'zip72_scores', label: 'Scores in Locked doubles (start here)', line: 'Tonight, Game 1 on both courts, no scores yet. View as Vic: Enter score, the team names, Submit score (5 seconds to Undo). Then view as Parker: Lost 7–11, Standings −4 pts. Home: Fix on any game, two numbers, Save.' },
+  { stage: 'zip72_scores', label: 'Scores in Locked doubles', line: 'Tonight, Game 1 on both courts, no scores yet. View as Vic: Enter score, the team names, Submit score (5 seconds to Undo). Then view as Parker: Lost 7–11, Standings −4 pts. Home: Fix on any game, two numbers, Save.' },
   { stage: 'zip72_circle', label: 'Three-way circle, settled by points', line: 'Every round robin game in. Kitchen Crew 3-0; the other three 1-2 in a circle, ranked by point difference (0, −2, −9 pts). No wheel: the Final is Kitchen Crew vs Net Ninjas.' },
   // Zip 71 (🎾71.teams): the first answer counts (no confirming) and Projected teams on the Levels card.
   { stage: 'zip71_taps', label: 'First score counts', line: 'Tonight, Game 1, no scores yet. View as Vic: Enter score (5 seconds to Undo). Then view as Wren or Parker: Game 1 is in, no buttons, nothing to answer. Home: Done, Fix.' },

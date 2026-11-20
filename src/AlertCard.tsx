@@ -12,7 +12,7 @@ import './alert-cards.css';
 export type AcTone = 'green' | 'amber' | 'blue' | 'purple' | 'gray' | 'red';
 
 /** The badge icons (the mock's set, plus a calendar, a message, a person and an info mark for the organizer cards). */
-export type AcIconName = 'join' | 'owe' | 'ok' | 'credit' | 'clock' | 'stop' | 'text' | 'court' | 'person' | 'info';
+export type AcIconName = 'join' | 'owe' | 'ok' | 'credit' | 'clock' | 'stop' | 'text' | 'court' | 'person' | 'info' | 'trophy';
 
 const ICON_PATHS: Record<AcIconName, ReactNode> = {
   join: (
@@ -69,6 +69,13 @@ const ICON_PATHS: Record<AcIconName, ReactNode> = {
     <>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 11v5.5M12 7.6v.2" />
+    </>
+  ),
+  // Zip 74: the game night alerts (shorter games use the clock; the Final: a trophy).
+  trophy: (
+    <>
+      <path d="M7.5 4h9v5a4.5 4.5 0 0 1-9 0V4z" />
+      <path d="M7.5 6H4.5a3 3 0 0 0 3 4M16.5 6h3a3 3 0 0 1-3 4M12 13.5V17M8.5 20h7M9.5 17h5" />
     </>
   ),
 };

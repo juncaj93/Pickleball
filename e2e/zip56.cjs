@@ -324,7 +324,7 @@ async function main() {
     const text = p.page.locator('[data-tm-backout-text]');
     await text.waitFor({ timeout: 10000 });
     const words = flat(await text.innerText());
-    assert(words === 'Are you sure you want to back out of the Winter Classic? You come off the list. You can sign up again if you change your mind. Your $16 comes back as credit.', words);
+    assert(words === 'You come off the list. You can sign up again if you change your mind. Your $16 comes back as credit.', words);
     const sheet = flat(await sheetOpen(p.page).innerText());
     assert(sheet.includes('Stay signed up') && sheet.includes('Yes, back out'), sheet);
     await shot(p.page, 'E-back-out');

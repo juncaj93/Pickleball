@@ -17,7 +17,7 @@ import { HttpError } from './http';
 import { newId } from './crypto';
 import * as v from './validate';
 import { audit } from './repo';
-import type { AdminRoundGame, AdminRoundsView, PlayerRound, PlayerRoundsView } from '../shared/tournament';
+import { type AdminRoundGame, type AdminRoundsView, type PlayerRound, type PlayerRoundsView, shortAlertOf } from '../shared/tournament';
 import { firstAnswer, saidScore } from '../shared/partnerTaps';
 import { MAX_SCORE } from '../shared/scores';
 import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
@@ -335,6 +335,8 @@ export function playerRoundsView(
   const leaver = offs[0]?.leftBy ?? null;
   const mineOff = leaver ? offs.filter((g) => g.leftBy === leaver).map((g) => g.round) : [];
   const note = shorterNote(f);
+  // Zip 74 (picture pair-3): the shorter games alert at the top of Home (Americano's last round is never shortened, so it is not part of it).
+  const shortAlert = today && f.started && !f.over ? shortAlertOf(t.id, f.games.map((g) => ({ round: g.round, playTo: g.playTo, pool: true, decided: decided(g) })), f.plan.gameTo) : undefined;
   return {
     kind: 'americano',
     me,
@@ -347,6 +349,7 @@ export function playerRoundsView(
     live,
     standings,
     ...(note ? { timeNote: note } : {}),
+    ...(shortAlert ? { shortAlert } : {}),
     ...(t.paused_at ? { paused: true as const } : {}),
     ...(leaver
       ? {

@@ -16,8 +16,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /** Zip 48 sizes, gzipped (Sun Nov 15, 2026): script 136.6 KB, style 35.0 KB, page 0.9 KB. Budget = that plus about 3%.
  *  Zip 71 (Nov 20): script 141 -> 141.2 on purpose. Main sat 23 bytes under 141; the one-banner fix (the style news as the date card's
- *  second line, src/pages/PlayerHome.tsx) adds about 60 bytes gzipped to the player script. Game night's own code is in the tournament chunk. */
-export const BUDGET = { scriptKB: 141.2, styleKB: 36.5, pageKB: 1.5, totalKB: 177 };
+ *  second line, src/pages/PlayerHome.tsx) adds about 60 bytes gzipped to the player script. Game night's own code is in the tournament chunk.
+ *  Zip 74 (Nov 20): script 141.2 -> 141.5 on purpose. The two game night alerts at the top of Home (shorter games, the Final) and the
+ *  trophy badge sit with the other tournament alerts in src/pages/PlayerHome.tsx and src/AlertCard.tsx: about 230 bytes gzipped (141.43 KB). */
+export const BUDGET = { scriptKB: 141.5, styleKB: 36.5, pageKB: 1.5, totalKB: 177 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

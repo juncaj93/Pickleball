@@ -321,7 +321,7 @@ async function main() {
         await v.page.waitForTimeout(300);
         await v.page.locator('[data-tc-drop]').click();
         const confirm = flat(await v.page.locator('dialog[open]').innerText());
-        assert(confirm.includes('Back out?') && confirm.includes('Are you sure you want to back out of the Winter Classic? You come off the list. You can sign up again if you change your mind.') && confirm.includes('Stay signed up') && confirm.includes('Yes, back out'), confirm);
+        assert(confirm.includes('Back out of the Winter Classic?') && confirm.includes('You come off the list. You can sign up again if you change your mind.') && confirm.includes('Stay signed up') && confirm.includes('Yes, back out'), confirm);
         await fits(v.page, 'dialog[open]');
         await shot(v.page, `E-backout-${width}-${scheme}`);
         await v.ctx.close();

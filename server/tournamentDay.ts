@@ -29,6 +29,7 @@ import {
   type PlayoffRow,
   type TournamentFormat,
   MAX_SPOTS,
+  shortAlertOf,
 } from '../shared/tournament';
 import { firstAnswer, saidTeamScore, saidWon } from '../shared/partnerTaps';
 import { about, clockLabel, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES } from '../shared/tournamentPlan';
@@ -467,6 +468,9 @@ export function adminDayView(
             ? 'The night is over.'
             : locked.length < 6
               ? `Needs at least 6 locked in. ${locked.length} are.`
+              : // Zip 74: never more than 16 (the cap); an older row past it gets a plain answer, never a crash.
+                locked.length > MAX_SPOTS
+                ? `${locked.length} are locked in. Take ${locked.length - MAX_SPOTS} off first (16 at most).`
               : locked.length % 2 === 1
                 ? `Needs an even number locked in. ${locked.length} are.`
                 : f.anyResult
@@ -774,6 +778,14 @@ export function playerDayView(
     if (finalAt !== null) night.push({ label: f.games.some((g) => g.stage === 'third') ? 'Final and 3rd place' : 'Final', time: clockLabel(about(finalAt)) });
   }
   const note = shorterNote(f);
+  // Zip 74 (pictures pair-3 and pair-5): the night's two alerts at the top of a player's Home, the night only.
+  const shortAlert = today && f.started && !f.over ? shortAlertOf(t.id, f.games.map((g) => ({ round: g.round, playTo: g.play_to, pool: g.stage === 'pool', decided: decided(g) })), f.plan.gameTo) : undefined;
+  const finGame = f.games.find((g) => g.stage === 'final');
+  const finR = finGame ? f.resolved.get(finGame.num) : undefined;
+  const finalAlert =
+    today && !f.over && seat !== null && mine && !mine.out_at && finGame && finR?.a && finR?.b && (finR.a === seat || finR.b === seat) && !decided(finGame)
+      ? { key: `final:${t.id}:${finGame.num}:${finR.a}-${finR.b}`, title: `You’re in the Final! It goes to ${PLAYOFF_TO} points.`, sub: `Head to Court ${courtNo(t, finGame.court)}.` }
+      : undefined;
   // Zip 58: while a tie is settled the bar says so (picture 20: "Tied for the final"; picture 21: "Playoff").
   if (tie && today) {
     label = tie.state === 'playoff' ? 'Playoff' : tie.target === 'semi' ? 'Tied for the semifinals' : tie.target === 'third' ? 'Tied for 3rd place' : 'Tied for the final';
@@ -793,6 +805,8 @@ export function playerDayView(
     standings: standingsOut,
     night,
     ...(note ? { timeNote: note } : {}),
+    ...(shortAlert ? { shortAlert } : {}),
+    ...(finalAlert ? { finalAlert } : {}),
     ...(t.paused_at ? { paused: true as const } : {}),
     ...(tie ? { tie } : {}),
     ...(playoff && playoff.length ? { playoff } : {}),
@@ -1509,7 +1523,7 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
 
 /**
  * POST /api/tournament/team-name { tournamentId, name? }: either partner names their team (the pencil), or rolls the dice (no `name`: a new
- * suggestion nobody else in the tournament has). Until Game 1 starts; the last save wins and the partner sees it at once. No two teams share a name.
+ * suggestion nobody else in the tournament has). Zip 74: { suggest: true, not? } answers a suggestion and saves nothing (the sheet's Randomize). Until Game 1 starts; the last save wins and the partner sees it at once. No two teams share a name.
  */
 export async function playerTeamName(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
   const { t, playerId } = await playerTarget(ctx, who, body);
@@ -1519,6 +1533,12 @@ export async function playerTeamName(ctx: Ctx, who: TournamentActor, body: Recor
   if (!team) bad('not_your_team', 'You are on no team. Look again.');
   const real = realTimes(t);
   if (ctx.nowMs >= startMsOf(t.final_date!, real.start, who.group.timezone)) bad('started', 'Game 1 has started. The name stays.');
+  // Zip 74 (picture pair-2): "Need help? Randomize a name" only fills the sheet's box (`suggest`: a name nobody else has, never the one in the
+  // box); nothing is saved until Save. A typed name is checked for a clash when it is saved, as before.
+  if (body.suggest === true) {
+    const not = typeof body.not === 'string' ? body.not.trim() : team!.name;
+    return { ok: true, name: suggestTeamName(teams.filter((x) => x.id !== team!.id).map((x) => x.name), Math.random, not), suggested: true };
+  }
   const name = body.name === undefined || body.name === null ? suggestTeamName(teams.filter((x) => x.id !== team!.id).map((x) => x.name), Math.random, team!.name) : readTeamName(body.name);
   if (name === team!.name) return { ok: true, name };
   const res = await ctx.db.prepare(`UPDATE tournament_teams SET name = ?, updated_at = ? WHERE id = ? AND ${NAME_FREE}`).bind(name, ctx.nowIso, team!.id, t.id, name, team!.id).run();

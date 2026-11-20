@@ -121,8 +121,17 @@ export const tournamentCanceled = (x: string): string => `EXISTS (SELECT 1 FROM 
 /**
  * Every open spot goes to the first PAID people in line, in the order they joined it (only people still on the list). Never more than 16
  * spots (Alex: the spots follow the players locked in, and standby starts after the cap of 16 (Zip 63): the LIMIT, and the database's own cap trigger behind
- * it). Runs after every change that can open a spot or pay a ticket in line.
+ * it). Zip 74: the LIMIT counts every player locked in (waiting whole-ticket I paids too), not only the spots. Runs after every change that can open a spot or pay a ticket in line.
  */
+/**
+ * Zip 74 (the review): the players locked in as everyone sees them (server/tournament.ts lockedInSql, written out here over ?1): every spot of
+ * a player on the list, and every whole-ticket I paid outside the line still waiting for the organizer. Those I paids already hold a place
+ * under the cap (the trust rule), so the line never fills it under them (a standby I paid confirmed first never takes the 16th place of a
+ * waiting one).
+ */
+const LOCKED_IN_SQL = `(SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
+     WHERE k.tournament_id = ?1 AND (k.place = 'spot' OR (k.place <> 'line' AND k.claim_cents > 0 AND k.credit_cents + k.paid_cents + k.claim_cents >= k.price_cents)))`;
+
 export function fillSpotsStatement(db: D1Database, tournamentId: string, nowIso: string): D1PreparedStatement {
   return db
     .prepare(
@@ -131,7 +140,7 @@ export function fillSpotsStatement(db: D1Database, tournamentId: string, nowIso:
          SELECT x.id FROM tournament_tickets x
          WHERE x.tournament_id = ?1 AND x.place = 'line' AND x.credit_cents + x.paid_cents >= x.price_cents AND ${onList('x')}
          ORDER BY x.place_at, x.rowid
-         LIMIT MAX(0, ${MAX_SPOTS} - (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = ?1 AND place = 'spot')))
+         LIMIT MAX(0, ${MAX_SPOTS} - MAX((SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = ?1 AND place = 'spot'), ${LOCKED_IN_SQL})))
        AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?1 AND status IN ${TICKET_STAGES})`,
     )
     .bind(tournamentId, nowIso);

@@ -164,12 +164,13 @@ export const clockLabel = clock;
 /**
  * The Finalize line (mocks 60 and 61), and the same check when tickets close. Zip 70: "Locked doubles for 12: pool games to 9, done about
  * 9:30 PM." ("games to 11" when there are no pools) in the accent color. Not: "Locked doubles for 12: too tight on 1 court. Use 2 courts or add
- * court time." in amber.
+ * court time." in amber. On 2 courts: "... too tight on 2 courts. Move the end later."
  */
 export function fitWords(p: NightPlan, start: number): { fits: boolean; text: string } {
   // Zip 70: the line names the style that will really be played (an odd count is Americano): "Americano for 9: games to 11, done about 9:50 PM."
   const who = `${p.style === 'americano' ? 'Americano' : 'Locked doubles'} for ${p.players}`;
-  if (!p.fits) return { fits: false, text: `${who}: too tight on ${p.courts} ${p.courts === 1 ? 'court' : 'courts'}. Use 2 courts or add court time.` };
+  // Zip 74 (the 🎾73 audit): already on 2 courts, "Use 2 courts" was no help: the hint is a later end instead, in the same short style.
+  if (!p.fits) return { fits: false, text: p.courts === 1 ? `${who}: too tight on 1 court. Use 2 courts or add court time.` : `${who}: too tight on 2 courts. Move the end later.` };
   const what = p.doubles?.shape === 'pools' ? 'pool games' : 'games';
   return { fits: true, text: `${who}: ${what} to ${p.gameTo}, done about ${clock(about(start + p.minutesUsed))}.` };
 }

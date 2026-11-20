@@ -382,7 +382,7 @@
   font-family: var(--body);
   font-size: 1.18rem;
   line-height: 1.2;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tc-gd-main span {
   color: var(--ink-2);
@@ -446,13 +446,13 @@
 .tc-gd-tn > b {
   font-weight: 700;
   line-height: 1.2;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tc-gd-tn > span {
   font-size: 0.86rem;
   font-weight: 500;
   color: var(--ink-2);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tc-gd-tn-big > b {
   font-size: 1.5rem;
@@ -510,11 +510,6 @@
 .tc-gd-yt-row > .tc-gd-tn {
   flex: 1 1 auto;
 }
-.tc-gd-yt-btns {
-  flex: none;
-  display: flex;
-  gap: 8px;
-}
 .tc-gd-round {
   display: grid;
   place-items: center;
@@ -542,28 +537,81 @@
   fill: currentColor;
   stroke: none;
 }
-.tc-gd-yt-edit {
-  display: flex;
-  gap: 8px;
-  padding: 8px 16px 16px;
-}
 .tc-gd-yt-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 46px;
-  padding: 8px 14px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 56px;
+  padding: 10px 16px;
   border: 1px solid var(--line-strong);
-  border-radius: 14px;
-  background: var(--sheet-bg);
+  border-radius: 16px;
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
-  font-size: 1.1rem;
+  font-family: var(--body);
+  font-size: 1.25rem;
   font-weight: 700;
 }
-.tc-gd-yt-save {
+/* Zip 74 (pictures pair-1 and pair-2): "Edit name", a small secondary pill on the right of the name; the "Team name" sheet: the box, the
+   Randomize link with the dice, Save. */
+.tc-gd-yt-editbtn {
   flex: none;
-  min-height: 46px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--body);
+  font-size: 1rem;
+  font-weight: 700;
   white-space: nowrap;
+  cursor: pointer;
+}
+.tc-gd-yt-editbtn:active:not(:disabled) {
+  background: var(--fill-press);
+}
+.tc-gd-yt-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tc-gd-yt-random {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--body);
+  font-size: 1.08rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.tc-gd-yt-random span {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.tc-gd-yt-random svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.tc-gd-yt-random svg circle {
+  fill: currentColor;
+  stroke: none;
+}
+.tc-gd-yt-save {
+  min-height: 52px;
 }
 
 /* The other team's sheet (mock 19). */
@@ -753,13 +801,13 @@
   align-items: baseline;
   min-width: 0;
 }
+/* Zip 74 (the 🎾73 audit): a name is never cut. "With Rowan" / "vs Third Shot Gang" wraps between words; a word wider than the row (never
+   seen with real names) is the only thing that breaks inside. */
 .tc-gd-main .tc-gd-with {
   color: inherit;
   font-size: inherit;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 .tc-gd-game .tc-gd-main > b > .tc-gd-tag {
   flex: none;
@@ -781,9 +829,7 @@
   text-align: center;
 }
 .tc-gd-game .tc-gd-main > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 .tc-gd-break .tc-gd-main b {
   color: var(--ink);
@@ -791,7 +837,7 @@
 .tc-gd-break.tc-gd-s-done .tc-gd-main b {
   color: var(--ink-2);
 }
-/* Standings with points: the name cut with an ellipsis, "2 - 0", the points chip. */
+/* Standings with points: the name (Zip 74: wraps between words, never cut), "2 - 0", the points chip. */
 .tc-gd-pname {
   display: flex;
   align-items: baseline;
@@ -799,9 +845,7 @@
 }
 .tc-gd-pname > b {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
   font-weight: 700;
 }
 .tc-gd-pname > .tc-gd-tag {
@@ -847,9 +891,7 @@
 .tc-gd-score-name {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
   font-family: var(--body);
   font-size: 1.12rem;
   font-weight: 700;
@@ -904,4 +946,112 @@
 .tc-gd-liverow .tc-gd-tn > b {
   overflow-wrap: break-word;
   font-size: 1rem;
+}
+
+/* Zip 74 (the 🎾73 audit, 320 px): names wrap only between words; scores and times stay on one line.
+   - Your games / Your rounds: on a narrow card the result tag ("Won 11–7") and the Play to 9 pill drop under the name when both do not fit
+     beside it, so "vs Third Shot Gang" takes at most two lines. On wider cards the tag sits beside the name as before (Zip 72's picture).
+   - Currently playing: on a narrow card the two sides stack (side, VS, side, all left), so a long name never breaks mid-word. */
+.tc-gd-card {
+  container-type: inline-size;
+}
+.tc-gd-game .tc-gd-main > b > .tc-gd-with {
+  flex: 0 1 auto;
+}
+@container (max-width: 300px) {
+  .tc-gd-game .tc-gd-main > b {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}
+@container (max-width: 340px) {
+  .tc-gd-liverow .tc-gd-vs {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 2px;
+  }
+  .tc-gd-liverow .tc-gd-vs > .tc-gd-tn:last-child {
+    text-align: left;
+    align-items: flex-start;
+  }
+}
+
+/* Zip 74 (pictures pair-3 and pair-4): a game shorter than 11. The Up next card: a yellow "Play to 9 points" centered on its own line under
+   the kicker, tight to the team names. Your games / Your rounds: a small soft "Play to 9" beside the name (the result tag's place on a done
+   game). Same in light and dark on the green card; the row pill follows the theme. */
+.tc-gd {
+  --tc-gd-pill-bg: #f6e8bb;
+  --tc-gd-pill-ink: #5c4708;
+}
+:root[data-theme='dark'] .tc-gd {
+  --tc-gd-pill-bg: #4f4a1f;
+  --tc-gd-pill-ink: #f2dc7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tc-gd {
+    --tc-gd-pill-bg: #4f4a1f;
+    --tc-gd-pill-ink: #f2dc7a;
+  }
+}
+.tc-gd-playto {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--tc-gd-pill-bg);
+  color: var(--tc-gd-pill-ink);
+  font-family: var(--body);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.tc-gd-game .tc-gd-main > b > .tc-gd-playto {
+  flex: none;
+  align-self: center;
+  margin-left: -2px;
+  /* Over the row's own span color and size. */
+  color: var(--tc-gd-pill-ink);
+  font-size: 0.84rem;
+}
+.tc-gd-playto-row {
+  margin: 10px 0 -2px;
+  text-align: center;
+}
+.tc-gd-playto.tc-gd-playto-big {
+  padding: 4px 14px;
+  background: #f2c94c;
+  color: #1d1a08;
+  font-size: 0.95rem;
+}
+
+/* Zip 74 (320 px): a standings row gives its name more room on a narrow card (tighter gaps, a narrower points chip), so a long first name
+   ("Christopher") fits on its line and wraps only between words. */
+@container (max-width: 300px) {
+  .tc-gd-stand {
+    gap: 8px;
+  }
+  .tc-gd-stand .tc-gd-rank {
+    width: 18px;
+  }
+  .tc-gd-stand .tc-gd-pts {
+    min-width: 50px;
+    padding-inline: 8px;
+  }
+}
+
+/* Zip 74 (320 px): Americano's big card names two players a side ("You + Christopher Vanderberg"): on a narrow card the two sides stack
+   (side, VS, side, all left) so a long first name never breaks inside. Locked doubles' team names keep the side by side look. */
+.tc-gd-next {
+  container-type: inline-size;
+}
+@container (max-width: 300px) {
+  [data-tc-americano] .tc-gd-next .tc-gd-vs {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 4px;
+  }
+  [data-tc-americano] .tc-gd-next .tc-gd-vs > .tc-gd-tn:last-child {
+    text-align: left;
+    align-items: flex-start;
+  }
 }

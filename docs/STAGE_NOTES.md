@@ -7327,3 +7327,79 @@ the date card, the bar "Game 1 of 3" and the VS card with one Enter score. No pa
 - Read-only live look (pages.dev address): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen,
   the new bundle; /admin and /api/status 200; the organizer dashboard and check 401 without a PIN. The organizer screens were not opened on
   live (no read-only PIN in this session).
+
+## Zip 74: Audit fixes and game night polish for The Cold Open (🎾74.polish), Fri Nov 20, 2026
+Branch `claude/new-session-oipdqa` (the session is named "🎾74.polish"; the build system pins the branch name). Built on main `39b2685` (Zip 72 live,
+main equal to live). Same switch, TOURNAMENTS (on for everyone on live); no new switch: every change is a fix or polish of game night, which only
+shows on a tournament night. **NO database change**: no table, column or migration. "Play to 9" uses the existing shorter games state
+(`tournament_games.play_to`, written by the organizer's Time check apply). No money, ticket price or credit path changed; the cap fix only refuses
+taps that would pass 16.
+
+### 1. Must fix: names are never cut (the 🎾73 audit)
+- Americano Your rounds: "With R…" and the "vs ..." line were cut with an ellipsis at 320/360 (long names at 390). Now the name wraps between
+  words (`overflow-wrap: break-word`, no ellipsis): src/tournament/gameday-tour.css `.tc-gd-with`, `.tc-gd-game .tc-gd-main > span`.
+- The same rule everywhere a name shows on game night: Your games (the name is its own span now), Standings (no ellipsis), Currently playing
+  (both styles), Also now, the tie button, the score sheet and the organizer's Fix sheet and All rounds.
+
+### 2. Should fixes (the 🎾73 audit)
+- **Cap** (server/tournamentTickets.ts): before Pay by, a whole-ticket I paid was not capped (17 locked in on 15 spots; Draft teams 500 at 18).
+  Now Lock in uses its full rule in both phases (spots under 16 AND locked in, spots plus waiting whole-ticket I paids, under 16), checked in the
+  very statement that saves it, and an I paid on a ticket with no place (it makes a locked in) has the same check: "Every spot just filled. Join
+  standby." (after Pay by "Tickets are closed."), nothing saved. A standby hold's I paid and a spot holder's I paid never add one, so they always
+  finish. The player's card is "full" (Join standby) by the same count, and Join waitlist accepts it. Draft teams with more than 16 locked in (only
+  rows from before this zip) says "18 are locked in. Take 2 off first (16 at most)." instead of crashing.
+- **Pay sheet, dark mode**: the ticket's Pay sheet opens outside the game cards, where the --pc-* colors are not set, so Copy Venmo fell back to
+  dark green on the dark sheet. The sheet now carries the game cards' dark outline colors (#7fd9a3 text, #3a8f69 line). Light unchanged.
+- **Too tight on 2 courts** (shared/tournamentPlan.ts fitWords): "... too tight on 2 courts. Move the end later." (1 court unchanged: "Use 2
+  courts or add court time.").
+- **320 px wraps**: names wrap only between words; on a narrow card the result tag and the Play to pill drop under a long name (so "vs Third Shot
+  Gang" is at most two lines); Currently playing stacks the two sides on a narrow card; Americano's big VS card stacks too (two names a side);
+  standings give the name more room; scores ("11 to 7") and clock times ("7:00 PM") use no-break spaces in the Undo banner, the Time check and
+  the kicker (`glue` in GameDayView.tsx); the tie button and the Fix sheet wrap instead of cutting.
+- **Weekly backup** (read only, nothing changed): `BACKUP_TABLES` (server/backupData.ts) lists all 8 tournament tables (tournaments,
+  tournament_signups, tournament_level_history, tournament_tickets, tournament_teams, tournament_games, tournament_ties, tournament_results),
+  file version 5. The live clock Worker (version `0a7adcad`, deployed Nov 19, 22:17 UTC) carries that list (checked in its live bundle). The Nov 15
+  copy had none because tournament tables first went into the Worker on Nov 18 (Zip 56). So the Sun Nov 22 copy will include every tournament
+  table. Restore reads versions 1 to 5 and loads all 8 (scripts/backup-sql.mjs, restore-backup.mjs). Size is no concern (about 31 tournament rows).
+
+### 3. Team name (pictures pair-1 and pair-2)
+- Your team: the pencil and the dice are gone. One small secondary "Edit name" pill on the right of the name, only while the name can change
+  (the same rule: until Game 1 starts, `canRename`).
+- Tap: the "Team name" sheet: a box with the current name, "Need help? Randomize a name" (with the dice) and Save. Randomize asks the server for a
+  suggestion nobody else has (POST /api/tournament/team-name { suggest: true, not }) and only fills the box: nothing is saved until Save. Save
+  keeps the duplicate rule ("Another team has that name. Try another.").
+
+### 4. Play to 9 (pictures pair-3 and pair-4)
+- The alert (server: `shortAlertOf` in shared/tournament.ts, on the player's day view in both styles as `shortAlert`; client: PlayerHome's
+  tournament notices, amber, filled, a stopwatch badge): "Starting Round 2, all games go to 9 points." / "We're running behind, so games are
+  shorter." The round is the first round played at the newest (shortest) length, so the words never move while the night goes on; X hides it per
+  phone (its key carries the round and the length), and shortening again (to 7) is a new alert. Shown on the night while a shortened game is
+  still to be played. Every player on the night sees it.
+- The Up next card: a yellow "Play to 9 points" centered on its own line under the kicker (both styles). Your games and Your rounds: a small
+  "Play to 9" pill beside the name on each shortened game still to play; the old "· to 9" in the sub line is gone. The players' Time check line
+  is not repeated while the alert carries it (the organizer's Time check card is unchanged).
+- The Final and 3rd place always go to 11: apply only ever touches pool games (unchanged), and the Time check counts every playoff round at
+  its full 11 length when it works out how much to shorten (unchanged; now covered by a test). Americano's last round is never shortened.
+
+### 5. Final alert (picture pair-5)
+- When the Final's two teams are known and it is not played yet, its 4 players see "You're in the Final! It goes to 11 points." / "Head to
+  Court 1." (the real court), the same alert card (blue, a trophy badge), X to hide. Nobody else gets it; it goes once the Final has a result.
+
+### 6. Back out sheet (picture pair-6)
+- Title "Back out of The Cold Open?" with the real name; a name that already starts with "The" is never given another one (`theName`,
+  shared/credit.ts), also in the credit history ("$18 back from The Cold Open (you backed out)"), "Players don't see ...", "Every player sees
+  ..." and the organizer's ticket and hide lines. ("the Winter Classic" stays.)
+- After Pay by, when the drop takes a 2 court night below 8 (the kept case), the body is only: "Backing out now means no credit back, unless
+  someone takes your spot. Below 8 players we lose the second court, which is already paid for." Before Pay by: "You come off the list. You can
+  sign up again if you change your mind." plus the credit line. Buttons: Stay signed up / Yes, back out.
+
+### 7. Americano with 7 players (done)
+- The saved 7 player, 1 court pattern ('7:4', shared/americanoPatterns.ts) made seat 2 sit rounds 3, 4 and 5. A new pattern from a seeded beam
+  search with the sit rule (scripts/americano-patterns.ts `noLongSits`; the script still rebuilds the file exactly): nobody sits more than 2 in a
+  row, sit-outs differ by at most 1 after every round, no early partner repeat, and the opponent spread is the same or narrower at every length
+  (8 rounds: 1..3 became 1..2). Other sizes are unchanged (9:4, 10:4 and 15:8 still have a 3 round sit somewhere; 11 to 16 on 1 court cannot avoid
+  it).
+
+### Preview stages
+`zip74_short` (THE CALM START: mid's night, Game 1 in, and the Time check applied from Round 2 to 9: View as Vic). One tap away: Final
+(`final_on`, Vic's Final alert), Teams published (Edit name), Time and Plan (`zip70_start`) and Late drop (`zip70_late`) for the back out sheet.

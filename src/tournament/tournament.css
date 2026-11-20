@@ -1951,10 +1951,3 @@ dialog.sheet.tc-tw-overlay {
   }
 }
 
-/* Zip 70: the late drop rule's two short lines in the Back out? sheet, each on its own line. */
-.tc-keep-note span {
-  display: block;
-}
-.tc-keep-note span + span {
-  margin-top: 4px;
-}

@@ -958,7 +958,8 @@ async function playerTicketsView(
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at the cap (16, Zip 63).
     size: smartPlan(locked).size,
-    full: locked >= MAX_SPOTS,
+    // Zip 74: full once 16 are locked in as everyone sees it (spots and waiting whole-ticket I paids), the count the server's cap uses.
+    full: Math.max(locked, lockedInCount(tickets)) >= MAX_SPOTS,
     // The organizer pays the venue, never the group: their own seat is $0 (the organizer found as the site always finds them, saved or by name).
     priceCents: own ? own.price_cents : playerId === (await orgOf()) ? 0 : t.ticket_cents,
     payBy: statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null,
@@ -1229,7 +1230,7 @@ async function notSignedUpOf(
     return { mode: 'recent', players: recent.filter((p) => p.id !== org && !on.has(p.id)).map((p) => ({ playerId: p.id, name: p.display_name })), closeAt: null };
   }
   // The same fullness the player's card uses (spots taken: lockedCount), so the row and the player's alert agree.
-  if (st !== 'tickets' || !t.final_date || salesClosed(t, group.timezone, ctx.nowMs) || lockedCount(tickets) >= MAX_SPOTS) return null;
+  if (st !== 'tickets' || !t.final_date || salesClosed(t, group.timezone, ctx.nowMs) || Math.max(lockedCount(tickets), lockedInCount(tickets)) >= MAX_SPOTS) return null;
   const phase = ticketPhase(t, group.timezone, ctx.nowMs);
   if (phase === 'cut') return null;
   const byId = new Map(tickets.map((k) => [k.player_id, k]));

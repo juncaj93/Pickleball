@@ -322,7 +322,7 @@ async function main() {
   await stage('teams_published');
   for (const scheme of SCHEMES)
     for (const w of SIZES)
-      await check(`B Vic before the night at ${w} ${scheme}: your team (pencil, dice), your games, all teams`, async () => {
+      await check(`B Vic before the night at ${w} ${scheme}: your team (Edit name), your games, all teams`, async () => {
         const v = await playerPage('Vic', { width: w, scheme });
         await v.page.locator('[data-tc-day="before"]').waitFor({ timeout: 15000 });
         assert((await v.page.locator('.tc-short').count()) === 1, 'the ticket stays');
@@ -332,7 +332,8 @@ async function main() {
         // Your team: the name big in the body font, the players under it, a pencil and a dice (before Game 1).
         const tc = v.page.locator('[data-tc-day-team-card]');
         assert(flat(await tc.innerText()).includes('Net Ninjas Vic + Wren'), await tc.innerText());
-        assert((await tc.locator('[data-tc-team-pencil], [data-tc-team-dice]').count()) === 2, 'pencil and dice');
+        // Zip 74 (picture pair-1): one small "Edit name" button instead of the pencil and the dice.
+        assert((await tc.locator('[data-tc-team-edit]').count()) === 1 && flat(await tc.locator('[data-tc-team-edit]').innerText()) === 'Edit name', 'Edit name');
         const font = await tc.locator('.tc-gd-tn b').first().evaluate((el) => getComputedStyle(el).fontFamily);
         assert(!/Bricolage/i.test(font), `body font for the team name: ${font}`);
         assert((await v.page.locator('[data-tc-day-team]').count()) === 4, 'all teams');
@@ -585,7 +586,7 @@ async function main() {
       await a.page.locator('[data-tm-fin-end]').selectOption(String(19 * 60 + 30 + 60));
       await a.page.waitForTimeout(200);
       const tight = flat(await a.page.locator('[data-tm-fin-fit]').innerText());
-      assert(tight === 'Locked doubles for 8: too tight on 1 court. Use 2 courts or add court time.', tight);
+      assert(tight === 'Locked doubles for 8: too tight on 1 court. Use 2 courts or add court time.', tight); // 1 court: unchanged by Zip 74
       await SH(a.page, `F-tight-420-${scheme}`);
       const go = await a.page.locator('[data-tm-finalize-go]').boundingBox();
       assert(go && go.y + go.height <= 912, `Finalize date on one screen: ${JSON.stringify(go)}`);

@@ -2,6 +2,7 @@
 // the tournament's own page (who can see it, the level list of mock 14, how many can make each date and picking it, Edit, Cancel), the card on
 // Home, and the level and date sheets. Only drawn while the switch is on for this phone (ctx.d.tournaments). No money moves here: the ticket
 // price and the champion credit are stored for pieces 2 and 3.
+import { theName } from '../../../shared/credit';
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AdminTicketView,
@@ -720,7 +721,7 @@ function paidWords(k: AdminTicketView): string {
 /** Zip 56: an I paid on a ticket, waiting for the organizer (the same amber card and words as a game's I paid). */
 function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k: AdminTicketView }) {
   const { busy, save } = useSave(ctx);
-  const where = t.status === 'canceled' ? `The ${t.name} was canceled.` : k.out ? `Backed out of the ${t.name}.` : `${t.name} ticket.`;
+  const where = t.status === 'canceled' ? `${t.name} was canceled.` : k.out ? `Backed out of ${theName(t.name)}.` : `${t.name} ticket.`;
   const answer = (action: 'confirm' | 'reject') =>
     save(
       () => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId: k.playerId, action, cents: k.claimCents }),
@@ -1559,7 +1560,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               ? `Are you sure? Players see it canceled. ${held.length} paid ${held.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(heldCents)}).`
               : t.finalDate
                 ? 'Are you sure? Players on the list see it canceled. Nothing was paid, so nothing comes back.'
-                : `Players stop seeing the ${t.name}. The list stays saved. Nothing was paid, so nothing comes back.`}
+                : `Players stop seeing ${theName(t.name)}. The list stays saved. Nothing was paid, so nothing comes back.`}
           </p>
         }
         cancelLabel="Keep it"

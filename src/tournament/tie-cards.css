@@ -32,9 +32,7 @@
   font-weight: 800;
   line-height: 1.2;
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 button.tc-tie-spin {
   cursor: pointer;
@@ -76,7 +74,7 @@ button.tc-tie-spin:disabled {
   font-weight: 800;
   line-height: 1.2;
   color: var(--ink);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tc-tie-picked-text span {
   font-size: 1rem;
@@ -101,16 +99,12 @@ button.tc-tie-spin:disabled {
   font-size: 1.08rem;
   font-weight: 800;
   color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 .tc-also-body span {
   font-size: 0.95rem;
   color: var(--ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 .tc-gd-through {
   white-space: nowrap;

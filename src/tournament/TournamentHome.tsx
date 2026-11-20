@@ -7,6 +7,7 @@
 //
 // This file is its own download (src/TournamentSlot.tsx loads it): a phone fetches it only when the server sends a tournament for it, so with
 // the switch off (or a tournament on Only me) a player's download is exactly main's.
+import { theName } from '../../shared/credit';
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormatVote, PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
 import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, monthsBetween, monthSpan, shortClock, startLabel, stubParts } from '../../shared/tournament';
@@ -171,7 +172,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         <div className="tc-strip" role="note" data-tc-strip>
           <div className="tc-strip-text">
             <p className="tc-strip-title">Only you can see this</p>
-            <p className="tc-strip-sub">Players don't see the {t.name} yet.</p>
+            <p className="tc-strip-sub">Players don't see {theName(t.name)} yet.</p>
           </div>
           <button type="button" className="btn" onClick={() => setAskShow(true)} data-tc-show>
             Show to everyone
@@ -270,19 +271,19 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
       <WhoSheet t={t} open={sheet === 'who'} onClose={() => setSheet(null)} />
       <ConfirmDialog
         open={askOut}
-        title="Back out?"
+        title={`Back out of ${theName(t.name)}?`}
         body={
-          <>
-            <p className="tm-confirm-text" data-tm-backout-text>
-              Are you sure you want to back out of the {t.name}? You come off the list. You can sign up again if you change your mind.{keeps ? '' : backLine}
+          // Zip 74 (picture pair-6): the real name in the title (never "the The Cold Open"). After Pay by, when the drop would take a 2 court
+          // night below 8 (the "kept" case), the body is only the money line; before that, the same meaning as before, shorter.
+          keeps ? (
+            <p className="tm-confirm-text tc-keep-note" data-tm-backout-keeps>
+              Backing out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.
             </p>
-            {keeps && (
-              <p className="tm-confirm-text tc-keep-note" data-tm-backout-keeps>
-                <span>Dropping now means no credit back unless someone takes your spot.</span>{' '}
-                <span>Below 8 players we lose the second court, and it's already paid for.</span>
-              </p>
-            )}
-          </>
+          ) : (
+            <p className="tm-confirm-text" data-tm-backout-text>
+              You come off the list. You can sign up again if you change your mind.{backLine}
+            </p>
+          )
         }
         cancelLabel="Stay signed up"
         confirmLabel="Yes, back out"
@@ -311,7 +312,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         <ConfirmDialog
           open={askShow}
           title="Show to everyone?"
-          body={<p className="tm-confirm-text">Every player sees the {t.name} on Home and can sign up.</p>}
+          body={<p className="tm-confirm-text">Every player sees {theName(t.name)} on Home and can sign up.</p>}
           confirmLabel="Show to everyone"
           busy={busy}
           onCancel={() => setAskShow(false)}

@@ -636,6 +636,27 @@ export interface PlayerTournamentView {
   day?: PlayerDayView | PlayerRoundsView;
 }
 
+/** Zip 74: a game night alert at the top of a player's Home (the site's alert card, dismissed per phone by its key). */
+export interface DayAlert {
+  key: string;
+  title: string;
+  sub: string;
+}
+
+/**
+ * Zip 74 (picture pair-3): the shorter games alert, from the games as stored. The newest shortening is the shortest length below the plan's
+ * (lengths only ever go down), and its round is the first round played at that length, so the words never move while the night goes on
+ * ("Starting Round 2, all games go to 9 points."). Shown while a shortened game is still to be played; the Final and 3rd place are never
+ * shortened (only pool games are), so they are not part of it.
+ */
+export function shortAlertOf(tournamentId: string, games: readonly { round: number; playTo: number; pool: boolean; decided: boolean }[], planTo: number): DayAlert | undefined {
+  const low = games.filter((g) => g.pool && g.playTo < planTo);
+  if (!low.some((g) => !g.decided)) return undefined;
+  const to = Math.min(...low.map((g) => g.playTo));
+  const from = Math.min(...low.filter((g) => g.playTo === to).map((g) => g.round));
+  return { key: `short:${tournamentId}:${from}:${to}`, title: `Starting Round ${from}, all games go to ${to} points.`, sub: 'We’re running behind, so games are shorter.' };
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Zip 57 (🎾57.tourney3): teams and game day (server/tournamentDay.ts). Names only for everyone else; a player sees only their own games (plus
 // the games being played now, by team name), the standings and the night's times.
@@ -748,6 +769,12 @@ export interface PlayerDayView {
   night: { label: string; time: string }[];
   /** The Time check banner (only when shorter games are in force or suggested). */
   timeNote?: string;
+  /** Zip 74 (picture pair-3): shorter games are in force: the amber alert at the top of Home ("Starting Round 2, all games go to 9 points."),
+   *  dismissed per phone; a second shortening (to 7) has a new key, so a new alert shows. */
+  shortAlert?: DayAlert;
+  /** Zip 74 (picture pair-5): this player's team is in the Final (both teams known, not played yet): "You're in the Final! It goes to 11
+   *  points." / "Head to Court 1.". Only the 4 players in it. */
+  finalAlert?: DayAlert;
   /** The organizer paused game day. */
   paused?: true;
   /** A partner changed after the teams were published: a one-time note ("Your new partner is Rowan."). */
@@ -893,6 +920,8 @@ export interface PlayerRoundsView {
   /** The points table: rank, name, wins-losses, points. */
   standings: { rank: number; name: string; record: string; points: number; me?: true; tied?: true; out?: true }[];
   timeNote?: string;
+  /** Zip 74: shorter games are in force (as PlayerDayView.shortAlert). */
+  shortAlert?: DayAlert;
   paused?: true;
   /** Someone left: a plain note for each player whose later game is off ("Zoe left. Your Round 5 game is off."). */
   leftNote?: { key: string; text: string };

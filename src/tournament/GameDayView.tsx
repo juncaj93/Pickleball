@@ -90,7 +90,8 @@ function rowWords(g: PlayerDayGame): { title: string; sub: string } {
   if (!g.opponent) return { title: g.pending ?? 'Not decided yet', sub: g.stage === 'final' ? 'Against the other finalist' : g.stage === 'semi' ? 'Against the other pool' : '' };
   const players = g.opponent.players.join(' + ');
   if (g.state === 'done' && g.won !== undefined) return { title: `vs ${g.opponent.name}`, sub: players };
-  return { title: `vs ${g.opponent.name}`, sub: g.playTo !== 11 && g.stage === 'pool' ? `${players} · to ${g.playTo}` : players };
+  // Zip 74: a shorter game says so with the "Play to 9" pill beside the name (PlayToPill), not in this line.
+  return { title: `vs ${g.opponent.name}`, sub: players };
 }
 
 function GamesCard({ day }: { day: PlayerDayView }) {
@@ -109,7 +110,8 @@ function GamesCard({ day }: { day: PlayerDayView }) {
               </span>
               <span className="tc-gd-main">
                 <b>
-                  {w.title}
+                  <span className="tc-gd-with">{w.title}</span>
+                  {g.state !== 'done' && g.opponent && !g.skipped && g.playTo < 11 && <PlayToPill to={g.playTo} />}
                   {g.state === 'done' && g.won !== undefined && (
                     <span className={g.won ? 'tc-gd-tag tc-gd-tag-won' : 'tc-gd-tag'} data-tc-day-result>
                       {resultTag(g.won, g.score)}
@@ -274,11 +276,25 @@ export function Matchup({ a, b, big, lit }: { a: { name: string; players: string
   );
 }
 
-const PENCIL = (
-  <svg viewBox="0 0 20 20" aria-hidden="true">
-    <path d="M13.6 3.4l3 3L7 16H4v-3z" />
-  </svg>
-);
+/**
+ * Zip 74 (pictures pair-3 and pair-4): a game shorter than 11 says so. `big`: the Up next card's yellow "Play to 9 points", centered on its own
+ * line under the kicker; else the small "Play to 9" pill beside the opponent in Your games / Your rounds. The Final and 3rd place are always to
+ * 11, so they never get one.
+ */
+export function PlayToPill({ to, big }: { to: number; big?: boolean }) {
+  return big ? (
+    <p className="tc-gd-playto-row">
+      <span className="tc-gd-playto tc-gd-playto-big" data-tc-play-to={to}>
+        Play to {to} points
+      </span>
+    </p>
+  ) : (
+    <span className="tc-gd-playto" data-tc-play-to={to}>
+      Play to {to}
+    </span>
+  );
+}
+
 const DICE = (
   <svg viewBox="0 0 20 20" aria-hidden="true">
     <rect x="3" y="3" width="14" height="14" rx="3.5" />
@@ -289,8 +305,10 @@ const DICE = (
 );
 
 /**
- * Your team (Alex's PM, under the ticket before the night): the name big, the two players under it, and while Game 1 has not started a pencil (type
- * your own name: the name becomes a box with Save name) and a dice (roll a new suggestion). Either partner; the last save wins.
+ * Your team (Alex's PM, under the ticket before the night): the name big, the two players under it. Zip 74 (pictures pair-1 and pair-2): while
+ * the name can still change (until Game 1 starts: the server's `canRename`), one small secondary "Edit name" button on the right. It opens the
+ * "Team name" sheet: a box with the name, "Need help? Randomize a name" (rolls a suggestion nobody else has into the box; nothing is saved),
+ * and Save. Either partner; the last save wins; a name another team has is refused.
  */
 function YourTeamCard({ t, day, onChanged }: { t: PlayerTournamentView; day: PlayerDayView; onChanged: () => Promise<unknown> }) {
   const toast = useToast();
@@ -299,12 +317,13 @@ function YourTeamCard({ t, day, onChanged }: { t: PlayerTournamentView; day: Pla
   const [busy, setBusy] = useState(false);
   if (!day.team) return null;
   const team = day.team;
-  async function save(name?: string) {
+  async function save(name: string) {
     setBusy(true);
     try {
-      await api('POST', '/api/tournament/team-name', { tournamentId: t.id, ...(name !== undefined ? { name } : {}) });
+      await api('POST', '/api/tournament/team-name', { tournamentId: t.id, name });
       await onChanged();
       setEditing(false);
+      toast('Team name saved', 'ok');
     } catch (err) {
       toast(errorText(err), 'error');
       if (err instanceof ApiError && (err.status === 409 || err.status === 404)) void onChanged();
@@ -312,47 +331,56 @@ function YourTeamCard({ t, day, onChanged }: { t: PlayerTournamentView; day: Pla
       setBusy(false);
     }
   }
+  async function randomize() {
+    setBusy(true);
+    try {
+      const r = await api<{ name: string }>('POST', '/api/tournament/team-name', { tournamentId: t.id, suggest: true, not: draft });
+      setDraft(r.name);
+    } catch (err) {
+      toast(errorText(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section className="tc-gd-card tc-gd-yourteam" aria-label={`Your team, ${team.name}`} data-tc-day-team-card>
       <h3 className="tc-gd-label">Your team</h3>
-      {editing ? (
+      <div className="tc-gd-yt-row">
+        <TeamName name={team.name} players={team.players} big />
+        {team.canRename && (
+          <button
+            type="button"
+            className="tc-gd-yt-editbtn"
+            disabled={busy}
+            onClick={() => {
+              setDraft(team.name);
+              setEditing(true);
+            }}
+            data-tc-team-edit
+          >
+            Edit name
+          </button>
+        )}
+      </div>
+      <Sheet calmFocus open={editing && !!team.canRename} title="Team name" onClose={() => setEditing(false)} className="tc-gd-sheet">
         <form
-          className="tc-gd-yt-edit"
+          className="tc-gd-yt-sheet"
+          data-tc-team-sheet
           onSubmit={(e) => {
             e.preventDefault();
             if (draft.trim()) void save(draft.trim());
           }}
         >
-          <input className="tc-gd-yt-input" value={draft} maxLength={24} autoFocus onChange={(e) => setDraft(e.target.value)} aria-label="Team name" data-tc-team-input />
-          <button type="submit" className="btn tc-gd-yt-save" disabled={busy || !draft.trim()} data-tc-team-save>
-            Save name
+          <input className="tc-gd-yt-input" value={draft} maxLength={24} onChange={(e) => setDraft(e.target.value)} aria-label="Team name" autoComplete="off" data-tc-team-input />
+          <button type="button" className="tc-gd-yt-random" disabled={busy} onClick={() => void randomize()} data-tc-team-random>
+            {DICE}
+            <span>Need help? Randomize a name</span>
+          </button>
+          <button type="submit" className="btn block big tc-gd-yt-save" disabled={busy || !draft.trim()} data-tc-team-save>
+            Save
           </button>
         </form>
-      ) : (
-        <div className="tc-gd-yt-row">
-          <TeamName name={team.name} players={team.players} big />
-          {team.canRename && (
-            <span className="tc-gd-yt-btns">
-              <button
-                type="button"
-                className="tc-gd-round"
-                aria-label="Type a team name"
-                disabled={busy}
-                onClick={() => {
-                  setDraft(team.name);
-                  setEditing(true);
-                }}
-                data-tc-team-pencil
-              >
-                {PENCIL}
-              </button>
-              <button type="button" className="tc-gd-round" aria-label="Roll a new team name" disabled={busy} onClick={() => void save()} data-tc-team-dice>
-                {DICE}
-              </button>
-            </span>
-          )}
-        </div>
-      )}
+      </Sheet>
     </section>
   );
 }
@@ -452,6 +480,12 @@ export type Held = { num: number; won: boolean; lit: boolean };
 export type HeldScore = Held & { mine: number; theirs: number };
 
 /**
+ * Zip 74 (the 🎾73 audit, 320 px): a score ("11 to 7") and a clock time ("7:00 PM") never break across two lines: their spaces become
+ * no-break spaces. Names around them still wrap between words.
+ */
+export const glue = (text: string): string => text.replace(/(\d+) to (\d+)/g, '$1\u00a0to\u00a0$2').replace(/(\d{1,2}(?::\d{2})?) ([AP]M)\b/g, '$1\u00a0$2');
+
+/**
  * THE result motion, shared by Locked doubles and Americano (Submit score; Zip 72: both styles enter a score): zip 57's code, the one copy. The card
  * lights for a second (won: our side lime and "✓ Let's go!"; lost: their side's white glow and "Onto the next!"), then slides to the next game;
  * the bottom banner says who won with Undo and its 5 second countdown circle; the result is sent after 5 seconds unless Undo. Leaving Home or locking
@@ -514,7 +548,7 @@ export function useHeldResult(t: PlayerTournamentView, onChanged: () => Promise<
     if (lit) litTimer.current = setTimeout(() => setHeld((h) => (h && h.num === num ? { ...h, lit: false } : h)), LIT_MS);
     pending.current = body;
     // Zip 71 (Alex): the countdown circle on Undo only; no draining line along the banner's foot (it repeated the circle).
-    toast(banner, 'ok', { action: { label: 'Undo', onClick: undo }, stayMs: UNDO_MS, keep: true });
+    toast(glue(banner), 'ok', { action: { label: 'Undo', onClick: undo }, stayMs: UNDO_MS, keep: true });
     timer.current = setTimeout(() => {
       pending.current = null;
       void send(body).then(() => setHeld(null));
@@ -622,9 +656,10 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
       {/* Zip 58 (picture 22): the 3rd place game beside this player's Final. */}
       {tiePhase === null && day.alsoNow && next?.stage === 'final' && <AlsoNowCard a={day.alsoNow} />}
       {tiePhase === 'playoff' && day.playoff && <PlayoffCard rows={day.playoff} day={day} />}
-      {tiePhase === null && day.timeNote && (
+      {/* Zip 74: the shorter games alert at the top of Home says it (picture pair-3), so the players' Time check line is not repeated here. */}
+      {tiePhase === null && day.timeNote && !day.shortAlert && (
         <p className="tc-gd-tc" role="status" data-tc-day-time>
-          <b>Time check.</b> {day.timeNote}
+          <b>Time check.</b> {glue(day.timeNote)}
         </p>
       )}
       {tiePhase === null && <GamesCard day={day} />}
@@ -634,7 +669,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           <h3 className="tc-gd-label">Currently playing</h3>
           <ul className="tc-gd-rows">
             {day.live.map((x) => (
-              <li key={`${x.round}-${x.court}-${x.a.name}`} className="tc-gd-row tc-gd-game">
+              <li key={`${x.round}-${x.court}-${x.a.name}`} className="tc-gd-row tc-gd-game tc-gd-liverow">
                 <span className="tc-gd-left">
                   <b>{x.label ?? `Round ${x.round}`}</b>
                   <Court n={x.court} set={day.courtsSet} />
@@ -715,13 +750,14 @@ function UpNext({
   onEnter: () => void;
 }) {
   const court = g.court !== null ? ` · Court ${g.court}` : '';
-  const kicker = first && !day.started ? `${g.label} · Begins at ${day.beginsAt}` : g.onNow || lit ? `${g.label}${court}` : `Up next · ${g.label}${court}`;
+  const kicker = first && !day.started ? `${g.label} · Begins at ${glue(day.beginsAt)}` : g.onNow || lit ? `${g.label}${court}` : `Up next · ${g.label}${court}`;
   const mine = day.team ?? { name: 'Your team', players: [] };
   return (
     <section className="tc-gd-next" aria-label={kicker} data-tc-day-next={g.num}>
       <p className="tc-gd-next-kicker">{kicker}</p>
       {g.opponent ? (
         <>
+          {g.playTo < 11 && <PlayToPill to={g.playTo} big />}
           <Matchup a={{ name: mine.name, players: mine.players }} b={g.opponent} big lit={lit} />
           {(g.onNow || lit) && (
             <div className={lit === 'mine' ? 'tc-gd-next-btns tc-gd-next-lit' : lit === 'theirs' ? 'tc-gd-next-btns tc-gd-next-lost' : 'tc-gd-next-btns'}>

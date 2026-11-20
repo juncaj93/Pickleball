@@ -1059,6 +1059,19 @@ a[href] {
   color: var(--pc-green, var(--primary));
   border-color: var(--pc-green-line, var(--primary));
 }
+/* Zip 74 (the 🎾73 audit): the tournament ticket's Pay sheet opens outside the game cards, where the --pc-* colors are not set, so in dark
+   mode "Copy Venmo" fell back to the dark primary green on the dark sheet. The sheet now carries the game cards' own dark outline colors
+   (light green text on a mid green line, as on every game card's sheet). Light mode is unchanged. */
+:root[data-theme='dark'] .pay-sheet {
+  --pc-green: #7fd9a3;
+  --pc-green-line: #3a8f69;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .pay-sheet {
+    --pc-green: #7fd9a3;
+    --pc-green-line: #3a8f69;
+  }
+}
 .pay-sheet .pay-alt {
   margin: 2px 0;
   font-size: 0.85rem;

@@ -692,6 +692,23 @@ html[data-alert-cards] .short-ac {
   margin-top: 10px;
 }
 
+/* Zip 74 (picture pair-3): a filled card for game night news that everyone must see (shorter games): the whole card in its tone's tint, a
+   tinted border, the badge in the tone's fill. Light and dark read the tone's own colors. Only cards that ask for it (className ac-filled). */
+html[data-alert-cards] .ac.ac-filled,
+html[data-alert-cards]:not([data-theme='light']) .ac.ac-filled.ac-filled {
+  background: var(--t-tint);
+  border-color: color-mix(in srgb, var(--t-fill) 55%, var(--t-tint));
+}
+html[data-alert-cards] .ac.ac-filled .ac-icon {
+  background: var(--t-fill);
+  color: var(--t-fill-ink);
+}
+/* The amber badge is the bright amber with a dark stopwatch in both themes (picture pair-3). */
+html[data-alert-cards] .ac.ac-filled.ac-amber .ac-icon {
+  background: #f0b84a;
+  color: #2a1c00;
+}
+
 /* ---------- Zip 16: the dark-mode "in-between" look for every alert card (aftergame_mock.html, the .ph.dark.mid rules) ----------
  * Alex's phone: in dark mode a card was almost the page color, so its shape was hard to see. Player cards, and the organizer cards too
  * (Alex, Nov 8, after the preview: same values). In dark mode only: a 1.5 px border, a fill that is the card color

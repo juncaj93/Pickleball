@@ -111,3 +111,10 @@ ADMIN SPEED RULE (Alex, Nov 19): the admin site must never get slower. Before yo
 - Americano ranking is unchanged: wins (win % when game counts differ), then total points.
 - Small fixes: the pay countdown rounds to the nearest hour ("Due in 5 hours" at 4 h 59 m); every organizer row counts locked in the same way (spots plus a whole-ticket I paid still waiting, as players see it), so "Locked in 8 of 10", the Tickets chip and "8 locked in. Draft the teams." agree.
 
+
+## Game night polish (Zip 74, Nov 20; the code is the truth: shared/tournament.ts shortAlertOf, server/tournamentDay.ts playerDayView, server/tournamentTickets.ts)
+- The cap of 16 holds before Pay by too: a whole-ticket I paid is refused ("Every spot just filled. Join standby.") when 16 are already locked in (spots plus waiting whole-ticket I paids). A standby hold's I paid and a spot holder's own I paid always finish.
+- Play to 9: when the organizer shortens games, every player on the night sees one amber alert at the top of Home ("Starting Round 2, all games go to 9 points." / "We're running behind, so games are shorter."), dismissed per phone; shortening again (to 7) shows a new one. "Play to 9 points" on the Up next card, "Play to 9" beside each shortened game. The Final and 3rd place always go to 11.
+- The Final: its 4 players see "You're in the Final! It goes to 11 points." / "Head to Court N.", dismissed per phone.
+- Team names: "Edit name" opens the Team name sheet (type, or Randomize into the box, then Save); until Game 1 starts; no two teams share a name.
+- Back out sheet: "Back out of The Cold Open?" (a name starting with "The" never gets another "the"); after Pay by below 8 on 2 courts, only the money line.

@@ -98,6 +98,13 @@ export const ZIP66_STAGES = ['zip66_start', 'missed_date'] as const;
 //                    "−4 pts". Organizer Home: Fix on any game (Fix Game 1 · Court 1, two numbers, Save).
 //   zip72_circle     every round robin game in: Kitchen Crew 3-0, then Net Ninjas, Third Shot Gang and Dill With It 1-2 each in a circle, settled
 //                    by point difference (0, −2, −9 pts): no wheel; the Final (Kitchen Crew vs Net Ninjas) and 3rd place are set.
+// Zip 74 (🎾74.polish):
+//   zip74_short      THE CALM START. mid's night (Game 1 in, Net Ninjas won 11 to 7), and Alex applied the Time check: from Round 2 on, play
+//                    to 9 (the real apply's rows). View as Vic: the amber "Starting Round 2, all games go to 9 points." at the top (X hides
+//                    it), "Play to 9 points" on the Up next card, "Play to 9" beside Games 2 and 3. The Final stays to 11. The other Zip 74
+//                    screens are existing stages: final_on (Vic: "You're in the Final!"), teams_published (Your team: Edit name), zip70_start
+//                    and zip70_late (Parker: Drop out, "Back out of The Cold Open?" before and after Pay by).
+export const ZIP74_STAGES = ['zip74_short'] as const;
 export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out', 'zip71_taps', 'zip72_scores', 'zip72_circle'] as const;
 type DayStage = (typeof DAY_STAGES)[number];
 const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[]).includes(s);
@@ -146,7 +153,7 @@ const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).
 export const ZIP70_STAGES = ['zip70_start', 'zip70_loss', 'zip70_moved', 'zip70_late', 'zip70_finalize'] as const;
 type Zip70Stage = (typeof ZIP70_STAGES)[number];
 const isZip70Stage = (s: string): s is Zip70Stage => (ZIP70_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -304,6 +311,15 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
   if (isZip58Stage(stage)) return zip58Stage(ctx, group, stage);
   if (stage === 'zip72_circle') return dayStage(ctx, group, stage, TIE3, CIRCLE_SCORE);
+  if (stage === 'zip74_short') {
+    // mid's night, then the Time check's apply exactly as the organizer's tap writes it (server/tournamentDay.ts gamesAction 'apply').
+    const made = await dayStage(ctx, group, 'mid');
+    await ctx.db
+      .prepare("UPDATE tournament_games SET play_to = 9, updated_at = ? WHERE tournament_id = ? AND stage = 'pool' AND round >= 2 AND play_to > 9 AND winner IS NULL AND claim IS NULL AND skipped = 0")
+      .bind(ctx.nowIso, made.id)
+      .run();
+    return { ...made, stage };
+  }
   if (isDayStage(stage)) return dayStage(ctx, group, stage);
   if (isAmStage(stage)) return americanoStage(ctx, group, stage);
   if (stage === 'vote_open' || stage === 'vote_majority' || stage === 'vote_tie' || stage === 'vote_finalize' || stage === 'speed_check' || stage === 'zip64_start' || stage === 'zip66_start' || stage === 'missed_date' || stage === 'zip71_teams') return voteStage(ctx, group, stage);

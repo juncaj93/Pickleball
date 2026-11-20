@@ -30,7 +30,7 @@ import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
-import { AcBalls, AcIcon, AcX, AlertCard } from '../AlertCard';
+import { AcBalls, AcIcon, type AcIconName, type AcTone, AcX, AlertCard } from '../AlertCard';
 import { extAlerts, inclNote } from '../../shared/extension';
 import '../extended-time.css';
 import { afterGameCard, oweMoreText } from '../../shared/afterGame';
@@ -446,6 +446,13 @@ export function PlayerHome({
   }, []);
   // Games with no court booked are drawn like normal games (src/courtDisplay.ts), after the taps still waiting on the server.
   const view = useMemo(() => (g ? courtDisplay(applyOverlay(g, overlay)) : null), [g, overlay]);
+  // Zip 74: game night's two alerts (the server sends them on the player's day view only on the night).
+  type Al = { key: string; title: string; sub: string };
+  const td = view?.tournament?.day as { shortAlert?: Al; finalAlert?: Al } | undefined;
+  const dayAlerts = [
+    td?.finalAlert && <FormatAlertCard key="f" a={td.finalAlert} label="You're in the Final" data="data-final-alert" icon="trophy" />,
+    td?.shortAlert && <FormatAlertCard key="s" a={td.shortAlert} label="Shorter games" data="data-short-alert" tone="amber" icon="clock" filled />,
+  ].filter(Boolean);
 
   // All games / My games, remembered on this phone (not in the organizer's "View as...").
   const [filter, setFilterState] = useState<GameFilter>(() => (!viewAs && storageGet(FILTER_KEY) === 'mine' ? 'mine' : 'all'));
@@ -820,8 +827,11 @@ export function PlayerHome({
                 onChanged={load.reload}
                 pay={{ group: g.group, meName: g.me?.name ?? null }}
                 notice={
-                  view!.tournament.formatAlert || view!.tournament.styleNote || view!.tournament.timeNote ? (
+                  view!.tournament.formatAlert || view!.tournament.styleNote || view!.tournament.timeNote || dayAlerts.length ? (
                     <>
+                      {/* Zip 74 (pictures pair-3 and pair-5): game night first: the Final alert for the 4 players in it (blue, a trophy),
+                          then shorter games (amber, filled). Each dismissed per phone; a new shortening (to 7) is a new alert. */}
+                      {dayAlerts}
                       {/* Zip 70 (picture 6): the organizer moved the start or the end: first, dismissed per player. */}
                       {view!.tournament.timeNote && <FormatAlertCard a={view!.tournament.timeNote} label="Time changed" data="data-time-note" />}
                       {/* Zip 64: the style changed after tickets closed: one short banner, dismissed per player. Zip 71: while the date alert is
@@ -1256,10 +1266,18 @@ function FormatAlertCard({
   label = 'Tournament scheduled',
   data = 'data-format-alert',
   also = [],
+  tone = 'blue',
+  icon = 'court',
+  filled = false,
 }: {
   a: { key: string; title: string; sub?: string };
   label?: string;
   data?: string;
+  /** Zip 74: the game night alerts' own color and badge (shorter games amber with a stopwatch; the Final blue with a trophy). */
+  tone?: AcTone;
+  icon?: AcIconName;
+  /** Zip 74: the whole card in its tone (the shorter games alert). */
+  filled?: boolean;
   /** Zip 71: other alerts this card carries (their keys are hidden with it). */
   also?: string[];
 }) {
@@ -1268,8 +1286,9 @@ function FormatAlertCard({
   return (
     <AlertCard
       as="section"
-      tone="blue"
-      icon="court"
+      tone={tone}
+      icon={icon}
+      className={filled ? 'ac-filled' : ''}
       label={label}
       title={a.title}
       sub={a.sub || undefined}

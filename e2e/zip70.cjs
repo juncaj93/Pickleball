@@ -455,12 +455,11 @@ async function main() {
         await p.page.locator('[data-tc-drop]').click();
         const keep = p.page.locator('[data-tm-backout-keeps]');
         await keep.waitFor({ timeout: 5000 });
-        const lines = (await keep.locator('span').allInnerTexts()).map(flat);
-        assert(
-          JSON.stringify(lines) === JSON.stringify(['Dropping now means no credit back unless someone takes your spot.', "Below 8 players we lose the second court, and it's already paid for."]),
-          JSON.stringify(lines),
-        );
-        assert(!/comes back as credit/.test(await p.page.locator('[data-tm-backout-text]').innerText()), 'no "comes back as credit"');
+        // Zip 74 (picture pair-6): the kept case's body is just the money line, under "Back out of The Cold Open?".
+        const words = flat(await keep.innerText());
+        assert(words === 'Backing out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.', words);
+        assert((await p.page.locator('[data-tm-backout-text]').count()) === 0, 'no "comes back as credit" line');
+        assert(flat(await p.page.locator('dialog[open]').innerText()).startsWith('Back out of The Cold Open?'), 'the title');
         await p.page.locator('[role="dialog"], .confirm').last().screenshot({ path: path.join(SHOTS, `H-drop-${width}-${scheme}.png`) }).catch(() => undefined);
         await p.ctx.close();
         const z = await vicCard({ who: 'Zoe', width, scheme });

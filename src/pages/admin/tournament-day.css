@@ -65,7 +65,7 @@ span.tm-gd-team-text {
   line-height: 1.3;
 }
 .tm-gd-who {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tm-gd-pname {
   color: var(--ink);
@@ -357,7 +357,7 @@ span.tm-gd-team-text {
   font-family: var(--body);
   font-size: 1.14rem;
   font-weight: 700;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tm-gd-pick-mark,
 .tm-gd-option-mark {
@@ -400,13 +400,22 @@ span.tm-gd-team-text {
   .tm-gd-court {
     width: 78px;
   }
+  /* Zip 74 (320 px): inside a sheet (All rounds) the row already sits in the sheet's padding: a narrower court column and no extra inset, so
+     "Christopher Vanderberg" wraps between words, never inside one. */
+  .tm-gd-sheet .tm-gd-result {
+    gap: 10px;
+    padding-inline: 2px;
+  }
+  .tm-gd-sheet .tm-gd-court {
+    width: 64px;
+  }
 }
 
 /* Alex's PM: a team's players under its name (smaller, grey), the pencil on each published team, a result's two sides. */
 .tm-gd-tplayers {
   font-size: 0.92rem;
   color: var(--ink-2);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tm-gd-team-pub .tm-gd-tname {
   font-size: 1.06rem;
@@ -443,12 +452,12 @@ span.tm-gd-team-text {
 .tm-gd-side > b {
   font-size: 1.02rem;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tm-gd-side > span {
   font-size: 0.86rem;
   color: var(--ink-2);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .tm-gd-word {
   font-size: 0.8rem;
@@ -582,9 +591,8 @@ span.tm-gd-team-text {
 .tm-am-step-name {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Zip 74: the Fix sheet's names wrap between words, never cut. */
+  overflow-wrap: break-word;
   font-family: var(--body);
   font-size: 1.05rem;
   font-weight: 700;

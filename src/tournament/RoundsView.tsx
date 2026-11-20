@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import type { PlayerRound, PlayerRoundsView, PlayerTournamentView } from '../../shared/tournament';
 import { resultTag } from '../../shared/scores';
-import { Court, DayHero, type HeldScore, Matchup, ScoreSheet, Slide, useHeldResult, useSeen } from './GameDayView';
+import { Court, DayHero, glue, type HeldScore, Matchup, PlayToPill, ScoreSheet, Slide, useHeldResult, useSeen } from './GameDayView';
 import './gameday-tour.css';
 
 const pair = (a: string, b: string) => `${a} + ${b}`;
@@ -49,6 +49,7 @@ function RoundRow({ r, set, plain }: { r: PlayerRound; set: boolean; plain?: boo
           <>
             <b>
               <span className="tc-gd-with">With {r.partner}</span>
+              {r.state !== 'done' && !r.skipped && r.playTo < 11 && <PlayToPill to={r.playTo} />}
               {r.state === 'done' && r.won !== undefined && (
                 <span className={r.won ? 'tc-gd-tag tc-gd-tag-won' : 'tc-gd-tag'} data-tc-day-result>
                   {resultTag(r.won, r.score)}
@@ -126,10 +127,11 @@ function LiveCard({ day }: { day: PlayerRoundsView }) {
 /** The big green card (picture 32): "Round 3 · Court 1", "You + Parker" VS "Quinn + Reese", Enter score while the round is on. */
 function RoundCard({ r, day, busy, lit, onEnter }: { r: PlayerRound; day: PlayerRoundsView; busy: boolean; lit: 'mine' | 'theirs' | null; onEnter: () => void }) {
   const first = r.round === 1 && !day.started;
-  const kicker = first ? `Round 1 · Begins at ${day.beginsAt}` : r.onNow || lit ? `Round ${r.round} · Court ${r.court}` : `Up next · Round ${r.round} · Court ${r.court}`;
+  const kicker = first ? `Round 1 · Begins at ${glue(day.beginsAt)}` : r.onNow || lit ? `Round ${r.round} · Court ${r.court}` : `Up next · Round ${r.round} · Court ${r.court}`;
   return (
     <section className="tc-gd-next" aria-label={kicker} data-tc-day-next={r.num ?? undefined} data-tc-round-card={r.round}>
       <p className="tc-gd-next-kicker">{kicker}</p>
+      {r.playTo < 11 && <PlayToPill to={r.playTo} big />}
       <Matchup a={{ name: pair('You', r.partner!), players: [] }} b={{ name: pair(r.opponents![0], r.opponents![1]), players: [] }} big lit={lit} />
       {(r.onNow || lit) && (
         <div className={lit === 'mine' ? 'tc-gd-next-btns tc-gd-next-lit' : lit === 'theirs' ? 'tc-gd-next-btns tc-gd-next-lost' : 'tc-gd-next-btns'}>
@@ -206,9 +208,10 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
           )}
         </Slide>
       )}
-      {shown.timeNote && (
+      {/* Zip 74: the shorter games alert at the top of Home says it, so no Time check line here too. */}
+      {shown.timeNote && !shown.shortAlert && (
         <p className="tc-gd-tc" role="status" data-tc-day-time>
-          <b>Time check.</b> {shown.timeNote}
+          <b>Time check.</b> {glue(shown.timeNote)}
         </p>
       )}
       <RoundsCard day={shown} />
