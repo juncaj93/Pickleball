@@ -6960,9 +6960,9 @@ Alex's phone), median of 15 to 21 calls (`e2e/zip68-time.cjs`); (3) a real brows
   That is the "sometimes 3 to 4 seconds": the first open after a deploy, or a slower network moment multiplied by 33 trips in a row.
 
 ### What changed
-1. `server/speed.ts`: three small pieces on the "Fewer database trips" wrapper. `firstWithSwitches`: the organizer sign-in check and the
+1. `server/speed.ts`: two small pieces on the "Fewer database trips" wrapper. `firstWithSwitches`: the organizer sign-in check and the
    read of every switch row in ONE trip (the first switch question then uses those rows; a write in between, a failed batch, the switch off
-   after deciding, or a look-only database fall back to exactly the old reads). `alsoNext`: reads that ride in the next shared trip.
+   after deciding, or a look-only database fall back to exactly the old reads).
    `isFast`: whether the shared trips are on for this request.
 2. `server/auth.ts` `requireAdmin`: uses `firstWithSwitches` (every organizer call saves one trip, the 5-second check included).
 3. `server/admin.ts` `dashboard`: with the switch on, ONE shared trip carries the fingerprint's reads, the "next weeks' games" check and every
