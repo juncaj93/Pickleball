@@ -7074,6 +7074,34 @@ database at zip70_start: main's preview (`claude-new-session-0k1imm`) dashboard 
 85 to 89 ms (medians of 11).
 
 ### Preview
-`pickleball-preview` (fake): Time Travel bookmark first `000001ab-00000000-00005129-121fe9780d025b373326e9de7ce5edda`; deployment `064ab7e3`,
+`pickleball-preview` (fake): Time Travel bookmark first `000001ab-00000000-00005129-121fe9780d025b373326e9de7ce5edda`; deployment `49ea8262` (first `064ab7e3`),
 https://claude-new-session-491iok.pickleball-club-9h0.pages.dev; re-seeded (calm start: zip70_start). New Tournament test stages: zip70_start,
 zip70_loss, zip70_moved, zip70_late, zip70_finalize.
+
+### Review
+A fresh reviewer (no part in the build) read the diff twice, with probe tests. First pass, fixed with a test each: (blocking) a kept player could
+sign up again and drop again to get the money back: signing up again now puts their own paid ticket back in line (they retake their spot), and
+after the 3 hour cutoff a kept player cannot sign up again; the drop now lands only if the rule still says what the Drop out sheet showed
+(`keeps`; 409 "This just changed. Look again." otherwise); a Reschedule gives kept money back; the keep test and the release test both count
+paid spots on the list (an I paid still waiting is not money yet, on either side); a switch to 1 court (Plan box, or the game night card) gives
+kept money back; a time move whose 3 hour cutoff already passed is refused while tickets are still open; a Plan save with nothing changed writes
+nothing. Second pass: nothing blocking. Kept as notes: two identical Plan saves landing at the very same moment can write two History lines;
+payment details for a phone with no name changed whatever the TOURNAMENTS switch says (that is fix 4).
+
+### Tests
+- Unit: tests/zip70-time.test.ts (22: the money line, expected players, the time card words, the fit line; 10 to 9 credit, 9 to 8 credit, 8 to 7
+  kept, a new player pays and both kept drops come back once, double taps and refreshes never pay twice, before Pay by, 1 court, after the cutoff
+  refused, after the night and Cancel; every review case; Time and Plan routes; payment details). Older tests follow the new words and rules
+  (zip56, zip57, zip59, zip61, zip64). Full run: 207 files, 4,087 passed, 2 skipped (the one failure in that run was the new cutoff test loaded
+  while it was being written; it passes on its own); `npx tsc -b` clean; the player download 140.8 KB gzipped (budget 141).
+- Browser: new e2e/zip70.cjs 74 of 74 (A to J: pictures 1 to 7 at 420/390/360/320 light and dark, no row wraps, "to 10 PM" never cut at 320, the
+  two lines, fixes 2, 3 and 6). Older: zip55 91, zip56 57, zip57 21, zip58 24, zip59 12, zip60 29, zip61 19, zip62 17, zip63 64, zip64 83, zip66 84,
+  all passing after their expectations followed the new words. Switch OFF equals main `9b6839e`: zip55-off 47 of 47, zip56-off 47 of 47.
+
+### Live: NOT done
+This session's permission guard refused live database access (a read-only SELECT of the live Cold Open's counts), so the deploy checklist's first
+steps (SQL export, Time Travel bookmark, integrity checks on `pickleball`) could not run here, and nothing was deployed. No migration is needed.
+To ship (quiet window): SQL export and Time Travel bookmark of `pickleball`; the three integrity checks (the tournament file now has
+`tour_kept_wrong_stage` and `info_kept_late_drops`); fast-forward main to this branch and push; `npm run deploy` from main; the checks again; the
+read-only live check. Rollback: deployment `0b0f0e1d` (Zip 68). No database undo needed (task_log rows and a 'kept' status are only written by
+the new code; old code reads 'kept' as off the list).
