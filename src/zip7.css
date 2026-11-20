@@ -11,60 +11,42 @@
 
 :root {
   /* Tonight / Tomorrow tags (Tonight glow) */
-  --z7-tonight-bg: #1f6b45;
-  --z7-tonight-ink: #ffffff;
-  --z7-tomorrow-bg: #dff0e6;
-  --z7-tomorrow-ink: #1f6b45;
+  --z7-tonight-bg: var(--primary);
+  --z7-tonight-ink: var(--primary-ink);
+  --z7-tomorrow-bg: var(--ok-bg);
+  --z7-tomorrow-ink: var(--primary);
   --z7-glow: 47 143 91;
   --z7-sweep: rgb(255 255 255 / 13%);
   /* Color cleanup */
-  --z7-text-fill: #6a56a6;
-  --z7-text-ink: #ffffff;
-  --z7-credit-fg: #3a4fa3;
-  --z7-credit-bg: #e9edf6;
-  --z7-wait-bg: #4b5563;
-  --z7-wait-ink: #ffffff;
-  --z7-cancel-fg: #4b5563;
-  --z7-cancel-bg: #e9ebee;
-  --z7-gray-line: #b9bcb2;
-  --z7-gray-ink: #565d58;
+  --z7-text-fill: var(--fill);
+  --z7-text-ink: var(--ink);
+  --z7-credit-fg: var(--info-fg);
+  --z7-credit-bg: var(--info-bg);
+  --z7-wait-bg: var(--ink-2);
+  --z7-wait-ink: var(--primary-ink);
+  --z7-cancel-fg: var(--ink-2);
+  --z7-cancel-bg: var(--fill);
+  --z7-gray-line: var(--line-strong);
+  --z7-gray-ink: var(--ink-2);
 }
 :root[data-theme='dark'] {
-  --z7-tonight-bg: #4cc58a;
-  --z7-tonight-ink: #0d2a1b;
-  --z7-tomorrow-bg: #1c3a2a;
-  --z7-tomorrow-ink: #8be0b3;
+  --z7-tonight-bg: var(--ok-edge);
+  --z7-tonight-ink: var(--ok-bg);
+  --z7-tomorrow-ink: var(--ok-fg);
   --z7-glow: 76 197 138;
   --z7-sweep: rgb(255 255 255 / 12%);
-  --z7-text-fill: #b2a0e6;
-  --z7-text-ink: #1d1433;
-  --z7-credit-fg: #93a6e6;
-  --z7-credit-bg: #202840;
-  --z7-wait-bg: #9aa3b0;
-  --z7-wait-ink: #14181c;
-  --z7-cancel-fg: #aab2ac;
-  --z7-cancel-bg: #262c28;
-  --z7-gray-line: #5a615b;
-  --z7-gray-ink: #b3b9b5;
+  --z7-wait-ink: var(--bg);
+  --z7-cancel-bg: var(--fill);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --z7-tonight-bg: #4cc58a;
-    --z7-tonight-ink: #0d2a1b;
-    --z7-tomorrow-bg: #1c3a2a;
-    --z7-tomorrow-ink: #8be0b3;
+    --z7-tonight-bg: var(--ok-edge);
+    --z7-tonight-ink: var(--ok-bg);
+    --z7-tomorrow-ink: var(--ok-fg);
     --z7-glow: 76 197 138;
     --z7-sweep: rgb(255 255 255 / 12%);
-    --z7-text-fill: #b2a0e6;
-    --z7-text-ink: #1d1433;
-    --z7-credit-fg: #93a6e6;
-    --z7-credit-bg: #202840;
-    --z7-wait-bg: #9aa3b0;
-    --z7-wait-ink: #14181c;
-    --z7-cancel-fg: #aab2ac;
-    --z7-cancel-bg: #262c28;
-    --z7-gray-line: #5a615b;
-    --z7-gray-ink: #b3b9b5;
+    --z7-wait-ink: var(--bg);
+    --z7-cancel-bg: var(--fill);
   }
 }
 
@@ -101,7 +83,7 @@
   padding: 5px 0 4px;
   border-radius: calc(var(--z7-r) - var(--z7-bw)) calc(var(--z7-r) - var(--z7-bw)) 0 0;
   font-family: var(--body);
-  font-size: 9px;
+  font-size: max(11px, 9px);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0.02em;
@@ -301,7 +283,7 @@
 }
 :root[data-color-cleanup] .credit-chip.pending .cc-label {
   /* A pending cash-out keeps its amber "needs attention" label. */
-  color: var(--warn-fg, #9a6700);
+  color: var(--warn-fg, var(--warn-fg));
 }
 :root[data-color-cleanup] .schedule .pchip.chip-credit-used {
   color: var(--z7-credit-fg);
@@ -357,7 +339,7 @@
 }
 :root[data-tonight-glow] .hv2-short .tile .day-tag {
   padding: 3px 0 2px;
-  font-size: 8px;
+  font-size: max(11px, 8px);
   letter-spacing: 0;
 }
 /* TONIGHT is the longest word on the strip: a hair smaller, and (round 3) the tile is 48 px, so it keeps at least 2 px clear of the tile's
@@ -365,7 +347,7 @@
    eye on iPhone): 6.75 px (was 7.5), so the word has about 7.3 px clear on each side inside the border (was 5.6). Only this word changes:
    the tile, TOM and the plain tiles stay as they are. */
 :root[data-tonight-glow] .hv2-short .tile .day-tag.tonight {
-  font-size: 6.75px;
+  font-size: max(11px, 6.75px);
 }
 :root[data-tonight-glow] .hv2-short .tile.day-tonight .day,
 :root[data-tonight-glow] .hv2-short .tile.day-tomorrow .day {

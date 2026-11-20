@@ -13,15 +13,14 @@
   padding: 12px 14px;
   border: 0;
   border-radius: 16px;
-  background: #1f6d47;
-  color: #ffffff;
+  background: var(--primary);
+  color: var(--tour-ink);
   font-family: var(--body);
   font-size: 1.1rem;
   font-weight: 800;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-tie-spin:disabled {
   opacity: 0.7;
@@ -88,16 +87,14 @@
 }
 .tm-tie-team-text b {
   font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-tie-team-text span {
   font-size: 0.9rem;
   color: var(--ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-tie-team-mark {
   flex: none;
@@ -109,11 +106,11 @@
 .tm-end-done {
   padding: 20px 18px 20px;
   border-radius: 22px;
-  color: #ffffff;
-  background: linear-gradient(180deg, #2b8c5b 0%, #1f6d47 100%);
+  color: var(--tour-ink);
+  background: linear-gradient(180deg, var(--primary-hi) 0%, var(--primary) 100%);
   box-shadow:
-    0 0 0 1px rgb(110 240 176 / 18%),
-    0 10px 30px rgb(43 140 91 / 28%);
+    0 0 0 1px color-mix(in srgb, var(--tour-mint) 18%, transparent),
+    0 10px 30px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 .tm-end-kicker {
   margin: 0;
@@ -121,7 +118,7 @@
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: #e3f03b;
+  color: var(--ball);
 }
 .tm-end-title {
   margin: 6px 0 2px;
@@ -129,7 +126,7 @@
   font-size: 1.85rem;
   font-weight: 800;
   line-height: 1.15;
-  color: #ffffff;
+  color: var(--tour-ink);
   overflow-wrap: anywhere;
 }
 .tm-end-sub {
@@ -168,17 +165,15 @@
 .tm-end-val b {
   font-weight: 800;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-end-val > span {
   font-size: 0.92rem;
   color: var(--ink-2);
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-end-row > span:first-child {
   flex: none;
@@ -187,8 +182,8 @@
   margin: 10px 0 0;
   padding: 10px 12px;
   border-radius: 12px;
-  background: var(--amber-soft, #fdf1d6);
-  color: var(--amber-text, #7a4b00);
+  background: var(--amber-soft, var(--warn-bg));
+  color: var(--amber-text, var(--warn-fg));
   font-size: 0.95rem;
 }
 .tm-end-go {
@@ -229,15 +224,13 @@
 .tm-awards-pick-text b {
   font-size: 1.12rem;
   font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-awards-players {
   color: var(--ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-awards-change {
   flex: none;
@@ -273,8 +266,8 @@
   cursor: pointer;
 }
 .tm-awards-choice[aria-pressed='true'] {
-  border-color: #1f6d47;
-  box-shadow: inset 0 0 0 1px #1f6d47;
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 .tm-awards-row {
   min-height: 56px;
@@ -306,8 +299,8 @@
   cursor: pointer;
 }
 .tm-awards-week.tm-on {
-  background: #1f6d47;
-  color: #ffffff;
+  background: var(--primary);
+  color: var(--tour-ink);
 }
 @media (max-width: 359px) {
   .tm-awards-week {

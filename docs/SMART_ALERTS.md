@@ -165,9 +165,10 @@ changes. The `kind` column says what each row is:
 | `failed` | A send didn't go through |
 | `off` | The Smart alerts switch is off |
 
-Rows are deleted along with their game (ON DELETE CASCADE). A restore from a
-backup file empties this table. Worst case, that resends an alert that came
-due in the last hour.
+Rows are deleted along with their game (ON DELETE CASCADE). A version 2 or later
+backup file (Zip 50 on) carries this table, so a restore brings it back as of the
+backup; only an older file empties it. Worst case, a restore resends an alert that
+came due after the backup.
 
 ## Free-plan math (limits read from developers.cloudflare.com, Oct 30, 2026)
 

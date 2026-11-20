@@ -6,39 +6,13 @@
 .sc-card,
 .vr-card-ac,
 .vr-card {
-  --mp-muted: #6a6e66;
-  --mp-amber: #8a5a00;
-  --mp-amber-line: #b8780f;
-  --mp-purple: #4b3a8f;
-  --mp-purple-line: #6a56a6;
-  --mp-blue: #2a3fb0;
-  --mp-blue-line: #2a3fb0;
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme='light']) .mp-card,
-  html:not([data-theme='light']) .sc-card,
-  html:not([data-theme='light']) .vr-card-ac,
-  html:not([data-theme='light']) .vr-card {
-    --mp-muted: #9aa097;
-    --mp-amber: #f0c26a;
-    --mp-amber-line: #e2a73c;
-    --mp-purple: #b2a0e6;
-    --mp-purple-line: #b2a0e6;
-    --mp-blue: #a5b5ee;
-    --mp-blue-line: #7f94e6;
-  }
-}
-html[data-theme='dark'] .mp-card,
-html[data-theme='dark'] .sc-card,
-html[data-theme='dark'] .vr-card-ac,
-html[data-theme='dark'] .vr-card {
-  --mp-muted: #9aa097;
-  --mp-amber: #f0c26a;
-  --mp-amber-line: #e2a73c;
-  --mp-purple: #b2a0e6;
-  --mp-purple-line: #b2a0e6;
-  --mp-blue: #a5b5ee;
-  --mp-blue-line: #7f94e6;
+  --mp-muted: var(--ink-2);
+  --mp-amber: var(--warn-fg);
+  --mp-amber-line: var(--warn-edge);
+  --mp-purple: var(--purple-fg);
+  --mp-purple-line: var(--purple-edge);
+  --mp-blue: var(--info-fg);
+  --mp-blue-line: var(--info-edge);
 }
 
 /* The card: the alert card, with the mock's 4 px bottom padding (the last row's own space closes it). */
@@ -87,10 +61,9 @@ html[data-alert-cards] .mp-head .ac-title {
 .mp-name {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-size: 16px;
+  overflow-wrap: break-word;
 }
 .mp-name strong {
   font-weight: 700;
@@ -106,7 +79,7 @@ html[data-alert-cards] .mp-head .ac-title {
   content: '· ';
 }
 
-/* The small outline buttons: 34 px to see (44 px to tap), 14 px words, 10 px corners. */
+/* Zip 78 (one look): Mark paid, Request and Text are the site's small secondary button everywhere: 44 px, gray fill, ink words. */
 .mp-btn,
 .mp-row .sc-req {
   position: relative;
@@ -115,16 +88,17 @@ html[data-alert-cards] .mp-head .ac-title {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  height: 34px;
+  height: var(--btn-h-sm);
   min-width: 0;
   margin: 0;
   padding: 0 12px;
-  border: 1.5px solid;
-  border-radius: 10px;
-  background: transparent;
+  border: 1.5px solid var(--fill);
+  border-radius: var(--btn-r);
+  background: var(--fill);
+  color: var(--ink);
   font-family: var(--body);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
@@ -136,18 +110,6 @@ html[data-alert-cards] .mp-head .ac-title {
   content: '';
   position: absolute;
   inset: -5px 0;
-}
-.mp-btn.mp-amber {
-  color: var(--mp-amber);
-  border-color: var(--mp-amber-line);
-}
-.mp-row .sc-req {
-  color: var(--mp-blue);
-  border-color: var(--mp-blue-line);
-}
-.mp-row .sc-req.sc-req-text {
-  color: var(--mp-purple);
-  border-color: var(--mp-purple-line);
 }
 .mp-btn:disabled {
   opacity: 0.55;

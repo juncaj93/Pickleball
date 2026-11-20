@@ -226,7 +226,7 @@ export function VoteList({ value, onPick }: { value: FormatVote; onPick: (v: For
 // ---------------------------------------------------------------------------------------------------------------------
 
 /** The slices' colors (picture 20): green, purple, orange. */
-const COLORS = ['#2f9e64', '#b45ccb', '#e08a3c'];
+const COLORS = ['var(--art-tie-1)', 'var(--art-tie-2)', 'var(--art-tie-3)'];
 /** How long a spin takes (the video: about 4 seconds of turning). */
 export const SPIN_MS = 4200;
 
@@ -293,13 +293,13 @@ export function Wheel({ names, result, spinKey, small, onDone }: { names: string
             const flip = mid > 90 && mid < 270;
             return (
               <g key={i} className={off ? 'tc-wh-slice tc-wh-off' : result === i && lit ? 'tc-wh-slice tc-wh-win' : 'tc-wh-slice'}>
-                <path d={slice(i)} fill={COLORS[i % COLORS.length]} className="tc-wh-fill" />
+                <path d={slice(i)} style={{ fill: COLORS[i % COLORS.length] }} className="tc-wh-fill" />
                 <text
                   className="tc-wh-text"
                   transform={`rotate(${mid}) translate(0 ${-R * 0.6})${flip ? ' rotate(180)' : ''}`}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  style={{ fontSize: `${Math.max(7, Math.min(16, 165 / Math.max(6, name.length)))}px` }}
+                  style={{ fontSize: `${Math.max(11, Math.min(16, 165 / Math.max(6, name.length)))}px` }}
                 >
                   {name}
                 </text>

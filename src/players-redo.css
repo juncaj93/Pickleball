@@ -18,7 +18,7 @@
   padding: 0;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--card-r);
   overflow: hidden;
 }
 .pr-li + .pr-li {
@@ -30,8 +30,9 @@
   align-items: center;
   gap: 5px;
   width: 100%;
-  height: 46px;
-  padding: 0 10px 0 16px;
+  /* Zip 78: at least 46 px, taller when a long name takes two lines (a name is never cut). */
+  min-height: 46px;
+  padding: 4px 10px 4px 16px;
   margin: 0;
   border: 0;
   background: transparent;
@@ -39,7 +40,6 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 .pr-row:active {
@@ -49,17 +49,14 @@
   outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
-/* Never a second line: the gray part ("2 played · Tue Thu") gives way first; only a very long name (over half the row) shortens with "…". */
+/* The gray part ("2 played · Tue Thu") gives way first. Zip 78: the name is never cut: it keeps at least its longest word and wraps
+   between words onto a second line when the row is narrow. */
 .pr-name {
-  /* Zip 18 round 2: may shorten further (with "…") so the money chip and "+2" always fit at big text. */
   flex: 0 1 auto;
-  max-width: 52%;
-  min-width: 0;
   font-size: 16px;
   font-weight: 800;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .pr-sub {
   /* Zip 18 round 2: shrinks long before the name does (the name only gives way once the gray part is gone). */
@@ -69,6 +66,7 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-2);
+  /* Not a name: this gray line may shorten with "…" (the one place on the Players tab that does). */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,11 +87,11 @@
 /* ---- The one money chip (Owes > Held > Credit) and the small gray "+1" ---- */
 .pr-chip {
   flex: none;
-  font-weight: 800;
-  font-size: 12px;
+  font-weight: var(--chip-weight);
+  font-size: var(--chip-font);
   line-height: 1;
   border-radius: 999px;
-  padding: 4px 8px;
+  padding: var(--chip-pad);
   border: 1px solid;
   white-space: nowrap;
 }
@@ -135,9 +133,8 @@ dialog.sheet.pr-sheet {
   font-size: 24px;
   font-weight: 800;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .pr-sheet .sheet-body {
   padding-top: 4px;
@@ -174,7 +171,7 @@ dialog.sheet.pr-sheet {
 .pr-cd {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--card-r);
   overflow: hidden;
 }
 .pr-cd h4,

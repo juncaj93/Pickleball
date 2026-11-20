@@ -26,7 +26,7 @@ export interface SkinTheme {
 }
 
 /** Ornament colors by seat: red, green, gold, blue (light, dark). */
-const COLS: [string, string][] = [['#e5483f', '#b3261e'], ['#37b873', '#1f7a4a'], ['#f2b33d', '#c28a14'], ['#4f7be0', '#2f55b0']];
+const COLS: [string, string][] = [1, 2, 3, 4].map((n) => [`var(--art-xmas-${n})`, `var(--art-xmas-${n}-deep)`]);
 
 /** The animation that ends each moment (the last one to finish): the ornament clears its motion class when THAT one ends. */
 const LAST_ANIMATION: Record<string, string> = { xin: 'xdrop', 'xin xin-j': 'xjingle', xjoin: 'xjoin', 'xjoin xjoin-j': 'xjingle', 'xjingle xjingle-j': 'xjingle' };
@@ -87,15 +87,15 @@ export function Ornament({ index, empty, className = '', style, moment, momentId
     <svg className={`xorn ${playing?.cls ?? ''} ${className}`.replace(/\s+/g, ' ').trim()} style={style} viewBox="0 0 22 26" aria-hidden="true" onAnimationEnd={onEnd} data-moment={playing?.id}>
       <defs>
         <radialGradient id={`xg${uid}`} cx=".35" cy=".3" r=".8">
-          <stop offset="0" stopColor="#fff" stopOpacity=".9" />
-          <stop offset=".25" stopColor={c} />
-          <stop offset="1" stopColor={d} />
+          <stop offset="0" style={{ stopColor: 'var(--art-shine)', stopOpacity: 0.9 }} />
+          <stop offset=".25" style={{ stopColor: c }} />
+          <stop offset="1" style={{ stopColor: d }} />
         </radialGradient>
       </defs>
-      <rect x="8.5" y="1" width="5" height="4.5" rx="1" fill="#d9a53a" />
-      <rect x="9.7" y="4.6" width="2.6" height="2" fill="#b98424" />
+      <rect x="8.5" y="1" width="5" height="4.5" rx="1" style={{ fill: 'var(--art-xmas-cap)' }} />
+      <rect x="9.7" y="4.6" width="2.6" height="2" style={{ fill: 'var(--art-xmas-cap-deep)' }} />
       <circle cx="11" cy="16" r="9" fill={`url(#xg${uid})`} />
-      <ellipse cx="7.8" cy="12.3" rx="2.4" ry="1.5" fill="#fff" opacity=".6" transform="rotate(-30 7.8 12.3)" />
+      <ellipse cx="7.8" cy="12.3" rx="2.4" ry="1.5" style={{ fill: 'var(--art-shine)' }} opacity=".6" transform="rotate(-30 7.8 12.3)" />
     </svg>
   );
 }

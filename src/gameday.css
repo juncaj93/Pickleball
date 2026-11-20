@@ -4,24 +4,11 @@
    (.cm) and the organizer's Court row (.gd-court-row) only exist while the switch is on. Light and dark: the site's two theme rules. */
 
 :root {
-  --gd-blue: #2a3fb0;
-  --gd-mut: #6a6e66;
-  --gd-line: #dcdcd5;
-  --gd-note-bg: #f3f3ef;
-}
-:root[data-theme='dark'] {
-  --gd-blue: #a5b5ee;
-  --gd-mut: #9aa097;
-  --gd-line: #2b312d;
-  --gd-note-bg: #121815;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --gd-blue: #a5b5ee;
-    --gd-mut: #9aa097;
-    --gd-line: #2b312d;
-    --gd-note-bg: #121815;
-  }
+  /* Zip 78: the site's tokens (they turn dark by themselves). */
+  --gd-blue: var(--info-fg);
+  --gd-mut: var(--ink-2);
+  --gd-line: var(--line);
+  --gd-note-bg: var(--bg);
 }
 
 /* ---- Every THIS WEEK card while the switch is on: the 17 px "You're in" and 7 px above the balls (mock10 .in, .bl) ---- */
@@ -40,12 +27,12 @@ html[data-game-day] .schedule > .sched.tier-this .sched-main {
   /* The band is as tall as the weekday row it replaces (9 px of tile padding + the weekday's own size), so the tile is exactly as tall as
      a plain one at any text size. The same cap as the weekday's (src/large-text.css), so the band grows with big text but never past the tile. */
   --gd-dow: min(0.8rem, 15.6cqw);
-  --gd-band-font: min(0.58rem, 11.2cqw);
+  --gd-band-font: max(11px, min(0.58rem, 11.2cqw));
 }
 @media (max-width: 380px) {
   :root {
     --gd-dow: min(0.8rem, 17.2cqw);
-    --gd-band-font: min(0.58rem, 11.2cqw);
+    --gd-band-font: max(11px, min(0.58rem, 11.2cqw));
   }
 }
 /* The band: a flex box with its own height, so the word is centered inside it by layout, never by font metrics or a fixed line height.
@@ -62,8 +49,8 @@ html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
   border-radius: 0;
   font-size: var(--gd-band-font);
   font-weight: 800;
-  letter-spacing: 0.1em;
-  text-indent: 0.1em; /* the last letter's tracking would push the word left of center */
+  letter-spacing: 0.04em;
+  text-indent: 0.04em; /* the last letter's tracking would push the word left of center */
   line-height: 1.2;
   white-space: nowrap;
   overflow: visible;
@@ -71,7 +58,7 @@ html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
 /* A narrow phone (the tile is 76 px there and the badge takes a corner): a little less tracking so the word keeps clear of the badge. */
 @media (max-width: 380px) {
   html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
-    letter-spacing: 0.07em;
+    letter-spacing: 0.02em;
   }
 }
 /* No weekday under the band any more (TONIGHT, 10, NOV). */
@@ -274,10 +261,10 @@ dialog.cm {
   padding: 6px 0 14px;
   overflow: visible;
   border-radius: 24px;
-  border: 1px solid rgb(20 30 24 / 12%);
-  background: linear-gradient(180deg, #fff, #f4f8f3);
-  box-shadow: 0 14px 36px rgb(20 40 28 / 22%);
-  color: #1c2420;
+  border: 1px solid var(--raised-line);
+  background: var(--raised);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 22%);
+  color: var(--ink);
   font-family: var(--body, inherit);
 }
 dialog.cm[open] {
@@ -287,7 +274,7 @@ dialog.cm[open] {
   animation: cm-in 0.18s ease-out;
 }
 dialog.cm::backdrop {
-  background: rgb(10 14 12 / 28%);
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
 }
 @keyframes cm-in {
   from {
@@ -306,10 +293,10 @@ dialog.cm::backdrop {
   place-items: center;
   padding: 0;
   border-radius: 50%;
-  background: #fff;
-  color: #1c2420;
-  border: 1px solid rgb(20 30 24 / 12%);
-  box-shadow: 0 1px 3px rgb(20 40 28 / 18%);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
   cursor: pointer;
 }
 .cm-x::before {
@@ -340,7 +327,7 @@ dialog.cm::backdrop {
   transform: rotateX(46deg);
   transform-origin: 50% 60%;
   border-radius: 16px;
-  background-image: linear-gradient(rgb(47 143 91 / 16%) 1px, transparent 1px), linear-gradient(90deg, rgb(47 143 91 / 16%) 1px, transparent 1px);
+  background-image: linear-gradient(color-mix(in srgb, var(--primary) 16%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--primary) 16%, transparent) 1px, transparent 1px);
   background-size: 26px 26px;
 }
 .cm-rw {
@@ -372,19 +359,19 @@ dialog.cm::backdrop {
   font: inherit;
   font-size: 15px;
   font-weight: 800;
-  background: #fff;
-  color: #6a7169;
-  border: 1px solid #e3e7df;
+  background: var(--surface);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
   box-shadow:
-    0 9px 0 #cfd5cb,
-    0 12px 14px rgb(20 40 28 / 12%);
+    0 9px 0 var(--line-strong),
+    0 12px 14px rgb(0 0 0 / 12%);
 }
 button.cm-cl {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 button.cm-cl:focus-visible {
-  outline: 2.5px solid #2f8f5b;
+  outline: 2.5px solid var(--primary);
   outline-offset: 2px;
 }
 /* The game's court: green, lifted, with a soft glow that pulses (2.4 s). Zip 18 round 2 (Alex): the glow only; the light sweep that used to
@@ -393,21 +380,21 @@ button.cm-cl:focus-visible {
   z-index: 6;
   overflow: hidden;
   border: 0;
-  background: linear-gradient(160deg, #4fc487, #2a8a56);
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-ink);
   animation: cm-glow 2.4s ease-in-out infinite;
 }
 @keyframes cm-glow {
   0%,
   100% {
     box-shadow:
-      0 9px 0 #1c5a39,
-      0 0 5px 0 rgb(60 200 130 / 32%);
+      0 9px 0 var(--court-deep),
+      0 0 5px 0 color-mix(in srgb, var(--primary) 32%, transparent);
   }
   50% {
     box-shadow:
-      0 9px 0 #1c5a39,
-      0 0 15px 2px rgb(60 200 130 / 80%);
+      0 9px 0 var(--court-deep),
+      0 0 15px 2px color-mix(in srgb, var(--primary) 80%, transparent);
   }
 }
 .cm-pick .cm-cl.me {
@@ -419,10 +406,10 @@ button.cm-cl:focus-visible {
   gap: 6px;
   padding: 5px 9px;
   border-radius: 999px;
-  border: 1px solid rgb(47 143 91 / 45%);
-  background: #fff;
-  color: #6a7169;
-  font-size: 8.5px;
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: max(11px, 8.5px);
   font-weight: 700;
   letter-spacing: 0.14em;
   line-height: 1;
@@ -447,9 +434,9 @@ button.cm-cl:focus-visible {
   padding: 5px 14px;
   border-radius: 999px;
   /* The organizer screens' own tokens (src/styles.css), so it follows light and dark there. */
-  border: 1px solid var(--line-strong, var(--gd-line));
-  background: var(--surface, #fff);
-  color: var(--ink-2, var(--gd-mut));
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
@@ -466,68 +453,6 @@ button.cm-cl:focus-visible {
 }
 
 /* Dark */
-:root[data-theme='dark'] dialog.cm {
-  background: linear-gradient(180deg, #0c1812, #0a120e);
-  border: 1px solid rgb(255 255 255 / 14%);
-  box-shadow: 0 18px 44px rgb(0 0 0 / 50%);
-  color: #f1f3ef;
-}
-:root[data-theme='dark'] dialog.cm::backdrop {
-  background: rgb(0 0 0 / 40%);
-}
-:root[data-theme='dark'] .cm-x {
-  background: #000;
-  color: #fff;
-  border: 1px solid rgb(255 255 255 / 20%);
-  box-shadow: none;
-}
-:root[data-theme='dark'] .cm-pl {
-  background-image: linear-gradient(rgb(110 230 170 / 14%) 1px, transparent 1px), linear-gradient(90deg, rgb(110 230 170 / 14%) 1px, transparent 1px);
-}
-:root[data-theme='dark'] .cm-cl:not(.me) {
-  background: #2f3d36;
-  color: #b9c8bf;
-  border: 0;
-  box-shadow: 0 9px 0 #121a16;
-}
-:root[data-theme='dark'] .cm-ent {
-  background: transparent;
-  color: #b9c8bf;
-  border-color: rgb(110 230 170 / 35%);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) dialog.cm {
-    background: linear-gradient(180deg, #0c1812, #0a120e);
-    border: 1px solid rgb(255 255 255 / 14%);
-    box-shadow: 0 18px 44px rgb(0 0 0 / 50%);
-    color: #f1f3ef;
-  }
-  :root:not([data-theme='light']) dialog.cm::backdrop {
-    background: rgb(0 0 0 / 40%);
-  }
-  :root:not([data-theme='light']) .cm-x {
-    background: #000;
-    color: #fff;
-    border: 1px solid rgb(255 255 255 / 20%);
-    box-shadow: none;
-  }
-  :root:not([data-theme='light']) .cm-pl {
-    background-image: linear-gradient(rgb(110 230 170 / 14%) 1px, transparent 1px), linear-gradient(90deg, rgb(110 230 170 / 14%) 1px, transparent 1px);
-  }
-  :root:not([data-theme='light']) .cm-cl:not(.me) {
-    background: #2f3d36;
-    color: #b9c8bf;
-    border: 0;
-    box-shadow: 0 9px 0 #121a16;
-  }
-  :root:not([data-theme='light']) .cm-ent {
-    background: transparent;
-    color: #b9c8bf;
-    border-color: rgb(110 230 170 / 35%);
-  }
-}
-
-/* Reduce Motion: the court holds still with a steady glow, the panel just appears. */
 @media (prefers-reduced-motion: reduce) {
   dialog.cm[open] {
     animation: none;
@@ -535,8 +460,8 @@ button.cm-cl:focus-visible {
   .cm-cl.me {
     animation: none;
     box-shadow:
-      0 9px 0 #1c5a39,
-      0 0 12px 2px rgb(60 200 130 / 60%);
+      0 9px 0 var(--court-deep),
+      0 0 12px 2px color-mix(in srgb, var(--primary) 60%, transparent);
   }
 }
 
@@ -551,8 +476,8 @@ button.cm-cl:focus-visible {
   padding: 0 14px;
   /* The site's own field look (src/styles.css inputs), so it sits with Date, Start and End in light and dark. */
   border-radius: var(--r-md, 14px);
-  border: 1px solid var(--line-strong, #c9c9c2);
-  background: var(--surface, #fff);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
   font-size: 17px;
@@ -560,7 +485,7 @@ button.cm-cl:focus-visible {
   text-align: left;
 }
 .gd-court-row .gd-court-label {
-  color: var(--ink-2, var(--gd-mut));
+  color: var(--ink-2);
   font-weight: 600;
 }
 .gd-court-row .gd-court-value {
@@ -572,15 +497,6 @@ button.cm-cl:focus-visible {
 }
 .gd-court-row .gd-court-value.unset {
   color: var(--gd-blue);
-}
-.gd-court-row .gd-chev {
-  width: 8px;
-  height: 13px;
-  fill: none;
-  stroke: var(--ink-2, var(--gd-mut));
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .gd-court-row:focus-visible {
   outline: 2.5px solid var(--gd-blue);

@@ -8,36 +8,14 @@
  */
 
 :root {
-  --z9-blue: #3a4fa3;
-  --z9-blue-press: #e9edf6;
-  --z9-note-bg: #ebebe6;
-  --z9-note-ink: #141815;
-  --z9-note-sub: #565d58;
-  --z9-pill-line: #b9bcb2;
-  --z9-pill-ink: #565d58;
-  --z9-length: #596059;
-}
-:root[data-theme='dark'] {
-  --z9-blue: #93a6e6;
-  --z9-blue-press: #202840;
-  --z9-note-bg: #252a27;
-  --z9-note-ink: #f1f3f1;
-  --z9-note-sub: #b3b9b5;
-  --z9-pill-line: #5a615b;
-  --z9-pill-ink: #b3b9b5;
-  --z9-length: #a4ada7;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --z9-blue: #93a6e6;
-    --z9-blue-press: #202840;
-    --z9-note-bg: #252a27;
-    --z9-note-ink: #f1f3f1;
-    --z9-note-sub: #b3b9b5;
-    --z9-pill-line: #5a615b;
-    --z9-pill-ink: #b3b9b5;
-    --z9-length: #a4ada7;
-  }
+  --z9-blue: var(--info-fg);
+  --z9-blue-press: var(--info-bg);
+  --z9-note-bg: var(--fill);
+  --z9-note-ink: var(--ink);
+  --z9-note-sub: var(--ink-2);
+  --z9-pill-line: var(--line-strong);
+  --z9-pill-ink: var(--ink-2);
+  --z9-length: var(--ink-2);
 }
 
 /* ---- Short games: the heads-up under Start and End (Add game, Edit game) ---- */
@@ -71,12 +49,12 @@
 .z9-len-pill {
   display: inline-block;
   margin-top: 4px;
-  padding: 1px 8px;
+  padding: var(--chip-pad);
   border: 1.5px solid var(--z9-pill-line);
   border-radius: 999px;
   color: var(--z9-pill-ink);
-  font-size: 0.68rem;
-  font-weight: 800;
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
   letter-spacing: 0.06em;
   line-height: 1.5;
   white-space: nowrap;
@@ -93,7 +71,7 @@
   display: block;
   margin-top: 1px;
   font-family: var(--body, inherit);
-  font-size: 0.82em;
+  font-size: max(11px, 0.82em);
   font-weight: 500;
   letter-spacing: 0;
   color: var(--z9-length);

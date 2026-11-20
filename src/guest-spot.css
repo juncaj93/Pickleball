@@ -32,22 +32,11 @@
    the host row on top, the guest row under it, indented with a small connector line, a thin dashed divider between them, rounded outer
    corners and a gap after the group. Rows without a guest are untouched. */
 .ps {
-  --gs-pair: #e6f0e2;
-  --gs-link: #2f7a52;
-  --gs-dash: #7fae8f;
+  --gs-pair: var(--ok-bg);
+  --gs-link: var(--ok-fg);
+  --gs-dash: var(--line);
 }
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme='light']) .ps {
-    --gs-pair: #1f3328;
-    --gs-link: #5fbf8a;
-    --gs-dash: #3f6b52;
-  }
-}
-html[data-theme='dark'] .ps {
-  --gs-pair: #1f3328;
-  --gs-link: #5fbf8a;
-  --gs-dash: #3f6b52;
-}
+
 .ps-card > .ps-pair {
   list-style: none;
   margin: 6px;

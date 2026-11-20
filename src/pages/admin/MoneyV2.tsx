@@ -50,7 +50,7 @@ export function MoneyTabV2({ ctx }: { ctx: AdminCtx }) {
       <div className="mv2-controls">
         <div className="month-picker" role="group" aria-label="Month">
           <button className="btn small secondary" aria-label="Previous month" onClick={() => setMonth((x) => shiftMonth(x, -1))}>
-            ‹
+            Back
           </button>
           <label className="sr-only" htmlFor="mv2-month">
             Month
@@ -75,7 +75,7 @@ export function MoneyTabV2({ ctx }: { ctx: AdminCtx }) {
             />
           </div>
           <button className="btn small secondary" aria-label="Next month" onClick={() => setMonth((x) => shiftMonth(x, 1))}>
-            ›
+            Next
           </button>
         </div>
         <div className="segmented compact" role="group" aria-label="Who paid or Totals">
@@ -154,12 +154,6 @@ function gameChip(s: AdminSessionView): { tone: Tone; label: string } | null {
   return null;
 }
 
-export const Chevron = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="m7 10 5 5 5-5" />
-  </svg>
-);
-
 function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; s: AdminSessionView; open: boolean; onToggle: () => void; onRemind: () => void; sameDay: boolean }) {
   const tz = ctx.d.group.timezone;
   const date = formatShortDate(s.startsAt, tz);
@@ -187,9 +181,6 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
             </span>
           )
         )}
-        <button type="button" className="mv2-chev" aria-hidden="true" tabIndex={-1} onClick={onToggle}>
-          <Chevron />
-        </button>
       </div>
       {open && <GameBody ctx={ctx} s={s} />}
     </article>

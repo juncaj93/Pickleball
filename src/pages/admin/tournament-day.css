@@ -73,7 +73,7 @@ span.tm-gd-team-text {
 .tm-gd-lvl {
   color: var(--ink-2);
   font-weight: 600;
-  font-size: 0.94em;
+  font-size: max(11px, 0.94em);
   font-variant-numeric: tabular-nums;
 }
 .tm-gd-plus {
@@ -91,7 +91,7 @@ span.tm-gd-team-text {
 }
 .tm-gd-eq {
   font-family: var(--body);
-  font-size: 0.86em;
+  font-size: max(11px, 0.86em);
   font-weight: 600;
   color: var(--ink-2);
 }
@@ -128,9 +128,8 @@ span.tm-gd-team-text {
 /* The swap and rename sheets. */
 .tm-gd-seg button {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-gd-swaplist,
 .tm-gd-who-list {
@@ -160,9 +159,8 @@ span.tm-gd-team-text {
 .tm-gd-swapname {
   font-weight: 700;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-gd-swapnums {
   flex: none;
@@ -188,10 +186,10 @@ span.tm-gd-team-text {
   flex-direction: column;
   gap: 14px;
   padding: 18px 18px 18px;
-  border: 1px solid #234a36;
+  border: 1px solid var(--tour-line);
   border-radius: 22px;
-  background: linear-gradient(160deg, #183b2b, #10291d);
-  color: #ffffff;
+  background: linear-gradient(160deg, var(--tour-raised), var(--tour-bg-top));
+  color: var(--tour-ink);
 }
 .tm-gd-hero-top {
   display: flex;
@@ -204,13 +202,12 @@ span.tm-gd-team-text {
 .tm-gd-hero-name {
   margin: 0;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-family: var(--body);
   font-size: 1.3rem;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--tour-ink);
+  overflow-wrap: break-word;
 }
 .tm-gd-hero-kicker {
   flex: none;
@@ -309,6 +306,7 @@ span.tm-gd-team-text {
 
 .tm-gd-all {
   display: block;
+  min-height: 44px;
   margin: 6px 0 4px;
   padding: 8px 0;
   border: 0;
@@ -507,16 +505,15 @@ span.tm-gd-team-text {
   cursor: default;
 }
 .tm-gd-pbtn[aria-pressed='true'] {
-  background: #d8f03b;
-  border-color: #c3dc2a;
-  color: #1a2410;
-  box-shadow: 0 0 0 4px rgb(216 240 59 / 22%);
+  background: var(--ball);
+  border-color: var(--ball);
+  color: var(--ball-ink);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ball) 22%, transparent);
 }
 .tm-gd-pbtn-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-gd-pbtn-lvl {
   flex: none;
@@ -525,7 +522,7 @@ span.tm-gd-team-text {
   font-variant-numeric: tabular-nums;
 }
 .tm-gd-pbtn[aria-pressed='true'] .tm-gd-pbtn-lvl {
-  color: #3a4a12;
+  color: var(--ball-ink);
 }
 .tm-gd-draftrow .tm-gd-total {
   min-width: 52px;
@@ -540,8 +537,8 @@ span.tm-gd-team-text {
 @keyframes tm-gd-flash {
   0%,
   35% {
-    background: #d8f03b;
-    color: #1a2410;
+    background: var(--ball);
+    color: var(--ball-ink);
   }
   100% {
     background: transparent;
@@ -549,11 +546,10 @@ span.tm-gd-team-text {
 }
 .tm-chip.tm-gd-pickchip {
   max-width: 62%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: #d8f03b;
-  color: #1a2410;
+  white-space: normal;
+  background: var(--ball);
+  color: var(--ball-ink);
+  overflow-wrap: break-word;
 }
 @media (prefers-reduced-motion: reduce) {
   .tm-gd-flash {

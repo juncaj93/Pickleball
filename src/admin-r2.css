@@ -57,7 +57,7 @@
   min-height: 44px;
 }
 .r2-gear .icon-round {
-  width: 40px;
+  width: 44px;
 }
 
 /* ---- The footer: three equal cells, thin dividers ---- */
@@ -94,15 +94,16 @@
 
 /* In | Out as two plain words. The one that is true is filled. */
 .r2-seg {
+  /* Zip 78: the site's one segmented look (44 px cells, 3 px around, 12 px corners). */
   display: inline-flex;
-  padding: 2px;
-  border-radius: 11px;
+  padding: 3px;
+  border-radius: 12px;
   background: var(--fill);
 }
 .r2-seg button {
   position: relative;
-  min-width: 0;
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0 13px;
   border: 0;
   border-radius: 9px;
@@ -185,17 +186,17 @@
 }
 .r2-paid[data-paid-state='owed'] .r2-dol {
   background: var(--warn-edge);
-  color: var(--r2-owe-ink, #ffffff);
+  color: var(--r2-owe-ink, var(--primary-ink));
 }
 .r2-paid[data-paid-state='owed'] .r2-paid-text {
   color: var(--warn-fg);
 }
 :root[data-theme='dark'] .r2-paid[data-paid-state='owed'] .r2-dol {
-  --r2-owe-ink: #1c1300;
+  --r2-owe-ink: var(--ball-ink);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .r2-paid[data-paid-state='owed'] .r2-dol {
-    --r2-owe-ink: #1c1300;
+    --r2-owe-ink: var(--ball-ink);
   }
 }
 
@@ -255,13 +256,13 @@
 }
 .r2-courtbtn-num {
   padding: 0 7px;
-  font-size: clamp(0.72rem, 3.3vw, 0.84rem);
+  font-size: max(11px, clamp(0.72rem, 3.3vw, 0.84rem));
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
 }
 .r2-courtbtn-dir {
-  width: 30px;
+  width: 44px;
   flex: none;
   border-left: 1px solid color-mix(in srgb, var(--gd-blue) 45%, transparent);
 }
@@ -284,9 +285,9 @@
 }
 .r2-book .btn.external {
   position: relative;
-  min-height: 34px;
+  min-height: var(--btn-h-sm);
   padding: 2px 14px;
-  border-radius: 10px;
+  border-radius: var(--btn-r);
   font-size: 0.86rem;
 }
 .r2-book .btn.external::before {
@@ -459,12 +460,11 @@
 }
 .r2m-sub {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-size: 0.86rem;
   font-weight: 800;
   line-height: 1.2;
+  overflow-wrap: break-word;
 }
 .r2m-sub2 {
   color: var(--ink-2);
@@ -490,7 +490,7 @@
 }
 .r2m-tile i {
   color: var(--cal-red);
-  font-size: 0.52rem;
+  font-size: max(11px, 0.52rem);
   font-style: normal;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -578,25 +578,9 @@
   opacity: 0.6;
 }
 /* Remind is exactly Mark paid: same width, height and type. */
-.r2m-chev {
-  display: grid;
-  place-items: center;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.r2m-chev svg {
-  transition: transform var(--fast);
-}
-.r2m-game.open .r2m-chev svg {
-  transform: rotate(180deg);
-}
 .r2m-head .btn.r2m-remind {
   width: 5.6rem;
-  min-height: 36px;
+  min-height: var(--btn-h-sm);
   padding: 4px;
   font-size: 0.8rem;
   line-height: 1.1;
@@ -645,6 +629,6 @@
     font-size: 0.8rem;
   }
   .r2-hdr-actions .mode-btn {
-    width: 40px;
+    width: 44px;
   }
 }

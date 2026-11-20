@@ -139,7 +139,7 @@ async function main() {
     assert((await page.locator('.money-v2').count()) === 0 && (await page.getByText('Monthly money').count()) === 1, 'old Money tab');
     await tab(page, 'History');
     assert((await page.locator('.history-v2').count()) === 0, 'old History');
-    assert((await page.locator('.chip-btn[aria-pressed="true"]').innerText()) === 'Sessions', 'old History opens on Sessions');
+    assert((await page.locator('.history-head .segmented button[aria-pressed="true"]').innerText()) === 'Sessions', 'old History opens on Sessions');
     await ctx.close();
   });
 
@@ -180,11 +180,11 @@ async function main() {
   await check('1 History: two tabs only, Activity first, no All; Sessions is the old list', async () => {
     const { ctx, page } = await openAdmin();
     await tab(page, 'History');
-    const chips = await page.locator('.history-v2 .chip-btn').allInnerTexts();
+    const chips = await page.locator('.history-v2 .segmented button').allInnerTexts();
     assert(JSON.stringify(chips) === JSON.stringify(['Activity', 'Sessions']), `tabs ${chips}`);
-    assert((await page.locator('.chip-btn[aria-pressed="true"]').innerText()) === 'Activity', 'opens on Activity');
+    assert((await page.locator('.history-head .segmented button[aria-pressed="true"]').innerText()) === 'Activity', 'opens on Activity');
     assert((await page.locator('ul.activity-list li').count()) > 5, 'activity rows');
-    await page.locator('.chip-btn', { hasText: 'Sessions' }).click();
+    await page.locator('.history-head .segmented button', { hasText: 'Sessions' }).click();
     assert((await page.getByText('No played sessions yet.').count()) + (await page.locator('ul.history-list').count()) === 1, 'the old sessions list');
     await ctx.close();
   });
@@ -206,8 +206,8 @@ async function main() {
     assert((await page.locator('[data-divider="viewed"]').count()) === 1, 'VIEWED divider');
     assert((await page.locator('ul[aria-label="New activity"] li').count()) === 2, 'two new rows');
     // Staying on History (even switching sub-tabs) keeps NEW.
-    await page.locator('.chip-btn', { hasText: 'Sessions' }).click();
-    await page.locator('.chip-btn', { hasText: 'Activity' }).click();
+    await page.locator('.history-head .segmented button', { hasText: 'Sessions' }).click();
+    await page.locator('.history-head .segmented button', { hasText: 'Activity' }).click();
     assert((await page.locator('[data-divider="new"]').count()) === 1, 'NEW stays while on the tab');
     await tab(page, 'Money');
     await tab(page, 'History');

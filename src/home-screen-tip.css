@@ -3,60 +3,24 @@
  * it off nothing here applies. A skin (Christmas, later) restyles the card by changing the --hs-* tokens below. */
 
 :root {
-  --hs-card: #f1f2fb;
-  --hs-card-line: #c9cfee;
-  --hs-ink: #1d1f1b;
-  --hs-mut: #666a62;
-  --hs-badge: #e1e5f8;
-  --hs-badge-ink: #3846a6;
-  --hs-pill: #3846a6;
-  --hs-pill-ink: #ffffff;
-  --hs-x-line: #c9cfee;
+  --hs-card: var(--info-bg);
+  --hs-card-line: var(--info-edge);
+  --hs-ink: var(--ink);
+  --hs-mut: var(--ink-2);
+  --hs-badge: var(--info-bg);
+  --hs-badge-ink: var(--info-fg);
+  --hs-pill: var(--info-fg);
+  --hs-pill-ink: var(--surface);
+  --hs-x-line: var(--info-edge);
   /* The sheet */
-  --hs-line: #dad9d0;
-  --hs-num-bg: #e8eaf8;
-  --hs-num-ink: #3846a6;
-  --hs-ring: #2f7bff;
-  --hs-ring-halo: rgb(47 123 255 / 25%);
-  --hs-ring-glow: rgb(47 123 255 / 50%);
-  --hs-go: #37694d;
-  --hs-go-ink: #ffffff;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --hs-card: #171d2e;
-    --hs-card-line: #2f3a63;
-    --hs-ink: #f1f3ef;
-    --hs-mut: #9aa097;
-    --hs-badge: #252c52;
-    --hs-badge-ink: #a5b0f4;
-    --hs-pill: #a5b0f4;
-    --hs-pill-ink: #141a45;
-    --hs-x-line: #3a4678;
-    --hs-line: #2c352f;
-    --hs-num-bg: #252c52;
-    --hs-num-ink: #a5b0f4;
-    --hs-ring: #5aa2ff;
-    --hs-go: #4cc27a;
-    --hs-go-ink: #0a2a16;
-  }
-}
-:root[data-theme='dark'] {
-  --hs-card: #171d2e;
-  --hs-card-line: #2f3a63;
-  --hs-ink: #f1f3ef;
-  --hs-mut: #9aa097;
-  --hs-badge: #252c52;
-  --hs-badge-ink: #a5b0f4;
-  --hs-pill: #a5b0f4;
-  --hs-pill-ink: #141a45;
-  --hs-x-line: #3a4678;
-  --hs-line: #2c352f;
-  --hs-num-bg: #252c52;
-  --hs-num-ink: #a5b0f4;
-  --hs-ring: #5aa2ff;
-  --hs-go: #4cc27a;
-  --hs-go-ink: #0a2a16;
+  --hs-line: var(--line);
+  --hs-num-bg: var(--info-bg);
+  --hs-num-ink: var(--info-fg);
+  --hs-ring: var(--info-edge);
+  --hs-ring-halo: color-mix(in srgb, var(--info-edge) 25%, transparent);
+  --hs-ring-glow: color-mix(in srgb, var(--info-edge) 50%, transparent);
+  --hs-go: var(--primary);
+  --hs-go-ink: var(--primary-ink);
 }
 
 /* ---------- The card (mock 1, layout B) ---------- */
@@ -66,7 +30,7 @@
   align-items: flex-start;
   box-sizing: border-box;
   border: 1.5px solid var(--hs-card-line);
-  border-radius: 24px;
+  border-radius: var(--card-r);
   background: var(--hs-card);
   padding: 14px;
   color: var(--hs-ink);
@@ -230,7 +194,7 @@
   border: 1px solid var(--hs-line);
   border-radius: 14px;
   overflow: hidden;
-  background: #2a2a2a;
+  background: var(--tile-line);
 }
 .hs-img {
   display: block;

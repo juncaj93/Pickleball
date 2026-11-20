@@ -23,12 +23,6 @@ const SWITCH_LABEL: Record<CourtSwitch, string> = {
   not_booked: 'Not booked',
 };
 
-const Chevron = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="m9 6 6 6-6 6" />
-  </svg>
-);
-
 /** How the games are open or folded: the top 2 start open (round 2: this week's games), a tap flips one game. Nothing is remembered (a reload starts over). */
 export function useOpenGames(openByDefault?: (id: string, index: number) => boolean): {
   isOpen: (id: string, index: number) => boolean;
@@ -214,9 +208,6 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
               In
             </span>
           )}
-          <span className="hv2-chev" aria-hidden="true">
-            <Chevron />
-          </span>
         </div>
       </div>
     </div>

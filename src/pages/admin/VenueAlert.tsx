@@ -42,7 +42,7 @@ function VenueCard({ ctx, a }: { ctx: AdminCtx; a: VenueAlert }) {
         label={a.title}
         data={{ 'data-venue-alert': a.kinds.join('+') }}
         actions={
-          <button className="ac-btn" disabled={busy} data-venue-paid onClick={() => void markPaid()}>
+          <button className="ac-btn ac-out" disabled={busy} data-venue-paid onClick={() => void markPaid()}>
             Mark paid
           </button>
         }
@@ -53,7 +53,7 @@ function VenueCard({ ctx, a }: { ctx: AdminCtx; a: VenueAlert }) {
     <article className="card stack" aria-label={a.title} data-venue-alert={a.kinds.join('+')}>
       <h3>{a.title}</h3>
       <p className="small muted">{a.line}</p>
-      <button className="btn" disabled={busy} data-venue-paid onClick={() => void markPaid()}>
+      <button className="btn secondary" disabled={busy} data-venue-paid onClick={() => void markPaid()}>
         Mark paid
       </button>
     </article>

@@ -22,12 +22,12 @@ function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
   const r2 = ctx.d.adminR2 === true;
   const [view, setView] = useState<'sessions' | 'activity' | 'tournaments'>(r2 ? 'activity' : 'sessions');
   const sessionsChip = (
-    <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
+    <button aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
       Sessions
     </button>
   );
   const activityChip = (
-    <button className="chip-btn" aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
+    <button aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
       Activity
     </button>
   );
@@ -37,12 +37,12 @@ function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
         <h2 id="history-title" className="sr-only">
           History
         </h2>
-        <div className="chips" role="group" aria-label="Show">
+        <div className="segmented" role="group" aria-label="Show">
           {r2 ? activityChip : sessionsChip}
           {r2 ? sessionsChip : activityChip}
           {/* Zip 58 (picture 46): the third chip, only while Tournaments is on. */}
           {ctx.d.tournaments === true && (
-            <button className="chip-btn" aria-pressed={view === 'tournaments'} onClick={() => setView('tournaments')} data-history-tournaments>
+            <button aria-pressed={view === 'tournaments'} onClick={() => setView('tournaments')} data-history-tournaments>
               Tournaments
             </button>
           )}
@@ -239,16 +239,16 @@ function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
         <h2 id="history-title" className="sr-only">
           History
         </h2>
-        <div className="chips" role="group" aria-label="Show">
-          <button className="chip-btn" aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
+        <div className="segmented" role="group" aria-label="Show">
+          <button aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
             Activity
           </button>
-          <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
+          <button aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
             Sessions
           </button>
           {/* Zip 58 (picture 46): the third chip, only while Tournaments is on. */}
           {ctx.d.tournaments === true && (
-            <button className="chip-btn" aria-pressed={view === 'tournaments'} onClick={() => setView('tournaments')} data-history-tournaments>
+            <button aria-pressed={view === 'tournaments'} onClick={() => setView('tournaments')} data-history-tournaments>
               Tournaments
             </button>
           )}

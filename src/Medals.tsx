@@ -7,13 +7,14 @@ import './medals.css';
 /** Medals by player name (the names the game cards show). Empty: no medals anywhere. */
 export const MedalsContext = createContext<Readonly<Record<string, number>>>({});
 
-/** One gold medal: a red and blue ribbon, a gold disc with a star. Zip 77: also 1st place's mark on the reveal board (`className`). */
+/** One gold medal: a red and blue ribbon, a gold disc with a star. Zip 77: also 1st place's mark on the reveal board (`className`). Zip 78:
+ *  its colors are the named art tokens. */
 export const MedalIcon = ({ className = 'md-ico' }: { className?: string }) => (
   <svg className={className} viewBox="0 0 20 26" aria-hidden="true">
-    <path d="M5 1h4l2 8H7z" fill="#d6453d" />
-    <path d="M11 1h4l-2 8H9z" fill="#2f5fb3" />
-    <circle cx="10" cy="17" r="7.5" fill="#f2c54b" stroke="#a8740c" strokeWidth="2" />
-    <path d="M10 13l1 2.4 2.6.3-2 1.8.6 2.6-2.2-1.3-2.2 1.3.6-2.6-2-1.8 2.6-.3z" fill="#7a5206" />
+    <path d="M5 1h4l2 8H7z" style={{ fill: 'var(--art-medal-ribbon-1)' }} />
+    <path d="M11 1h4l-2 8H9z" style={{ fill: 'var(--art-medal-ribbon-2)' }} />
+    <circle cx="10" cy="17" r="7.5" style={{ fill: 'var(--art-medal-gold)', stroke: 'var(--art-medal-edge)' }} strokeWidth="2" />
+    <path d="M10 13l1 2.4 2.6.3-2 1.8.6 2.6-2.2-1.3-2.2 1.3.6-2.6-2-1.8 2.6-.3z" style={{ fill: 'var(--art-medal-star)' }} />
   </svg>
 );
 

@@ -4,38 +4,26 @@
    so everything about the border layers below applies to the organizer's tiles only. */
 
 :root {
-  --ts-booked: #18241d;
-  --ts-wait: #5f665d;
-  --ts-none: #7c837a;
-  --ts-muted: #4a4f46;
-  --ts-green: #226b4b;
-  --ts-green-soft: #e6f2eb;
-  --ts-outline: #226b4b;
-  --ts-neutral: #6b7069;
+  --ts-booked: var(--tile-line);
+  --ts-wait: var(--ink-2);
+  --ts-none: var(--ink-2);
+  --ts-muted: var(--ink-2);
+  --ts-green: var(--primary);
+  --ts-green-soft: var(--accent-soft);
+  --ts-outline: var(--primary);
+  --ts-neutral: var(--ink-2);
   --ts-pop: 1.12;
 }
 :root[data-theme='dark'] {
-  --ts-booked: #8bd9a3;
-  --ts-wait: #a3ab9f;
-  --ts-none: #6b786f;
-  --ts-muted: #b8bfb2;
-  --ts-green: #7fd9a3;
-  --ts-green-soft: #1b3527;
-  --ts-outline: #3fa071;
-  --ts-neutral: #8c958b;
-  --ts-clock-ink: #0b140f;
+  --ts-booked: var(--ok-fg);
+  --ts-green: var(--ok-fg);
+  --ts-clock-ink: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --ts-booked: #8bd9a3;
-    --ts-wait: #a3ab9f;
-    --ts-none: #6b786f;
-    --ts-muted: #b8bfb2;
-    --ts-green: #7fd9a3;
-    --ts-green-soft: #1b3527;
-    --ts-outline: #3fa071;
-    --ts-neutral: #8c958b;
-  --ts-clock-ink: #0b140f;
+    --ts-booked: var(--ok-fg);
+    --ts-green: var(--ok-fg);
+  --ts-clock-ink: var(--bg);
   }
 }
 
@@ -121,7 +109,7 @@
   background: var(--raised, var(--surface));
   color: var(--ink);
   border: 1px solid var(--raised-line, var(--line));
-  box-shadow: var(--raised-shadow, 0 2px 10px rgb(24 36 29 / 10%));
+  box-shadow: var(--raised-shadow, 0 2px 10px rgb(0 0 0 / 10%));
   transform-origin: top center;
   transition:
     opacity 220ms ease,
@@ -146,7 +134,7 @@
   display: grid;
   place-items: center;
   background: var(--ts-green);
-  color: var(--ts-clock-ink, #ffffff);
+  color: var(--ts-clock-ink, var(--primary-ink));
 }
 .ts-clock svg {
   width: 20px;
@@ -159,7 +147,6 @@
   padding-top: 1px;
 }
 .ts-title {
-  font-family: var(--display);
   font-weight: 800;
   font-size: 1.05rem;
   line-height: 1.25;
@@ -253,9 +240,8 @@
   padding: 6px 10px;
   font-size: 0.9rem;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .ts-note {
   font-size: 0.9rem;
@@ -291,28 +277,16 @@
 
 /* "~10:30 AM" is one character longer than any plain time: a touch smaller so it still fits on one line under the tile. */
 .scard-time.ts-wait {
-  font-size: min(0.9rem, 18.5cqw);
+  font-size: max(11px, min(0.9rem, 18.5cqw));
   letter-spacing: -0.01em;
 }
 .schedule .sched-time.ts-wait {
-  font-size: min(0.95rem, 18.5cqw);
+  font-size: max(11px, min(0.95rem, 18.5cqw));
   letter-spacing: -0.01em;
 }
 .tier-next .sched-time.ts-wait {
-  font-size: min(0.82rem, 18.5cqw);
+  font-size: max(11px, min(0.82rem, 18.5cqw));
 }
 .tier-later .sched-time.ts-wait {
-  font-size: min(0.74rem, 18.5cqw);
-}
-
-/* Dark mode: gray buttons on the raised sheets keep their shape (the sheet and the gray fill are close). */
-:root[data-theme='dark'] dialog.sheet .btn.secondary,
-:root[data-theme='dark'] dialog.sheet .icon-btn {
-  border: 1px solid #6f8a7c;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) dialog.sheet .btn.secondary,
-  :root:not([data-theme='light']) dialog.sheet .icon-btn {
-    border: 1px solid #6f8a7c;
-  }
+  font-size: max(11px, min(0.74rem, 18.5cqw));
 }

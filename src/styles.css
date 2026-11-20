@@ -24,25 +24,67 @@
   --line-strong: #c9c9c2;
   --tile-line: #262b27;
   /* Weekday on date tiles: calendar red. 5.6:1 on white. */
-  --cal-red: #c62a1f;
+  --cal-red: var(--danger-fg);
   /* The gear panel's Text button: charcoal, its own family (not green, not blue). */
   --text-btn-bg: #2a2f36;
   --text-btn-fg: #ffffff;
-  --scrim: rgb(12 18 14 / 40%);
+  --scrim: rgb(0 0 0 / 40%);
 
   /* The one accent: court green. White text on it is 6.4:1. */
-  --court: #1e6a48;
+  --court: var(--primary);
   --court-deep: #154d34;
   --primary: #1e6a48;
   --primary-press: #185a3c;
   --primary-ink: #ffffff;
-  --accent-text: #1a5c3e;
+  --accent-text: var(--ok-fg);
   --accent-soft: #e2efe7;
-  --focus: #1e6a48;
+  --focus: var(--primary);
 
   /* The logo's ball yellow, used sparingly. */
   --ball: #d8f03b;
   --ball-ink: #1a2410;
+  /* Zip 78: the ball's own light and shade (the tournament card's round ball art). */
+  --ball-hi: #ecff7a;
+  --ball-lo: #b9d12a;
+  /* A lighter step of the green, for the top of a green card's gradient. */
+  --primary-hi: color-mix(in srgb, var(--primary) 82%, #ffffff);
+
+  /* Zip 78: the tournament ticket: a dark green card in both themes, lime and mint on it, gold for awards. Same values light and dark. */
+  --tour-bg-top: #112a1f;
+  --tour-bg: #0e241a;
+  --tour-bg-deep: #0b1b14;
+  --tour-raised: #183b2b;
+  --tour-line: #24503a;
+  --tour-ink: #ffffff;
+  --tour-sub: #c3d1c9;
+  --tour-dim: #7c9688;
+  --tour-mint: #6ef0b0;
+  /* The game night Up next card (Zip 77 darkened it so lime and white pass 4.5:1 on it). */
+  --tour-green-top: #1f7049;
+  --tour-green: #195a3a;
+  --gold: #f0c94a;
+  --gold-deep: #e6b83a;
+  --gold-line: #6e6224;
+  /* Zip 78: art colors (pictures, not meanings), named once: the medal, the three-way tie wheel's slices, the Christmas ornaments. */
+  --art-medal-ribbon-1: #d6453d;
+  --art-medal-ribbon-2: #2f5fb3;
+  --art-medal-gold: #f2c54b;
+  --art-medal-edge: #a8740c;
+  --art-medal-star: #7a5206;
+  --art-tie-1: #2f9e64;
+  --art-tie-2: #b45ccb;
+  --art-tie-3: #e08a3c;
+  --art-xmas-1: #e5483f;
+  --art-xmas-1-deep: #b3261e;
+  --art-xmas-2: #37b873;
+  --art-xmas-2-deep: #1f7a4a;
+  --art-xmas-3: #f2b33d;
+  --art-xmas-3-deep: #c28a14;
+  --art-xmas-4: #4f7be0;
+  --art-xmas-4-deep: #2f55b0;
+  --art-xmas-cap: #d9a53a;
+  --art-xmas-cap-deep: #b98424;
+  --art-shine: #ffffff;
 
   /* Status */
   --ok-fg: #17603a;
@@ -56,10 +98,22 @@
   --info-fg: #1c4a85;
   --info-bg: #e3ecf8;
   --info-edge: #3b78c8;
-  --muted-fg: #565d58;
-  --muted-bg: #ebebe6;
-  --holiday-fg: #5b2a86;
-  --holiday-bg: #f1e9f9;
+  --muted-fg: var(--ink-2);
+  --muted-bg: var(--fill);
+  --danger-edge: #c9473d;
+  /* Zip 78: purple is texting (and holidays): one family. */
+  --purple-fg: #5a3fa0;
+  --purple-bg: #efeaf8;
+  --purple-edge: #6a56a6;
+  /* Zip 78: the court switch's three states, defined once (src/admin-cards.css and the folded Home rows read them). */
+  --sw-notbooked-bg: var(--warn-edge);
+  --sw-notbooked-fg: var(--ball-ink);
+  --sw-wait-bg: var(--info-fg);
+  --sw-wait-fg: var(--primary-ink);
+  --sw-booked-bg: var(--primary);
+  --sw-booked-fg: var(--primary-ink);
+  --holiday-fg: var(--purple-fg);
+  --holiday-bg: var(--purple-bg);
 
   /* CourtReserve links: their own quiet blue-teal. */
   --ext-bg: #e1edf2;
@@ -72,13 +126,13 @@
   --pop-err-bg: #fbe1dc;
   --pop-err-fg: #8a1b14;
   --pop-err-line: #efb2a8;
-  --pop-shadow: 0 10px 28px rgb(10 20 15 / 30%);
+  --pop-shadow: 0 10px 28px rgb(0 0 0 / 30%);
 
   /* Raised cards (toasts, pop-ups, sheets, menus, notices). Light mode keeps white;
      dark mode gets a card a little lighter than the page, a thin border and a soft shadow. */
   --raised: #ffffff;
   --raised-line: #e2e2dc;
-  --raised-shadow: 0 8px 20px rgb(20 28 22 / 10%);
+  --raised-shadow: 0 8px 20px rgb(0 0 0 / 10%);
   /* Sheets sit on the page color in light mode (as before). */
   --sheet-bg: var(--bg);
 
@@ -87,16 +141,27 @@
   --logo-line: #17231c;
 
   /* Type */
-  --display: 'Bricolage Grotesque Variable', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
   --body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   /* Space, radii, shadows */
   --gutter: 16px;
   --radius: 16px;
+  /* Zip 78: every card (game cards, alert cards, money cards, tournament cards) has the same corners. */
+  --card-r: 20px;
   --r-md: 12px;
   --r-sm: 9px;
-  --shadow: 0 1px 2px rgb(20 28 22 / 5%), 0 2px 8px rgb(20 28 22 / 4%);
-  --shadow-lift: 0 8px 28px rgb(12 20 15 / 16%), 0 1px 3px rgb(12 20 15 / 8%);
+  /* Zip 78: one button size set. Normal (primary and secondary) 46, small 44, big (a sheet's main button) 54; one corner for all. */
+  --btn-h: 46px;
+  --btn-h-sm: 44px;
+  --btn-h-lg: 54px;
+  --btn-r: var(--r-md);
+  /* Zip 78: one chip size (status chips and pills): 12.5 px words, 3 px by 10 px inside, fully round. */
+  --chip-font: 0.78rem;
+  --chip-pad: 3px 10px;
+  --chip-weight: 700;
+  --chip-h: 22px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 5%), 0 2px 8px rgb(0 0 0 / 4%);
+  --shadow-lift: 0 8px 28px rgb(0 0 0 / 16%), 0 1px 3px rgb(0 0 0 / 8%);
 
   /* Motion */
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -123,16 +188,12 @@
     --line: #2a2f2b;
     --line-strong: #3b413c;
     --tile-line: #c9d1cb;
-    --cal-red: #ff8a80;
     --text-btn-bg: #e6e9ee;
     --text-btn-fg: #15181d;
     --scrim: rgb(0 0 0 / 55%);
-    --court: #237a52;
     --court-deep: #0f2e21;
     --primary: #237a52;
     --primary-press: #1d6845;
-    --primary-ink: #ffffff;
-    --accent-text: #86d9aa;
     --accent-soft: #17301f;
     --focus: #c9e83c;
     --ok-fg: #8fe0ad;
@@ -146,10 +207,12 @@
     --info-fg: #a8c7f4;
     --info-bg: #152740;
     --info-edge: #6fa3ea;
-    --muted-fg: #b3b9b5;
-    --muted-bg: #252a27;
-    --holiday-fg: #dcc2f7;
-    --holiday-bg: #2b1f3c;
+    --danger-edge: #ff8f7e;
+    --purple-fg: #c4afef;
+    --purple-bg: #2a2440;
+    --purple-edge: #b2a0e6;
+    --sw-wait-bg: var(--info-edge);
+    --sw-wait-fg: var(--bg);
     --ext-bg: #14313d;
     --ext-fg: #9fd3e8;
     --pop-bg: #22312a;
@@ -182,16 +245,12 @@
   --line: #2a2f2b;
   --line-strong: #3b413c;
   --tile-line: #c9d1cb;
-  --cal-red: #ff8a80;
   --text-btn-bg: #e6e9ee;
   --text-btn-fg: #15181d;
   --scrim: rgb(0 0 0 / 55%);
-  --court: #237a52;
   --court-deep: #0f2e21;
   --primary: #237a52;
   --primary-press: #1d6845;
-  --primary-ink: #ffffff;
-  --accent-text: #86d9aa;
   --accent-soft: #17301f;
   --focus: #c9e83c;
   --ok-fg: #8fe0ad;
@@ -205,10 +264,12 @@
   --info-fg: #a8c7f4;
   --info-bg: #152740;
   --info-edge: #6fa3ea;
-  --muted-fg: #b3b9b5;
-  --muted-bg: #252a27;
-  --holiday-fg: #dcc2f7;
-  --holiday-bg: #2b1f3c;
+  --danger-edge: #ff8f7e;
+  --purple-fg: #c4afef;
+  --purple-bg: #2a2440;
+  --purple-edge: #b2a0e6;
+  --sw-wait-bg: var(--info-edge);
+  --sw-wait-fg: var(--bg);
   --ext-bg: #14313d;
   --ext-fg: #9fd3e8;
   --pop-bg: #22312a;
@@ -257,11 +318,11 @@ body {
   overflow-x: hidden;
 }
 
+/* Zip 78 (one look): one body font everywhere. Titles are the body font, heavier; the rounded display font is gone (names, levels,
+   numbers, money and sheet titles were drawn in it). */
 h1,
 h2,
 h3 {
-  font-family: var(--display);
-  font-optical-sizing: auto;
   line-height: 1.15;
   margin: 0;
   letter-spacing: -0.015em;
@@ -275,7 +336,7 @@ h1 {
 
 h2 {
   font-size: 1.25rem;
-  font-weight: 680;
+  font-weight: 700;
 }
 
 h3 {
@@ -289,6 +350,14 @@ p {
 
 a {
   color: inherit;
+}
+
+/* Zip 78: a button, field or menu with no font of its own takes the page's font (the browser's own is Arial, 13.33 px). */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 :focus-visible {
@@ -311,6 +380,18 @@ html[data-input='pointer'] :focus-visible {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Zip 78 (moved here from src/time-shift.css, one token): dark mode: gray buttons on the raised sheets keep their shape (the sheet and the gray fill are close). */
+:root[data-theme='dark'] dialog.sheet .btn.secondary,
+:root[data-theme='dark'] dialog.sheet .icon-btn {
+  border: 1px solid color-mix(in srgb, var(--ink-2) 60%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) dialog.sheet .btn.secondary,
+  :root:not([data-theme='light']) dialog.sheet .icon-btn {
+    border: 1px solid color-mix(in srgb, var(--ink-2) 60%, transparent);
+  }
 }
 
 /* ---------- Header ---------- */
@@ -372,11 +453,6 @@ html[data-input='pointer'] :focus-visible {
   line-height: 1.12;
   letter-spacing: -0.02em;
   margin: 1px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   /* Break between words; a single word only breaks when it cannot fit at all. */
   overflow-wrap: break-word;
 }
@@ -398,7 +474,6 @@ html[data-input='pointer'] :focus-visible {
   align-items: center;
   justify-content: center;
   line-height: 1;
-  font-family: var(--display);
 }
 .topbar .today .dow {
   font-family: var(--body);
@@ -538,11 +613,10 @@ html[data-input='pointer'] :focus-visible {
 }
 .title-line h1 {
   display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
   min-width: 0;
   flex: 0 1 auto;
+  overflow-wrap: break-word;
 }
 /* With the CREDIT chip there is less room: "not you?" moves under the name when both don't fit, and a long name
  * ends in "…" on one line (never broken in the middle of a word). */
@@ -766,7 +840,7 @@ html[data-input='pointer'] :focus-visible {
 
 .card {
   background: var(--surface);
-  border-radius: var(--radius);
+  border-radius: var(--card-r);
   box-shadow: var(--shadow);
   padding: 16px;
   border: 1px solid var(--line);
@@ -777,7 +851,6 @@ html[data-input='pointer'] :focus-visible {
 }
 
 .card-date {
-  font-family: var(--display);
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1.1;
@@ -821,9 +894,9 @@ html[data-input='pointer'] :focus-visible {
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 0.78rem;
-  font-weight: 650;
+  padding: var(--chip-pad);
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
   white-space: nowrap;
   line-height: 1.3;
 }
@@ -881,9 +954,9 @@ html[data-input='pointer'] :focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 46px;
+  min-height: var(--btn-h);
   padding: 10px 18px;
-  border-radius: var(--r-md);
+  border-radius: var(--btn-r);
   border: 1px solid transparent;
   font: inherit;
   font-weight: 650;
@@ -933,7 +1006,7 @@ html[data-input='pointer'] :focus-visible {
 }
 
 .btn.small {
-  min-height: 44px;
+  min-height: var(--btn-h-sm);
   padding: 8px 14px;
   font-size: 0.93rem;
 }
@@ -943,9 +1016,9 @@ html[data-input='pointer'] :focus-visible {
 }
 
 .btn.big {
-  min-height: 54px;
+  min-height: var(--btn-h-lg);
   font-size: 1.08rem;
-  border-radius: 14px;
+  border-radius: var(--btn-r);
 }
 
 /* While a tap is saving the button says "Saving…" rather than looking switched off. */
@@ -1151,13 +1224,14 @@ input[type='month']::-webkit-date-and-time-value {
   font-size: 0.85rem;
 }
 
-/* iPhone segmented control: a gray track with a white thumb. */
+/* iPhone segmented control: a gray track with a white thumb. Zip 78: the one segmented look (the court switch, In / Out, Games / Totals and
+   the History tabs use the same track, 3 px inside, 12 px corners, 44 px cells with 9 px corners). */
 .segmented {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   background: var(--fill);
-  border-radius: 11px;
+  border-radius: 12px;
   padding: 3px;
   gap: 2px;
 }
@@ -1202,7 +1276,7 @@ input[type='month']::-webkit-date-and-time-value {
 
 .segmented.compact {
   flex: 0 1 210px;
-  padding: 2px;
+  padding: 3px;
   gap: 2px;
 }
 .segmented.compact button {
@@ -1298,13 +1372,11 @@ input[type='month']::-webkit-date-and-time-value {
 }
 
 .amount {
-  font-family: var(--display);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .big-amount {
-  font-family: var(--display);
   font-size: 2rem;
   font-weight: 720;
   line-height: 1;
@@ -1409,7 +1481,6 @@ code.link {
 .name-grid .btn {
   min-height: 60px;
   font-size: 1.1rem;
-  font-family: var(--display);
   font-weight: 650;
   border-radius: 14px;
 }
@@ -1837,7 +1908,6 @@ body:has(.tabbar) .pop {
   color: var(--ink);
   padding: 5px 0 6px;
   line-height: 1;
-  font-family: var(--display);
 }
 :root[data-theme='dark'] .tile {
   background: var(--surface-2);
@@ -2127,7 +2197,6 @@ body:has(.tabbar) .pop {
 }
 
 .sched-time {
-  font-family: var(--display);
   font-weight: 700;
   font-size: 1.04rem;
   letter-spacing: -0.01em;
@@ -2174,7 +2243,6 @@ body:has(.tabbar) .pop {
   font-size: 0.88rem;
   color: var(--ink-2);
 }
-
 
 /* Holiday or "Extra game" on the court line: small colored words, no pill. */
 .holiday-text {
@@ -2328,10 +2396,10 @@ body:has(.tabbar) .pop {
 /* Smaller than the main button, with a full 44px tap area. */
 .btn.pay-small {
   position: relative;
-  min-height: 34px;
+  min-height: var(--btn-h-sm);
   padding: 4px 14px;
   font-size: 0.88rem;
-  border-radius: 999px;
+  border-radius: var(--btn-r);
 }
 .btn.pay-small::before {
   content: '';
@@ -2444,9 +2512,8 @@ body:has(.tabbar) .pop {
   font-size: 0.72rem;
   font-weight: 650;
   line-height: 1.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 /* "Want in?" popup: date and time with the holiday pill on the same line. */
@@ -2537,12 +2604,11 @@ body:has(.tabbar) .pop {
   font-size: 0.74rem;
   font-weight: 650;
   line-height: 1.4;
-  white-space: nowrap;
+  white-space: normal;
   max-width: 9em;
-  overflow: hidden;
-  text-overflow: ellipsis;
   /* A filled spot springs in: the "I'm in" celebration. */
   animation: spot-pop 0.42s var(--spring);
+  overflow-wrap: break-word;
 }
 .spots li.me {
   background: var(--primary);
@@ -2819,10 +2885,10 @@ body:has(.tabbar) .pop {
 .btn.small.me-in {
   position: relative;
   flex: none;
-  min-height: 34px;
+  min-height: var(--btn-h-sm);
   padding: 4px 14px;
   font-size: 0.88rem;
-  border-radius: 999px;
+  border-radius: var(--btn-r);
   color: var(--accent-text);
 }
 .btn.small.me-in::before {
@@ -2958,11 +3024,11 @@ body:has(.tabbar) .pop {
   position: relative;
   flex: 1 1 0;
   min-width: max-content;
-  min-height: 36px;
+  min-height: var(--btn-h-sm);
   padding: 4px 12px;
   font-size: 15px;
   line-height: 1.1;
-  border-radius: 10px;
+  border-radius: var(--btn-r);
 }
 /* 36px to look at, 44px to tap. */
 .court-banner .banner-btns > .btn::before {
@@ -3148,16 +3214,6 @@ body:has(.tabbar) .pop {
   color: var(--ink);
   text-decoration: none;
 }
-/* A chevron, like an iPhone list row. */
-.text-choice::after {
-  content: '›';
-  position: absolute;
-  right: 2px;
-  top: 50%;
-  transform: translateY(-52%);
-  font-size: 1.3rem;
-  color: var(--ink-2);
-}
 .text-choice .text-name {
   font-weight: 650;
 }
@@ -3178,14 +3234,6 @@ body:has(.tabbar) .pop {
 }
 .other-texts > summary::-webkit-details-marker {
   display: none;
-}
-.other-texts > summary::after {
-  content: '›';
-  font-size: 1.2rem;
-  transition: transform var(--fast);
-}
-.other-texts[open] > summary::after {
-  transform: rotate(90deg);
 }
 .other-texts .text-menu {
   margin: 0;
@@ -3368,17 +3416,6 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
 }
 .money-sess > summary::-webkit-details-marker {
   display: none;
-}
-.money-sess > summary::after {
-  content: '›';
-  flex: none;
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: var(--ink-2);
-  transition: transform var(--fast);
-}
-.money-sess[open] > summary::after {
-  transform: rotate(90deg);
 }
 .money-sess[open] > summary {
   margin-bottom: 8px;
@@ -3580,10 +3617,10 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
   color: var(--ink-2);
 }
 .btn.small.p-edit {
-  min-height: 34px;
+  min-height: var(--btn-h-sm);
   padding: 0 12px;
   font-size: 0.88rem;
-  border-radius: 999px;
+  border-radius: var(--btn-r);
   position: relative;
 }
 .btn.small.p-edit::before {
@@ -3854,25 +3891,14 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
 .set-sect > summary::-webkit-details-marker {
   display: none;
 }
-.set-sect > summary::after {
-  content: '›';
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: var(--ink-2);
-  transition: transform var(--fast) var(--ease);
-}
-.set-sect[open] > summary::after {
-  transform: rotate(90deg);
-}
 .set-note {
   margin-left: auto;
   font-weight: 400;
   font-size: 0.85rem;
   color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
   max-width: 55%;
+  overflow-wrap: break-word;
 }
 .set-body {
   display: flex;
@@ -3895,16 +3921,6 @@ details.advanced > summary {
 }
 details.advanced > summary::-webkit-details-marker {
   display: none;
-}
-details.advanced > summary::after {
-  content: '›';
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: var(--ink-2);
-  transition: transform var(--fast) var(--ease);
-}
-details.advanced[open] > summary::after {
-  transform: rotate(90deg);
 }
 details.advanced[open] > summary {
   margin-bottom: 12px;
@@ -4036,7 +4052,6 @@ dialog.sheet[open]::backdrop {
   gap: 8px;
 }
 
-
 /* ---------- Settings > Alerts ---------- */
 
 .alert-status {
@@ -4112,7 +4127,7 @@ dialog.sheet[open]::backdrop {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--primary-ink);
   box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
   transition: transform var(--fast) var(--ease);
 }
@@ -4276,26 +4291,10 @@ dialog.sheet[open]::backdrop {
   justify-content: center;
 }
 .mv2-remind {
-  min-height: 36px;
+  min-height: var(--btn-h-sm);
   padding: 4px 14px;
   font-size: 0.82rem;
   white-space: nowrap;
-}
-.mv2-chev {
-  min-height: 44px;
-  display: grid;
-  place-items: center;
-  background: none;
-  border: 0;
-  padding: 0;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.mv2-chev svg {
-  transition: transform var(--fast);
-}
-.mv2-game.open .mv2-chev svg {
-  transform: rotate(180deg);
 }
 .mv2-body {
   display: flex;
@@ -4362,17 +4361,15 @@ dialog.sheet[open]::backdrop {
   max-width: 100%;
   font-size: 0.93rem;
   line-height: 1.25;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .mv2-line {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-size: 0.74rem;
   line-height: 1.25;
+  overflow-wrap: break-word;
 }
 .mv2-row.expanded .mv2-line {
   white-space: normal;
@@ -4555,15 +4552,9 @@ dialog.sheet[open]::backdrop {
 /* A short row: the same card width, padding and gaps as the full cards, and the same height every time (3.6rem). Two lines at most,
    each cut off with an ellipsis, so nothing ever wraps to a third line. */
 .hv2-short {
-  --sw-notbooked-bg: #eaa31a;
-  --sw-notbooked-fg: #2a1a00;
-  --sw-wait-bg: #1c4f94;
-  --sw-wait-fg: #ffffff;
-  --sw-booked-bg: #1e6a48;
-  --sw-booked-fg: #ffffff;
   display: grid;
   /* Zip 18 round 3: the small tile is 48 px (was 44) so TONIGHT keeps a clear margin inside the tile's rounded border. */
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   /* Zip 18 round 2: at least 3.4rem (the same as before for a plain tile) and taller when something needs it (a TOM / TONIGHT tile,
@@ -4574,31 +4565,14 @@ dialog.sheet[open]::backdrop {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-:root[data-theme='dark'] .hv2-short {
-  --sw-notbooked-bg: #e0a83e;
-  --sw-notbooked-fg: #1c1300;
-  --sw-wait-bg: #6fa3ea;
-  --sw-wait-fg: #0a1424;
-  --sw-booked-bg: #4cc27a;
-  --sw-booked-fg: #06200f;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .hv2-short {
-    --sw-notbooked-bg: #e0a83e;
-    --sw-notbooked-fg: #1c1300;
-    --sw-wait-bg: #6fa3ea;
-    --sw-wait-fg: #0a1424;
-    --sw-booked-bg: #4cc27a;
-    --sw-booked-fg: #06200f;
-  }
-}
 .hv2-short:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 /* The small date tile, centered. */
 .hv2-short .tile {
-  width: 48px;
+  /* Zip 78: 58 px (was 48) so TONIGHT fits at 11 px, the smallest text on the site. */
+  width: 58px;
   box-sizing: border-box;
   align-self: center;
   padding: 3px 0 4px;
@@ -4606,7 +4580,7 @@ dialog.sheet[open]::backdrop {
 }
 .hv2-short .tile .dow,
 .hv2-short .tile .mon {
-  font-size: 0.56rem;
+  font-size: max(11px, 0.56rem);
 }
 .hv2-short .tile .day {
   font-size: 1.12rem;
@@ -4621,9 +4595,8 @@ dialog.sheet[open]::backdrop {
 .hv2-count,
 .hv2-names {
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .hv2-count {
   font-size: 0.97rem;
@@ -4649,14 +4622,11 @@ dialog.sheet[open]::backdrop {
   grid-column: 2;
   justify-self: center;
 }
-.hv2-side > .hv2-chev {
-  grid-column: 3;
-}
 .hv2-pill {
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 0.74rem;
-  font-weight: 750;
+  padding: var(--chip-pad);
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -4683,15 +4653,6 @@ dialog.sheet[open]::backdrop {
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--ok-fg);
-}
-.hv2-chev {
-  display: grid;
-  place-items: center;
-  color: var(--ink-2);
-}
-.hv2-chev svg {
-  width: 16px;
-  height: 16px;
 }
 /* "Court still needs to be booked" and the Book a court button live only on the opened card. */
 .court-need {
@@ -4749,14 +4710,6 @@ dialog.sheet[open]::backdrop {
     width: 100%;
     padding-inline: 4px;
   }
-  .mv2-chev {
-    grid-column: 3;
-  }
-  .mv2-head:has(.mv2-remind) .mv2-chev {
-    grid-column: 2;
-    justify-self: end;
-    width: 2rem;
-  }
 }
 
 /* Zip 51, PREVIEW ONLY (?holdrefresh=on): a plain note that this phone's live refresh is paused. Never drawn on live (g.preview is not sent there). */
@@ -4782,9 +4735,8 @@ dialog.sheet[open]::backdrop {
 }
 .topbar h1.has-badge .h1-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .topbar h1.has-badge .h1-badge {
   flex: none;

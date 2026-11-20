@@ -148,7 +148,7 @@ html[data-skin='christmas'] .schedule > .week-break::after {
   height: 3px;
   border-radius: 3px;
   background: repeating-linear-gradient(135deg, var(--xmas-cane-red) 0 6px, var(--xmas-cane-white) 6px 12px);
-  box-shadow: 0 0 0 1px rgb(200 49 47 / 40%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--xmas-red) 40%, transparent);
 }
 html[data-skin='christmas'] .schedule > .week-break.tier-this::after {
   height: 5px;

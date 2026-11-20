@@ -122,7 +122,8 @@ html[data-motion='on'] .skel {
   animation-duration: 2.2s;
 }
 /* The old "everything fades in whenever it is drawn" is replaced: only the one first-load cascade plays. */
-html[data-motion='on'] main:not(.m-cascade) > *,
+/* Zip 78: a loading shimmer (.skel) keeps its sweep: the tournament card's place-holder sits right under main, and this rule used to stop it. */
+html[data-motion='on'] main:not(.m-cascade) > *:not(.skel),
 html[data-motion='on'] main:not(.m-cascade) .schedule > .sched:not(.leaving) {
   animation: none;
 }

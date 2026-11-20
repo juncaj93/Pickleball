@@ -76,15 +76,15 @@
   position: relative;
   flex: none;
   box-sizing: border-box;
-  height: 36px;
+  height: var(--btn-h-sm);
   padding: 0 14px;
-  border: 1.5px solid var(--tok-text-fill, #6a56a6);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--tok-text-fill, #6a56a6);
+  border: 1.5px solid var(--fill);
+  border-radius: var(--btn-r);
+  background: var(--fill);
+  color: var(--ink);
   font: inherit;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 .vr-remind::before {

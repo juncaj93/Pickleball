@@ -20,7 +20,7 @@
   line-height: 18px;
   font-weight: 500;
   color: var(--muted-fg);
-  background: var(--bg, #f2f2ee);
+  background: var(--bg, var(--bg));
   box-shadow: 0 0 0 1px var(--line);
   pointer-events: none;
 }

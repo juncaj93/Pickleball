@@ -15,9 +15,6 @@ export function AdjustCreditRow({ player, ctx, onOpen }: { player: AdminPlayer; 
     <button type="button" className="adj-row" data-adjust-credit-row onClick={onOpen}>
       <span className="adj-row-name">Adjust credit</span>
       <span className="adj-row-hint">{pot > 0 ? `Credit ${formatPrice(pot)}` : 'No credit'}</span>
-      <span className="adj-row-chev" aria-hidden="true">
-        ›
-      </span>
     </button>
   );
 }

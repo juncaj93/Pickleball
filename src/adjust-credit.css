@@ -28,12 +28,6 @@
   font-size: 0.88rem;
   overflow-wrap: anywhere;
 }
-.adj-row-chev {
-  flex: none;
-  color: var(--ink-2);
-  font-size: 1.4rem;
-  line-height: 1;
-}
 
 .adj-sheet {
   gap: 14px;

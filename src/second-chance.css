@@ -19,7 +19,7 @@ html[data-alert-cards] .sc-card .ac-btn svg {
   width: 15px;
   height: 15px;
 }
-/* The time button: an outline in the card's line color, ink words, a chevron. The real <select> lies on top of it (invisible), so a tap
+/* The time button: an outline in the card’s line color, ink words (Zip 78: no chevron). The real <select> lies on top of it (invisible), so a tap
  * opens the phone's own picker. */
 html[data-alert-cards] .sc-card .sc-time {
   background: transparent;
@@ -84,9 +84,8 @@ html[data-alert-cards] .sc-card .sc-time {
   flex: 1 1 auto;
   min-width: 0;
   font-size: 14.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .sc-owes {
   color: var(--ac-sub, var(--ink-2));
@@ -105,7 +104,7 @@ html[data-alert-cards] .sc-card .sc-time {
   padding: 0 12px;
   border: 1.5px solid currentColor;
   border-radius: 10px;
-  color: var(--ac-blue-ink, #2a3fb0);
+  color: var(--ac-blue-ink, var(--info-fg));
   font-size: 13.5px;
   font-weight: 800;
   text-decoration: none;
@@ -117,7 +116,7 @@ html[data-alert-cards] .sc-card .sc-time {
   inset: -6px 0;
 }
 .sc-req.sc-req-text {
-  color: var(--ac-purple-ink, #5a3fa0);
+  color: var(--ac-purple-ink, var(--purple-fg));
 }
 .sc-req:focus-visible {
   outline: 3px solid currentColor;

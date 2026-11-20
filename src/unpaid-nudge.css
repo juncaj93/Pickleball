@@ -19,9 +19,8 @@
   display: block;
   min-width: 0;
   max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 /* The "You're in! Please pay..." toast: the inverse of the page (a dark banner on a light page, a light one on a dark page), no badge,

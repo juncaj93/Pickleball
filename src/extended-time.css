@@ -10,7 +10,6 @@
 /* "4 played · $14 each": the count bold, the rest gray, as the mock. */
 .xt-summary {
   margin: 0;
-  font-family: var(--display);
   font-size: 1.35rem;
   line-height: 1.2;
   overflow-wrap: anywhere;
@@ -91,7 +90,7 @@
 }
 .xt-you {
   color: var(--ink-2);
-  font-size: 0.92em;
+  font-size: max(11px, 0.92em);
   font-weight: 500;
 }
 /* The small green check badge on the tile's top-right corner. */
@@ -105,7 +104,7 @@
   display: grid;
   place-items: center;
   background: var(--court);
-  color: #fff;
+  color: var(--primary-ink);
   box-shadow: 0 0 0 2.5px var(--sheet-bg);
 }
 
@@ -190,9 +189,8 @@ dialog.sheet[open]:has(.xt-sheet) > .sheet-body {
 }
 .xt-row .mp-name strong {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .xt-row .xt-what {
   display: block;
@@ -226,11 +224,11 @@ dialog.sheet[open]:has(.xt-sheet) > .sheet-body {
 }
 
 :root[data-theme='dark'] .xt-check {
-  color: #0d1a12;
+  color: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .xt-check {
-    color: #0d1a12;
+    color: var(--bg);
   }
 }
 

@@ -82,7 +82,11 @@ export function PaySheet({
             </button>
           )}
         </div>
-        {zelle && <p className="pay-alt">No Venmo? Apple Pay or Zelle {zelle}, or cash.</p>}
+        {zelle && (
+          <p className="pay-alt">
+            No Venmo? Apple Pay or Zelle <span className="nowrap">{zelle}</span>, or cash.
+          </p>
+        )}
         <button className="btn paid-soft" data-sheet-paid disabled={busy} onClick={onPaid}>
           {!saving && (
             <svg className="paid-check" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">

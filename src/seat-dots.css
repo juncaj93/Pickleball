@@ -7,16 +7,8 @@
  * Filled balls (the Pickleball component) are not touched. */
 
 html[data-seat-dots] {
-  /* The game card's muted ink at 70 percent, as in the mock: a soft gray ring on the white card, a soft light ring on the dark card. */
-  --sd-ring: rgb(74 79 70 / 70%);
-}
-@media (prefers-color-scheme: dark) {
-  html[data-seat-dots]:not([data-theme='light']) {
-    --sd-ring: rgb(184 191 178 / 70%);
-  }
-}
-html[data-seat-dots][data-theme='dark'] {
-  --sd-ring: rgb(184 191 178 / 70%);
+  /* The game card's muted ink at 70 percent, as in the mock: a soft gray ring on the var(--primary-ink) card, a soft light ring on the dark card. */
+  --sd-ring: color-mix(in srgb, var(--ink-2) 70%, transparent);
 }
 
 html[data-seat-dots] .dots > .dot.dot {

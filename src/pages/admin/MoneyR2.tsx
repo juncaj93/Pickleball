@@ -7,7 +7,7 @@ import { Chip, Sheet } from '../../ui';
 import { RollText } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { shiftMonth } from './MonthlyMoney';
-import { Chevron, currentMonth, GameBody, RemindList, shortMonth, Totals } from './MoneyV2';
+import { currentMonth, GameBody, RemindList, shortMonth, Totals } from './MoneyV2';
 import { moneyGames, owedCentsOf, unpaidRows } from './moneyList';
 import '../../credit-admin.css';
 import '../../admin-r2.css';
@@ -24,7 +24,7 @@ export function MoneyTabR2({ ctx }: { ctx: AdminCtx }) {
       <div className="mv2-controls r2m-controls">
         <div className="month-picker" role="group" aria-label="Month">
           <button className="btn small secondary" aria-label="Previous month" onClick={() => setMonth((x) => shiftMonth(x, -1))}>
-            ‹
+            Back
           </button>
           <label className="sr-only" htmlFor="mv2-month">
             Month
@@ -48,7 +48,7 @@ export function MoneyTabR2({ ctx }: { ctx: AdminCtx }) {
             />
           </div>
           <button className="btn small secondary" aria-label="Next month" onClick={() => setMonth((x) => shiftMonth(x, 1))}>
-            ›
+            Next
           </button>
         </div>
         <div className="segmented compact" role="group" aria-label="Who paid or Totals">
@@ -178,9 +178,6 @@ function GameR2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
         ) : (
           <span className="r2m-status">{status}</span>
         )}
-        <button type="button" className="r2m-chev" aria-hidden="true" tabIndex={-1} onClick={onToggle}>
-          <Chevron />
-        </button>
       </div>
       {open && <GameBody ctx={ctx} s={s} r2 />}
     </article>

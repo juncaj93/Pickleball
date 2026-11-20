@@ -5,10 +5,10 @@
   width: 100%;
   margin: 6px 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #14301f 0%, #102619 100%);
-  border-top: 1px solid #6e6224;
-  border-bottom: 1px solid #6e6224;
-  color: #ffffff;
+  background: linear-gradient(180deg, var(--tour-raised) 0%, var(--ball-ink) 100%);
+  border-top: 1px solid var(--gold-line);
+  border-bottom: 1px solid var(--gold-line);
+  color: var(--primary-ink);
 }
 .tw-track {
   display: flex;
@@ -28,7 +28,7 @@
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #f0d64e;
+  color: var(--gold);
 }
 .tw-name {
   display: inline-flex;
@@ -37,17 +37,17 @@
   font-size: 1.02rem;
   font-weight: 800;
   line-height: 1.2;
-  color: #ffffff;
+  color: var(--primary-ink);
 }
 .tw-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #b9c2b5;
+  background: var(--line-strong);
   flex: none;
 }
 .tw .md-count {
-  color: #e8ece6;
+  color: var(--fill);
 }
 @keyframes tw-run {
   from {

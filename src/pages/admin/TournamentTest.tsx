@@ -125,9 +125,6 @@ export default function TournamentTestRow({ ctx, home }: { ctx: AdminCtx; home?:
           <span className="set-name">Tournament test</span>
           <span className="set-hint">Preview only</span>
         </span>
-        <span className="tm-chevron" aria-hidden="true">
-          ›
-        </span>
       </button>
       <Sheet calmFocus open={open} title="Tournament test" onClose={() => setOpen(false)} className="tm-page">
         {open && <TestBody ctx={ctx} />}

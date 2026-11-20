@@ -28,11 +28,6 @@ const ExtIcon = () => (
     <path d="M7 17L17 7M9 7h8v8" />
   </svg>
 );
-const ChevIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M6 9l6 6 6-6" />
-  </svg>
-);
 
 const tap = (sessionId: string, body: Record<string, unknown>) => api('POST', `/api/admin/sessions/${sessionId}/second-chance`, body);
 
@@ -110,7 +105,6 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
           {!noTime && (
           <label className="ac-btn sc-time" data-sc-time>
             <span aria-hidden="true">{minutesLabel(minutes)}</span>
-            <ChevIcon />
             <select aria-label="Start time" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
               {times.map((m) => (
                 <option key={m} value={m}>

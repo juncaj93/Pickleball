@@ -25,7 +25,7 @@ dialog.sheet.tm-page {
   min-width: 0;
   padding: 16px 16px 16px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--card-r);
   background: var(--surface);
   overflow: hidden;
 }
@@ -87,7 +87,7 @@ dialog.sheet.tm-page {
   color: var(--ink-2);
 }
 .tm-cal-offer .tm-day.tm-on {
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tm-cal-offer .tm-day.tm-past {
   color: var(--line-strong);
@@ -179,7 +179,7 @@ dialog.sheet.tm-page {
 .tm-home-format {
   margin: 3px 0 0;
   font-size: 0.8rem;
-  font-size: clamp(0.64rem, 4.9cqw, 0.8rem);
+  font-size: max(11px, clamp(0.64rem, 4.9cqw, 0.8rem));
   font-weight: 650;
   line-height: 1.3;
   color: var(--accent-text);
@@ -280,13 +280,11 @@ dialog.sheet.tm-page {
 }
 .tm-lrow-name {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--display);
+  white-space: normal;
   font-size: 1.08rem;
   font-weight: 750;
   line-height: 1.25;
+  overflow-wrap: break-word;
 }
 .tm-lrow-picked {
   display: block;
@@ -296,9 +294,9 @@ dialog.sheet.tm-page {
 }
 .tm-lrow-level {
   flex: 0 0 auto;
-  font-family: var(--display);
   font-size: 1.22rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 .tm-pencil {
   flex: 0 0 auto;
@@ -342,14 +340,14 @@ dialog.sheet.tm-page {
   color: var(--ink-2);
 }
 .tm-cal-counts .tm-day.tm-on .tm-badge {
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tm-best-count {
   color: var(--accent-text);
   font-weight: 800;
 }
 .tm-cal-counts .tm-day.tm-on .tm-best-count {
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tm-edit {
   margin-top: 12px;
@@ -375,7 +373,6 @@ dialog.sheet.tm-page {
   font-size: 1.1rem;
 }
 .tm-date-count b {
-  font-family: var(--display);
   font-size: 1.6rem;
   font-weight: 800;
 }
@@ -406,12 +403,6 @@ dialog.sheet.tm-page {
   cursor: pointer;
   padding: 0;
 }
-.tm-chevron {
-  flex: 0 0 auto;
-  font-size: 1.5rem;
-  line-height: 1;
-  color: var(--ink-2);
-}
 
 /* The Home card. */
 .tm-home {
@@ -428,7 +419,7 @@ dialog.sheet.tm-page {
   height: 34px;
   margin-top: 2px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ecff7a, #d8f03b 55%, #b9d12a);
+  background: radial-gradient(circle at 35% 35%, var(--ball-hi), var(--ball) 55%, var(--ball-lo));
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%);
 }
 .tm-home-text {
@@ -438,7 +429,6 @@ dialog.sheet.tm-page {
 }
 .tm-home-title {
   margin: 0;
-  font-family: var(--display);
   font-size: 1.3rem;
   font-weight: 800;
   line-height: 1.2;
@@ -497,12 +487,12 @@ dialog.sheet.tm-page {
   padding-bottom: 10px;
 }
 .tm-tix .tm-label {
-  font-size: 0.67rem;
+  font-size: max(11px, 0.67rem);
 }
 .tm-tix .tm-chip {
-  min-height: 21px;
-  padding: 2px 10px;
-  font-size: 0.76rem;
+  min-height: var(--chip-h);
+  padding: var(--chip-pad);
+  font-size: var(--chip-font);
 }
 .tm-tix .tm-head-line + .tm-rows {
   margin-top: 0;
@@ -525,9 +515,8 @@ dialog.sheet.tm-page {
   cursor: pointer;
 }
 .tm-tix-name .tm-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tm-chip.tm-chip-ok {
   background: var(--ok-bg);
@@ -646,11 +635,10 @@ dialog.sheet.tm-page {
 }
 .tm-tk-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-size: 1.02rem;
   font-weight: 650;
+  overflow-wrap: break-word;
 }
 .tm-tk-tag {
   flex: 0 0 auto;
@@ -751,26 +739,17 @@ dialog.sheet.tm-page {
   flex: 0 0 auto;
   min-height: 25px;
   padding: 2px 11px;
-  background: #fcf0d2;
-  color: #7b4a03;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
 }
-:root[data-theme='dark'] .tm-chip.tm-chip-unpaid {
-  background: #33270b;
-  color: #f2c25c;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tm-chip.tm-chip-unpaid {
-    background: #33270b;
-    color: #f2c25c;
-  }
-}
+
 /* Zip 64 (🎾64.finalize, mock 03): the heat map. Each date still to pick is shaded by how many can play (Tournament.tsx sets the colors from
    shared/tournament.ts HEAT_RAMP): brightest green = the most, palest = the fewest. One text color across each ramp, so the steps read evenly:
    dark ink on the light ramp, white on the dark one. The count stays in each tile. */
 .tm-cal-counts .tm-day.tm-open[data-heat] {
   border-color: var(--heat-edge);
   background: var(--heat-bg);
-  color: #10231a;
+  color: var(--ball-ink);
 }
 .tm-cal-counts .tm-day.tm-open[data-heat] .tm-badge,
 .tm-cal-counts .tm-day.tm-open[data-heat] .tm-best-count {
@@ -779,13 +758,13 @@ dialog.sheet.tm-page {
 :root[data-theme='dark'] .tm-cal-counts .tm-day.tm-open[data-heat] {
   border-color: var(--heat-edge-dark);
   background: var(--heat-bg-dark);
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tm-cal-counts .tm-day.tm-open[data-heat] {
     border-color: var(--heat-edge-dark);
     background: var(--heat-bg-dark);
-    color: #ffffff;
+    color: var(--tour-ink);
   }
 }
 
@@ -802,7 +781,6 @@ dialog.sheet.tm-page {
 }
 .tm-fin-count b {
   margin-right: 2px;
-  font-family: var(--display);
   font-size: 1.7rem;
   font-weight: 800;
 }
@@ -982,13 +960,11 @@ dialog.sheet.tm-page {
 .tm-hc-name {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--display);
+  white-space: normal;
   font-size: 1.22rem;
   font-weight: 800;
   line-height: 1.2;
+  overflow-wrap: break-word;
 }
 .tm-chip.tm-hc-pill {
   flex: 0 0 auto;
@@ -999,30 +975,6 @@ dialog.sheet.tm-page {
   font-size: 0.9rem;
   font-weight: 700;
   white-space: nowrap;
-}
-.tm-hc-chev {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--fill);
-  color: var(--ink-2);
-}
-.tm-hc-chev svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 0.18s ease;
-}
-.tm-hc-open .tm-hc-chev svg {
-  transform: rotate(180deg);
 }
 /* Narrow phones: everything on the line a little smaller, so the name keeps its room (one line, no cut at 320 for a usual name). */
 @media (max-width: 399px) {
@@ -1043,10 +995,6 @@ dialog.sheet.tm-page {
     padding-inline: 8px;
     font-size: 0.8rem;
   }
-  .tm-hc-chev {
-    width: 28px;
-    height: 28px;
-  }
 }
 @media (max-width: 339px) {
   .tm-hc-name {
@@ -1060,13 +1008,13 @@ dialog.sheet.tm-page {
   border-top: 1px solid var(--line);
 }
 .tm-hc-rows .tm-row {
-  min-height: 38px;
+  min-height: 44px;
   font-size: 1rem;
 }
 .tm-hc-rows .tm-row > span {
   flex: 0 0 auto;
   font-size: 1rem;
-  font-size: clamp(0.88rem, 4.3cqw, 1rem);
+  font-size: max(11px, clamp(0.88rem, 4.3cqw, 1rem));
   color: var(--ink-2);
   white-space: nowrap;
 }
@@ -1077,7 +1025,7 @@ dialog.sheet.tm-page {
 /* The long values (Votes, Plan, Date, Ticket) shrink with the card instead of wrapping: 15.5 px at 420 (the mock), about 12 px at 320. */
 .tm-hc-val.tm-hc-fit {
   font-size: 0.95rem;
-  font-size: clamp(0.7rem, 4cqw, 1rem);
+  font-size: max(11px, clamp(0.7rem, 4cqw, 1rem));
 }
 /* A row that opens a soft box under it (Votes, Not signed up): the whole row is the tap, no arrow. */
 .tm-row.tm-hc-tap {
@@ -1368,7 +1316,6 @@ a.tm-hc-copy {
 }
 .tm-fin-courts button {
   min-height: 44px;
-  font-family: var(--display);
   font-size: 1.15rem;
   font-weight: 700;
 }
@@ -1380,15 +1327,7 @@ a.tm-hc-copy {
   color: var(--accent-text);
 }
 .tm-fin-fit.tm-fin-tight {
-  color: #9a5c06;
-}
-:root[data-theme='dark'] .tm-fin-fit.tm-fin-tight {
-  color: #f0b54a;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tm-fin-fit.tm-fin-tight {
-    color: #f0b54a;
-  }
+  color: var(--warn-fg);
 }
 
 /* ---------- Zip 70 (🎾70.time): the money row, the Time and Plan boxes (pictures 1, 2, 3 and 7) ---------- */
@@ -1495,7 +1434,6 @@ a.tm-hc-copy {
 }
 .tm-step-n {
   min-width: 2.2ch;
-  font-family: var(--display);
   font-size: 1.3rem;
   font-weight: 750;
   text-align: center;

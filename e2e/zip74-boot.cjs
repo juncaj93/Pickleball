@@ -14,18 +14,18 @@ const assert = (c, m) => {
   if (!c) throw new Error(m);
 };
 
-async function boot({ port = Number(process.env.E2E_PORT) || 5476, seedIso = '2026-11-19T14:00:00.000Z', nowMs = Date.parse('2026-11-19T15:00:00.000Z'), name = 'zip74' } = {}) {
+async function boot({ port = Number(process.env.E2E_PORT) || 5476, seedIso = '2026-11-19T14:00:00.000Z', nowMs = Date.parse('2026-11-19T15:00:00.000Z'), name = 'zip74', calm = true } = {}) {
   const BASE = `http://localhost:${port}`;
   const PIN = /PIN `(\d{6})`/.exec(readFileSync(path.join(ROOT, 'docs/PREVIEW_FAKE_DB.md'), 'utf8'))[1];
   const dbFile = path.join(ROOT, '.data', `${name}-e2e.sqlite`);
   mkdirSync(path.join(ROOT, '.data'), { recursive: true });
   rmSync(dbFile, { force: true });
-  const seeded = spawnSync('npx', ['vite-node', 'scripts/load-small-local.ts', '--', dbFile, seedIso, '--calm', '--zip55', '--zip60', '--zip66'], { cwd: ROOT, encoding: 'utf8' });
+  const seeded = spawnSync('npx', ['vite-node', 'scripts/load-small-local.ts', '--', dbFile, seedIso, ...(calm ? ['--calm'] : []), '--zip55', '--zip60', '--zip66'], { cwd: ROOT, encoding: 'utf8' });
   if (seeded.status !== 0) throw new Error(`could not build the calm world: ${seeded.stderr || seeded.stdout}`);
   if (await fetch(`${BASE}/api/status`).then((r) => r.ok, () => false)) throw new Error(`port ${port} is already in use`);
   const server = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
     cwd: ROOT,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: `${name}-setup-token-0123456789`, DEV_CLOCK: '1', PREVIEW_CALM: 'on', PB_PREVIEW_BUILD: '1' },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: `${name}-setup-token-0123456789`, DEV_CLOCK: '1', PREVIEW_CALM: calm ? 'on' : 'off', PB_PREVIEW_BUILD: '1' },
     stdio: 'ignore',
     detached: true,
   });

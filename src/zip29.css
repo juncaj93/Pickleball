@@ -27,7 +27,7 @@
   padding: 0 1px;
   border-radius: 0;
   /* TOM keeps the 8 px it always had; only TONIGHT, the long word, gets the new size below. */
-  font-size: 8px;
+  font-size: max(11px, 8px);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
@@ -36,6 +36,6 @@
 }
 /* TONIGHT: 7.5 px at normal text (it was 6.75), growing a little with big text up to 8.5 px, never wider than the tile's inside edge allows. */
 :root[data-tonight-glow] .hv2-short .tile .day-tag.tonight {
-  font-size: clamp(7.5px, 0.47rem, 8.5px);
-  letter-spacing: 0.01em;
+  font-size: max(11px, clamp(7.5px, 0.47rem, 8.5px));
+  letter-spacing: 0;
 }

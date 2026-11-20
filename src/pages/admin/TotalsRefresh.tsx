@@ -215,19 +215,12 @@ function TournamentRow({ x }: { x: TotalsTournament }) {
 
 // ---------- Month by month ----------
 
-const Chev = () => (
-  <svg className="tr-chev" viewBox="0 0 14 9" aria-hidden="true">
-    <path d="M1 1.5l6 6 6-6" />
-  </svg>
-);
-
 /** One collapsed card. Opening it loads each past month's own Totals answer (nothing is loaded while it is closed). */
 function MonthByMonth({ open, onToggle, past, answers }: { open: boolean; onToggle: () => void; past: string[]; answers: MonthAnswers }) {
   return (
     <section className={`tr-mm${open ? ' open' : ''}`} data-fold="month-by-month">
       <button type="button" className="tr-mm-head" aria-expanded={open} onClick={onToggle}>
         <span className="tr-t plain">Month by month</span>
-        <Chev />
       </button>
       {open && <MonthRows months={past} answers={answers} />}
     </section>
@@ -292,7 +285,6 @@ function RunningTotal({ open, onToggle, past, currentMonth, current, answers }: 
     <section className={`tr-mm rt${open ? ' open' : ''}`} data-fold="running-total">
       <button type="button" className="tr-mm-head" aria-expanded={open} onClick={onToggle}>
         <span className="tr-t plain">Running total</span>
-        <Chev />
       </button>
       {open && <RunningRows past={past} currentMonth={currentMonth} current={current} answers={answers} />}
     </section>

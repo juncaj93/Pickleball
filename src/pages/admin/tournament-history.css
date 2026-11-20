@@ -74,9 +74,8 @@
   min-width: 0;
   font-size: 1.1rem;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .th-wins {
   flex: none;

@@ -2,74 +2,41 @@
    Presentation only. Markup lives in PlayerHome.tsx (ScheduleRow, PlayerTile, RowPay).
    Colors come from the --pc-* tokens below, light and dark. Fonts are the site's own. */
 
-.schedule,
-.pay-card {
-  --pc-card: #ffffff;
-  --pc-ink: #18241d;
-  --pc-muted: #4a4f46;
-  --pc-line: #dad9cf;
-  --pc-tile: #fafaf5;
-  --pc-red: #c23b22;
-  --pc-green: #226b4b;
-  --pc-green-line: #226b4b;
-  --pc-btn: #226b4b;
-  --pc-btn-ink: #ffffff;
-  --pc-amber: #8a5a00;
-  --pc-amber-bg: #fff3d6;
-  --pc-ok-bg: #e6f2eb;
-  --pc-blue: #2f5bd3;
-  --pc-blue-ink: #ffffff;
-  --pc-ring: #18241d;
-  --pc-shadow: rgb(24 36 29 / 45%);
+/* Zip 78: the player card's color names are only aliases of the site's tokens now, set on the page itself, so a sheet opened from anywhere
+   (the You owe banner, a tournament ticket, a game card) reads the same colors. */
+:root {
+  --pc-card: var(--surface);
+  --pc-ink: var(--ink);
+  --pc-muted: var(--ink-2);
+  --pc-line: var(--line);
+  --pc-tile: var(--surface-2);
+  --pc-red: var(--danger-fg);
+  --pc-green: var(--ok-fg);
+  --pc-green-line: var(--primary);
+  --pc-btn: var(--primary);
+  --pc-btn-ink: var(--primary-ink);
+  --pc-amber: var(--warn-fg);
+  --pc-amber-bg: var(--warn-bg);
+  --pc-ok-bg: var(--ok-bg);
+  --pc-blue: var(--info-fg);
+  --pc-blue-ink: var(--primary-ink);
+  --pc-ring: var(--ink);
+  --pc-shadow: color-mix(in srgb, var(--ink) 45%, transparent);
   /* Date tile outline (Zip 41): ONE solid line, color by ROW only. This week = ink (mint in dark), next week and later = charcoal. */
-  --pc-ol-this: #18241d;
-  --pc-ol-quiet: #5b625a;
+  --pc-ol-this: var(--ink);
+  --pc-ol-quiet: var(--ink-2);
 }
 :root[data-theme='dark'] .schedule,
 :root[data-theme='dark'] .pay-card,
 :root[data-theme='dark'] .saved-hold {
-  --pc-card: #18221c;
-  --pc-ink: #f1f3ec;
-  --pc-muted: #b8bfb2;
-  --pc-line: #2b3a31;
-  --pc-tile: #1f2b24;
-  --pc-red: #ff8a70;
-  --pc-green: #7fd9a3;
-  --pc-green-line: #3a8f69;
-  --pc-btn: #7fd9a3;
-  --pc-btn-ink: #0b140f;
-  --pc-amber: #f0b84a;
-  --pc-amber-bg: #2e2410;
-  --pc-ok-bg: #1b3527;
-  --pc-blue: #8fb0ff;
-  --pc-blue-ink: #0f1612;
-  --pc-ring: #d5dacf;
   --pc-shadow: rgb(0 0 0 / 70%);
-  --pc-ol-this: #8bd9a3;
-  --pc-ol-quiet: #8e988f;
+  --pc-ol-this: var(--ok-fg);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .schedule,
   :root:not([data-theme='light']) .pay-card {
-    --pc-card: #18221c;
-    --pc-ink: #f1f3ec;
-    --pc-muted: #b8bfb2;
-    --pc-line: #2b3a31;
-    --pc-tile: #1f2b24;
-    --pc-red: #ff8a70;
-    --pc-green: #7fd9a3;
-    --pc-green-line: #3a8f69;
-    --pc-btn: #7fd9a3;
-    --pc-btn-ink: #0b140f;
-    --pc-amber: #f0b84a;
-    --pc-amber-bg: #2e2410;
-    --pc-ok-bg: #1b3527;
-    --pc-blue: #8fb0ff;
-    --pc-blue-ink: #0f1612;
-    --pc-ring: #d5dacf;
     --pc-shadow: rgb(0 0 0 / 70%);
-    --pc-ol-this: #8bd9a3;
-    --pc-ol-quiet: #8e988f;
+    --pc-ol-this: var(--ok-fg);
   }
 }
 
@@ -131,7 +98,7 @@
   background: var(--pc-card);
   color: var(--pc-ink);
   border: 1px solid var(--pc-line);
-  border-radius: 24px;
+  border-radius: var(--card-r);
   padding: 16px;
   box-shadow: none;
 }
@@ -142,7 +109,7 @@
 .schedule > .sched.tier-next {
   gap: 14px;
   padding: 14px;
-  border-radius: 20px;
+  border-radius: var(--card-r);
 }
 .schedule > .sched.tier-later {
   align-items: flex-start;
@@ -262,7 +229,7 @@
 }
 .tier-later .ptile .dow,
 .tier-later .ptile .mon {
-  font-size: 0.64rem;
+  font-size: max(11px, 0.64rem);
 }
 .tier-later .ptile .day {
   font-size: 1.15rem;
@@ -277,19 +244,19 @@
   border-radius: 8px;
   background: var(--pc-blue);
   color: var(--pc-blue-ink);
-  font-size: 0.56rem;
+  font-size: max(11px, 0.56rem);
   font-weight: 800;
   letter-spacing: 0;
   white-space: nowrap;
 }
 .tier-next .tonight-tag {
   margin: 0 4px;
-  font-size: 0.5rem;
+  font-size: max(11px, 0.5rem);
 }
 .tier-later .tonight-tag {
   margin: 0 2px;
   padding: 3px 0;
-  font-size: 0.42rem;
+  font-size: max(11px, 0.42rem);
 }
 
 /* The check badge: top-right corner of the tile, never over the TONIGHT strip. */
@@ -326,7 +293,6 @@
 
 .schedule .sched-time {
   text-align: center;
-  font-family: var(--display);
   font-size: 0.95rem;
   font-weight: 800;
   letter-spacing: 0;
@@ -344,13 +310,13 @@
 /* Never wider than the tile's column: the widest start ("10:30 AM", 8 characters) takes about 4.7em, so the
    text is at most 21% of the column's width tall. Phones that don't know cqw keep the sizes above. */
 .schedule .sched-time {
-  font-size: min(0.95rem, 21cqw);
+  font-size: max(11px, min(0.95rem, 21cqw));
 }
 .tier-next .sched-time {
-  font-size: min(0.82rem, 21cqw);
+  font-size: max(11px, min(0.82rem, 21cqw));
 }
 .tier-later .sched-time {
-  font-size: min(0.74rem, 21cqw);
+  font-size: max(11px, min(0.74rem, 21cqw));
 }
 /* Just the start time, so it always fits under the tile. A game that is not the usual length adds
    where it ends on a second short line (a touch smaller), still inside the tile's column. */
@@ -361,7 +327,7 @@
   line-height: 1.2;
 }
 .schedule .sched-time.range span + span {
-  font-size: 0.8em;
+  font-size: max(11px, 0.8em);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -701,7 +667,7 @@
   }
   .tier-this .tonight-tag {
     margin: 0 4px;
-    font-size: 0.5rem;
+    font-size: max(11px, 0.5rem);
   }
   .schedule > .sched.tier-this {
     padding: 14px;
@@ -800,7 +766,7 @@
   background: var(--pc-card);
   color: var(--pc-ink);
   border: 1px solid var(--pc-line);
-  border-radius: 24px;
+  border-radius: var(--card-r);
 }
 .schedule .empty-mine p {
   margin: 0;
@@ -840,22 +806,20 @@ a[href] {
   background-size: 300% 100%;
   animation: skel-shimmer 1.4s linear infinite;
 }
-.schedule,
-.pay-card,
-.saved-hold {
-  --pc-skel-a: #ecebe3;
-  --pc-skel-b: #f6f5ef;
+/* Zip 78: the sweep's two colors live on the page itself, so every .skel on the site has them (History > Tournaments had none, so it drew
+   nothing at all). */
+:root {
+  --pc-skel-a: var(--fill);
+  --pc-skel-b: var(--surface);
 }
-:root[data-theme='dark'] .schedule,
-:root[data-theme='dark'] .saved-hold {
-  --pc-skel-a: #202c25;
-  --pc-skel-b: #2a3830;
+:root[data-theme='dark'] {
+  --pc-skel-a: var(--fill);
+  --pc-skel-b: var(--line-strong);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .schedule,
-  :root:not([data-theme='light']) .saved-hold {
-    --pc-skel-a: #202c25;
-    --pc-skel-b: #2a3830;
+  :root:not([data-theme='light']) {
+    --pc-skel-a: var(--fill);
+    --pc-skel-b: var(--line-strong);
   }
 }
 @keyframes skel-shimmer {
@@ -970,7 +934,7 @@ a[href] {
   border: 1px solid color-mix(in srgb, var(--holiday-fg) 40%, transparent);
   background: var(--holiday-bg);
   color: var(--holiday-fg);
-  font-size: min(0.62rem, 15cqw);
+  font-size: max(11px, min(0.62rem, 15cqw));
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1.5;
@@ -1025,11 +989,11 @@ a[href] {
   margin: 0;
   padding: 0.42em 0.7em;
   border-radius: 8px;
-  font-size: min(0.72rem, 13cqw);
+  font-size: max(11px, min(0.72rem, 13cqw));
   letter-spacing: 0.04em;
 }
 .schedule.pf1 .tier-later .tonight-tag {
-  font-size: min(0.64rem, 13.5cqw);
+  font-size: max(11px, min(0.64rem, 13.5cqw));
 }
 
 /* ---- PAY_SHEET: the small sheet a Pay button opens ----
@@ -1059,19 +1023,7 @@ a[href] {
   color: var(--pc-green, var(--primary));
   border-color: var(--pc-green-line, var(--primary));
 }
-/* Zip 74 (the 🎾73 audit): the tournament ticket's Pay sheet opens outside the game cards, where the --pc-* colors are not set, so in dark
-   mode "Copy Venmo" fell back to the dark primary green on the dark sheet. The sheet now carries the game cards' own dark outline colors
-   (light green text on a mid green line, as on every game card's sheet). Light mode is unchanged. */
-:root[data-theme='dark'] .pay-sheet {
-  --pc-green: #7fd9a3;
-  --pc-green-line: #3a8f69;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .pay-sheet {
-    --pc-green: #7fd9a3;
-    --pc-green-line: #3a8f69;
-  }
-}
+
 .pay-sheet .pay-alt {
   margin: 2px 0;
   font-size: 0.85rem;

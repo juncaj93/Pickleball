@@ -25,57 +25,57 @@
 }
 .schedule .ptile .dow,
 .schedule .ptile .mon {
-  font-size: min(0.8rem, 15.6cqw);
+  font-size: max(11px, min(0.8rem, 15.6cqw));
 }
 .schedule .ptile .day {
-  font-size: min(2.35rem, 45.6cqw);
+  font-size: max(11px, min(2.35rem, 45.6cqw));
 }
 .tier-next .ptile .dow,
 .tier-next .ptile .mon {
-  font-size: min(0.7rem, 16.4cqw);
+  font-size: max(11px, min(0.7rem, 16.4cqw));
 }
 .tier-next .ptile .day {
-  font-size: min(1.8rem, 41.9cqw);
+  font-size: max(11px, min(1.8rem, 41.9cqw));
 }
 .tier-later .ptile .dow,
 .tier-later .ptile .mon {
-  font-size: min(0.64rem, 18.7cqw);
+  font-size: max(11px, min(0.64rem, 18.7cqw));
 }
 .tier-later .ptile .day {
-  font-size: min(1.15rem, 33.5cqw);
+  font-size: max(11px, min(1.15rem, 33.5cqw));
 }
 @media (max-width: 380px) {
   /* Narrow phones have slightly smaller tile columns (76, 64 and 52 px). */
   .schedule .ptile .dow,
   .schedule .ptile .mon {
-    font-size: min(0.8rem, 17.2cqw);
+    font-size: max(11px, min(0.8rem, 17.2cqw));
   }
   .schedule .ptile .day {
-    font-size: min(2.1rem, 45cqw);
+    font-size: max(11px, min(2.1rem, 45cqw));
   }
   .tier-next .ptile .dow,
   .tier-next .ptile .mon {
-    font-size: min(0.7rem, 17.9cqw);
+    font-size: max(11px, min(0.7rem, 17.9cqw));
   }
   .tier-next .ptile .day {
-    font-size: min(1.6rem, 40.8cqw);
+    font-size: max(11px, min(1.6rem, 40.8cqw));
   }
   .tier-later .ptile .dow,
   .tier-later .ptile .mon {
-    font-size: min(0.64rem, 20.1cqw);
+    font-size: max(11px, min(0.64rem, 20.1cqw));
   }
   /* (On narrow phones the LATER tile's number is the larger "2.1rem" of the rule above in src/player-cards.css, as it always was.) */
   .tier-later .ptile .day {
-    font-size: min(2.1rem, 66cqw);
+    font-size: max(11px, min(2.1rem, 66cqw));
   }
 }
 /* The organizer's tile (56 px wide). */
 .scard .tile .dow,
 .scard .tile .mon {
-  font-size: min(0.7rem, 21.6cqw);
+  font-size: max(11px, min(0.7rem, 21.6cqw));
 }
 .scard .tile .day {
-  font-size: min(1.3rem, 40cqw);
+  font-size: max(11px, min(1.3rem, 40cqw));
 }
 
 /* ---------- 2. Player cards: tile above the words once the words column would be too narrow ---------- */
@@ -207,7 +207,7 @@ section[aria-labelledby='sessions-title'],
 }
 .tabbar button {
   min-width: 0;
-  font-size: min(0.7rem, 3.9cqw);
+  font-size: max(11px, min(0.7rem, 3.9cqw));
 }
 
 /* A game card: the date tile moves above the words when the words column would be too narrow. */

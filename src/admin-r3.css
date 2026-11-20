@@ -38,12 +38,11 @@
 }
 .r3-name {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-size: 1rem;
   font-weight: 650;
   line-height: 1.2;
+  overflow-wrap: break-word;
 }
 .r3-sub {
   display: flex;
@@ -61,9 +60,8 @@
   /* The pills never wrap to a third line (every row stays the same height): a long stats line gives way first. */
   flex: 0 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .r3-pill {
   font-size: 0.7rem;

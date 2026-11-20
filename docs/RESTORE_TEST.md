@@ -31,7 +31,7 @@ Other ways to run it:
    `docs/RESTORE.md` step 1 makes (`scripts/restore-backup.mjs`), in one transaction, then the database's own foreign key check.
    The throwaway disappears when the test ends. It is never the live database and never `pickleball-preview`.
 3. Compares the copy with the source:
-   - **rows per table, and every value of every row** (all 10 backed-up tables);
+   - **rows per table, and every value of every row** (all 21 backed-up tables, `BACKUP_TABLES` in server/backupData.ts);
    - for a weekly copy, the row counts it saved when it was made;
    - **money**: finalized games, canceled games, total credit (and how many players have some), cash marked paid, unpaid seats and
      what they owe, pending cash-outs;

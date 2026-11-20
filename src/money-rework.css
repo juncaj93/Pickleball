@@ -7,24 +7,10 @@
   --tok-paid-dot: var(--ok-edge);
   --tok-owes-fg: var(--warn-fg);
   --tok-owes-bg: var(--warn-bg);
-  --tok-credit-fg: #3a4fa3;
-  --tok-credit-bg: #e9edf6;
-  --tok-text-fill: #6a56a6;
-  --tok-text-ink: #ffffff;
-}
-:root[data-theme='dark'] {
-  --tok-credit-fg: #93a6e6;
-  --tok-credit-bg: #202840;
-  --tok-text-fill: #b2a0e6;
-  --tok-text-ink: #1d1433;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --tok-credit-fg: #93a6e6;
-    --tok-credit-bg: #202840;
-    --tok-text-fill: #b2a0e6;
-    --tok-text-ink: #1d1433;
-  }
+  --tok-credit-fg: var(--info-fg);
+  --tok-credit-bg: var(--info-bg);
+  --tok-text-fill: var(--fill);
+  --tok-text-ink: var(--ink);
 }
 
 /* Money page, reworked (MONEY_REWORK). Only the site's own tokens, so light and dark follow the theme. Layout follows the approved
@@ -34,8 +20,8 @@
 .money-rework {
   gap: 10px;
   /* Soft outlines: the month box and the Mark paid button. */
-  --mrw-box-line: #dcdcd5;
-  --mrw-btn-line: #cfd2c9;
+  --mrw-box-line: var(--line);
+  --mrw-btn-line: var(--line);
 }
 :root[data-theme='dark'] .money-rework {
   --mrw-box-line: var(--line-strong);
@@ -96,15 +82,13 @@
   min-width: 0;
 }
 .mrw-seg {
-  /* A 42 px track with 3 px around the white pill, so the pill is 36 px. */
+  /* Zip 78: the site's one segmented look (44 px cells, 3 px around). */
   box-sizing: border-box;
-  height: 42px;
   padding: 3px;
 }
 .mrw-seg button {
   position: relative;
-  min-height: 36px;
-  height: 36px;
+  min-height: 44px;
   padding: 0 8px;
   white-space: nowrap;
   font-size: 15px;
@@ -285,15 +269,15 @@
   appearance: none;
   position: relative;
   box-sizing: border-box;
-  height: 38px;
+  height: var(--btn-h-sm);
   padding: 0 14px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--btn-r);
   background: var(--tok-text-fill);
   color: var(--tok-text-ink);
   font: inherit;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -421,22 +405,22 @@
   font-weight: 650;
   cursor: pointer;
 }
-/* White, outlined, never the one filled green button. */
+/* Zip 78 (one look): Mark paid, Request and Text are the site's small secondary button everywhere: 44 px, gray fill, ink words. */
 .mrw-mark {
   appearance: none;
   position: relative;
   flex: none;
   box-sizing: border-box;
-  height: 34px;
+  height: var(--btn-h-sm);
   min-width: 96px;
   padding: 0 14px;
-  border: 1.5px solid var(--mrw-btn-line);
-  border-radius: 11px;
-  background: var(--surface);
+  border: 1.5px solid var(--fill);
+  border-radius: var(--btn-r);
+  background: var(--fill);
   color: var(--ink);
   font: inherit;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -550,13 +534,6 @@
   font-weight: 650;
   cursor: pointer;
 }
-.mrw-fold-chev {
-  display: inline-flex;
-  color: var(--ink-2);
-}
-.mrw-fold.open .mrw-fold-chev svg {
-  transform: rotate(180deg);
-}
 .mrw-fold-rows {
   list-style: none;
   margin: 0;
@@ -622,7 +599,6 @@
   white-space: nowrap;
 }
 .mrw-big {
-  font-family: var(--display);
   font-size: 2rem;
   font-weight: 800;
   line-height: 1;
@@ -655,7 +631,7 @@
 }
 .mrw-col dt {
   color: var(--ink-2);
-  font-size: 0.62rem;
+  font-size: max(11px, 0.62rem);
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -686,7 +662,7 @@
 }
 .mrw-yours-label {
   color: var(--ink-2);
-  font-size: 0.6rem;
+  font-size: max(11px, 0.6rem);
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -702,7 +678,6 @@
 }
 .mrw-yours-total {
   margin-left: auto;
-  font-family: var(--display);
   font-size: 1.45rem;
   font-weight: 800;
   line-height: 1;
@@ -732,11 +707,11 @@
     gap: 5px;
   }
   .mrw-yours-label {
-    font-size: 0.55rem;
+    font-size: max(11px, 0.55rem);
     letter-spacing: 0.04em;
   }
   .mrw-yours-eq {
-    font-size: 0.64rem;
+    font-size: max(11px, 0.64rem);
   }
   .mrw-yours-total {
     font-size: 1.3rem;
@@ -746,12 +721,11 @@
 /* ---------- Settings: the tidied Feature switches page ---------- */
 .switches-tidy .set-row .set-name {
   /* A little smaller on the narrowest phones so even "Ask for payment on every game" stays on one line at 320 px. */
-  font-size: clamp(0.82rem, 4.4vw, 0.95rem);
+  font-size: max(11px, clamp(0.82rem, 4.4vw, 0.95rem));
   display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
   font-weight: 650;
+  overflow-wrap: break-word;
 }
 /* Only on the very narrowest phones (under 340 px) a long title may wrap cleanly onto a second line instead of being cut off. */
 @media (max-width: 339px) {
@@ -804,7 +778,7 @@
   line-height: 1.3;
 }
 
-/* Settings summaries that carry a count: the count sits right after the title, with room before the chevron. */
+/* Settings summaries that carry a count: the count sits right after the title, (Zip 78: no chevron). */
 .hidden-games > summary,
 .switches-tidy .live-stable > summary {
   gap: 12px;
@@ -880,8 +854,8 @@
   padding: 0 14px;
   border: 1.5px solid var(--tok-text-fill);
   border-radius: 12px;
-  background: var(--surface);
-  color: var(--tok-text-fill);
+  background: var(--tok-text-fill);
+  color: var(--tok-text-ink);
   font-size: 14px;
   font-weight: 600;
   line-height: 1;

@@ -123,9 +123,6 @@ export function GameTimeCard({
           </span>
           <button type="button" className="bh-box bh-start" data-bh-start aria-haspopup="dialog" aria-labelledby="bh-start-label bh-start-value" onClick={() => setGrid(true)}>
             <span id="bh-start-value">{startMin === null ? 'Pick' : clockLabel(startMin)}</span>
-            <svg className="bh-updown" viewBox="0 0 10 16" aria-hidden="true">
-              <path d="M2 6l3-3 3 3M2 10l3 3 3-3" />
-            </svg>
           </button>
         </div>
         <div className="bh-cell">

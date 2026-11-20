@@ -215,8 +215,9 @@ async function main() {
       assert(filled === balls, `one ornament per ball: ${filled} vs ${balls}`);
       assert((await page.locator('.schedule .dots .xorn.xempty').count()) > 0, 'empty seats are dashed ornament outlines');
       // Colors cycle red, green, gold, blue by seat.
-      const stops = await page.evaluate(() => [...document.querySelectorAll('.schedule article.sched')[0].querySelectorAll('.dots .xorn:not(.xempty) radialGradient stop:nth-child(2)')].map((s) => s.getAttribute('stop-color')));
-      assert(stops.join(',') === '#e5483f,#37b873,#f2b33d,#4f7be0'.split(',').slice(0, stops.length).join(','), `ornament colors by seat: ${stops}`);
+      const stops = await page.evaluate(() => [...document.querySelectorAll('.schedule article.sched')[0].querySelectorAll('.dots .xorn:not(.xempty) radialGradient stop:nth-child(2)')].map((s) => getComputedStyle(s).stopColor));
+      // Zip 78: the colors are the named art tokens (--art-xmas-1 to 4), read as computed colors.
+      assert(stops.join(';') === 'rgb(229, 72, 63);rgb(55, 184, 115);rgb(242, 179, 61);rgb(79, 123, 224)'.split(';').slice(0, stops.length).join(';'), `ornament colors by seat: ${stops}`);
       // My own seat keeps a ring.
       // No ring, no glow, no sway: nothing is drawn around any ornament and nothing moves on a card at rest.
       assert((await page.locator('.xorn:not(.xempty) circle[stroke]').count()) === 0, 'no ring around any filled ornament (the dashed ones are the empty seats)');

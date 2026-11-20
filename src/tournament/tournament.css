@@ -12,10 +12,10 @@
   /* Zip 59: the gap down to the dark card was 18 + the stack's 12 = 30 px; now about half (3 + 12 = 15 px). */
   margin-bottom: 3px;
   padding: 12px 12px 12px 16px;
-  border: 1px solid #ecd27a;
+  border: 1px solid var(--warn-edge);
   border-radius: 16px;
-  background: #fff3c9;
-  color: #4d3b00;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
 }
 .tc-strip-text {
   flex: 1 1 auto;
@@ -42,15 +42,11 @@
   white-space: nowrap;
 }
 :root[data-theme='dark'] .tc-strip {
-  border-color: #6b5520;
-  background: #2c2410;
-  color: #f6e3a3;
+  border-color: var(--warn-edge);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tc-strip {
-    border-color: #6b5520;
-    background: #2c2410;
-    color: #f6e3a3;
+    border-color: var(--warn-edge);
   }
 }
 /* A narrow phone: the button goes under the words (never squeezed). */
@@ -65,21 +61,21 @@
 
 /* ---------- The pinned ticket card (mocks 04, 07, 08) ---------- */
 .tc {
-  --tc-lime: #d8f03b;
-  --tc-lime-ink: #1a2410;
-  --tc-mint: #6ef0b0;
-  --tc-line: #24503a;
-  --tc-sub: #c3d1c9;
-  --tc-dim: #7c9688;
+  --tc-lime: var(--ball);
+  --tc-lime-ink: var(--ball-ink);
+  --tc-mint: var(--tour-mint);
+  --tc-line: var(--tour-line);
+  --tc-sub: var(--tour-sub);
+  --tc-dim: var(--tour-dim);
   --tc-stub-w: 77px;
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  border-radius: 22px;
-  color: #ffffff;
+  border-radius: var(--card-r);
+  color: var(--tour-ink);
   background:
-    radial-gradient(120% 90% at 18% 0%, #112a1f 0%, rgb(17 42 31 / 0%) 60%),
-    linear-gradient(180deg, #0e241a 0%, #0c1f16 62%, #0b1b14 100%);
+    radial-gradient(120% 90% at 18% 0%, var(--tour-bg-top) 0%, rgb(0 0 0 / 0%) 60%),
+    linear-gradient(180deg, var(--tour-bg) 0%, var(--tour-bg) 62%, var(--tour-bg-deep) 100%);
   /* The 1 px edge is inside the card (so the notch cuts it too). No outer shadow (Zip 59): it showed as a grey band above the card and filled
      the notch. */
   box-shadow: inset 0 0 0 1px var(--tc-line);
@@ -88,14 +84,7 @@
   -webkit-mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
   mask-image: radial-gradient(circle 8px at calc(var(--tc-stub-w) + 1px) 0, transparent 7.5px, #000 8px);
 }
-:root[data-theme='dark'] .tc {
-  --tc-line: #2a5a42;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tc {
-    --tc-line: #2a5a42;
-  }
-}
+
 .tc-top {
   display: flex;
   /* Zip 59: 118 before; the blank space between the last text line and the button is about 10 px less. */
@@ -132,12 +121,11 @@
 }
 /* Two months before a date is picked ("DEC–JAN"): smaller and tighter, so the widest pair keeps room on both sides of the 77 px stub. */
 .tc-mon-span {
-  font-size: 0.62rem;
+  font-size: max(11px, 0.62rem);
   letter-spacing: 0.05em;
 }
 .tc-day {
   margin: 5px 0 3px;
-  font-family: var(--display);
   font-size: 2.25rem;
   font-weight: 800;
   line-height: 1;
@@ -165,7 +153,6 @@
 }
 .tc-title {
   margin: 0;
-  font-family: var(--display);
   font-size: 1.8rem;
   font-weight: 800;
   line-height: 1.04;
@@ -184,7 +171,7 @@
 .tc-format {
   margin: 5px 0 0;
   font-size: 0.8rem;
-  font-size: clamp(0.64rem, 4.9cqw, 0.8rem);
+  font-size: max(11px, clamp(0.64rem, 4.9cqw, 0.8rem));
   font-weight: 650;
   line-height: 1.3;
   color: var(--tc-mint);
@@ -223,18 +210,19 @@
 .tc-btn:focus-visible,
 .tc-link:focus-visible,
 .tc-strip .btn:focus-visible {
-  outline: 3px solid var(--tc-lime, #d8f03b);
+  outline: 3px solid var(--tc-lime, var(--ball));
   outline-offset: 2px;
 }
+/* Zip 78 (one look): the ticket's main button is the site's green primary (it was ball yellow). The class keeps its old name. */
 .tc-lime {
-  background: var(--tc-lime);
-  color: var(--tc-lime-ink);
-  box-shadow: 0 0 22px rgb(216 240 59 / 26%), 0 6px 16px rgb(0 0 0 / 22%);
+  background: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 22%);
 }
 .tc-gray {
   min-height: 46px;
   background: rgb(255 255 255 / 12%);
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-link {
   min-height: 30px;
@@ -245,7 +233,7 @@
   font-size: 0.8rem;
   color: var(--tc-sub);
   text-decoration: underline;
-  text-decoration-color: rgb(195 209 201 / 60%);
+  text-decoration-color: color-mix(in srgb, var(--tour-sub) 60%, transparent);
   text-underline-offset: 3px;
   cursor: pointer;
 }
@@ -270,7 +258,7 @@
   left: calc(50% / var(--tc-steps, 5));
   right: calc(50% / var(--tc-steps, 5));
   height: 2px;
-  background: #33493c;
+  background: var(--tour-line);
 }
 .tc-track li {
   position: relative;
@@ -288,19 +276,19 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 2px solid #4b6757;
+  border: 2px solid var(--tour-dim);
   background: transparent;
 }
 .tc-step-label {
-  font-size: 0.64rem;
+  font-size: max(11px, 0.64rem);
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1.2;
-  color: #7f9a8b;
+  color: var(--tour-dim);
   white-space: nowrap;
 }
 .tc-step-done .tc-step-label {
-  color: #a9c4b4;
+  color: var(--tour-sub);
 }
 .tc-step-done .tc-step-dot {
   border: 0;
@@ -320,7 +308,7 @@
 .tc-step-now .tc-step-dot {
   border: 0;
   background: var(--tc-lime);
-  box-shadow: 0 0 0 4px rgb(216 240 59 / 28%), 0 0 12px 2px rgb(216 240 59 / 45%);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ball) 28%, transparent), 0 0 12px 2px color-mix(in srgb, var(--ball) 45%, transparent);
 }
 .tc-step-now .tc-step-label {
   color: var(--tc-lime);
@@ -328,7 +316,7 @@
 /* Small phones: the step words get a little smaller so FINAL never clips. */
 @media (max-width: 359px) {
   .tc-step-label {
-    font-size: 0.6rem;
+    font-size: max(11px, 0.6rem);
     letter-spacing: 0.08em;
   }
   .tc-title {
@@ -346,7 +334,7 @@
     padding-right: 8px;
   }
   .tc-kicker {
-    font-size: 0.64rem;
+    font-size: max(11px, 0.64rem);
     letter-spacing: 0.1em;
   }
 }
@@ -546,10 +534,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 .tm-level-num {
-  font-family: var(--display);
   font-size: 1.12rem;
   font-weight: 800;
   line-height: 1;
+  /* Zip 78: body font, even digits; the column is as wide as "3.6+" needs. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .tm-level-text {
   font-size: 0.84rem;
@@ -557,7 +547,7 @@
 }
 /* Zip 59: every level line fits on two lines or fewer, down to a 320 px phone: a tighter row (number, gaps, radio) and a smaller line. */
 .tm-levels:not(.tm-levels-flat) .tm-level {
-  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(38px, max-content) minmax(0, 1fr) auto;
   padding: 6px 12px;
   gap: 6px;
 }
@@ -567,7 +557,7 @@
 }
 @media (max-width: 379px) {
   .tm-levels:not(.tm-levels-flat) .tm-level {
-    grid-template-columns: 34px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(34px, max-content) minmax(0, 1fr) auto;
     padding: 6px 10px;
   }
   .tm-levels:not(.tm-levels-flat) .tm-radio {
@@ -582,7 +572,7 @@
 /* A 320 px phone: the round mark goes (the picked card is still green with its green edge and tint), so the longest lines keep to two lines. */
 @media (max-width: 339px) {
   .tm-levels:not(.tm-levels-flat) .tm-level {
-    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-columns: minmax(34px, max-content) minmax(0, 1fr);
   }
   .tm-levels:not(.tm-levels-flat) .tm-radio {
     display: none;
@@ -604,7 +594,7 @@
 }
 .tm-level-on .tm-radio {
   border: 0;
-  background: radial-gradient(circle, var(--court) 0 4px, #ffffff 4.5px 6.5px, transparent 7px), var(--court);
+  background: radial-gradient(circle, var(--court) 0 4px, var(--tour-ink) 4.5px 6.5px, transparent 7px), var(--court);
 }
 .tm-level:focus-visible,
 .tm-day:focus-visible {
@@ -629,7 +619,6 @@
   min-width: 0;
 }
 .tm-vote-name {
-  font-family: var(--display);
   font-size: 1.02rem;
   font-weight: 800;
   line-height: 1.15;
@@ -717,7 +706,6 @@
 }
 .tm-month-title {
   margin: 0 0 8px 2px;
-  font-family: var(--display);
   font-size: 1.06rem;
   font-weight: 800;
   letter-spacing: -0.01em;
@@ -760,7 +748,7 @@ button.tm-day {
   cursor: pointer;
 }
 .tm-day.tm-off {
-  color: #9da39e;
+  color: color-mix(in srgb, var(--ink) 40%, transparent);
 }
 .tm-day.tm-past {
   color: var(--line-strong);
@@ -768,7 +756,7 @@ button.tm-day {
 .tm-day.tm-on {
   background: var(--court);
   border-color: var(--court);
-  color: #ffffff;
+  color: var(--tour-ink);
   font-weight: 750;
 }
 .tm-dot {
@@ -790,34 +778,30 @@ button.tm-day {
 }
 :root[data-theme='dark'] .tm-cal-pick .tm-day.tm-open,
 :root[data-theme='dark'] .tm-cal-counts .tm-day.tm-open {
-  border-color: #2f8f5d;
-  background: #13261b;
+  border-color: var(--primary-hi);
+  background: var(--tour-raised);
 }
 :root[data-theme='dark'] .tm-day.tm-on {
-  background: #23845a;
-  border-color: #23845a;
+  background: var(--primary);
+  border-color: var(--primary);
 }
-:root[data-theme='dark'] .tm-day.tm-off {
-  color: #6c746f;
-}
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tm-cal-pick .tm-day.tm-open,
   :root:not([data-theme='light']) .tm-cal-counts .tm-day.tm-open {
-    border-color: #2f8f5d;
-    background: #13261b;
+    border-color: var(--primary-hi);
+    background: var(--tour-raised);
   }
   :root:not([data-theme='light']) .tm-day.tm-on {
-    background: #23845a;
-    border-color: #23845a;
+    background: var(--primary);
+    border-color: var(--primary);
   }
-  :root:not([data-theme='light']) .tm-day.tm-off {
-    color: #6c746f;
-  }
+
 }
 /* The organizer's date list: the count under each day. */
 .tm-badge {
   margin-top: 3px;
-  font-size: 0.68rem;
+  font-size: max(11px, 0.68rem);
   font-weight: 700;
   line-height: 1;
 }
@@ -864,20 +848,19 @@ button.tm-day {
 }
 .tm-who-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-size: 1.05rem;
+  overflow-wrap: break-word;
 }
 .tm-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 3px 11px;
+  min-height: var(--chip-h);
+  padding: var(--chip-pad);
   border-radius: 999px;
   background: var(--fill);
-  font-size: 0.8rem;
-  font-weight: 800;
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -931,7 +914,7 @@ dialog.sheet.tc-tw-overlay .sheet-head {
   height: 9px;
   border-radius: 50%;
   background: var(--tc-lime);
-  box-shadow: 0 0 9px 1px rgb(216 240 59 / 55%);
+  box-shadow: 0 0 9px 1px color-mix(in srgb, var(--ball) 55%, transparent);
 }
 /* The ticket states (pictures 07 to 12, measured at 420 wide): the status line 3 px lower than piece 1's text, the name 11 px under it, the line
    under the name 2 px below it. */
@@ -973,14 +956,14 @@ dialog.sheet.tc-tw-overlay .sheet-head {
   font-size: 1.1rem;
   font-weight: 750;
   line-height: 1.2;
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-row-lime {
-  color: #f6d56a;
+  color: var(--gold);
 }
 .tc-row .tc-tw-num {
   border-color: rgb(255 255 255 / 40%);
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 /* Hold my spot and Just keep me on the list: two lines each, left aligned (mock 12). */
 .tc-choices {
@@ -1025,10 +1008,9 @@ dialog.sheet.tc-tw-overlay .sheet-head {
 }
 .tc-tw-overlay.sheet-has-back .sheet-head h2 {
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
   max-width: 62vw;
+  overflow-wrap: break-word;
 }
 .tc-tw-overlay .sheet-back {
   justify-self: start;
@@ -1073,16 +1055,16 @@ dialog.sheet.tc-tw-overlay {
   padding: 12px 14px calc(env(safe-area-inset-bottom) + 24px);
 }
 .tc-tw {
-  --tw-gold: #8a6410;
-  --tw-ring: #d5aa3e;
+  --tw-gold: var(--warn-fg);
+  --tw-ring: var(--gold-deep);
   gap: 12px;
 }
 :root[data-theme='dark'] .tc-tw {
-  --tw-gold: #f6d56a;
+  --tw-gold: var(--gold);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tc-tw {
-    --tw-gold: #f6d56a;
+    --tw-gold: var(--gold);
   }
 }
 /* Who's in and the waitlist (mocks 09, 11, 12). */
@@ -1112,13 +1094,13 @@ dialog.sheet.tc-tw-overlay {
 .tc-tw-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 21px;
-  padding: 2px 11px;
+  min-height: var(--chip-h);
+  padding: var(--chip-pad);
   border-radius: 999px;
   background: var(--warn-bg);
   color: var(--warn-fg);
-  font-size: 0.74rem;
-  font-weight: 800;
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1167,7 +1149,7 @@ dialog.sheet.tc-tw-overlay {
   height: 32px;
 }
 .tc-tw-ball-gold {
-  box-shadow: inset 0 0 0 3px var(--tw-ring, #d5aa3e);
+  box-shadow: inset 0 0 0 3px var(--tw-ring, var(--gold-deep));
 }
 .tc-tw-ball-open {
   border: 1.5px dashed var(--line-strong);
@@ -1186,10 +1168,9 @@ dialog.sheet.tc-tw-overlay {
 }
 .tc-tw-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-size: 1rem;
+  overflow-wrap: break-word;
 }
 .tc-tw-me .tc-tw-name {
   font-weight: 750;
@@ -1245,7 +1226,7 @@ dialog.sheet.tc-tw-overlay {
   border-radius: 50%;
 }
 .tc-punch-ring {
-  border: 2px dashed rgb(216 240 59 / 75%);
+  border: 2px dashed color-mix(in srgb, var(--ball) 75%, transparent);
   background: rgb(255 255 255 / 9%);
   animation: tc-ring 1.5s ease-out both;
 }
@@ -1267,23 +1248,23 @@ dialog.sheet.tc-tw-overlay {
   }
   50% {
     border-style: solid;
-    border-color: #d8f03b;
-    background: #07140e;
-    box-shadow: 0 0 14px 2px rgb(216 240 59 / 70%);
+    border-color: var(--ball);
+    background: var(--tour-bg-deep);
+    box-shadow: 0 0 14px 2px color-mix(in srgb, var(--ball) 70%, transparent);
     transform: scale(1.35) rotate(300deg);
   }
   66%,
   100% {
     opacity: 1;
     border-style: solid;
-    border-color: #d8f03b;
-    background: #07140e;
-    box-shadow: 0 0 9px 1px rgb(216 240 59 / 45%);
+    border-color: var(--ball);
+    background: var(--tour-bg-deep);
+    box-shadow: 0 0 9px 1px color-mix(in srgb, var(--ball) 45%, transparent);
     transform: scale(1) rotate(300deg);
   }
 }
 .tc-punch-wave {
-  border: 2px solid rgb(216 240 59 / 55%);
+  border: 2px solid color-mix(in srgb, var(--ball) 55%, transparent);
   opacity: 0;
   animation: tc-wave 1.5s ease-out both;
 }
@@ -1311,15 +1292,15 @@ dialog.sheet.tc-tw-overlay {
   height: 4px;
   margin: -2px 0 0 -2px;
   border-radius: 1px;
-  background: #d8f03b;
+  background: var(--ball);
   opacity: 0;
   animation: tc-dot 1.5s ease-out both;
 }
 .tc-punch-dot:nth-child(3n + 1) {
-  background: #6ef0b0;
+  background: var(--tour-mint);
 }
 .tc-punch-dot:nth-child(3n + 2) {
-  background: #f1f6e4;
+  background: var(--tour-ink);
   width: 3px;
   height: 3px;
 }
@@ -1399,12 +1380,12 @@ dialog.sheet.tc-tw-overlay {
    The same deep green in light and dark; a soft shadow under it in light only. */
 .tc.tc-hero {
   padding: 19px 17px 15px;
-  border-radius: 22px;
+  border-radius: var(--card-r);
   background:
-    radial-gradient(300px 150px at 100% 0%, #2c704c 0%, rgb(44 112 76 / 0%) 100%),
-    linear-gradient(180deg, #13261b 0%, #0b1410 100%);
+    radial-gradient(300px 150px at 100% 0%, var(--primary) 0%, transparent 100%),
+    linear-gradient(180deg, var(--tour-raised) 0%, var(--tour-bg-deep) 100%);
   box-shadow:
-    inset 0 0 0 1px #2f4a3a,
+    inset 0 0 0 1px var(--tour-line),
     0 10px 26px rgb(0 0 0 / 17%);
   -webkit-mask-image: none;
   mask-image: none;
@@ -1412,11 +1393,11 @@ dialog.sheet.tc-tw-overlay {
   container-type: inline-size;
 }
 :root[data-theme='dark'] .tc.tc-hero {
-  box-shadow: inset 0 0 0 1px #2f4a3a;
+  box-shadow: inset 0 0 0 1px var(--tour-line);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .tc.tc-hero {
-    box-shadow: inset 0 0 0 1px #2f4a3a;
+    box-shadow: inset 0 0 0 1px var(--tour-line);
   }
 }
 /* The big soft ring in the top right corner (cut by the card's edge). */
@@ -1428,14 +1409,14 @@ dialog.sheet.tc-tw-overlay {
   box-sizing: border-box;
   width: 128px;
   height: 128px;
-  border: 14px solid rgb(216 240 59 / 10.5%);
+  border: 14px solid color-mix(in srgb, var(--ball) 10.5%, transparent);
   border-radius: 50%;
   pointer-events: none;
 }
 .tc-hero .tc-kicker {
   gap: 9px;
   margin: 0;
-  font-size: min(0.78rem, calc(3.9cqw - 0.7px));
+  font-size: max(11px, min(0.78rem, calc(3.9cqw - 0.7px)));
   letter-spacing: 0.17em;
   line-height: 1.2;
   white-space: nowrap;
@@ -1457,7 +1438,7 @@ dialog.sheet.tc-tw-overlay {
 }
 .tc-hero .tc-format {
   margin: 6px 0 0;
-  font-size: min(0.97rem, 4.6cqw);
+  font-size: max(11px, min(0.97rem, 4.6cqw));
   white-space: nowrap;
   font-weight: 450;
   line-height: 1.3;
@@ -1524,9 +1505,9 @@ dialog.sheet.tc-tw-overlay {
 /* Gold = locked in: a thin dark gap, the gold ring and a soft steady glow (mocks 01 to 07). */
 .tc-gold {
   box-shadow:
-    0 0 0 1px #102018,
-    0 0 0 var(--tc-ring, 3.5px) #e6b83a,
-    0 0 0 var(--tc-ring-halo, 5.5px) rgb(230 184 58 / 27%);
+    0 0 0 1px var(--tour-bg-deep),
+    0 0 0 var(--tc-ring, 3.5px) var(--gold-deep),
+    0 0 0 var(--tc-ring-halo, 5.5px) color-mix(in srgb, var(--gold-deep) 27%, transparent);
 }
 /* Mocks 03 and 04: the ball pops (the site's own m-ball-pop, 240 ms) and the gold ring arrives with a big glow that eases to the steady ring. */
 @media (prefers-reduced-motion: no-preference) {
@@ -1540,30 +1521,30 @@ dialog.sheet.tc-tw-overlay {
 @keyframes tc-gold-in {
   0% {
     box-shadow:
-      0 0 0 1px rgb(16 32 24 / 0%),
-      0 0 0 1px rgb(230 184 58 / 0%),
-      0 0 0 1px rgb(230 184 58 / 0%),
-      0 0 0 0 rgb(246 210 92 / 0%);
+      0 0 0 1px rgb(0 0 0 / 0%),
+      0 0 0 1px transparent,
+      0 0 0 1px transparent,
+      0 0 0 0 transparent;
   }
   30% {
     box-shadow:
-      0 0 0 1px #102018,
-      0 0 0 var(--tc-ring, 3.5px) #f0c64a,
-      0 0 0 var(--tc-ring-halo, 5.5px) rgb(230 184 58 / 45%),
-      0 0 18px 7px rgb(246 210 92 / 55%);
+      0 0 0 1px var(--tour-bg-deep),
+      0 0 0 var(--tc-ring, 3.5px) var(--gold),
+      0 0 0 var(--tc-ring-halo, 5.5px) color-mix(in srgb, var(--gold-deep) 45%, transparent),
+      0 0 18px 7px color-mix(in srgb, var(--gold) 55%, transparent);
   }
   100% {
     box-shadow:
-      0 0 0 1px #102018,
-      0 0 0 var(--tc-ring, 3.5px) #e6b83a,
-      0 0 0 var(--tc-ring-halo, 5.5px) rgb(230 184 58 / 27%),
-      0 0 0 0 rgb(246 210 92 / 0%);
+      0 0 0 1px var(--tour-bg-deep),
+      0 0 0 var(--tc-ring, 3.5px) var(--gold-deep),
+      0 0 0 var(--tc-ring-halo, 5.5px) color-mix(in srgb, var(--gold-deep) 27%, transparent),
+      0 0 0 0 transparent;
   }
 }
 /* A narrow card (a 320 px phone): the top line's letters closer together, so the words stay big enough to read. */
 @container (max-width: 300px) {
   .tc-hero .tc-kicker {
-    font-size: min(0.78rem, calc(4.3cqw - 0.7px));
+    font-size: max(11px, min(0.78rem, calc(4.3cqw - 0.7px)));
     letter-spacing: 0.1em;
   }
 }
@@ -1590,7 +1571,7 @@ dialog.sheet.tc-tw-overlay {
 /* Zip 70 (picture 5): the end under the start ("to 10 PM", "to 9:30 PM"), a little smaller and softer; never cut at 320. */
 .tc-time-end {
   margin-top: 1px;
-  font-size: 0.64rem;
+  font-size: max(11px, 0.64rem);
   font-weight: 600;
   line-height: 1.1;
   white-space: nowrap;
@@ -1617,22 +1598,21 @@ dialog.sheet.tc-tw-overlay {
 }
 .tc-short .tc-title {
   margin: 7px 0 0;
-  font-size: min(1.6rem, 10.7cqw);
+  font-size: max(11px, min(1.6rem, 10.7cqw));
   line-height: 1.04;
   letter-spacing: -0.015em;
   text-transform: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 /* A long name (17 letters or more) may take two lines rather than shrink to nothing. */
 .tc-short .tc-title.tc-title-long {
-  font-size: min(1.3rem, 8.4cqw);
+  font-size: max(11px, min(1.3rem, 8.4cqw));
   white-space: normal;
 }
 .tc-short .tc-format {
   margin: 3px 0 0;
-  font-size: min(0.8rem, 5.5cqw);
+  font-size: max(11px, min(0.8rem, 5.5cqw));
   font-weight: 650;
   line-height: 1.25;
   white-space: nowrap;
@@ -1675,8 +1655,7 @@ dialog.sheet.tc-tw-overlay {
   padding: 0 19px;
   border-radius: 14px;
   font-size: 0.95rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 /* Edit and Drop out: plain underlined words, far apart (about 22 px between the tap areas), each tap area at least 44 px tall (Zip 77). */
 .tc-bar-links {
@@ -1701,10 +1680,9 @@ dialog.sheet.tc-tw-overlay {
   font-size: 0.9rem;
   line-height: 1.25;
   text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
   color: var(--tc-sub);
+  overflow-wrap: break-word;
 }
 .tc-aside-lime {
   color: var(--tc-lime);
@@ -1894,13 +1872,13 @@ dialog.sheet.tc-tw-overlay {
   width: 112px;
 }
 .tc-wh-rim-gold {
-  fill: #f0c94a;
+  fill: var(--gold);
 }
 .tc-wh-rim {
-  fill: #12261b;
+  fill: var(--tour-raised);
 }
 .tc-wh-dot {
-  fill: #f0c94a;
+  fill: var(--gold);
 }
 .tc-wh-turn {
   transform-box: view-box;
@@ -1915,11 +1893,11 @@ dialog.sheet.tc-tw-overlay {
   transition: opacity 0.35s ease;
 }
 .tc-wh-line {
-  stroke: #ffffff;
+  stroke: var(--tour-ink);
   stroke-width: 3;
 }
 .tc-wh-text {
-  fill: #ffffff;
+  fill: var(--tour-ink);
   font-family: var(--body);
   font-weight: 800;
   letter-spacing: 0.01em;
@@ -1935,13 +1913,13 @@ dialog.sheet.tc-tw-overlay {
   filter: brightness(1.08);
 }
 .tc-wh-hub {
-  fill: #f5cf5a;
-  stroke: #ffffff;
+  fill: var(--gold);
+  stroke: var(--tour-ink);
   stroke-width: 3;
 }
 .tc-wh-arrow {
-  fill: #ffffff;
-  stroke: #12261b;
+  fill: var(--tour-ink);
+  stroke: var(--tour-raised);
   stroke-width: 3;
   stroke-linejoin: round;
 }

@@ -596,7 +596,7 @@ async function main() {
     await post(areq, `/api/admin/sessions/${C.id}/court-status`, { status: 'waitlist' });
     const { ctx, page } = await openAdmin();
     await tab(page, 'History');
-    await page.locator('.chip-btn', { hasText: 'Activity' }).click();
+    await page.locator('.history-head .segmented button', { hasText: 'Activity' }).click();
     await page.locator('.activity-list li').first().waitFor();
     const rows = await page.locator('.activity-list li').evaluateAll((els) => els.map((e) => ({ text: e.querySelector('.a-text').textContent, other: e.getAttribute('data-by-other') === 'yes' })));
     assert(rows.some((r) => r.other && /said I'm in|dropped out/.test(r.text)), 'a player\'s tap is highlighted');
@@ -611,7 +611,7 @@ async function main() {
     // Off: no highlight.
     const off = await openAdmin({ r2: false });
     await tab(off.page, 'History');
-    await off.page.locator('.chip-btn', { hasText: 'Activity' }).click();
+    await off.page.locator('.history-head .segmented button', { hasText: 'Activity' }).click();
     await off.page.locator('.activity-list li').first().waitFor();
     assert((await off.page.locator('.activity-list li[data-by-other]').count()) === 0, 'off: nothing highlighted');
     await off.ctx.close();
@@ -708,17 +708,17 @@ async function main() {
   await check('F3 History: Activity first and the default, Sessions second (round 2); off: Sessions first as before', async () => {
     const { ctx, page } = await openAdmin();
     await tab(page, 'History');
-    const chips = await page.locator('.history-head .chip-btn').allInnerTexts();
+    const chips = await page.locator('.history-head .segmented button').allInnerTexts();
     assert(chips.join('|') === 'Activity|Sessions', `order ${chips}`);
-    assert((await page.locator('.history-head .chip-btn[aria-pressed="true"]').innerText()) === 'Activity', 'Activity is selected');
+    assert((await page.locator('.history-head .segmented button[aria-pressed="true"]').innerText()) === 'Activity', 'Activity is selected');
     assert((await page.locator('.activity-list').count()) === 1, 'the activity list is showing');
-    await page.locator('.history-head .chip-btn', { hasText: 'Sessions' }).click();
+    await page.locator('.history-head .segmented button', { hasText: 'Sessions' }).click();
     assert((await page.locator('.activity-list').count()) === 0, 'Sessions opens when tapped');
     await ctx.close();
     const off = await openAdmin({ r2: false });
     await tab(off.page, 'History');
-    assert((await off.page.locator('.history-head .chip-btn').allInnerTexts()).join('|') === 'Sessions|Activity', 'off: old order');
-    assert((await off.page.locator('.history-head .chip-btn[aria-pressed="true"]').innerText()) === 'Sessions', 'off: Sessions first');
+    assert((await off.page.locator('.history-head .segmented button').allInnerTexts()).join('|') === 'Sessions|Activity', 'off: old order');
+    assert((await off.page.locator('.history-head .segmented button[aria-pressed="true"]').innerText()) === 'Sessions', 'off: Sessions first');
     await off.ctx.close();
   });
 

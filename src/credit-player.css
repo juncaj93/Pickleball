@@ -68,7 +68,6 @@
   align-items: flex-end;
   justify-content: center;
   line-height: 1;
-  font-family: var(--display);
   text-align: right;
   cursor: pointer;
 }
@@ -84,7 +83,7 @@
   color: var(--accent-text);
 }
 .credit-chip.pending .cc-label {
-  color: var(--warn-fg, #9a6700);
+  color: var(--warn-fg, var(--warn-fg));
 }
 .credit-chip .cc-amount {
   font-size: 1.15rem;
@@ -128,7 +127,6 @@
 
 .credit-sheet .credit-big {
   margin: 0;
-  font-family: var(--display);
   font-size: 1.6rem;
 }
 .credit-pending {

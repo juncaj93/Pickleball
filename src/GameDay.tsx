@@ -220,9 +220,6 @@ export function CourtRow({ value, onChange, stacked }: { value: number | null; o
         <span className={stacked ? 'sr-only' : 'gd-court-label'}>Court</span>
         <span className={`gd-court-value${value === null ? ' unset' : ''}`}>
           {value === null ? 'Not set' : `Court ${value}`}
-          <svg className="gd-chev" viewBox="0 0 9 14" aria-hidden="true">
-            <path d="M1.5 1.5L7 7l-5.5 5.5" />
-          </svg>
         </span>
       </button>
       <CourtMap

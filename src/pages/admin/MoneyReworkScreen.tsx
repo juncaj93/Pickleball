@@ -9,7 +9,7 @@ import { zonedTimeToUtc } from '../../../shared/time';
 import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { minus, monthName } from './MonthlyMoney';
-import { Chevron, currentMonth, GameBody } from './MoneyV2';
+import { currentMonth, GameBody } from './MoneyV2';
 import { ReworkRemind } from './MoneyReworkParts';
 import { unpaidRows, owedCentsOf } from './moneyList';
 import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, monthRows, type RwGame, splitGames } from './moneyRework';
@@ -276,9 +276,6 @@ function FoldList({ ctx, id, title, games, sameDay }: { ctx: AdminCtx; id: strin
     <section className={`card mrw-fold${open ? ' open' : ''}`} data-fold={id}>
       <button type="button" className="mrw-fold-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span>{title}</span>
-        <span className="mrw-fold-chev" aria-hidden="true">
-          <Chevron />
-        </span>
       </button>
       {open && (
         <ul className="mrw-fold-rows">

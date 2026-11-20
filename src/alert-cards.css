@@ -11,105 +11,45 @@
 
 html[data-alert-cards] {
   /* The game card's own surface (src/player-cards.css --pc-card, --pc-line, --pc-ink, --pc-muted, --pc-ring). */
-  --ac-card: #ffffff;
-  --ac-line: #dad9cf;
-  --ac-title: #18241d;
-  --ac-sub: #4a4f46;
-  --ac-ring: #18241d;
-  --ac-x-bg: #ecece8;
-  --ac-shadow: 0 1px 2px rgb(24 36 29 / 5%);
-  --ac-green-tint: #e4f2ea;
-  --ac-green-ink: #226b4b;
-  --ac-green-fill: #226b4b;
-  --ac-green-fill-ink: #ffffff;
-  --ac-amber-tint: #fcf1db;
-  --ac-amber-ink: #8a5a00;
-  --ac-amber-fill: #8a5a00;
-  --ac-amber-fill-ink: #ffffff;
-  --ac-blue-tint: #e9ecf9;
-  --ac-blue-ink: #2a3fb0;
-  --ac-blue-fill: #2a3fb0;
-  --ac-blue-fill-ink: #ffffff;
-  --ac-purple-tint: #efeaf8;
-  --ac-purple-ink: #5a3fa0;
-  --ac-purple-fill: #6a4fb0;
-  --ac-purple-fill-ink: #ffffff;
-  --ac-gray-tint: #ecece8;
-  --ac-gray-ink: #4a4e47;
-  --ac-gray-fill: #4a4e47;
-  --ac-gray-fill-ink: #ffffff;
-  --ac-red-tint: #fbe9e6;
-  --ac-red-ink: #b02a1f;
-  --ac-red-fill: #b02a1f;
-  --ac-red-fill-ink: #ffffff;
+  --ac-card: var(--surface);
+  --ac-line: var(--line);
+  --ac-title: var(--ink);
+  --ac-sub: var(--ink-2);
+  --ac-ring: var(--ink);
+  --ac-x-bg: var(--fill);
+  --ac-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent);
+  --ac-green-tint: var(--ok-bg);
+  --ac-green-ink: var(--ok-fg);
+  --ac-green-fill: var(--primary);
+  --ac-green-fill-ink: var(--primary-ink);
+  --ac-amber-tint: var(--warn-bg);
+  --ac-amber-ink: var(--warn-fg);
+  --ac-amber-fill: var(--primary);
+  --ac-amber-fill-ink: var(--primary-ink);
+  --ac-blue-tint: var(--info-bg);
+  --ac-blue-ink: var(--info-fg);
+  --ac-blue-fill: var(--primary);
+  --ac-blue-fill-ink: var(--primary-ink);
+  --ac-purple-tint: var(--purple-bg);
+  --ac-purple-ink: var(--purple-fg);
+  --ac-purple-fill: var(--primary);
+  --ac-purple-fill-ink: var(--primary-ink);
+  --ac-gray-tint: var(--fill);
+  --ac-gray-ink: var(--ink-2);
+  --ac-gray-fill: var(--primary);
+  --ac-gray-fill-ink: var(--primary-ink);
+  --ac-red-tint: var(--danger-bg);
+  --ac-red-ink: var(--danger-fg);
+  --ac-red-fill: var(--primary);
+  --ac-red-fill-ink: var(--primary-ink);
 }
 @media (prefers-color-scheme: dark) {
   html[data-alert-cards]:not([data-theme='light']) {
-    --ac-card: #18221c;
-    --ac-line: #2b3a31;
-    --ac-title: #f1f3ec;
-    --ac-sub: #b8bfb2;
-    --ac-ring: #d5dacf;
-    --ac-x-bg: #26302a;
     --ac-shadow: none;
-    --ac-green-tint: #1a2f24;
-    --ac-green-ink: #8be0b3;
-    --ac-green-fill: #7fd9a3;
-    --ac-green-fill-ink: #0b140f;
-    --ac-amber-tint: #2f2716;
-    --ac-amber-ink: #f0c26a;
-    --ac-amber-fill: #f0b84a;
-    --ac-amber-fill-ink: #2a1c00;
-    --ac-blue-tint: #1f2440;
-    --ac-blue-ink: #a5b5ee;
-    --ac-blue-fill: #7f94e6;
-    --ac-blue-fill-ink: #10153a;
-    --ac-purple-tint: #2a2440;
-    --ac-purple-ink: #c4afef;
-    --ac-purple-fill: #bba3f0;
-    --ac-purple-fill-ink: #1d1433;
-    --ac-gray-tint: #262b28;
-    --ac-gray-ink: #c3c8c0;
-    --ac-gray-fill: #b3b9b5;
-    --ac-gray-fill-ink: #141815;
-    --ac-red-tint: #3a2422;
-    --ac-red-ink: #ff8f7e;
-    --ac-red-fill: #ff8f7e;
-    --ac-red-fill-ink: #2a0f0b;
   }
 }
 html[data-alert-cards][data-theme='dark'] {
-  --ac-card: #18221c;
-  --ac-line: #2b3a31;
-  --ac-title: #f1f3ec;
-  --ac-sub: #b8bfb2;
-  --ac-ring: #d5dacf;
-  --ac-x-bg: #26302a;
   --ac-shadow: none;
-  --ac-green-tint: #1a2f24;
-  --ac-green-ink: #8be0b3;
-  --ac-green-fill: #7fd9a3;
-  --ac-green-fill-ink: #0b140f;
-  --ac-amber-tint: #2f2716;
-  --ac-amber-ink: #f0c26a;
-  --ac-amber-fill: #f0b84a;
-  --ac-amber-fill-ink: #2a1c00;
-  --ac-blue-tint: #1f2440;
-  --ac-blue-ink: #a5b5ee;
-  --ac-blue-fill: #7f94e6;
-  --ac-blue-fill-ink: #10153a;
-  --ac-purple-tint: #2a2440;
-  --ac-purple-ink: #c4afef;
-  --ac-purple-fill: #bba3f0;
-  --ac-purple-fill-ink: #1d1433;
-  --ac-gray-tint: #262b28;
-  --ac-gray-ink: #c3c8c0;
-  --ac-gray-fill: #b3b9b5;
-  --ac-gray-fill-ink: #141815;
-  --ac-red-tint: #3a2422;
-  --ac-red-ink: #ff8f7e;
-  --ac-red-fill: #ff8f7e;
-  --ac-red-fill-ink: #2a0f0b;
 }
 
 /* Each tone sets the four colors its badge, buttons and links read. A button can carry its own tone (data-ac-tone). */
@@ -165,7 +105,7 @@ html[data-alert-cards] .ac {
   margin: 0;
   padding: 12px;
   border: 1px solid var(--ac-line);
-  border-radius: 18px;
+  border-radius: var(--card-r);
   background: var(--ac-card);
   color: var(--ac-title);
   box-shadow: var(--ac-shadow);
@@ -272,7 +212,7 @@ html[data-alert-cards] .ac-actions > .ac-btn {
   min-width: fit-content;
   max-width: 100%;
   height: auto;
-  min-height: 38px;
+  min-height: var(--btn-h-sm);
   padding: 5px 8px;
   font-size: 14.5px;
   line-height: 1.15;
@@ -286,12 +226,12 @@ html[data-alert-cards] .ac-btn {
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
-  height: 38px;
+  height: var(--btn-h-sm);
   min-width: 56px;
   margin: 0;
   padding: 0 14px;
   border: 1.5px solid var(--t-fill);
-  border-radius: 12px;
+  border-radius: var(--btn-r);
   background: var(--t-fill);
   color: var(--t-fill-ink);
   font-family: var(--body);
@@ -309,10 +249,15 @@ html[data-alert-cards] .ac-btn::after {
   position: absolute;
   inset: -3px 0;
 }
+/* Zip 78 (one look): a second choice is the site's neutral secondary button (gray fill, ink words), whatever the card's tone. Only a cancel
+   keeps red words (red: cancel only). The tone stays on the badge. */
 html[data-alert-cards] .ac-btn.ac-out {
-  background: transparent;
-  color: var(--t-ink);
-  border-color: currentColor;
+  background: var(--fill);
+  color: var(--ink);
+  border-color: var(--fill);
+}
+html[data-alert-cards] .ac-btn.ac-out[data-ac-tone='red'] {
+  color: var(--danger-fg);
 }
 html[data-alert-cards] .ac-btn:disabled,
 html[data-alert-cards] .ac-btn[aria-disabled='true'] {
@@ -469,7 +414,7 @@ html[data-alert-cards] .pop.toast {
   color: var(--ac-title);
   border: 1px solid var(--ac-line);
   border-radius: 18px;
-  box-shadow: 0 10px 28px rgb(10 20 15 / 20%);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 20%);
   font-family: var(--body);
   --t-tint: var(--ac-green-tint);
   --t-ink: var(--ac-green-ink);
@@ -550,7 +495,7 @@ html[data-alert-cards] .cashout-prompt.ac {
   background: var(--ac-card);
   border: 1px solid var(--ac-line);
   color: var(--ac-title);
-  box-shadow: 0 12px 30px rgb(10 20 15 / 24%);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 24%);
 }
 @media (prefers-color-scheme: dark) {
   html[data-alert-cards]:not([data-theme='light']) .cashout-prompt.ac {
@@ -705,8 +650,8 @@ html[data-alert-cards] .ac.ac-filled .ac-icon {
 }
 /* The amber badge is the bright amber with a dark stopwatch in both themes (picture pair-3). */
 html[data-alert-cards] .ac.ac-filled.ac-amber .ac-icon {
-  background: #f0b84a;
-  color: #2a1c00;
+  background: var(--warn-edge);
+  color: var(--ball-ink);
 }
 
 /* ---------- Zip 16: the dark-mode "in-between" look for every alert card (aftergame_mock.html, the .ph.dark.mid rules) ----------
@@ -742,12 +687,12 @@ html[data-alert-cards] [data-ac-tone='red'] {
 @media (prefers-color-scheme: dark) {
   html[data-alert-cards]:not([data-theme='light']) {
     /* The mock's dark line colors (--gline, --aline, --bline, --nline); purple and red follow the same step (the mock has none). */
-    --ac-green-line: #2b5a40;
-    --ac-amber-line: #5a4720;
-    --ac-blue-line: #363f78;
-    --ac-purple-line: #4a3d78;
-    --ac-gray-line: #3a403b;
-    --ac-red-line: #6a3430;
+    --ac-green-line: var(--primary);
+    --ac-amber-line: var(--warn-edge);
+    --ac-blue-line: var(--info-edge);
+    --ac-purple-line: var(--purple-edge);
+    --ac-gray-line: var(--line);
+    --ac-red-line: var(--danger-edge);
   }
   html[data-alert-cards]:not([data-theme='light']) .ac,
   html[data-alert-cards]:not([data-theme='light']) .pop.toast {
@@ -759,20 +704,18 @@ html[data-alert-cards] [data-ac-tone='red'] {
   html[data-alert-cards]:not([data-theme='light']) .pop.toast .toast-icon {
     background: color-mix(in srgb, var(--t-ink) 12%, transparent);
   }
-  html[data-alert-cards]:not([data-theme='light']) .pop.toast {
-    --t-line: var(--ac-green-line);
-  }
+
   html[data-alert-cards]:not([data-theme='light']) .pop.toast.pop-error {
     --t-line: var(--ac-red-line);
   }
 }
 html[data-alert-cards][data-theme='dark'] {
-  --ac-green-line: #2b5a40;
-  --ac-amber-line: #5a4720;
-  --ac-blue-line: #363f78;
-  --ac-purple-line: #4a3d78;
-  --ac-gray-line: #3a403b;
-  --ac-red-line: #6a3430;
+  --ac-green-line: var(--primary);
+  --ac-amber-line: var(--warn-edge);
+  --ac-blue-line: var(--info-edge);
+  --ac-purple-line: var(--purple-edge);
+  --ac-gray-line: var(--line);
+  --ac-red-line: var(--danger-edge);
 }
 html[data-alert-cards][data-theme='dark'] .ac,
 html[data-alert-cards][data-theme='dark'] .pop.toast {
@@ -784,9 +727,7 @@ html[data-alert-cards][data-theme='dark'] .ac .ac-icon,
 html[data-alert-cards][data-theme='dark'] .pop.toast .toast-icon {
   background: color-mix(in srgb, var(--t-ink) 12%, transparent);
 }
-html[data-alert-cards][data-theme='dark'] .pop.toast {
-  --t-line: var(--ac-green-line);
-}
+
 html[data-alert-cards][data-theme='dark'] .pop.toast.pop-error {
   --t-line: var(--ac-red-line);
 }

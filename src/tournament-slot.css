@@ -3,16 +3,17 @@
    in the card's deep greens. Zip 64: the short ticket is about 176 to 184 px tall at 420 wide. */
 .tc-shell {
   min-height: 176px;
-  border: 1px solid #24503a;
-  border-radius: 22px;
-  background-color: #0d2118;
-  --pc-skel-a: #10251b;
-  --pc-skel-b: #1a3a2a;
+  border: 1px solid var(--tour-line);
+  border-radius: var(--card-r);
+  background-color: var(--tour-bg);
+  /* Zip 78: the sweep runs from the card's green to its line green, far enough apart to see on the dark card (light and dark mode alike). */
+  --pc-skel-a: var(--tour-bg);
+  --pc-skel-b: var(--tour-line);
 }
 .tc-shell-strip {
   margin-top: 116px;
 }
 .tc-shell.skel {
   display: block;
-  border-radius: 22px;
+  border-radius: var(--card-r);
 }

@@ -4,62 +4,30 @@
  * Every text and button color pair here is the site's own pair (src/alert-cards.css, src/mark-paid.css), at least 4.5:1. */
 
 .ps {
-  --ps-card: #ffffff;
-  --ps-line: #dad9cf;
-  --ps-ink: #18241d;
-  --ps-sub: #5b625d;
-  --ps-notice: #ecebe4;
-  --ps-green-tint: #e4f2ea;
-  --ps-green-ink: #226b4b;
-  --ps-green-fill: #226b4b;
-  --ps-green-fill-ink: #ffffff;
-  --ps-amber: #8a5a00;
-  --ps-amber-line: #b8780f;
-  --ps-blue: #2a3fb0;
-  --ps-blue-line: #2a3fb0;
-  --ps-purple-fill: #6a4fb0;
-  --ps-purple-fill-ink: #ffffff;
-  --ps-danger: #b3261e;
-  --ps-pop-shadow: 0 10px 28px rgb(10 20 15 / 20%);
+  --ps-card: var(--surface);
+  --ps-line: var(--line);
+  --ps-ink: var(--ink);
+  --ps-sub: var(--ink-2);
+  --ps-notice: var(--fill);
+  --ps-green-tint: var(--ok-bg);
+  --ps-green-ink: var(--ok-fg);
+  --ps-green-fill: var(--primary);
+  --ps-green-fill-ink: var(--primary-ink);
+  --ps-amber: var(--warn-fg);
+  --ps-amber-line: var(--warn-edge);
+  --ps-blue: var(--info-fg);
+  --ps-blue-line: var(--info-edge);
+  --ps-purple-fill: var(--fill);
+  --ps-purple-fill-ink: var(--ink);
+  --ps-danger: var(--danger-fg);
+  --ps-pop-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 20%, transparent);
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme='light']) .ps {
-    --ps-card: #18221c;
-    --ps-line: #2b3a31;
-    --ps-ink: #f1f3ec;
-    --ps-sub: #a4ada7;
-    --ps-notice: #263029;
-    --ps-green-tint: #1a2f24;
-    --ps-green-ink: #8be0b3;
-    --ps-green-fill: #7fd9a3;
-    --ps-green-fill-ink: #0b140f;
-    --ps-amber: #f0c26a;
-    --ps-amber-line: #e2a73c;
-    --ps-blue: #a5b5ee;
-    --ps-blue-line: #7f94e6;
-    --ps-purple-fill: #bba3f0;
-    --ps-purple-fill-ink: #1d1433;
-    --ps-danger: #ff9b92;
     --ps-pop-shadow: 0 10px 28px rgb(0 0 0 / 50%);
   }
 }
 html[data-theme='dark'] .ps {
-  --ps-card: #18221c;
-  --ps-line: #2b3a31;
-  --ps-ink: #f1f3ec;
-  --ps-sub: #a4ada7;
-  --ps-notice: #263029;
-  --ps-green-tint: #1a2f24;
-  --ps-green-ink: #8be0b3;
-  --ps-green-fill: #7fd9a3;
-  --ps-green-fill-ink: #0b140f;
-  --ps-amber: #f0c26a;
-  --ps-amber-line: #e2a73c;
-  --ps-blue: #a5b5ee;
-  --ps-blue-line: #7f94e6;
-  --ps-purple-fill: #bba3f0;
-  --ps-purple-fill-ink: #1d1433;
-  --ps-danger: #ff9b92;
   --ps-pop-shadow: 0 10px 28px rgb(0 0 0 / 50%);
 }
 
@@ -150,7 +118,7 @@ html[data-theme='dark'] .ps {
   margin: 0;
   padding: 0;
   border: 1px solid var(--ps-line);
-  border-radius: 18px;
+  border-radius: var(--card-r);
   background: var(--ps-card);
 }
 .ps-row {
@@ -215,11 +183,11 @@ html[data-theme='dark'] .ps {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: var(--chip-h);
+  padding: var(--chip-pad);
   border-radius: 999px;
-  font-size: 0.9rem;
-  font-weight: 800;
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
   white-space: nowrap;
   background: var(--ps-notice);
   color: var(--ps-sub);
@@ -233,7 +201,7 @@ html[data-theme='dark'] .ps {
   color: var(--ps-amber);
 }
 
-/* Mark paid (amber outline) and Request (blue outline): the Home money card's own buttons, 34 px to see and 44 px to tap. */
+/* Zip 78 (one look): Mark paid, Request and Text are the site's small secondary button everywhere: 44 px, gray fill, ink words. */
 .ps-btn,
 .ps-acts .sc-req {
   position: relative;
@@ -242,16 +210,17 @@ html[data-theme='dark'] .ps {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  height: 34px;
+  height: var(--btn-h-sm);
   min-width: 0;
   margin: 0;
   padding: 0 10px;
-  border: 1.5px solid;
-  border-radius: 10px;
-  background: transparent;
+  border: 1.5px solid var(--fill);
+  border-radius: var(--btn-r);
+  background: var(--fill);
+  color: var(--ink);
   font-family: var(--body);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
@@ -264,19 +233,8 @@ html[data-theme='dark'] .ps {
   position: absolute;
   inset: -5px -2px;
 }
-.ps-btn.ps-amber {
-  color: var(--ps-amber);
-  border-color: var(--ps-amber-line);
-}
 .ps-acts .sc-req {
   min-width: 0;
-  height: 34px;
-  color: var(--ps-blue);
-  border-color: var(--ps-blue-line);
-}
-.ps-acts .sc-req.sc-req-text {
-  color: var(--ps-blue);
-  border-color: var(--ps-blue-line);
 }
 .ps-acts .mp-none {
   font-size: 12px;

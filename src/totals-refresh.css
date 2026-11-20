@@ -3,8 +3,8 @@
    with the words. Numbers use the site's body font (the one the Games rows, the balance card and the date tiles use) with equal-width digits.
    Card, ink, line and muted colors are the site's tokens; the two accents are the mock's. */
 .tr {
-  --tr-sf: #8a6a00;
-  --tr-pj: #4a5f8f;
+  --tr-sf: var(--warn-fg);
+  --tr-pj: var(--info-fg);
   --tr-rt: var(--tok-paid-fg);
   display: flex;
   flex-direction: column;
@@ -12,22 +12,12 @@
   font-family: var(--body);
   font-variant-numeric: tabular-nums;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tr {
-    --tr-sf: #f0cf55;
-    --tr-pj: #9db3e6;
-  }
-}
-:root[data-theme='dark'] .tr {
-  --tr-sf: #f0cf55;
-  --tr-pj: #9db3e6;
-}
 
 .tr-card {
   --acc: var(--tr-sf);
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--acc) 45%, var(--line));
-  border-radius: 18px;
+  border-radius: var(--card-r);
   overflow: hidden;
   color: var(--ink);
 }
@@ -149,11 +139,11 @@
   color: var(--tok-paid-fg);
 }
 
-/* Month by month: one collapsed card, the label on the left and a chevron on the right. */
+/* Month by month: one collapsed card, the label on the left (Zip 78: no chevron; a tap opens it, a second tap folds it). */
 .tr-mm {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--card-r);
   overflow: hidden;
   color: var(--ink);
 }
@@ -164,7 +154,7 @@
   justify-content: space-between;
   box-sizing: border-box;
   width: 100%;
-  min-height: 2.625rem;
+  min-height: 2.75rem;
   padding: 0 1rem;
   border: 0;
   background: transparent;
@@ -174,19 +164,6 @@
 }
 .tr-t.plain {
   color: var(--ink-2);
-}
-.tr-chev {
-  flex: none;
-  width: 14px;
-  height: 9px;
-  stroke: var(--ink-2);
-  fill: none;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.tr-mm.open .tr-chev {
-  transform: rotate(180deg);
 }
 .tr-mm-rows {
   list-style: none;

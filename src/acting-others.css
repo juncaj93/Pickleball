@@ -10,7 +10,7 @@
   margin: 0;
   padding: 12px 14px 4px;
   border: 1px solid var(--ac-line, var(--line-strong));
-  border-radius: 18px;
+  border-radius: var(--card-r);
   background: var(--ac-card, var(--surface));
   color: var(--ac-title, var(--ink));
   box-shadow: var(--ac-shadow, none);

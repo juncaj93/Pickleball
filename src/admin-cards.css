@@ -21,7 +21,7 @@
   /* Zip 29: the game's length under the time: small, regular weight, a tad gray, clearly quieter than the time. */
   text-align: center;
   font-family: var(--body, inherit);
-  font-size: min(0.72rem, 18cqw);
+  font-size: max(11px, min(0.72rem, 18cqw));
   font-weight: 500;
   line-height: 1.15;
   letter-spacing: 0;
@@ -30,22 +30,15 @@
 }
 .scard-time {
   text-align: center;
-  font-family: var(--display);
   font-weight: 800;
   white-space: nowrap;
   color: var(--ink);
-  font-size: min(0.9rem, 21cqw);
+  font-size: max(11px, min(0.9rem, 21cqw));
   line-height: 1.1;
 }
 
 /* ---- The court switch ---- */
 .court-switch {
-  --sw-notbooked-bg: #eaa31a;
-  --sw-notbooked-fg: #2a1a00;
-  --sw-wait-bg: #1c4f94;
-  --sw-wait-fg: #ffffff;
-  --sw-booked-bg: #1e6a48;
-  --sw-booked-fg: #ffffff;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2px;
@@ -54,24 +47,6 @@
   background: var(--fill);
   flex: 1 1 auto;
   min-width: 0;
-}
-:root[data-theme='dark'] .court-switch {
-  --sw-notbooked-bg: #e0a83e;
-  --sw-notbooked-fg: #1c1300;
-  --sw-wait-bg: #6fa3ea;
-  --sw-wait-fg: #0a1424;
-  --sw-booked-bg: #4cc27a;
-  --sw-booked-fg: #06200f;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .court-switch {
-    --sw-notbooked-bg: #e0a83e;
-    --sw-notbooked-fg: #1c1300;
-    --sw-wait-bg: #6fa3ea;
-    --sw-wait-fg: #0a1424;
-    --sw-booked-bg: #4cc27a;
-    --sw-booked-fg: #06200f;
-  }
 }
 .court-switch button {
   min-height: 44px;

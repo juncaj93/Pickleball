@@ -3,22 +3,10 @@
    classes). */
 
 .tc-gd {
-  --tc-gd-done: #e3f3ea;
-  --tc-gd-next: #e5ecfa;
-  --tc-gd-me: #e3f0e7;
+  --tc-gd-done: var(--ok-bg);
+  --tc-gd-next: var(--info-bg);
+  --tc-gd-me: var(--accent-soft);
   gap: 14px;
-}
-:root[data-theme='dark'] .tc-gd {
-  --tc-gd-done: #1a3125;
-  --tc-gd-next: #1f3b2c;
-  --tc-gd-me: #1d3628;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tc-gd {
-    --tc-gd-done: #1a3125;
-    --tc-gd-next: #1f3b2c;
-    --tc-gd-me: #1d3628;
-  }
 }
 
 /* The short card on game night: the ticket's dark green, the name, the lime "GAME 1 OF 3", a slim bar. */
@@ -27,12 +15,12 @@
   flex-direction: column;
   gap: 16px;
   padding: 20px 18px 20px;
-  border-radius: 22px;
-  color: #ffffff;
+  border-radius: var(--card-r);
+  color: var(--tour-ink);
   background:
-    radial-gradient(120% 90% at 18% 0%, #163a2a 0%, rgb(22 58 42 / 0%) 60%),
-    linear-gradient(180deg, #11291e 0%, #0d2118 100%);
-  box-shadow: inset 0 0 0 1px #24503a;
+    radial-gradient(120% 90% at 18% 0%, var(--tour-raised) 0%, transparent 60%),
+    linear-gradient(180deg, var(--tour-bg-top) 0%, var(--tour-bg) 100%);
+  box-shadow: inset 0 0 0 1px var(--tour-line);
 }
 .tc-gd-hero-top {
   display: flex;
@@ -45,14 +33,13 @@
 .tc-gd-hero-name {
   margin: 0;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   font-family: var(--body);
   font-size: 1.35rem;
   font-weight: 800;
   line-height: 1.15;
-  color: #ffffff;
+  color: var(--tour-ink);
+  overflow-wrap: break-word;
 }
 .tc-gd-kicker {
   flex: none;
@@ -60,7 +47,7 @@
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: #d8f03b;
+  color: var(--ball);
   white-space: nowrap;
 }
 .tc-gd-bar {
@@ -74,19 +61,19 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #d8f03b;
+  background: var(--ball);
 }
 
 /* Up next (mock 17): the bright green card, Enter score in lime (Zip 72: one button); after a loss the button turns clear white. */
 .tc-gd-next {
   padding: 18px 16px 16px;
-  border-radius: 22px;
-  color: #ffffff;
-  /* Zip 77 (the 🎾75 audit): a little darker at the top so the lime kicker and "VS" (4.7:1) and the white lines pass WCAG AA. */
-  background: linear-gradient(180deg, #1f7049 0%, #195a3a 100%);
+  border-radius: var(--card-r);
+  color: var(--tour-ink);
+  /* Zip 77 (the 🎾75 audit): a little darker at the top so the lime kicker and "VS" (4.7:1) and the white lines pass WCAG AA. Zip 78: named. */
+  background: linear-gradient(180deg, var(--tour-green-top) 0%, var(--tour-green) 100%);
   box-shadow:
-    0 0 0 1px rgb(110 240 176 / 18%),
-    0 10px 30px rgb(43 140 91 / 28%);
+    0 0 0 1px color-mix(in srgb, var(--tour-mint) 18%, transparent),
+    0 10px 30px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 .tc-gd-next-kicker {
   margin: 0;
@@ -94,7 +81,7 @@
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: #d8f03b;
+  color: var(--ball);
 }
 .tc-gd-next-title {
   margin: 6px 0 0;
@@ -102,7 +89,7 @@
   font-size: 1.45rem;
   font-weight: 800;
   line-height: 1.15;
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-gd-next-sub {
   margin: 4px 0 0;
@@ -127,13 +114,15 @@
   font-weight: 700;
   cursor: pointer;
 }
+/* Zip 78 (one look): Enter score sits on the green Up next card, so the filled button is white with green words (a green button would vanish
+   into the card); never ball yellow. */
 .tc-gd-wewon {
-  background: #d8f03b;
-  color: #1a2410;
+  background: var(--tour-ink);
+  color: var(--primary);
 }
 .tc-gd-theywon {
   background: rgb(255 255 255 / 18%);
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-gd-wewon:disabled,
 .tc-gd-theywon:disabled {
@@ -146,7 +135,7 @@
   align-items: center;
   gap: 14px;
   padding: 14px 14px 14px 16px;
-  border-radius: 20px;
+  border-radius: var(--card-r);
   background: var(--tc-gd-me);
   box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -163,7 +152,7 @@
   width: 20px;
   height: 20px;
   fill: none;
-  stroke: #ffffff;
+  stroke: var(--tour-ink);
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -243,7 +232,7 @@
 /* The white cards (Your games, Standings, Pools, Currently playing, The night, All teams). */
 .tc-gd-card {
   padding: 0;
-  border-radius: 20px;
+  border-radius: var(--card-r);
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--line);
   overflow: hidden;
@@ -275,12 +264,12 @@
 }
 .tc-gd-chip {
   flex: none;
-  padding: 3px 11px;
-  border-radius: 99px;
+  padding: var(--chip-pad);
+  border-radius: 999px;
   background: var(--fill);
   color: var(--ink-2);
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
   white-space: nowrap;
 }
 .tc-gd-chip-label {
@@ -494,14 +483,14 @@
 }
 .tc-gd-vs-big .tc-gd-tn > b {
   font-size: 1.22rem;
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-gd-vs-big .tc-gd-tn > span {
   font-size: 0.95rem;
   color: rgb(255 255 255 / 92%);
 }
 .tc-gd-vs-big .tc-gd-vs-mark {
-  color: #d8f03b;
+  color: var(--ball);
 }
 
 /* Your team (Alex's PM): the name big, the players under it, a round pencil and a round dice on the right. */
@@ -676,12 +665,12 @@
 .tc-gd-vs-lit .tc-gd-side-a {
   padding: 6px 10px;
   margin: -6px -10px;
-  background: #d8f03b;
-  box-shadow: 0 0 22px rgb(216 240 59 / 55%);
+  background: var(--ball);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--ball) 55%, transparent);
 }
 .tc-gd-vs-big.tc-gd-vs-lit .tc-gd-side-a .tc-gd-tn > b,
 .tc-gd-vs-big.tc-gd-vs-lit .tc-gd-side-a .tc-gd-tn > span {
-  color: #1a2410;
+  color: var(--ball-ink);
 }
 .tc-gd-vs-lit > .tc-gd-tn:last-child,
 .tc-gd-vs-lit .tc-gd-vs-mark {
@@ -696,13 +685,13 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #1a2410;
+  background: var(--ball-ink);
 }
 .tc-gd-litcheck svg {
   width: 14px;
   height: 14px;
   fill: none;
-  stroke: #d8f03b;
+  stroke: var(--ball);
   stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -875,8 +864,8 @@
 .tc-gd-breakcard {
   gap: 4px;
   box-shadow:
-    inset 0 0 0 1px #24503a,
-    0 10px 30px rgb(13 33 24 / 22%);
+    inset 0 0 0 1px var(--tour-line),
+    0 10px 30px rgb(0 0 0 / 22%);
 }
 .tc-gd-breakcard .tc-gd-next-title {
   margin: 2px 0 0;
@@ -988,19 +977,10 @@
    the kicker, tight to the team names. Your games / Your rounds: a small soft "Play to 9" beside the name (the result tag's place on a done
    game). Same in light and dark on the green card; the row pill follows the theme. */
 .tc-gd {
-  --tc-gd-pill-bg: #f6e8bb;
-  --tc-gd-pill-ink: #5c4708;
+  --tc-gd-pill-bg: var(--warn-bg);
+  --tc-gd-pill-ink: var(--warn-fg);
 }
-:root[data-theme='dark'] .tc-gd {
-  --tc-gd-pill-bg: #4f4a1f;
-  --tc-gd-pill-ink: #f2dc7a;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tc-gd {
-    --tc-gd-pill-bg: #4f4a1f;
-    --tc-gd-pill-ink: #f2dc7a;
-  }
-}
+
 .tc-gd-playto {
   display: inline-block;
   padding: 1px 7px;
@@ -1027,8 +1007,8 @@
 }
 .tc-gd-playto.tc-gd-playto-big {
   padding: 4px 14px;
-  background: #f2c94c;
-  color: #1d1a08;
+  background: var(--gold);
+  color: var(--ball-ink);
   font-size: 0.95rem;
 }
 

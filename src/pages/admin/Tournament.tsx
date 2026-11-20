@@ -144,18 +144,12 @@ export function TournamentScheduleRow({ ctx }: { ctx: AdminCtx }) {
           <span className="set-name">Create tournament</span>
           <span className="set-hint">Doubles, once a year</span>
         </span>
-        <span className="tm-chevron" aria-hidden="true">
-          ›
-        </span>
       </button>
       {t && (
         <button type="button" className="set-row tm-set-row" onClick={() => setOpen('page')} data-tm-open-row>
           <span className="set-label">
             <span className="set-name">{t.name}</span>
             <span className="set-hint">{statusLine(t)}</span>
-          </span>
-          <span className="tm-chevron" aria-hidden="true">
-            ›
           </span>
         </button>
       )}
@@ -457,12 +451,6 @@ function TapRow({ label, value, open, onTap, data, valueData, fit }: { label: st
   );
 }
 
-const ChevronIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M6 9.5l6 6 6-6" />
-  </svg>
-);
-
 /**
  * Zip 66 (mocks 01, 02, 06 to 09): the tournament on the organizer's Home. One line to start (the pickleball, the name, "8 signed up", a chevron);
  * tap anywhere on it to open, tap again to close. It starts closed every time Home loads (nothing is remembered). Open: Style, Votes (tap: who
@@ -510,9 +498,6 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
           <span className="tm-hc-name">{t.name}</span>
           <span className={pill.cls} data-tm-stage data-tickets-card={t.status === 'tickets' ? `${locked}/${t.size}` : undefined}>
             {pill.words}
-          </span>
-          <span className="tm-hc-chev" aria-hidden="true">
-            <ChevronIcon />
           </span>
         </button>
       </h2>

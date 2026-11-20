@@ -4,18 +4,8 @@
    blue links and credit, gray neutral. Checked light and dark (4.5:1 for every text). */
 
 :root[data-card-cleanup] {
-  --cl-later-bg: #f9f9f6;
-  --cl-later-line: #dad9cf;
-}
-:root[data-card-cleanup][data-theme='dark'] {
-  --cl-later-bg: #1b2620;
-  --cl-later-line: #2b3a31;
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-card-cleanup]:not([data-theme='light']) {
-    --cl-later-bg: #1b2620;
-    --cl-later-line: #2b3a31;
-  }
+  --cl-later-bg: var(--surface-2);
+  --cl-later-line: var(--line);
 }
 
 /* ---- Player cards ---- */
@@ -106,7 +96,7 @@ html[data-card-cleanup] .schedule > .sched.cl-later {
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--cl-later-line);
-  border-radius: 18px;
+  border-radius: var(--card-r);
   background: var(--cl-later-bg);
   box-shadow: none;
 }
@@ -120,7 +110,7 @@ html[data-card-cleanup] .schedule > .sched.cl-later .tile.ptile {
 }
 html[data-card-cleanup] .schedule > .sched.cl-later .ptile .dow,
 html[data-card-cleanup] .schedule > .sched.cl-later .ptile .mon {
-  font-size: 0.64rem;
+  font-size: max(11px, 0.64rem);
 }
 html[data-card-cleanup] .schedule > .sched.cl-later .ptile .day {
   font-size: 1.3rem;
@@ -176,8 +166,7 @@ html[data-card-cleanup] .cl-names {
 }
 html[data-card-cleanup] .cl-names .cl-names-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 /* Zip 18 round 2: the folded Home row never cuts its circles off. The strip keeps room for every circle at its tightest tuck (13 px balls,
