@@ -173,7 +173,9 @@ async function main() {
       assert(!c.wrappedBtn, `${label}: a button on "${c.title}" wraps its words`);
       for (const b of c.balls) assert(Math.abs(b.w - b.h) < 0.5 && b.w === 16, `${label}: a ball on "${c.title}" is ${b.w} x ${b.h} (not a 16 px circle)`);
       // Zip 53: every player gets the needs-people card now, so a longer day word can show ("Wednesday" in the fake world's extra Wednesday game, or "Next Tuesday"); the card shrinks its text and wraps on two lines there. Not a look bug in the card.
-      if (c.title && width >= 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, |^(Wednesday|Next [A-Z][a-z]+day) (needs \d more|has \d+ in)|^(Tonight|Tomorrow) \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines === 1, `${label}: "${c.title}" wraps at ${width} (${c.titleLines} lines, ${c.titleSize} px)`);
+      if (c.title && width >= 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, |^(Wednesday|Next [A-Z][a-z]+day) (needs \d more|has \d+ in)|^[A-Z][a-z]+ \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines === 1, `${label}: "${c.title}" wraps at ${width} (${c.titleLines} lines, ${c.titleSize} px)`);
+      // Zip 76: the Want in title names the game's time ("Wed 7:30 PM needs 1 more"): two lines at most at any width.
+      if (c.title && /^[A-Z][a-z]+ \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines <= 2, `${label}: "${c.title}" takes ${c.titleLines} lines at ${width}`);
       if (c.title && width < 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, /.test(c.title)) assert(c.titleLines <= 2, `${label}: "${c.title}" takes ${c.titleLines} lines at ${width}`);
       assert(c.borderW !== '0px', `${label}: card "${c.title}" has no border`);
       assert(contrast(c.titleColor, c.bg) >= 4.5, `${label}: title of "${c.title}" is ${contrast(c.titleColor, c.bg).toFixed(2)}:1`);
