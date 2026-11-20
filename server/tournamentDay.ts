@@ -17,6 +17,7 @@ import { HttpError } from './http';
 import { newId } from './crypto';
 import * as v from './validate';
 import { audit } from './repo';
+import { releaseKeptStatements } from './tournamentMoney';
 import {
   type AdminDayGame,
   type AdminDayTeam,
@@ -897,10 +898,13 @@ export async function teamsAction(ctx: Ctx, body: Record<string, unknown>) {
     const n = body.courts === 1 ? 1 : body.courts === 2 ? 2 : bad('invalid_courts', 'Pick 1 or 2 courts.');
     if (t.teams_at) bad('tournament_changed', 'The teams are published. Edit teams first.');
     if (!t.final_date) bad('tournament_changed', 'Finalize the date first.');
-    const res = await ctx.db
-      .prepare(`UPDATE tournaments SET courts = ?, court_numbers = CASE WHEN json_array_length(COALESCE(court_numbers, '[]')) = ? THEN court_numbers ELSE NULL END, updated_at = ? WHERE id = ? AND teams_at IS NULL`)
-      .bind(n, n, nowIso, t.id)
-      .run();
+    const [res] = await ctx.db.batch([
+      ctx.db
+        .prepare(`UPDATE tournaments SET courts = ?, court_numbers = CASE WHEN json_array_length(COALESCE(court_numbers, '[]')) = ? THEN court_numbers ELSE NULL END, updated_at = ? WHERE id = ? AND teams_at IS NULL`)
+        .bind(n, n, nowIso, t.id),
+      // Zip 70: down to 1 court, no second court is lost: kept late drops get their credit back in this same step.
+      ...releaseKeptStatements(ctx.db, group.id, t.id, nowIso),
+    ]);
     if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
     await audit(ctx.db, group.id, null, 'tournament_courts', { tournament: t.name, count: n }, nowIso);
     return { ok: true };

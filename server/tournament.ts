@@ -1983,6 +1983,9 @@ export async function playerTournamentSignup(ctx: Ctx, who: TournamentActor, bod
   const dates = readDates(body, openDatesOf(t, todayKey(ctx.nowMs, who.group.timezone)));
   const before = await mySignup(ctx.db, t.id, playerId);
   const vote = readVote(body, await votePending(ctx, who.group, t), before?.format_vote);
+  // Zip 70 (review): a kept late drop can come back only while tickets are open (back onto their own paid spot); after the 3 hour cutoff the
+  // money stays kept (a sign-up then would leave paid money with no place, which the night's end would hand back).
+  if (before?.status === KEPT && statusOf(t) === 'tickets' && dropClosedAt(t, who.group.timezone, ctx.nowMs)) throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
   // A second tap of Sign up (or another phone) with exactly the same answers: nothing to save, nothing to write in History.
   if (before && before.status === 'in' && JSON.stringify(storedDays(before.dates)) === JSON.stringify(dates) && sameVote(before.format_vote, vote)) return { ok: true, result: 'signed_up' };
   const [, listRow] = await ctx.db.batch([
@@ -2106,7 +2109,8 @@ export async function playerTournamentBackOut(ctx: Ctx, who: TournamentActor, bo
   if ((res[0].meta?.changes ?? 0) === 0) {
     // Zip 70 (review): the sheet said one thing about the money and the rule now says the other (someone else dropped, Pay by passed): nothing
     // moved; the player looks again.
-    if (shownKeeps !== null && (await mySignup(ctx.db, t.id, playerId))?.status === 'in') throw new HttpError(409, 'drop_changed', 'This just changed. Look again.');
+    const still = shownKeeps !== null ? await ctx.db.prepare("SELECT 1 AS x FROM tournament_signups s JOIN tournaments tt ON tt.id = s.tournament_id WHERE s.id = ? AND s.status = 'in' AND tt.status <> 'canceled'").bind(before.id).first() : null;
+    if (still) throw new HttpError(409, 'drop_changed', 'This just changed. Look again.');
     return { ok: true, result: 'not_signed_up' };
   }
   // Kept, and not released by a paid standby taking the spot in this same batch: no credit back now.

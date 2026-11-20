@@ -303,6 +303,17 @@ describe('the late drop rule: the independent review\'s cases', () => {
     expect(ok.data.keptCents).toBe(1600);
   });
 
+  it('after the 3 hour cutoff a kept player cannot sign up again (the money stays kept)', async () => {
+    const ctx = await kept8();
+    ctx.app.now = CUTOFF_MS;
+    const r = await (await playerPhone(ctx, 'Blair')).call('POST', '/api/tournament/signup', { tournamentId: ctx.tid, level: 320, dates: [DATE] });
+    expect(r.status).toBe(409);
+    expect(signupStatus(ctx, 'Blair')).toBe('kept');
+    ctx.app.now = START_MS + 5 * 3_600_000;
+    await dash(ctx);
+    expect(pot(ctx, 'Blair')).toBe(0);
+  });
+
   it('a Reschedule gives kept money back (the new date is not the night they paid for)', async () => {
     const ctx = await kept8();
     expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/reschedule`, {})).status).toBe(200);
