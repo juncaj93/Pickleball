@@ -6,7 +6,7 @@
 //      those stages and on the rare paths: extra switches on, hidden games (one with money), the organizer found by name, a pending cash out,
 //      and the weekly upkeep writing in the middle of the dashboard (everything kept is forgotten and read again);
 //   3. the wrapper's three new pieces (server/speed.ts): the sign-in check and the switch rows in one trip, a write in between makes the
-//      first switch question read them again, and alsoNext reads ride in the next prefetch's trip; with the switch off nothing is added.
+//      first switch question read them again; with the switch off nothing is added.
 import { describe, expect, it, vi } from 'vitest';
 import { handleApi } from '../server/app';
 import { createNodeD1 } from '../dev/nodeD1';
@@ -184,7 +184,6 @@ describe('Zip 68: the wrapper pieces (server/speed.ts)', () => {
     expect(f.isFast()).toBe(false);
     await f.prepare(SWITCH_READ).bind(groupId, 'admin_r2_on').first();
     expect(c.trips).toBe(2);
-    f.alsoNext([{ kind: 'all', sql: 'SELECT id FROM players WHERE group_id = ?', values: [groupId] }]);
     await f.prefetch([{ kind: 'all', sql: 'SELECT id FROM sessions WHERE group_id = ?', values: [groupId] }]);
     expect(c.trips).toBe(2);
   });
@@ -206,18 +205,5 @@ describe('Zip 68: the wrapper pieces (server/speed.ts)', () => {
     expect((await f.firstWithSwitches<{ id: string }>(check(f, groupId)))?.id).toBe(groupId);
     expect(await f.prepare(SWITCH_READ).bind(groupId, 'admin_v2_on').first()).toEqual({ x: 1 });
     expect(c.sql.filter((s) => s === ALL_SWITCHES_READ).length).toBe(1);
-  });
-
-  it('alsoNext: the reads ride in the next prefetch trip and are answered from it', async () => {
-    const { groupId, c, counted } = await db();
-    const f = fewerQueriesDb(counted, 'fast');
-    const players = { kind: 'all' as const, sql: 'SELECT id FROM players WHERE group_id = ? ORDER BY id', values: [groupId] };
-    f.alsoNext([players]);
-    await f.prefetch([{ kind: 'all', sql: 'SELECT id FROM sessions WHERE group_id = ? ORDER BY id', values: [groupId] }]);
-    expect(c.trips).toBe(1);
-    expect(c.statements).toBe(2);
-    const got = await f.prepare(players.sql).bind(...players.values).all();
-    expect(got.results.length).toBeGreaterThan(0);
-    expect(c.trips).toBe(1);
   });
 });

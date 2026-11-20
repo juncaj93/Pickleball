@@ -6998,7 +6998,17 @@ call on a fresh deployment (cold): 1.29 s before, 0.19 s after.
 - Screens: organizer Home at 390 px, light and dark, from both previews: pixel-identical screenshots (same image fingerprint).
 
 ### Tests
-- `tests/zip68-speed.test.ts` (10): at most 4 dashboard trips and 2 check trips at 7 stages on both worlds, fast answers byte for byte the
+- `tests/zip68-speed.test.ts` (9): at most 4 dashboard trips and 2 check trips at 7 stages on both worlds, fast answers byte for byte the
   plain ones, the rare paths, the upkeep write, refused sign-ins unchanged, and the wrapper pieces (one trip, a write in between, a failed batch,
-  switch off adds nothing, alsoNext).
+  switch off adds nothing).
 - `tests/zip62-speed.test.ts`: the organizer check is now 2 trips (was pinned at 3).
+- `tests/speed-queries.test.ts`: with the switch rows off, the organizer screens make one trip fewer than main (the sign-in check and the
+  switch read share a trip while the wrapper is deciding); every other count unchanged.
+
+### Fresh reviewer
+A reviewer that did not write the code compared main and this branch on 10 cases (read-only PIN and Pretend included): byte-identical
+answers, never more trips than main. Nothing serious. Low items: (1) the big shared trip fails as a whole if one read in it is bad; the
+wrapper then lets each read go alone (right answers, main's speed). That only happens on a database missing migrations 0016 or 0018, and
+live has both. Left as is. (2) A wrong comment in `server/auth.ts`: fixed. (3) If the sign-in trip itself fails (no `task_log` table) the
+check costs one extra trip: left as is. (4) `alsoNext` in `server/speed.ts` was unused: removed with its test. (5) A write in the middle of
+the dashboard (weekly upkeep) can cost one extra switch read: rare, and main pays it too. Left as is.

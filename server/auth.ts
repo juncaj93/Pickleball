@@ -161,8 +161,8 @@ export async function requireAdmin(ctx: Ctx): Promise<GroupRow> {
     )
     // Real time, even while pretending it's another time.
     .bind(await sha256(token), ctx.realNowIso);
-  // Zip 68: with "Fewer database trips" on or deciding, the switch rows every organizer screen reads next ride in this same trip
-  // (server/speed.ts firstWithSwitches). Off, or no such database: the check alone, exactly as before.
+  // Zip 68: while the "Fewer database trips" wrapper is on or still deciding, the switch rows every organizer screen reads next ride in this
+  // same trip (server/speed.ts firstWithSwitches). With the wrapper off (or a database without it), the check alone, exactly as before.
   const fewer = asFewer(ctx.db);
   const row = await (fewer ? fewer.firstWithSwitches<GroupRow & { admin_session_id: string }>(check) : check.first<GroupRow & { admin_session_id: string }>());
   if (!row) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');

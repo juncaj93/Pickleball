@@ -83,11 +83,6 @@ export interface FewerQueriesDb extends D1Database {
    */
   isFast(): boolean;
   /**
-   * Zip 68: reads that ride in the NEXT prefetch's trip (whoever sends it), instead of a trip of their own later. Only while the switch is on;
-   * a read the screen never asks costs only its share of that one trip. Kept until that prefetch (or the answer is sent).
-   */
-  alsoNext(reads: { kind: 'first' | 'all'; sql: string; values: unknown[] }[]): void;
-  /**
    * Zip 68: `stmt.first()` (the sign-in check) and the read of every switch row in ONE trip, while the switch is on or still being decided
    * and the switch rows are not read yet. The switch rows are then used by the first switch question, exactly as if it had read them itself
    * (unless something wrote in between: then it reads them again, as before). Anything else (off, look-only, a failed batch): stmt.first().
@@ -123,8 +118,6 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
   // Zip 68: the switch rows read together with the sign-in check (firstWithSwitches), waiting for the first switch question. Only good for
   // the generation it was read in (a write after it means the question reads them again, as before).
   let primed: { rows: { group_id: string; task: string }[]; generation: number } | null = null;
-  // Zip 68: reads waiting to ride in the next prefetch's trip (alsoNext).
-  let queued: { kind: 'first' | 'all'; sql: string; values: unknown[] }[] = [];
   const forget = () => {
     generation++;
     known = null;
@@ -257,13 +250,9 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
     finish: () => {
       state = 'plain';
       speedKnown = null;
-      queued = [];
       forget();
     },
     isFast: () => state === 'fast' && !lookOnly,
-    alsoNext: (reads) => {
-      if (state === 'fast' && !lookOnly) queued.push(...reads);
-    },
     firstWithSwitches: async <T>(stmt: D1PreparedStatement): Promise<T | null> => {
       if (state === 'plain' || lookOnly || known || primed || !(stmt instanceof Stmt) || !stmt.read) return stmt.first<T>();
       const startedAt = generation;
@@ -273,10 +262,7 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
       if (generation === startedAt && (state as string) !== 'plain') primed = { rows: (results[1].results ?? []) as { group_id: string; task: string }[], generation };
       return ((results[0].results ?? [])[0] ?? null) as T | null;
     },
-    prefetch: async (asked) => {
-      // Zip 68: the reads waiting for this trip (alsoNext) ride along.
-      const reads = queued.length ? [...asked, ...queued] : asked;
-      queued = [];
+    prefetch: async (reads) => {
       // Not on a look-only database ("Pretend it's...", the read-only PIN): their batches are not plain reads (server/pretend.ts).
       if (state !== 'fast' || lookOnly) return;
       // One entry per distinct read; `uses`: how many times the screen will ask it (listed that many times).
