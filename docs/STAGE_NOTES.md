@@ -7651,3 +7651,17 @@ organizer Home is the Tournament test row, the night's bar, "Vic finished first"
 date note, the card's name with the thin divider, "Final standings coming soon" and Your rounds. On the preview itself (through Cloudflare):
 Vic and Parker (clock 25 s off) waiting, Alex's real tap, Zoe opened 12 s later: the countdown 3.18 s after the tap on both, every place within
 17 ms; then put back to all games in. A player's /api/group before the reveal: `standings: []`, no points, records or ranks.
+
+### Live (Fri Nov 20, 2026, about 7:00 PM Eastern, a quiet window; the brief: ship when green, after 🎾76)
+- 🎾76 went live first (deployment 0f4af6a7, main `4610c01`); this zip was rebased onto it and every test re-run.
+- Restore points first: Time Travel bookmark `00001a68-00000000-00005129-94bc7741d804c5325c27469939d6d4f0`; SQL export of `pickleball`
+  (316 KB) `export-20261120235315.sql`, kept in this session's scratch folder only (phone numbers, not in git): this session's Cloudflare token
+  could not write to `pickleball-backups` (the same as 🎾76), so the bucket has no copy from this deploy. The bookmark is the restore point.
+- Integrity checks before and after: integrity-checks 21 columns, extension 8, tournament 13, every problem column 0.
+- Main fast-forwarded `4610c01` to `41e34be` and pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **ca5c91b0-8542-4050-9d3d-12a461ff0309** (bundle `index-BAAFWQgF.js`). No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **0f4af6a7-10fc-4362-8408-b85e668aa605** (🎾76, `5430594`), Cloudflare Deployments > Rollback. No database undo needed
+  (no schema change; old code reads every row this code writes).
+- Read-only live look (pages.dev): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen, the new
+  bundle; /admin and /api/status 200; the organizer dashboard 401 without a PIN. The organizer screens were not opened on live (no read-only
+  PIN in this session).
