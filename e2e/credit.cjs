@@ -282,7 +282,7 @@ async function main() {
         await nav(page, 'Players').click();
         const row = page.locator('li.player-row[data-player="Mitchel"]');
         assert(/Credit \$14/.test(squash(await row.innerText())), squash(await row.innerText()));
-        const refund = row.getByRole('link', { name: /^Refund Mitchel \$14 credit balance/ });
+        const refund = row.getByRole('link', { name: /^Refund Mitchel \$14 credit with Venmo/ });
         await refund.waitFor();
         assert((await refund.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', `href ${await refund.getAttribute('href')}`);
         assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', 'app link');
