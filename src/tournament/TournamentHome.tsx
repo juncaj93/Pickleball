@@ -180,7 +180,7 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         </div>
       )}
       {/* Zip 57: on game night (the live window) the live view takes the ticket's place; before it the ticket stays as it is (zip 66's one row). */}
-      {t.day?.today ? null : (
+      {t.day?.today || t.reveal ? null : (
         <TicketCard
           t={t}
           org={org}

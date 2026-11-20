@@ -2033,7 +2033,8 @@ export async function playerTarget(ctx: Ctx, who: TournamentActor, body: Record<
   if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const seen = await visibleTo(ctx, who.group, who.playerId, !!who.viewAsName);
   // The same answer for "none", "switched off", "Only me" and (Zip 56) a canceled one: nothing leaks through an error either.
-  if (!seen || statusOf(seen.t) === 'canceled') throw new HttpError(404, 'tournament_not_open', 'This tournament is not open.');
+  // Zip 77 (review): an Americano night just revealed is shown to its players, but nothing on it can be tapped (sign-up, edit, back out).
+  if (!seen || statusOf(seen.t) === 'canceled' || statusOf(seen.t) === 'ended') throw new HttpError(404, 'tournament_not_open', 'This tournament is not open.');
   if (typeof body.tournamentId === 'string' && body.tournamentId !== seen.t.id) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   return { t: seen.t, playerId: who.playerId };
 }

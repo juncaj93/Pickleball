@@ -179,7 +179,9 @@ export async function viewer(ctx: Ctx): Promise<Viewer> {
 /** GET /api/group/version: the tiny "did anything change?" answer the open page asks every few seconds. */
 export async function groupVersion(ctx: Ctx): Promise<Response> {
   const { group, playerId } = await viewer(ctx);
-  // Zip 77: `t`, the server's clock (the real one, never Pretend it's): the standings reveal runs on it on every phone.
+  // Zip 77: `t`, the server's clock (the real one, never Pretend it's): the standings reveal runs on it on every phone. It is the request's own
+  // time (the same answer for the same request, byte for byte); the stamp's reads after it put every phone the same few ms behind, so phones
+  // stay in step with each other.
   return new Response(JSON.stringify({ v: await changeStamp(ctx, group, playerId), t: Date.parse(ctx.realNowIso) }), {
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
   });

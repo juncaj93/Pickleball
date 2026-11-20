@@ -270,7 +270,8 @@ const RECORDER = () => {
       }
       assert(moved === 0, 'the card shook');
       const rv = await r.page.evaluate(() => window.__rv);
-      assert(rv[1] && Math.abs(rv[1] - (t0 + 24600)) < 1200, `1st at ${rv[1] ? Math.round(rv[1] - t0) : 'never'} ms`);
+      // Timed from the countdown on this phone (T0): 1st comes in 24.6 s later, as with full motion.
+      assert(rv.count && rv[1] && Math.abs(rv[1] - rv.count - 24600) < 300, `1st at ${rv[1] && rv.count ? Math.round(rv[1] - rv.count) : 'never'} ms after T0`);
       await shot(r.page, 'D-reduced');
       assert(!r.errors.length, r.errors.join(' | '));
       await r.ctx.close();

@@ -29,6 +29,9 @@ export const LIVE_UPDATES = {
 
 export type LiveConfig = typeof LIVE_UPDATES;
 
+/** Zip 77: the 2 second rhythm stops after this long without a tap or scroll (a phone left on the table during the last games still starts). */
+export const FAST_STOP_MS = 30 * 60_000;
+
 /**
  * Zip 77: the server's clock as each check saw it ([sent, got, server time], this phone's clock for the first two), the last 12. Only kept here;
  * src/serverClock.ts (the reveal's own download) works the offset out from them, so the player script stays small.
@@ -113,7 +116,7 @@ export class LivePoller {
   setFast(ms: number | null) {
     if (ms === this.fastMs) return;
     this.fastMs = ms;
-    if (this.running && !this.dead && this.timer !== null) this.plan();
+    if (this.running && !this.dead && !this.inFlight) this.plan();
   }
 
   /** The tab went hidden / the screen turned off. */
@@ -137,8 +140,9 @@ export class LivePoller {
 
   /** The wait before the next check, or null when it should stay quiet. */
   nextWait(): number | null {
-    if (this.fastMs !== null) return Math.max(this.fastMs, this.backoff);
     const quiet = this.env.now() - this.lastTouch;
+    // Zip 77 (review): the fast rhythm ignores the usual slow-down, but not forever: 30 minutes without a touch stops it like any other.
+    if (this.fastMs !== null) return quiet >= FAST_STOP_MS ? null : Math.max(this.fastMs, this.backoff);
     if (quiet >= this.cfg.stopAfterMs) return null;
     const base = quiet >= this.cfg.slowAfterMs ? this.cfg.idleMs : this.cfg.activeMs;
     return Math.max(base, this.backoff);

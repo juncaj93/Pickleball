@@ -57,7 +57,7 @@ function reconcile() {
         goingBack = false;
         schedule();
       }
-    }, 800);
+    }, 2500);
     return;
   }
   while (owned < want) {

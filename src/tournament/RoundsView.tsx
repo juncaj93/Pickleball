@@ -179,18 +179,18 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
     hold(r.num!, won, { num: r.num, key: r.key, action: 'score', mine, theirs }, `${winners} won ${Math.max(mine, theirs)} to ${Math.min(mine, theirs)}`);
   }
 
-  if (!shown.today) {
-    return (
-      <div className="tc-gd stack" data-tc-day="before" data-tc-americano>
-        <RoundsCard day={shown} />
-      </div>
-    );
-  }
   // Zip 77: Alex revealed the standings: the board on every phone in step, then the night's final standings.
   if (t.reveal && shown.final) {
     return (
       <div className="tc-gd stack" data-tc-day="revealed" data-tc-americano>
         <RevealNight t={t} day={shown} rounds={<RoundsCard day={shown} />} after={<PointsCard day={shown} />} />
+      </div>
+    );
+  }
+  if (!shown.today) {
+    return (
+      <div className="tc-gd stack" data-tc-day="before" data-tc-americano>
+        <RoundsCard day={shown} />
       </div>
     );
   }

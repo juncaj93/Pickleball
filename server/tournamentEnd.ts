@@ -407,8 +407,10 @@ export function withoutRevealing(a: AwardsPre, nowMs: number): AwardsPre {
   const held = new Set(a.banners.filter((b) => b.format === 'americano' && revealHolding(b.ended_at, nowMs)).map((b) => b.id));
   if (!held.size) return a;
   const medals = a.medals.map((m) => ({ ...m }));
+  // The medal counts are of tournaments everyone could see (awardsReads), so only those give one back.
+  const heldPublic = new Set(a.banners.filter((b) => held.has(b.id) && b.visibility === 'all').map((b) => b.id));
   for (const w of a.winners) {
-    if (!held.has(w.tournament_id) || !w.medal) continue;
+    if (!heldPublic.has(w.tournament_id) || !w.medal) continue;
     const m = medals.find((x) => x.name === w.display_name);
     if (m) m.n = Number(m.n) - 1;
   }

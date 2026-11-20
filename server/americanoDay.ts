@@ -277,8 +277,9 @@ export function playerRoundsView(
   if (!f.roster.includes(playerId) && !f.gone.has(playerId)) return null;
   const real = realTimes(t);
   const startMs = t.final_date ? startMsOf(t.final_date, real.start, tz) : Infinity;
-  // Zip 77: after the reveal the night stays on Home (the board, then the final standings) whatever the clock says.
-  const today = mode === 'final' || (nowMs >= startMs - LIVE_BEFORE_MS && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS);
+  // Zip 77 (review): `today` keeps its own window after the reveal too (Home folds the week's games only on the night); the revealed card
+  // shows whatever the clock says (src/tournament/RoundsView.tsx checks the reveal first).
+  const today = nowMs >= startMs - LIVE_BEFORE_MS && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS;
   const me = nameOf(f, playerId);
   const rounds: PlayerRound[] = [];
   let first = true;

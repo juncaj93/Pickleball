@@ -55,8 +55,9 @@ function noTable(tour: any) {
   expect(text).not.toMatch(/"points"|"record"|"rank"/);
 }
 
-async function nightOf9() {
-  const ctx = await world(9, { format: 'americano', organizer: 'Blair' });
+/** 9 players, Americano. `organizer`: one of them is the organizer (Blair), else the organizer does not play (their seat would get no credit). */
+async function nightOf9(organizerPlays = true) {
+  const ctx = await world(9, { format: 'americano', ...(organizerPlays ? { organizer: 'Blair' } : {}) });
   expect((await adminTour(ctx)).format).toBe('americano');
   ctx.app.now = START_MS + 60_000;
   return ctx;
@@ -69,7 +70,7 @@ describe('zip 77: hidden standings during the night', () => {
     const vic = await card(ctx, 'Casey');
     noTable(vic);
     expect(vic.day.waiting).toBeUndefined();
-    expect(vic.day.rounds.filter((r: any) => r.state === 'done').every((r: any) => r.score)).toBe(true);
+    expect(vic.day.rounds.filter((r: any) => r.state === 'done' && r.num !== null).every((r: any) => r.score)).toBe(true);
     // The whole answer, as the phone receives it: nothing of the table anywhere (the version check is a hash).
     const whole = (await (await playerPhone(ctx, 'Casey')).call('GET', '/api/group')).text;
     expect(whole).not.toMatch(/"standings":\[\{/);
@@ -114,7 +115,7 @@ describe('zip 77: hidden standings during the night', () => {
 
 describe('zip 77: Reveal standings', () => {
   it('the same End (credit once, to the cent); the board for the players in it; nothing tells the winner until the hold ends; then all of it', async () => {
-    const ctx = await nightOf9();
+    const ctx = await nightOf9(false);
     const before = moneyPrint(ctx);
     const pot0 = pots(ctx);
     await playAll(ctx);
@@ -155,6 +156,9 @@ describe('zip 77: Reveal standings', () => {
     expect(g2.tourAwards?.congrats).toBeUndefined();
     // Someone who was not in the night: no card, no ticker yet.
     const outsider = await group(ctx, 'Shay');
+    // Nothing on the revealed night can be tapped (review): sign-up and Edit sign-up answer "not open".
+    expect((await (await playerPhone(ctx, first)).call('PUT', '/api/tournament/signup', { tournamentId: ctx.tid, dates: ['2026-11-12'] })).status).toBe(404);
+    expect((await (await playerPhone(ctx, 'Shay')).call('POST', '/api/tournament/signup', { tournamentId: ctx.tid, level: 300, dates: ['2026-11-12'] })).status).toBe(404);
     expect(outsider.tournament).toBeUndefined();
     expect(outsider.tourAwards?.ticker).toBeUndefined();
 
@@ -178,7 +182,7 @@ describe('zip 77: Reveal standings', () => {
   });
 
   it('Edit awards (1st and 2nd swapped): the board shows the saved order, not the table', async () => {
-    const ctx = await nightOf9();
+    const ctx = await nightOf9(false);
     await playAll(ctx);
     const end = (await adminTour(ctx)).end;
     const save = await awards(ctx, { action: 'save', first: end.second.key, second: end.first.key, championCents: 1400, secondCents: 700, weeks: 1 });
@@ -264,13 +268,20 @@ describe('zip 77: the 2 second check', () => {
     p.setKnown('same');
     p.start();
     p.setFast(2000);
-    // 30 minutes without a touch: still every 2 seconds.
-    await run(30 * 60_000);
-    expect(checks).toBeGreaterThanOrEqual(899);
-    p.setFast(null);
+    // 29 minutes without a touch: still every 2 seconds (the usual rhythm would have stopped at 10).
+    await run(29 * 60_000);
+    expect(checks).toBeGreaterThanOrEqual(865);
+    // 30 quiet minutes: it stops like any other (Alex may never tap Reveal on a night).
+    await run(40 * 60_000);
     const at = checks;
-    await run(30 * 60_000 + LIVE_UPDATES.stopAfterMs);
+    expect(at).toBeLessThanOrEqual(900);
+    await run(60 * 60_000);
     expect(checks).toBe(at);
+    // A touch wakes it; back to the usual rhythm once the card is gone.
+    p.touch();
+    p.setFast(null);
+    await run(60 * 60_000 + LIVE_UPDATES.stopAfterMs + 60_000);
+    expect(checks).toBeGreaterThan(at);
     p.stop();
   });
 });
