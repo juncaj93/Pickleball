@@ -332,7 +332,8 @@ async function main() {
         assert((await a.page.locator('[data-tm-card="page-who"]').count()) === 0, 'no Who can see it card');
         // Plan (mock 03): the pills and one cost line.
         const pills = await a.page.locator('.tm-plan-pill').allInnerTexts();
-        assert(JSON.stringify(pills.map(flat)) === JSON.stringify(['10 players', '2 courts', '2.5 hrs']), JSON.stringify(pills));
+        // Zip 70: the Plan's expected players (the 8 signed up) and the table's 2 courts and 2 hours for 8.
+        assert(JSON.stringify(pills.map(flat)) === JSON.stringify(['8 players', '2 courts', '2 hrs']), JSON.stringify(pills));
         const pillTops = new Set(await a.page.locator('.tm-plan-pill').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top))));
         assert(pillTops.size === 1, 'the pills stay on one line');
         assert(/^\$\d+ \(\$\d+ with 0 paid\)$/.test(flat(await a.page.locator('.tm-plan-cost-val').innerText())), await a.page.locator('.tm-plan-cost-val').innerText());

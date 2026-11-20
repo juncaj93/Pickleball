@@ -291,7 +291,8 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
         onCancel={() => setAskOut(false)}
         onConfirm={async () => {
           const ok = await run(
-            () => api('POST', '/api/tournament/back-out', { tournamentId: t.id, ...(k ? { backCents } : {}) }),
+            // Zip 70: what this sheet said about the money; the server refuses if the rule now says the other (someone else dropped first).
+            () => api('POST', '/api/tournament/back-out', { tournamentId: t.id, ...(k ? { backCents, keeps } : {}) }),
             (r: { creditBackCents?: number; creditReturnedCents?: number; waitingCents?: number; keptCents?: number }) => {
               if ((r?.keptCents ?? 0) > 0) return "You're off the list. No credit back unless someone takes your spot.";
               const back = (r?.creditBackCents ?? 0) + (r?.creditReturnedCents ?? 0);

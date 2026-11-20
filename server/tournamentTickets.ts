@@ -417,6 +417,19 @@ export async function rescheduleTournament(ctx: Ctx) {
          WHERE tournament_id = ?2 AND dates <> '[]' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?2 AND status = 'rescheduled' AND updated_at = ?1)`,
       )
       .bind(ctx.nowIso, t.id),
+    // Zip 70 (review): a kept late drop paid for the night that was planned; a new date is not that night: their money comes back now.
+    ...ticketBackStatements(ctx.db, {
+      groupId: group.id,
+      tournamentId: t.id,
+      playerId: null,
+      why: 'back',
+      endedReason: 'dropped',
+      nowIso: ctx.nowIso,
+      when: (x) => `(${keptOff(x)} AND EXISTS (SELECT 1 FROM tournaments tr WHERE tr.id = ${x}.tournament_id AND tr.status = 'rescheduled'))`,
+    }),
+    ctx.db
+      .prepare(`UPDATE tournament_signups SET status = 'out', updated_at = ?1 WHERE tournament_id = ?2 AND status = 'kept' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?2 AND status = 'rescheduled')`)
+      .bind(ctx.nowIso, t.id),
   ]);
   changedOrLookAgain(res[0]);
   await audit(ctx.db, group.id, null, 'tournament_rescheduled', { tournament: t.name, ...(t.final_date ? { date: dayLong(t.final_date) } : {}), ...(held ? { held } : {}) }, ctx.nowIso);

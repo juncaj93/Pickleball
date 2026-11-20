@@ -7028,3 +7028,52 @@ the dashboard (weekly upkeep) can cost one extra switch read: rare, and main pay
 - Preview with the final code: `claude-new-session-0k1imm` (deployment `54056a20`), fake database at tickets open: dashboard median 181 to
   201 ms, check 100 to 110 ms.
 
+
+## Zip 70: Time, Plan and money, the late drop rule, the dry run fixes (🎾70.time), Thu Nov 19 to Fri Nov 20, 2026
+Branch `claude/new-session-491iok` (the session is named "🎾70.time"; the build system pins the branch name). Built on main `9b6839e` (Zip 68 live).
+Same switch, TOURNAMENTS (on for everyone on live). **NO database change**: no table, column or migration. Two new kinds of task_log row (kind 'mark',
+no game, the same way a hidden tournament is kept): 'tournament_expect:<id>' (the Plan's saved Expect number in `detail`) and 'tournament_time:<id>'
+(the last time move players are told about, JSON in `detail`). One new tournament_signups status value, 'kept' (the column has no CHECK).
+
+### Dry run fixes (🎾69)
+1. Late drop rule (Alex). Before Pay by: unchanged. After Pay by, on a 2 court night, a drop that takes the number locked in below 8 (8 to 7, 7 to 6)
+   gives no credit back: the sign-up becomes 'kept' (off the list everywhere, like 'out'), the money stays on the ticket, the spot opens. When the
+   spots taken are back to 8 or more, every kept drop gets its credit back once, by the usual back-out statements, in the same batch that filled
+   the spot (`releaseKeptStatements`, appended to every batch that can fill a spot: `fillSpotsStatements`). The keep decision is made inside the
+   statement that takes the player off the list (`lateDropKeepsSql`), from the rows as they are when it lands. A Cancel gives kept money back; the
+   end of the night (unused holds), End tournament and the organizer's I paid answers never do. Drop out closes 3 hours before the start (server:
+   409 "Drop out has closed. Text Alex."; the card hides it). The Drop out sheet's two lines show only when the rule applies (`dropKeeps`).
+   Integrity checks: `tour_money_on_left` skips 'kept'; new `tour_kept_wrong_stage` (0) and `info_kept_late_drops` (a count, not a problem).
+2. The "switched to Americano" card: its button moved under the words (the alert card's actions row), so the words keep the card's width.
+3. Its Copy text leaves the pay line out once the 3 hour cutoff has passed.
+4. A phone with no name gets no Venmo link and no Zelle number (server/player.ts).
+5. "Your cost if it fills" uses the Plan's expected players (below), not the plan size.
+6. Currently playing names playoff games ("Final", "3rd place", "Semifinal", a tie's "Game A"); pool games keep "Round N".
+
+### Time, Plan and money (pictures 1 to 7)
+- THE money line (`shared/tournamentMoney.ts` moneyLine, its own file so the player download stays in budget): Courts = courts x hours x $24;
+  Tickets = (expected - 1) x ticket; You = Tickets - Courts - the winners' credits. Card row "You make if it fills" green "+$X" (--ok-fg), or "Your
+  cost if it fills" red "$X" (--danger-fg, no minus). The same function in the Time box, the Plan box, Finalize and the tournament page's Plan card.
+- Expected players: the saved Expect number, else the site's suggestion (planCount: the real count), never fewer than locked in, 6 to 16. Before
+  the date is finalized the courts and hours are the table's suggestion for that many (`suggestedPlan(expected)`), or the saved courts.
+- Card rows (tickets open): Date "Tue Dec 1", Time "7:30 to 10 PM" (tap: start and end pickers, fit line, money line, Save), Plan (tap: Expect - and
+  +, Courts 1 | 2, fit line, money line, Save), the money row, Locked in N of the spots players see.
+- PUT /api/admin/tournament/:id/time: until the teams are published or the night window opens (30 minutes before the start); a start too soon is
+  refused; Pay by never moves (a start whose 3 hour cutoff falls before Pay by is refused: "Move Pay by first"). Everything that reads the real times
+  follows. The venue card shows again with the new times. Players on the list: "The Cold Open now ends at 9:30 PM (was 10 PM)." / "Based on the
+  number of players locked in.", dismissed per phone; "was" is the time before the first move they were told about; moving back removes it.
+- PUT /api/admin/tournament/:id/plan: Expect (not below locked in) and the courts (the existing courts field).
+- Finalize: "Plays" is "Time"; the fit line names the style really played ("Americano for 9: games to 11, done about 9:50 PM."), and the money line
+  follows Time and Courts. The fit line wording changed everywhere it shows (also the close check).
+- Players' ticket stub: "7:30 PM" then "to 10 PM" once the times are real.
+
+### Admin speed
+Local (in-process, the calm world, "Fewer database trips" on): dashboard 4 trips, 61 statements; check 2 trips, 16 statements, before and after, at
+tickets_open, all_locked, late_open, day_ready, mid, am_round3 (and zip70_start, zip70_late after). Bytes +about 150. On Cloudflare, the same fake
+database at zip70_start: main's preview (`claude-new-session-0k1imm`) dashboard 183 to 194 ms, check 94 to 97 ms; this branch 189 to 192 ms, check
+85 to 89 ms (medians of 11).
+
+### Preview
+`pickleball-preview` (fake): Time Travel bookmark first `000001ab-00000000-00005129-121fe9780d025b373326e9de7ce5edda`; deployment `064ab7e3`,
+https://claude-new-session-491iok.pickleball-club-9h0.pages.dev; re-seeded (calm start: zip70_start). New Tournament test stages: zip70_start,
+zip70_loss, zip70_moved, zip70_late, zip70_finalize.

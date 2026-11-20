@@ -260,6 +260,84 @@ describe('fix 1: the late drop rule (after Pay by, below 8 on 2 courts: no credi
   });
 });
 
+describe('the late drop rule: the independent review\'s cases', () => {
+  async function kept8() {
+    const names = NAMES.slice(0, 8);
+    const ctx = await world({ signUp: [...names, 'Lee', 'Lane'] });
+    await lockIn(ctx, names);
+    ctx.app.now = AFTER_PAY_BY;
+    expect((await backOut(ctx, 'Blair')).data.keptCents).toBe(1600);
+    return ctx;
+  }
+
+  it('a kept player who signs up again takes their own paid spot back; dropping again keeps it again (never a refund by dropping twice)', async () => {
+    const ctx = await kept8();
+    await signUp(ctx, 'Blair');
+    expect(signupStatus(ctx, 'Blair')).toBe('in');
+    expect(ticket(ctx, 'Blair')).toMatchObject({ place: 'spot', credit_cents: 1600 });
+    expect(pot(ctx, 'Blair')).toBe(0);
+    // 8 again: the second drop is kept again.
+    expect((await backOut(ctx, 'Blair')).data.keptCents).toBe(1600);
+    expect(pot(ctx, 'Blair')).toBe(0);
+    // The night ends: still kept.
+    ctx.app.now = START_MS + 5 * 3_600_000;
+    await dash(ctx);
+    expect(pot(ctx, 'Blair')).toBe(0);
+    books(ctx);
+  });
+
+  it('the sheet said "credit back" but the rule now keeps it (someone else dropped first): refused, nothing moves', async () => {
+    const names = NAMES.slice(0, 9);
+    const ctx = await world({ signUp: names });
+    await lockIn(ctx, names);
+    ctx.app.now = AFTER_PAY_BY;
+    expect((await card(ctx, 'Casey')).tickets.dropKeeps).toBeUndefined();
+    expect((await backOut(ctx, 'Blair')).data.keptCents).toBeUndefined(); // 9 to 8: credit back
+    const r = await (await playerPhone(ctx, 'Casey')).call('POST', '/api/tournament/back-out', { tournamentId: ctx.tid, backCents: 1600, keeps: false });
+    expect(r.status).toBe(409);
+    expect(r.data.error).toBe('drop_changed');
+    expect(signupStatus(ctx, 'Casey')).toBe('in');
+    // The sheet now says it (two lines), and the drop with what it showed lands, kept.
+    expect((await card(ctx, 'Casey')).tickets.dropKeeps).toBe(true);
+    const ok = await (await playerPhone(ctx, 'Casey')).call('POST', '/api/tournament/back-out', { tournamentId: ctx.tid, backCents: 1600, keeps: true });
+    expect(ok.data.keptCents).toBe(1600);
+  });
+
+  it('a Reschedule gives kept money back (the new date is not the night they paid for)', async () => {
+    const ctx = await kept8();
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/reschedule`, {})).status).toBe(200);
+    expect(pot(ctx, 'Blair')).toBe(1600);
+    expect(signupStatus(ctx, 'Blair')).toBe('out');
+    books(ctx);
+  });
+
+  it('down to 1 court (the Plan box): no second court to lose, so kept drops get their credit back', async () => {
+    const ctx = await kept8();
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/plan`, { expected: 8, courts: 1 })).status).toBe(200);
+    expect(pot(ctx, 'Blair')).toBe(1600);
+    expect(signupStatus(ctx, 'Blair')).toBe('out');
+    books(ctx);
+  });
+
+  it('an I paid still waiting is not a paid spot: the keep test and the release test count the same paid spots', async () => {
+    const names = NAMES.slice(0, 7);
+    const ctx = await world({ signUp: [...names, 'Lee', 'Lane'] });
+    await lockIn(ctx, names);
+    // Lee taps I paid (waiting): players see 8 locked in, paid spots are 7.
+    const lee = await playerPhone(ctx, 'Lee');
+    await lee.call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: 1600 });
+    expect((await lee.call('POST', '/api/tournament/paid', { tournamentId: ctx.tid, cents: 1600 })).status).toBe(200);
+    ctx.app.now = AFTER_PAY_BY;
+    // 7 paid spots: Blair's drop is kept; Lane pays: 7 paid spots again (not 8): still kept; the organizer confirms Lee: 8: back.
+    expect((await backOut(ctx, 'Blair')).data.keptCents).toBe(1600);
+    await lockIn(ctx, ['Lane']);
+    expect(pot(ctx, 'Blair')).toBe(0);
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/ticket`, { playerId: ctx.byName.Lee, action: 'confirm', cents: 1600 })).status).toBe(200);
+    expect(pot(ctx, 'Blair')).toBe(1600);
+    books(ctx);
+  });
+});
+
 describe('Time and Plan (pictures 1, 2, 3, 6, 7)', () => {
   it('the card: Time, the money row for the expected players, the spots players see', async () => {
     const ctx = await world({ signUp: NAMES.slice(0, 8) });
@@ -308,6 +386,11 @@ describe('Time and Plan (pictures 1, 2, 3, 6, 7)', () => {
     const late = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/time`, { start: 17 * 60 + 30, minutes: 150 });
     expect(late.status).toBe(409);
     expect(late.data.error).toBe('pay_by_late');
+    // Thursday 3:30 PM (before the 4:30 PM cutoff): a 6 PM start would close tickets and Drop out right now (its cutoff is 3 PM): refused.
+    ctx.app.now = CUTOFF_MS - 60 * 60_000;
+    const instant = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/time`, { start: 18 * 60, minutes: 150 });
+    expect(instant.status).toBe(400);
+    expect(instant.data.message).toBe('That start would close tickets and Drop out right now. Pick a later one.');
     ctx.app.now = START_MS - 31 * 60_000;
     const soon = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/time`, { start: 19 * 60, minutes: 150 });
     expect(soon.status).toBe(400);
@@ -333,6 +416,10 @@ describe('Time and Plan (pictures 1, 2, 3, 6, 7)', () => {
     expect(t.money).toEqual({ courtCents: 6000, ticketsCents: 14400, youCents: 5600 });
     expect((ctx.app.db.raw.prepare('SELECT courts FROM tournaments WHERE id = ?').get(ctx.tid) as { courts: number }).courts).toBe(1);
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/plan`, { expected: 17, courts: 2 })).status).toBe(400);
+    // The same numbers again (a double tap): nothing written.
+    const lines = (await history(ctx)).filter((e) => e.action === 'tournament_plan').length;
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/plan`, { expected: 10, courts: 1 })).data.changed).toBe(false);
+    expect((await history(ctx)).filter((e) => e.action === 'tournament_plan').length).toBe(lines);
     expect(activityText((await history(ctx)).find((e) => e.action === 'tournament_plan') as never, 'America/Detroit', 'Alex')).toMatch(/set the The Cold Open plan to 10 players on 1 court/);
   });
 });

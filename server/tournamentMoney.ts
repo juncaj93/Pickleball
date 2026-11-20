@@ -78,9 +78,11 @@ export const offListBack = (x: string): string =>
   `EXISTS (SELECT 1 FROM tournament_signups s WHERE s.tournament_id = ${x}.tournament_id AND s.player_id = ${x}.player_id AND s.status NOT IN ('in', '${KEPT}'))`;
 
 /** SQL: the spots taken by players on the list are back to 8 or more (a kept late drop's money then comes back). */
+// (Review: or the night is down to 1 court: no second court is lost any more.)
 const refilledSql = (t: string) =>
-  `((SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
-     WHERE k.tournament_id = ${t} AND k.place = 'spot') >= ${LATE_DROP_FLOOR} AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${t} AND tt.status = 'tickets'))`;
+  `(((SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
+     WHERE k.tournament_id = ${t} AND k.place = 'spot') >= ${LATE_DROP_FLOOR} OR EXISTS (SELECT 1 FROM tournaments tc WHERE tc.id = ${t} AND tc.courts = 1))
+     AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${t} AND tt.status = 'tickets'))`;
 
 /**
  * Zip 70: every kept late drop of a tournament comes back as credit once the spots are back to 8 or more: one History line each (written first,

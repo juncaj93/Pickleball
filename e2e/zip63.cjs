@@ -235,7 +235,8 @@ async function main() {
         const card = v.page.locator('.tc-short').first();
         // Zip 64: the short ticket: the kicker is the one word, the date and the real start are on the stub.
         assert(flat(await card.locator('.tc-kicker').innerText()) === 'TOURNAMENT', await card.locator('.tc-kicker').innerText());
-        assert(flat(await card.locator('.tc-stub').innerText()) === 'THU 17 DEC 7:30 PM', await card.locator('.tc-stub').innerText());
+        // Zip 70 (picture 5): the end under the start once the times are real.
+        assert(flat(await card.locator('.tc-stub').innerText()) === 'THU 17 DEC 7:30 PM to 10 PM', await card.locator('.tc-stub').innerText());
         assert(flat(await card.locator('.tc-title').innerText()) === 'Winter Classic', 'the real name');
         // Zip 66b (picture A1): one row, Lock in · $16, Who's in, Drop out; no Pay by on the card (the countdown alert says it).
         assert(flat(await card.locator('[data-tc-lock]').innerText()) === 'Lock in · $16', 'the lime button');

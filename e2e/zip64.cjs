@@ -464,7 +464,8 @@ async function main() {
     // The player's stub: the real start with no "~", the style still TBD.
     const v = await vicCard({ who: 'Parker' });
     const stub = flat(await v.page.locator('.tc-short .tc-stub').innerText());
-    assert(/^[A-Z]{3} \d+ [A-Z]{3} 7:30 PM$/.test(stub), stub);
+    // Zip 70 (picture 5): the end under the start.
+    assert(/^[A-Z]{3} \d+ [A-Z]{3} 7:30 PM to 10:30 PM$/.test(stub), stub);
     assert(flat(await v.page.locator('.tc-short .tc-format').innerText()) === 'Tournament style TBD', 'TBD until Pay by');
     await v.ctx.close();
     await a.ctx.close();
