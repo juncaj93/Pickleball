@@ -7005,6 +7005,10 @@ call on a fresh deployment (cold): 1.29 s before, 0.19 s after.
 - `tests/speed-queries.test.ts`: with the switch rows off, the organizer screens make one trip fewer than main (the sign-in check and the
   switch read share a trip while the wrapper is deciding); every other count unchanged.
 
+- Browser, all 90 scripts 3 at a time: 74 green. The 16 red ones were run again on a clean checkout of main `40d0f32`: the same 15 fail
+  there with the same counts (the old "newest switch is the top Settings row" checks in money-rework, zip16, zip23, zip27, zip30, zip32,
+  zip34, zip35, zip38, zip39, zip42; live 4; audit-player-flows 1; zip43 1; money-visible 1), and money-rework is one worse on main (2 red).
+  `banner` is flaky on both: three runs each, main red twice of two finished runs, the branch green once. None of these screens changed.
 ### Fresh reviewer
 A reviewer that did not write the code compared main and this branch on 10 cases (read-only PIN and Pretend included): byte-identical
 answers, never more trips than main. Nothing serious. Low items: (1) the big shared trip fails as a whole if one read in it is bad; the
