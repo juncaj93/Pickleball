@@ -7016,3 +7016,15 @@ wrapper then lets each read go alone (right answers, main's speed). That only ha
 live has both. Left as is. (2) A wrong comment in `server/auth.ts`: fixed. (3) If the sign-in trip itself fails (no `task_log` table) the
 check costs one extra trip: left as is. (4) `alsoNext` in `server/speed.ts` was unused: removed with its test. (5) A write in the middle of
 the dashboard (weekly upkeep) can cost one extra switch read: rare, and main pays it too. Left as is.
+
+### Live: shipped Thu Nov 19, 2026, about 8:32 PM Eastern (loud hours waived by Alex in the brief)
+- Deployment `0b0f0e1d` (commit `77d12dd`). Rollback: `58652ccf` (Zip 58). No migration, no Worker deploy.
+- Tests first: unit 206 files, 4,066 passed, 2 skipped, none failed; `npx tsc -b` clean; browser as above (no new red; same as main).
+- Restore points: SQL export of `pickleball` (308 KB), saved to `pickleball-backups` as `export-20261120013234` and checked; Time Travel
+  bookmark `00001944-00000000-00005129-0b32ad5b47e704b94a5db5161c8c8d8d`.
+- Integrity checks before and after: 21, extension 8, tournament 11 columns, every one 0.
+- Read-only live check (no read-only PIN in this session): Home and the organizer page load (200); the organizer dashboard and check still
+  refuse without a PIN (401, same message). The signed-in Home on live was not opened from here.
+- Preview with the final code: `claude-new-session-0k1imm` (deployment `54056a20`), fake database at tickets open: dashboard median 181 to
+  201 ms, check 100 to 110 ms.
+
