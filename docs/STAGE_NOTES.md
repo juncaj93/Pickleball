@@ -7439,3 +7439,16 @@ https://claude-new-session-oipdqa.pickleball-club-9h0.pages.dev; re-seeded (`npm
 at 390, light and dark: Vic's Home is the amber "Starting Round 2, all games go to 9 points." alert, the night's bar "Game 2 of 3", the Up
 next card with "Play to 9 points", and Your games with the two pills; organizer Home is the Tournament test row, the night's bar and the Time
 check card (to 7 from Round 3, one tap). No page errors. Switches as on live (TOURNAMENTS on).
+
+### Live (Fri Nov 20, 2026, about 2:05 PM Eastern, a quiet window; the brief: ship when green and the audit is clean)
+- Restore points first: Time Travel bookmark `00001a28-00000000-00005129-5abd64f8839cdeffe7c668e2f2dd4839`; SQL export of `pickleball` (313 KB)
+  saved as `export-20261120190238` in `pickleball-backups`, checked against the file, local copy deleted (phone numbers).
+- Integrity checks before and after: integrity-checks 21 columns, extension 8, tournament 13, every problem column 0.
+- Main fast-forwarded `39b2685` to `573e010` and pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **bcaeb223-664d-4f3e-989c-4585cf9b03ab** (bundle `index-BxoF2_eq.js`). No migration, no Worker deploy, no live data touched; The Cold Open's
+  money, tickets, credits and settings untouched.
+- Rollback: deployment **324e0caa-764a-47d2-895c-df45a577d97e** (Zip 72, `1bca2a0`), Cloudflare Deployments > Rollback. No database undo
+  needed (no schema change; old code reads every row this code writes).
+- Read-only live look (pages.dev address): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen, the
+  new bundle; /admin and /api/status 200; the organizer dashboard and check 401 without a PIN. The organizer screens were not opened on live
+  (no read-only PIN in this session).
