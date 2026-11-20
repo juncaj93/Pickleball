@@ -105,7 +105,7 @@ export interface PlayerSessionView {
      * Zip 42 round 3, only for a host with a guest: `guestSpots`, how many spots dropping out now would leave the game short (0 to 2: the
      * dialog's wording); `removeOwes`, removing the guest alone would leave the game below 4 (the guest's share stays owed).
      */
-    lateDrop?: { cancelByAt: string; owes: boolean; paid: boolean; feeCents: number; guestSpots?: number; removeOwes?: boolean };
+    lateDrop?: { cancelByAt: string; owes: boolean; paid: boolean; feeCents: number; guestSpots?: number; removeOwes?: boolean; pairBackCents?: number };
     /** Zip 42 "Guest spot": this player's guest for this game (in or waiting) and one person's share. Missing: no guest. */
     guest?: { name: string; status: 'confirmed' | 'waitlisted'; shareCents: number };
     /** Zip 42 round 3: a guest removed late whose spot is still owed on this seat until someone takes it. */

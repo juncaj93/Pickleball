@@ -3272,10 +3272,10 @@ export function ScheduleRow({
                 hostDropText(
                   myGuest.name,
                   mine?.lateDrop && myGuest.status === 'confirmed'
-                    ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz), spots: mine.lateDrop.owes ? (mine.lateDrop.guestSpots ?? 2) : 0, owesCents: mine.lateDrop.feeCents, paid: mine.lateDrop.paid }
+                    ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz), spots: mine.lateDrop.owes ? (mine.lateDrop.guestSpots ?? 2) : 0, owesCents: mine.lateDrop.feeCents, paid: mine.lateDrop.paid, backCents: mine.lateDrop.pairBackCents ?? 0 }
                     : null,
                   formatPrice,
-                  mine && !(mine.lateDrop?.owes) ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, g.group.organizerName) : '',
+                  mine && !(mine.lateDrop?.owes) ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, firstNameOf(g.group.organizerName)) : '',
                 )
             : mine?.lateDrop
               ? // Past the cancel-by with late fees on: what this drop costs (shared/lateFees.ts rule 9).
@@ -3287,7 +3287,7 @@ export function ScheduleRow({
                   mine.lateDrop.paid,
                 )
               : // Zip 76: what happens to money already paid, in the toast's words.
-                `Your spot opens up for someone else.${mine ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, g.group.organizerName) : ''}`}
+                `Your spot opens up for someone else.${mine ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, firstNameOf(g.group.organizerName)) : ''}`}
           </>
         }
         confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : myGuest ? 'Drop out both' : 'Drop out'}

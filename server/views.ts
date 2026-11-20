@@ -150,6 +150,10 @@ export function playerSessionView(
                 // Zip 42 round 3: only for a host with a guest: how many spots a drop would leave short (0 to 2), and whether removing the
                 // guest alone would leave the game below 4.
                 ...(mySpots === 2 ? { guestSpots: shortSpots, ...(guestIn(mine) ? { removeOwes } : {}) } : {}),
+                // Zip 76 (review): a pair one spot short keeps one share; what the seat holds above it comes back at once (roster.ts pairBack).
+                ...(mySpots === 2 && dropOwes && shortSpots === 1 && !isOrganizer && !claimed
+                  ? { pairBackCents: Math.max(0, (paidNow > 0 ? paidNow : pot.seat.usedCents + pot.seat.cashCents) - feeCents) }
+                  : {}),
               },
             }
           : {}),

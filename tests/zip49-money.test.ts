@@ -1,3 +1,4 @@
+import { hostDropText } from '../shared/guestSpot';
 // Zip 49 (🎾49.moneyfix): the money fixes from Audit C (docs/audits/AUDIT_C_2026-11.md), each with its exact numbers.
 // Rule for every late drop (Alex): it owes only the spots the game is short of 4 (organizer counted), and the amount charged, the amount shown
 // and the amount kept always agree. Fake world, fake clock, Eastern time; Late fees and Guest spot ON (as on live).
@@ -76,6 +77,24 @@ describe('Item 1 (M-1): a late host and guest never keep more than the spots the
     expect((await finalize(w, g.id, ['Casey', 'Devon', 'Emery'])).status).toBe(200);
     expect(await credit(w, 'Blair')).toBe(1400);
     expect(await keptOn(w, g.id, 'Blair')).toBe(1400);
+    expect(health(w)).toEqual({});
+  });
+
+  it('(a2) Zip 76: paid $28 (confirmed), game one short: the dialog says the guest share comes back, and it does, at once', async () => {
+    const w = await guests();
+    const g = await game(w);
+    await join(w, g.id, ['Casey', 'Devon', 'Emery', 'Blair']);
+    expect((await addGuest(w, g.id, 'Blair')).status).toBe(200);
+    await selfPaid(w, g.id, 'Blair');
+    await markPaid(w, g.id, 'Blair');
+    at(w, g.start, 6);
+    const card = (await mineOn(w, 'Blair', g.id)).mine!;
+    expect(card.lateDrop).toMatchObject({ owes: true, paid: true, feeCents: PRICE, guestSpots: 1, pairBackCents: 1400 });
+    expect(hostDropText('Gus', { cancelBy: '7:00 AM', spots: 1, owesCents: card.lateDrop!.feeCents, paid: true, backCents: card.lateDrop!.pairBackCents }, formatPrice)).toBe(
+      "It's past the 7:00 AM cancel-by. Your guest Gus drops out too. Your $14 stays on this game unless someone takes your spot. Your guest's $14 comes back as credit.",
+    );
+    await drop(w, g.id, 'Blair');
+    expect(await credit(w, 'Blair')).toBe(1400);
     expect(health(w)).toEqual({});
   });
 

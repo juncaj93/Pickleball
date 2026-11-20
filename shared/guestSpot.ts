@@ -163,7 +163,7 @@ export function guestViewOf(r: GuestCols): GuestView | null {
  */
 export function hostDropText(
   guest: string,
-  late: { cancelBy: string; spots: number; owesCents: number; paid?: boolean } | null,
+  late: { cancelBy: string; spots: number; owesCents: number; paid?: boolean; backCents?: number } | null,
   fmt: (cents: number) => string,
   moneyLine = '',
 ): string {
@@ -172,7 +172,7 @@ export function hostDropText(
   // Zip 76: already paid: the money stays on the game, nothing more is owed.
   if (late.spots === 1)
     return late.paid
-      ? `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your spot. Your guest's spot isn't needed.`
+      ? `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your spot.${late.backCents ? ` Your guest's ${fmt(late.backCents)} comes back as credit.` : " Your guest's spot isn't needed."}`
       : `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your spot, you still owe ${fmt(late.owesCents)}. Your guest's spot isn't needed.`;
   return late.paid
     ? `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your 2 spots.`

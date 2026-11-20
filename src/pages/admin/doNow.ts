@@ -1,5 +1,6 @@
 // The "Do this now" card's data: the dashboard turned into the shared task
 // brain's input, and the card's taps. No React here, so tests can use it.
+import { CANCEL_BY_HOURS } from '../../../shared/time';
 import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
@@ -30,7 +31,7 @@ export function dashboardTasks(d: AdminDashboard, nowMs: number, adminUrl: strin
   return nextTasks(nowMs, d.sessions.filter((s) => s.hiddenFromList !== true).map((s) => taskSessionOfView(s, d.courtBookedAt ?? {})), new Set(d.taskMarks ?? []), {
     tz: d.group.timezone,
     bookingLeadDays: d.group.settings.bookingLeadDays,
-    defaultDeadlineHours: d.group.settings.defaultDeadlineHours,
+    defaultDeadlineHours: CANCEL_BY_HOURS, // Zip 76: one clock, start minus 12 hours (as the server)
     links: { admin: adminUrl, book: COURTRESERVE_BOOKING_URL, cancel: COURTRESERVE_CANCEL_URL },
     ...(d.textsR2 === true ? { textsR2: true } : {}),
   });
