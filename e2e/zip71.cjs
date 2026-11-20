@@ -107,8 +107,8 @@ async function main() {
     return ctx;
   }
   async function newPage(opts = {}) {
-    const { width = 390, scheme = 'light', height = 844, organizer = false } = opts;
-    const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, colorScheme: scheme, isMobile: true, hasTouch: true, userAgent: UA, reducedMotion: 'reduce' });
+    const { width = 390, scheme = 'light', height = 844, organizer = false, reducedMotion = 'reduce' } = opts;
+    const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, colorScheme: scheme, isMobile: true, hasTouch: true, userAgent: UA, reducedMotion });
     await shift(ctx);
     if (organizer) await ctx.addCookies(adminCookies.map((c) => ({ ...c })));
     const page = await ctx.newPage();
@@ -118,7 +118,7 @@ async function main() {
   }
   async function playerPage(who, opts = {}) {
     const p = await newPage(opts);
-    await p.page.goto(`${BASE}/?as=${encodeURIComponent(who)}`);
+    await p.page.goto(`${BASE}/?as=${encodeURIComponent(who)}${opts.query ?? ''}`);
     // On game night the week's games fold into "Show future games": wait for the night's view or the schedule, whichever this Home has.
     await p.page.locator('.schedule, [data-tc-day]').first().waitFor({ timeout: 30000 });
     await p.page.reload();
@@ -357,6 +357,102 @@ async function main() {
       }
       await p.ctx.close();
     }
+  });
+
+  // ---------------------------------------------------------------- G  the look fixes (Alex, after the preview)
+  /** Red and green parts of a row's background, from the computed color (rgb or color(srgb ...)). */
+  const tint = (page, sel) =>
+    page.locator(sel).first().evaluate((el) => {
+      const c = document.createElement('canvas').getContext('2d');
+      c.fillStyle = getComputedStyle(el).backgroundColor;
+      c.fillRect(0, 0, 1, 1);
+      const [r, g, b] = c.getImageData(0, 0, 1, 1).data;
+      return { r, g, b };
+    });
+  await check('G banner: the Undo circle stays, no draining line along the bottom (Locked doubles and Americano)', async () => {
+    await stage('zip71_taps');
+    const v = await playerPage('Vic', { reducedMotion: 'no-preference', query: '&motion=on' });
+    await v.page.locator('[data-tc-day-wewon]').click();
+    const box = v.page.locator('.pop.toast').first();
+    await box.waitFor({ timeout: 3000 });
+    assert((await box.locator('.m-undo-ring').count()) === 1, 'the circle on Undo');
+    assert((await box.locator('.toast-drain').count()) === 0, 'no drain line (Locked doubles)');
+    await v.page.screenshot({ path: path.join(SHOTS, 'G-banner-doubles.png') });
+    await v.ctx.close();
+    await stage('zip71_am');
+    const a = await playerPage('Vic', { reducedMotion: 'no-preference', query: '&motion=on' });
+    await a.page.locator('[data-tc-day-next] button', { hasText: 'Enter score' }).first().click();
+    await a.page.locator('[data-tc-score-sheet]').waitFor({ timeout: 5000 });
+    await a.page.locator('[data-tc-score-sheet] button', { hasText: 'Submit' }).first().click();
+    const box2 = a.page.locator('.pop.toast').first();
+    await box2.waitFor({ timeout: 3000 });
+    assert((await box2.locator('.m-undo-ring').count()) === 1, 'the circle on Undo (Americano)');
+    assert((await box2.locator('.toast-drain').count()) === 0, 'no drain line (Americano)');
+    await a.page.locator('.toast-action').first().click();
+    await a.ctx.close();
+  });
+  const LOOK = [420, 390, 360, 320];
+  await check('G Your games: Lost rows soft red, Won rows green, the next game blue (Locked doubles, 420/390/360/320, light and dark)', async () => {
+    await stage('pools_done');
+    for (const width of LOOK)
+      for (const scheme of SCHEMES) {
+        const p = await playerPage('Parker', { width, scheme });
+        const rows = p.page.locator('[data-tc-day-game][data-state="done"]');
+        const n = await rows.count();
+        let lost = 0;
+        let won = 0;
+        for (let i = 0; i < n; i++) {
+          const row = rows.nth(i);
+          const isLost = flat(await row.innerText()).includes('Lost');
+          const c = await row.evaluate((el) => getComputedStyle(el).backgroundColor);
+          const cls = await row.getAttribute('class');
+          if (isLost) {
+            lost++;
+            assert(cls.includes('tc-gd-lost'), `${width} ${scheme}: a lost row has the red shade`);
+          } else {
+            won++;
+            assert(!cls.includes('tc-gd-lost'), `${width} ${scheme}: a won row stays green`);
+          }
+          void c;
+        }
+        assert(lost > 0 && won > 0, `${width} ${scheme}: Parker has won and lost games (${won} won, ${lost} lost)`);
+        const red = await tint(p.page, '[data-tc-day-game].tc-gd-lost');
+        const green = await tint(p.page, '[data-tc-day-game][data-state="done"]:not(.tc-gd-lost)');
+        assert(red.r > red.g && green.g > green.r, `${width} ${scheme}: red ${JSON.stringify(red)} green ${JSON.stringify(green)}`);
+        await noWider(p.page, `Parker ${width} ${scheme}`);
+        await p.page.locator('[data-tc-day-game]').first().scrollIntoViewIfNeeded();
+        await p.page.screenshot({ path: path.join(SHOTS, `G-games-${width}-${scheme}.png`) });
+        assert(p.errors.length === 0, p.errors.join('; '));
+        await p.ctx.close();
+      }
+  });
+  await check('G Your rounds: Lost rows soft red, Won rows green, the next round blue (Americano, 420/390/360/320, light and dark)', async () => {
+    await stage('am_round3');
+    for (const width of LOOK)
+      for (const scheme of SCHEMES) {
+        const p = await playerPage('Vic', { width, scheme });
+        const done = p.page.locator('[data-tc-round][data-state="done"]');
+        const n = await done.count();
+        let lost = 0;
+        for (let i = 0; i < n; i++) {
+          const t = flat(await done.nth(i).innerText());
+          const cls = await done.nth(i).getAttribute('class');
+          if (t.includes('Lost')) {
+            lost++;
+            assert(cls.includes('tc-gd-lost'), `${width} ${scheme}: lost round red`);
+          } else assert(!cls.includes('tc-gd-lost'), `${width} ${scheme}: won round green`);
+        }
+        const next = await p.page.locator('[data-tc-round][data-state="next"]').first().getAttribute('class');
+        assert(next.includes('tc-gd-s-next') && !next.includes('tc-gd-lost'), 'the next round blue');
+        if (lost) {
+          const red = await tint(p.page, '[data-tc-round].tc-gd-lost');
+          assert(red.r > red.g, `${width} ${scheme}: red ${JSON.stringify(red)}`);
+        }
+        await noWider(p.page, `Vic ${width} ${scheme}`);
+        await p.page.locator('[data-tc-round]').first().scrollIntoViewIfNeeded();
+        await p.page.screenshot({ path: path.join(SHOTS, `G-rounds-${width}-${scheme}.png`) });
+        await p.ctx.close();
+      }
   });
 
   await browser.close();

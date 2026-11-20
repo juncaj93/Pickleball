@@ -7202,8 +7202,15 @@ Net Ninjas 1-0, nothing to confirm (light and dark); then the stage was put back
   take back."; leftover comments. Left as is: Locked doubles has no server check on the round being played (the screen only offers the buttons
   for the game on now; not new).
 
-### Live: NOT shipped
-Live is deployment `b828b43f` (Zip 70, commit `896f4c1`; main `ad02027` is that plus notes). Before the deploy, the live SQL export (the
-backup step) was refused by this session's permission check, so nothing went to live: no deploy, main not moved, no live data read or touched.
-The live Time Travel bookmark read just before was `000019dd-00000000-00005129-88413914b80ca960ccd6a74673e6ddda`. To ship: allow the export (or
-run it), then the usual DEPLOY.md steps from main; rollback would be `b828b43f`.
+### Look fixes after Alex's preview taps (Fri Nov 20, 2026)
+1. The result banner (both styles, every player's own result): the countdown circle on Undo stays; the thin green line that drained along the
+   banner's foot is gone (it repeated the circle). The circle is drawn while the site's Motion switch is on (on for everyone on live).
+2. Your games / Your rounds: a LOST game is no longer shaded green like a win. Lost rows get a soft red (`--tc-gd-lost`: light, the danger
+   text color at 11% over the card; dark, the dark danger background over the card), as strong as the green. Won rows stay green, the next game
+   blue. Checked in both styles at 420/390/360/320, light and dark (e2e/zip71.cjs G, three checks; e2e/zip57.cjs and e2e/zip61.cjs follow: no
+   drain line, the circle when drawn). zip71 11 of 11, zip57 21 of 21, zip61 19 of 19.
+
+### Live (Fri Nov 20, 2026, quiet window; Alex: "ship it" after the two look fixes)
+- Live access worked on the retry: Time Travel bookmark `000019ed-00000000-00005129-22a862edd1fee994860c61a1dfff5e7d`; SQL export of
+  `pickleball` (310 KB) saved as `export-20261120145748` in `pickleball-backups`, checked against the file, local copy deleted (phone numbers).
+- Integrity checks before: integrity-checks 21 columns, extension 8, tournament 13, every problem column 0 (info_kept_late_drops 0, open claims 0).

@@ -396,12 +396,17 @@ async function main() {
         };
       });
       assert(lit.check && /216, 240, 59/.test(lit.litBg) && lit.otherOpacity < 1 && lit.otherBtn < 1, `lit: ${JSON.stringify(lit)}`);
-      // The real bottom banner: "Net Ninjas won Game 1", Undo, and a thin line draining over 5 seconds.
+      // The real bottom banner: "Net Ninjas won Game 1", Undo with its 5 second circle (Zip 71: no drain line).
       await toastBox(v.page).waitFor();
       const tText = flat(await toastBox(v.page).innerText());
       assert(tText.startsWith('Net Ninjas won Game 1') && tText.includes('Undo'), `toast: ${tText}`);
-      const drain = await toastBox(v.page).locator('.toast-drain').evaluate((el) => [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration]);
-      assert(drain[0] === 'toast-drain' && drain[1] === '5s', `drain: ${drain}`);
+      // Zip 71 (Alex): no draining line along the banner; the countdown circle on Undo stays (5 seconds).
+      assert((await toastBox(v.page).locator('.toast-drain').count()) === 0, 'no drain line');
+      // The circle is drawn while the site's Motion switch is on (it is on live; this world has it off): when drawn, it runs the 5 seconds.
+      if (await toastBox(v.page).locator('.m-undo-ring').count()) {
+        const ring = await toastBox(v.page).locator('.m-undo-ring').evaluate((el) => getComputedStyle(el).getPropertyValue('--ring-ms').trim());
+        assert(ring === '5000ms', `the circle: ${ring}`);
+      }
       await SH(v.page, `C-lit-${scheme}`);
       // About a second later the card slides to Game 2; the bar says Game 2 of 3; Game 1 gets a green Won tag.
       await v.page.locator('.tc-gd-slide-out').waitFor({ timeout: 2500 });

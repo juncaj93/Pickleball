@@ -326,6 +326,22 @@
 .tc-gd-game.tc-gd-s-next {
   background: var(--tc-gd-next);
 }
+/* Zip 71 (Alex): a lost game is not shaded like a win: the site's danger color softened over the card, as soft as the green, in light and
+   dark (light: the danger text color at 11%; dark: the dark danger background, which is the danger red at low strength). */
+.tc-gd {
+  --tc-gd-lost: color-mix(in srgb, var(--danger-fg) 11%, var(--surface));
+}
+:root[data-theme='dark'] .tc-gd {
+  --tc-gd-lost: color-mix(in srgb, var(--danger-bg) 75%, var(--surface));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tc-gd {
+    --tc-gd-lost: color-mix(in srgb, var(--danger-bg) 75%, var(--surface));
+  }
+}
+.tc-gd-game.tc-gd-s-done.tc-gd-lost {
+  background: var(--tc-gd-lost);
+}
 .tc-gd-left {
   flex: none;
   width: 84px;

@@ -101,7 +101,7 @@ function GamesCard({ day, org }: { day: PlayerDayView; org: string }) {
         {day.games.map((g) => {
           const w = rowWords(g, org);
           return (
-            <li key={`${g.stage}-${g.num}`} className={`tc-gd-row tc-gd-game tc-gd-s-${g.state}`} data-tc-day-game={g.label} data-state={g.state}>
+            <li key={`${g.stage}-${g.num}`} className={`tc-gd-row tc-gd-game tc-gd-s-${g.state}${g.state === 'done' && g.won === false ? ' tc-gd-lost' : ''}`} data-tc-day-game={g.label} data-state={g.state}>
               <span className="tc-gd-left">
                 <b>{g.label}</b>
                 {g.opponent && <Court n={g.court} set={day.courtsSet} />}
@@ -353,7 +353,7 @@ export type Held = { num: number; won: boolean; lit: boolean };
 /**
  * THE result motion, shared by Locked doubles (We won, "<other team> won") and Americano (Submit score): zip 57's code, the one copy. The card
  * lights for a second (won: our side lime and "✓ Let's go!"; lost: their side's white glow and "Onto the next!"), then slides to the next game;
- * the bottom banner says who won with Undo and a 5 second drain line; the result is sent after 5 seconds unless Undo. Leaving Home or locking
+ * the bottom banner says who won with Undo and its 5 second countdown circle; the result is sent after 5 seconds unless Undo. Leaving Home or locking
  * the phone inside the 5 seconds still sends it. Reduced motion: no light and no slide (the card just changes).
  */
 export function useHeldResult(t: PlayerTournamentView, onChanged: () => Promise<unknown>) {
@@ -412,7 +412,8 @@ export function useHeldResult(t: PlayerTournamentView, onChanged: () => Promise<
     setHeld({ num, won, lit });
     if (lit) litTimer.current = setTimeout(() => setHeld((h) => (h && h.num === num ? { ...h, lit: false } : h)), LIT_MS);
     pending.current = body;
-    toast(banner, 'ok', { action: { label: 'Undo', onClick: undo }, stayMs: UNDO_MS, keep: true, drain: UNDO_MS });
+    // Zip 71 (Alex): the countdown circle on Undo only; no draining line along the banner's foot (it repeated the circle).
+    toast(banner, 'ok', { action: { label: 'Undo', onClick: undo }, stayMs: UNDO_MS, keep: true });
     timer.current = setTimeout(() => {
       pending.current = null;
       void send(body).then(() => setHeld(null));

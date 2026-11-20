@@ -37,7 +37,7 @@ function withHeld(day: PlayerRoundsView, held: (Held & { mine: number; theirs: n
 function RoundRow({ r, set, plain }: { r: PlayerRound; set: boolean; plain?: boolean }) {
   // Before the night (picture 31) every row is plain white; on the night done rows are green and the next one blue (picture 32).
   return (
-    <li className={`tc-gd-row tc-gd-game${plain ? '' : ` tc-gd-s-${r.state}`}${r.num === null ? ' tc-gd-break' : ''}`} data-tc-round={r.round} data-state={r.state}>
+    <li className={`tc-gd-row tc-gd-game${plain ? '' : ` tc-gd-s-${r.state}`}${!plain && r.state === 'done' && r.won === false ? ' tc-gd-lost' : ''}${r.num === null ? ' tc-gd-break' : ''}`} data-tc-round={r.round} data-state={r.state}>
       <span className="tc-gd-left">
         <b>Round {r.round}</b>
         {r.num !== null && <Court n={r.court} set={set} />}

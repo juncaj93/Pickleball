@@ -7,7 +7,7 @@
  *   B  Vic at Round 3 (picture 32): the hero, the VS card with Enter score, Your rounds (Won / Lost tags), Standings with points, Currently
  *      playing, Show future games; light and dark at 390, 360, 320; no row wraps
  *   C  Enter score (picture 33) and the win motion (picture 36): lime "✓ Let's go!", the slide to the break card, Round 4 of 6, the Won tag,
- *      the banner with Undo and the drain line, sent after 5 seconds
+ *      the banner with Undo and its countdown circle (Zip 71: no drain line), sent after 5 seconds
  *   D  a losing score (picture 37): the white glow and "Onto the next!", the slide, the Lost tag; Undo sends nothing
  *   E  the other side (zip 71, no confirming): the score is in at once; no "Is this right?", no Enter score for that round
  *   F  a break (picture 35): the dark card, who else sits, Currently playing shows every court
@@ -299,8 +299,13 @@ async function main() {
       await toastBox(v.page).waitFor();
       const tText = flat(await toastBox(v.page).innerText());
       assert(tText.startsWith(`You + ${r3.partner} won 11 to 8`) && tText.includes('Undo'), `banner: ${tText}`);
-      const drain = await toastBox(v.page).locator('.toast-drain').evaluate((el) => [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration]);
-      assert(drain[0] === 'toast-drain' && drain[1] === '5s', `drain: ${drain}`);
+      // Zip 71 (Alex): no draining line along the banner; the countdown circle on Undo stays (5 seconds).
+      assert((await toastBox(v.page).locator('.toast-drain').count()) === 0, 'no drain line');
+      // The circle is drawn while the site's Motion switch is on (it is on live; this world has it off): when drawn, it runs the 5 seconds.
+      if (await toastBox(v.page).locator('.m-undo-ring').count()) {
+        const ring = await toastBox(v.page).locator('.m-undo-ring').evaluate((el) => getComputedStyle(el).getPropertyValue('--ring-ms').trim());
+        assert(ring === '5000ms', `the circle: ${ring}`);
+      }
       await SH(v.page, `C-lit-${scheme}`);
       await v.page.locator('.tc-gd-slide-out').waitFor({ timeout: 2500 });
       await SH(v.page, `C-slide-${scheme}`);
