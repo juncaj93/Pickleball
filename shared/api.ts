@@ -827,6 +827,23 @@ export interface AdminDashboard {
 }
 
 /** The organizer's private monthly money page. Never sent to players. */
+/** Zip 76: one ended tournament on Money > Totals (all cents). */
+export interface MonthTournament {
+  id: string;
+  name: string;
+  /** "YYYY-MM-DD", the night. */
+  date: string;
+  ticketsCents: number;
+  /** Tickets with money on them (the organizer's $0 seat is never one). */
+  paid: number;
+  courtCents: number;
+  courts: number;
+  minutes: number;
+  prizeCents: number;
+  /** ticketsCents - courtCents - prizeCents. */
+  resultCents: number;
+}
+
 export interface MonthlyMoney {
   /** "2026-11" */
   month: string;
@@ -899,9 +916,15 @@ export interface MonthlyMoney {
       yourCostMembershipCents: number;
     };
     /**
-     * Zip 56: the money on tournament tickets paid in full this month (credit and confirmed cash still on them) and how many tickets, while
-     * Tournaments is on for this phone and there is some. Its own line under the cards; not part of the venue cost.
+     * Zip 76: each tournament whose night is in this month and that was ENDED (prizes final), while Tournaments is on for this phone. Its
+     * result for the organizer: tickets in (credit and confirmed cash still on the tickets) minus the courts (the court rate x courts x the
+     * final hours) minus the prize credit given out. Above 0 the organizer made money. Replaces Zip 56's "Tournament tickets" line.
      */
-    tournamentTickets?: { cents: number; paid: number };
+    tournaments?: MonthTournament[];
+    /**
+     * Zip 76: credit the organizer added by hand (Adjust credit) this month, minus credit taken away by hand, in cents. It is a cost in the
+     * month it is given, so the credit spent later as "Players paid" balances. Missing when 0.
+     */
+    handCreditCents?: number;
   };
 }

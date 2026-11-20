@@ -953,8 +953,11 @@ async function playerTicketsView(
   const closed = statusOf(t) === 'tickets' && (salesClosed(t, group.timezone, ctx.nowMs) || (!holding && (phase === 'cut' || (phase === 'after' && lockedInCount(tickets) >= MAX_SPOTS))));
   // Zip 70: Drop out closes 3 hours before the start; the late drop rule (the same test the back out runs in its statement, lateDropKeepsSql).
   const dropClosed = statusOf(t) === 'tickets' && dropClosedAt(t, group.timezone, ctx.nowMs);
-  const ownSpot = !!own && own.signup_status === 'in' && own.place === 'spot' && own.credit_cents + own.paid_cents > 0;
-  const dropKeeps = !dropClosed && statusOf(t) === 'tickets' && t.courts === 2 && !!t.pay_by && ctx.nowMs >= Date.parse(t.pay_by) && ownSpot && locked <= LATE_DROP_FLOOR;
+  // Zip 76 (the 🎾75 audit): a whole-ticket I paid still waiting counts the way players see it (lockedInCount), for the dropper and the count.
+  const ownWaiting = !!own && own.place !== 'line' && own.claim_cents > 0 && own.credit_cents + own.paid_cents + own.claim_cents >= own.price_cents;
+  const ownSpot = !!own && own.signup_status === 'in' && ((own.place === 'spot' && own.credit_cents + own.paid_cents > 0) || ownWaiting);
+  const dropKeeps =
+    !dropClosed && statusOf(t) === 'tickets' && t.courts === 2 && !!t.pay_by && ctx.nowMs >= Date.parse(t.pay_by) && ownSpot && lockedInCount(tickets) <= LATE_DROP_FLOOR;
   return {
     // The spots players see: the planned size (Alex's smart plan); every spot is taken only at the cap (16, Zip 63).
     size: smartPlan(locked).size,
@@ -2133,14 +2136,6 @@ export async function playerTournamentBackOut(ctx: Ctx, who: TournamentActor, bo
   return { ok: true, result: 'backed_out', creditBackCents: cash, creditReturnedCents: credit, waitingCents: waiting };
 }
 
-/**
- * Zip 70 (review): the keep test and the release test count the same thing: paid spots held by players on the list (an I paid still waiting
- * for the organizer is not money yet, on either side). The dropper must hold a paid spot.
- */
-const spotsOnListSql = (t: string) =>
-  `(SELECT COUNT(*) FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
-     WHERE k.tournament_id = ${t} AND k.place = 'spot')`;
-
 /** Zip 70: Drop out has closed: 3 hours before the real start (the moment tickets close), or the night has started. */
 export function dropClosedAt(t: TournamentRow, tz: string, nowMs: number): boolean {
   if (!t.final_date) return false;
@@ -2151,13 +2146,17 @@ export function dropClosedAt(t: TournamentRow, tz: string, nowMs: number): boole
  * Zip 70: SQL, true when THIS drop keeps the dropper's money (the late drop rule): the tournament has tickets open on 2 courts and Pay by has
  * passed; the dropper is locked in (a spot, or an I paid for the whole ticket waiting) and has money on the ticket; and the number locked in,
  * the dropper included, is 8 or fewer (so the drop takes it below 8). Read inside the statement that takes them off the list.
+ * Zip 76 (the 🎾75 audit): "locked in" is counted the way players see it (lockedInSql: spots and whole-ticket I paids still waiting), for the
+ * dropper too, so a Venmo payer whose I paid waits is held to the same rule as a credit payer. Giving kept money back still needs real money
+ * (refilledSql counts paid spots), so an I paid that later turns out unpaid never releases anyone.
  */
 export function lateDropKeepsSql(tournamentId: string, playerId: string, nowIso: string): string {
   const t = sqlText(tournamentId);
   return `(EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ${t} AND tt.status = 'tickets' AND tt.courts = 2 AND tt.pay_by IS NOT NULL AND tt.pay_by <= ${sqlText(nowIso)})
     AND EXISTS (SELECT 1 FROM tournament_tickets kk WHERE kk.tournament_id = ${t} AND kk.player_id = ${sqlText(playerId)}
-      AND kk.place = 'spot' AND kk.credit_cents + kk.paid_cents > 0)
-    AND ${spotsOnListSql(t)} <= ${LATE_DROP_FLOOR})`;
+      AND ((kk.place = 'spot' AND kk.credit_cents + kk.paid_cents > 0)
+        OR (kk.place <> 'line' AND kk.claim_cents > 0 AND kk.credit_cents + kk.paid_cents + kk.claim_cents >= kk.price_cents)))
+    AND ${lockedInSql(t)} <= ${LATE_DROP_FLOOR})`;
 }
 
 /** Zip 70: the money a kept late drop holds now (0 when they are not kept, or it already came back). */

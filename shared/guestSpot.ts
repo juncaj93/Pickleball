@@ -161,12 +161,22 @@ export function guestViewOf(r: GuestCols): GuestView | null {
  * The confirm a host reads before dropping out with a guest in (Alex's wording). `late`: inside the 12 hours with late fees on; `spots` is
  * how many spots the game would be left short (0 to 2) and `owesCents` what that costs if nobody takes them. Outside the window: as before.
  */
-export function hostDropText(guest: string, late: { cancelBy: string; spots: number; owesCents: number } | null, fmt: (cents: number) => string): string {
-  if (!late) return `Your guest ${guest} drops out too. Both spots open up for someone else.`;
-  if (late.spots <= 0) return `Your guest ${guest} drops out too. Both spots open up. You don't owe anything because the game still has 4 players.`;
+export function hostDropText(
+  guest: string,
+  late: { cancelBy: string; spots: number; owesCents: number; paid?: boolean } | null,
+  fmt: (cents: number) => string,
+  moneyLine = '',
+): string {
+  if (!late) return `Your guest ${guest} drops out too. Both spots open up for someone else.${moneyLine}`;
+  if (late.spots <= 0) return `Your guest ${guest} drops out too. Both spots open up. You don't owe anything because the game still has 4 players.${moneyLine}`;
+  // Zip 76: already paid: the money stays on the game, nothing more is owed.
   if (late.spots === 1)
-    return `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your spot, you still owe ${fmt(late.owesCents)}. Your guest's spot isn't needed.`;
-  return `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your 2 spots, you still owe ${fmt(late.owesCents)}.`;
+    return late.paid
+      ? `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your spot. Your guest's spot isn't needed.`
+      : `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your spot, you still owe ${fmt(late.owesCents)}. Your guest's spot isn't needed.`;
+  return late.paid
+    ? `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. Your ${fmt(late.owesCents)} stays on this game unless someone takes your 2 spots.`
+    : `It's past the ${late.cancelBy} cancel-by. Your guest ${guest} drops out too. If no one takes your 2 spots, you still owe ${fmt(late.owesCents)}.`;
 }
 
 /**

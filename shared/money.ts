@@ -50,7 +50,10 @@ export function venmoPayUrl(
   }
   if (!/(^|\.)venmo\.com$/i.test(u.hostname)) return { url: profileUrl, appUrl: null, prefilled: false };
   const parts = u.pathname.split('/').filter(Boolean);
-  const name = parts[0] === 'u' ? parts[1] : parts.length === 1 ? parts[0] : undefined;
+  // Zip 76: the same page-word guard as parseVenmoHandle, so a saved venmo.com/code or /pay link never pays "code" or "pay". An id link
+  // (user_id=...) cannot be used as a recipient here: the profile link opens and the page shows the amount.
+  const first = parts[0]?.toLowerCase();
+  const name = first === 'u' ? parts[1] : parts.length === 1 && !VENMO_PAGES.has(first) ? parts[0] : undefined;
   if (!name || !/^[A-Za-z0-9_-]{2,40}$/.test(name)) return { url: profileUrl, appUrl: null, prefilled: false };
   const query = `txn=pay&recipients=${name}&amount=${venmoAmount(cents)}&note=${venmoEncode(note)}`;
   return {
@@ -123,9 +126,12 @@ export function venmoHandleText(handle: string | null): string {
  * pick the person. `appUrl` opens the Venmo app first, like the Pay button.
  */
 export function venmoRefundUrl(handle: string | null, cents: number, note: string): { url: string; appUrl: string; addressed: boolean } {
-  const to = handle ? `recipients=${handle.startsWith('id:') ? handle.slice(3) : handle}&` : '';
+  // Zip 76: an id handle cannot be a recipient in this link (shared/venmoRequest.ts says the same), so it is treated like no handle:
+  // the organizer picks them in Venmo.
+  const name = handle && !handle.startsWith('id:') ? handle : null;
+  const to = name ? `recipients=${name}&` : '';
   const query = `txn=pay&${to}amount=${venmoAmount(cents)}&note=${venmoEncode(note)}`;
-  return { url: `https://venmo.com/?${query}`, appUrl: `venmo://paycharge?${query}`, addressed: !!handle };
+  return { url: `https://venmo.com/?${query}`, appUrl: `venmo://paycharge?${query}`, addressed: !!name };
 }
 
 /** "Pickleball Thu Oct 29 refund". */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MonthlyMoney } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
-import { countedPastMonths, dollarsText, monthRowOf, perCourtDollars, projectedCard, runningTotalOf, sinceLabel, soFarCard, type TotalsCard } from '../../../shared/totalsRefresh';
+import { countedPastMonths, dollarsText, expectedTournament, monthRowOf, monthSubText, perCourtDollars, projectedCard, runningTotalOf, sinceLabel, soFarCard, type TotalsCard, type TotalsTournament } from '../../../shared/totalsRefresh';
 import { ApiError, api, useDemoVersion, usePretend } from '../../lib';
 import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
@@ -34,22 +34,8 @@ export function TotalsRefresh({ ctx, t, month }: { ctx: AdminCtx; t: Rework; mon
   return (
     <div className="tr" data-totals data-totals-refresh>
       <TotalsCardView kind="sf" title="So far" paidLabel="Players paid" c={soFarCard(t)} />
-      <TotalsCardView kind="pj" title="Projected" paidLabel="Players pay" c={projectedCard(t)} />
-      {/* Zip 56 (Alex): ticket money paid this month, its own line (not part of the venue cost: the site does not know a tournament's court bill). */}
-      {t.tournamentTickets && (
-        <section className="tr-card tt" data-card="tournament-tickets" aria-label="Tournament tickets">
-          <dl className="tr-rows">
-            <div className="tr-ln" data-row="tournament-tickets">
-              <dt>
-                Tournament tickets <em>{t.tournamentTickets.paid} paid</em>
-              </dt>
-              <dd className="gr" data-tickets-total={t.tournamentTickets.cents}>
-                {formatPrice(t.tournamentTickets.cents)}
-              </dd>
-            </div>
-          </dl>
-        </section>
-      )}
+      {/* Zip 76: an open tournament whose night is in this month shows its expected result here (its card's "You make if it fills"). */}
+      <TotalsCardView kind="pj" title="Projected" paidLabel="Players pay" c={projectedCard(t, expectedTournament(ctx.d.tournament, month))} />
       <RunningTotal open={rtOpen} onToggle={() => setRtOpen((v) => !v)} past={past} currentMonth={currentMonth} current={month === currentMonth ? t : (answers.byMonth[currentMonth] ?? null)} answers={answers} />
       <MonthByMonth open={mmOpen} onToggle={() => setMmOpen((v) => !v)} past={past} answers={answers} />
     </div>
@@ -120,7 +106,8 @@ function useMonthAnswers(wanted: string[], version: unknown): MonthAnswers {
  * players' share. When the players paid MORE than the venue is owed it is a credit: green, with the word, never a minus sign.
  */
 function TotalsCardView({ kind, title, paidLabel, c }: { kind: 'sf' | 'pj'; title: string; paidLabel: string; c: TotalsCard }) {
-  const per = perCourtDollars(c.netCents, c.games);
+  // Zip 76: per court is the regular games only (Alex's check on the $14 price); the big total has the tournaments too.
+  const per = perCourtDollars(c.regularNetCents, c.games);
   const credit = c.netCents < 0;
   return (
     <section className={`tr-card ${kind}`} data-card={kind === 'sf' ? 'so-far' : 'projected'} aria-label={title}>
@@ -147,6 +134,19 @@ function TotalsCardView({ kind, title, paidLabel, c }: { kind: 'sf' | 'pj'; titl
           <dt>{paidLabel}</dt>
           <dd className="gr">{minus(c.playersCents)}</dd>
         </div>
+        {c.handCreditCents !== 0 && (
+          <div className="tr-ln" data-row="hand-credit">
+            <dt>
+              Credit you added <em>by hand</em>
+            </dt>
+            <dd className={c.handCreditCents < 0 ? 'gr' : undefined} data-hand-credit={c.handCreditCents}>
+              {c.handCreditCents < 0 ? minus(-c.handCreditCents) : formatPrice(c.handCreditCents)}
+            </dd>
+          </div>
+        )}
+        {c.tournaments.map((x) => (
+          <TournamentRow key={x.id} x={x} />
+        ))}
       </dl>
       <div className="tr-you">
         <div className="tr-t">
@@ -166,6 +166,50 @@ function TotalsCardView({ kind, title, paidLabel, c }: { kind: 'sf' | 'pj'; titl
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Zip 76 (pictures totals-pair-1 and 2): "The Cold Open tournament" and its result: made money "−$8" in green (it lowers the cost, like Players
+ * paid), cost money "$10" in red. A tap on the row opens Tickets / Courts / Prizes in place (no caret); a second tap closes it.
+ */
+function TournamentRow({ x }: { x: TotalsTournament }) {
+  const [open, setOpen] = useState(false);
+  const made = x.resultCents >= 0;
+  const d = x.detail;
+  return (
+    <>
+      <div className={`tr-ln tr-tour${open ? ' open' : ''}`} data-row="tournament" data-tournament={x.id}>
+        <dt>
+          <button type="button" className="tr-tour-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            {x.name} <em>tournament</em>
+          </button>
+        </dt>
+        <dd className={made ? 'gr' : 'rd'} data-tournament-result={x.resultCents}>
+          {made ? minus(x.resultCents) : formatPrice(-x.resultCents)}
+        </dd>
+      </div>
+      {open && (
+        <>
+          <div className="tr-sub first" data-row="tour-tickets" data-tournament-detail={x.id}>
+            <dt>
+              Tickets {d.ticketsSub && <em>{d.ticketsSub}</em>}
+            </dt>
+            <dd>{formatPrice(d.ticketsCents)}</dd>
+          </div>
+          <div className="tr-sub" data-row="tour-courts">
+            <dt>Courts {d.courtsSub && <em>{d.courtsSub}</em>}</dt>
+            <dd>{minus(d.courtCents)}</dd>
+          </div>
+          <div className="tr-sub" data-row="tour-prizes">
+            <dt>
+              Prizes <em>credit</em>
+            </dt>
+            <dd>{minus(d.prizeCents)}</dd>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -207,7 +251,7 @@ function MonthRows({ months, answers }: { months: string[]; answers: MonthAnswer
           <li key={r.month} className="tr-mrow" data-month-row={r.month}>
             <span className="tr-mrow-l">
               <span className="tr-mrow-name">{monthBoxLabel(r.month)}</span>
-              <span className="tr-mrow-sub">{r.games > 0 ? plural(r.games, 'game', 'games') : 'No games'}</span>
+              <span className="tr-mrow-sub">{monthSubText(r.games, r.tournaments)}</span>
             </span>
             <span className="tr-mrow-r">
               <span className={`tr-mrow-net${credit ? ' credit' : ''}`} data-month-net={r.netCents}>
@@ -281,6 +325,27 @@ function RunningRows({ past, currentMonth, current, answers }: { past: string[];
             {total.courtAfterPlayersCents < 0 && <small> credit</small>}
           </dd>
         </div>
+        {total.handCreditCents !== 0 && (
+          <div className="tr-ln" data-row="rt-hand-credit">
+            <dt>
+              Credit you added <em>by hand</em>
+            </dt>
+            <dd className={total.handCreditCents < 0 ? 'gr' : undefined}>
+              {formatPrice(Math.abs(total.handCreditCents))}
+              {total.handCreditCents < 0 && <small> credit</small>}
+            </dd>
+          </div>
+        )}
+        {total.tournaments > 0 && (
+          <div className="tr-ln" data-row="rt-tournaments">
+            <dt>
+              Tournaments <em>{total.tournaments}</em>
+            </dt>
+            <dd className={total.tournamentsCents < 0 ? 'gr' : undefined} data-tournaments-total={total.tournamentsCents}>
+              {total.tournamentsCents < 0 ? minus(-total.tournamentsCents) : formatPrice(total.tournamentsCents)}
+            </dd>
+          </div>
+        )}
         <div className="tr-ln sum" data-row="rt-out">
           <dt>Out of pocket</dt>
           <dd className={credit ? 'gr' : 'am'} data-out-of-pocket={total.outOfPocketCents}>

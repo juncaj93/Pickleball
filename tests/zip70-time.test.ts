@@ -450,3 +450,67 @@ describe('fix 4: payment details only to a phone that picked a name', () => {
     expect('zelleNumber' in named.group).toBe(true);
   });
 });
+
+// ---------- Zip 76 (🎾76.money fixes, the 🎾75 audit): the late drop rule counts a waiting I paid the way players see it; Pay by moved later ----------
+
+describe('Zip 76: the late drop rule and a waiting I paid; Pay by moved later', () => {
+  async function withWaiting(paidSpots: number, waiter: string) {
+    const names = NAMES.slice(0, paidSpots);
+    const ctx = await world({ signUp: [...names, waiter, 'Lane'] });
+    await lockIn(ctx, names);
+    const w = await playerPhone(ctx, waiter);
+    await w.call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: 1600 });
+    expect((await w.call('POST', '/api/tournament/paid', { tournamentId: ctx.tid, cents: 1600 })).status).toBe(200);
+    ctx.app.now = AFTER_PAY_BY;
+    return ctx;
+  }
+
+  it('7 paid spots + Lee whose $16 I paid waits (players see 8): Lee drops and is held to the rule like a credit payer (kept)', async () => {
+    const ctx = await withWaiting(7, 'Lee');
+    expect((await card(ctx, 'Lee')).tickets.dropKeeps).toBe(true);
+    const r = await backOut(ctx, 'Lee');
+    expect(r.status, r.text).toBe(200);
+    expect(r.data.keptCents).toBe(1600);
+    expect(signupStatus(ctx, 'Lee')).toBe('kept');
+    // The organizer confirms the I paid: still kept (no credit back), as for a credit payer.
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/ticket`, { playerId: ctx.byName.Lee, action: 'confirm', cents: 1600 })).status).toBe(200);
+    expect(pot(ctx, 'Lee')).toBe(0);
+    // Blair (a credit spot) dropping next is kept too: the same rule for both.
+    expect((await backOut(ctx, 'Blair')).data.keptCents).toBe(1600);
+    books(ctx);
+  });
+
+  it('8 paid spots + Lee waiting (players see 9): a drop takes it to 8, so it is NOT kept (credit back at once)', async () => {
+    const ctx = await withWaiting(8, 'Lee');
+    expect((await card(ctx, 'Blair')).tickets.dropKeeps).toBeUndefined();
+    const r = await backOut(ctx, 'Blair');
+    expect(r.status, r.text).toBe(200);
+    expect(r.data.keptCents).toBeUndefined();
+    expect(pot(ctx, 'Blair')).toBe(1600);
+    expect(signupStatus(ctx, 'Blair')).toBe('out');
+    books(ctx);
+  });
+
+  it('Pay by moved later: a drop kept under the old Pay by comes back at once (once), and a drop before the new Pay by gets credit back', async () => {
+    const names = NAMES.slice(0, 8);
+    const ctx = await world({ signUp: [...names, 'Lee', 'Lane'] });
+    await lockIn(ctx, names);
+    ctx.app.now = AFTER_PAY_BY;
+    expect((await backOut(ctx, 'Blair')).data.keptCents).toBe(1600);
+    expect(pot(ctx, 'Blair')).toBe(0);
+    // Moved EARLIER than now (still past): nothing kept moves. (Refused: Pay by must be in the future; nothing written either way.)
+    // Moved to Thu Nov 12, 10:00 AM (later than now): Blair's $16 comes back in the same step.
+    const moved = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: '2026-11-12T15:00:00.000Z' });
+    expect(moved.status, moved.text).toBe(200);
+    expect(pot(ctx, 'Blair')).toBe(1600);
+    expect(signupStatus(ctx, 'Blair')).toBe('out');
+    expect((await history(ctx)).filter((e) => e.action === 'tournament_kept_returned')).toHaveLength(1);
+    // Moving it again gives nothing more.
+    expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/pay-by`, { payBy: '2026-11-12T16:00:00.000Z' })).status).toBe(200);
+    expect(pot(ctx, 'Blair')).toBe(1600);
+    // Before the new Pay by: Casey's drop (7 to 6) gets credit back, the same as Blair's now.
+    expect((await backOut(ctx, 'Casey')).data.keptCents).toBeUndefined();
+    expect(pot(ctx, 'Casey')).toBe(1600);
+    books(ctx);
+  });
+});

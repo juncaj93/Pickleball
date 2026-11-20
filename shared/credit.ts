@@ -332,6 +332,16 @@ export function droppedText(creditCents: number, cashCents: number, lead = 'You 
 }
 
 /**
+ * Zip 76: the Drop out dialog's money line, in the toast's words: " $14 comes back as credit." (a leading space, or '' when nothing comes
+ * back). An I paid not confirmed yet: " Your $14 comes back as credit once Alex confirms your payment."
+ */
+export function dropMoneyLine(creditCents: number, cashCents: number, claimCents = 0, organizerName: string | null = null): string {
+  if (claimCents > 0) return ` Your ${formatPrice(claimCents)} comes back as credit once ${organizerName ?? 'the organizer'} confirms your payment.`;
+  const total = creditCents + cashCents;
+  return total > 0 ? ` ${formatPrice(total)} comes back as credit.` : '';
+}
+
+/**
  * The sign-up banner when credit went on the game at once: "You're in. $14
  * credit used." Part cover: "You're in. $3 credit used, $11 due." The amount
  * due is left out where the card shows no "$ due" (a court not booked while

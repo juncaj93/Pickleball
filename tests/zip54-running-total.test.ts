@@ -28,7 +28,7 @@ const NOV_SO_FAR = month(3000, 19200, 16800, 4);
 describe("Running total: Alex's real numbers", () => {
   it('Oct $30 with no games + Nov so far (membership $30, court $192, players paid $168, 4 games) = $60, $24, $84, $42 a month, $21 a game', () => {
     const t = runningTotalOf(cards(OCT, NOV_SO_FAR));
-    expect(t).toEqual({ months: 2, membershipCents: 6000, courtAfterPlayersCents: 2400, games: 4, outOfPocketCents: 8400, averagePerMonth: 42, perGame: 21 });
+    expect(t).toEqual({ months: 2, membershipCents: 6000, courtAfterPlayersCents: 2400, handCreditCents: 0, tournaments: 0, tournamentsCents: 0, games: 4, outOfPocketCents: 8400, averagePerMonth: 42, perGame: 21 });
   });
   it('the current month is the So far card, never Projected (Projected numbers in the same answer change nothing)', () => {
     const a = runningTotalOf(cards(OCT, NOV_SO_FAR));

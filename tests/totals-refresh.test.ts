@@ -28,8 +28,8 @@ describe('cost per court: the one new number', () => {
   it("the mock's numbers: So far $42 over 2 games is $21, Projected $72 over 7 games is $10", () => {
     const so = soFarCard(MOCK);
     const pj = projectedCard(MOCK);
-    expect(so).toEqual({ membershipCents: 3000, courtCents: 9600, games: 2, owedCents: 12600, playersCents: 8400, netCents: 4200 });
-    expect(pj).toEqual({ membershipCents: 3000, courtCents: 33600, games: 7, owedCents: 36600, playersCents: 29400, netCents: 7200 });
+    expect(so).toEqual({ membershipCents: 3000, courtCents: 9600, games: 2, owedCents: 12600, playersCents: 8400, handCreditCents: 0, tournaments: [], regularNetCents: 4200, netCents: 4200 });
+    expect(pj).toEqual({ membershipCents: 3000, courtCents: 33600, games: 7, owedCents: 36600, playersCents: 29400, handCreditCents: 0, tournaments: [], regularNetCents: 7200, netCents: 7200 });
     expect(perCourtDollars(so.netCents, so.games)).toBe(21);
     expect(perCourtDollars(pj.netCents, pj.games)).toBe(10);
   });
@@ -71,8 +71,8 @@ describe('cost per court: the one new number', () => {
     expect(perCourtDollars(c.netCents, c.games)).toBe(-1);
   });
   it('month rows: games, net and per court from one past month; "No games" is a null per court', () => {
-    expect(monthRowOf('2026-10', { ...MOCK, courtSessions: 1, courtCostCents: 4800, owedToVenueCents: 7800, collectedCents: 4200 })).toEqual({ month: '2026-10', games: 1, netCents: 3600, perCourt: 36 });
-    expect(monthRowOf('2026-09', { ...MOCK, courtSessions: 0, courtCostCents: 0, membershipCents: 3000, owedToVenueCents: 3000, collectedCents: 0 })).toEqual({ month: '2026-09', games: 0, netCents: 3000, perCourt: null });
+    expect(monthRowOf('2026-10', { ...MOCK, courtSessions: 1, courtCostCents: 4800, owedToVenueCents: 7800, collectedCents: 4200 })).toEqual({ month: '2026-10', games: 1, tournaments: 0, netCents: 3600, perCourt: 36 });
+    expect(monthRowOf('2026-09', { ...MOCK, courtSessions: 0, courtCostCents: 0, membershipCents: 3000, owedToVenueCents: 3000, collectedCents: 0 })).toEqual({ month: '2026-09', games: 0, tournaments: 0, netCents: 3000, perCourt: null });
   });
   it('past months: only those before the current one, newest first as given', () => {
     const choices = [{ month: '2026-12' }, { month: '2026-11' }, { month: '2026-10' }, { month: '2026-09' }];
@@ -178,7 +178,7 @@ describe('the cards agree with the server (one finalized game)', () => {
     const w = await world();
     const cur = monthOf(w.app.now); // 2026-10: the membership month, no game finalized yet
     const row = monthRowOf(cur, (await money(w, cur)).rework!);
-    expect(row).toEqual({ month: cur, games: 0, netCents: 3000, perCourt: null });
+    expect(row).toEqual({ month: cur, games: 0, tournaments: 0, netCents: 3000, perCourt: null });
     const early = monthRowOf('2026-03', (await money(w, '2026-03')).rework!);
     expect(early.games).toBe(0);
     expect(early.perCourt).toBeNull();

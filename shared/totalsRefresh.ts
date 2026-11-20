@@ -8,7 +8,7 @@
 //  - A wrangler.toml kill switch (allowed unless "off"), a Settings > Feature switches row (one task_log row, no schema change), and a
 //    private per-phone link (/admin?totalsrefresh=on) that sends the header below. No database change, no new cost.
 
-import type { MonthlyMoney } from './api';
+import type { MonthlyMoney, MonthTournament } from './api';
 import { MEMBERSHIP_FROM } from './moneyRework';
 
 export const TOTALS_REFRESH = { task: 'totals_refresh_on', header: 'X-Totals-Refresh', link: 'totalsrefresh', env: 'TOTALS_REFRESH', name: 'Totals refresh' } as const;
@@ -20,6 +20,24 @@ export function totalsRefreshAllowed(flag: string | undefined | null): boolean {
 
 type Rework = NonNullable<MonthlyMoney['rework']>;
 
+/**
+ * Zip 76: one tournament row on a card. `resultCents` above 0: the organizer made money (it lowers his cost, shown "−$8" in green); below 0
+ * it cost him (red "$10").
+ */
+export interface TotalsTournament {
+  id: string;
+  name: string;
+  resultCents: number;
+  /** Where the result came from (picture 2): Tickets, Courts, Prizes and the small words after each. */
+  detail: { ticketsCents: number; ticketsSub: string; courtCents: number; courtsSub: string; prizeCents: number };
+}
+
+/** "2.5 hrs", "2 hrs", "1 hr". */
+export function hoursText(minutes: number): string {
+  const h = Math.round((minutes / 60) * 100) / 100;
+  return `${h} ${h === 1 ? 'hr' : 'hrs'}`;
+}
+
 /** One of the two cards, in cents. `netCents` is what the organizer is out after the players' share; negative = the players paid more than the venue is owed. */
 export interface TotalsCard {
   membershipCents: number;
@@ -30,21 +48,91 @@ export interface TotalsCard {
   owedCents: number;
   /** What the players paid (So far) or will pay (Projected). */
   playersCents: number;
+  /** Zip 76: credit added by hand this month (minus taken away), a cost. 0 when none. */
+  handCreditCents: number;
+  /** Zip 76: the month's tournaments (So far: ended ones; Projected: those plus the open one's expected result). */
+  tournaments: TotalsTournament[];
+  /** Zip 76: the regular games only (owed - players + hand credit): what per court divides, Alex's check on the $14 price. */
+  regularNetCents: number;
+  /** Everything: regularNetCents minus every tournament's result. */
   netCents: number;
 }
 
-/**
- * The "So far" card from the server's numbers. `netCents` is owed minus players paid; it is the same figure as the server's "Your cost so
- * far" whenever that is above $0 (the server never goes below $0, this card also shows a credit).
- */
-export function soFarCard(t: Rework): TotalsCard {
-  return { membershipCents: t.membershipCents, courtCents: t.courtCostCents, games: t.courtSessions, owedCents: t.owedToVenueCents, playersCents: t.collectedCents, netCents: t.owedToVenueCents - t.collectedCents };
+const tourRows = (list: MonthTournament[] | undefined): TotalsTournament[] =>
+  (list ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    resultCents: t.resultCents,
+    detail: {
+      ticketsCents: t.ticketsCents,
+      ticketsSub: `${t.paid} paid`,
+      courtCents: t.courtCents,
+      courtsSub: `${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${hoursText(t.minutes)}`,
+      prizeCents: t.prizeCents,
+    },
+  }));
+
+function card(base: Omit<TotalsCard, 'regularNetCents' | 'netCents'>): TotalsCard {
+  const regularNetCents = base.owedCents - base.playersCents + base.handCreditCents;
+  return { ...base, regularNetCents, netCents: regularNetCents - base.tournaments.reduce((a, t) => a + t.resultCents, 0) };
 }
 
-/** The "Projected" card. Games = every court counted so far plus the ones still to come (the server's `courtCount`). */
-export function projectedCard(t: Rework): TotalsCard {
+/**
+ * The "So far" card from the server's numbers. `regularNetCents` is owed minus players paid (plus credit added by hand); it is the same figure
+ * as the server's "Your cost so far" whenever that is above $0 (the server never goes below $0, this card also shows a credit). Zip 76: the
+ * month's ENDED tournaments count here (their prizes are final).
+ */
+export function soFarCard(t: Rework): TotalsCard {
+  return card({
+    membershipCents: t.membershipCents,
+    courtCents: t.courtCostCents,
+    games: t.courtSessions,
+    owedCents: t.owedToVenueCents,
+    playersCents: t.collectedCents,
+    handCreditCents: t.handCreditCents ?? 0,
+    tournaments: tourRows(t.tournaments),
+  });
+}
+
+/**
+ * The "Projected" card. Games = every court counted so far plus the ones still to come (the server's `courtCount`). Zip 76: the ended
+ * tournaments, plus `expected`: an open tournament whose night is in this month, with its card's "You make if it fills" number.
+ */
+export function projectedCard(t: Rework, expected: TotalsTournament | null = null): TotalsCard {
   const p = t.projected;
-  return { membershipCents: p.membershipCents, courtCents: p.courtCostCents, games: p.courtCount, owedCents: p.totalCents, playersCents: p.playersPayCents, netCents: p.totalCents - p.playersPayCents };
+  const ended = tourRows(t.tournaments);
+  return card({
+    membershipCents: p.membershipCents,
+    courtCents: p.courtCostCents,
+    games: p.courtCount,
+    owedCents: p.totalCents,
+    playersCents: p.playersPayCents,
+    handCreditCents: t.handCreditCents ?? 0,
+    tournaments: expected && !ended.some((x) => x.id === expected.id) ? [...ended, expected] : ended,
+  });
+}
+
+/**
+ * Zip 76: the open tournament's expected result for the Projected card of `month` ("2026-12"): its night (the picked date, else the first date
+ * offered) must fall in that month, it is not canceled, and its card has a money line. Null otherwise.
+ */
+export function expectedTournament(
+  tour:
+    | { id: string; name: string; status: string; finalDate: string | null; offeredDates: string[]; money?: { youCents: number; ticketsCents: number; courtCents: number } }
+    | null
+    | undefined,
+  month: string,
+): TotalsTournament | null {
+  if (!tour || tour.status === 'canceled' || !tour.money) return null;
+  const night = tour.finalDate ?? [...tour.offeredDates].sort()[0] ?? null;
+  if (!night || night.slice(0, 7) !== month) return null;
+  const m = tour.money;
+  return {
+    id: tour.id,
+    name: tour.name,
+    resultCents: m.youCents,
+    detail: { ticketsCents: m.ticketsCents, ticketsSub: 'if it fills', courtCents: m.courtCents, courtsSub: '', prizeCents: m.ticketsCents - m.courtCents - m.youCents },
+  };
 }
 
 /**
@@ -65,15 +153,24 @@ export const dollarsText = (d: number) => `$${Math.abs(d)}`;
 export interface MonthRow {
   month: string;
   games: number;
+  /** Zip 76: tournaments counted in the month ("6 games · 1 tournament"). */
+  tournaments: number;
   netCents: number;
-  /** null with no games (the row says "No games"). */
+  /** null with no games (the row says "No games"). Regular games only. */
   perCourt: number | null;
 }
 
 /** A past month's row from that month's own answer (the same `rework` numbers its Totals page shows, "So far" side). */
 export function monthRowOf(month: string, t: Rework): MonthRow {
   const c = soFarCard(t);
-  return { month, games: c.games, netCents: c.netCents, perCourt: perCourtDollars(c.netCents, c.games) };
+  return { month, games: c.games, tournaments: c.tournaments.length, netCents: c.netCents, perCourt: perCourtDollars(c.regularNetCents, c.games) };
+}
+
+/** "6 games · 1 tournament", "No games", "1 tournament". */
+export function monthSubText(games: number, tournaments: number): string {
+  const g = games > 0 ? `${games} ${games === 1 ? 'game' : 'games'}` : '';
+  const t = tournaments > 0 ? `${tournaments} ${tournaments === 1 ? 'tournament' : 'tournaments'}` : '';
+  return [g, t].filter(Boolean).join(' · ') || 'No games';
 }
 
 /** The past months to list, newest first: every month in the list that is before the current one. */
@@ -125,21 +222,42 @@ export interface RunningTotal {
   membershipCents: number;
   /** Court costs minus what the players paid, added up (can be below 0). */
   courtAfterPlayersCents: number;
+  /** Zip 76: credit added by hand, added up (a cost; below 0 when more was taken away). */
+  handCreditCents: number;
+  /** Zip 76: how many tournaments, and their net COST to the organizer (below 0: they made money overall). */
+  tournaments: number;
+  tournamentsCents: number;
   /** Games played (courts used) in those months. */
   games: number;
-  /** Membership + court costs after players. Below 0 = a credit. */
+  /** Membership + court costs after players + credit added by hand + tournaments. Below 0 = a credit. */
   outOfPocketCents: number;
   /** Out of pocket / months, whole dollars (negative = credit). */
   averagePerMonth: number | null;
-  /** Out of pocket / games, whole dollars (negative = credit); null with no games. */
+  /** Regular games only (no tournaments): (membership + court costs after players + hand credit) / games, whole dollars; null with no games. */
   perGame: number | null;
 }
 
 /** Adds the "So far" cards of every counted month (oldest to current). The average uses the same whole-dollar rounding as per court. */
 export function runningTotalOf(cards: TotalsCard[]): RunningTotal {
-  const membershipCents = cards.reduce((a, c) => a + c.membershipCents, 0);
-  const courtAfterPlayersCents = cards.reduce((a, c) => a + (c.courtCents - c.playersCents), 0);
-  const games = cards.reduce((a, c) => a + c.games, 0);
-  const outOfPocketCents = membershipCents + courtAfterPlayersCents;
-  return { months: cards.length, membershipCents, courtAfterPlayersCents, games, outOfPocketCents, averagePerMonth: perCourtDollars(outOfPocketCents, cards.length), perGame: perCourtDollars(outOfPocketCents, games) };
+  const sum = (f: (c: TotalsCard) => number) => cards.reduce((a, c) => a + f(c), 0);
+  const membershipCents = sum((c) => c.membershipCents);
+  const courtAfterPlayersCents = sum((c) => c.courtCents - c.playersCents);
+  const handCreditCents = sum((c) => c.handCreditCents);
+  const tournaments = sum((c) => c.tournaments.length);
+  const tournamentsCents = sum((c) => c.tournaments.reduce((a, t) => a - t.resultCents, 0)) || 0;
+  const games = sum((c) => c.games);
+  const regular = membershipCents + courtAfterPlayersCents + handCreditCents;
+  const outOfPocketCents = regular + tournamentsCents;
+  return {
+    months: cards.length,
+    membershipCents,
+    courtAfterPlayersCents,
+    handCreditCents,
+    tournaments,
+    tournamentsCents,
+    games,
+    outOfPocketCents,
+    averagePerMonth: perCourtDollars(outOfPocketCents, cards.length),
+    perGame: perCourtDollars(regular, games),
+  };
 }

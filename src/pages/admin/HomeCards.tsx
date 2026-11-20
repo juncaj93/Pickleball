@@ -3,6 +3,9 @@ import '../../guest-spot.css';
 import { useState } from 'react';
 import type { AdminDashboard, AdminSessionView, RefundRequestView, AdminRosterEntry } from '../../../shared/api';
 import { formatPrice, venmoRefundUrl } from '../../../shared/money';
+
+/** Zip 76: an id link is saved but cannot address the payment, so it says pick them, without "No Venmo saved". */
+const pickInVenmo = (name: string, venmo: string | null | undefined) => (venmo ? `Pick ${name} in Venmo.` : `No Venmo saved for ${name}: pick them in Venmo.`);
 import { paymentClaimText, unconfirmedPaidWarning } from '../../../shared/credit';
 import { formatShortDate } from '../../../shared/time';
 import { api, openVenmo, storageGet, storageSet } from '../../lib';
@@ -297,7 +300,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
         titleAs="h3"
         data={{ 'data-refund-request': r.name }}
         title={`${r.name} requested a refund of ${formatPrice(r.cents)}`}
-        sub={pay.addressed ? 'Cash out request' : `Cash out request · No Venmo saved for ${r.name}: pick them in Venmo.`}
+        sub={pay.addressed ? 'Cash out request' : `Cash out request · ${pickInVenmo(r.name, r.venmo)}`}
         actions={
           <>
             <a
@@ -360,7 +363,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
           Not now
         </button>
       </div>
-      {!pay.addressed && <p className="small muted">No Venmo saved for {r.name}: pick them in Venmo.</p>}
+      {!pay.addressed && <p className="small muted">{pickInVenmo(r.name, r.venmo)}</p>}
     </article>
   );
 }

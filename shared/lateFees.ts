@@ -161,7 +161,9 @@ export function lateFeeCutoffMs(startsAtIso: string): number {
  * Owes: "It's past the 8:00 AM cancel-by. If no one takes your spot, you still owe $14."
  * Not short: the money comes back as credit (or nothing is owed when nothing was paid).
  */
-export function lateDropDialogText(time: string, owes: boolean, feeText: string, moneyBackText: string | null): string {
+export function lateDropDialogText(time: string, owes: boolean, feeText: string, moneyBackText: string | null, paid = false): string {
+  // Zip 76: a player who already paid owes nothing more; their money stays on the game (the toast's own words).
+  if (owes && paid) return `It's past the ${time} cancel-by. Your ${feeText} stays on this game unless someone takes your spot.`;
   if (owes) return `It's past the ${time} cancel-by. If no one takes your spot, you still owe ${feeText}.`;
   return moneyBackText ? `It's past the ${time} cancel-by. Enough players are still in, so ${moneyBackText}.` : `It's past the ${time} cancel-by. Enough players are still in, so you owe nothing.`;
 }

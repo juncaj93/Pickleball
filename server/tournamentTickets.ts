@@ -49,7 +49,9 @@ import {
   loadTickets,
   onList,
   organizerSeatStatement,
+  payByMovedLaterSql,
   payWithCreditStatements,
+  releaseKeptStatements,
   sqlText,
   ticketAsRead,
   ticketBackStatements,
@@ -274,7 +276,13 @@ export async function setPayBy(ctx: Ctx, body: Record<string, unknown>) {
   const t = await openById(ctx, group);
   if (statusOf(t) !== 'tickets') throw new HttpError(409, 'tickets_not_open', 'Tickets are not open. Look again.');
   const payBy = readPayByTime(body.payBy, ctx.nowMs, nightOf(t, group.timezone)!.start);
-  changedOrLookAgain(await ctx.db.prepare("UPDATE tournaments SET pay_by = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'tickets'").bind(payBy, ctx.nowIso, t.id).run());
+  // Zip 76 (the 🎾75 audit): moved past now, every drop kept under the old Pay by comes back as credit in the same batch (the new Pay by would
+  // not have kept it), the same back-out statements and History line as a refill. Moved earlier, or still past: nothing kept moves.
+  const res = await ctx.db.batch([
+    ctx.db.prepare("UPDATE tournaments SET pay_by = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'tickets'").bind(payBy, ctx.nowIso, t.id),
+    ...releaseKeptStatements(ctx.db, group.id, t.id, ctx.nowIso, payByMovedLaterSql(t.id, ctx.nowIso)),
+  ]);
+  changedOrLookAgain(res[0]);
   await audit(ctx.db, group.id, null, 'tournament_pay_by', { tournament: t.name, payBy: payByLabel(payBy, group.timezone, t.final_date) }, ctx.nowIso);
   return { ok: true, payBy };
 }

@@ -8,7 +8,7 @@
 // who played). Credit owed is money that was never collected, so it is
 // shown but not taken off Left.
 
-import type { MonthlyMoney } from '../shared/api';
+import type { MonthlyMoney, MonthTournament } from '../shared/api';
 import { formatPrice } from '../shared/money';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { requireAdmin } from './auth';
@@ -16,32 +16,59 @@ import type { Ctx } from './context';
 import { HttpError } from './http';
 import { keptRemaining, seatCredit } from '../shared/credit';
 import { seatIsClaim, seatKeptCents } from './seatMoney';
-import { loadLedger } from './credit';
+import { type LedgerRow, loadLedger } from './credit';
 import { courtCostOf, flatOf, type GroupRow, loadCancelCharges, loadRoster, organizerIdOf, priceLockCol, rosterRead, type SessionRow, settingsOf } from './repo';
 import { fewerDb } from './speed';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 import { membershipMonth, PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
 import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
-import { tournamentsFlags } from './tournament';
+import { realTimes, tournamentsFlags } from './tournament';
+import { courtCentsOf } from '../shared/tournament';
 
 /**
- * Zip 56 (Alex, ship answer 4): the money on tournament tickets paid in full this month (credit used and cash the organizer confirmed, still on
- * the ticket: money that went back as credit is not counted, and neither is an I paid still waiting), shown as its own line, "Tournament
- * tickets", under the Totals cards. Not part of the venue cost: the site does not know a tournament's court bill. Only while Tournaments is
- * on for this phone, so with it off the answer is exactly as before. Null when there is none.
+ * Zip 76 (Alex, pictures totals-pair-1 to 5): each tournament whose night falls in this month and that was ENDED (the prizes are final), with
+ * its result for the organizer: tickets in (credit used and cash the organizer confirmed, still on the tickets: money that went back as credit
+ * is not on them any more, and an I paid still waiting is not money yet) minus the courts (the court rate x courts x the final hours, as on
+ * the tournament card) minus the prize credit really given out (the award rows; an organizer who wins gets no credit). Only while Tournaments
+ * is on for this phone. One read (the one Zip 56's "Tournament tickets" line made). Replaces that line.
  */
-async function ticketMoneyOf(ctx: Ctx, groupId: string, from: string, to: string): Promise<{ cents: number; paid: number } | null> {
-  if (!(await tournamentsFlags(ctx, groupId)).on) return null;
-  const row = await ctx.db
+async function tournamentsOf(ctx: Ctx, groupId: string, year: number, month: number, ledger: LedgerRow[]): Promise<MonthTournament[]> {
+  if (!(await tournamentsFlags(ctx, groupId)).on) return [];
+  const first = `${year}-${String(month).padStart(2, '0')}-01`;
+  const next = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const { results } = await ctx.db
     .prepare(
-      `SELECT COALESCE(SUM(k.credit_cents + k.paid_cents), 0) AS cents, COUNT(*) AS paid
-       FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
-       WHERE t.group_id = ? AND k.paid_at >= ? AND k.paid_at < ? AND k.price_cents > 0 AND k.credit_cents + k.paid_cents >= k.price_cents`,
+      `SELECT t.id, t.name, t.final_date, t.courts, t.minutes, t.start_minutes,
+         (SELECT COALESCE(SUM(k.credit_cents + k.paid_cents), 0) FROM tournament_tickets k WHERE k.tournament_id = t.id AND k.price_cents > 0) AS tickets,
+         (SELECT COUNT(*) FROM tournament_tickets k WHERE k.tournament_id = t.id AND k.price_cents > 0 AND k.credit_cents + k.paid_cents > 0) AS paid
+       FROM tournaments t
+       WHERE t.group_id = ? AND t.ended_at IS NOT NULL AND t.canceled_at IS NULL AND t.final_date >= ? AND t.final_date < ?
+       ORDER BY t.final_date, t.created_at`,
     )
-    .bind(groupId, from, to)
-    .first<{ cents: number; paid: number }>()
-    .catch(() => null);
-  return row && Number(row.cents) > 0 ? { cents: Number(row.cents), paid: Number(row.paid) } : null;
+    .bind(groupId, first, next)
+    .all<{ id: string; name: string; final_date: string; courts: number; minutes: number; start_minutes: number; tickets: number; paid: number }>()
+    .catch(() => ({ results: [] as never[] }));
+  return results.map((t) => {
+    const minutes = realTimes(t).minutes;
+    const courts = Math.max(1, Math.min(4, Number(t.courts) || 1));
+    const courtCents = courtCentsOf({ courts, minutes });
+    const prizeCents = ledger
+      .filter((e) => e.kind === 'kept' && e.tourId === t.id && (e.tourWhy === 'champion' || e.tourWhy === 'second'))
+      .reduce((a, e) => a + e.cents, 0);
+    const ticketsCents = Number(t.tickets) || 0;
+    return { id: t.id, name: t.name, date: t.final_date, ticketsCents, paid: Number(t.paid) || 0, courtCents, courts, minutes, prizeCents, resultCents: ticketsCents - courtCents - prizeCents };
+  });
+}
+
+/**
+ * Zip 76 (the 🎾75 audit): credit the organizer added by hand (Adjust credit, a 'kept' row with reason "adjusted:<why>") in this month, minus
+ * credit taken away by hand (a 'used' row), not undone. A cost in the month it is given: when that credit is spent on a game later it counts as
+ * "Players paid", so the books balance. From the ledger the page already read: no new trip.
+ */
+function handCreditOf(ledger: LedgerRow[], from: string, to: string): number {
+  return ledger
+    .filter((e) => e.reason === 'adjusted' && !e.endedAt && e.createdAt >= from && e.createdAt < to)
+    .reduce((a, e) => a + (e.kind === 'kept' ? e.cents : e.kind === 'used' ? -e.cents : 0), 0);
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -208,8 +235,9 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
     });
   }
   const net = collected - courts;
-  // Zip 56: the Tournament tickets line (only on the reworked Totals, only while Tournaments is on).
-  const tickets = rework && !forceRework ? await ticketMoneyOf(ctx, group.id, from, to) : null;
+  // Zip 76: the month's ended tournaments and the credit added by hand (only on the reworked Totals; the tournaments only while Tournaments is on).
+  const tours = rework && !forceRework ? await tournamentsOf(ctx, group.id, year, month, ledger) : [];
+  const handCredit = rework && !forceRework ? handCreditOf(ledger, from, to) : 0;
   const reworkTotals = rework
     ? (() => {
         const p = localParts(ctx.nowMs, tz);
@@ -243,7 +271,8 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
             playersPayCents: projPlayersCents,
             ...split(rwCourts + projCourts, projPlayersCents, projMembership),
           },
-          ...(tickets ? { tournamentTickets: tickets } : {}),
+          ...(tours.length ? { tournaments: tours } : {}),
+          ...(handCredit !== 0 ? { handCreditCents: handCredit } : {}),
         };
       })()
     : undefined;

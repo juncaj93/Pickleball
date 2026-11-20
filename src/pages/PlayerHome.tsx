@@ -8,7 +8,7 @@ import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
-import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
+import { creditHintText, creditUsedMessage, droppedText, dropMoneyLine, joinedCreditText } from '../../shared/credit';
 import { adjustedPlayerLine, latestAdjustment, signedPrice } from '../../shared/adjustCredit';
 import { feeClearedNotice, lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
 import { DROP_CHANGED, dropQuote } from '../../shared/dropQuote';
@@ -3244,6 +3244,7 @@ export function ScheduleRow({
                   mine.lateDrop.owes,
                   formatPrice(mine.lateDrop.feeCents),
                   mine.dropCreditCents + mine.dropCashCents > 0 ? `your ${formatPrice(mine.dropCreditCents + mine.dropCashCents)} comes back as credit` : null,
+                  mine.lateDrop.paid,
                 )} Your guest ${myGuest.name} comes off the waitlist too.`
             : myGuest
               ? // Zip 42: the guest drops out too. "You still owe $28 if no one takes your 2 spots" only inside the 12 hours (mocks 4 and 5).
@@ -3251,9 +3252,10 @@ export function ScheduleRow({
                 hostDropText(
                   myGuest.name,
                   mine?.lateDrop && myGuest.status === 'confirmed'
-                    ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz), spots: mine.lateDrop.owes ? (mine.lateDrop.guestSpots ?? 2) : 0, owesCents: mine.lateDrop.feeCents }
+                    ? { cancelBy: formatTime(mine.lateDrop.cancelByAt, tz), spots: mine.lateDrop.owes ? (mine.lateDrop.guestSpots ?? 2) : 0, owesCents: mine.lateDrop.feeCents, paid: mine.lateDrop.paid }
                     : null,
                   formatPrice,
+                  mine && !(mine.lateDrop?.owes) ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, g.group.organizerName) : '',
                 )
             : mine?.lateDrop
               ? // Past the cancel-by with late fees on: what this drop costs (shared/lateFees.ts rule 9).
@@ -3262,8 +3264,10 @@ export function ScheduleRow({
                   mine.lateDrop.owes,
                   formatPrice(mine.lateDrop.feeCents),
                   mine.dropCreditCents + mine.dropCashCents > 0 ? `your ${formatPrice(mine.dropCreditCents + mine.dropCashCents)} comes back as credit` : null,
+                  mine.lateDrop.paid,
                 )
-              : 'Your spot opens up for someone else.'}
+              : // Zip 76: what happens to money already paid, in the toast's words.
+                `Your spot opens up for someone else.${mine ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, g.group.organizerName) : ''}`}
           </>
         }
         confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : myGuest ? 'Drop out both' : 'Drop out'}

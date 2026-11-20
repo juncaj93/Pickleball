@@ -1113,15 +1113,14 @@ describe('ship answers (Alex, Zip 56)', () => {
     await backOut(ctx, 'Emery'); // back as credit: not counted
     const money = async (month: string) => (await ctx.organizer.call('GET', `/api/admin/money?month=${month}`)).data;
     const on = await money('2026-10');
-    expect(on.rework.tournamentTickets).toEqual({ cents: 3200, paid: 2 });
-    // Another month: no line.
-    expect((await money('2026-11')).rework.tournamentTickets).toBeUndefined();
-    // Not part of the venue cost: with the switch off the answer is exactly what it was, without the line.
+    // Zip 76: the Tournament tickets line is gone; a tournament counts on Totals as one result row, only once it is ENDED (tests/zip76-totals).
+    expect(on.rework.tournamentTickets).toBeUndefined();
+    expect(on.rework.tournaments).toBeUndefined();
+    expect((await money('2026-11')).rework.tournaments).toBeUndefined();
+    // Not part of the venue cost: with the switch off the answer is exactly the same.
     expect((await ctx.organizer.call('PUT', '/api/admin/tournaments-switch', { on: false })).status).toBe(200);
     const off = await money('2026-10');
-    expect(off.rework.tournamentTickets).toBeUndefined();
-    const { tournamentTickets: _line, ...rest } = on.rework;
-    expect(off.rework).toEqual(rest);
+    expect(off.rework).toEqual(on.rework);
     books(ctx);
   });
 

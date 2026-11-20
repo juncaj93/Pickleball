@@ -477,6 +477,45 @@ describe('review fixes', () => {
   });
 });
 
+// ---------- Zip 76: a late drop that left the game NOT short (played stays NULL) ----------
+
+describe('Zip 76: an I paid on a late drop that did not leave the game short', () => {
+  it('Paid gives the credit the toast promises, once', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Gale']);
+    at(w, g.start, 5);
+    expect((await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/paid`, { paid: true, cents: PRICE })).status).toBe(200);
+    await drop(w, g.id, 'Blair');
+    const raw = (w.app.db as any).raw;
+    const seat = raw.prepare('SELECT played, late_drop_at FROM session_players WHERE session_id = ? AND player_id = ?').get(g.id, w.byName.Blair);
+    expect(seat.played).toBeNull();
+    expect(seat.late_drop_at).not.toBeNull();
+    expect(await pot(w, 'Blair')).toBe(0);
+    const r = await admin(w, 'POST', `/api/admin/sessions/${g.id}/claim`, { playerId: w.byName.Blair, paid: true });
+    expect(r.status, r.text).toBe(200);
+    expect(await pot(w, 'Blair')).toBe(PRICE);
+    // A second answer gives nothing more.
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/claim`, { playerId: w.byName.Blair, paid: true });
+    expect(await pot(w, 'Blair')).toBe(PRICE);
+    expect(await owedOf(w, 'Blair', g.id)).toBeNull();
+    expect(health(w)).toEqual({});
+  });
+  it("Didn't pay leaves nothing owed and no credit", async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Gale']);
+    at(w, g.start, 5);
+    expect((await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/paid`, { paid: true, cents: PRICE })).status).toBe(200);
+    await drop(w, g.id, 'Blair');
+    const r = await admin(w, 'POST', `/api/admin/sessions/${g.id}/claim`, { playerId: w.byName.Blair, paid: false });
+    expect(r.status, r.text).toBe(200);
+    expect(await pot(w, 'Blair')).toBe(0);
+    expect(await owedOf(w, 'Blair', g.id)).toBeNull();
+    expect(health(w)).toEqual({});
+  });
+});
+
 // ---------- paying a debt ----------
 
 describe('paying and clearing a debt', () => {
@@ -778,8 +817,11 @@ describe('restore round trip, privacy, and the SQL rule matching the TypeScript 
         .run(c.status, c.played, lateAt, c.done, c.pay === 'paid-refunded' ? 'paid' : c.pay, c.pay === 'paid-refunded' ? '2026-10-27T00:00:00.000Z' : null, c.pay.startsWith('paid') ? 1400 : null, g.id);
       const seat = raw.prepare('SELECT * FROM session_players WHERE session_id = ?').get(g.id);
       const sess = raw.prepare('SELECT * FROM sessions WHERE id = ?').get(g.id);
-      const sql = raw.prepare(`SELECT ${OPEN_FEE('sp')} AS f FROM session_players sp WHERE sp.session_id = ?`).get(g.id).f;
-      expect(!!lateFeeKind(seat, sess), JSON.stringify(c)).toBe(sql === 1);
+      const q = raw.prepare(`SELECT ${OPEN_FEE('sp')} AS f, NOT ${OPEN_FEE('sp')} AS nf FROM session_players sp WHERE sp.session_id = ?`).get(g.id);
+      const fee = !!lateFeeKind(seat, sess);
+      // Zip 76: both ways round, as real 0 or 1 (a NULL here once made "NOT OPEN_FEE" skip a seat with played NULL).
+      expect(q.f, JSON.stringify(c)).toBe(fee ? 1 : 0);
+      expect(q.nf, JSON.stringify(c)).toBe(fee ? 0 : 1);
     }
   });
 });

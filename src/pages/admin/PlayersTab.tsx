@@ -205,14 +205,14 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
           data-app-href={pay.appUrl}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Refund ${player.name} ${formatPrice(refundCents)} credit balance with Venmo`}
+          aria-label={`Refund ${player.name} ${formatPrice(refundCents)} credit with Venmo`}
           onClick={(e) => {
             openVenmo(e, pay);
             storageSet(`pb_credit_refund_opened_${player.id}`, String(refundCents));
             bump((n) => n + 1);
           }}
         >
-          Refund credit balance
+          Refund {formatPrice(refundCents)} credit
         </a>
       )}
       {tapped && (
@@ -239,7 +239,7 @@ function CreditSection({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
     <section className="stack credit-section" aria-label="Credit" data-credit-section>
       <h3 className="credit-title">Credit</h3>
       <p className="credit-balance" data-credit-balance>
-        <strong>Balance {formatPrice(ledger.balanceCents)}</strong>
+        <strong>Credit {formatPrice(ledger.balanceCents)}</strong>
         {ledger.reservedCents > 0 && <span className="muted"> · {formatPrice(ledger.reservedCents)} refund requested</span>}
       </p>
       <CreditActions ctx={ctx} player={player} />

@@ -34,13 +34,6 @@
 .tr-card.pj {
   --acc: var(--tr-pj);
 }
-/* Zip 56: the Tournament tickets line, its own card of one line (not part of the venue cost above). */
-.tr-card.tt {
-  --acc: var(--tr-rt);
-}
-.tr-card.tt .tr-rows {
-  padding-bottom: 0.375rem;
-}
 
 /* The rows: dashed lines between them, a solid line above "Owed to venue". */
 .tr-rows {
@@ -263,4 +256,68 @@
 .tr-ln dd small {
   font-size: 0.71875rem;
   font-weight: 700;
+}
+
+/* Zip 76 (pictures totals-pair-1 and 2): a tournament's row. The whole row is one button (its ::after covers the row, at least 44 px tall);
+   a tap opens Tickets / Courts / Prizes in place under it, indented and quieter, with no caret. Made money: green "−$8"; cost money: red "$10". */
+.tr-ln.tr-tour {
+  position: relative;
+  align-items: center;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+.tr-tour-btn {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tr-tour-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.tr-tour-btn:focus-visible {
+  outline: none;
+}
+.tr-tour-btn:focus-visible::after {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.tr-ln dd.rd {
+  color: var(--danger-fg);
+}
+.tr-sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.125rem 0 0.125rem 1rem;
+  font-size: 0.84375rem;
+  color: var(--ink-2);
+}
+.tr-sub.first {
+  margin-top: -0.25rem;
+}
+.tr-sub:last-of-type {
+  padding-bottom: 0.375rem;
+}
+.tr-sub dt {
+  margin: 0;
+  min-width: 0;
+}
+.tr-sub dd {
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tr-sub em {
+  font-style: normal;
+  font-size: 0.71875rem;
+  margin-left: 4px;
 }

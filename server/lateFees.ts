@@ -48,19 +48,23 @@ const game = (sp: string, col: string) => `(SELECT ${col} FROM sessions WHERE id
 const HOLDS = (sp: string) => `(${sp}.payment_status = 'unpaid' OR (${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL))`;
 
 /** An open late-drop debt (seat left, game went below 4). */
+// Zip 76: `played` is NULL on a late drop that did not leave the game short (no fee), so every test of it is COALESCEd: a bare
+// `played = 0` is NULL there, and `NOT (NULL)` is NULL too, which silently skipped those seats in every "NOT OPEN_..." check.
+const PLAYED_NO = (sp: string) => `COALESCE(${sp}.played, -1) = 0`;
+
 export const OPEN_LATE_DROP = (sp: string) =>
-  `(${sp}.status = 'withdrawn' AND ${sp}.played = 0 AND ${sp}.late_drop_at IS NOT NULL AND ${sp}.late_drop_done_at IS NULL)`;
+  `(${sp}.status = 'withdrawn' AND ${PLAYED_NO(sp)} AND ${sp}.late_drop_at IS NOT NULL AND ${sp}.late_drop_done_at IS NULL)`;
 
 /**
  * Any open late fee on the seat (same rule as lateFeeKind in shared/lateFees.ts). The organizer is never one: the
  * money-back statements already skip them, and other callers add their own check.
  */
 export const OPEN_FEE = (sp: string) =>
-  `(${sp}.late_drop_done_at IS NULL AND ${HOLDS(sp)} AND (
-     (${sp}.status = 'withdrawn' AND ${sp}.played = 0 AND ${sp}.late_drop_at IS NOT NULL)
+  `COALESCE((${sp}.late_drop_done_at IS NULL AND ${HOLDS(sp)} AND (
+     (${sp}.status = 'withdrawn' AND ${PLAYED_NO(sp)} AND ${sp}.late_drop_at IS NOT NULL)
      OR (${sp}.status = 'confirmed' AND ${game(sp, 'status')} = 'canceled' AND COALESCE(${game(sp, 'canceled_by')}, '') = '${FEE_KEPT}')
-     OR (${sp}.status = 'confirmed' AND ${game(sp, 'status')} <> 'canceled' AND ${sp}.played = 0 AND ${sp}.late_drop_at IS NOT NULL
-         AND ${sp}.late_drop_at = ${game(sp, 'finalized_at')})))`;
+     OR (${sp}.status = 'confirmed' AND ${game(sp, 'status')} <> 'canceled' AND ${PLAYED_NO(sp)} AND ${sp}.late_drop_at IS NOT NULL
+         AND ${sp}.late_drop_at = COALESCE(${game(sp, 'finalized_at')}, '')))), 0)`;
 
 /**
  * SQL for "this seat leaving now leaves the game short": the others still in plus everyone waiting (the first ones

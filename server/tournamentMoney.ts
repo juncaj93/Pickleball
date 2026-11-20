@@ -90,9 +90,11 @@ const refilledSql = (t: string) =>
  * guarded by the rows as they are when it runs, so a second batch (a double tap, a refresh, another phone) finds nothing kept and moves nothing.
  * Runs right after fillSpotsStatement in every batch that can fill a spot.
  */
-export function releaseKeptStatements(db: D1Database, groupId: string, tournamentId: string, nowIso: string): D1PreparedStatement[] {
+export function releaseKeptStatements(db: D1Database, groupId: string, tournamentId: string, nowIso: string, cond?: string): D1PreparedStatement[] {
   const t = sqlText(tournamentId);
-  const when = (x: string) => `(${keptOff(x)} AND ${refilledSql(t)})`;
+  // Zip 76: `cond` replaces the refill test (a Pay by moved later gives every kept drop back: payByMovedLaterSql).
+  const ok = cond ?? refilledSql(t);
+  const when = (x: string) => `(${keptOff(x)} AND ${ok})`;
   return [
     db
       .prepare(
@@ -105,10 +107,17 @@ export function releaseKeptStatements(db: D1Database, groupId: string, tournamen
       .bind(groupId, nowIso),
     ...ticketBackStatements(db, { groupId, tournamentId, playerId: null, why: 'back', endedReason: 'dropped', nowIso, when }),
     db
-      .prepare(`UPDATE tournament_signups SET status = 'out', updated_at = ?1 WHERE tournament_id = ${t} AND status = '${KEPT}' AND ${refilledSql(t)}`)
+      .prepare(`UPDATE tournament_signups SET status = 'out', updated_at = ?1 WHERE tournament_id = ${t} AND status = '${KEPT}' AND ${ok}`)
       .bind(nowIso),
   ];
 }
+
+/**
+ * Zip 76 (the 🎾75 audit): SQL, true when the tournament's Pay by is now LATER than this moment with tickets open: a drop kept under the old Pay
+ * by would not be kept under the new one, so it comes back the same way (releaseKeptStatements with this condition, in the Pay by batch).
+ */
+export const payByMovedLaterSql = (tournamentId: string, nowIso: string): string =>
+  `EXISTS (SELECT 1 FROM tournaments tp WHERE tp.id = ${sqlText(tournamentId)} AND tp.status = 'tickets' AND tp.pay_by IS NOT NULL AND tp.pay_by > ${sqlText(nowIso)})`;
 
 /** fillSpotsStatement, then the kept late drops it may release (Zip 70): what every batch that can fill a spot runs. */
 export function fillSpotsStatements(db: D1Database, groupId: string, tournamentId: string, nowIso: string): D1PreparedStatement[] {
