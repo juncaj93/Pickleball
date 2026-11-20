@@ -10,6 +10,7 @@ import { ALERT_CARDS_HEADER, splitFirst, zip11Allowed } from '../shared/zip11';
 import { PREVIEW_SWITCHES_ON } from '../scripts/seed-preview-world';
 import { PIN, playerPhone, setupGroup, TestApp } from './harness';
 import { allowedOnBoth } from './tomlVars';
+import { contrast, declsOf, resolve } from './cssTokens';
 
 async function world(env: Record<string, string> = {}) {
   const app = new TestApp();
@@ -111,40 +112,24 @@ describe('the look (src/alert-cards.css)', () => {
     for (const sel of rules) for (const part of sel.split(',')) expect(part.trim(), part).toMatch(/^html\[data-alert-cards\]/);
   });
 
-  /** WCAG contrast of two hex colors. */
-  const contrast = (a: string, b: string) => {
-    const lum = (h: string) => {
-      const [r, g, bl] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-      return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-    };
-    const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
-    return (x + 0.05) / (y + 0.05);
-  };
-  /** The tokens of one block (light, the phone's dark, the site's dark). */
-  const blocks = () => {
-    const out: Record<string, string>[] = [];
-    for (const m of css.matchAll(/html\[data-alert-cards\](?::not\(\[data-theme='light'\]\)|\[data-theme='dark'\])? \{([^}]*)\}/g)) {
-      const t: Record<string, string> = {};
-      for (const d of m[1].matchAll(/--(ac-[a-z-]+):\s*(#[0-9a-f]{6})/g)) t[d[1]] = d[2];
-      if (Object.keys(t).length > 20) out.push(t);
-    }
-    return out;
-  };
+  /** Zip 78: the card's names only point at the site's tokens; resolved to real colors for the light theme and the dark one. */
+  const own = declsOf(css, /^html\[data-alert-cards\]$/);
+  const blocks = () =>
+    (['light', 'dark'] as const).map((theme) => Object.fromEntries(Object.keys(own).filter((k) => /^--ac-/.test(k) && !/shadow/.test(k)).map((k) => [k.slice(2), resolve(own[k], theme, own)])));
 
-  it('light, dark and dark again: every tone has its tokens, the two dark blocks are the same', () => {
-    const [light, dark1, dark2] = blocks();
-    expect(light && dark1 && dark2).toBeTruthy();
-    expect(dark2).toEqual(dark1);
-    for (const tone of ['green', 'amber', 'blue', 'purple', 'gray', 'red']) for (const k of ['tint', 'fill', 'fill-ink', 'ink']) expect(light[`ac-${tone}-${k}`], `${tone}-${k}`).toMatch(/^#/);
-    // The card is the game card's own surface (src/player-cards.css --pc-card, --pc-line, --pc-ink, --pc-muted, --pc-ring), light and dark.
-    expect([light['ac-card'], light['ac-line'], light['ac-title'], light['ac-sub'], light['ac-ring']]).toEqual(['#ffffff', '#dad9cf', '#18241d', '#4a4f46', '#18241d']);
-    expect([dark1['ac-card'], dark1['ac-line'], dark1['ac-title'], dark1['ac-sub'], dark1['ac-ring']]).toEqual(['#18221c', '#2b3a31', '#f1f3ec', '#b8bfb2', '#d5dacf']);
-    const pc = readFileSync(new URL('../src/player-cards.css', import.meta.url), 'utf8');
-    for (const v of ['#ffffff', '#dad9cf', '#18221c', '#2b3a31', '#d5dacf']) expect(pc).toContain(v);
+  it('every tone has its tokens; the card is the game card surface (the site tokens surface, line, ink, ink-2), light and dark', () => {
+    for (const tone of ['green', 'amber', 'blue', 'purple', 'gray', 'red']) for (const k of ['tint', 'fill', 'fill-ink', 'ink']) expect(own[`--ac-${tone}-${k}`], `${tone}-${k}`).toMatch(/^var\(--/);
+    expect([own['--ac-card'], own['--ac-line'], own['--ac-title'], own['--ac-sub'], own['--ac-ring']]).toEqual(['var(--surface)', 'var(--line)', 'var(--ink)', 'var(--ink-2)', 'var(--ink)']);
+    // Zip 78: a filled button is the green primary whatever the tone (amber, blue and purple stay on the badge and the links).
+    for (const tone of ['green', 'amber', 'blue', 'purple', 'gray', 'red']) expect(own[`--ac-${tone}-fill`]).toBe('var(--primary)');
+    // No dark copy of the tokens any more: the site tokens turn dark by themselves.
+    expect(css).not.toMatch(/--ac-card:\s*#/);
   });
 
   it('every text and button pair is 4.5:1 or better, light and dark (title, sub line, filled button, outline button, link); badge icons 3:1', () => {
-    for (const t of blocks()) {
+    const all = blocks();
+    expect(all.length).toBe(2);
+    for (const t of all) {
       for (const tone of ['green', 'amber', 'blue', 'purple', 'gray', 'red']) {
         const bg = t['ac-card'];
         expect(contrast(t[`ac-${tone}-ink`], t[`ac-${tone}-tint`]), `${tone} badge icon`).toBeGreaterThanOrEqual(3);

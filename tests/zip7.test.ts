@@ -1,6 +1,7 @@
 // Zip 7 (Nov 2026): Tonight glow (TONIGHT_GLOW), Color cleanup (COLOR_CLEANUP), Simpler player cards (PLAYER_CARDS_SIMPLE).
 // Tested here: the tonight/tomorrow rule in Eastern time (never reads today's real date), the three switches (header, Settings row, kill switch,
 // stamp, log line, "off = same as today"), and the color tokens in src/zip7.css. The look itself is tested in the browser (e2e/zip7.cjs).
+import { contrast, resolve } from './cssTokens';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { activityText } from '../shared/activity';
@@ -143,13 +144,17 @@ describe('color tokens (src/zip7.css)', () => {
   const dark = block(/:root\[data-theme='dark'\] \{[\s\S]*?\n\}/);
   const media = block(/@media \(prefers-color-scheme: dark\) \{\n  :root:not\(\[data-theme='light'\]\) \{[\s\S]*?\n  \}/);
   const val = (b: string, name: string) => new RegExp(`--${name}:\\s*([^;]+);`).exec(b)?.[1].trim();
-  it('uses the approved purple, credit blue and gray Waitlist values, light and dark', () => {
-    expect([val(light, 'z7-text-fill'), val(light, 'z7-text-ink')]).toEqual(['#6a56a6', '#ffffff']);
-    expect([val(dark, 'z7-text-fill'), val(dark, 'z7-text-ink')]).toEqual(['#b2a0e6', '#1d1433']);
-    expect([val(light, 'z7-credit-fg'), val(light, 'z7-credit-bg')]).toEqual(['#3a4fa3', '#e9edf6']);
-    expect([val(dark, 'z7-credit-fg'), val(dark, 'z7-credit-bg')]).toEqual(['#93a6e6', '#202840']);
-    expect([val(light, 'z7-wait-bg'), val(light, 'z7-wait-ink')]).toEqual(['#4b5563', '#ffffff']);
-    expect([val(dark, 'z7-wait-bg'), val(dark, 'z7-wait-ink')]).toEqual(['#9aa3b0', '#14181c']);
+  // Zip 78 (one look): every token here names a site token; the dark values come from the site tokens turning dark (plus the few names
+  // this file still sets in its dark blocks). Text and Remind are the neutral secondary button now (gray fill, ink words).
+  const z = (b: string) => Object.fromEntries([...b.matchAll(/(--z7-[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+  const L = z(light);
+  const D = { ...L, ...z(dark) };
+  const col = (theme: 'light' | 'dark', name: string) => resolve(`var(--${name})`, theme, theme === 'light' ? L : D);
+  it('uses the site tokens: Text is the neutral secondary, credit is the site blue, Waitlist the gray, light and dark', () => {
+    for (const v of Object.values(L)) if (!/^\d+ \d+ \d+$/.test(v)) expect(v, v).toMatch(/^(var\(--|rgb\(255 255 255 \/|color-mix\()/);
+    expect([L['--z7-text-fill'], L['--z7-text-ink']]).toEqual(['var(--fill)', 'var(--ink)']);
+    expect([L['--z7-credit-fg'], L['--z7-credit-bg']]).toEqual(['var(--info-fg)', 'var(--info-bg)']);
+    expect([L['--z7-wait-bg'], L['--z7-wait-ink']]).toEqual(['var(--ink-2)', 'var(--primary-ink)']);
   });
   it('the "follow the phone" dark block has the same values as the Dark choice', () => {
     for (const n of ['z7-text-fill', 'z7-text-ink', 'z7-credit-fg', 'z7-credit-bg', 'z7-wait-bg', 'z7-wait-ink', 'z7-cancel-fg', 'z7-cancel-bg', 'z7-tonight-bg', 'z7-tomorrow-bg']) {
@@ -158,23 +163,12 @@ describe('color tokens (src/zip7.css)', () => {
   });
   it('the tokens match the Money screens', () => {
     const money = readFileSync('src/money-rework.css', 'utf8');
-    for (const [a, b] of [['z7-text-fill', 'tok-text-fill'], ['z7-credit-fg', 'tok-credit-fg'], ['z7-credit-bg', 'tok-credit-bg']] as const) {
-      expect(money).toContain(`--${b}: ${val(light, a)};`);
-      expect(money).toContain(`--${b}: ${val(dark, a)};`);
-    }
+    for (const [a, b] of [['z7-text-fill', 'tok-text-fill'], ['z7-credit-fg', 'tok-credit-fg'], ['z7-credit-bg', 'tok-credit-bg']] as const) expect(money).toContain(`--${b}: ${L[`--${a}`]};`);
   });
-  const ratio = (fg: string, bg: string) => {
-    const lum = (h: string) => {
-      const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-    };
-    const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
-    return (a + 0.05) / (b + 0.05);
-  };
   it('text on every new fill is readable (4.5:1) in light and dark', () => {
-    for (const [b, mode] of [[light, 'light'], [dark, 'dark']] as const) {
+    for (const mode of ['light', 'dark'] as const) {
       for (const [fg, bg] of [['z7-tonight-ink', 'z7-tonight-bg'], ['z7-tomorrow-ink', 'z7-tomorrow-bg'], ['z7-text-ink', 'z7-text-fill'], ['z7-credit-fg', 'z7-credit-bg'], ['z7-wait-ink', 'z7-wait-bg'], ['z7-cancel-fg', 'z7-cancel-bg']] as const) {
-        expect(ratio(val(b, fg)!, val(b, bg)!), `${mode} ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(col(mode, fg), col(mode, bg)), `${mode} ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
       }
     }
   });

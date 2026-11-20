@@ -686,13 +686,13 @@ html[data-alert-cards] [data-ac-tone='red'] {
 }
 @media (prefers-color-scheme: dark) {
   html[data-alert-cards]:not([data-theme='light']) {
-    /* The mock's dark line colors (--gline, --aline, --bline, --nline); purple and red follow the same step (the mock has none). */
-    --ac-green-line: var(--primary);
-    --ac-amber-line: var(--warn-edge);
-    --ac-blue-line: var(--info-edge);
-    --ac-purple-line: var(--purple-edge);
-    --ac-gray-line: var(--line);
-    --ac-red-line: var(--danger-edge);
+    /* The mock's dark line colors (--gline, --aline, --bline, --nline): Zip 78 makes each from its tone's edge token, 35% on the card. */
+    --ac-green-line: color-mix(in srgb, var(--ok-edge) 35%, var(--surface));
+    --ac-amber-line: color-mix(in srgb, var(--warn-edge) 35%, var(--surface));
+    --ac-blue-line: color-mix(in srgb, var(--info-edge) 35%, var(--surface));
+    --ac-purple-line: color-mix(in srgb, var(--purple-edge) 35%, var(--surface));
+    --ac-gray-line: var(--line-strong);
+    --ac-red-line: color-mix(in srgb, var(--danger-edge) 35%, var(--surface));
   }
   html[data-alert-cards]:not([data-theme='light']) .ac,
   html[data-alert-cards]:not([data-theme='light']) .pop.toast {
@@ -710,12 +710,12 @@ html[data-alert-cards] [data-ac-tone='red'] {
   }
 }
 html[data-alert-cards][data-theme='dark'] {
-  --ac-green-line: var(--primary);
-  --ac-amber-line: var(--warn-edge);
-  --ac-blue-line: var(--info-edge);
-  --ac-purple-line: var(--purple-edge);
-  --ac-gray-line: var(--line);
-  --ac-red-line: var(--danger-edge);
+  --ac-green-line: color-mix(in srgb, var(--ok-edge) 35%, var(--surface));
+  --ac-amber-line: color-mix(in srgb, var(--warn-edge) 35%, var(--surface));
+  --ac-blue-line: color-mix(in srgb, var(--info-edge) 35%, var(--surface));
+  --ac-purple-line: color-mix(in srgb, var(--purple-edge) 35%, var(--surface));
+  --ac-gray-line: var(--line-strong);
+  --ac-red-line: color-mix(in srgb, var(--danger-edge) 35%, var(--surface));
 }
 html[data-alert-cards][data-theme='dark'] .ac,
 html[data-alert-cards][data-theme='dark'] .pop.toast {

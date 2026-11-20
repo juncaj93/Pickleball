@@ -56,18 +56,15 @@ describe('the old personal-link routes are gone', () => {
 describe('the Later card shade (item 1)', () => {
   const css = read('../src/zip10.css');
   const block = (re: RegExp) => (re.exec(css) ?? [])[1] ?? '';
-  it('light is barely off white, #f9f9f6, with the same border color', () => {
+  // Zip 78 (one look): the Later card is the site's second surface with the site line, light and dark (the tokens turn dark by themselves).
+  it('light is barely off white (the site surface-2), with the site line', () => {
     const light = block(/:root\[data-card-cleanup\] \{([^}]*)\}/);
-    expect(light).toContain('--cl-later-bg: #f9f9f6;');
-    expect(light).toContain('--cl-later-line: #dad9cf;');
+    expect(light).toContain('--cl-later-bg: var(--surface-2);');
+    expect(light).toContain('--cl-later-line: var(--line);');
   });
-  it('dark stays exactly as it was (#1b2620 on #2b3a31), both the chosen theme and the phone setting', () => {
-    const dark = block(/:root\[data-card-cleanup\]\[data-theme='dark'\] \{([^}]*)\}/);
-    expect(dark).toContain('--cl-later-bg: #1b2620;');
-    expect(dark).toContain('--cl-later-line: #2b3a31;');
-    const media = block(/@media \(prefers-color-scheme: dark\) \{\s*:root\[data-card-cleanup\]:not\(\[data-theme='light'\]\) \{([^}]*)\}/);
-    expect(media).toContain('--cl-later-bg: #1b2620;');
-    expect(media).toContain('--cl-later-line: #2b3a31;');
+  it('dark follows the same tokens: no dark copy of its own', () => {
+    expect(css).not.toMatch(/--cl-later-(bg|line):\s*#/);
+    expect(css.match(/--cl-later-bg:/g)?.length).toBe(1);
   });
   it('the old gray is nowhere in the styles and the skin sets no Later background of its own', () => {
     expect(css).not.toContain('#ebebe4');

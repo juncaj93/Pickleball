@@ -801,9 +801,10 @@ describe('Part E: the look and the motion (Alex, rounds 1 and 2)', () => {
   });
   it('Zip 41: every player date tile is one plain solid outline by ROW (this week 2 px ink / mint, next week 1.5 px charcoal, later 1 px charcoal); the old status layers cannot draw on a player tile', () => {
     const pc = readFileSync(new URL('../src/player-cards.css', import.meta.url), 'utf8');
-    expect(pc).toContain('--pc-ol-this: #18241d;');
-    expect(pc).toContain('--pc-ol-quiet: #5b625a;');
-    expect(pc.match(/--pc-ol-this: #8bd9a3;\s*--pc-ol-quiet: #8e988f;/g)).toHaveLength(2);
+    // Zip 78: the outline colors are the site tokens: this week ink (the site green words in dark), later rows the quiet ink.
+    expect(pc).toContain('--pc-ol-this: var(--ink);');
+    expect(pc).toContain('--pc-ol-quiet: var(--ink-2);');
+    expect(pc.match(/--pc-ol-this: var\(--ok-fg\);/g)).toHaveLength(2);
     expect(pc).toMatch(/\.schedule \.sched\.tier-this \{\s*--tile-ol-w: 2px;\s*--tile-ol-c: var\(--pc-ol-this\);/);
     expect(pc).toMatch(/\.schedule \.sched\.tier-next \{\s*--tile-ol-w: 1\.5px;/);
     expect(pc).toMatch(/\.schedule \.sched \{\s*--tile-ol-w: 1px;\s*--tile-ol-c: var\(--pc-ol-quiet\);/);

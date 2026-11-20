@@ -272,7 +272,9 @@ describe('dark-mode in-between look (rides on Alert cards, player and organizer,
     expect(part).toContain('color-mix(in srgb, var(--ac-card) 62%, var(--t-tint))');
     expect(part).toContain('color-mix(in srgb, var(--ac-line) 45%, var(--t-line))');
     expect(part).toContain('border-width: 1.5px');
-    for (const c of ['#2b5a40', '#5a4720', '#363f78', '#3a403b']) expect(part).toContain(c);
+    // Zip 78: the mock's dark line colors are made from the tone tokens (35% of the tone's edge on the card), no typed colors.
+    for (const t of ['ok-edge', 'warn-edge', 'info-edge', 'purple-edge', 'danger-edge']) expect(part).toContain(`color-mix(in srgb, var(--${t}) 35%, var(--surface))`);
+    expect(part).toContain('--ac-gray-line: var(--line-strong);');
   });
   it('applies to every alert card (player and organizer) under the Alert cards attribute, dark only', () => {
     expect(part).not.toContain('data-ac-player');
