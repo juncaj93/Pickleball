@@ -207,7 +207,7 @@ describe('fix 1: the late drop rule (after Pay by, below 8 on 2 courts: no credi
     const h = await history(ctx);
     const kept = h.filter((e) => e.action === 'tournament_back_out' && e.details.keptCents === 1600);
     expect(kept).toHaveLength(2);
-    expect(activityText(kept[kept.length - 1] as never, 'America/Detroit', 'Alex')).toMatch(/dropped out of the The Cold Open late \(\$16 kept: no credit back unless someone takes the spot\)/);
+    expect(activityText(kept[kept.length - 1] as never, 'America/Detroit', 'Alex')).toMatch(/dropped out of The Cold Open late \(\$16 kept: no credit back unless someone takes the spot\)/);
     expect(h.filter((e) => e.action === 'tournament_kept_returned')).toHaveLength(2);
     const credit = (await (await playerPhone(ctx, 'Blair')).call('GET', '/api/group')).data.credit;
     expect(credit.balanceCents).toBe(1600);
@@ -387,7 +387,7 @@ describe('Time and Plan (pictures 1, 2, 3, 6, 7)', () => {
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/time`, { start: 1170, minutes: 150 })).status).toBe(200);
     expect((await card(ctx, 'Blair')).timeNote).toBeUndefined();
     const h = await history(ctx);
-    expect(activityText(h.find((e) => e.action === 'tournament_time') as never, 'America/Detroit', 'Alex')).toMatch(/moved the The Cold Open to 7:30 to 10 PM \(was 8 to 9:30 PM\)/);
+    expect(activityText(h.find((e) => e.action === 'tournament_time') as never, 'America/Detroit', 'Alex')).toMatch(/moved The Cold Open to 7:30 to 10 PM \(was 8 to 9:30 PM\)/);
   });
 
   it('the time stays once the night window opens or the teams are published; a start too soon and a Pay by after the new cutoff are refused', async () => {
@@ -431,7 +431,7 @@ describe('Time and Plan (pictures 1, 2, 3, 6, 7)', () => {
     const lines = (await history(ctx)).filter((e) => e.action === 'tournament_plan').length;
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/plan`, { expected: 10, courts: 1 })).data.changed).toBe(false);
     expect((await history(ctx)).filter((e) => e.action === 'tournament_plan').length).toBe(lines);
-    expect(activityText((await history(ctx)).find((e) => e.action === 'tournament_plan') as never, 'America/Detroit', 'Alex')).toMatch(/set the The Cold Open plan to 10 players on 1 court/);
+    expect(activityText((await history(ctx)).find((e) => e.action === 'tournament_plan') as never, 'America/Detroit', 'Alex')).toMatch(/set The Cold Open plan to 10 players on 1 court/);
   });
 });
 

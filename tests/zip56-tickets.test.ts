@@ -645,7 +645,7 @@ describe("the organizer's own seat and answers", () => {
     await payCash(ctx, 'Blair');
     const first = await ctx.organizer.call('DELETE', `/api/admin/players/${ctx.byName.Blair}`);
     expect(first.status).toBe(409);
-    expect(first.data.message).toBe('Blair holds a ticket for the Winter Classic. Take Blair off its list first (the tournament\'s Tickets), then remove the name.');
+    expect(first.data.message).toBe('Blair holds a ticket for the Winter Classic. Take Blair off its Tickets list first.');
     await answer(ctx, 'Blair', 'take_off');
     expect(pot(ctx, 'Blair')).toBe(1600);
     expect((await ctx.organizer.call('DELETE', `/api/admin/players/${ctx.byName.Blair}`)).data).toMatchObject({ result: 'hidden' });

@@ -124,7 +124,8 @@ describe('Players sheet redo: the facts the sheet draws from', () => {
     expect(full.status).toBe(409);
     expect(full.data.message ?? full.text).toContain('The game is full (4 in).');
     // With the no-cap rule the words are the database limit's (the sheet shows the same text without asking).
-    expect(DB_LIMIT_MESSAGE).toBe('12 is the most one game can hold right now. Ask Alex.');
+    // Zip 76: the organizer's own sheet has no name in it; a player's refusal adds "Ask <first name>." (tests/zip76-small.test.ts).
+    expect(DB_LIMIT_MESSAGE).toBe('12 is the most one game can hold right now.');
   });
 });
 

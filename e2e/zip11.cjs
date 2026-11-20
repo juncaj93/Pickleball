@@ -173,7 +173,7 @@ async function main() {
       assert(!c.wrappedBtn, `${label}: a button on "${c.title}" wraps its words`);
       for (const b of c.balls) assert(Math.abs(b.w - b.h) < 0.5 && b.w === 16, `${label}: a ball on "${c.title}" is ${b.w} x ${b.h} (not a 16 px circle)`);
       // Zip 53: every player gets the needs-people card now, so a longer day word can show ("Wednesday" in the fake world's extra Wednesday game, or "Next Tuesday"); the card shrinks its text and wraps on two lines there. Not a look bug in the card.
-      if (c.title && width >= 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, |^(Wednesday|Next [A-Z][a-z]+day) (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines === 1, `${label}: "${c.title}" wraps at ${width} (${c.titleLines} lines, ${c.titleSize} px)`);
+      if (c.title && width >= 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, |^(Wednesday|Next [A-Z][a-z]+day) (needs \d more|has \d+ in)|^(Tonight|Tomorrow) \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines === 1, `${label}: "${c.title}" wraps at ${width} (${c.titleLines} lines, ${c.titleSize} px)`);
       if (c.title && width < 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, /.test(c.title)) assert(c.titleLines <= 2, `${label}: "${c.title}" takes ${c.titleLines} lines at ${width}`);
       assert(c.borderW !== '0px', `${label}: card "${c.title}" has no border`);
       assert(contrast(c.titleColor, c.bg) >= 4.5, `${label}: title of "${c.title}" is ${contrast(c.titleColor, c.bg).toFixed(2)}:1`);
@@ -241,7 +241,7 @@ async function main() {
     console.log(`      cards seen:\n        ${texts.join('\n        ')}`);
   });
 
-  await check('the Want in card: "needs N more" with the circles, or "has N in" / "You\'d make it", I\'m in joins, X says No', async () => {
+  await check('the Want in card: "needs N more" with the circles, or "has N in" / "You\'d make it", I\'m in joins, X only hides it', async () => {
     // Find a player with a Want in card.
     let found = null;
     for (const n of ['Casey', 'Harper', 'Lane', 'Morgan', 'Avery', 'Drew', 'Emery', NO_NUMBER_NAME()]) {
@@ -255,14 +255,20 @@ async function main() {
     }
     assert(found, 'no player in the fake world has a Want in card');
     const t = (await found.c.innerText()).replace(/\s+/g, ' ');
-    assert(/^(Tonight|Tomorrow|[A-Z][a-z]+day|Next [A-Z][a-z]+day|[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+) (needs \d more|has \d+ in)/.test(t), `the title reads "${t}"`);
+    // Zip 76: the title names the game's time ("Tonight 9:30 PM needs 1 more", "Sun 6 PM needs 3 more").
+    assert(/^(Tonight|Tomorrow|[A-Z][a-z]{2}|Next [A-Z][a-z]+day|[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+) \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(t), `the title reads "${t}"`);
     if (/needs/.test(t)) assert((await found.c.locator('.ac-seats .dots > *').count()) >= 4, 'needs N more without the circles');
     else assert(/You'd make it \d+/.test(t), `no "You'd make it": ${t}`);
     assert(!/waitlist|full|max|spots? left/i.test(t), `the card implies a cap: ${t}`);
-    // X = No: the card goes (the same decline call as before).
-    const declined = found.p.page.waitForResponse((r) => /\/decline$/.test(r.url()));
+    // Zip 76: the X only hides the card on this phone: no decline call.
+    let declined = false;
+    found.p.page.on('request', (r) => {
+      if (/\/decline$/.test(r.url())) declined = true;
+    });
     await found.c.locator('.ac-x').click();
-    assert((await declined).ok(), 'the X did not decline');
+    await found.p.page.waitForTimeout(800);
+    assert(!declined, 'the X sent a decline');
+    assert((await found.p.page.locator('[data-suggest-card]').count()) === 0, 'the card stayed');
     await found.p.ctx.close();
   });
 

@@ -77,7 +77,8 @@ describe('Venmo refund link', () => {
     // A $9 amount (a smaller refund request) and a half dollar.
     expect(venmoRefundUrl('x_y', 900, note).url).toContain('amount=9&');
     expect(venmoRefundUrl('x_y', 1450, note).url).toContain('amount=14.50&');
-    expect(venmoRefundUrl('id:1234567890', 1400, note).url).toContain('recipients=1234567890&');
+    // Zip 76 (the 🎾75 audit): an id cannot be a recipient in this link, so it is treated like no handle (pick them in Venmo).
+    expect(venmoRefundUrl('id:1234567890', 1400, note)).toMatchObject({ addressed: false, url: 'https://venmo.com/?txn=pay&amount=14&note=Pickleball%20Thu%20Oct%2029%20refund' });
   });
   it('without a saved Venmo, leaves the person for you to pick', () => {
     const b = venmoRefundUrl(null, 1400, 'Pickleball Thu Oct 29 refund');

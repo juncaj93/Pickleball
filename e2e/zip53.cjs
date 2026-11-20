@@ -154,9 +154,9 @@ async function main() {
   };
   const dayWord = (iso) => {
     const days = Math.round((Date.parse(new Date(Date.parse(iso)).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' })) - Date.parse(new Date(NOW_MS).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }))) / DAY_MS);
-    const day = days === 0 ? 'Tonight' : days === 1 ? 'Tomorrow' : new Date(iso).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Detroit' });
-    // Zip 76: the title names the game's time too ("Tonight 9:30 PM needs 1 more").
-    return `${day} ${new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Detroit' })}`;
+    const day = days === 0 ? 'Tonight' : days === 1 ? 'Tomorrow' : new Date(iso).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Detroit' });
+    // Zip 76: the title names the game's time too, compact ("Tonight 9:30 PM needs 1 more", "Sun 6 PM needs 3 more").
+    return `${day} ${new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Detroit' }).replace(':00', '')}`;
   };
 
   // ---------------------------------------------------------------- A

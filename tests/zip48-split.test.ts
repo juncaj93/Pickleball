@@ -19,7 +19,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  *  second line, src/pages/PlayerHome.tsx) adds about 60 bytes gzipped to the player script. Game night's own code is in the tournament chunk.
  *  Zip 74 (Nov 20): script 141.2 -> 141.5 on purpose. The two game night alerts at the top of Home (shorter games, the Final) and the
  *  trophy badge sit with the other tournament alerts in src/pages/PlayerHome.tsx and src/AlertCard.tsx: about 230 bytes gzipped (141.43 KB). */
-export const BUDGET = { scriptKB: 141.5, styleKB: 36.5, pageKB: 1.5, totalKB: 177 };
+// Zip 76: 141.5 to 142.3 on purpose (the Drop out money words, Full, Is this you Back, the Want in time and the Nice toast, about 0.7 KB).
+export const BUDGET = { scriptKB: 142.3, styleKB: 36.5, pageKB: 1.5, totalKB: 177.8 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

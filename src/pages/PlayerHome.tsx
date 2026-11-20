@@ -2254,7 +2254,8 @@ function SuggestionCard({
     const short = n < MIN_PLAYERS;
     // (A venue-waitlist game, "standby": no count, as before.)
     // Zip 76: the title says which game ("Tonight 9:30 PM needs 1 more"), so nobody commits to a game without seeing its time.
-    const when = `${day} ${formatTime(s.startsAt, tz)}`;
+    // Compact so it stays short on a phone: "Tonight 9:30 PM", "Sun 6 PM".
+    const when = `${word === 'tonight' || word === 'tomorrow' ? day : day.slice(0, 3)} ${formatTime(s.startsAt, tz).replace(':00', '')}`;
     const title = standby ? wantInTitle(s.startsAt, tz, Date.parse(g.now), false) : short ? `${when} needs ${MIN_PLAYERS - n} more` : `${when} has ${n} in`;
     if (hidden) return null;
     const atLimit = cleanup && n >= g.group.maxPlayers;
