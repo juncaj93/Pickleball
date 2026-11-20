@@ -154,7 +154,9 @@ async function main() {
   };
   const dayWord = (iso) => {
     const days = Math.round((Date.parse(new Date(Date.parse(iso)).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' })) - Date.parse(new Date(NOW_MS).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }))) / DAY_MS);
-    return days === 0 ? 'Tonight' : days === 1 ? 'Tomorrow' : new Date(iso).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Detroit' });
+    const day = days === 0 ? 'Tonight' : days === 1 ? 'Tomorrow' : new Date(iso).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Detroit' });
+    // Zip 76: the title names the game's time too ("Tonight 9:30 PM needs 1 more").
+    return `${day} ${new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Detroit' })}`;
   };
 
   // ---------------------------------------------------------------- A
@@ -218,16 +220,17 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- C
-  await check('C X (No) on the card: that player sees the next game, another player still sees this one', async () => {
+  await check('C X on the card only hides it on this phone (Zip 76: no decline sent); another player still sees this one', async () => {
     const a = await playerPage(outsiders[0]);
     const b = await playerPage(outsiders[1]);
     const before = await cardText(a.page);
     assert(before && before.startsWith(`${dayWord(g1.startsAt)} needs 2 more`), `before: ${before}`);
     await a.page.locator('[data-suggest-card] button.ac-x').click();
     await a.page.waitForTimeout(1500);
-    const after = await cardText(a.page);
-    assert(after !== before, `the card did not change: ${after}`);
-    // Demo copy: View as keeps nothing, so on a real phone the answer sticks; here the demo copy hides it for this screen.
+    assert((await cardText(a.page)) === null, 'the card is hidden on this phone');
+    await a.page.reload();
+    await a.page.waitForTimeout(1000);
+    assert((await cardText(a.page)) === null, 'still hidden after a reload');
     await a.ctx.close();
     await b.page.reload();
     await b.page.waitForTimeout(800);

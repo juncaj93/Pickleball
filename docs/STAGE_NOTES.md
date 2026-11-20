@@ -7452,3 +7452,65 @@ check card (to 7 from Round 3, one tap). No page errors. Switches as on live (TO
 - Read-only live look (pages.dev address): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen, the
   new bundle; /admin and /api/status 200; the organizer dashboard and check 401 without a PIN. The organizer screens were not opened on live
   (no read-only PIN in this session).
+
+## Zip 76: Money fixes from the 🎾75 audit, tournament money on Totals (🎾76.money fixes), Fri Nov 20, 2026
+Branch `claude/new-session-82pe3u` (the session is named "🎾76.money fixes"; the build system pins the branch name). Built on main `85989f8` (Zip 74
+live, main equal to live). **NO database change**: no table, column or migration. No new switch: every change is a fix, a rule Alex decided, or
+the Totals change he approved (it rides the Tournaments switch, on for everyone on live). The Cold Open's settings, tickets and money untouched.
+
+### MUST 1: late drop credit (the 🎾75 audit)
+- `OPEN_FEE` / `OPEN_LATE_DROP` (server/lateFees.ts) were NULL, not false, on a late drop that did not leave the game short (`played` stays
+  NULL), so `NOT OPEN_FEE` skipped the seat: the organizer's "Paid" on that player's unconfirmed I paid said "$14 is credit now" and gave $0.
+  Now `COALESCE(played, -1) = 0` and the whole fee test is COALESCEd to 0. Tests: tests/late-fees.test.ts (Paid gives the $14 once; Didn't
+  pay leaves nothing owed), and the 576-shape agreement test now checks OPEN_FEE and NOT OPEN_FEE as real 0 and 1 (it compared `=== 1`, so
+  NULL passed). Both new tests fail on the old code.
+- Live, read-only (Fri Nov 20): no late drop exists at all on live (0 rows with late_drop_at), so no seat is stuck.
+
+### MUST 2: Drop out words
+- Late, already paid: "It's past the 7:00 AM cancel-by. Your $14 stays on this game unless someone takes your spot." (never "you still owe");
+  a host with a guest the same ("Your $28 stays on this game unless someone takes your 2 spots."). A plain drop adds the toast's money line:
+  "Your spot opens up for someone else. $14 comes back as credit." (an I paid waiting: "Your $14 comes back as credit once Alex confirms your
+  payment."). shared/lateFees.ts, shared/guestSpot.ts, shared/credit.ts dropMoneyLine, src/pages/PlayerHome.tsx.
+
+### Tournament money on Totals (pictures totals-pair-1 to 5)
+- server/money.ts `tournamentsOf`: each tournament ENDED with its night in the month: tickets (credit and confirmed cash still on the tickets)
+  minus courts (court rate x courts x the final hours) minus the award credit rows = its result. One read, in place of Zip 56's "Tournament
+  tickets" line (gone). `handCreditOf`: credit added by hand (Adjust credit) minus taken away, a cost in the month given (from the ledger the
+  page already reads).
+- So far: "<name> tournament", made money "−$8" green, cost money "$10" red; only after End tournament. Projected: the same once ended, before
+  that the open tournament's "You make if it fills" (the dashboard's money line, no new read) when its night is in that month. A tap opens
+  Tickets / Courts / Prizes in place (no caret), a second tap closes. "Credit you added (by hand)" shows only when not $0.
+- Running total: "Tournaments <n>" (net), in Out of pocket and Average per month; per game and $/court stay regular games only (hand credit
+  counts there). Month by month: "6 games · 1 tournament".
+- Tests: tests/zip76-totals.test.ts (picture 5 to the cent: Dec $58 at $11/court, Jan $52 at $21/court, Feb $48 at $16/court; Running
+  total $90 + $66 + $2 = $158, $53 a month, $14 a game; hand credit balances; on the real server a 10 player night: $160 - $120 - $28 = +$12,
+  nothing before End, nothing with Tournaments off).
+
+### Tournament rules
+- The late drop keep rule counts locked in the way players see it (lockedInSql: spots and whole-ticket I paids still waiting), and a dropper
+  whose whole-ticket I paid waits can be kept (the Venmo payer is held to the credit payer's rule). Giving kept money back still needs paid
+  spots (refilledSql), so an I paid that turns out unpaid never releases anyone.
+- Pay by moved later (past now): every drop kept under the old Pay by comes back as credit in the same batch (releaseKeptStatements with
+  payByMovedLaterSql; one History line each, once).
+- Venue hours still never apply to tournaments: left for the smart venue hours work.
+- Tests: tests/zip70-time.test.ts "Zip 76" (3; all fail on the old code).
+
+### Small rules and clicks
+- Full regular game (no waitlist, 12 in): the card shows a disabled "Full" (view `atLimit`), not an I'm in that always fails.
+- Want in card: "Tonight 9:30 PM needs 1 more"; its X only hides the card on this phone (no decline sent).
+- Add my name > Is this you?: Back keeps the typed name. Congratulations "Nice": a failed save toasts.
+- Edit game: the "Moved" text only when the START changed. Cancel session past the cancel-by: "The free cancel time passed (Thu 5:00 AM)."
+- Cancel-by is always start minus 12 hours: the Settings > Schedule hours row is gone; new and moved games, the cards' fallback and the smart
+  alerts use 12 (live: the setting was 12 and all 19 saved deadlines were 12 hours, read-only, so nothing changes there).
+- An extra game sets planned_starts_at to its own start (unless a moved game still holds that time), so a Tue/Thu extra game far ahead is that
+  day's game when the horizon reaches it.
+- Smart alerts OFF pauses the Second Chance Telegrams (the tick checks first; a tap checks too).
+- Venmo: the Pay link uses the page-word guard (venmo.com/code, /pay never pay "code"/"pay"; an id link opens the profile with the amount shown);
+  the cash-out link treats an id handle like no handle ("Pick Vic in Venmo."). Live, read-only: the organizer's saved link is the handle
+  (/u/) form; no player has an id link.
+
+### Words
+- Activity and the remove-name refusal: theName everywhere (no "the The Cold Open").
+- Player refusals use the organizer's first name from Settings ("Ask Alex."), one wording; the 12 limit too. The credit sheet falls back to
+  "the organizer". Late drop refusals name the real amount (or none). Pay sheet "Open Venmo". Settings > Alerts: "Only you get these: names,
+  game times and amounts. ..." Players sheet: "Credit $14", "Refund $14 credit". Players see "game", not "session", in refusals.
