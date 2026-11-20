@@ -231,6 +231,9 @@ describe('switch ON: no cap, no waitlist', () => {
     expect(thirteenth.status).toBe(409);
     expect(thirteenth.data).toMatchObject({ error: 'game_limit' });
     expect(thirteenth.text).toContain(DB_LIMIT_MESSAGE);
+    // Zip 76: the refusal names the organizer from Settings; the 13th's card says Full (no I'm in that always fails).
+    expect(thirteenth.data.message).toMatch(/ Ask [A-Z][a-z]+\.$/);
+    expect((await phones[ALL[12]].call('GET', '/api/group')).data.sessions.find((x: any) => x.id === s.id).atLimit).toBe(true);
     // Nobody was put on a waitlist, and the organizer's own In is refused the same way.
     const rows = ctx.app.db.raw.prepare("SELECT COUNT(*) AS n FROM session_players WHERE session_id = ? AND status = 'waitlisted'").get(s.id) as { n: number };
     expect(rows.n).toBe(0);

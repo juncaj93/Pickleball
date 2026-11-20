@@ -460,6 +460,26 @@ describe('fixes from the fresh review', () => {
   });
 });
 
+describe('Zip 76: Smart alerts OFF pauses the Second Chance Telegrams too (the 🎾75 audit)', () => {
+  it('a tap at 4 in and the 7:05 AM clock send nothing while Smart alerts is off; back on, the clock sends it', async () => {
+    const w = await world({ CRON_SECRET: 'c'.repeat(40) });
+    await switchOn(w);
+    expect((await w.organizer.call('PUT', '/api/admin/alerts', { smartAlerts: false })).status).toBe(200);
+    w.app.now = Date.parse('2026-10-27T12:00:00Z'); // Tue 8:00 AM
+    const s = await tue(w);
+    await w.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
+    for (const n of ['Blair', 'Casey', 'Devon']) await join(w, n, s.id);
+    await w.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': 'c'.repeat(40) });
+    await w.app.settle();
+    expect(w.sent).toEqual([]);
+    expect((await w.organizer.call('PUT', '/api/admin/alerts', { smartAlerts: true })).status).toBe(200);
+    w.app.now += 5 * 60_000;
+    await w.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': 'c'.repeat(40) });
+    await w.app.settle();
+    expect(w.sent).toHaveLength(1);
+  });
+});
+
 describe('round 2 (Alex, Nov 8)', () => {
   it('Reopen offers EVERY half hour from 4:00 to 9:30 PM still ahead, none missing', () => {
     const start = '2026-12-02T01:00:00.000Z'; // Tue Dec 1, 8:00 PM EST

@@ -734,7 +734,7 @@ async function main() {
         await fits(a.page, '[data-tm-home]');
         await a.ctx.close();
       });
-  await check('K Money > Totals: its own Tournament tickets line, 6 paid $96 (5 Venmo, 1 credit), under the two cards', async () => {
+  await check('K Money > Totals: no Tournament tickets line any more (Zip 76: a tournament counts as one result row, only once it is ended)', async () => {
     await stage('tickets_open');
     const a = await adminPage();
     await a.page.locator('.tabbar button', { hasText: 'Money' }).click();
@@ -742,11 +742,9 @@ async function main() {
     await totals.waitFor({ timeout: 15000 });
     await a.page.waitForTimeout(600);
     await totals.click();
-    const line = a.page.locator('[data-card="tournament-tickets"]');
-    await line.waitFor({ timeout: 15000 });
-    const words = flat(await line.innerText());
-    assert(words === 'Tournament tickets 6 paid $96', words);
-    assert((await a.page.locator('[data-tickets-total="9600"]').count()) === 1, 'the cents');
+    await a.page.locator('[data-card="so-far"]').waitFor({ timeout: 15000 });
+    assert((await a.page.locator('[data-card="tournament-tickets"]').count()) === 0, 'no old line');
+    assert((await a.page.locator('[data-card="so-far"] [data-row="tournament"]').count()) === 0, 'not ended: nothing on So far');
     await shot(a.page, 'K-totals-tickets');
     await a.ctx.close();
   });

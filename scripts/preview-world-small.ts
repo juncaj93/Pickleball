@@ -724,11 +724,15 @@ export async function buildSmallPreview(
       // Parker sees Lost 7–11 and −4 pts; organizer Home: Fix any game with two numbers. The circle settled by points is one tap away.
       // Zip 74 (🎾74.polish): the calm start is that night with games to 9 from Round 2 (zip74_short): View as Vic: the amber alert, the
       // Play to 9 pills. The Final alert, Edit name and the back out sheet are one tap away on the Tournament test page.
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip74_short' });
+      // Zip 76 (🎾76.money fixes): the calm start is The Cold Open ENDED tonight (ended): Money > Totals has the "The Cold Open tournament" row
+      // (tap: Tickets, Courts, Prizes); the champions hold $14 award credit, so View as one, I'm in (credit used), Drop out says "$14 comes back
+      // as credit.". Zip 74's night is one tap away (zip74_short).
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'ended' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 74 (on, the calm start): "The Cold Open", tonight, Game 1 in, games to 9 from Round 2. View as Vic: "Starting Round 2, all games go to 9 points." at the top, Play to 9 points on the Up next card, Play to 9 on Games 2 and 3. One tap away: Final (Vic: You’re in the Final!), Teams published (Edit name), Time and Plan / Late drop (Parker: Drop out)');
+    summary.push('Zip 76 (the calm start): "The Cold Open" ended tonight ($14 to each champion). Money > Totals: the "The Cold Open tournament" row (tap: Tickets, Courts, Prizes), Running total: Tournaments 1. View as a champion: I\'m in (credit used), then Drop out: "$14 comes back as credit."');
+    summary.push('Zip 74 (one tap away, zip74_short): "The Cold Open", tonight, Game 1 in, games to 9 from Round 2. View as Vic: "Starting Round 2, all games go to 9 points." at the top, Play to 9 points on the Up next card, Play to 9 on Games 2 and 3. One tap away: Final (Vic: You’re in the Final!), Teams published (Edit name), Time and Plan / Late drop (Parker: Drop out)');
     summary.push('Zip 72 (one tap away): "The Cold Open", Locked doubles, tonight, Game 1 on both courts, no scores yet. View as Vic: Enter score, Submit score; then Parker: Lost 7–11, −4 pts. Organizer Home: Fix Game 1 · Court 1 with two numbers. The Tournament test page has the three-way circle settled by points, First score counts: Americano and Projected teams');
     summary.push('Zip 70 (one tap away): "The Cold Open" as on live, Locked doubles, $18, credits $0, Tue 7:30 to 10 PM on 2 courts, 6 locked in of 8 (Vic and Zoe unpaid), Reese on the list without the date. Organizer Home: the card with Time and Plan (You make if it fills +$6). The Tournament test page has the loss, the moved time, the late drop and Finalize for 9');
     summary.push('Zip 58 (one tap away): "The Cold Open", Locked doubles, the four teams, tonight, every pool game in: Kitchen Crew 3-0, Net Ninjas, Third Shot Gang and Dill With It tied 1-2 in a circle (the wheel on organizer Home). The Tournament test page has Final, Final done, Tournament ended, History and Americano: last round in');
