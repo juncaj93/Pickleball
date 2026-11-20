@@ -662,7 +662,7 @@ export interface PlayerDayGame {
   won?: boolean;
   /** Played to this (the Time check can make pool games shorter). */
   playTo: number;
-  /** This team said it won and the other team has not confirmed (Undo is still possible). */
+  /** Before Zip 71 only: this team said it won and the other team had not confirmed (a saved answer from then; never set now). */
   claimed?: boolean;
   /** The other team said "No, we won": the organizer decides. */
   disputed?: boolean;
@@ -861,7 +861,7 @@ export interface PlayerRound {
   /** The score from their side (mine first). */
   score?: { mine: number; theirs: number };
   playTo: number;
-  /** Their side entered the score and the other side has not said Yes yet. */
+  /** Before Zip 71 only: their side entered the score and the other side had not said Yes (never set now: no confirming). */
   claimed?: true;
   /** Never played (someone left). */
   skipped?: true;

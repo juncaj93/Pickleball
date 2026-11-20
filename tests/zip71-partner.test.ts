@@ -111,7 +111,9 @@ describe('zip 71, no confirming: Locked doubles, the first answer from any of th
       for (const action of ['won', 'lost', 'confirm', 'dispute', 'undo']) {
         const r = await tap(ctx, who, num, action);
         expect(r.status, `${who} ${action}`).toBe(409);
-        expect(r.text).toContain(line);
+        // An answer that says the same thing is still the second one (refused), but nothing needs fixing.
+        const agrees = (who === a2 && action === 'won') || (who !== a2 && action === 'lost');
+        expect(r.text).toContain(agrees ? `${a} said ${teamA} won. It is in.` : line);
       }
     expect((await tap(ctx, a, num, 'won')).status).toBe(200);
     for (const action of ['lost', 'undo']) {
@@ -128,7 +130,9 @@ describe('zip 71, no confirming: Locked doubles, the first answer from any of th
     expect(gameRow(ctx, num)).toMatchObject({ winner: 'a', claim_by: ctx.byName[b2] });
     const r = await tap(ctx, a, num, 'won');
     expect(r.status).toBe(409);
-    expect(r.text).toContain(`${b2} said ${teamA} won. Ask Alex to fix it.`);
+    expect(r.text).toContain(`${b2} said ${teamA} won. It is in.`);
+    const r2 = await tap(ctx, a, num, 'lost');
+    expect(r2.text).toContain(`${b2} said ${teamA} won. Ask Alex to fix it.`);
   });
 
   it('nothing to confirm: Yes / No / Undo with no result are refused, nothing written', async () => {
@@ -176,6 +180,14 @@ describe('zip 71, no confirming: Locked doubles, the first answer from any of th
     const same = await Promise.all([tap(n.ctx, n.a, n.num, 'won'), tap(n.ctx, n.a, n.num, 'won')]);
     expect(same.map((r) => r.status)).toEqual([200, 200]);
     books(n.ctx);
+  });
+
+  it('an old disputed game (from before this zip): no buttons on it for either team; the organizer settles it', async () => {
+    const { ctx, num, a, b } = await doublesNight();
+    ctx.app.db.raw.prepare("UPDATE tournament_games SET claim = 'a', disputed_at = ? WHERE tournament_id = ? AND num = ?").run(new Date(START_MS).toISOString(), ctx.tid, num);
+    for (const who of [a, b]) expect((await card(ctx, who)).day.games[0].onNow, who).toBeUndefined();
+    expect((await fix(ctx, { action: 'result', num, winner: 'b' })).status).toBe(200);
+    expect(gameRow(ctx, num)).toMatchObject({ winner: 'b', disputed_at: null });
   });
 
   it('a We won from before this zip (still waiting, no claim_by) counts as the result: nobody can answer over it', async () => {
@@ -227,11 +239,13 @@ describe('zip 71, no confirming: Americano, the first score from any of the 4 pl
     const { ctx, num, a, a2, b, b2 } = await americanoNight();
     await score(ctx, a, { num, action: 'score', mine: 11, theirs: 8 });
     const line = `${a} entered 11 to 8. Ask Alex to fix it.`;
+    // The same score from someone else: refused, but nothing needs fixing.
+    expect((await score(ctx, a2, { num, action: 'score', mine: 11, theirs: 8 })).text).toContain(`${a} entered 11 to 8. It is in.`);
+    expect((await score(ctx, b, { num, action: 'score', mine: 8, theirs: 11 })).text).toContain(`${a} entered 11 to 8. It is in.`);
     for (const who of [a2, b, b2])
       for (const body of [
-        { action: 'score', mine: 11, theirs: 8 },
-        { action: 'score', mine: 8, theirs: 11 },
         { action: 'score', mine: 11, theirs: 9 },
+        { action: 'score', mine: 9, theirs: 11 },
         { action: 'confirm', shown: { mine: 11, theirs: 8 } },
         { action: 'fix', mine: 11, theirs: 2, shown: { mine: 11, theirs: 8 } },
         { action: 'undo' },

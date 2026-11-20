@@ -642,9 +642,9 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
   await ctx.db.batch(writeTeamsAndGames(ctx.db, row, teams, published ? plan.games : null, plan.playTo, ctx.nowIso, '1 = 1', []));
   const iso = (minsAgo: number) => new Date(ctx.nowMs - minsAgo * 60_000).toISOString();
   if (stage === 'mid') {
-    // Game 1 (Net Ninjas, seat 1, side a): Vic's We won 2 minutes ago (zip71_taps: 1). Zip 71, no confirming: the first answer is the result,
-    // written the way Vic's tap writes it (winner, and who answered in claim_by).
-    const ago2 = stage === 'mid' ? 2 : 1;
+    // Game 1 (Net Ninjas, seat 1, side a): Vic's We won 2 minutes ago. Zip 71, no confirming: the first answer is the result, written the way
+    // Vic's tap writes it (winner, and who answered in claim_by).
+    const ago2 = 2;
     await ctx.db
       .prepare("UPDATE tournament_games SET winner = 'a', claim_by = ?, result_at = ?, result_by = 'players', seat_a = CAST(substr(slot_a, 2) AS INTEGER), seat_b = CAST(substr(slot_b, 2) AS INTEGER), updated_at = ? WHERE tournament_id = ? AND num = 1")
       .bind(idOf.get('Vic') ?? null, iso(ago2), iso(ago2), id)

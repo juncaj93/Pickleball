@@ -627,7 +627,8 @@ export function playerDayView(
       ...(g.disputed_at && !g.winner ? { disputed: true as const } : {}),
       ...(g.skipped ? { skipped: true as const } : {}),
       // Zip 58: a tie game is played as soon as both its teams are known (a pool can be done while the other still plays).
-      ...(!done && opp && f.started && (g.round <= roundNow || g.stage === 'tie') ? { onNow: true as const } : {}),
+      // Zip 71: an old disputed game (from before no confirming) is the organizer's to settle: no buttons on it.
+      ...(!done && opp && f.started && !g.disputed_at && (g.round <= roundNow || g.stage === 'tie') ? { onNow: true as const } : {}),
     };
     if (!done) firstOpen = false;
     games.push(entry);
@@ -1428,9 +1429,11 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
   // fine, anything else is refused.
   if (g!.winner || g!.skipped || g!.claim) {
     if (answer && (g!.winner ?? g!.claim) === answer && g!.claim_by === playerId) return { ok: true, result: action };
+    // Someone else's answer that says the same thing: refused (it is the second answer), but nothing needs fixing.
+    if (answer && !g!.skipped && (g!.winner ?? g!.claim) === answer) bad('decided', (await standing(g!)).replace(` Ask ${org} to fix it.`, ' It is in.'));
     bad('decided', await standing(g!));
   }
-  if (!answer) bad('no_confirm', `Nothing to confirm. Tap who won.`);
+  if (!answer) bad('no_confirm', action === 'undo' ? 'Nothing to take back.' : 'Nothing to confirm. Tap who won.');
   // Every result keeps the two teams it was given for (seat_a, seat_b), so a later change to an earlier game never moves it to other teams.
   const res = await ctx.db
     .prepare(

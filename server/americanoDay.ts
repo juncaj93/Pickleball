@@ -27,7 +27,7 @@ import type { TicketWithName } from './tournamentMoney';
 import { courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds } from './tournamentDay';
 import { firstName, logPlayer, nightOver, organizerOn, openById, realTimes, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
 
-/** A score is waiting for the other side's Yes this long before the organizer's card calls it late. */
+/** A score saved before Zip 71 still waiting for the other side's Yes this long is late on the organizer's card (no score waits now). */
 export const LATE_WAIT_MIN = 5;
 /** Highest score a side can enter (a game to 11 that runs on, win by 2). */
 export const MAX_SCORE = 30;
@@ -538,15 +538,17 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   const same = (z: AmGame) => z.claimBy === playerId && z.scoreA === x && z.scoreB === y;
   if (done(g)) {
     if (same(g)) return { ok: true, result: 'score' };
+    // Someone else entering the same score: refused (it is the second answer), but nothing needs fixing.
+    if (g.scoreA === x && g.scoreB === y) bad('decided', standing(g).replace(` Ask ${org} to fix it.`, ' It is in.'));
     bad('decided', standing(g));
   }
   const res = await ctx.db
     .prepare(
-      `UPDATE tournament_games SET score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = ?, claim_at = ?, disputed_at = NULL, result_at = ?, result_by = 'players', updated_at = ?
+      `UPDATE tournament_games SET score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'players', updated_at = ?
        WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND claim IS NULL
          AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
     )
-    .bind(x, y, x > y ? 'a' : 'b', playerId, ctx.nowIso, ctx.nowIso, ctx.nowIso, row!.id, row!.updated_at)
+    .bind(x, y, x > y ? 'a' : 'b', playerId, ctx.nowIso, ctx.nowIso, row!.id, row!.updated_at)
     .run();
   if ((res.meta?.changes ?? 0) === 0) {
     // Two phones at once: another score landed first. The same player with the same score: it is in. Anyone else: who entered it.
