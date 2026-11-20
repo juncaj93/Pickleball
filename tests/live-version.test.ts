@@ -15,10 +15,12 @@ describe('live updates: the change stamp', () => {
     const ctx = await setupGroup();
     const alex = await playerPhone(ctx, 'Alex');
     const r = await alex.call('GET', '/api/group/version');
-    expect(Object.keys(r.data)).toEqual(['v']);
+    // Zip 77: plus `t`, the server's clock in ms (the standings reveal runs on it on every phone).
+    expect(Object.keys(r.data)).toEqual(['v', 't']);
     expect(r.data.v).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    expect(r.data.t).toBe(ctx.app.now);
     expect(r.headers.get('Cache-Control')).toBe('no-store');
-    expect(r.text.length).toBeLessThan(40);
+    expect(r.text.length).toBeLessThan(48);
   });
 
   it('stays the same when nothing changed, and matches the full data', async () => {

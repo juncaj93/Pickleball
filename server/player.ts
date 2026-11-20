@@ -179,7 +179,8 @@ export async function viewer(ctx: Ctx): Promise<Viewer> {
 /** GET /api/group/version: the tiny "did anything change?" answer the open page asks every few seconds. */
 export async function groupVersion(ctx: Ctx): Promise<Response> {
   const { group, playerId } = await viewer(ctx);
-  return new Response(JSON.stringify({ v: await changeStamp(ctx, group, playerId) }), {
+  // Zip 77: `t`, the server's clock (the real one, never Pretend it's): the standings reveal runs on it on every phone.
+  return new Response(JSON.stringify({ v: await changeStamp(ctx, group, playerId), t: Date.parse(ctx.realNowIso) }), {
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
   });
 }
@@ -268,8 +269,17 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       // Zip 56: a tournament ticket's entries name it (one small read, only for a player who has such entries), and only while the switch is on
       // for this phone: switched off, the entries say "a tournament" (review: no tournament data at all to a phone that may not see it).
       const tourOn = mineOnly.some((e) => e.tourId) && (await tournamentsFlags(ctx, group.id)).on;
-      const tourNames = await tourNamesOf(ctx.db, tourOn ? mineOnly : [], { everyoneOnly: true, ...(tourOn ? { groupId: group.id } : {}) });
+      const tourNames = await tourNamesOf(ctx.db, tourOn ? mineOnly : [], { everyoneOnly: true, nowMs: ctx.nowMs, ...(tourOn ? { groupId: group.id } : {}) });
+      // Zip 77: while an Americano night's reveal is playing, its award credit (granted at the tap, as before) waits on this screen: the chip and
+      // the history would tell the winner (and 2nd) before the board does. Display only; from the end of the hold it shows as always.
+      const revealing = mineOnly.filter((e) => e.kind === 'kept' && !!e.tourId && (e.tourWhy === 'champion' || e.tourWhy === 'second') && tourNames.get(e.tourId)?.revealing);
+      if (revealing.length) {
+        const heldCents = revealing.reduce((sum, e) => sum + e.cents, 0);
+        credit.balanceCents = Math.max(0, credit.balanceCents - heldCents);
+        credit.usableCents = usableCredit(credit.balanceCents, reserved.get(me.id) ?? 0);
+      }
       credit.history = mineOnly
+        .filter((e) => !revealing.includes(e))
         .map(
           (e): CreditEntryView => ({
             id: e.id,

@@ -266,12 +266,19 @@ export function playerRoundsView(
   playerId: string,
   tz: string,
   nowMs: number,
+  /**
+   * Zip 77, who sees the standings: 'hidden' (every player during the night: the table is not sent at all, the reveal shows it), 'live' (the
+   * organizer's own player on the organizer's own signed-in phone: he catches wrong scores there), 'final' (after Reveal standings, the night's
+   * board and Standings card).
+   */
+  mode: 'hidden' | 'live' | 'final' = 'hidden',
 ): PlayerRoundsView | null {
   const f = amFacts(t, signups, tickets, rows, tz, nowMs);
   if (!f.roster.includes(playerId) && !f.gone.has(playerId)) return null;
   const real = realTimes(t);
   const startMs = t.final_date ? startMsOf(t.final_date, real.start, tz) : Infinity;
-  const today = nowMs >= startMs - LIVE_BEFORE_MS && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS;
+  // Zip 77: after the reveal the night stays on Home (the board, then the final standings) whatever the clock says.
+  const today = mode === 'final' || (nowMs >= startMs - LIVE_BEFORE_MS && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS);
   const me = nameOf(f, playerId);
   const rounds: PlayerRound[] = [];
   let first = true;
@@ -320,7 +327,8 @@ export function playerRoundsView(
         .filter((g) => !decided(g) && g.round === f.roundNow && !sideOf(g, playerId))
         .map((g) => ({ round: g.round, court: courtNo(t, g.court), a: pairNames(f, g.a), b: pairNames(f, g.b) }))
     : [];
-  const table = tableOf(f);
+  // Zip 77: before the reveal a player's answer carries no table at all (names, records, points and ranks stay on the server).
+  const table = mode === 'hidden' ? [] : tableOf(f);
   const standings = table.map((r) => ({
     rank: r.rank,
     name: nameOf(f, r.id),
@@ -334,9 +342,10 @@ export function playerRoundsView(
   const offs = f.games.filter((g) => g.skipped && g.leftBy && g.leftBy !== playerId && sideOf(g, playerId));
   const leaver = offs[0]?.leftBy ?? null;
   const mineOff = leaver ? offs.filter((g) => g.leftBy === leaver).map((g) => g.round) : [];
-  const note = shorterNote(f);
+  // Zip 77: after the reveal nothing about the night's time is said any more.
+  const note = mode === 'final' ? undefined : shorterNote(f);
   // Zip 74 (picture pair-3): the shorter games alert at the top of Home (Americano's last round is never shortened, so it is not part of it).
-  const shortAlert = today && f.started && !f.over ? shortAlertOf(t.id, f.games.map((g) => ({ round: g.round, playTo: g.playTo, pool: true, decided: decided(g) })), f.plan.gameTo) : undefined;
+  const shortAlert = mode !== 'final' && today && f.started && !f.over ? shortAlertOf(t.id, f.games.map((g) => ({ round: g.round, playTo: g.playTo, pool: true, decided: decided(g) })), f.plan.gameTo) : undefined;
   return {
     kind: 'americano',
     me,
@@ -348,9 +357,13 @@ export function playerRoundsView(
     progress: { label, done: doneCount, total: Math.max(1, f.rounds) },
     live,
     standings,
+    ...(mode === 'hidden' ? { standingsHidden: true as const } : {}),
+    // Zip 77: every game in, not revealed yet, on the night: the "Final standings coming soon" card.
+    ...(mode !== 'final' && today && f.started && allIn && f.games.length > 0 ? { waiting: true as const } : {}),
+    ...(mode === 'final' ? { final: true as const } : {}),
     ...(note ? { timeNote: note } : {}),
     ...(shortAlert ? { shortAlert } : {}),
-    ...(t.paused_at ? { paused: true as const } : {}),
+    ...(t.paused_at && mode !== 'final' ? { paused: true as const } : {}),
     ...(leaver
       ? {
           leftNote: {

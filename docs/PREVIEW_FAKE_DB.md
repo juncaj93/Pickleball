@@ -311,3 +311,10 @@ Round 3 on both courts. The seats are drawn so Vic plays Rounds 1 to 3, sits Rou
 comes from the real schedule. The night is relative to the seed, so a later visit taps Tournament test > "Americano: Round 3 (start here)"
 first. The other stages: Americano: before the night, Round 1, a break, after Round 5, switched from Locked doubles (9 locked in, Reese did not
 pay). Zip 57's Locked doubles stages are still on the page.
+
+Zip 77 (🎾77.reveal, Americano's hidden standings and the reveal): no new names, no migration. `npm run db:seed:preview` now opens on the
+Americano night with every game in (zip77_allin): "The Cold Open", Americano, all 10 names, tonight, Vic first. View as Vic: no kicker, a thin
+divider, "Final standings coming soon" with three bouncing balls, no Standings card. Organizer Home: Edit awards and Reveal standings (the
+real End: the board then plays on every phone). The night is relative to the seed, so a later visit taps Tournament test > "Americano: all
+games in" first. The other stages: Americano: last round (standings hidden), reveal running (as Vic: starts 6 seconds after the tap),
+revealed (10 minutes ago: the final board once, then the standings, the ticker and You won The Cold Open).

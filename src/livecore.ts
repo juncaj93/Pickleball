@@ -29,6 +29,12 @@ export const LIVE_UPDATES = {
 
 export type LiveConfig = typeof LIVE_UPDATES;
 
+/**
+ * Zip 77: the server's clock as each check saw it ([sent, got, server time], this phone's clock for the first two), the last 12. Only kept here;
+ * src/serverClock.ts (the reveal's own download) works the offset out from them, so the player script stays small.
+ */
+export const clockReadings: [number, number, number][] = [];
+
 export interface LiveEnv {
   now(): number;
   setTimer(fn: () => void, ms: number): unknown;
@@ -59,6 +65,11 @@ export class LivePoller {
   private dead = false;
   /** How many checks went out (for tests and the usage math). */
   checks = 0;
+  /**
+   * Zip 77: a short wait that holds whatever the person does (no slow-down, no stop while visible), or null for the usual rhythm. Only the
+   * Americano night's "Final standings coming soon" card sets it (2 s), so a phone left on the table still starts the reveal with the rest.
+   */
+  private fastMs: number | null = null;
 
   constructor(
     private env: LiveEnv,
@@ -98,6 +109,13 @@ export class LivePoller {
     }
   }
 
+  /** Zip 77: check every `ms` (null: back to the usual rhythm). A change takes effect at once. */
+  setFast(ms: number | null) {
+    if (ms === this.fastMs) return;
+    this.fastMs = ms;
+    if (this.running && !this.dead && this.timer !== null) this.plan();
+  }
+
   /** The tab went hidden / the screen turned off. */
   hide() {
     this.clear();
@@ -119,6 +137,7 @@ export class LivePoller {
 
   /** The wait before the next check, or null when it should stay quiet. */
   nextWait(): number | null {
+    if (this.fastMs !== null) return Math.max(this.fastMs, this.backoff);
     const quiet = this.env.now() - this.lastTouch;
     if (quiet >= this.cfg.stopAfterMs) return null;
     const base = quiet >= this.cfg.slowAfterMs ? this.cfg.idleMs : this.cfg.activeMs;

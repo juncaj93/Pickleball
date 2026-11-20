@@ -82,7 +82,8 @@
   padding: 18px 16px 16px;
   border-radius: 22px;
   color: #ffffff;
-  background: linear-gradient(180deg, #2b8c5b 0%, #1f6d47 100%);
+  /* Zip 77 (the 🎾75 audit): a little darker at the top so the lime kicker and "VS" (4.7:1) and the white lines pass WCAG AA. */
+  background: linear-gradient(180deg, #1f7049 0%, #195a3a 100%);
   box-shadow:
     0 0 0 1px rgb(110 240 176 / 18%),
     0 10px 30px rgb(43 140 91 / 28%);
@@ -360,6 +361,8 @@
   color: var(--ink-2);
 }
 .tc-gd-court-btn {
+  /* Zip 77 (the 🎾75 audit): a 44 px tall tap area around the words (like .gd-btn::before), the look unchanged. */
+  position: relative;
   padding: 0;
   border: 0;
   background: none;
@@ -370,6 +373,11 @@
   text-decoration: underline dotted;
   text-underline-offset: 4px;
   cursor: pointer;
+}
+.tc-gd-court-btn::before {
+  content: '';
+  position: absolute;
+  inset: -11px -6px;
 }
 .tc-gd-main {
   flex: 1 1 auto;
@@ -490,7 +498,7 @@
 }
 .tc-gd-vs-big .tc-gd-tn > span {
   font-size: 0.95rem;
-  color: rgb(255 255 255 / 82%);
+  color: rgb(255 255 255 / 92%);
 }
 .tc-gd-vs-big .tc-gd-vs-mark {
   color: #d8f03b;

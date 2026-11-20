@@ -286,7 +286,8 @@ function FixSheet({ ctx, t, g, onClose }: { ctx: AdminCtx; t: AdminTournamentVie
     setB(g.scoreB ?? 0);
   }
   return (
-    <Sheet calmFocus open={!!g} title={g ? `Fix · Round ${g.round} · ${where(g)}` : 'Fix'} onClose={onClose} className="tm-gd-sheet">
+    // Zip 77 (the 🎾75 audit): a game with no score yet is Set (the button said Set); Fix once it has one.
+    <Sheet calmFocus open={!!g} title={g ? `${g.status === 'done' ? 'Fix' : 'Set'} · Round ${g.round} · ${where(g)}` : 'Fix'} onClose={onClose} className="tm-gd-sheet">
       {g && (
         <div className="stack" data-tm-am-fix-sheet={g.num}>
           <Stepper label={pair(g.a.names)} value={a} onChange={setA} id="a" />

@@ -195,8 +195,9 @@ describe('zip 61: game night, scores', () => {
     const mine = (await card(ctx, a2)).day;
     expect(myRound(mine, 1)).toMatchObject({ state: 'done', won: true, score: { mine: 11, theirs: 8 } });
     expect(mine.progress.label).toBe('Round 2 of 6');
-    const top = mine.standings[0];
-    expect([top.record, top.points]).toEqual(['1-0', 11]);
+    // Zip 77: a player's answer carries no table before the reveal (no names, records or points: the reveal shows them).
+    expect(mine.standings).toEqual([]);
+    expect(mine.standingsHidden).toBe(true);
     const theirs = (await card(ctx, b)).day;
     expect(myRound(theirs, 1)).toMatchObject({ state: 'done', won: false, score: { mine: 8, theirs: 11 } });
     expect(myRound(theirs, 1).ask).toBeUndefined();
@@ -489,8 +490,9 @@ describe('zip 61: the preview test page, the Americano stages', () => {
     await stage('am_standings');
     v = (await card(c, 'Vic')).day;
     expect(v.progress.label).toBe('Round 6 of 6');
-    expect(v.standings).toHaveLength(10);
-    expect(v.standings.reduce((s: number, r: any) => s + r.points, 0)).toBeGreaterThan(0);
+    // Zip 77: the table stays on the server until Alex reveals it.
+    expect(v.standings).toEqual([]);
+    expect(v.standingsHidden).toBe(true);
     await stage('am_switched');
     const s = await card(c, 'Vic');
     expect(s.format).toBe('americano');

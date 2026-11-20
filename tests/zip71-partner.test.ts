@@ -231,8 +231,8 @@ describe('zip 71, no confirming: Americano, the first score from any of the 4 pl
       expect(r, who).toMatchObject({ state: 'done', won: mine > theirs, score: { mine, theirs } });
       for (const k of [...NO_CONFIRM_KEYS, 'claimed']) expect(r[k], `${who} ${k}`).toBeUndefined();
     }
-    const table = (await card(ctx, a)).day.standings;
-    expect(table.find((x: any) => x.name === a)).toMatchObject({ record: '1-0', points: 11 });
+    // Zip 77: players get no table before the reveal; the organizer's End card follows the first score (tested in zip77-reveal).
+    expect((await card(ctx, a)).day.standings).toEqual([]);
     expect(moneyRows(ctx)).toBe(before);
     books(ctx);
   });

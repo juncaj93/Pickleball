@@ -105,6 +105,17 @@ export const ZIP66_STAGES = ['zip66_start', 'missed_date'] as const;
 //                    screens are existing stages: final_on (Vic: "You're in the Final!"), teams_published (Your team: Edit name), zip70_start
 //                    and zip70_late (Parker: Drop out, "Back out of The Cold Open?" before and after Pay by).
 export const ZIP74_STAGES = ['zip74_short'] as const;
+// Zip 77 (🎾77.reveal): the Americano standings reveal, on Zip 61's night (10 names, Vic sits Round 4).
+//   zip77_last       Rounds 1 to 5 in, Round 6 on (THE CALM START): View as Vic: no Standings card, the line at the bottom; Home: the scores.
+//   zip77_allin      every round in (Vic first): View as Vic: no kicker, the thin divider, "Final standings coming soon" with the bouncing
+//                    balls (Home checks every 2 seconds). Home: Edit awards and Reveal standings.
+//   zip77_running    zip77_allin, then Reveal standings by the real code, timed 6 seconds after the stage tap: View as Vic right away: the
+//                    waiting card, then the countdown and the board in step with every other phone.
+//   zip77_revealed   the same, revealed 10 minutes ago (the board is done): View as Vic: the final board once (X closes it), then the night's
+//                    final standings, the ticker, You won The Cold Open and the medal.
+export const ZIP77_STAGES = ['zip77_last', 'zip77_allin', 'zip77_running', 'zip77_revealed'] as const;
+type Zip77Stage = (typeof ZIP77_STAGES)[number];
+const isZip77Stage = (s: string): s is Zip77Stage => (ZIP77_STAGES as readonly string[]).includes(s);
 export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out', 'zip71_taps', 'zip72_scores', 'zip72_circle'] as const;
 type DayStage = (typeof DAY_STAGES)[number];
 const isDayStage = (s: string): s is DayStage => (DAY_STAGES as readonly string[]).includes(s);
@@ -153,7 +164,7 @@ const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).
 export const ZIP70_STAGES = ['zip70_start', 'zip70_loss', 'zip70_moved', 'zip70_late', 'zip70_finalize'] as const;
 type Zip70Stage = (typeof ZIP70_STAGES)[number];
 const isZip70Stage = (s: string): s is Zip70Stage => (ZIP70_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -309,6 +320,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   ]);
   if (stage === 'none') return { ok: true, stage };
   if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
+  if (isZip77Stage(stage)) return zip77Stage(ctx, group, stage);
   if (isZip58Stage(stage)) return zip58Stage(ctx, group, stage);
   if (stage === 'zip72_circle') return dayStage(ctx, group, stage, TIE3, CIRCLE_SCORE);
   if (stage === 'zip74_short') {
@@ -973,6 +985,23 @@ async function zip58Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
   }
   await ctx.db.batch(statements);
   return { ...made, stage };
+}
+
+/**
+ * Zip 77's stages (see ZIP77_STAGES): Zip 61's night, then Reveal standings by the real code (endPlan and writeEnd, exactly what the organizer's
+ * tap runs), moved in time only by its ended_at (the reveal's clock): 6 seconds after the stage tap, or 10 minutes before it.
+ */
+async function zip77Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip77Stage) {
+  const made = await americanoStage(ctx, group, stage === 'zip77_last' ? 'am_standings' : 'am_done');
+  if (stage === 'zip77_last' || stage === 'zip77_allin') return { ...made, stage };
+  const t = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(made.id).first<EndRow>())!;
+  const night = await readNight(ctx, t);
+  const plan = endPlan(t, 'americano', night.signups, night.tickets, night.day, group.timezone, ctx.nowMs, await organizerIdOf(ctx.db, group));
+  if (!plan) throw new HttpError(500, 'stage_failed', 'The last round is not in.');
+  await writeEnd(ctx, group, t, night, plan);
+  const tapMs = stage === 'zip77_running' ? ctx.nowMs + 6_000 : ctx.nowMs - 10 * 60_000;
+  await ctx.db.prepare('UPDATE tournaments SET ended_at = ? WHERE id = ?').bind(new Date(tapMs).toISOString(), made.id).run();
+  return { ...made, stage, tapMs };
 }
 
 /** The Eastern calendar day `days` before today, 'YYYY-MM-DD'. */

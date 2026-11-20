@@ -547,7 +547,8 @@ export function cleanDays(list: unknown): string[] | null {
  * Piece 1's stages, then piece 2's (Zip 56): 'tickets' (tickets open), 'rescheduled' (tickets had opened; the organizer went back to the date
  * step: sign-up is open again, every ticket stays as it is) and 'canceled' (players on the list see a plain Canceled card for a while).
  */
-export type TournamentStatus = 'signup' | 'date_picked' | 'tickets' | 'rescheduled' | 'canceled';
+/** Zip 77: 'ended' reaches a player only for an Americano night just revealed (its board, then the final standings, on that night). */
+export type TournamentStatus = 'signup' | 'date_picked' | 'tickets' | 'rescheduled' | 'canceled' | 'ended';
 export type Visibility = 'me' | 'all';
 
 /** Zip 56: where a ticket stands (shared/tournamentTickets.ts has the rules). */
@@ -634,6 +635,11 @@ export interface PlayerTournamentView {
   /** Zip 57: Locked doubles teams and game day, once the organizer published the teams (and the style is Locked doubles). Zip 61: the Americano
    *  night (`kind: 'americano'`), once tickets close on Americano, for a player in it. */
   day?: PlayerDayView | PlayerRoundsView;
+  /**
+   * Zip 77: an Americano night the organizer just revealed (status 'ended', for the players in it, on that night): when the organizer tapped
+   * Reveal standings (server clock, ms) and how many rows the board has. Every phone draws the board from these two and the server's clock.
+   */
+  reveal?: { tapMs: number; players: number };
 }
 
 /** Zip 74: a game night alert at the top of a player's Home (the site's alert card, dismissed per phone by its key). */
@@ -917,8 +923,14 @@ export interface PlayerRoundsView {
   progress: { label: string; done: number; total: number };
   /** Games being played now that are not theirs (every court while they sit). */
   live: { round: number; court: number; a: string[]; b: string[] }[];
-  /** The points table: rank, name, wins-losses, points. */
+  /** The points table: rank, name, wins-losses, points. Zip 77: empty for players until the reveal (the server never sends it before). */
   standings: { rank: number; name: string; record: string; points: number; me?: true; tied?: true; out?: true }[];
+  /** Zip 77: the standings are kept for the reveal (players during the night): no Standings card, one line at the bottom instead. */
+  standingsHidden?: true;
+  /** Zip 77: every game is in and the organizer has not revealed yet: the "Final standings coming soon" card (phones check every 2 s). */
+  waiting?: true;
+  /** Zip 77: the final standings (after the reveal): no Live chip, no kicker, the bar is a thin divider. */
+  final?: true;
   timeNote?: string;
   /** Zip 74: shorter games are in force (as PlayerDayView.shortAlert). */
   shortAlert?: DayAlert;

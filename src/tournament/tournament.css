@@ -1670,14 +1670,15 @@ dialog.sheet.tc-tw-overlay {
 /* Mock 01: the gray button is narrower and shorter, sized to its words. */
 .tc-bar .tc-gray {
   flex: 0 1 auto;
-  min-height: 40px;
+  /* Zip 77 (the 🎾75 audit): every tap on the card is at least 44 px tall. */
+  min-height: 44px;
   padding: 0 19px;
   border-radius: 14px;
   font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Edit and Drop out: plain underlined words, far apart (about 22 px between the tap areas), each tap area at least 36 px tall. */
+/* Edit and Drop out: plain underlined words, far apart (about 22 px between the tap areas), each tap area at least 44 px tall (Zip 77). */
 .tc-bar-links {
   display: flex;
   flex: none;
@@ -1687,7 +1688,7 @@ dialog.sheet.tc-tw-overlay {
   padding-right: 5px;
 }
 .tc-bar .tc-link {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 8px;
   font-size: 0.8rem;
   white-space: nowrap;
@@ -1779,14 +1780,14 @@ dialog.sheet.tc-tw-overlay {
 }
 .tc-bar-row .tc-gray {
   flex: 0 0 auto;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   font-size: 1rem;
   font-weight: 750;
 }
 .tc-bar-row .tc-row-drop {
   flex: 0 0 auto;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 4px;
   font-size: 0.95rem;
   white-space: nowrap;

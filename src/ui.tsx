@@ -6,6 +6,7 @@ import { type CourtKind } from '../shared/court';
 import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
 import { holdLive } from './busy';
+import { openLayer } from './backStack';
 import { DEMO_MESSAGE, isIOS, VIEW_ONLY_MESSAGE } from './lib';
 import { adminMotionOn, canMove, motionOn, RollText, useMotion } from './motion';
 import { formatPhone, smsHref } from '../shared/messages';
@@ -487,6 +488,10 @@ export function Sheet({
   }, [open]);
   // An open sheet holds live updates back until it closes.
   useEffect(() => (open ? holdLive() : undefined), [open]);
+  // Zip 77 (the 🎾75 audit): Back (an edge swipe, Android's back) closes the sheet instead of leaving the site (src/backStack.ts).
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => (open ? openLayer(() => closeRef.current()) : undefined), [open]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;

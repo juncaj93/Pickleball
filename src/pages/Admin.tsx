@@ -8,6 +8,7 @@ import { courtCards } from './admin/doNow';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, demoOn, navigate, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
+import { markFirstTab, onTabBack, pushTab } from '../backStack';
 import { fadeChanges, LAST_ADMIN_HOLD_MS, markMoney, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../lastAdmin';
 import { asOfText } from '../lastScreen';
 import { afterHolds } from '../undoHold';
@@ -289,6 +290,19 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
     window.scrollTo(0, restoreTo.current);
     restoreTo.current = null;
   }, [tab]);
+  // Zip 77 (the 🎾75 audit): Back after a tab switch returns to the last tab (src/backStack.ts), with its scroll spot, instead of leaving the site.
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  useEffect(() => {
+    markFirstTab(tabRef.current);
+    return onTabBack((back) => {
+      const id = TABS.find((x) => x.id === back)?.id;
+      if (!id || id === tabRef.current) return;
+      scrollOf.current[tabRef.current] = window.scrollY;
+      restoreTo.current = scrollOf.current[id] ?? 0;
+      setTab(id);
+    });
+  }, []);
   function pickTab(id: Tab) {
     if (id === tab) {
       setSheet(null);
@@ -300,6 +314,7 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
     scrollOf.current[tab] = window.scrollY;
     restoreTo.current = scrollOf.current[id] ?? 0;
     setTab(id);
+    pushTab(id);
   }
 
   if (viewing) {

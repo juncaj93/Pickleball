@@ -37,6 +37,7 @@ import {
   type TournamentHistoryView,
 } from '../shared/tournament';
 import { americanoOutcome } from './americanoDay';
+import { revealHolding } from '../shared/reveal';
 import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
 import { keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
 import { logPlayer, organizerOn, openById, styleDecided, type SignupRow, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
@@ -397,6 +398,27 @@ async function readAwards(db: D1Database, groupId: string, nowMs: number): Promi
   }
 }
 
+/**
+ * Zip 77: an Americano night whose reveal is still playing (REVEAL_HOLD_MS from Reveal standings, on the server's clock) keeps its ticker, its
+ * congratulations card and its medals back, so nothing at the top of Home tells the winner before the board does. Then they come at the next
+ * check, as before (the change stamp carries them, so the moment the hold ends is a change).
+ */
+export function withoutRevealing(a: AwardsPre, nowMs: number): AwardsPre {
+  const held = new Set(a.banners.filter((b) => b.format === 'americano' && revealHolding(b.ended_at, nowMs)).map((b) => b.id));
+  if (!held.size) return a;
+  const medals = a.medals.map((m) => ({ ...m }));
+  for (const w of a.winners) {
+    if (!held.has(w.tournament_id) || !w.medal) continue;
+    const m = medals.find((x) => x.name === w.display_name);
+    if (m) m.n = Number(m.n) - 1;
+  }
+  return {
+    banners: a.banners.filter((b) => !held.has(b.id)),
+    winners: a.winners.filter((w) => !held.has(w.tournament_id)),
+    medals: medals.filter((m) => Number(m.n) > 0),
+  };
+}
+
 /** Only me: the organizer's own player on the organizer's own signed-in phone (or the organizer's View as of their own player). */
 async function onlyMeOk(ctx: Ctx, group: GroupRow, playerId: string, viewAs: boolean): Promise<boolean> {
   if (playerId !== (await organizerIdOf(ctx.db, group))) return false;
@@ -413,7 +435,7 @@ async function onlyMeOk(ctx: Ctx, group: GroupRow, playerId: string, viewAs: boo
 export async function playerAwardsFor(ctx: Ctx, group: GroupRow, playerId: string | null, viewAs: boolean, pre?: AwardsPre): Promise<TourAwardsView | null> {
   if (!playerId) return null;
   if (!pre && !(await tournamentsFlags(ctx, group.id)).on) return null;
-  const a = pre ?? (await readAwards(ctx.db, group.id, ctx.nowMs));
+  const a = withoutRevealing(pre ?? (await readAwards(ctx.db, group.id, ctx.nowMs)), ctx.nowMs);
   if (!a.banners.length && !a.medals.length) return null;
   const meOk = a.banners.some((b) => b.visibility !== 'all') ? await onlyMeOk(ctx, group, playerId, viewAs) : false;
   const banners = a.banners.filter((b) => b.visibility === 'all' || meOk);

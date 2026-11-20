@@ -293,7 +293,7 @@ async function main() {
         }
   });
 
-  await check('D pair-5: organizer Home: Fix Game 1 · Court 1 with the team names, − and +, Save; the row says 11 to 7; no Confirm (light and dark)', async () => {
+  await check('D pair-5: organizer Home: Set Game 1 · Court 1 (Zip 77) with the team names, − and +, Save; the row says 11 to 7; no Confirm (light and dark)', async () => {
     for (const scheme of SCHEMES) {
       await stage('zip72_scores');
       const a = await adminHome({ scheme });
@@ -302,7 +302,8 @@ async function main() {
       const sheet = a.page.locator('[data-tm-fix-sheet="1"]');
       await sheet.waitFor({ timeout: 5000 });
       const dialog = a.page.locator('dialog[open]').filter({ has: sheet });
-      assert(flat(await dialog.innerText()).startsWith('Fix Game 1 · Court 1'), `title: ${flat(await dialog.innerText()).slice(0, 40)}`);
+      // Zip 77 (the 🎾75 audit): Game 1 has no result yet, so the sheet is "Set Game 1 · Court 1" (Fix once it has one).
+      assert(flat(await dialog.innerText()).startsWith('Set Game 1 · Court 1'), `title: ${flat(await dialog.innerText()).slice(0, 40)}`);
       const names = (await sheet.locator('.tm-am-step-name').allInnerTexts()).map(flat);
       assert(JSON.stringify(names) === JSON.stringify(['Net Ninjas', 'Third Shot Gang']), `names: ${names}`);
       for (let i = 0; i < 7; i++) await sheet.locator('[data-tm-am-plus="b"]').click();

@@ -10,6 +10,7 @@ import { adjustNoteOf } from '../shared/adjustCredit';
 import { extSessionOf } from '../shared/extension';
 import { newId } from './crypto';
 import type { D1Database, D1PreparedStatement } from './db';
+import { revealHolding } from '../shared/reveal';
 import { HttpError } from './http';
 import { audit, flatOf, type GroupRow, loadRosters, loadSessions, lookbackIso, lookbackRead, organizerIdOf, type ReadSpec, rostersRead, type SessionRow, sessionsRead, visibleFrom } from './repo';
 import { asFewer } from './speed';
@@ -106,26 +107,29 @@ export async function tourNamesOf(
   db: D1Database,
   rows: readonly Pick<CreditRow, 'tourId'>[],
   /** `groupId` (Zip 62, only while the switch is on): read the group's tournaments with tourNamesRead, the read the screen already sent in its shared trip. */
-  opts: { everyoneOnly?: boolean; groupId?: string } = {},
-): Promise<Map<string, { name: string; canceled: boolean }>> {
+  opts: { everyoneOnly?: boolean; groupId?: string; nowMs?: number } = {},
+): Promise<Map<string, { name: string; canceled: boolean; revealing?: boolean }>> {
   const ids = [...new Set(rows.map((r) => r.tourId).filter((x): x is string => !!x))];
   if (ids.length === 0) return new Map();
   const byGroup = opts.groupId ? tourNamesRead(opts.groupId) : null;
   const { results } = await (byGroup
     ? db.prepare(byGroup.sql).bind(...byGroup.values)
-    : db.prepare(`SELECT id, name, status, visibility FROM tournaments WHERE id IN (${ids.map(() => '?').join(', ')})`).bind(...ids)
+    : db.prepare(`SELECT id, name, status, visibility, format, ended_at FROM tournaments WHERE id IN (${ids.map(() => '?').join(', ')})`).bind(...ids)
   )
-    .all<{ id: string; name: string; status: string; visibility: string }>()
-    .catch(() => ({ results: [] as { id: string; name: string; status: string; visibility: string }[] }));
+    .all<{ id: string; name: string; status: string; visibility: string; format?: string; ended_at?: string | null }>()
+    .catch(() => ({ results: [] as { id: string; name: string; status: string; visibility: string; format?: string; ended_at?: string | null }[] }));
   const wanted = new Set(ids);
   // `everyoneOnly` (a player's own answer): an Only me tournament is never named (review: no tournament data to a player who may not see it).
   return new Map(
-    results.filter((t) => wanted.has(t.id) && (!opts.everyoneOnly || t.visibility === 'all')).map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled' }]),
+    results
+      .filter((t) => wanted.has(t.id) && (!opts.everyoneOnly || t.visibility === 'all'))
+      // Zip 77: an Americano night whose reveal is still playing (its award credit waits on the player's screen; shared/reveal.ts).
+      .map((t) => [t.id, { name: t.name, canceled: t.status === 'canceled', ...(t.status === 'ended' && t.format === 'americano' && revealHolding(t.ended_at, opts.nowMs ?? Date.now()) ? { revealing: true } : {}) }]),
   );
 }
 
 /** Zip 62: every tournament of the group (a handful of rows): tourNamesOf's read when the screen can send it early (SPEED_FEWER_QUERIES prefetch). */
-export const tourNamesRead = (groupId: string): ReadSpec => ({ sql: 'SELECT id, name, status, visibility FROM tournaments WHERE group_id = ? ORDER BY created_at, id', values: [groupId] });
+export const tourNamesRead = (groupId: string): ReadSpec => ({ sql: 'SELECT id, name, status, visibility, format, ended_at FROM tournaments WHERE group_id = ? ORDER BY created_at, id', values: [groupId] });
 
 /**
  * Zip 56: a ticket row's extra words for a CreditEntryView (nothing on any other row, so every other entry is exactly as before). The name only

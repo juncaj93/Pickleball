@@ -246,7 +246,7 @@ async function main() {
 
   // ---------------------------------------------------------------- B  the night at Round 3
   for (const scheme of SCHEMES)
-    await check(`B Round 3 (${scheme}): hero, VS card with Enter score, Your rounds, Standings with points, Currently playing, Show future games`, async () => {
+    await check(`B Round 3 (${scheme}): hero, VS card with Enter score, Your rounds, no Standings (Zip 77: the line), Currently playing, Show future games`, async () => {
       await stage('am_round3');
       const v = await playerPage('Vic', { scheme });
       await v.page.locator('[data-tc-day-hero]').waitFor({ timeout: 20000 });
@@ -264,10 +264,9 @@ async function main() {
         assert(/^(Won|Lost) \d+\u2013\d+$/.test(flat(await row.locator('.tc-gd-tag').innerText())), `a tag with the score (Zip 72): ${await row.locator('.tc-gd-tag').innerText()}`);
       }
       assert((await v.page.locator('[data-tc-round="3"]').getAttribute('data-state')) === 'next', 'round 3 next');
-      const stand = await v.page.locator('[data-tc-day-stand]').count();
-      assert(stand === 10, `10 in the table: ${stand}`);
-      const me = flat(await v.page.locator('[data-tc-day-stand].tc-gd-me').innerText());
-      assert(/^\d+ Vic \d - \d \d+ pts$/.test(me), me);
+      // Zip 77: no Standings card for players during the night (the server sends no table); one line at the bottom instead.
+      assert((await v.page.locator('[data-tc-day-stand]').count()) === 0, 'a table during the night');
+      assert(flat(await v.page.locator('[data-tc-standings-later]').innerText()) === 'Standings will be revealed at the end of the night.', 'the line');
       const live = flat(await v.page.locator('[data-tc-day-live]').innerText());
       assert(/^Currently playing Round 3 Court \d .+ \+ .+ VS .+ \+ .+$/i.test(live), live);
       assert(flat(await v.page.locator('[data-future-toggle]').innerText()) === 'Show future games', 'Show future games');

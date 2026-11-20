@@ -20,7 +20,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  *  Zip 74 (Nov 20): script 141.2 -> 141.5 on purpose. The two game night alerts at the top of Home (shorter games, the Final) and the
  *  trophy badge sit with the other tournament alerts in src/pages/PlayerHome.tsx and src/AlertCard.tsx: about 230 bytes gzipped (141.43 KB). */
 // Zip 76: 141.5 to 142.3 on purpose (the Drop out money words, Full, Is this you Back, the Want in time and the Nice toast, about 0.7 KB).
-export const BUDGET = { scriptKB: 142.3, styleKB: 36.5, pageKB: 1.5, totalKB: 177.8 };
+// Zip 77: 142.3 to 143.3 on purpose. Back closes the open sheet (the 🎾75 audit): every sheet of the site is in the player script, so its
+// history steps are too (src/backStack.ts, about 650 bytes gzipped); plus the 2 second check and the server clock readings (src/livecore.ts).
+// The reveal itself and its clock math are in the tournament chunk. Main (Zip 76) 142.08 KB, this zip 143.10 KB; the first visit total 177.8 -> 179.
+export const BUDGET = { scriptKB: 143.3, styleKB: 36.5, pageKB: 1.5, totalKB: 179 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

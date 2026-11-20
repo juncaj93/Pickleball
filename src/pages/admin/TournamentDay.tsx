@@ -556,7 +556,8 @@ function FixSheet({ ctx, t, g, onClose }: { ctx: AdminCtx; t: AdminTournamentVie
   const noScore = !!g && !!g.winner && !g.skipped && g.scoreA === null;
   const hint = g && ready ? (noScore ? 'No score was saved for this game. Enter it, then Save.' : scoreHint(a, b, g.playTo)) : null;
   return (
-    <Sheet calmFocus open={!!g} title={g ? `Fix ${stageName(g)} · ${where(g)}` : 'Fix'} onClose={onClose} className="tm-gd-sheet">
+    // Zip 77 (the 🎾75 audit): a game with no result yet is Set (the button said Set); Fix once it has one. The 11 to 0 start stays (Alex).
+    <Sheet calmFocus open={!!g} title={g ? `${g.winner || g.skipped ? 'Fix' : 'Set'} ${stageName(g)} · ${where(g)}` : 'Fix'} onClose={onClose} className="tm-gd-sheet">
       {g && (
         <div className="stack" data-tm-fix-sheet={g.num}>
           {ready ? (

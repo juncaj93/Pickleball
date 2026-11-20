@@ -1446,7 +1446,9 @@ describe('7. Privacy', () => {
     const { w } = await busy();
     const r = await call(w, 'Blair', 'GET', '/api/group/version');
     expect(r.status).toBe(200);
-    expect(Object.keys(r.data)).toEqual(['v']);
+    // Zip 77: plus `t`, the server's clock (a number, nobody's data): the standings reveal runs on it.
+    expect(Object.keys(r.data)).toEqual(['v', 't']);
+    expect(typeof r.data.t).toBe('number');
     expect(String(r.data.v).length).toBeLessThanOrEqual(64);
   });
 

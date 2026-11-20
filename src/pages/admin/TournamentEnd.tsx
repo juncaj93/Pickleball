@@ -211,10 +211,12 @@ export function EndCards({ ctx, t, end }: { ctx: AdminCtx; t: AdminTournamentVie
           type="button"
           className="btn block big tm-end-go"
           disabled={busy || !!end.blocked}
-          onClick={() => void save(() => api('POST', `/api/admin/tournament/${t.id}/awards`, { action: 'end', seen: end.seen }), `${t.name} ended`)}
+          onClick={() => void save(() => api('POST', `/api/admin/tournament/${t.id}/awards`, { action: 'end', seen: end.seen }), doubles ? `${t.name} ended` : 'Revealing on every phone')}
           data-tm-end-confirm
+          data-tm-reveal={doubles ? undefined : true}
         >
-          Confirm winners and end
+          {/* Zip 77: Americano's same End (credit once, history, medals) also starts the reveal on every player's phone. */}
+          {doubles ? 'Confirm winners and end' : 'Reveal standings'}
         </button>
       </section>
       <EditAwardsSheet ctx={ctx} t={t} end={end} open={editing} onClose={() => setEditing(false)} />

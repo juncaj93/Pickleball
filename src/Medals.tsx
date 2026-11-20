@@ -7,9 +7,9 @@ import './medals.css';
 /** Medals by player name (the names the game cards show). Empty: no medals anywhere. */
 export const MedalsContext = createContext<Readonly<Record<string, number>>>({});
 
-/** One gold medal: a red and blue ribbon, a gold disc with a star. */
-const MedalIcon = () => (
-  <svg className="md-ico" viewBox="0 0 20 26" aria-hidden="true">
+/** One gold medal: a red and blue ribbon, a gold disc with a star. Zip 77: also 1st place's mark on the reveal board (`className`). */
+export const MedalIcon = ({ className = 'md-ico' }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 20 26" aria-hidden="true">
     <path d="M5 1h4l2 8H7z" fill="#d6453d" />
     <path d="M11 1h4l-2 8H9z" fill="#2f5fb3" />
     <circle cx="10" cy="17" r="7.5" fill="#f2c54b" stroke="#a8740c" strokeWidth="2" />

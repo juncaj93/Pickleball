@@ -1,0 +1,383 @@
+/* Zip 77 (🎾77.reveal): the Americano standings reveal (src/tournament/Reveal.tsx; pictures 1 to 4 and the reveal video). The tournament card
+   is the same dark green in light and dark, so the board is too. Every rule names a tc-rv- class (tests/zip48-split.test.ts). */
+
+/* During the night: one centered line at the bottom where the Standings card was (picture 1). */
+.tc-rv-later {
+  margin: 4px 0 0;
+  padding: 0 4px;
+  text-align: center;
+  font-size: 0.98rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* Every game in: no kicker, the bar is a thin muted divider (3 px, white 16%) (picture 2). */
+.tc-rv-hero .tc-rv-divider {
+  height: 3px;
+  background: rgb(255 255 255 / 16%);
+}
+.tc-rv-top {
+  flex-wrap: nowrap;
+  align-items: center;
+  min-height: 34px;
+}
+.tc-rv-top .tc-gd-hero-name {
+  flex: 1 1 auto;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* The slim green card: one white line, three pickleballs bouncing in turn on the right. */
+.tc-rv-wait.tc-gd-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.tc-rv-wait-title {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--body);
+  /* One line on a phone (390 px and up); a narrower one wraps between words, never cut. */
+  font-size: clamp(1rem, 4.35vw, 1.15rem);
+  font-weight: 800;
+  line-height: 1.2;
+  color: #ffffff;
+}
+.tc-rv-balls {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  height: 30px;
+}
+.tc-rv-balls .ball {
+  display: block;
+  width: 21px;
+  height: 21px;
+  transform-origin: 50% 100%;
+  animation: tc-rv-bounce 0.91s cubic-bezier(0.3, 0, 0.7, 1) infinite;
+}
+.tc-rv-balls .ball:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.tc-rv-balls .ball:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes tc-rv-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.08, 0.9);
+  }
+  5% {
+    transform: translateY(-1px) scale(1, 1);
+  }
+  22% {
+    transform: translateY(-10px) scale(0.97, 1.03);
+  }
+  40% {
+    transform: translateY(-1px) scale(1, 1);
+  }
+  45%,
+  99% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-rv-balls .ball {
+    animation: none;
+  }
+}
+
+/* The round X where the kicker was. 44 px to tap (the look is 34 px). */
+.tc-rv-x {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin: -4px -4px -4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgb(255 255 255 / 12%);
+  color: #ffffff;
+  cursor: pointer;
+}
+.tc-rv-x::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+.tc-rv-x svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* The board: the card grows open (it pushes the page down; no takeover, no dim). "Final standings" in the name's size, 16 px under the divider
+   (the card's own gap). No empty space under the last row. */
+.tc-rv-open {
+  will-change: transform;
+}
+.tc-rv-board {
+  position: relative;
+  margin: 0 -18px -20px;
+  padding: 0 14px 14px;
+  overflow: hidden;
+  border-radius: 0 0 22px 22px;
+  color: #ffffff;
+  font-family: var(--body);
+}
+.tc-rv-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #ffffff;
+}
+.tc-rv-stage {
+  position: relative;
+  min-height: 236px;
+}
+.tc-rv-count {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: max(0px, min(96px, calc(50% - 118px)));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  pointer-events: none;
+}
+.tc-rv-cl {
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 72%);
+}
+.tc-rv-ring {
+  position: relative;
+  width: 180px;
+  height: 180px;
+}
+.tc-rv-ring svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+.tc-rv-num {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 88px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+}
+.tc-rv-list {
+  position: relative;
+  z-index: 1;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.tc-rv-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 6%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 8%);
+  box-sizing: border-box;
+  color: #ffffff;
+}
+.tc-rv-rk {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: rgb(255 255 255 / 60%);
+  font-variant-numeric: tabular-nums;
+}
+.tc-rv-rk > .tc-rv-rkv,
+.tc-rv-rk > .tc-rv-md {
+  grid-area: 1 / 1;
+}
+.tc-rv-medal {
+  display: block;
+  width: 21px;
+  height: 27px;
+}
+.tc-rv-dash {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px dashed currentColor;
+  opacity: 0;
+  box-sizing: border-box;
+}
+.tc-rv-ph {
+  position: absolute;
+  left: 52px;
+  right: 16px;
+  top: 50%;
+  height: 11px;
+  margin-top: -5.5px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 10%);
+}
+.tc-rv-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+/* Names never cut: a long name wraps between words. */
+.tc-rv-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+.tc-rv-rec {
+  flex: none;
+  font-size: 1.02rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tc-rv-pts {
+  flex: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 12%);
+  white-space: nowrap;
+}
+.tc-rv-you {
+  display: inline-block;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #d8f03b;
+  color: #14230a;
+  margin-left: 7px;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+.tc-rv-row.tc-rv-third {
+  background: rgb(255 255 255 / 11%);
+}
+.tc-rv-row.tc-rv-third .tc-rv-rk,
+.tc-rv-row.tc-rv-silver .tc-rv-rk {
+  color: #ffffff;
+}
+.tc-rv-row.tc-rv-silver {
+  background: rgb(255 255 255 / 16%);
+}
+.tc-rv-row.tc-rv-gold {
+  background: #d8f03b;
+  color: #13210a;
+}
+.tc-rv-gold .tc-rv-dash {
+  color: #13210a;
+}
+.tc-rv-gold .tc-rv-pts {
+  background: rgb(19 33 10 / 12%);
+}
+.tc-rv-gold .tc-rv-you {
+  background: #13210a;
+  color: #d8f03b;
+}
+.tc-rv-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.tc-rv-rays {
+  position: absolute;
+  z-index: 0;
+  width: 640px;
+  height: 640px;
+  left: 50%;
+  margin-left: -320px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: repeating-conic-gradient(from 0deg, rgb(216 240 59 / 22%) 0deg 7deg, rgb(216 240 59 / 0%) 7deg 22deg);
+  -webkit-mask: radial-gradient(circle, #000 0, #000 18%, transparent 46%);
+  mask: radial-gradient(circle, #000 0, #000 18%, transparent 46%);
+}
+.tc-rv-wave {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 16px;
+  border: 3px solid #d8f03b;
+  box-sizing: border-box;
+  opacity: 0;
+}
+.tc-rv-wave.tc-rv-s {
+  border-color: #e9eef3;
+}
+.tc-rv-spark {
+  position: absolute;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(#ffffff, #d8f03b);
+  opacity: 0;
+}
+.tc-rv-spark.tc-rv-s {
+  background: linear-gradient(#ffffff, #cfd6de);
+}
+
+/* A narrow phone (320 px): the name gets the room, so a long name wraps between words, never inside one ("Christopher Vanderberg"). */
+.tc-rv-board {
+  container-type: inline-size;
+}
+@container (max-width: 300px) {
+  .tc-rv-row {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .tc-rv-rk {
+    width: 22px;
+  }
+  .tc-rv-in {
+    gap: 6px;
+  }
+  .tc-rv-name,
+  .tc-rv-rec {
+    font-size: 0.94rem;
+  }
+  .tc-rv-pts {
+    padding: 3px 6px;
+    font-size: 0.72rem;
+  }
+  .tc-rv-ph {
+    left: 40px;
+  }
+}

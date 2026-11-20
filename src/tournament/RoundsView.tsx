@@ -12,6 +12,7 @@ import type { PlayerRound, PlayerRoundsView, PlayerTournamentView } from '../../
 import { resultTag } from '../../shared/scores';
 import { Court, DayHero, glue, type HeldScore, Matchup, PlayToPill, ScoreSheet, Slide, useHeldResult, useSeen } from './GameDayView';
 import './gameday-tour.css';
+import { DoneHero, RevealNight, StandingsLater, WaitingCard } from './Reveal';
 
 const pair = (a: string, b: string) => `${a} + ${b}`;
 
@@ -80,11 +81,13 @@ function RoundsCard({ day }: { day: PlayerRoundsView }) {
 
 /** Standings (picture 32): rank, name, wins-losses, the points chip; their own row highlighted; "Tied" once the night is in. */
 function PointsCard({ day }: { day: PlayerRoundsView }) {
+  // Zip 77: players get no table before the reveal (the server sends none): no card at all, not even blank rows.
+  if (day.standingsHidden || !day.standings.length) return null;
   return (
     <section className="tc-gd-card" aria-label="Standings" data-tc-day-standings>
       <div className="tc-gd-head">
         <h3 className="tc-gd-label">Standings</h3>
-        {day.started && <span className="tc-gd-chip tc-gd-live">Live</span>}
+        {day.started && !day.final && <span className="tc-gd-chip tc-gd-live">Live</span>}
       </div>
       <ol className="tc-gd-rows">
         {day.standings.map((r) => (
@@ -183,9 +186,18 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
       </div>
     );
   }
+  // Zip 77: Alex revealed the standings: the board on every phone in step, then the night's final standings.
+  if (t.reveal && shown.final) {
+    return (
+      <div className="tc-gd stack" data-tc-day="revealed" data-tc-americano>
+        <RevealNight t={t} day={shown} rounds={<RoundsCard day={shown} />} after={<PointsCard day={shown} />} />
+      </div>
+    );
+  }
   return (
     <div className="tc-gd stack" data-tc-day="night" data-tc-americano>
-      <DayHero t={t} day={shown} />
+      {/* Zip 77: every game in, not revealed yet: no kicker, a thin divider, then the waiting card where Up next was. */}
+      {shown.waiting ? <DoneHero name={t.name} /> : <DayHero t={t} day={shown} />}
       {shown.leftNote && !noteSeen && (
         <section className="tc-gd-note" role="status" data-tc-day-left>
           <span>{shown.leftNote.text}</span>
@@ -199,6 +211,7 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
           Paused. Hang tight.
         </p>
       )}
+      {shown.waiting && !next && <WaitingCard />}
       {next && (
         <Slide k={`${next.round}`}>
           {next.num === null ? (
@@ -217,6 +230,7 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
       <RoundsCard day={shown} />
       <PointsCard day={shown} />
       <LiveCard day={shown} />
+      {shown.standingsHidden && <StandingsLater />}
       <ScoreSheet
         num={sheet?.r.num ?? null}
         open={sheet !== null}

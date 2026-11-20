@@ -10,6 +10,11 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 77 (🎾77.reveal): Americano's hidden standings and the standings reveal, on the 10 player Americano night (Vic sits Round 4).
+  { stage: 'zip77_last', label: 'Americano: last round (standings hidden)', line: 'Tonight, Rounds 1 to 5 in, Round 6 on. View as Vic: no Standings card, “Standings will be revealed at the end of the night.” at the bottom. Home: the scores as before.' },
+  { stage: 'zip77_allin', label: 'Americano: all games in', line: 'Every round in, Vic first. View as Vic: no kicker, a thin divider, “Final standings coming soon” with three bouncing balls. Home: Edit awards, then Reveal standings (it plays on every phone).' },
+  { stage: 'zip77_running', label: 'Americano: reveal running (as Vic)', line: 'Revealed by the real button, starting 6 seconds after this tap. View as Vic right away: the countdown, then last place up to Vic in 1st with the gold medal. Open it on a second phone: the same frame.' },
+  { stage: 'zip77_revealed', label: 'Americano: revealed', line: 'Revealed 10 minutes ago. View as Vic: the final board once (the X closes it), then the final standings, the ticker, You won The Cold Open and the medal.' },
   // Zip 74 (🎾74.polish): game night polish. The team name, the Final alert and the back out sheet use the stages below (Teams published,
   // Final, Time and Plan, Late drop).
   { stage: 'zip74_short', label: 'Play to 9 (start here)', line: 'Tonight, Game 1 in, and from Round 2 on games go to 9. View as Vic: the amber alert at the top (X hides it), Play to 9 points on the Up next card, Play to 9 on Games 2 and 3. Also: Final (Vic: You’re in the Final!), Teams published (Edit name), Time and Plan and Late drop (Parker: Drop out).' },

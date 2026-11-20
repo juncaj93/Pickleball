@@ -4,6 +4,7 @@ import { COURT_NAME, directionsUrl } from '../shared/zip9';
 import { localParts } from '../shared/time';
 import type { GroupView, PlayerSessionView } from '../shared/api';
 import { DirectionsArrowIcon } from './CardButtons';
+import { openLayer } from './backStack';
 
 // Zip 14, "Game day card" (GAME_DAY_CARD, shared/gameDay.ts). Display only: nothing here saves, charges or sends anything.
 //  - GameDayButtons: the two equal buttons on the day of the game, "Court 3" (opens the court map) and "Directions" (Apple Maps on an
@@ -114,6 +115,10 @@ export function CourtMap({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [top, setTop] = useState<number | null>(null);
+  // Zip 77 (the 🎾75 audit): Back closes the court map instead of leaving the site (src/backStack.ts).
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => (open ? openLayer(() => closeRef.current()) : undefined), [open]);
   // Opened first, then measured (a closed dialog has no height): under the button that opened it (the X needs 14 px above the panel),
   // moved up if it would run off the bottom of the screen. A screen too short for it lets the panel scroll (gameday.css).
   useLayoutEffect(() => {

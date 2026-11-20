@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { liveIsBusy, onLiveQuiet } from './busy';
 import { api, demoOn } from './lib';
-import { LIVE_UPDATES, LivePoller } from './livecore';
+import { clockReadings, LIVE_UPDATES, LivePoller } from './livecore';
 
 
 /**
@@ -21,6 +21,7 @@ export function useLiveUpdates({
   reload,
   path = '/api/group/version',
   onChecked,
+  fastMs = null,
 }: {
   enabled: boolean;
   version: string | null;
@@ -29,6 +30,8 @@ export function useLiveUpdates({
   path?: string;
   /** A check went through (changed or not). */
   onChecked?: () => void;
+  /** Zip 77: check every this many ms whatever the person does (the Americano night's waiting card); null for the usual rhythm. */
+  fastMs?: number | null;
 }) {
   const poller = useRef<LivePoller | null>(null);
   const reloadRef = useRef(reload);
@@ -44,6 +47,11 @@ export function useLiveUpdates({
   useEffect(() => {
     poller.current?.setKnown(version);
   }, [version]);
+  const fastRef = useRef(fastMs);
+  fastRef.current = fastMs;
+  useEffect(() => {
+    poller.current?.setFast(fastMs);
+  }, [fastMs]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -66,7 +74,13 @@ export function useLiveUpdates({
       now: () => Date.now(),
       setTimer: (fn, ms) => setTimeout(fn, ms),
       clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
-      fetchStamp: async () => (await api<{ v: string }>('GET', path)).v,
+      fetchStamp: async () => {
+        // Zip 77: every check is also a reading of the server's clock (the reveal runs on it).
+        const sent = Date.now();
+        const r = await api<{ v: string; t?: number }>('GET', path);
+        if (typeof r.t === 'number') clockReadings.push([sent, Date.now(), r.t]) > 12 && clockReadings.shift();
+        return r.v;
+      },
       onChecked: () => checkedRef.current?.(),
       isVisible: () => document.visibilityState === 'visible',
       onChange: () => {
@@ -76,6 +90,7 @@ export function useLiveUpdates({
       },
     });
     p.setKnown(version);
+    p.setFast(fastRef.current);
     poller.current = p;
     const stopWaiting = onLiveQuiet(() => {
       if (pending.current && Date.now() >= cooldown.current.until) void apply();

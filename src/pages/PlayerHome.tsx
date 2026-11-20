@@ -465,7 +465,10 @@ export function PlayerHome({
   // Zip 51, preview only: ?holdrefresh=on pauses it on this phone (g.preview is never sent on live, so live is unchanged).
   const holdRefresh = g?.preview === true && holdRefreshLink();
   holdRefreshRef.current = holdRefresh;
-  useLiveUpdates({ enabled: !!g && !!g.me && !switching && !viewAs && !pretend && !holdRefresh, version: g?.version ?? null, reload: load.quiet });
+  // Zip 77: while the Americano night's "Final standings coming soon" card shows (every game in, not revealed yet, on that night), Home checks
+  // every 2 seconds whatever the phone is doing, so every phone starts the reveal together. Only then; the usual rhythm otherwise.
+  const waitingReveal = g?.tournament?.day?.kind === 'americano' && g.tournament.day.waiting === true;
+  useLiveUpdates({ enabled: !!g && !!g.me && !switching && !viewAs && !pretend && !holdRefresh, version: g?.version ?? null, reload: load.quiet, fastMs: waitingReveal ? 2000 : null });
 
   // One-time moments: a game I'm in reached 4, and a cash out the organizer sent.
   const celebrated = useRef<Set<string> | null>(null);

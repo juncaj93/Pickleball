@@ -20,7 +20,7 @@ import { alertCardsForAll } from './zip11';
 import { seatDotsForAll } from './seatDots';
 import { gameDayCardForAll } from './gameDay';
 import { afterGameCardForAll } from './afterGame';
-import { adminTournamentStamp, adminTourReads, playerTournamentStamp, playerTourReads, type TourReads, tournamentsFlags } from './tournament';
+import { adminCookieHash, adminTournamentStamp, adminTourReads, playerTournamentStamp, playerTourReads, type TourReads, tournamentsFlags } from './tournament';
 import { playerAwardsFor } from './tournamentEnd';
 import type { AdminTournamentView, PlayerTournamentView, TourAwardsView } from '../shared/tournament';
 import type { D1PreparedStatement, D1Result } from './db';
@@ -107,7 +107,7 @@ export async function changeStampAndTour(
   const queries = (withTime: boolean) => reads(withTime).map((r) => ctx.db.prepare(r.sql).bind(...r.values));
   // Zip 62: the tournament card's reads, in this same trip (only while the switch is on for this phone and a name is picked; off: none, the
   // batch is exactly main's). The switch question is answered from the switch rows the request already read (no trip).
-  const tour = playerId && (await tournamentsFlags(ctx, group.id)).on ? playerTourReads(ctx, group, playerId) : null;
+  const tour = playerId && (await tournamentsFlags(ctx, group.id)).on ? playerTourReads(ctx, group, playerId, await adminCookieHash(ctx)) : null;
   // SPEED_FEWER_QUERIES (server/speed.ts): the two switch reads further down (player motion, hidden games) ride in the same trip.
   await fewerDb(ctx)?.prefetch([
     ...reads(true).map((r) => ({ kind: 'all' as const, ...r })),

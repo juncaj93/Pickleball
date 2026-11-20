@@ -1,12 +1,12 @@
 import type { Ctx } from './context';
 import type { D1Database } from './db';
 import { HttpError } from './http';
-import { newId } from './crypto';
+import { newId, sha256 } from './crypto';
 import { requireAdmin } from './auth';
 import * as v from './validate';
 import { organizerSignedIn } from './zip13';
 import { ADMIN_COOKIE } from './context';
-import { VIEW_ONLY_COOKIE_PREFIX } from './viewOnly';
+import { VIEW_ONLY_COOKIE_PREFIX, VIEW_ONLY_SESSION_PREFIX } from './viewOnly';
 import { audit, type GroupRow, organizerIdOf, organizerIdRead, playersRead, type ReadSpec } from './repo';
 import { localParts } from '../shared/time';
 import { formatPrice } from '../shared/money';
@@ -286,15 +286,26 @@ async function activeTournamentForPlayer(db: D1Database, group: GroupRow, player
     .catch(() => null);
 }
 
-type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null; ties_json?: string };
-/** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately. */
-const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownCanceled('t.')})
-       ORDER BY CASE WHEN t.status = 'canceled' THEN 1 ELSE 0 END, t.created_at DESC, t.id LIMIT 1`;
+type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null; ties_json?: string; ended_at?: string | null };
+/**
+ * Zip 77: an Americano night revealed in the last REVEAL_SHOW_HOURS hours (its board, then its final standings, on that night). Worked out
+ * from ?2 (the canceled cutoff, now minus CANCELED_DAYS days), so the reads keep their values.
+ */
+export const REVEAL_SHOW_HOURS = 6;
+const shownRevealed = (t = '') =>
+  `(${t}status = 'ended' AND ${t}format = 'americano' AND ${t}ended_at >= strftime('%Y-%m-%dT%H:%M:%fZ', ?2, '+${CANCELED_DAYS * 24 - REVEAL_SHOW_HOURS} hours'))`;
+/** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else an Americano night just revealed, else one canceled lately. */
+const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownRevealed('t.')} OR ${shownCanceled('t.')})
+       ORDER BY CASE WHEN t.status = 'canceled' THEN 2 WHEN t.status = 'ended' THEN 1 ELSE 0 END, t.created_at DESC, t.id LIMIT 1`;
 const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')}, ${markDetailSql(TIME_TASK, 't.id')} AS time_moved,
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ?4 AND group_id = t.group_id) END AS viewer_name,
          CASE WHEN t.status = 'canceled' THEN (SELECT status FROM tournament_signups WHERE tournament_id = t.id AND player_id = ?4) ELSE NULL END AS my_signup
        FROM tournaments t WHERE ${ACTIVE_WHERE}`;
+
+/** Zip 77: a tournament's saved results with the names (the reveal board). Only an ended tournament has any. */
+const resultsSqlFor = (idSql: string) =>
+  `SELECT r.player_id, r.finish, r.wins, r.losses, r.points, p.display_name FROM tournament_results r JOIN players p ON p.id = r.player_id WHERE r.tournament_id = ${idSql} ORDER BY r.rowid`;
 
 /** A tournament's sign-ups (names, and each player's first level). `idSql`: a `?`, or Zip 62's subquery that picks the tournament in the same trip. */
 const signupsSqlFor = (idSql: string) => `SELECT s.*, p.display_name, p.is_active, ${FIRST_LEVEL_SQL('s')} AS first_level FROM tournament_signups s JOIN players p ON p.id = s.player_id
@@ -333,6 +344,20 @@ export interface TourPre<Row> {
   day?: DayRows;
   /** Zip 58: a player's screen: the winners banners up now, their winners, and every medal (server/tournamentEnd.ts). */
   awards?: AwardsPre;
+  /** Zip 77: a player's screen: the saved results of the picked tournament (only an Americano night just revealed has any). */
+  results?: ResultRead[];
+  /** Zip 77: the phone's organizer cookie is a real organizer sign-in (read in the same trip; missing: no cookie, or not read). */
+  orgSignedIn?: boolean;
+}
+
+/** Zip 77: one row of a tournament's saved results, as the reveal board shows it (names only; never money or levels). */
+export interface ResultRead {
+  player_id: string;
+  finish: number | null;
+  wins: number;
+  losses: number;
+  points: number | null;
+  display_name: string;
 }
 
 /** The reads (for the screen's batch) and how to read their answers back. Only while the switch is on for the request. */
@@ -364,7 +389,7 @@ function mayBeOrganizerPhone(ctx: Ctx): boolean {
 }
 
 /** A player's screen (GET /api/group and its 5-second check): the same row activeTournamentForPlayer reads, its sign-ups and tickets. */
-export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): TourReads<ActiveRow> {
+export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string, adminHash: string | null = null): TourReads<ActiveRow> {
   const cutoff = canceledFrom(ctx.nowMs);
   // The same pick as the row read; then nothing at all for an Only me tournament on a phone that cannot be the organizer's (?3 = 0).
   const pick = `(SELECT p.id FROM (SELECT t.id, t.visibility FROM tournaments t WHERE ${ACTIVE_WHERE}) p WHERE ?3 = 1 OR p.visibility = 'all')`;
@@ -398,6 +423,11 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
     { sql: gamesSqlFor(pick), values },
     // Zip 58: after a tournament ends, the ticker, the congratulations card and medals (three small reads, in this same trip).
     ...awardsReads(group.id, ctx.nowMs),
+    // Zip 77: the saved results (only an Americano night just revealed has any: the board's order, as End wrote it).
+    { sql: resultsSqlFor(pick), values },
+    // Zip 77: a phone with an organizer cookie: is it a real organizer sign-in (the organizer's own phone keeps the live standings)? In this
+    // same trip, so the organizer's own Home makes no more trips than before (zip62-speed). Every other phone: no read.
+    ...(adminHash ? [{ sql: 'SELECT id FROM admin_sessions WHERE token_hash = ? AND group_id = ? AND expires_at > ?', values: [adminHash, group.id, ctx.realNowIso] }] : []),
   ];
   return {
     reads,
@@ -414,6 +444,8 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string): To
         canceledMoney: money ? { backCents: money.back ?? 0, claimCents: money.claim ?? 0 } : null,
         day: { teams: rows(6), games: rows(7), ties: tiesFromJson((rows(0)[0] as { ties_json?: string } | undefined)?.ties_json) },
         awards: awardsFrom(res.slice(8, 11)),
+        results: rows(11),
+        ...(adminHash ? { orgSignedIn: (rows(12) as { id: string }[]).some((r) => !String(r.id).startsWith(VIEW_ONLY_SESSION_PREFIX)) } : {}),
       };
     },
   };
@@ -487,7 +519,7 @@ export function storedDays(json: string | null | undefined): string[] {
 /** The stored format, read safely (anything odd reads as Doubles). */
 const formatOf = (t: TournamentRow): TournamentFormat => (t.format === 'americano' ? 'americano' : 'doubles');
 
-const STATUSES: readonly TournamentStatus[] = ['signup', 'date_picked', 'tickets', 'rescheduled', 'canceled'];
+const STATUSES: readonly TournamentStatus[] = ['signup', 'date_picked', 'tickets', 'rescheduled', 'canceled', 'ended'];
 export const statusOf = (t: TournamentRow): TournamentStatus => (STATUSES.find((s) => s === t.status) ?? 'signup');
 
 /** The date is set (picked, or tickets open on it): sign-up and Edit offer only that one date. */
@@ -861,6 +893,8 @@ export async function playerTournamentFor(
   const orgOf = orgLookup(ctx, group, pre);
   const seen = await visibleTo(ctx, group, playerId, viewAs, pre, orgOf);
   if (!seen) return null;
+  // Zip 77: an Americano night just revealed: its board, then its final standings (only for the players who were in it).
+  if (statusOf(seen.t) === 'ended') return revealedViewFor(ctx, group, seen.t as ActiveRow, playerId, pre);
   const { onlyMe } = seen;
   const t = await upgradeDatePicked(ctx, group, seen.t, upkeep);
   // A piece 1 date pick that just opened tickets wrote the organizer's seat and the spots: its tickets are read again (as before, after it).
@@ -923,9 +957,85 @@ export async function playerTournamentFor(
       ? playerDayView(t2, all, readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id), playerId, group.timezone, ctx.nowMs)
       : // Zip 61: the Americano night, once tickets close on Americano, for a player in it (their rounds, the games now, the points table).
         statusOf(t2) === 'tickets' && t2.final_date && base.format === 'americano' && decided
-        ? playerRoundsView(t2, all, tickets, (readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id)).games, playerId, group.timezone, ctx.nowMs)
+        ? playerRoundsView(
+            t2,
+            all,
+            tickets,
+            (readTickets && pre?.day ? pre.day : await loadDay(ctx.db, t.id)).games,
+            playerId,
+            group.timezone,
+            ctx.nowMs,
+            // Zip 77: the standings stay on the server until the reveal, except on the organizer's own phone (he catches wrong scores there).
+            (await organizerPhone(ctx, group, playerId, viewAs, orgOf, pre)) ? 'live' : 'hidden',
+          )
         : null;
   return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf, readTickets ? pre?.freed : undefined), ...(dayView ? { day: dayView } : {}) };
+}
+
+/**
+ * Zip 77: the organizer's own player on the organizer's own signed-in phone (not the read-only PIN), or the organizer's View as of their own
+ * player. Every other phone is answered with no database trip (no organizer cookie, or another player).
+ */
+async function organizerPhone(ctx: Ctx, group: GroupRow, playerId: string, viewAs: boolean, orgOf: () => Promise<string | null>, pre?: TourPre<ActiveRow>): Promise<boolean> {
+  if (!viewAs && !mayBeOrganizerPhone(ctx)) return false;
+  if (playerId !== (await orgOf())) return false;
+  if (viewAs) return true;
+  return pre?.orgSignedIn ?? organizerSignedIn(ctx, group.id);
+}
+
+/** Zip 77: the hash of this phone's organizer cookie (for playerTourReads' sign-in read), or null with no such cookie. No database trip. */
+export async function adminCookieHash(ctx: Ctx): Promise<string | null> {
+  return mayBeOrganizerPhone(ctx) ? sha256(ctx.cookies[ADMIN_COOKIE]!) : null;
+}
+
+/**
+ * Zip 77: the card of an Americano night the organizer just revealed (Reveal standings, server/tournamentEnd.ts), for a player who was in it:
+ * the night as it ended (Your rounds) with the final standings in the order End saved them (tournament_results: Edit awards may have changed
+ * 1st and 2nd), and when the tap was (`reveal.tapMs`): every phone runs the board from that moment on the server's clock. Names, records and
+ * points only: no money, no levels. Null for anyone who was not in the night (they get the ticker like everyone).
+ */
+async function revealedViewFor(ctx: Ctx, group: GroupRow, t: ActiveRow, playerId: string, pre?: TourPre<ActiveRow>): Promise<PlayerTournamentView | null> {
+  if (!t.ended_at || !t.final_date) return null;
+  const signups = pre ? pre.signups : await signupRows(ctx.db, t.id);
+  const tickets = pre ? pre.tickets : await loadTickets(ctx.db, t.id);
+  const games = (pre?.day ?? (await loadDay(ctx.db, t.id))).games;
+  const day = playerRoundsView(t, signups, tickets, games, playerId, group.timezone, ctx.nowMs, 'final');
+  if (!day) return null;
+  const results =
+    pre?.results ??
+    (await ctx.db
+      .prepare(resultsSqlFor('?'))
+      .bind(t.id)
+      .all<ResultRead>()
+      .then((r) => r.results)
+      .catch(() => [] as ResultRead[]));
+  if (!results.length) return null;
+  // The board's order: the places End saved (1st, 2nd, then the table), anyone without a place (left the night) after them.
+  const order = [...results].sort((a, b) => (a.finish ?? Infinity) - (b.finish ?? Infinity));
+  const standings = order.map((r, i) => ({
+    rank: r.finish ?? i + 1,
+    name: r.display_name,
+    record: `${r.wins}-${r.losses}`,
+    points: r.points ?? 0,
+    ...(r.player_id === playerId ? { me: true as const } : {}),
+    ...(r.finish === null ? { out: true as const } : {}),
+  }));
+  const real = realTimes(t);
+  return {
+    id: t.id,
+    name: t.name,
+    format: 'americano',
+    status: 'ended',
+    start: real.start,
+    minutes: real.minutes,
+    startSet: true,
+    openDates: [],
+    finalDate: t.final_date,
+    names: [],
+    me: null,
+    day: { ...day, standings },
+    reveal: { tapMs: Date.parse(t.ended_at), players: standings.length },
+  };
 }
 
 /** Zip 56: the ticket part of one player's card: names only for everyone else, their own money only. */

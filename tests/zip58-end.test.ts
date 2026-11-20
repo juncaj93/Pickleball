@@ -1,3 +1,4 @@
+import { REVEAL_HOLD_MS } from '../shared/reveal';
 import { describe, expect, it } from 'vitest';
 import { playerPhone } from './harness';
 import { adminTour, awards, books, card, dash, draftAndPublish, games, group, playerOfSeat, playPools, potOf, setWinner, START_MS, world, type World } from './zip58-world';
@@ -194,6 +195,9 @@ describe('zip 58: End tournament, Americano', () => {
       ['champion', 1, 1],
       ['second', 0, 2],
     ]);
+    // Zip 77: the ticker, the card and the award credit wait while the reveal plays on the phones.
+    expect((await group(ctx, second)).tourAwards?.ticker).toBeUndefined();
+    ctx.app.now += REVEAL_HOLD_MS;
     const g2 = await group(ctx, second);
     expect(g2.tourAwards.ticker).toMatchObject({ format: 'americano', winner: { name: first, medals: 1 }, runnerUp: { name: second, medals: 0 } });
     expect(g2.tourAwards.congrats).toMatchObject({ title: 'Second place, The Cold Open', sub: '$7 credit toward your next game.' });
