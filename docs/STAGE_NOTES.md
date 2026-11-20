@@ -7555,3 +7555,99 @@ tonight, Vic and Wren hold $14 award credit; the calm seed now keeps the tournam
 - Read-only live look (pages.dev): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen; /admin
   and /api/status 200; the organizer dashboard 401 without a PIN. The Cold Open unchanged: Tue Dec 1, 2 courts, 7:30 to 10 PM, $18, Pay by
   Mon Nov 30 7:00 PM. The organizer screens were not opened on live (no read-only PIN in this session).
+## Zip 77: Americano hidden standings and the standings reveal, plus game night fixes (🎾77.reveal), Fri Nov 20, 2026
+Branch `claude/new-session-qt8af3` (the session is named "🎾77.reveal"). Built on main `85989f8` (Zip 74 live), then rebased onto `4610c01`
+(🎾76 live, as the brief asks: 🎾76 ships first; two small conflicts, the preview's calm start and the size budget). Same switch, TOURNAMENTS (on for
+everyone on live); no new switch (every tournament zip since 57 rides it). **NO database change**: no table, column or migration. The reveal's
+clock is the existing `tournaments.ended_at` (End already writes it at the tap).
+
+### 1. During the night (picture 1)
+- `server/americanoDay.ts` playerRoundsView takes a mode: 'hidden' (every player: `standings: []`, `standingsHidden`, the table is never built
+  for them), 'live' (the organizer's own player on the organizer's own signed-in phone, or View as of that player: he catches wrong scores
+  there), 'final' (after the reveal). The sign-in check rides the player batch (`playerTourReads` adds one admin_sessions read only for a phone
+  with an organizer cookie; `adminCookieHash`), so the organizer's own Home makes no extra trip (tests/zip62-speed).
+- Player screen: no Standings card at all; one centered muted line at the bottom ("Standings will be revealed at the end of the night.").
+  Your rounds and Currently playing unchanged. Locked doubles unchanged.
+
+### 2. All games in (picture 2)
+- `waiting` on the day view (every game in, on the night, not revealed): the card loses its kicker, the bar becomes a 3 px white 16% divider
+  (`DoneHero`), and the slim green "Final standings coming soon" card with three Pickleball components bouncing in turn takes the Up next
+  card's place (`WaitingCard`). One line from 390 px (font `clamp`), wraps between words below that.
+- While it shows, Home checks every 2 seconds whatever the phone is doing (`LivePoller.setFast`, `useLiveUpdates({ fastMs })`); only then,
+  and not forever: 30 minutes without a touch stops it like any other check (`FAST_STOP_MS`), in case the reveal never comes that night.
+
+### 3. Alex's side
+- The End card's button on an Americano night reads "Reveal standings" (`data-tm-reveal`); the same `awardsAction 'end'` (credit once, history,
+  medals, banner). No confirm step (End had none). Toast "Revealing on every phone". Alex's own screens keep everything as before.
+
+### 4. The reveal (picture 3, the video)
+- `shared/reveal.ts`: one timeline from the number of players. T0 = tap + 3 s. Countdown 0 to 5 s, slots at 5 s, last place at 6 s, then the
+  brief's gaps (10 players: exactly the mock's 6.0, 7.5, 9.0, 10.6, 12.2, 13.8, 15.6, 17.8, 20.4, 24.6; drumrolls 19.7 and 22.6; X at 27.4). 9
+  players: about 29 s from the tap. Below 7th 1.5 s apart, 1.0 s with more than 10.
+- The server: an Americano tournament ended in the last 6 hours reaches the players who were in it (`ACTIVE_WHERE` + `shownRevealed`, worked
+  out from the existing ?2 cutoff with strftime; open tournaments first), as status 'ended' with `reveal { tapMs, players }` and the board's
+  rows from `tournament_results` (Edit awards' 1st and 2nd win; names, records, points only). Nothing on it can be tapped: sign-up, Edit
+  sign-up and Back out answer "not open" (`playerTarget` refuses 'ended').
+- The phone (`src/tournament/Reveal.tsx`, its own CSS `reveal.css`, in the tournament chunk): every frame is a pure function of T on the
+  SERVER's clock (`/api/group/version` now answers `t`; each check is a reading, the shortest round trip wins; `src/serverClock.ts`). The
+  tournament card itself grows open (0.55 s), "Final standings" at the name's size 16 px under the divider, rows slide up with a lime flash,
+  3rd a small pop and one ring, 2nd a 0.7 s drumroll and a drop with a ring and sparks, 1st a 2 s faster drumroll, the flight, the card's
+  shake, lime rays, a double shock wave, sparks, the lime row and the site's GOLD medal (`MedalIcon`, now exported from src/Medals.tsx) with a
+  dashed ring that spins and settles. No confetti, no silver or bronze, no money. YOU on the viewer's row. Names wrap between words (a
+  container query gives them room at 320).
+- Mid-join lands on the same frame; a phone that opens after it finished sees the final board once (`pb_reveal_seen:<id>`, storage wrapped);
+  the X folds the board away and the night's final standings sit in the Standings card (no Live chip).
+- The hold: until REVEAL_HOLD_MS (about 36 s, the 16 player board) after the tap, nothing at the top of Home tells the winner: no ticker, no
+  congratulations, no medals (`withoutRevealing`), and the award credit is left out of the player's credit chip and history (display only:
+  the credit itself is granted at the tap, as before). The change stamp carries the awards, so the hold's end is a change and phones reload.
+- Reduced motion: the same order and timing; fades only (no slide, fly, shake, rays, sparks or waves).
+- Speed: nothing new on the organizer's Home or its refresh.
+
+### 5. Game night fixes (the 🎾75 audit)
+- Back closes sheets (`src/backStack.ts`): every open layer (Sheet, so ConfirmDialog too, and the court map) owns one history entry; Back
+  pops it and closes the top layer; a layer closed any other way gives its entry back with history.go; entries are only counted, so a sheet
+  handing over to the next reuses one. Organizer tabs: each switch is one entry; Back returns to the last tab with its scroll spot.
+- Up next card: the gradient's top `#2b8c5b` -> `#1f7049` (lime 4.74:1, white 6.05:1 at the very top) and the players line 92% white.
+- 44 px taps: the Court link's `::before` (44 px tall), the card's Edit, Drop out, Who's in and the row Drop out at 44 px.
+- The organizer's sheet on a game with no result: "Set Game 1 · Court 1" / "Set · Round 6 · Court 2" (Fix once it has one). 11 to 0 start kept.
+
+### Review
+A fresh reviewer (no part in the build) read the diff. Fixed: (1) the sign-up routes still reached the revealed night for 6 hours (a History
+line, no money): refused now; (2) the 2 second check had no end: 30 quiet minutes now, and setting it wakes a page that had stopped; (3) two
+new tests were flaky (the organizer placing 1st gets no credit; a break round has no score): fixed, 3 runs in a row green; (4) the medal hold
+took one off a public count for an Only me night: only public nights now; (5) the revealed card forced `today`, folding the week's game cards
+for 6 hours: `today` keeps its own window and the card shows the reveal regardless; (6) Back's guard for a slow history.go is 2.5 s (was
+0.8 s). Kept, as designed: the first answer after the tap carries the board's whole order (every phone needs it to jump in mid-reveal); the
+screens hold everything that tells the winner. The version's `t` is the request's own time (a later reading breaks the byte-for-byte speed
+tests; the few ms bias is the same on every phone).
+
+### Preview stages
+`zip77_last` (Americano: last round, standings hidden), `zip77_allin` (all games in: THE CALM START), `zip77_running` (revealed by the real
+code, starting 6 seconds after the tap), `zip77_revealed` (10 minutes ago).
+
+### Admin speed (ADMIN SPEED RULE)
+Local, the calm world, before and after: dashboard 4 trips and 61 statements, the 5 second check 2 trips and 16 statements, at all_locked, mid,
+am_round3, am_done, zip74_short, day_ready (and zip77_last, zip77_allin after). Dashboard 9.3 to 10.6 ms before, 8.8 to 10.2 ms after.
+
+### Tests
+Unit: tests/zip77-reveal.test.ts (10: no table in a player's JSON, the organizer's own phone and View as, waiting, Locked doubles unchanged,
+Reveal = End with credit once to the cent, the board in the saved order, the hold and its end, Edit awards' order, the version's `t`, the
+timeline, the 2 second check), tests/zip77-back.test.ts (9, a fake history: Back, X, nested, hand-over, refused close, tabs, a tap outside onto
+a tab). Updated on purpose: zip61-day, zip71-partner (players get no table), zip58-end (the ticker after the hold), audit-player-api and
+live-version (the version answer has `t`), zip48-split (player script 141.5 -> 142.3 KB: Back's history steps are in every sheet, about 650
+bytes; after 🎾76's own raise: 142.3 -> 143.3 KB, measured 143.10, first visit 177.8 -> 179).
+After the rebase and the review fixes: 218 files, 4,206 passed, 2 skipped, 0 failed; `npx tsc -b` clean; e2e/zip77.cjs 7 of 7 again.
+Browser: e2e/zip77.cjs 7 of 7 (A picture 1 at 320/390/420 light and dark; B picture 2 and the 2 s check with nobody touching; C two phones,
+one with its clock 40 s off, and a third opened mid-reveal: every place within 1 ms locally, the countdown together, the timeline, the order,
+gold, YOU, no money, nothing at the top during the hold, X, the final card, the congratulations after; D after once, names never split at
+320, reduced motion; E Back closes the score sheet by Back, X, Escape and the backdrop, no dead Back after, the organizer's tabs; F contrast,
+44 px, Set; G the Christmas skin on, 390 and 320). zip61 19, zip72 8 (D now says Set), zip58 24, zip74 7, zip57 21, zip71 11, zip70 74,
+zip55 91, zip56 57.
+
+### Preview (Fri Nov 20, 2026)
+`pickleball-preview` (fake): Time Travel bookmark first `000001bb-00000000-00005129-7e49b456e690c388c0cf58d8e458870b`; deployment `e4357004`,
+https://claude-new-session-qt8af3.pickleball-club-9h0.pages.dev; re-seeded (calm start zip77_allin). First screen at 390, light and dark:
+organizer Home is the Tournament test row, the night's bar, "Vic finished first" and the End card with Reveal standings; Vic's Home is the
+date note, the card's name with the thin divider, "Final standings coming soon" and Your rounds. On the preview itself (through Cloudflare):
+Vic and Parker (clock 25 s off) waiting, Alex's real tap, Zoe opened 12 s later: the countdown 3.18 s after the tap on both, every place within
+17 ms; then put back to all games in. A player's /api/group before the reveal: `standings: []`, no points, records or ranks.
