@@ -7514,3 +7514,44 @@ the Totals change he approved (it rides the Tournaments switch, on for everyone 
 - Player refusals use the organizer's first name from Settings ("Ask Alex."), one wording; the 12 limit too. The credit sheet falls back to
   "the organizer". Late drop refusals name the real amount (or none). Pay sheet "Open Venmo". Settings > Alerts: "Only you get these: names,
   game times and amounts. ..." Players sheet: "Credit $14", "Refund $14 credit". Players see "game", not "session", in refusals.
+
+### Review
+A fresh reviewer (no part in the build) read the diff with two probe tests (a kept drop whose money is a waiting I paid: Pay by moved later,
+confirm, sign up again, drop again, Cancel; every pot once, books 0). Nothing blocking. Fixed: a pair host who paid $28 and leaves the game
+one short now reads "... Your $14 stays on this game unless someone takes your spot. Your guest's $14 comes back as credit." (view
+`lateDrop.pairBackCents`, the same sum roster.ts gives back); the drop money line uses the organizer's first name; the Do now card uses the
+12 hour clock. Kept as notes: (1) seats stuck before the MUST 1 fix are not repaired by it (none exist on live); (2) an unconfirmed I paid
+that owes reads "stays on this game" (a Didn't pay then leaves it owing, as the toast always said); (3) Players "Spent" (Spent matches Totals)
+leaves out tournaments and hand credit, so it can differ from So far in a month that has them; (4) an extra Tue/Thu game far ahead stays that
+day's game even if it is later canceled (by design).
+
+### Admin speed (ADMIN SPEED RULE)
+Local, the calm world, "Fewer database trips" on (scripts/zip68-admin-speed.ts), before and after: dashboard 4 trips and 61 statements, the
+5-second check 2 trips and 16 statements, same bytes, at none, all_locked, day_ready, mid (and ended after). Dashboard 8.1 to 9.0 ms before,
+7.5 to 8.6 ms after. The Money tab makes the same trips (the tournaments read replaces Zip 56's ticket read).
+
+### Tests at ship
+Unit: 216 files, 4,187 passed, 2 skipped, 0 failed; `npx tsc -b` clean. New: tests/zip76-totals.test.ts (7), tests/zip76-small.test.ts (7),
+the Zip 76 blocks in tests/late-fees, zip70-time (3), second-chance, card-cleanup and zip49-money. Updated on purpose for the new words:
+zip32, zip56, zip70 (no "the The"), held-refunds (an id handle is not addressed), zip54/totals-refresh (the card's new fields). Player script
+budget 141.5 to 142.3 KB, first visit 177 to 177.8 KB (the new words, about 0.7 KB). Browser: e2e/zip76.cjs 12 of 12 (Totals 420/390/320 light
+and dark, Running total, the two drop dialogs, Open Venmo, Is this you Back); zip11 26, zip53 10, zip17 23, pay-sheet 23, zip56 57, zip74 7,
+zip70 74, credit 153, held 81 (zip11, zip53, zip56, pay-sheet and credit updated on purpose for the new title, the X, the gone line and words).
+
+### Preview
+`pickleball-preview` (fake): Time Travel bookmark first `000001ba-00000000-00005129-ac067698ca95321b69908732529b5fb2`; final deployment
+`136cea65`, https://claude-new-session-82pe3u.pickleball-club-9h0.pages.dev; re-seeded, calm start "Tournament ended" (The Cold Open ended
+tonight, Vic and Wren hold $14 award credit; the calm seed now keeps the tournament's own credit rows). Switches as on live.
+
+### Live (Fri Nov 20, 2026, about 6:10 PM Eastern, a quiet window; the brief: ship when green)
+- Restore points first: Time Travel bookmark `00001a5c-00000000-00005129-44dd48ff1f8789a49e33b4f7eb962c05`; SQL export of `pickleball`
+  (315 KB) `export-20261120230505.sql`, kept in this session's scratch folder only (phone numbers, not in git): this session's Cloudflare token
+  could not write to `pickleball-backups` (401), so the bucket has no copy from this deploy. The bookmark is the restore point.
+- Integrity checks before and after: integrity-checks 21 columns, extension 8, tournament 13, every problem column 0.
+- Main fast-forwarded `85989f8` to `5430594` and pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **0f4af6a7-10fc-4362-8408-b85e668aa605** (bundle `index-BtBk6y6C.js`). No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **bcaeb223-664d-4f3e-989c-4585cf9b03ab** (Zip 74, `573e010`), Cloudflare Deployments > Rollback. No database undo
+  needed (no schema change; old code reads every row this code writes; an extra game's planned_starts_at is a column old code already has).
+- Read-only live look (pages.dev): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen; /admin
+  and /api/status 200; the organizer dashboard 401 without a PIN. The Cold Open unchanged: Tue Dec 1, 2 courts, 7:30 to 10 PM, $18, Pay by
+  Mon Nov 30 7:00 PM. The organizer screens were not opened on live (no read-only PIN in this session).
