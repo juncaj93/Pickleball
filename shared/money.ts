@@ -66,12 +66,20 @@ export function venmoPayUrl(
 /**
  * The Venmo note: "Pickleball Tue Nov 3 - Ryan", or for several sessions
  * "Pickleball Tue Nov 3, Thu Nov 5 - Ryan". Dates in the group's time zone.
+ * Zip 80: each date once. Several games on one day: "Pickleball 4 games on Thu Nov 19 - Rowan" (it used to repeat "Thu Nov 19" four times);
+ * with other days too: "Pickleball Tue Nov 17, Thu Nov 19 (3 games) - Rowan".
  */
 export function venmoNote(startsAt: string | string[], tz: string, name?: string | null): string {
-  const dates = (Array.isArray(startsAt) ? startsAt : [startsAt]).map((iso) =>
-    new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).replace(/,/g, ''),
-  );
-  const text = `Pickleball ${dates.join(', ')}`;
+  const counts = new Map<string, number>();
+  for (const iso of Array.isArray(startsAt) ? startsAt : [startsAt]) {
+    const label = new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).replace(/,/g, '');
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const days = [...counts];
+  const text =
+    days.length === 1 && days[0][1] > 1
+      ? `Pickleball ${days[0][1]} games on ${days[0][0]}`
+      : `Pickleball ${days.map(([label, n]) => (n > 1 ? `${label} (${n} games)` : label)).join(', ')}`;
   return name ? `${text} - ${name}` : text;
 }
 

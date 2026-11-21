@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MonthlyMoney } from '../shared/api';
 import { soFarCard } from '../shared/totalsRefresh';
 import { formatAlertWords, mostPlayersVoted } from '../shared/tournament';
+import { venmoNote } from '../shared/money';
 import { playerPhone } from './harness';
 import { adminTour, awards, books, draftAndPublish, potOf, START_MS, world, type World } from './zip58-world';
 
@@ -104,5 +105,16 @@ describe('zip 80: the venue charge card counts a tournament night\'s courts', ()
     // Canceled before its night: the venue charges nothing for it.
     raw.prepare("UPDATE tournaments SET status = 'canceled', canceled_at = ? WHERE id = ?").run('2026-11-10T00:00:00.000Z', ctx.tid);
     expect((await cards()).find((a) => a.kinds.includes('court'))).toBeUndefined();
+  });
+});
+
+describe('zip 80: the Venmo note lists each date once', () => {
+  it('one game, two days, four games on one day, and a mix', () => {
+    const tz = 'America/Detroit';
+    const thu = (h: number) => `2026-11-20T0${h}:00:00.000Z`; // Thu Nov 19, evening Eastern
+    expect(venmoNote(thu(0), tz, 'Rowan')).toBe('Pickleball Thu Nov 19 - Rowan');
+    expect(venmoNote(['2026-11-18T00:00:00.000Z', thu(0)], tz, 'Rowan')).toBe('Pickleball Tue Nov 17, Thu Nov 19 - Rowan');
+    expect(venmoNote([thu(0), thu(1), thu(2), thu(3)], tz, 'Rowan')).toBe('Pickleball 4 games on Thu Nov 19 - Rowan');
+    expect(venmoNote(['2026-11-18T00:00:00.000Z', thu(0), thu(1), thu(2)], tz)).toBe('Pickleball Tue Nov 17, Thu Nov 19 (3 games)');
   });
 });
