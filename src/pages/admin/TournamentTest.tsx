@@ -238,7 +238,7 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
         <a className="btn secondary block" href="/?as=Vic&poolslook=12" data-tm-test-pools-link>
           Pools look (12 players)
         </a>
-        <p className="tm-card-note">Look only, as Vic: two pools of 3, Court 9 and Court 10 or Sits, The night. Start from a Game night stage. The 6th team is Kai + Guest (no 12th name on the preview).</p>
+        <p className="tm-card-note">Look only, as Vic: the Dink group and the Drive group (3 teams each, points once a score is in), The night. Start from a Game night stage. The 6th team is Kai + Guest (no 12th name on the preview).</p>
       </section>
       <section className="tm-card" aria-label="View as">
         <div className="tm-card-head">

@@ -17,7 +17,6 @@
     "deploy:preview": "node scripts/deploy.mjs preview"
   },
   "dependencies": {
-    "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "react": "19.1.10",
     "react-dom": "19.1.10",
     "sql.js": "1.14.2"

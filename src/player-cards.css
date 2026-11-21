@@ -31,12 +31,15 @@
 :root[data-theme='dark'] .saved-hold {
   --pc-shadow: rgb(0 0 0 / 70%);
   --pc-ol-this: var(--ok-fg);
+  /* The plain TONIGHT tag: dark words on the light dark-mode blue. */
+  --pc-blue-ink: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .schedule,
   :root:not([data-theme='light']) .pay-card {
     --pc-shadow: rgb(0 0 0 / 70%);
     --pc-ol-this: var(--ok-fg);
+    --pc-blue-ink: var(--bg);
   }
 }
 

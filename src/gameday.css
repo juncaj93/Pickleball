@@ -274,7 +274,7 @@ dialog.cm[open] {
   animation: cm-in 0.18s ease-out;
 }
 dialog.cm::backdrop {
-  background: color-mix(in srgb, var(--ink) 28%, transparent);
+  background: var(--scrim);
 }
 @keyframes cm-in {
   from {
