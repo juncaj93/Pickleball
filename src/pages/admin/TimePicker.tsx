@@ -1,6 +1,6 @@
 import '../../booking-hours.css';
 import { type ReactNode, useState } from 'react';
-import { clockLabel, fitStart, lengthChoices, lengthFits, startSlots, weekdayOfDate } from '../../../shared/bookingHours';
+import { clockLabel, dayRule, fitStart, hoursLine, lengthChoices, lengthFits, startSlots, type VenueHoursConfig, weekdayOfDate } from '../../../shared/bookingHours';
 import { hhmmToMinutes, minutesToHHMM } from '../../../shared/settings';
 import { CourtRow } from '../../GameDay';
 import { Sheet } from '../../ui';
@@ -31,11 +31,12 @@ export function dateText(date: string): string {
 const chipLabel = (m: number) => clockLabel(m).replace(/ [AP]M$/, '');
 
 /** When the date moves, the start stays if it still fits that day, else it is nudged into the hours. */
-export function startForDate(date: string, start: string, lengthMin: number): string {
+export function startForDate(date: string, start: string, lengthMin: number, hours?: VenueHoursConfig | null): string {
   const wd = weekdayOfDate(date);
   const s = hhmmToMinutes(start);
   if (wd === null || s === null) return start;
-  const f = fitStart(wd, s, lengthMin);
+  // Zip 81: the hours of THIS date (special hours too) when the dashboard has them.
+  const f = fitStart(hours ? dayRule(hours, date) : wd, s, lengthMin);
   return f === s ? start : minutesToHHMM(f);
 }
 
@@ -66,7 +67,9 @@ export function GameTimeCard({
   dateAttr?: string;
 }) {
   const [grid, setGrid] = useState(false);
-  const weekday = weekdayOfDate(date) ?? 1;
+  // Zip 81: the hours of the picked DATE (a special entry, a closed day), else the weekday's normal hours as before.
+  const weekday = ctx.d.group.venueHours && weekdayOfDate(date) !== null ? dayRule(ctx.d.group.venueHours, date) : (weekdayOfDate(date) ?? 1);
+  const closedDay = typeof weekday !== 'number' && weekday.hours === null;
   const startMin = hhmmToMinutes(start);
   const endLabel = startMin === null ? '' : clockLabel(startMin + lengthMin);
   const choices = lengthChoices(weekday, startMin, ctx.d.group.settings, ctx.d.shortGames === true, ctx.d.longGames === true);
@@ -155,7 +158,12 @@ export function GameTimeCard({
         </div>
       </div>
       <Sheet open={grid} title={`Start time · ${weekdayDate(date)}`} onClose={() => setGrid(false)} className="bh-grid-sheet">
-        {grid && (
+        {grid && closedDay && (
+          <div className="bh-card bh-gridcard" data-bh-grid data-bh-closed>
+            <p className="bh-closed-note">{hoursLine(weekday)} Pick another date.</p>
+          </div>
+        )}
+        {grid && !closedDay && (
           <div className="bh-card bh-gridcard" data-bh-grid>
             <div className="bh-ap">AM</div>
             <div className="bh-grid">{am.map(chip)}</div>

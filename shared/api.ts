@@ -4,6 +4,7 @@ import type { AdminTournamentView, PlayerTournamentView, PlayerTournamentsView, 
 // Shapes of the JSON the API returns. Shared by server and browser.
 import type { CreditReason } from './credit';
 import type { GroupSettings } from './settings';
+import type { VenueHoursConfig } from './bookingHours';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, SessionState } from './status';
 
 export type RosterStatus = 'confirmed' | 'waitlisted' | 'withdrawn' | 'declined';
@@ -787,6 +788,8 @@ export interface AdminDashboard {
     privateLink: string;
     openAccess: boolean;
     hasGroupWord: boolean;
+    /** Zip 81: the venue hours (normal week, special entries), only while Booking hours is on. */
+    venueHours?: VenueHoursConfig;
   };
   players: AdminPlayer[];
   sessions: AdminSessionView[];

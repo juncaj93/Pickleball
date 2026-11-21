@@ -7,7 +7,7 @@ import { hiddenTask, lockDate, setTournamentsForAll, type SignupRow, todayKey, t
 import { gamesFor, type GameRow, playerDayView, type TeamRow, writeTeamsAndGames } from './tournamentDay';
 import { americanoNight, pairSlot } from '../shared/americanoSchedule';
 import { previewSiteFor } from './secondChance';
-import { organizerIdOf } from './repo';
+import { type GroupRow, organizerIdOf } from './repo';
 import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { defaultPayBy, tourReason } from '../shared/tournamentTickets';
@@ -180,7 +180,17 @@ const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).
 export const ZIP70_STAGES = ['zip70_start', 'zip70_loss', 'zip70_moved', 'zip70_late', 'zip70_finalize'] as const;
 type Zip70Stage = (typeof ZIP70_STAGES)[number];
 const isZip70Stage = (s: string): s is Zip70Stage => (ZIP70_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+/**
+ * Zip 81 (🎾81.venue hours), the preview's two venue hours stages (no tournament; every stage clears the tournament first):
+ *   venue_winter  the hours from the venue's flyers (Winter hours Nov 23 2026 to Jan 31 2027, Thanksgiving, Christmas Eve, Christmas Closed,
+ *                 New Year's Eve, New Year's Day) and a plain game on Thu Nov 26, 8 to 10 PM, on Home: the amber card "Thu Nov 26: the venue
+ *                 closes at noon."
+ *   venue_none    the normal hours only (no special entries, the normal week back to the built-in one).
+ */
+export const VENUE_STAGES = ['venue_winter', 'venue_none'] as const;
+type VenueStage = (typeof VENUE_STAGES)[number];
+const isVenueStage = (s: string): s is VenueStage => (VENUE_STAGES as readonly string[]).includes(s);
+export const TEST_STAGES = [...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -335,6 +345,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isVenueStage(stage)) return venueStage(ctx, group, stage);
   if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
   if (isZip77Stage(stage)) return zip77Stage(ctx, group, stage);
   if (isZip79Stage(stage)) return zip79Stage(ctx, group, stage);
@@ -1220,4 +1231,55 @@ async function zip70Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
   }
   await ctx.db.batch(statements);
   return { ok: true, stage, format: 'doubles', id, signedUp: n, date: finalize ? null : date, firstDate: offered[0] };
+}
+
+/** The flyers' hours (Zip 81). Fixed dates: they are the venue's real 2026 to 2027 dates. */
+export const FLYER_HOURS = (() => {
+  const week = (close: number) => [0, 1, 2, 3, 4, 5, 6].map((d) => ({ open: 8 * 60, close: d === 0 ? 19 * 60 : close }));
+  return [
+    { id: 'pv-winter', name: 'Winter hours', from: '2026-11-23', to: '2027-01-31', oneDay: false, week: week(23 * 60) },
+    { id: 'pv-thanks', name: 'Thanksgiving', from: '2026-11-26', to: '2026-11-26', oneDay: true, day: { open: 8 * 60, close: 12 * 60 } },
+    { id: 'pv-xeve', name: 'Christmas Eve', from: '2026-12-24', to: '2026-12-24', oneDay: true, day: { open: 8 * 60, close: 14 * 60 } },
+    { id: 'pv-xmas', name: 'Christmas', from: '2026-12-25', to: '2026-12-25', oneDay: true, day: null },
+    { id: 'pv-nye', name: 'New Year’s Eve', from: '2026-12-31', to: '2026-12-31', oneDay: true, day: { open: 8 * 60, close: 23 * 60 } },
+    { id: 'pv-nyd', name: 'New Year’s Day', from: '2027-01-01', to: '2027-01-01', oneDay: true, day: { open: 8 * 60, close: 23 * 60 } },
+  ];
+})();
+
+async function venueStage(ctx: Ctx, group: GroupRow, stage: VenueStage) {
+  const fresh = await ctx.db.prepare('SELECT settings_json FROM groups WHERE id = ?').bind(group.id).first<{ settings_json: string | null }>();
+  let obj: Record<string, unknown> = {};
+  try {
+    obj = JSON.parse(fresh?.settings_json || '{}') as Record<string, unknown>;
+  } catch {
+    obj = {};
+  }
+  obj.venueHours = { specials: stage === 'venue_winter' ? FLYER_HOURS : [] };
+  await ctx.db.prepare('UPDATE groups SET settings_json = ? WHERE id = ?').bind(JSON.stringify(obj), group.id).run();
+  if (stage === 'venue_none') return { ok: true, stage };
+  // A plain game on Thu Nov 26 at 8 to 10 PM (Eastern), on the organizer's list: the one the amber card is about.
+  const tz = group.timezone;
+  const startsAt = new Date(zonedTimeToUtc(2026, 11, 26, 20, 0, tz)).toISOString();
+  const endsAt = new Date(zonedTimeToUtc(2026, 11, 26, 22, 0, tz)).toISOString();
+  const dayFrom = new Date(zonedTimeToUtc(2026, 11, 26, 0, 0, tz)).toISOString();
+  const dayTo = new Date(zonedTimeToUtc(2026, 11, 27, 0, 0, tz)).toISOString();
+  const games = (await ctx.db.prepare("SELECT id, starts_at, status FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at").bind(group.id, dayFrom, dayTo).all<{ id: string; starts_at: string; status: string }>()).results;
+  const live = games.find((g) => g.status !== 'canceled');
+  let id = live?.id ?? null;
+  if (live && live.starts_at !== startsAt) {
+    await ctx.db.prepare('UPDATE sessions SET starts_at = ?, ends_at = ?, planned_starts_at = ?, updated_at = ? WHERE id = ?').bind(startsAt, endsAt, startsAt, ctx.nowIso, live.id).run();
+  }
+  if (!id) {
+    id = newId();
+    await ctx.db
+      .prepare(
+        `INSERT INTO sessions (id, group_id, starts_at, ends_at, planned_starts_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, NULL, 0, ?, ?)`,
+      )
+      .bind(id, group.id, startsAt, endsAt, startsAt, new Date(Date.parse(startsAt) - 12 * 3_600_000).toISOString(), ctx.nowIso, ctx.nowIso)
+      .run();
+  }
+  // On the organizer's list (the calm preview hides empty games with the site's own "Hide from list" mark).
+  await ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id = ? AND task = 'admin_hidden_game'").bind(group.id, id).run();
+  return { ok: true, stage, id };
 }

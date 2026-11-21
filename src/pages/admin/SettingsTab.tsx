@@ -16,6 +16,7 @@ import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './
 import type { AdminCtx } from '../Admin';
 import { useInstant } from '../../InstantTaps';
 import { TournamentScheduleRow } from './Tournament';
+import { SpecialHoursRow } from './VenueHours';
 import { dayShort } from '../../../shared/tournament';
 import '../../money-rework.css';
 
@@ -439,6 +440,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           </div>
           )}
           <UsualTimeRow ctx={ctx} />
+          {/* Zip 81: special venue hours (only while Booking hours is on). */}
+          <SpecialHoursRow ctx={ctx} />
           {whole('checkInHours', 'Day-before check-in (hours before play)')}
           {whole('lastCallHours', 'Last call (hours before play)')}
           {!r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
@@ -797,7 +800,8 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
   const sMin = hhmmToMinutes(start);
   const tMin = hhmmToMinutes(end);
   const outsideHours = hoursOn && sMin !== null && tMin !== null && tMin > sMin && (() => {
-    const r = checkUsualTime(sMin, tMin);
+    // Zip 81: against the normal week as it is saved (Tuesday and Thursday).
+    const r = checkUsualTime(sMin, tMin, 2, ctx.d.group.venueHours?.normal);
     return !r.ok && r.why === 'hours';
   })();
   async function save(e: FormEvent) {
@@ -857,7 +861,7 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
           </div>
           {outsideHours && (
             <div className="bh-message" data-bh-message>
-              <Notice tone="danger">{hoursMessageAnyDay()}</Notice>
+              <Notice tone="danger">{hoursMessageAnyDay(ctx.d.group.venueHours?.normal)}</Notice>
             </div>
           )}
           {problem && <Notice tone="danger">{problem}</Notice>}

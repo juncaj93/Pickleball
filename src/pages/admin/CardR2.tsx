@@ -1,4 +1,6 @@
 import type { AdminSessionView } from '../../../shared/api';
+import { dateKeyOf } from '../../../shared/bookingHours';
+import { holidayCovered } from '../../../shared/venueHours';
 import { type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { rosterLine } from '../../../shared/guestSpot';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
@@ -333,6 +335,8 @@ function CancelBy({ startsAt, now, tz }: { startsAt: string; now: number; tz: st
 function HolidayTab({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   if (!s.holiday) return null;
+  // Zip 81: a one-day special hours entry on this date already says the venue's hours: no question.
+  if (ctx.d.bookingHours === true && holidayCovered(ctx.d.group.venueHours, dateKeyOf(Date.parse(s.startsAt), ctx.d.group.timezone))) return null;
   if (s.holidayHoursOk) {
     return (
       <div className="r2-holiday-done" data-holiday="confirmed">

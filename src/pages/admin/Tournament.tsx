@@ -4,6 +4,8 @@
 // price and the champion credit are stored for pieces 2 and 3.
 import { theName } from '../../../shared/credit';
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { checkDay, dayRule } from '../../../shared/bookingHours';
+import { OPEN_TOURNAMENT_TIME } from './VenueHours';
 import {
   type AdminTicketView,
   type AdminTournamentView,
@@ -233,6 +235,17 @@ function FitLine({ n, courts, minutes, start, format }: { n: number; courts: num
 }
 
 /**
+ * Zip 81: with Booking hours on, a tournament's night must sit inside the venue hours of its date (special hours too), like a game. The words
+ * the server would refuse with, or null when it fits (or the hours are not known). The server checks it too.
+ */
+function venueHoursProblem(ctx: AdminCtx, date: string | null, start: number, end: number): string | null {
+  const config = ctx.d.group.venueHours;
+  if (ctx.d.bookingHours !== true || !config || !date) return null;
+  const r = checkDay(dayRule(config, date), start, end);
+  return r.ok ? null : r.message;
+}
+
+/**
  * Zip 70 (picture 2): tap Time: the start and the end (the Finalize pickers' steps), the fit line and the money line as they change, Save.
  * Everything that depends on the time follows on the server; the "Call the venue" card shows again with the new times.
  */
@@ -244,6 +257,7 @@ function TimeBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
   const ends = playEnds(start, end);
   const n = t.expected ?? t.size;
   const m = moneyLine({ expected: n, courts: t.courts, minutes: end - start, ticketCents: t.ticketCents, prizeCents: prizeOf(t) });
+  const outside = venueHoursProblem(ctx, t.finalDate, start, end);
   return (
     <div className="tm-hc-box tm-hc-edit" data-tm-time-box>
       <span className="tm-fin-boxes tm-hc-times" role="group" aria-label="Time">
@@ -277,10 +291,15 @@ function TimeBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
       </span>
       <FitLine n={n} courts={t.courts} minutes={end - start} start={start} format={t.format} />
       <MoneyLineText m={m} />
+      {outside && (
+        <p className="field-error" role="alert" data-tm-hours>
+          {outside}
+        </p>
+      )}
       <button
         type="button"
         className="btn block tm-hc-save"
-        disabled={busy}
+        disabled={busy || !!outside}
         onClick={async () => {
           const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/time`, { start, minutes: end - start }), 'Time saved');
           if (ok) {
@@ -465,6 +484,17 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   // Zip 70: the Time and Plan boxes (one open at a time; tap the row again to close).
   const [edit, setEdit] = useState<null | 'time' | 'plan'>(null);
   const [page, setPage] = useState<null | 'dates' | 'edit' | 'tickets'>(null);
+  // Zip 81: the Home card "the venue closes at noon" asks to open the Time row (Change time): the card opens with the Time box showing.
+  const cardRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const openTime = () => {
+      setOpen(true);
+      setEdit('time');
+      requestAnimationFrame(() => cardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    };
+    window.addEventListener(OPEN_TOURNAMENT_TIME, openTime);
+    return () => window.removeEventListener(OPEN_TOURNAMENT_TIME, openTime);
+  }, []);
   const tz = ctx.d.group.timezone;
   const canceled = t.status === 'canceled';
   const ticketsStage = t.status === 'date_picked' || t.status === 'tickets' || canceled;
@@ -489,7 +519,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
         : { words: `${locked} locked in`, cls: 'tm-chip tm-chip-ok tm-hc-pill' }
       : { words: `${t.signups.length} signed up`, cls: 'tm-chip tm-chip-ok tm-hc-pill' };
   return (
-    <section className={open ? 'tm-hc tm-hc-open' : 'tm-hc'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={ticketsStage ? t.status : true} data-tm-open={open}>
+    <section ref={cardRef} className={open ? 'tm-hc tm-hc-open' : 'tm-hc'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={ticketsStage ? t.status : true} data-tm-open={open}>
       <h2 className="tm-hc-head">
         <button type="button" className="tm-hc-top" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((o) => !o)} data-tm-home-toggle>
           <span className="tm-hc-ball" aria-hidden="true">
@@ -1774,6 +1804,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
     ticketCents: view.ticketCents,
     prizeCents: prizeCentsOf(plan.style, t.championCreditCents, t.secondCreditCents),
   });
+  const outside = venueHoursProblem(ctx, day, start, end);
   return (
     <div className="stack tm-finalize tm-fin1" data-tm-finalize={day}>
       <section className="tm-fin-who" aria-label="Players for this date" data-tm-fin-players>
@@ -1889,6 +1920,11 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         </p>
       )}
       <MoneyLineText m={money} />
+      {outside && (
+        <p className="field-error" role="alert" data-tm-fin-hours>
+          {outside}
+        </p>
+      )}
       {notice && (
         <p className="tm-card-note tm-fin-notice" role="status" data-tm-fin-notice>
           {notice}
@@ -1898,7 +1934,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         <button type="button" className="btn secondary" disabled={busy} onClick={onClose} data-tm-finalize-back>
           Back
         </button>
-        <button type="button" className="btn tm-go" disabled={busy || !payIso} onClick={() => void finalize()} data-tm-finalize-go>
+        <button type="button" className="btn tm-go" disabled={busy || !payIso || !!outside} onClick={() => void finalize()} data-tm-finalize-go>
           {busy ? 'Working…' : 'Finalize date'}
         </button>
       </div>

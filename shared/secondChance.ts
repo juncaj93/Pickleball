@@ -15,7 +15,7 @@
 // No new status, no schema change: card steps and sent Telegrams are task_log rows (one per game, the table's own unique index).
 
 import { MIN_PLAYERS } from './spots';
-import { lengthFits } from './bookingHours';
+import { dateKeyOf, dayRule, lengthFits, type VenueHoursConfig } from './bookingHours';
 import { formatTime, formatWeekdayShort, localParts, zonedTimeToUtc } from './time';
 import { dayGap, dayLabelR2, dayWordR2, shortTime } from './textsR2';
 
@@ -263,7 +263,7 @@ export function duePing(g: Pick<ScGame, 'startsAt' | 'canceled' | 'booked' | 'in
  * game's date is offered (a 2 hour game: nothing after 8:00 PM Monday to Saturday, nothing after 5:00 PM on Sunday), the game's own
  * time included. Without `fit` the list is exactly what it always was.
  */
-export function pickTimes(startsAt: string, tz: string, nowMs: number, fit?: { lengthMs: number }): number[] {
+export function pickTimes(startsAt: string, tz: string, nowMs: number, fit?: { lengthMs: number; hours?: VenueHoursConfig | null }): number[] {
   const own = localParts(Date.parse(startsAt), tz);
   const ownMin = own.hour * 60 + own.minute;
   const nowParts = localParts(nowMs, tz);
@@ -274,7 +274,9 @@ export function pickTimes(startsAt: string, tz: string, nowMs: number, fit?: { l
   const all = [...out].sort((a, b) => a - b);
   if (!fit) return all;
   const lengthMin = fit.lengthMs / 60_000;
-  return all.filter((m) => lengthFits(own.weekday, m, lengthMin));
+  // Zip 81: the hours of the game's own DATE (special hours too) when they are known; else the normal table, as before.
+  const day = fit.hours ? dayRule(fit.hours, dateKeyOf(Date.parse(startsAt), tz)) : own.weekday;
+  return all.filter((m) => lengthFits(day, m, lengthMin));
 }
 
 /** "7:30 PM" for minutes after midnight. */

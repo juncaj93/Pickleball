@@ -8,7 +8,7 @@
 import type { AdminDashboard, AdminSessionView } from '../shared/api';
 import { headCount } from '../shared/guestSpot';
 import { MIN_PLAYERS } from '../shared/spots';
-import { checkBookingTimes, hoursLine } from '../shared/bookingHours';
+import { checkBookingTimes, dateKeyOf, dayRule, hoursLine, venueHoursOf } from '../shared/bookingHours';
 import { COURTRESERVE_BOOKING_URL } from '../shared/settings';
 import { siteAddress } from '../shared/messages';
 import { localParts, zonedTimeToUtc } from '../shared/time';
@@ -294,9 +294,11 @@ export async function secondChanceAction(
   // reopened. Off: every line below is the old flow, step for step.
   const hoursOn = (await bookingHoursFlags(ctx, group.id)).on;
   const length = Date.parse(session.ends_at) - Date.parse(session.starts_at);
-  const choices = pickTimes(session.starts_at, tz, nowMs, hoursOn ? { lengthMs: length } : undefined);
+  // Zip 81: the hours of the game's own date (special hours too).
+  const venueHours = venueHoursOf(group.settings_json);
+  const choices = pickTimes(session.starts_at, tz, nowMs, hoursOn ? { lengthMs: length, hours: venueHours } : undefined);
   if (hoursOn && !already && choices.length === 0) {
-    throw new HttpError(409, 'no_time_fits', `${hoursLine(localParts(Date.parse(session.starts_at), tz).weekday)} No time fits a game this long, so nothing was reopened or changed.`);
+    throw new HttpError(409, 'no_time_fits', `${hoursLine(dayRule(venueHours, dateKeyOf(Date.parse(session.starts_at), tz)))} No time fits a game this long, so nothing was reopened or changed.`);
   }
   const minutes = body.minutes === undefined || body.minutes === null ? null : Number(body.minutes);
   if (minutes !== null && !choices.includes(minutes)) throw new HttpError(400, 'invalid_time', 'Pick one of the times shown.');
@@ -306,7 +308,7 @@ export async function secondChanceAction(
   const newEnd = new Date(Date.parse(newStart) + length).toISOString();
   if (hoursOn && (moved || !already)) {
     // The time that would be saved (a game left at its own time too) must fit, or nothing at all happens.
-    const fits = checkBookingTimes(newStart, newEnd, tz);
+    const fits = checkBookingTimes(newStart, newEnd, tz, venueHours);
     if (!fits.ok) throw new HttpError(400, 'invalid_time', fits.message);
     if (moved && Date.parse(newStart) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   }

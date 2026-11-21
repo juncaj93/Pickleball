@@ -32,6 +32,7 @@ import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
 import { VenueAlertCards } from './admin/VenueAlert';
+import { VenueConflictCards } from './admin/VenueHours';
 import { TournamentHomeCard } from './admin/Tournament';
 import { preloadTournamentHome } from '../TournamentSlot';
 
@@ -464,6 +465,8 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   if (ctx.d.previewCalm === true) {
     return (
       <>
+        {/* Zip 81: a game or the tournament outside its date's venue hours (this zip's card). */}
+        <VenueConflictCards ctx={ctx} />
         {/* Zip 55, preview builds only: the Tournament test page, one tap from the preview link. */}
         {TournamentTestRow && ctx.d.tournamentTest === true && (
           <Suspense fallback={null}>
@@ -482,6 +485,8 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   }
   return (
     <>
+      {/* Zip 81: a game or the finalized tournament outside its date's venue hours (only while Booking hours is on), at the very top. */}
+      <VenueConflictCards ctx={ctx} />
       {/* Zip 55 "Tournaments" (only while on, and a tournament open): the level list and picking the date, two taps from Home. */}
       <TournamentHomeCard ctx={ctx} />
       {/* Zip 43, Venue charge alert (only while on): "Northville Pickleball should have charged you $192", at the very top of Home. */}
@@ -859,13 +864,13 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
   const [len, setLen] = useState(() => (isPickerLength(usualLen) ? usualLen : (PICKER_MINUTES[PICKER_MINUTES.length - 1] as number)));
   const [start, setStart] = useState(() => {
     const usual = minutesToHHMM(ctx.d.group.settings.defaultStartMinutes);
-    return picker ? startForDate(chips[0].iso, usual, isPickerLength(usualLen) ? usualLen : (PICKER_MINUTES[PICKER_MINUTES.length - 1] as number)) : usual;
+    return picker ? startForDate(chips[0].iso, usual, isPickerLength(usualLen) ? usualLen : (PICKER_MINUTES[PICKER_MINUTES.length - 1] as number), ctx.d.group.venueHours) : usual;
   });
   const [end, setEnd] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultEndMinutes));
   const [note, setNote] = useState('');
   const pickDate = (v: string) => {
     setDate(v);
-    if (picker) setStart((cur) => startForDate(v, cur, len));
+    if (picker) setStart((cur) => startForDate(v, cur, len, ctx.d.group.venueHours));
   };
   // Zip 14 (GAME_DAY_CARD): the court, picked on the court map. Off: no row, and nothing is sent.
   const courtOn = ctx.d.gameDayCard === true;
@@ -879,7 +884,7 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
     const endsAt = picker ? (startsAt ? new Date(Date.parse(startsAt) + len * 60_000).toISOString() : null) : fromLocalInputValue(`${date}T${end}`, tz);
     if (!startsAt || !endsAt) return setError('Pick a date, start time, and end time.');
     if (picker) {
-      const r = checkBookingTimes(startsAt, endsAt, tz);
+      const r = checkBookingTimes(startsAt, endsAt, tz, ctx.d.group.venueHours);
       if (!r.ok) return setError(r.message);
     }
     if (Date.parse(endsAt) <= Date.parse(startsAt)) return setError('The end time must be after the start time.');

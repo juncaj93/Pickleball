@@ -55,7 +55,7 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
   // message that says so; nothing is hidden here.
   // Booking hours on (Zip 35): only a start whose end is inside the venue hours. The server checks too, before it reopens anything.
   const lengthMs = Date.parse(c.endsAt) - Date.parse(c.startsAt);
-  const times = pickTimes(c.startsAt, tz, nowMs, ctx.d.bookingHours === true ? { lengthMs } : undefined);
+  const times = pickTimes(c.startsAt, tz, nowMs, ctx.d.bookingHours === true ? { lengthMs, hours: ctx.d.group.venueHours } : undefined);
   const ownMin = own.hour * 60 + own.minute;
   const [picked, setMinutes] = useState(ownMin);
   const minutes = times.includes(picked) ? picked : (times[0] ?? picked);

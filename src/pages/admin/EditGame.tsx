@@ -50,7 +50,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const pickDate = (v: string) => {
     setDate(v);
     // A new date with other hours: the start stays when it still fits, else it moves into that day's hours (length kept).
-    if (picker) setStart((cur) => startForDate(v, cur, len));
+    if (picker) setStart((cur) => startForDate(v, cur, len, ctx.d.group.venueHours));
   };
   const pickStart = (v: string) => {
     setStart(v);
@@ -77,7 +77,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const statusChanged = status !== current;
   // Zip 24: the hours rule on a CHANGED time only (the pickers cannot offer an out-of-hours time, so this is the backstop: a date change on
   // an odd-length game). An old game that is outside the hours and is not being moved is never blocked.
-  const hoursCheck = picker && timeChanged && startsAt && endsAt ? checkBookingTimes(startsAt, endsAt, tz) : null;
+  const hoursCheck = picker && timeChanged && startsAt && endsAt ? checkBookingTimes(startsAt, endsAt, tz, ctx.d.group.venueHours) : null;
   const blocked = hoursCheck !== null && !hoursCheck.ok;
 
   const savedText = () => (timeChanged || labelChanged ? 'Game saved' : courtChanged && !statusChanged ? (court === null ? 'Court cleared' : `Court ${court} saved`) : 'Court status saved');

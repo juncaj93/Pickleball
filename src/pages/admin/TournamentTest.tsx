@@ -10,6 +10,9 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 81 (🎾81.venue hours): special venue hours (no tournament).
+  { stage: 'venue_winter', label: 'Venue hours: winter set and holidays (start here)', line: 'The flyers’ hours: Winter hours Nov 23 to Jan 31, Thanksgiving 8 AM to noon, Christmas Eve, Christmas Closed, New Year’s Eve and Day. A game on Thu Nov 26 at 8 PM: Home shows “Thu Nov 26: the venue closes at noon.” with Cancel game. Settings > Schedule > Special venue hours > Change.' },
+  { stage: 'venue_none', label: 'Venue hours: none', line: 'Normal hours only: no special entries, no amber card. Settings > Schedule > Special venue hours says None; Add special hours from there.' },
   // Zip 79 (🎾79.results skills): the results row (both styles; the row's time: the night and the whole next day) and the skills history.
   { stage: 'zip79_night', label: 'Results: the night after the reveal (start here)', line: 'Americano, revealed 30 minutes ago. View as Vic: the final board once (X closes it), then one row: The Cold Open and Standings, Your rounds under it. Tap Standings: the final board; X closes it.' },
   { stage: 'zip79_night_ld', label: 'Results: the night after End (Locked doubles)', line: 'Ended tonight by the real Confirm. View as Vic: the row with Your games under it. Standings lists the teams, Net Ninjas first with the gold medal. View as Reese (did not play): the row alone.' },

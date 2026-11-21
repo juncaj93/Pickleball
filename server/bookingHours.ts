@@ -2,7 +2,7 @@ import type { Ctx } from './context';
 import type { D1Database } from './db';
 import { newId } from './crypto';
 import { HttpError } from './http';
-import { BOOKING_HOURS, bookingHoursAllowed, checkBookingTimes, checkUsualTime } from '../shared/bookingHours';
+import { BOOKING_HOURS, bookingHoursAllowed, checkBookingTimes, checkUsualTime, venueHoursOf } from '../shared/bookingHours';
 
 // Zip 24: BOOKING_HOURS (shared/bookingHours.ts). On for a request when:
 //  - its wrangler.toml var is not "off" (the kill switch, needs a deploy), and
@@ -46,16 +46,19 @@ export async function longGamesOn(ctx: Ctx, groupId: string): Promise<boolean> {
   return forAll(ctx.db, groupId);
 }
 
-/** Refuses (400 invalid_time) a game's NEW start and end when they are outside the venue hours. Only called when a game is created or its times change. */
-export async function enforceBookingHours(ctx: Ctx, groupId: string, tz: string, startsAt: string, endsAt: string): Promise<void> {
+/**
+ * Refuses (400 invalid_time) a game's NEW start and end when they are outside the venue hours. Only called when a game is created or its times
+ * change. Zip 81: by the hours of the game's own DATE (`settingsJson`, the group's saved settings: the normal week and the special entries).
+ */
+export async function enforceBookingHours(ctx: Ctx, groupId: string, tz: string, startsAt: string, endsAt: string, settingsJson?: string | null): Promise<void> {
   if (!(await bookingHoursFlags(ctx, groupId)).on) return;
-  const r = checkBookingTimes(startsAt, endsAt, tz);
+  const r = checkBookingTimes(startsAt, endsAt, tz, venueHoursOf(settingsJson));
   if (!r.ok) throw new HttpError(400, 'invalid_time', r.message);
 }
 
-/** The same for the usual game time (Settings > Schedule), minutes after midnight. Only called when that time is changed. */
-export async function enforceUsualTime(ctx: Ctx, groupId: string, startMin: number, endMin: number): Promise<void> {
+/** The same for the usual game time (Settings > Schedule), minutes after midnight. Only called when that time is changed. Zip 81: the normal Tue and Thu. */
+export async function enforceUsualTime(ctx: Ctx, groupId: string, startMin: number, endMin: number, settingsJson?: string | null): Promise<void> {
   if (!(await bookingHoursFlags(ctx, groupId)).on) return;
-  const r = checkUsualTime(startMin, endMin);
+  const r = checkUsualTime(startMin, endMin, 2, venueHoursOf(settingsJson).normal);
   if (!r.ok) throw new HttpError(400, 'invalid_time', r.message);
 }

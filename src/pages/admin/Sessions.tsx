@@ -1,4 +1,6 @@
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
+import { dateKeyOf } from '../../../shared/bookingHours';
+import { holidayCovered } from '../../../shared/venueHours';
 import { useEffect, useState } from 'react';
 import { rosterLine } from '../../../shared/guestSpot';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
@@ -342,6 +344,8 @@ export function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 export function HolidayControl({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   if (!s.holiday) return null;
+  // Zip 81: a one-day special hours entry on this date already says the venue's hours: no question.
+  if (ctx.d.bookingHours === true && holidayCovered(ctx.d.group.venueHours, dateKeyOf(Date.parse(s.startsAt), ctx.d.group.timezone))) return null;
   const set = (ok: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/holiday-hours`, { ok }), ok ? 'Venue hours confirmed' : 'Undone');
   return (

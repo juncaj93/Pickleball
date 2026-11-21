@@ -318,3 +318,11 @@ divider, "Final standings coming soon" with three bouncing balls, no Standings c
 real End: the board then plays on every phone). The night is relative to the seed, so a later visit taps Tournament test > "Americano: all
 games in" first. The other stages: Americano: last round (standings hidden), reveal running (as Vic: starts 6 seconds after the tap),
 revealed (10 minutes ago: the final board once, then the standings, the ticker and You won The Cold Open).
+
+Zip 81 (🎾81.venue hours, special venue hours): no new names, no migration. The Tournament test page has two stages at the top: **Venue hours:
+winter set and holidays** (the venue's flyers: Winter hours Nov 23 2026 to Jan 31 2027, Mon to Sat 8 AM to 11 PM, Sun 8 AM to 7 PM;
+Thanksgiving Thu Nov 26 8 AM to noon; Christmas Eve Thu Dec 24 8 AM to 2 PM; Christmas Fri Dec 25 Closed; New Year's Eve and New Year's Day
+8 AM to 11 PM; and the Thu Nov 26 game at 8 to 10 PM, on the organizer's list) and **Venue hours: none** (normal hours only). Organizer Home on
+the winter stage: two amber cards, "Thu Nov 26: the venue closes at noon." and "Thu Dec 24: the venue closes at 2 PM." (the preview's Thu Dec 24
+game is at 8 PM too), each with Cancel game. Settings > Schedule > Special venue hours > Change: the list, Add special hours, Change normal hours.
+- Locally: `node e2e/zip81.cjs` checks the screens (320/390/420, light and dark, the fake clock, the tournament's Change time).

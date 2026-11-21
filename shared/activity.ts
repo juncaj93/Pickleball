@@ -109,6 +109,15 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} confirmed venue hours${forDay}`;
     case 'holiday_hours_unconfirmed':
       return `${who} undid venue hours${forDay}`;
+    // Zip 81: Settings > Schedule > Special venue hours ("Thanksgiving, Thu Nov 26 · 8 AM to noon").
+    case 'venue_hours_added':
+      return `${who} added special venue hours: ${typeof d.entry === 'string' ? d.entry : 'an entry'}${typeof d.when === 'string' ? `, ${d.when}` : ''}`;
+    case 'venue_hours_changed':
+      return `${who} changed special venue hours: ${typeof d.entry === 'string' ? d.entry : 'an entry'}${typeof d.when === 'string' ? `, ${d.when}` : ''}`;
+    case 'venue_hours_removed':
+      return `${who} removed special venue hours: ${typeof d.entry === 'string' ? d.entry : 'an entry'}`;
+    case 'venue_hours_normal':
+      return `${who} changed the normal venue hours${typeof d.when === 'string' ? ` to ${d.when}` : ''}`;
     case 'decision_keep':
       return `${who} kept${day ? ` ${day}` : ' a session'} as is`;
     case 'decision_try_fill':

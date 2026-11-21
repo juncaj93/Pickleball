@@ -77,7 +77,7 @@ import { cancelChargesRead, hiddenSessionsRead, plannedStartsRead, rostersRead, 
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
-import { bookingHoursAllowed } from '../shared/bookingHours';
+import { bookingHoursAllowed, venueHoursOf } from '../shared/bookingHours';
 import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
@@ -405,6 +405,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       zelleNumber: zelleNumberOf(group.settings_json),
       firstSessionDate: group.first_session_date,
       settings,
+      // Zip 81: the venue hours (normal week and special entries), only while Booking hours is on (off: this answer is exactly main's).
+      ...(hours.on ? { venueHours: venueHoursOf(group.settings_json) } : {}),
       playerLink: playerLinkFor(ctx, group),
       privateLink: `${ctx.url.origin}/g/${group.group_key}`,
       openAccess: !!group.open_access,
@@ -1283,7 +1285,7 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileC
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   if (startsAt === session.starts_at && endsAt === session.ends_at) return { ok: true, changed: false };
   // Zip 24 "Booking hours": only a CHANGED start or end is looked at (an existing game outside the hours is never blocked for other edits).
-  if (!restoring) await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
+  if (!restoring) await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt, group.settings_json);
   const deadline = defaultDeadline(startsAt, settingsOf(group));
   const move = ctx.db
     .prepare(
@@ -2108,7 +2110,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   {
     const before = settingsOf(group);
     if (settings.defaultStartMinutes !== before.defaultStartMinutes || settings.defaultEndMinutes !== before.defaultEndMinutes) {
-      await enforceUsualTime(ctx, group.id, settings.defaultStartMinutes, settings.defaultEndMinutes);
+      await enforceUsualTime(ctx, group.id, settings.defaultStartMinutes, settings.defaultEndMinutes, group.settings_json);
     }
   }
   // The Apple Pay / Zelle number lives inside settings_json (normalizeSettings only keeps the numbers, so it is put back here).
@@ -2159,10 +2161,20 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     }
   }
   const withZelle = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
-  const storedSettings =
+  const withDays =
     body.venueDays !== undefined || hadVenueDays
       ? { ...withZelle, venueDays: { ...venueDays, ...(venueChangedAt > 0 ? { changedAt: venueChangedAt } : {}), ...(venueHistory.length ? { history: venueHistory } : {}) } }
       : withZelle;
+  // Zip 81 (server/venueHours.ts): the venue hours (normal week, special entries) live inside settings_json too. Every save keeps them as they
+  // are; only their own sheet changes them.
+  const storedSettings = (() => {
+    try {
+      const vh = (JSON.parse(group.settings_json || '{}') as { venueHours?: unknown }).venueHours;
+      return vh === undefined ? withDays : { ...withDays, venueHours: vh };
+    } catch {
+      return withDays;
+    }
+  })();
   // Zip 27 (A-01): a new "Price per player" or "Typical court cost" never re-prices a finalized game. Its rules are written down first,
   // from what it shows right now (a failure here changes nothing). Any other save is untouched.
   {
@@ -2399,8 +2411,8 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
   if (length <= 0) throw new HttpError(400, 'invalid_time', 'The end time must be after the start time.');
   if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A game can be at most 6 hours long.');
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
-  // Zip 24 "Booking hours": a new game must sit inside the venue hours.
-  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
+  // Zip 24 "Booking hours": a new game must sit inside the venue hours (Zip 81: that date's hours).
+  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt, group.settings_json);
   const note = v.optionalText(body.note, 'note', 80);
   // Zip 14: the court from the Court row (only there while "Game day card" is on). Off: ignored, exactly as main ignores a field it does not know.
   const court = body.court !== undefined && body.court !== null && (await gameDayCardFor(ctx, group.id)) ? courtBody(body.court) : null;

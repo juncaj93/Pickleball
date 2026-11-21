@@ -326,3 +326,12 @@ button.bh-box:focus-visible,
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* Zip 81: a closed day (special hours): the Start sheet says so instead of offering times. */
+.bh-closed-note {
+  margin: 0;
+  padding: 4px 2px;
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}

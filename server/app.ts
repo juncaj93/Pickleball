@@ -1,4 +1,5 @@
 import * as admin from './admin';
+import * as venueHours from './venueHours';
 import { monthlyMoney } from './money';
 import { type Ctx, makeCtx } from './context';
 import type { Env } from './db';
@@ -192,6 +193,10 @@ route('PUT', '/api/admin/spent-totals-switch', admin.setSpentTotalsSwitch);
 // Zip 39 (server/cheaperFix.ts): Made cheaper after paying.
 route('PUT', '/api/admin/cheaper-fix-switch', admin.setCheaperFixSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
+// Zip 81: Settings > Schedule > Special venue hours (server/venueHours.ts).
+route('POST', '/api/admin/venue-hours/special', venueHours.saveSpecialHours);
+route('POST', '/api/admin/venue-hours/remove', venueHours.removeSpecialHours);
+route('PUT', '/api/admin/venue-hours/normal', venueHours.saveNormalHours);
 // Zip 35 (server/tapGuardFix.ts): Tap guard fix.
 route('PUT', '/api/admin/tap-guard-switch', admin.setTapGuardFixSwitch);
 // Zip 51b (server/moneyNote.ts): Money change note.

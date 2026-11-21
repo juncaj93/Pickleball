@@ -1,6 +1,8 @@
 import type { Ctx } from './context';
 import type { D1Database } from './db';
 import { HttpError } from './http';
+import { bookingHoursFlags } from './bookingHours';
+import { checkDay, dayRule, isDateKey, venueHoursOf } from '../shared/bookingHours';
 import { newId, sha256 } from './crypto';
 import { requireAdmin } from './auth';
 import * as v from './validate';
@@ -1756,6 +1758,8 @@ export async function moveTournamentTime(ctx: Ctx, body: Record<string, unknown>
   }
   const next = { start: body.start as number, minutes: body.minutes as number };
   if (next.start === was.start && next.minutes === was.minutes) return { ok: true, changed: false, ...next };
+  // Zip 81: a moved start or end must sit inside the venue hours of the night's date (only while Booking hours is on).
+  await enforceTournamentHours(ctx, group, t.final_date, next);
   const closed = changeClosed(t, tz, ctx.nowMs);
   if (closed) throw new HttpError(409, 'time_locked', closed);
   const newStart = startMsOf(t.final_date, next.start, tz);
@@ -1874,7 +1878,22 @@ export async function setTournamentLevel(ctx: Ctx, body: Record<string, unknown>
 export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
+  // Zip 81: Finalize is refused outside that date's venue hours, the same way a game is (only while Booking hours is on). Taking the date back
+  // (date: null) is never refused. The preview's Tournament test page calls lockDate itself and is not checked.
+  if (typeof body.date === 'string') await enforceTournamentHours(ctx, group, body.date, readPlays(body, t));
   return lockDate(ctx, group, t, body);
+}
+
+/**
+ * Zip 81: a tournament's night must sit inside the venue hours of its date (special hours too), like a game: start at or after opening, end at
+ * or before closing (a venue open until midnight lets it end at midnight). 400 invalid_time with the games' own message. Booking hours off:
+ * nothing is checked (as before).
+ */
+async function enforceTournamentHours(ctx: Ctx, group: GroupRow, date: string, plays: { start: number; minutes: number }): Promise<void> {
+  if (!(await bookingHoursFlags(ctx, group.id)).on) return;
+  if (!isDateKey(date)) return;
+  const r = checkDay(dayRule(venueHoursOf(group.settings_json), date), plays.start, plays.start + plays.minutes);
+  if (!r.ok) throw new HttpError(400, 'invalid_time', r.message);
 }
 
 /** Zip 60: the votes of the players on the list who picked `date` (names in sign-up order), and the newest sign-up write they were counted from. */
