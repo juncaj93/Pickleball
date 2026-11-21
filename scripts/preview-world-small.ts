@@ -734,11 +734,15 @@ export async function buildSmallPreview(
       // (tap: Tickets, Courts, Prizes); the champions hold $14 award credit. One tap away now (Tournament test > Tournament ended).
       // Zip 77 (🎾77.reveal): the calm start is the Americano night with every game in (zip77_allin): View as Vic: "Final standings coming
       // soon"; organizer Home: Reveal standings. The last round with hidden standings, the reveal running and revealed are one tap away.
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip77_allin' });
+      // Zip 78 (🎾78.one look): the calm start is The Cold Open with tickets open (zip70_start: 6 locked in of 8, Vic and Zoe unpaid): View as
+      // Vic: the ticket with its green Lock in, the game cards in the one body font; organizer Home: the tournament card (no chevron, 44 px rows),
+      // the game card with the one segmented look. Zip 77's night is one tap away (Tournament test).
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip70_start' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 77 (on, the calm start): "The Cold Open", Americano, tonight, every game in (Vic first). View as Vic: no kicker, a thin divider, "Final standings coming soon" with three bouncing balls, no Standings card. Organizer Home: Edit awards and Reveal standings (the board plays on every phone). One tap away: the last round (standings hidden), the reveal running, revealed');
+    summary.push('Zip 78 (on, the calm start): "The Cold Open", tickets open, 6 locked in of 8 (Vic and Zoe unpaid). View as Vic: the ticket (Lock in is green), the game cards in the one body font. Organizer Home: the tournament card opens on a tap (no chevron), every row 44 px. The 12 players groups (Dink group, Drive group) are one tap away (Tournament test > Pools look)');
+    summary.push('Zip 77 (one tap away, zip77_allin): "The Cold Open", Americano, tonight, every game in (Vic first). View as Vic: no kicker, a thin divider, "Final standings coming soon" with three bouncing balls, no Standings card. Organizer Home: Edit awards and Reveal standings (the board plays on every phone). One tap away: the last round (standings hidden), the reveal running, revealed');
     summary.push('Zip 76 (one tap away, Tournament test > Tournament ended): "The Cold Open" ended tonight ($14 to each champion). Money > Totals: the "The Cold Open tournament" row (tap: Tickets, Courts, Prizes), Running total: Tournaments 1. View as a champion: I\'m in (credit used), then Drop out: "$14 comes back as credit."');
     summary.push('Zip 74 (one tap away, zip74_short): "The Cold Open", tonight, Game 1 in, games to 9 from Round 2. View as Vic: "Starting Round 2, all games go to 9 points." at the top, Play to 9 points on the Up next card, Play to 9 on Games 2 and 3. One tap away: Final (Vic: You’re in the Final!), Teams published (Edit name), Time and Plan / Late drop (Parker: Drop out)');
     summary.push('Zip 72 (one tap away): "The Cold Open", Locked doubles, tonight, Game 1 on both courts, no scores yet. View as Vic: Enter score, Submit score; then Parker: Lost 7–11, −4 pts. Organizer Home: Fix Game 1 · Court 1 with two numbers. The Tournament test page has the three-way circle settled by points, First score counts: Americano and Projected teams');
