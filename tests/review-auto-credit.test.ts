@@ -158,11 +158,11 @@ async function books(ctx: Ctx) {
   for (const p of d.players) {
     const sum = rows.filter((r) => r.player_id === p.id && !r.ended_at).reduce((n, r) => n + potEffect({ kind: r.kind, cents: r.amount_cents, fiveCents: r.five_cents }), 0);
     expect(sum).toBeGreaterThanOrEqual(0);
-    expect(d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0, `${p.name}'s balance on Players`).toBe(sum);
+    expect(d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0, `${p.name}’s balance on Players`).toBe(sum);
     expect(balanceOf(d, p.id).creditCents).toBe(sum);
     if (p.name !== 'Alex' && p.isActive) {
       const v = await view(ctx, p.name);
-      expect(v.credit.balanceCents, `${p.name}'s own balance`).toBe(sum);
+      expect(v.credit.balanceCents, `${p.name}’s own balance`).toBe(sum);
       expect(v.credit.usableCents).toBe(Math.max(0, sum - reservedOf(ctx, p.id)));
     }
   }
@@ -174,7 +174,7 @@ async function books(ctx: Ctx) {
         expect(used).toBe(0);
         continue;
       }
-      expect(used, `credit on ${r.name}'s seat`).toBeLessThanOrEqual(Math.max(price, r.paymentAmountCents ?? 0));
+      expect(used, `credit on ${r.name}’s seat`).toBeLessThanOrEqual(Math.max(price, r.paymentAmountCents ?? 0));
     }
   }
   const potTotal = d.creditLedger.reduce((n: number, p: any) => n + p.balanceCents, 0);

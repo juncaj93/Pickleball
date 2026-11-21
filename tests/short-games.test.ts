@@ -469,7 +469,7 @@ describe('credit chain with short games mixed in (Zip 9, item 7)', () => {
       const potBefore = await potOf(ctx, P);
       const join = await phone.call('POST', `/api/sessions/${ids[i]}/join`, {});
       expect(join.data.result).toBe('confirmed');
-      expect(join.data.creditCents ?? 0, `game ${i + 1}: credit used at I'm in`).toBe(step.creditUsed);
+      expect(join.data.creditCents ?? 0, `game ${i + 1}: credit used at I’m in`).toBe(step.creditUsed);
       expect(await potOf(ctx, P)).toBe(potBefore - step.creditUsed);
       let mine = (await game(ctx, ids[i])).roster.find((r: any) => r.name === P);
       expect(mine.owesCents, `game ${i + 1}: owes before paying`).toBe(flat - step.creditUsed);

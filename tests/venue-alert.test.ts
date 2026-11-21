@@ -144,14 +144,14 @@ describe('the cards and the math', () => {
     w.app.now = edt(10, 31, 0, 0);
     const a = (await dash(w)).venueAlerts;
     expect(a).toHaveLength(1);
-    expect(a[0]).toMatchObject({ kinds: ['court'], cents: 9600, title: 'Northville Pickleball should have charged you $96', line: '2 games x $48 = $96', keys: ['court:2026-10'] });
+    expect(a[0]).toMatchObject({ kinds: ['court'], cents: 9600, title: 'Northville Pickleball Club should have charged you $96', line: '2 games x $48 = $96', keys: ['court:2026-10'] });
     // The membership 26th of October was before the switch went on (Oct 26 12:00 PM): no backfill, not even for today.
     expect(a.some((x: any) => x.kinds.includes('membership'))).toBe(false);
     // November's membership day, the 26th.
     await jump(w, est(11, 26, 0, 0));
     const n = (await dash(w)).venueAlerts;
     expect(n.map((x: any) => x.keys.join('+'))).toEqual(['court:2026-10', 'membership:2026-11']);
-    expect(n[1]).toMatchObject({ cents: 3000, title: 'Membership should have been charged: $30', line: 'Monthly membership, Northville Pickleball' });
+    expect(n[1]).toMatchObject({ cents: 3000, title: 'Membership should have been charged: $30', line: 'Monthly membership, Northville Pickleball Club' });
   });
   it('Waitlist, Not booked and canceled games do not count; a canceled game that was Booked drops out', async () => {
     const w = await world();
@@ -257,7 +257,7 @@ describe('Mark paid', () => {
     w.app.now = edt(10, 31, 8);
     const a = (await dash(w)).venueAlerts;
     expect(a).toHaveLength(1);
-    expect(a[0]).toMatchObject({ keys: ['court:2026-10', 'membership:2026-10'], cents: 9600 + 3000, title: 'Northville Pickleball should have charged you $126', line: '2 games x $48 = $96, plus membership $30' });
+    expect(a[0]).toMatchObject({ keys: ['court:2026-10', 'membership:2026-10'], cents: 9600 + 3000, title: 'Northville Pickleball Club should have charged you $126', line: '2 games x $48 = $96, plus membership $30' });
     expect((await mark(w, a[0].keys, a[0].cents)).status).toBe(200);
     const lines = await paidLines(w);
     expect(lines).toHaveLength(1);

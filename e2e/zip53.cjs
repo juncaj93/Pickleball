@@ -183,7 +183,7 @@ async function main() {
         const t = await cardText(page);
         const exp = expected(inG1[0]);
         assert(exp && exp.id === g2.id, 'the rule itself wants G2 for a player in G1');
-        assert(t && t.startsWith(`${dayWord(g2.startsAt)} has 4 in`) && t.includes("You'd make it 5"), `a player in G1 sees "${t}"`);
+        assert(t && t.startsWith(`${dayWord(g2.startsAt)} has 4 in`) && t.includes("You’d make it 5"), `a player in G1 sees "${t}"`);
         if (width === 390) await page.screenshot({ path: path.join(SHOTS, `A-in-g1-${width}-${scheme}.png`) });
         await ctx.close();
       });
@@ -210,7 +210,7 @@ async function main() {
     for (const n of outsiders) {
       const { ctx, page } = await playerPage(n);
       const t = await cardText(page);
-      assert(t && t.startsWith(want) && t.includes("You'd make it 5"), `${n} sees "${t}", wanted "${want}"`);
+      assert(t && t.startsWith(want) && t.includes("You’d make it 5"), `${n} sees "${t}", wanted "${want}"`);
       texts.push(t);
       if (n === outsiders[0]) await page.screenshot({ path: path.join(SHOTS, 'B-room.png') });
       await ctx.close();

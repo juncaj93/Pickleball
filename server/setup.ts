@@ -35,7 +35,7 @@ export async function enterGroupWord(ctx: Ctx, body: Record<string, unknown>) {
   if (!slot) throw new HttpError(429, 'too_many_tries', 'Too many tries. Wait 15 minutes and try again.');
   const word = typeof body.word === 'string' ? body.word.slice(0, 60) : '';
   if (!word.trim() || !timingSafeEqual(await hashGroupWord(word), group.group_word_hash)) {
-    throw new HttpError(401, 'wrong_group_word', "That's not the group word. Ask in the group chat.");
+    throw new HttpError(401, 'wrong_group_word', "That’s not the group word. Ask in the group chat.");
   }
   await releaseSlot(ctx, slot);
   setCookie(ctx, ACCESS_COOKIE, await accessToken(group), 365 * 86_400, 'Lax');

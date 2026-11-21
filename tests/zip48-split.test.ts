@@ -139,7 +139,7 @@ describe('Zip 48: the player download', () => {
     const script = read(split, `assets/${asset(split, /^index-.*\.js$/)}`);
     const admin = read(split, `assets/${asset(split, /^AdminEntry-.*\.js$/)}`);
     // Words only the organizer screens draw: in the organizer file, not in the player file.
-    for (const w of ['Feature switches', 'Cancel session', 'Mark refunded', 'Add game', 'Edit game', 'Venue charge']) {
+    for (const w of ['Feature switches', 'Cancel game', 'Mark refunded', 'Add game', 'Edit game', 'Venue charge']) {
       expect(admin.includes(w), `"${w}" in the organizer file`).toBe(true);
       expect(script.includes(w), `"${w}" in the player file`).toBe(false);
     }

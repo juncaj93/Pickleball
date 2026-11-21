@@ -22,7 +22,7 @@ describe('court status words', () => {
 
   it('is gray with the reason when canceled', () => {
     expect(courtStatus({ ...base, canceled: true })).toMatchObject({ kind: 'off', text: 'Canceled' });
-    expect(courtStatus({ ...base, canceled: true, courtState: 'not_opened' })).toMatchObject({ kind: 'off', text: "Court didn't open" });
+    expect(courtStatus({ ...base, canceled: true, courtState: 'not_opened' })).toMatchObject({ kind: 'off', text: "Court didn’t open" });
     // The old third value ("Not available") now reads as Waitlist, and players read it as Not booked.
     expect(courtStatus({ ...base, bookingStatus: 'unavailable' })).toEqual({ kind: 'waitlist', text: 'Waitlist', playerText: 'Court not booked' });
     expect(courtStatus({ ...base, bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' })).toMatchObject({ kind: 'later', text: 'Booking opens Tue, Nov 17' });

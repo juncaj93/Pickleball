@@ -98,7 +98,7 @@ async function main() {
         expect((await row.locator('.set-hint').innerText()) === 'A Telegram to you when the clock, the backup or the database fails. At most 1 an hour per kind, 6 a day', 'hint');
         expect(!(await row.locator('[data-error-alerts-all]').isChecked()), 'ships off');
         const btn = row.locator('[data-error-alert-test]');
-        expect((await btn.innerText()) === 'Send TEST error alert', 'button words');
+        expect((await btn.innerText()) === 'Send test', 'button words');
         const box = await btn.boundingBox();
         expect(box && box.x >= 0 && box.x + box.width <= width, `button fits (${JSON.stringify(box)})`);
         // Same look as the other Settings test button (Settings > Alerts).

@@ -71,7 +71,7 @@ function tourText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'tournamentName' |
   if (e.kind === 'used') return `${money} used for ${name}`;
   // Zip 58: an award ("$14 Tournament champion, The Cold Open").
   if (e.tourWhy === 'champion' || e.tourWhy === 'second') return `${money} Tournament ${e.tourWhy === 'champion' ? 'champion' : '2nd place'}${e.tournamentName ? `, ${e.tournamentName}` : ''}`;
-  const why = e.tourWhy === 'back' ? 'you backed out' : e.tourWhy === 'off' ? 'taken off the list' : e.tourWhy === 'cancel' ? 'canceled' : 'no spot opened';
+  const why = e.tourWhy === 'back' ? 'you dropped out' : e.tourWhy === 'off' ? 'taken off the list' : e.tourWhy === 'cancel' ? 'canceled' : 'no spot opened';
   return `${money} back from ${name} (${why})`;
 }
 
@@ -312,7 +312,7 @@ export function unconfirmedPaidWarning(names: string[]): string | null {
 
 /** Why Reopen waits: a pending refund request is holding credit this game gave back. */
 export const reopenRequestedReason = (names: string[]) =>
-  `Can't reopen: ${names.join(' and ')} asked for this credit back. Answer the refund request on Home first.`;
+  `Can’t reopen: ${names.join(' and ')} asked for this credit back. Answer the cash out request on Home first.`;
 
 // ---------- What a player reads when their money moves (Oct 31, 2026) ----------
 // Nothing happens to a player's money without the screen saying so in plain words.
@@ -382,7 +382,7 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     if (e.reason === 'adjusted') text = `${adjustedPlayerLine(e.kind === 'kept' ? e.cents : -e.cents).replace(/^Credit/, 'credit')}${e.note ? `. ${e.note}` : ''}`;
     // Zip 31: "Nov 12: $3 used for extra time on Nov 12", "Nov 13: $1 back from Nov 12 (extra time changed)".
     else if (e.reason === 'extension') text = e.kind === 'used' ? `${money} used for extra time${game ? ` on ${game}` : ''}` : `${money} back${from} (extra time changed)`;
-    // Zip 56: "Dec 1: $16 used for the Winter Classic", "Dec 3: $16 back from the Winter Classic (you backed out)".
+    // Zip 56: "Dec 1: $16 used for the Winter Classic", "Dec 3: $16 back from the Winter Classic (you dropped out)".
     else if (e.reason === 'tournament') text = tourText(e, money);
     else if (e.kind === 'used') text = `${money} used${game ? ` for ${game}` : ''}`;
     else if (e.kind === 'refunded') text = `${money} cashed out`;

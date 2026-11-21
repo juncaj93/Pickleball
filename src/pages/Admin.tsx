@@ -492,7 +492,7 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
       <SecondChanceHome ctx={ctx} />
       <UnpaidTextSheet ctx={ctx} />
       {refunds.length > 0 && (
-        <section className="stack" aria-label="Refund requests">
+        <section className="stack" aria-label="Cash out requests">
           {refunds.map((item) => (
             <TodoCard key={key(item)} ctx={ctx} item={item} />
           ))}
@@ -716,13 +716,13 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
                   await ctx.reload();
                   toast(`${formatShortDate(h.startsAt, tz)} is showing`);
                 } catch (err) {
-                  toast(err instanceof ApiError ? err.message : "Couldn't show it.", 'error');
+                  toast(err instanceof ApiError ? err.message : "Couldn’t show it.", 'error');
                 } finally {
                   setBusy(false);
                 }
               }}
             >
-              Show this session
+              Show this game
             </button>
           </li>
         ))}

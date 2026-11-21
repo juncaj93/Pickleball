@@ -30,10 +30,10 @@ describe('tappable words in Telegram alerts', () => {
     // Direct link switched off (GO_LINKS off): the words stay, with no link.
     expect(shown(`Tuesday: 5 players in. Text the group to confirm: ${ADMIN}`)).toBe('Tuesday: 5 players in. Text the group to confirm');
     expect(shown(`Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`)).toBe(`Tuesday: only 3 players in. [Cancel court](${COURTRESERVE_CANCEL_URL})`);
-    expect(shown(`Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`)).toBe('Tuesday: court canceled? Now cancel the session and text everyone');
+    expect(shown(`Tuesday: court canceled? Now cancel the game and text everyone: ${ADMIN}`)).toBe('Tuesday: court canceled? Now cancel the game and text everyone');
     expect(shown(`Tonight: only 3 players in. Cancel court before 7:00 AM: ${COURTRESERVE_CANCEL_URL}`)).toBe(`Tonight: only 3 players in. [Cancel court before 7:00 AM](${COURTRESERVE_CANCEL_URL})`);
-    expect(shown(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`)).toBe(
-      `Thu Nov 26 opens at 7:00 AM (Thanksgiving). [Book](${COURTRESERVE_BOOKING_URL})\nThen set it to Booked`,
+    expect(shown(`Booking for Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`)).toBe(
+      `Booking for Thu Nov 26 opens at 7:00 AM (Thanksgiving). [Book](${COURTRESERVE_BOOKING_URL})\nThen set it to Booked`,
     );
     expect(shown(`Tonight: 5 in, no court yet. Check CourtReserve for an opening: ${COURTRESERVE_BOOKING_URL}`)).toBe(`Tonight: 5 in, no court yet. [Check CourtReserve for an opening](${COURTRESERVE_BOOKING_URL})`);
     expect(shown(`Thursday: finalize who played: ${ADMIN}`)).toBe('Thursday: finalize who played');

@@ -325,7 +325,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
 
   if (action === 'confirm' || action === 'reject') {
     if (!k || k.claim_cents === 0) throw new HttpError(409, 'nothing_waiting', `${name} has no I paid waiting. Look again.`);
-    if (shown !== null && shown !== k.claim_cents) throw new HttpError(409, 'amount_changed', `${name}'s I paid changed. Look again.`);
+    if (shown !== null && shown !== k.claim_cents) throw new HttpError(409, 'amount_changed', `${name}’s I paid changed. Look again.`);
     const answer =
       action === 'confirm'
         ? // SQLite reads every right-hand side from the row as it was: each CASE sees the old claim and the old place.
@@ -341,7 +341,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
             .bind(ctx.nowIso, k.id)
         : ctx.db.prepare(`UPDATE tournament_tickets SET claim_cents = 0, claim_at = NULL, updated_at = ?1 WHERE id = ?2 AND ${ticketAsRead(k)}`).bind(ctx.nowIso, k.id);
     const res = await ctx.db.batch([answer, ...back, ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
-    if ((res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', `${name}'s ticket just changed. Look again.`);
+    if ((res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', `${name}’s ticket just changed. Look again.`);
     const after = await ticketOf(ctx.db, t.id, playerId);
     // What came back as credit at once (the ticket was settled because they left, a cancel, or the night is over).
     const credited = after && after.credit_cents + after.paid_cents === 0 ? k.credit_cents + k.paid_cents + (action === 'confirm' ? k.claim_cents : 0) : 0;
@@ -385,7 +385,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
           )
           .bind(newId(), t.id, playerId, ctx.nowIso, price);
     const res = await ctx.db.batch([write, ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
-    if ((res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', `${name}'s ticket just changed. Look again.`);
+    if ((res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', `${name}’s ticket just changed. Look again.`);
     await audit(ctx.db, group.id, null, 'tournament_ticket_marked_paid', { tournament: t.name, player: name, playerId, amountCents: owed }, ctx.nowIso);
     return { ok: true, changed: true, ...answerOf(await ticketOf(ctx.db, t.id, playerId)) };
   }

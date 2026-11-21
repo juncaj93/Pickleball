@@ -160,8 +160,8 @@ async function main() {
       else if (f.long.noteRadius > 16 || f.long.noteBg === 'rgba(0, 0, 0, 0)') bad.push('long comment is not a tinted box');
       if (f.none.noteClass) bad.push('no comment, yet a note shows');
       if (f.rain && !/note-pill/.test(f.rain.stClass || '')) bad.push(`canceled reason "Rain" should be a pill: ${f.rain.stClass}`);
-      if (!f.tokens.noteBgOk || !f.tokens.noteColorOk) bad.push(`comment colors are not the site's accent tint/text: ${JSON.stringify(f.tokens)}`);
-      if (!f.tokens.flagBgOk || !f.tokens.flagColorOk) bad.push(`EXTRA tag colors are not the site's existing extra/holiday chip colors: ${JSON.stringify(f.tokens)}`);
+      if (!f.tokens.noteBgOk || !f.tokens.noteColorOk) bad.push(`comment colors are not the site’s accent tint/text: ${JSON.stringify(f.tokens)}`);
+      if (!f.tokens.flagBgOk || !f.tokens.flagColorOk) bad.push(`EXTRA tag colors are not the site’s existing extra/holiday chip colors: ${JSON.stringify(f.tokens)}`);
       if (nrm.flag || nrm.noteClass) bad.push(`a normal game shows an EXTRA tag or a note: ${JSON.stringify(nrm)}`);
       // The long canceled reason (20 characters, "Thanksgiving week") is a soft box.
       const tg = await a.page.evaluate(() => [...document.querySelectorAll('.st-canceled')].map((e) => [e.textContent.trim(), e.className]));
@@ -249,7 +249,7 @@ async function main() {
     if (last) {
       const q = last.getBoundingClientRect();
       const dr = d.getBoundingClientRect();
-      if (q.bottom > Math.min(dr.bottom, innerHeight) + 1) out.push(`last control "${(last.textContent || '').trim().slice(0, 20)}" below the sheet's bottom (${Math.round(q.bottom)} > ${Math.round(Math.min(dr.bottom, innerHeight))})`);
+      if (q.bottom > Math.min(dr.bottom, innerHeight) + 1) out.push(`last control "${(last.textContent || '').trim().slice(0, 20)}" below the sheet’s bottom (${Math.round(q.bottom)} > ${Math.round(Math.min(dr.bottom, innerHeight))})`);
     }
     return out;
   };
@@ -294,7 +294,7 @@ async function main() {
         const a = await openPlayer(who, l.width, l.scheme, l.pct);
         const card = a.page.locator(`#row-${sid}`);
         await card.scrollIntoViewIfNeeded();
-        await card.getByRole('button', { name: "I'm in" }).first().click();
+        await card.getByRole('button', { name: "I’m in" }).first().click();
         await a.page.locator('.pop').waitFor();
         await a.page.waitForTimeout(450);
         const probs = await a.page.evaluate(audit, { scope: '.pop', allowEllipsis: ELLIPSIS_OK });
@@ -334,8 +334,8 @@ async function main() {
           around: (document.body.innerText.match(/.{0,40}\$140.{0,20}/s) || [''])[0].replace(/\s+/g, ' '),
         }));
         // While waiting: either the name list is still up, or Ryan's own page is. Never the old name's page under the new cookie.
-        if (/\$140/.test(snap.text) || (snap.title === L.LONG && snap.cards > 0 && /Who are you/.test(snap.text))) seen.push(`old name's page showed: ${snap.title} ${/\$140/.test(snap.text) ? `($140 near "${snap.around}")` : ''}`);
-        if (snap.title === L.LONG && snap.cards > 0) seen.push('old name\'s cards still tappable after the switch');
+        if (/\$140/.test(snap.text) || (snap.title === L.LONG && snap.cards > 0 && /Who are you/.test(snap.text))) seen.push(`old name’s page showed: ${snap.title} ${/\$140/.test(snap.text) ? `($140 near "${snap.around}")` : ''}`);
+        if (snap.title === L.LONG && snap.cards > 0) seen.push('old name’s cards still tappable after the switch');
         await sleep(100);
       }
       slow = false;
@@ -352,7 +352,7 @@ async function main() {
       const ryanLeft = [];
       for (let i = 0; i < 24; i++) {
         const snap = await a.page.evaluate(() => ({ title: document.querySelector('header h1')?.textContent, cards: document.querySelectorAll('.schedule article').length }));
-        if (snap.title === 'Ryan' && snap.cards > 0) ryanLeft.push('Ryan\'s cards still tappable after switching to the other name');
+        if (snap.title === 'Ryan' && snap.cards > 0) ryanLeft.push('Ryan’s cards still tappable after switching to the other name');
         await sleep(100);
       }
       slow = false;
@@ -450,7 +450,7 @@ async function main() {
       await a.ctx.close();
       none(probs);
     });
-    for (const [rowName, what] of [['Edit game', 'Edit game sheet'], ['Players', 'Players sheet'], ['Cancel session', 'Cancel question']]) {
+    for (const [rowName, what] of [['Edit game', 'Edit game sheet'], ['Players', 'Players sheet'], ['Cancel game', 'Cancel question']]) {
       await check(`organizer ${what}, ${tag(l)}: whole, nothing cut off or overlapping, scrolls to its last button`, async () => {
         const a = await openAdmin(l.width, l.scheme, l.pct);
         const gear = (await gearBtn(a.page));

@@ -163,7 +163,7 @@ async function main() {
     const checkin = list.find((t) => t.id === 'checkin');
     assert(checkin, `no check-in: ${JSON.stringify(list)}`);
     const body = bodyOf(checkin.href);
-    assert(/^Pickleball (tomorrow|today|tonight|\w{3} \w{3} \d+), \d{1,2}:\d{2} (AM|PM)\. Can't make it\? Update here: \S+$/.test(body), `old words: ${body}`);
+    assert(/^Pickleball (tomorrow|today|tonight|\w{3} \w{3} \d+), \d{1,2}:\d{2} (AM|PM)\. Can’t make it\? Update here: \S+$/.test(body), `old words: ${body}`);
     assert(!body.includes('\n'), 'old words have line breaks');
     assert(/^sms:\+?\d/.test(checkin.href) || /^sms:\/\/open\?addresses=/.test(checkin.href), `old check-in goes to the numbers: ${checkin.href}`);
     assert(/Everyone signed up/.test(checkin.who), `who: ${checkin.who}`);
@@ -194,7 +194,7 @@ async function main() {
       assert(lines.length === 5 && lines[3] === '' && !lines[4].includes(' '), `lines: ${JSON.stringify(lines)}`);
       assert(/^Pickleball (tomorrow|today|tonight|\w{3} \w{3} \d+) @ \d{1,2}(:\d{2})?(am|pm)!$/.test(lines[0]), `first line: ${lines[0]}`);
       assert(lines[1] === '4 in so far. Want in? Join now.', `second line: ${lines[1]}`);
-      assert(lines[2] === 'Need to back out? Do it tonight to avoid cancel fees.', `third line: ${lines[2]}`);
+      assert(lines[2] === 'Need to drop out? Do it tonight to avoid cancel fees.', `third line: ${lines[2]}`);
       assert(!/[–—]/.test(body), 'a dash');
       assert(/^sms:&body=/.test(checkin.href), `a check-in must open with no recipients: ${checkin.href}`);
       assert(!checkin.href.includes('\n') && (checkin.href.match(/%0A/g) || []).length === 4, `line breaks must be %0A: ${checkin.href}`);
@@ -205,7 +205,7 @@ async function main() {
       const b = await openAdmin({ scheme, width, query: '?textsr2=on' });
       const need = (await textList(b.page, 'Two in')).find((t) => t.id === 'need');
       const nb = bodyOf(need.href).split('\n');
-      assert(nb[1] === '2 in, need 2 more.' && nb[2] === "Want in? Join tonight, otherwise we'll have to cancel." && nb[3] === '' && nb.length === 5, `need: ${JSON.stringify(nb)}`);
+      assert(nb[1] === '2 in, need 2 more.' && nb[2] === "Want in? Join tonight, otherwise we’ll have to cancel." && nb[3] === '' && nb.length === 5, `need: ${JSON.stringify(nb)}`);
       assert(/^sms:&body=/.test(need.href), 'need players has recipients');
       await b.ctx.close();
     });
@@ -222,7 +222,7 @@ async function main() {
   await check('another phone (no private link) still sees the old words', async () => {
     const { ctx, page } = await openAdmin();
     const checkin = (await textList(page, 'Four in')).find((t) => t.id === 'checkin');
-    assert(/Can't make it\?/.test(bodyOf(checkin.href)), `body: ${bodyOf(checkin.href)}`);
+    assert(/Can’t make it\?/.test(bodyOf(checkin.href)), `body: ${bodyOf(checkin.href)}`);
     await ctx.close();
   });
 
@@ -259,13 +259,13 @@ async function main() {
 
   await check('/admin?textsr2=on, a game canceled well ahead: the credit text says tomorrow or the date, with line breaks', async () => {
     const { ctx, page } = await openAdmin({ query: '?textsr2=on' });
-    await gearPick(page, 'Two in', /Cancel session/);
+    await gearPick(page, 'Two in', /Cancel game/);
     await page.locator('dialog[open] input[type="text"]').first().fill('Thanksgiving');
-    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
     const box = page.locator('dialog[open], .sheet').filter({ hasText: 'Text the players who were in' }).first();
     await box.waitFor({ timeout: 8000 });
     const draft = await box.locator('.bubble').first().innerText();
-    assert(/^Pickleball (tomorrow|today|tonight|\w{3} \w{3} \d+) is canceled\. Thanksgiving\.\nIf you paid, it's now your credit\. You can request a cash out on the site\.\n\n\S+$/.test(draft), `credit text: ${JSON.stringify(draft)}`);
+    assert(/^Pickleball (tomorrow|today|tonight|\w{3} \w{3} \d+) is canceled\. Thanksgiving\.\nIf you paid, it’s now your credit\. You can request a cash out on the site\.\n\n\S+$/.test(draft), `credit text: ${JSON.stringify(draft)}`);
     const href = await box.getByRole('link', { name: 'Text the players who were in' }).getAttribute('href');
     assert(/%0A%0A/.test(href), `link: ${href}`);
     await ctx.close();
@@ -285,11 +285,11 @@ async function main() {
   await check('off: the venue question starts with nothing picked (as it always did); confirming asks to pick', async () => {
     const id = await lateGame('Off sheet');
     const { ctx, page } = await openAdmin({ query: '?latefees=on' });
-    await gearPick(page, 'Off sheet', /Cancel session/);
+    await gearPick(page, 'Off sheet', /Cancel game/);
     const t = await dialogText(page);
     assert(/Did the venue waive the fee or give you credit toward the next booking\?/.test(t), `sheet: ${t}`);
     assert((await page.locator('dialog[open] [data-venue-waived] button[aria-pressed="true"]').count()) === 0, 'a default is picked with the switch off');
-    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
     await page.locator('dialog[open] .field-error', { hasText: 'Pick Yes or No.' }).waitFor({ timeout: 4000 });
     await ctx.close();
     assert((await dash()).sessions.find((s) => s.id === id).state.flags.canceled === false, 'canceled without an answer');
@@ -304,7 +304,7 @@ async function main() {
       const id = await lateGame(note);
       const { ctx, page } = await openAdmin({ scheme, width, query: '?latefees=on&textsr2=on' });
       await page.evaluate((x) => (window.__layoutW = x), width);
-      await gearPick(page, note, /Cancel session/);
+      await gearPick(page, note, /Cancel game/);
       const t = await dialogText(page);
       assert(/Did the venue waive the fee or give you credit toward the next booking\?/.test(t), `sheet: ${t}`);
       assert((await page.locator('dialog[open] [data-venue-waived] button[aria-pressed="true"]').count()) === 1, 'nothing picked');
@@ -312,15 +312,15 @@ async function main() {
       assert(/No: the fee is kept, and everyone signed up still owes their \$14/.test(t), `hint: ${t}`);
       await noSideScroll(page, 'cancel sheet');
       await page.locator('dialog[open] input[type="text"]').first().fill('Rain');
-      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
       const after = page.locator('[data-late-cancel="fee_kept"]');
       await after.waitFor({ timeout: 8000 });
       const body = await after.locator('[data-draft="canceled_fee_kept"] textarea').inputValue();
       const lines = body.split('\n');
       assert(lines.length === 5 && lines[3] === '', `lines: ${JSON.stringify(lines)}`);
-      assert(lines[0] === "Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. Rain.", `line 1: ${lines[0]}`);
-      assert(lines[1] === "If you were signed up, your $14 share still applies (if you already paid, you're all set).", `line 2: ${lines[1]}`);
-      assert(lines[2] === 'Sorry about that! You can pay on the site:' && !lines[4].includes(' '), `lines: ${JSON.stringify(lines)}`);
+      assert(lines[0] === 'Today’s game is canceled. It’s inside 12 hours, so the venue charges us. Rain.', `line 1: ${lines[0]}`);
+      assert(lines[1] === "If you were signed up, your $14 share still applies (if you already paid, you’re all set).", `line 2: ${lines[1]}`);
+      assert(lines[2] === 'You can pay on the site:' && !lines[4].includes(' '), `lines: ${JSON.stringify(lines)}`);
       const href = await after.locator('[data-draft="canceled_fee_kept"] [data-draft-open]').getAttribute('href');
       assert(/%0A%0A/.test(href) && !href.includes('\n'), `Messages link: ${href}`);
       await noSideScroll(page, 'after-cancel sheet');
@@ -336,15 +336,15 @@ async function main() {
   await check('/admin?textsr2=on: picking Yes still works exactly as before: everyone gets credit, nobody owes, and the credit text names the day and the reason', async () => {
     const id = await lateGame('Yes sheet');
     const { ctx, page } = await openAdmin({ query: '?latefees=on&textsr2=on' });
-    await gearPick(page, 'Yes sheet', /Cancel session/);
+    await gearPick(page, 'Yes sheet', /Cancel game/);
     await page.locator('dialog[open] [data-venue-waived]').getByRole('button', { name: 'Yes' }).click();
     assert((await page.locator('dialog[open] [data-venue-waived] button[aria-pressed="true"]').innerText()) === 'Yes', 'Yes did not take');
     await page.locator('dialog[open] input[type="text"]').first().fill('Venue closed');
-    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
     const after = page.locator('[data-late-cancel="waived"]');
     await after.waitFor({ timeout: 8000 });
     const body = await after.locator('[data-draft="canceled_today"] textarea').inputValue();
-    assert(/^Pickleball (today|tonight) is canceled\. Venue closed\.\nIf you paid, it's now your credit\. You can request a cash out on the site\.\n\n\S+$/.test(body), `Yes text: ${JSON.stringify(body)}`);
+    assert(/^Pickleball (today|tonight) is canceled\. Venue closed\.\nIf you paid, it’s now your credit\. You can request a cash out on the site\.\n\n\S+$/.test(body), `Yes text: ${JSON.stringify(body)}`);
     await ctx.close();
     const s = (await dash()).sessions.find((x) => x.id === id);
     assert(s.state.flags.canceled && s.canceledBy !== 'organizer_fee_kept', `session: ${s.canceledBy}`);

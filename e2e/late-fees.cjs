@@ -142,7 +142,7 @@ async function main() {
       const { ctx, page } = await open('Ryan', { scheme, width, query: '?latefees=on' });
       await row(page, A).getByRole('button', { name: 'Drop out' }).click();
       const t = await dialogText(page);
-      assert(/It's past the \d{1,2}:\d{2} (AM|PM) cancel-by\. If no one takes your spot, you still owe \$14\./.test(t), `dialog: ${t}`);
+      assert(/It’s past the \d{1,2}:\d{2} (AM|PM) cancel-by\. If no one takes your spot, you still owe \$14\./.test(t), `dialog: ${t}`);
       await noSideScroll(page, 'dialog');
       await page.keyboard.press('Escape');
       await ctx.close();
@@ -154,7 +154,7 @@ async function main() {
     await row(page, A).getByRole('button', { name: 'Drop out' }).click();
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
     const toast = squash(await page.locator('.toast-msg').first().innerText());
-    assert(toast === "You're out. You owe $14 unless someone takes your spot.", `banner: ${toast}`);
+    assert(toast === "You’re out. You owe $14 unless someone takes your spot.", `banner: ${toast}`);
     // The held drop goes out after the 5-second Undo.
     await page.waitForTimeout(6500);
     await page.reload();
@@ -264,8 +264,8 @@ async function main() {
     assert(r.ok(), `add game: ${await r.text()}`);
     return (await r.json()).id;
   };
-  const A_TEXT = "Hey guys, sorry, I have to back out of today's game. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!";
-  const B_TEXT = "Hey guys, sorry, I have to back out of today's game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!";
+  const A_TEXT = "Hey guys, sorry, I have to back out of today’s game. I canceled the court, so you can still book the same slot as non-members. It’s only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!";
+  const B_TEXT = "Hey guys, sorry, I have to back out of today’s game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!";
   /** Open the gear menu of the card that holds `who`, and pick the menu item `name`. */
   async function gearPick(page, who, name) {
     const gear = page.getByRole('button', { name: /^Game menu for / }).filter({ visible: true });
@@ -297,25 +297,25 @@ async function main() {
   for (const [scheme, width, who] of lateCancels) {
     await check(`${scheme} ${width}px: cancel inside 12 hours asks "Did the venue waive the fee or give you credit toward the next booking?" (nothing picked); No opens the "Heads up" text to the players who were in, and Text the players with "Court canceled" picked`, async () => {
       const { ctx, page } = await openAdmin({ scheme, width, query: '?latefees=on&adminr2=off&adminv2=off' });
-      await gearPick(page, `Cancel test ${who}`, /Cancel session/);
+      await gearPick(page, `Cancel test ${who}`, /Cancel game/);
       const t = await dialogText(page);
       assert(/Did the venue waive the fee or give you credit toward the next booking\?/.test(t) && !/Were you charged/.test(t), `sheet: ${t}`);
       assert((await page.locator('dialog[open] [data-venue-waived] button[aria-pressed="true"]').count()) === 0, 'a default is picked');
       await noSideScroll(page, 'cancel sheet');
       // Confirming with no answer is refused on the sheet itself.
-      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
       await page.locator('dialog[open] .field-error', { hasText: 'Pick Yes or No.' }).waitFor({ timeout: 4000 });
       await page.locator('dialog[open] [data-venue-waived]').getByRole('button', { name: 'No' }).click();
-      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
       const after = page.locator('[data-late-cancel="fee_kept"]');
       await after.waitFor({ timeout: 8000 });
       const body = await after.locator('[data-draft="canceled_fee_kept"] textarea').inputValue();
-      assert(/^Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court\. If you were signed up, your \$14 share still applies \(if you already paid, you're all set\)\. You can pay on the site: \S+\. Sorry about that!$/.test(body), `No text: ${body}`);
+      assert(/^Today’s game is canceled\. It’s inside 12 hours, so the venue charges us\. If you were signed up, your \$14 share still applies \(if you already paid, you’re all set\)\. You can pay on the site: \S+$/.test(body), `No text: ${body}`);
       assert(!/credit|tomorrow/.test(body), `No text mentions credit: ${body}`);
       const head = squash(await after.locator('[data-draft="canceled_fee_kept"] .draft-head').innerText());
       assert(/The players who were in · 2/.test(head), `who: ${head}`);
       const href = await after.locator('[data-draft="canceled_fee_kept"] [data-draft-open]').getAttribute('href');
-      assert(/^sms:/.test(href) && /Heads%20up|Heads up/.test(href), `Messages link: ${href}`);
+      assert(/^sms:/.test(href) && /Today%E2%80%99s%20game%20is%20canceled|Today’s game is canceled/.test(href), `Messages link: ${href}`);
       // Text the players: Court canceled first and picked.
       assert((await after.locator('[data-pick="court_canceled"][aria-pressed="true"]').count()) === 1, 'Court canceled not picked');
       assert((await after.locator('[data-players-text] textarea').inputValue()) === A_TEXT, 'A text');
@@ -372,7 +372,7 @@ async function main() {
       const n = page.locator('[data-fee-notice="sub"]');
       await n.waitFor({ timeout: 8000 });
       const t = squash(await n.innerText());
-      assert(/^Good news: someone took your spot for \w{3}, \w{3} \d+\. You no longer owe \$14\. Dismiss$/.test(t), `notice: ${t}`);
+      assert(/^Someone took your spot for \w{3}, \w{3} \d+\. You no longer owe \$14\. Dismiss$/.test(t), `notice: ${t}`);
       await noSideScroll(page, 'notice');
       await page.reload();
       await n.waitFor({ timeout: 8000 });

@@ -15,9 +15,9 @@ export async function loadSandbox(): Promise<Sandbox> {
     // Zip 18 (server/zip18.ts): the switch rows and the on/off settings the backup leaves out, so the copy shows what players see.
     fetch('/api/admin/demo-extras', { credentials: 'same-origin' }),
   ]);
-  if (!res.ok) throw new Error(res.status === 401 ? 'Sign in again to use the demo.' : "Couldn't start the demo.");
+  if (!res.ok) throw new Error(res.status === 401 ? 'Sign in again to use the demo.' : "Couldn’t start the demo.");
   // A server from before Zip 18 (a rollback) has no such address: the copy starts as it always did, without them.
-  if (!more.ok && more.status !== 404) throw new Error(more.status === 401 ? 'Sign in again to use the demo.' : "Couldn't start the demo.");
+  if (!more.ok && more.status !== 404) throw new Error(more.status === 401 ? 'Sign in again to use the demo.' : "Couldn’t start the demo.");
   const extras = more.ok ? ((await more.json()) as DemoExtras) : null;
   const migrations = Object.keys(migrationFiles)
     .sort()

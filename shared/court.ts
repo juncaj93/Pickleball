@@ -44,7 +44,7 @@ export function courtSwitchOf(s: { bookingStatus: BookingStatus; courtState: Cou
 }
 
 export function courtStatus(s: CourtInput, tz = 'America/Detroit'): CourtStatus {
-  if (s.canceled && s.courtState === 'not_opened') return off("Court didn't open");
+  if (s.canceled && s.courtState === 'not_opened') return off("Court didn’t open");
   if (s.canceled) return off('Canceled');
   if (s.past) return off('Played');
   if (s.bookingStatus === 'booked') return { kind: 'booked', text: 'Court booked', playerText: 'Court booked' };

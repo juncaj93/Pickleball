@@ -86,15 +86,15 @@ describe('the rule: ROUND UP(cost / N) each for everyone but Alex, never more th
 describe('the alert words', () => {
   const at = (iso: string) => Date.parse(iso);
   it('tonight, yesterday, else the date', () => {
-    expect(gameWhenWords('2026-11-13T00:00:00Z', at('2026-11-13T03:30:00Z'), TZ)).toBe("tonight's game"); // Thu 7 PM, Thu 10:30 PM
-    expect(gameWhenWords('2026-11-13T00:00:00Z', at('2026-11-13T15:00:00Z'), TZ)).toBe("yesterday's game"); // Fri 10 AM
+    expect(gameWhenWords('2026-11-13T00:00:00Z', at('2026-11-13T03:30:00Z'), TZ)).toBe("tonight’s game"); // Thu 7 PM, Thu 10:30 PM
+    expect(gameWhenWords('2026-11-13T00:00:00Z', at('2026-11-13T15:00:00Z'), TZ)).toBe("yesterday’s game"); // Fri 10 AM
     expect(gameWhenWords('2026-11-11T00:00:00Z', at('2026-11-13T15:00:00Z'), TZ)).toBe('the Nov 10 game');
   });
   it('one game, two games (one combined alert), credit full and part', () => {
     const now = at('2026-11-13T15:00:00Z');
     const one = extAlerts([{ sessionId: 'a', startsAt: '2026-11-13T00:00:00Z', minutes: 30, shareCents: 300, creditCents: 0, owedCents: 300, seen: false }], now, TZ);
     expect(one).toHaveLength(1);
-    expect(one[0].text.before + one[0].text.amount + one[0].text.after).toBe("You owe $3 for yesterday's extra 30 min. It's added to your next game.");
+    expect(one[0].text.before + one[0].text.amount + one[0].text.after).toBe("You owe $3 for yesterday’s extra 30 min. It’s added to your next game.");
     const two = extAlerts(
       [
         { sessionId: 'a', startsAt: '2026-11-11T00:00:00Z', minutes: 30, shareCents: 200, creditCents: 0, owedCents: 200, seen: true },
@@ -104,13 +104,13 @@ describe('the alert words', () => {
       TZ,
     );
     expect(two).toHaveLength(1);
-    expect(two[0].text.before + two[0].text.amount + two[0].text.after).toBe("You owe $5 for extra time on past games. It's added to your next game.");
+    expect(two[0].text.before + two[0].text.amount + two[0].text.after).toBe("You owe $5 for extra time on past games. It’s added to your next game.");
     // Both closed: nothing.
     expect(extAlerts([{ sessionId: 'a', startsAt: '2026-11-13T00:00:00Z', minutes: 30, shareCents: 300, creditCents: 0, owedCents: 300, seen: true }], now, TZ)).toHaveLength(0);
     const full = extAlerts([{ sessionId: 'a', startsAt: '2026-11-13T00:00:00Z', minutes: 30, shareCents: 300, creditCents: 300, owedCents: 0, seen: false }], now, TZ);
-    expect(full[0].text.before + full[0].text.amount + full[0].text.after).toBe("Your $3 credit was used for yesterday's extra 30 min.");
+    expect(full[0].text.before + full[0].text.amount + full[0].text.after).toBe("Your $3 credit was used for yesterday’s extra 30 min.");
     const part = extAlerts([{ sessionId: 'a', startsAt: '2026-11-13T00:00:00Z', minutes: 30, shareCents: 300, creditCents: 200, owedCents: 100, seen: false }], now, TZ);
-    expect(part[0].text.before + part[0].text.amount + part[0].text.after).toBe("$2 of your credit was used for yesterday's extra 30 min. You owe $1 more, added to your next game.");
+    expect(part[0].text.before + part[0].text.amount + part[0].text.after).toBe("$2 of your credit was used for yesterday’s extra 30 min. You owe $1 more, added to your next game.");
   });
 });
 
@@ -372,8 +372,8 @@ describe("Alex's edge-case decisions", () => {
     expect(seat(w, s, 'Blair')).toMatchObject({ ext_cents: 300, ext_paid_cents: 600, ext_credit_cents: -300 });
     expect(pot(w, 'Blair')).toBe(300); // $3 more than the new share, as credit
     const lines = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.map((e: any) => activityText(e, TZ, 'Alex'));
-    expect(lines.some((l: string) => /Blair's extra time share went from \$6 to \$0/.test(l))).toBe(true);
-    expect(lines.some((l: string) => /Blair's extra time share set to \$3/.test(l))).toBe(true);
+    expect(lines.some((l: string) => /Blair’s extra time share went from \$6 to \$0/.test(l))).toBe(true);
+    expect(lines.some((l: string) => /Blair’s extra time share set to \$3/.test(l))).toBe(true);
     // Totals: collected counts $3 (cash $6 minus $3 back as credit).
     const m = await month(w, s);
     expect(m.sessions.find((x: any) => x.id === s.id).extraCollectedCents).toBe(300);
@@ -447,7 +447,7 @@ describe("Alex's edge-case decisions", () => {
     expect(alerts.map((x) => x.kind)).toEqual(['owe']);
     // One combined alert with the total of both games.
     expect(alerts[0].cents).toBe(g.extension.owedCents);
-    expect(alerts[0].text.after).toBe(" for extra time on past games. It's added to your next game.");
+    expect(alerts[0].text.after).toBe(" for extra time on past games. It’s added to your next game.");
   });
 
   it('the organizer never pays a share and never uses credit for one', async () => {
@@ -462,7 +462,7 @@ describe("Alex's edge-case decisions", () => {
   it('the history lines are plain', () => {
     const e = (action: string, details: Record<string, unknown>) => activityText({ id: 'x', action, details, actorLabel: 'organizer', createdAt: '2026-11-13T03:00:00Z', sessionId: 's', sessionStartsAt: '2026-11-13T00:00:00Z' } as any, TZ, 'Alex');
     expect(e('extension_set', { minutes: 30, costCents: 1200, shareCents: 300, payers: 3, organizerCents: 300 })).toBe('Alex added 30 min of extra time for Thu, Nov 12: $12 court, 3 pay $3 each, you cover $3');
-    expect(e('extension_share', { player: 'Blair', fromCents: 600, toCents: 300, backCents: 300, creditUsedCents: 0 })).toBe("Blair's extra time share went from $6 to $3 for Thu, Nov 12, $3 back as credit");
+    expect(e('extension_share', { player: 'Blair', fromCents: 600, toCents: 300, backCents: 300, creditUsedCents: 0 })).toBe("Blair’s extra time share went from $6 to $3 for Thu, Nov 12, $3 back as credit");
   });
 });
 

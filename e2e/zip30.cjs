@@ -260,8 +260,8 @@ async function main() {
     if (await seg.count()) await seg.first().click();
     await page.waitForTimeout(700);
     const lines = await page.locator('.a-text').allInnerTexts();
-    const harper = lines.filter((l) => /^Harper said I'm in/.test(l));
-    assert(harper.length === 1 && / \(from Casey's phone\)$/.test(harper[0]), `Harper's line: ${JSON.stringify(harper)}`);
+    const harper = lines.filter((l) => /^Harper said I’m in/.test(l));
+    assert(harper.length === 1 && / \(from Casey’s phone\)$/.test(harper[0]), `Harper's line: ${JSON.stringify(harper)}`);
     assert(lines.filter((l) => /^Casey /.test(l)).every((l) => !/from .* phone/.test(l)), 'a Casey line has a note');
     await ctx.close();
   });
@@ -364,7 +364,7 @@ async function main() {
     assert(rows.includes('Blake signed up for Drew'), `card rows: ${JSON.stringify(rows)}`);
     const hist = (await (await org.get(`${BASE}/api/admin/activity`)).json()).entries;
     const drew = hist.find((e) => e.actorLabel === 'Drew' && e.action === 'player_join');
-    assert(drew?.from === "from Blake's phone", `Drew's line: ${JSON.stringify(drew)}`);
+    assert(drew?.from === "from Blake’s phone", `Drew's line: ${JSON.stringify(drew)}`);
     // And on the admin screen itself.
     const A2 = await openAdmin();
     const c = await cardOf(A2.page);
@@ -490,7 +490,7 @@ async function main() {
   };
   // The longest real names and words, and an older day's time ("Mon 10:45 PM").
   const LONG = [
-    { id: 'x1', at: '2026-11-09T14:58:00.000Z', by: 'Christopher Vanderberg', verb: 'took back a refund request', name: 'Christopher Vanderberg' },
+    { id: 'x1', at: '2026-11-09T14:58:00.000Z', by: 'Christopher Vanderberg', verb: 'took back a cash out request', name: 'Christopher Vanderberg' },
     { id: 'x2', at: '2026-11-09T03:45:00.000Z', by: null, verb: 'used cash-out credit', name: 'Christopher Vanderberg' },
     { id: 'x3', at: '2026-11-08T02:05:00.000Z', by: 'Organizer Orla', verb: 'unmarked paid', name: 'Morgan' },
     { id: 'x4', at: '2026-11-07T02:05:00.000Z', by: 'Avery', verb: 'signed up', name: 'Blake' },

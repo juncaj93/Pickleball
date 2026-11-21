@@ -322,12 +322,12 @@ export function playerDay(iso: string, tz: string, nowMs: number): PlayerDay {
   const n = localParts(nowMs, tz);
   const num = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day) / DAY_MS;
   const gap = num(g) - num(n);
-  if (gap === 0) return { word: 'tonight', waitlistOf: "tonight's", isDate: false };
-  if (gap === 1) return { word: 'tomorrow', waitlistOf: "tomorrow's", isDate: false };
+  if (gap === 0) return { word: 'tonight', waitlistOf: "tonight’s", isDate: false };
+  if (gap === 1) return { word: 'tomorrow', waitlistOf: "tomorrow’s", isDate: false };
   const weeks = gap > 1 ? (weekStart(iso, tz) - weekStart(nowMs, tz)) / 7 : NaN;
   const weekday = formatWeekday(iso, tz);
-  if (weeks === 0) return { word: `this ${weekday}`, waitlistOf: `this ${weekday}'s`, isDate: false };
-  if (weeks === 1) return { word: `next ${weekday}`, waitlistOf: `next ${weekday}'s`, isDate: false };
+  if (weeks === 0) return { word: `this ${weekday}`, waitlistOf: `this ${weekday}’s`, isDate: false };
+  if (weeks === 1) return { word: `next ${weekday}`, waitlistOf: `next ${weekday}’s`, isDate: false };
   return { word: formatShortDate(iso, tz), waitlistOf: `the ${formatMonthDay(iso, tz)}`, isDate: true };
 }
 
@@ -342,10 +342,10 @@ export function suggestDay(iso: string, tz: string, nowMs: number): PlayerDay {
   const num = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day) / DAY_MS;
   const gap = Math.round(num(g) - num(n));
   const weekday = formatWeekday(iso, tz);
-  if (gap === 0) return { word: 'tonight', waitlistOf: "tonight's", isDate: false };
-  if (gap === 1) return { word: 'tomorrow', waitlistOf: "tomorrow's", isDate: false };
-  if (gap >= 2 && gap <= 6) return { word: weekday, waitlistOf: `${weekday}'s`, isDate: false };
-  if (gap >= 7 && gap <= 13) return { word: `next ${weekday}`, waitlistOf: `next ${weekday}'s`, isDate: false };
+  if (gap === 0) return { word: 'tonight', waitlistOf: "tonight’s", isDate: false };
+  if (gap === 1) return { word: 'tomorrow', waitlistOf: "tomorrow’s", isDate: false };
+  if (gap >= 2 && gap <= 6) return { word: weekday, waitlistOf: `${weekday}’s`, isDate: false };
+  if (gap >= 7 && gap <= 13) return { word: `next ${weekday}`, waitlistOf: `next ${weekday}’s`, isDate: false };
   return { word: formatShortDate(iso, tz), waitlistOf: `the ${formatMonthDay(iso, tz)}`, isDate: true };
 }
 
@@ -360,8 +360,8 @@ export function wantInTitle(iso: string, tz: string, nowMs: number, waitlist: bo
 export function wantInSubline(confirmedCount: number, maxPlayers: number): string {
   if (confirmedCount <= 0) return '';
   if (confirmedCount < 4) return `Needs ${4 - confirmedCount} more to play`;
-  if (confirmedCount >= maxPlayers) return `${confirmedCount} are in. You'd be on the waitlist.`;
-  return `${confirmedCount} are in. You'd make it ${confirmedCount + 1}.`;
+  if (confirmedCount >= maxPlayers) return `${confirmedCount} are in. You’d be on the waitlist.`;
+  return `${confirmedCount} are in. You’d make it ${confirmedCount + 1}.`;
 }
 
 // ---------- Cancel-by (organizer screens) ----------

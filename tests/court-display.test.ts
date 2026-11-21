@@ -85,10 +85,10 @@ describe('(a) no words about waiting on a game with no court', () => {
   });
   it('the button says I\'m in to join and You\'re in with Drop out once joined, never Join standby', async () => {
     const { ctx, waitlisted } = await scene();
-    expect(card(await shown(ctx, 'Devon'), waitlisted.id)).toMatch(/I'm in/);
+    expect(card(await shown(ctx, 'Devon'), waitlisted.id)).toMatch(/I’m in/);
     await post(ctx, 'Devon', `/api/sessions/${waitlisted.id}/join`);
     const text = card(await shown(ctx, 'Devon'), waitlisted.id);
-    expect(text).toContain("You're in");
+    expect(text).toContain("You’re in");
     expect(text).toContain('Drop out');
     expect(text).not.toMatch(/Join standby|Leave standby|in line/i);
   });
@@ -104,7 +104,7 @@ describe('(b) to (e) no money prompts until a court is booked', () => {
     expect(g.payDue.some((o) => o.sessionId === noCourt.id)).toBe(false);
     const text = card(g, noCourt.id);
     expect(text).not.toMatch(PAY);
-    expect(text).toContain("You're in");
+    expect(text).toContain("You’re in");
     expect(text).toContain('Drop out');
   });
   it('(c) no court + already paid: still paid, and says so', async () => {
@@ -158,27 +158,27 @@ describe('(f) dropping out and joining again on a game with no court', () => {
     const join = async () => (await post(ctx, 'Emery', `/api/sessions/${id}/join`)).data;
     const res = await join();
     expect(res.result).toBe('confirmed'); // a court on Waitlist is just Not booked: a real seat
-    expect(joinedText(res, true)).toBe("You're in");
-    expect(card(await shown(ctx, 'Emery'), id)).toMatch(/You're in.*Drop out/);
+    expect(joinedText(res, true)).toBe("You’re in");
+    expect(card(await shown(ctx, 'Emery'), id)).toMatch(/You’re in.*Drop out/);
     expect((await post(ctx, 'Emery', `/api/sessions/${id}/withdraw`)).status).toBe(200);
     let text = card(await shown(ctx, 'Emery'), id);
-    expect(text).toMatch(/I'm in/);
+    expect(text).toMatch(/I’m in/);
     expect(text).not.toMatch(FORBIDDEN);
     expect(text).not.toContain('Drop out');
     const again = await join();
-    expect(joinedText(again, true)).toBe("You're in");
+    expect(joinedText(again, true)).toBe("You’re in");
     text = card(await shown(ctx, 'Emery'), id);
-    expect(text).toMatch(/You're in.*Drop out/);
+    expect(text).toMatch(/You’re in.*Drop out/);
     expect(text).not.toMatch(FORBIDDEN);
   });
   it('on a game that is not on any list the same words work, and a booked, full game keeps its waitlist words', async () => {
     const { ctx, noCourt, booked } = await scene();
-    expect(joinedText({ result: 'confirmed' }, true)).toBe("You're in");
-    expect(joinedText({ result: 'standby', position: 2 }, false)).toBe("You're on standby, #2");
-    expect(joinedText({ result: 'waitlisted', position: 1 }, false)).toBe("You're #1 on the waitlist");
+    expect(joinedText({ result: 'confirmed' }, true)).toBe("You’re in");
+    expect(joinedText({ result: 'standby', position: 2 }, false)).toBe("You’re 2nd on standby");
+    expect(joinedText({ result: 'waitlisted', position: 1 }, false)).toBe("You’re 1st on the waitlist");
     // A really full game with no court booked has a real waitlist too: the banner says so, not "You're in".
-    expect(joinedText({ result: 'waitlisted', position: 1 }, true)).toBe("You're #1 on the waitlist");
-    expect(card(await shown(ctx, 'Devon'), noCourt.id)).toMatch(/I'm in/);
+    expect(joinedText({ result: 'waitlisted', position: 1 }, true)).toBe("You’re 1st on the waitlist");
+    expect(card(await shown(ctx, 'Devon'), noCourt.id)).toMatch(/I’m in/);
     // A booked game that is full still says waitlist.
     const max = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.group.settings.maxPlayers;
     expect(max).toBeGreaterThanOrEqual(4);
@@ -223,7 +223,7 @@ describe('drop and rejoin with credit, on every kind of court', () => {
     expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/join`)).data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
     expect(await pot(s.ctx, 'Devon')).toBe(0);
     const text = card(await shown(s.ctx, 'Devon'), id);
-    expect(text).toContain("You're in");
+    expect(text).toContain("You’re in");
     expect(text).toContain('Paid with credit');
     // The old line "credit goes on once the court is booked" is gone: there is nothing left waiting.
     expect(text).not.toMatch(/once the court is booked|goes on this game/);

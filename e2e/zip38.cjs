@@ -498,7 +498,7 @@ async function main() {
     const joinable = page.locator('article.sched:has([data-join])');
     const three = joinable.filter({ has: page.locator('.dots .xorn:not(.xempty):nth-child(3)') }).filter({ hasNot: page.locator('.dots .xorn:not(.xempty):nth-child(4)') });
     const card = (await three.count()) > 0 ? three.first() : joinable.first();
-    await watch(() => card.locator('[data-join]').tap(), "I'm in");
+    await watch(() => card.locator('[data-join]').tap(), "I’m in");
     await sleep(600);
     assert((await page.locator('.xorn[data-moment]').count()) === 0, 'cleared after I\'m in too');
     assert(page.errors.length === 0, page.errors.join(' | '));

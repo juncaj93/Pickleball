@@ -475,7 +475,7 @@ export async function playerAwardsFor(ctx: Ctx, group: GroupRow, playerId: strin
     out.congrats =
       mine.award === 'champion'
         ? { key: `won:${t.id}`, tournamentId: t.id, title: `You won ${t.name}`, sub: money ? `${money}, plus a medal next to your name.` : 'A medal next to your name.' }
-        : { key: `second:${t.id}`, tournamentId: t.id, title: `Second place, ${t.name}`, sub: money ? `${money}.` : 'Great playing.' };
+        : { key: `second:${t.id}`, tournamentId: t.id, title: `Second place, ${t.name}`, sub: money ? `${money}.` : '' };
   }
   if (Object.keys(medals).length) out.medals = medals;
   return Object.keys(out).length ? out : null;

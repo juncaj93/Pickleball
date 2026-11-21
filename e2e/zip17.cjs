@@ -182,7 +182,7 @@ async function main() {
       const t0 = Date.now();
       assert((await page.locator('dialog.sheet[open]').count()) === 0, 'a pop-up opened');
       const text = await toast.innerText();
-      assert(/You're in!/.test(text) && /Please pay the \$28 you still owe for your 2 previous games\./.test(text), `toast «${text}»`);
+      assert(/You’re in!/.test(text) && /Please pay the \$28 you still owe for your 2 previous games\./.test(text), `toast «${text}»`);
       assert((await toast.locator('.toast-action').innerText()).trim() === 'Pay', 'no Pay in the toast');
       const after = await groupOf(ctx);
       assert(after.sessions.find((s) => s.id === target.id).mine?.status === 'confirmed', 'not signed up');
@@ -259,7 +259,7 @@ async function main() {
         const title = await page.locator('dialog.sheet[open] h2').first().innerText();
         assert(title === 'You owe $42', `title «${title}»`);
         const line = await sheet.locator('.nudge-line').innerText();
-        assert(line === "For your last 3 games. Once it's paid, you can sign up again.", `line «${line}»`);
+        assert(line === "For your last 3 games. Once it’s paid, you can sign up again.", `line «${line}»`);
         const pay = sheet.locator('[data-nudge-pay]');
         const later = sheet.locator('[data-nudge-later]');
         assert((await pay.innerText()).trim() === 'Pay $42' && (await later.innerText()).trim() === 'Not now', 'buttons');
@@ -288,7 +288,7 @@ async function main() {
     const r = await post(ctx.request, `/api/sessions/${target.id}/join`, {});
     assert(r.status() === 409, `status ${r.status()}`);
     const body = await r.json();
-    assert(body.error === 'unpaid_limit' && body.message === "You owe $42 for your last 3 games. Once it's paid, you can sign up again.", JSON.stringify(body));
+    assert(body.error === 'unpaid_limit' && body.message === "You owe $42 for your last 3 games. Once it’s paid, you can sign up again.", JSON.stringify(body));
     await ctx.close();
   });
 

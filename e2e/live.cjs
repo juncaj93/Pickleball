@@ -215,7 +215,7 @@ async function main() {
   await check('my tap that makes the 4th: banner says "Game on!" with the pickleball; the card gets no new text', async () => {
     const { ctx, page } = await open('Ryan');
     const cardBefore = squash(await card(page, 0).innerText());
-    await card(page, 0).getByRole('button', { name: "I'm in" }).click();
+    await card(page, 0).getByRole('button', { name: "I’m in" }).click();
     await banner(page).waitFor();
     assert((await bannerText(page)) === 'Game on!', await bannerText(page));
     assert((await banner(page).locator('.ball').count()) === 1, 'no pickleball in the banner');
@@ -322,7 +322,7 @@ async function main() {
   await check('in no games: "You\'re not in any games yet", the switch stays, the link goes back to all games', async () => {
     const { ctx, page } = await open('Pia');
     await page.locator('.filter-toggle').click();
-    await page.getByText("You're not in any games yet").waitFor();
+    await page.getByText("You’re not in any games yet").waitFor();
     assert((await page.locator('.filter-toggle').count()) === 1, 'switch gone');
     const box = await page.locator('.filter-toggle').boundingBox();
     assert(box.height >= 20, 'switch collapsed');
@@ -349,7 +349,7 @@ async function main() {
       await sleep(1500);
       await route.continue();
     });
-    await card(page, 2).getByRole('button', { name: "I'm in" }).click();
+    await card(page, 2).getByRole('button', { name: "I’m in" }).click();
     await page.waitForFunction(() => document.querySelectorAll('.schedule article')[2].dataset.mine === 'in', null, { timeout: 500 });
     assert(/Ryan/.test(await card(page, 2).locator('.names-line').innerText()), 'name not in the list yet');
     assert((await card(page, 2).locator('.pchip').count()) === 0, 'money chip shown before the server answered');
@@ -361,7 +361,7 @@ async function main() {
   await check('I\'m in rolls back with the error banner when the server says no', async () => {
     const { ctx, page } = await open('Ryan');
     await page.route('**/api/sessions/*/join', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'x', message: 'That game just filled up.' }) }));
-    await card(page, 2).getByRole('button', { name: "I'm in" }).click();
+    await card(page, 2).getByRole('button', { name: "I’m in" }).click();
     await banner(page).waitFor();
     assert(/filled up/.test(await bannerText(page)) && (await banner(page).evaluate((e) => e.classList.contains('pop-error'))), await bannerText(page));
     await page.waitForFunction(() => document.querySelectorAll('.schedule article')[2].dataset.mine !== 'in');
@@ -370,7 +370,7 @@ async function main() {
   await check('lost connection says "No signal, try again" in the one banner, and it can be dismissed', async () => {
     const { ctx, page } = await open('Ryan');
     await page.route('**/api/sessions/*/join', (route) => route.abort('internetdisconnected'));
-    await card(page, 2).getByRole('button', { name: "I'm in" }).click();
+    await card(page, 2).getByRole('button', { name: "I’m in" }).click();
     await banner(page).waitFor();
     assert((await bannerText(page)) === '! No signal, try again' || /No signal, try again/.test(await bannerText(page)), await bannerText(page));
     assert((await banner(page).count()) === 1, 'more than one banner');

@@ -163,8 +163,8 @@ async function main() {
     return (await c.count()) ? squash(await c.innerText()) : '';
   };
   const tapIn = async (page, s) => {
-    await card(page, s).getByRole('button', { name: /^I'm in/ }).click();
-    await card(page, s).getByText("You're in").first().waitFor();
+    await card(page, s).getByRole('button', { name: /^I’m in/ }).click();
+    await card(page, s).getByText("You’re in").first().waitFor();
   };
 
   // Brandon asks to cash out his $10 before anything else.
@@ -281,7 +281,7 @@ async function main() {
           const { ctx, page, errors } = await player(name, scheme, width);
           const c = card(page, s);
           await c.scrollIntoViewIfNeeded();
-          await tidy(c, `${name}'s card`);
+          await tidy(c, `${name}’s card`);
           assert((await greenButtons(c)) <= 1, `${name}: more than one filled button`);
           await noSideways(page);
           if (width === 360) await page.screenshot({ path: path.join(SHOTS, `auto-credit-${name}-${width}-${scheme}.png`) });

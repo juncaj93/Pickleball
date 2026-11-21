@@ -405,7 +405,7 @@ async function main() {
     const after = await rowState(card, 'Gray');
     assert(after.paid === before.paid && after.dots === before.dots && after.title === before.title, `back as it was: ${JSON.stringify(after)}`);
     assert((await card.evaluate((el) => el.innerHTML)) === html0, 'the card is exactly as it was');
-    assert((await toastText(page)).includes("Couldn't save, nothing changed"), `error toast: ${await toastText(page)}`);
+    assert((await toastText(page)).includes("Couldn’t save, nothing changed"), `error toast: ${await toastText(page)}`);
     assert((await dash()).sessions.find((s) => s.id === mixed.id).roster.find((r) => r.name === 'Gray').paymentStatus === 'unpaid', 'nothing was saved');
     await page.unroute('**/api/admin/sessions/*/payment');
     await ctx.close();
@@ -745,7 +745,7 @@ async function main() {
     const sheetFor = async (id) => {
       let card = await openHomeCard(page, id);
       await card.locator('button[aria-label^="Game menu"]').click();
-      await page.getByRole('menuitem', { name: /Cancel session/ }).click();
+      await page.getByRole('menuitem', { name: /Cancel game/ }).click();
       const dlg = page.locator('dialog[open]');
       await dlg.locator('[data-were-you-charged]').waitFor();
       return dlg;
@@ -1065,7 +1065,7 @@ async function main() {
       const addr = ((/addresses=([^&]*)/.exec(m.allHref) ?? /^sms:([^?&]*)/.exec(m.allHref))[1] || '').split(',').filter(Boolean).sort();
       assert(addr.join() === want.join(), `addressed to exactly Kai and Gray: ${addr} vs ${want}`);
       const body = decodeURIComponent(/body=(.*)$/.exec(m.allHref)[1]);
-      assert(/^Hey everyone, quick reminder for (today|tonight|tomorrow|yesterday|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)'s pickleball\.\nIf you haven't paid your \$14 yet, please do it here:\n\n[^\n]+$/.test(body), `group message: ${JSON.stringify(body)}`);
+      assert(/^Hey everyone, quick reminder for (today|tonight|tomorrow|yesterday|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)'s pickleball\.\nIf you haven’t paid your \$14 yet, please do it here:\n\n[^\n]+$/.test(body), `group message: ${JSON.stringify(body)}`);
       // One person: same wording as before, name and amount.
       const one = decodeURIComponent(m.oneHref.replace(/^sms:[^&?]*[&?]body=/, ''));
       assert(/^Hey (Kai|Gray), you owe \$\d+ for pickleball/.test(one), `one-person text: ${JSON.stringify(one.slice(0, 50))}`);

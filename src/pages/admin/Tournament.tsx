@@ -187,7 +187,7 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
 }
 
 /** Zip 66: "Doubles 2 · Americano 0 · Either 6" (the card's Votes row; Doubles, not Locked). */
-const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Doubles ${v.locked} · Americano ${v.americano} · Either ${v.either}`;
+const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Locked doubles ${v.locked} · Americano ${v.americano} · Either ${v.either}`;
 /** Zip 66: "6 players · 1 court · 2.5 hrs" (the card's Plan row). */
 // Zip 70: the Plan's expected players (the saved Expect number, else the site's suggestion), not the plan size.
 const planShort = (t: AdminTournamentView) => `${t.expected ?? t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
@@ -706,11 +706,11 @@ function paidWords(k: AdminTicketView): string {
 /** Zip 56: an I paid on a ticket, waiting for the organizer (the same amber card and words as a game's I paid). */
 function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k: AdminTicketView }) {
   const { busy, save } = useSave(ctx);
-  const where = t.status === 'canceled' ? `${t.name} was canceled.` : k.out ? `Backed out of ${theName(t.name)}.` : `${t.name} ticket.`;
+  const where = t.status === 'canceled' ? `${t.name} was canceled.` : k.out ? `Dropped out of ${theName(t.name)}.` : `${t.name} ticket.`;
   const answer = (action: 'confirm' | 'reject') =>
     save(
       () => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId: k.playerId, action, cents: k.claimCents }),
-      action === 'reject' ? 'Cleared' : t.status === 'canceled' || k.out ? `${k.name}'s ${formatPrice(k.claimCents)} is credit now` : `${k.name}'s ${formatPrice(k.claimCents)} is in`,
+      action === 'reject' ? 'Cleared' : t.status === 'canceled' || k.out ? `${k.name}’s ${formatPrice(k.claimCents)} is credit now` : `${k.name}’s ${formatPrice(k.claimCents)} is in`,
     );
   return (
     <AlertCard
@@ -727,7 +727,7 @@ function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView;
             Paid
           </button>
           <button className="ac-btn ac-out" disabled={busy} data-claim-not-paid onClick={() => void answer('reject')}>
-            Didn't pay
+            Didn’t pay
           </button>
         </>
       }
@@ -853,13 +853,13 @@ function CancelOrReschedule({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournam
               Cancel tournament
             </button>
           </div>
-          <p className="tm-cor-note">Reschedule: pick new dates. Players can back out and get their money back as credit. Cancel: everyone gets their money back as credit.</p>
+          <p className="tm-cor-note">Reschedule: pick new dates. Players can drop out and get their money back as credit. Cancel: everyone gets their money back as credit.</p>
         </div>
       </Sheet>
       <ConfirmDialog
         open={ask === 'reschedule'}
         title="Reschedule?"
-        body={<p>Are you sure? The date comes off and everyone picks their dates again. Paid tickets stay held.</p>}
+        body={<p>The date comes off and everyone picks their dates again. Paid tickets stay held.</p>}
         confirmLabel="Reschedule"
         busy={busy}
         onCancel={() => setAsk(null)}
@@ -877,7 +877,7 @@ function CancelOrReschedule({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournam
         title="Cancel the tournament?"
         body={
           <p>
-            Are you sure? Players see it canceled.
+            Players see it canceled.
             {back.length > 0 ? ` ${back.length} paid ${back.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(backCents)}).` : ' Nothing was paid, so nothing comes back.'}
           </p>
         }
@@ -981,11 +981,11 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
           </div>
           {k && k.claimCents > 0 ? (
             <div className="btn-row confirm-row">
-              <button type="button" className="btn confirm-safe" disabled={busy} onClick={() => void act('confirm', k.claimCents, `${name}'s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-paid>
+              <button type="button" className="btn confirm-safe" disabled={busy} onClick={() => void act('confirm', k.claimCents, `${name}’s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-paid>
                 Paid
               </button>
               <button type="button" className="btn danger confirm-out" disabled={busy} onClick={() => void act('reject', k.claimCents, 'Cleared')} data-tm-ticket-not-paid>
-                Didn't pay
+                Didn’t pay
               </button>
             </div>
           ) : (
@@ -1009,7 +1009,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
           <ConfirmDialog
             open={askOff}
             title={`Take ${name} off?`}
-            body={<p>{backCents > 0 ? `${name}'s ${formatPrice(backCents)} comes back as credit. ` : ''}{k?.place === 'spot' ? 'The spot goes to the first paid player in line.' : `${name} comes off the list.`}</p>}
+            body={<p>{backCents > 0 ? `${name}’s ${formatPrice(backCents)} comes back as credit. ` : ''}{k?.place === 'spot' ? 'The spot goes to the first paid player in line.' : `${name} comes off the list.`}</p>}
             cancelLabel="Keep"
             confirmLabel="Take off"
             danger
@@ -1417,7 +1417,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
                 </b>
                 {/* A canceled tournament's levels stay as they are (the server refuses a change). */}
                 {!canceled && (
-                  <button type="button" className="tm-pencil" aria-label={`Change ${s.name}'s level`} onClick={() => setLevelFor(s.playerId)} data-tm-pencil>
+                  <button type="button" className="tm-pencil" aria-label={`Change ${s.name}’s level`} onClick={() => setLevelFor(s.playerId)} data-tm-pencil>
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 20h4L19 9l-4-4L4 16v4z" />
                       <path d="M13.5 6.5l4 4" />
@@ -1519,7 +1519,7 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
         )}
       </Card>
 
-      {t.backedOut.length > 0 && <p className="tm-card-note tm-backed">Backed out: {t.backedOut.map((b) => b.name).join(', ')}</p>}
+      {t.backedOut.length > 0 && <p className="tm-card-note tm-backed">Dropped out: {t.backedOut.map((b) => b.name).join(', ')}</p>}
 
       {/* Zip 56: once the date is picked, Cancel or reschedule (picture 30); before it (and after a Reschedule), Cancel tournament. */}
       {!canceled &&
@@ -1542,9 +1542,9 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
         body={
           <p>
             {held.length > 0
-              ? `Are you sure? Players see it canceled. ${held.length} paid ${held.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(heldCents)}).`
+              ? `Players see it canceled. ${held.length} paid ${held.length === 1 ? 'ticket comes' : 'tickets come'} back as credit (${formatPrice(heldCents)}).`
               : t.finalDate
-                ? 'Are you sure? Players on the list see it canceled. Nothing was paid, so nothing comes back.'
+                ? 'Players on the list see it canceled. Nothing was paid, so nothing comes back.'
                 : `Players stop seeing ${theName(t.name)}. The list stays saved. Nothing was paid, so nothing comes back.`}
           </p>
         }
@@ -1946,7 +1946,7 @@ function OddSwitchCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k
   const cutoffMs = t.finalDate ? salesCutoffMs(startMsOf(t.finalDate, t.start, tz)) : null;
   const cutoff = cutoffMs !== null && Date.parse(ctx.d.now) < cutoffMs ? payByLabel(new Date(cutoffMs).toISOString(), tz, t.finalDate) : null;
   const text = [
-    who ? `${who} backed out of ${t.name}.` : `A spot opened in ${t.name}.`,
+    who ? `${who} dropped out of ${t.name}.` : `A spot opened in ${t.name}.`,
     `One spot is open${t.finalDate ? ` on ${dayWords(t.finalDate)}` : ''}: ${formatPrice(t.ticketCents)}${cutoff ? `, pay by ${cutoff}` : ''}.`,
     siteAddress(ctx.d.group.playerLink),
   ].join(' ');

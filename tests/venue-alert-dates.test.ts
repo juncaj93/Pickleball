@@ -150,10 +150,10 @@ describe('when an alert shows (fake clock)', () => {
     expect(dueAlerts({ ...base, games, onAtMs: onAt, nowMs: et(2026, 11, 25, 23, 59) })).toEqual([]);
     const m = dueAlerts({ ...base, games, onAtMs: onAt, nowMs: et(2026, 11, 26, 0, 0) });
     expect(m).toHaveLength(1);
-    expect(m[0]).toMatchObject({ kinds: ['membership'], cents: 3000, title: 'Membership should have been charged: $30', line: 'Monthly membership, Northville Pickleball', date: '2026-11-26' });
+    expect(m[0]).toMatchObject({ kinds: ['membership'], cents: 3000, title: 'Membership should have been charged: $30', line: 'Monthly membership, Northville Pickleball Club', date: '2026-11-26' });
     const c = dueAlerts({ ...base, games, onAtMs: onAt, nowMs: et(2026, 11, 30, 0, 0) });
     expect(c.map((a) => a.kinds)).toEqual([['membership'], ['court']]);
-    expect(c[1]).toMatchObject({ cents: 19200, title: 'Northville Pickleball should have charged you $192', line: '4 games x $48 = $192' });
+    expect(c[1]).toMatchObject({ cents: 19200, title: 'Northville Pickleball Club should have charged you $192', line: '4 games x $48 = $192' });
   });
   it('one minute before midnight Eastern on the charge day is still "yesterday" (not UTC midnight, which is 7 or 8 PM Eastern)', () => {
     // 11:59 PM Nov 29 Eastern = 04:59 UTC Nov 30: UTC says it is already the 30th. Eastern says not yet.
@@ -181,7 +181,7 @@ describe('when an alert shows (fake clock)', () => {
     const g = four(2026, 11);
     const a = dueAlerts({ ...base, days, games: g, onAtMs: onAt, nowMs: et(2026, 11, 28, 6) });
     expect(a).toHaveLength(1);
-    expect(a[0]).toMatchObject({ keys: ['court:2026-11', 'membership:2026-11'], kinds: ['court', 'membership'], cents: 22200, title: 'Northville Pickleball should have charged you $222', line: '4 games x $48 = $192, plus membership $30' });
+    expect(a[0]).toMatchObject({ keys: ['court:2026-11', 'membership:2026-11'], kinds: ['court', 'membership'], cents: 22200, title: 'Northville Pickleball Club should have charged you $222', line: '4 games x $48 = $192, plus membership $30' });
   });
   it('both on the same day by "last day" rounding (membership 31, courts Last day in November)', () => {
     const days = { membershipDay: 31, courtDay: 0 };
@@ -240,7 +240,7 @@ describe('the amounts', () => {
     const court = a.find((x) => x.kinds[0] === 'court')!;
     expect(court.cents).toBe(4800 + 3600 + 4800 + 6000);
     expect(court.line).toBe('4 games = $192');
-    expect(court.title).toBe('Northville Pickleball should have charged you $192');
+    expect(court.title).toBe('Northville Pickleball Club should have charged you $192');
   });
   it('a different membership amount shows in the title and the combined line', () => {
     const a = dueAlerts({ ...base, membershipCents: 4500, days: { membershipDay: 30, courtDay: 0 }, games: four(2026, 11), onAtMs: et(2026, 11, 14, 9), nowMs: et(2026, 11, 30, 8) });

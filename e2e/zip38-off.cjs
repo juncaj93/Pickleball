@@ -96,7 +96,7 @@ function giveMainTheSofterShimmer() {
   spawnSync('git', ['-C', MAIN, 'checkout', '--', 'src/styles.css']);
   const ring = "/* Your own ball: a green ring. */\n.ball.me .ball-skin {\n  stroke: var(--primary);\n  stroke-width: 2;\n}\n";
   const styles = readFileSync(path.join(MAIN, 'src/styles.css'), 'utf8');
-  if (styles.split(ring).length !== 2) throw new Error("main's src/styles.css does not hold the own-ball ring rule exactly once (main moved?)");
+  if (styles.split(ring).length !== 2) throw new Error("main’s src/styles.css does not hold the own-ball ring rule exactly once (main moved?)");
   writeFileSync(path.join(MAIN, 'src/styles.css'), styles.replace(ring, ''));
   return mainOnly.length + branchOnly.length;
 }

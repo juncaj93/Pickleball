@@ -35,7 +35,7 @@ describe('one-off games', () => {
     expect((await ctx.organizer.call('POST', '/api/admin/sessions', body)).status).toBe(200);
     const again = await ctx.organizer.call('POST', '/api/admin/sessions', body);
     expect(again.status).toBe(409);
-    expect(again.data.message).toBe("There's already a game at Sat, Nov 14, 8:00 PM.");
+    expect(again.data.message).toBe("There’s already a game at Sat, Nov 14, 8:00 PM.");
     // A regular Tue/Thu slot is taken too.
     const tue = await ctx.organizer.call('POST', '/api/admin/sessions', { startsAt: at(2026, 11, 3, 20), endsAt: at(2026, 11, 3, 22) });
     expect(tue.status).toBe(409);
@@ -91,7 +91,7 @@ describe('the organizer playing', () => {
     expect(mine).toMatchObject({ name: 'Robin', status: 'confirmed', shareCents: null, isOrganizer: true });
     expect(d.players.some((p: any) => p.name === 'Robin')).toBe(true);
     const day = formatShortDate(s.startsAt, TZ);
-    expect((await activity(ctx))[0]).toBe(`Robin said I'm in for ${day}`);
+    expect((await activity(ctx))[0]).toBe(`Robin said I’m in for ${day}`);
     // Players see the name in the roster.
     const g = (await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data;
     expect(g.sessions.find((x: any) => x.id === s.id).confirmed.map((c: any) => c.name)).toContain('Robin');

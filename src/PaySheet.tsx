@@ -75,7 +75,7 @@ export function PaySheet({
               onClick={async () => {
                 onTapPay();
                 const copied = await copyText(`@${handle}`);
-                toast(copied ? `Copied @${handle}` : "Couldn't copy.", copied ? 'ok' : 'error');
+                toast(copied ? `Copied @${handle}` : "Couldn’t copy.", copied ? 'ok' : 'error');
               }}
             >
               Copy Venmo @{handle}

@@ -11,7 +11,7 @@ import type { PlayerDayGame, PlayerDayView, PlayerTournamentView } from '../../s
 import { api, ApiError, storageGet, storageSet, VIEW_ONLY_MESSAGE } from '../lib';
 import { CourtMap } from '../GameDay';
 import { Sheet, useToast } from '../ui';
-import { diffLabel, MAX_SCORE, resultTag, scoreHint } from '../../shared/scores';
+import { diffLabel, groupName, MAX_SCORE, resultTag, scoreHint } from '../../shared/scores';
 import { AlsoNowCard, PlayoffCard, TieCard, WheelPickedCard } from './TieCards';
 import './gameday-tour.css';
 
@@ -87,7 +87,7 @@ export function Court({ n, set }: { n: number | null; set: boolean }) {
 /** The words of one game row (mock 16): "vs Third Shot Gang" and the players, or what decides a playoff. */
 function rowWords(g: PlayerDayGame): { title: string; sub: string } {
   if (g.skipped) return { title: g.opponent ? `vs ${g.opponent.name}` : g.label, sub: 'Not played' };
-  if (!g.opponent) return { title: g.pending ?? 'Not decided yet', sub: g.stage === 'final' ? 'Against the other finalist' : g.stage === 'semi' ? 'Against the other pool' : '' };
+  if (!g.opponent) return { title: g.pending ?? 'Not decided yet', sub: g.stage === 'final' ? 'Against the other finalist' : g.stage === 'semi' ? 'Against the other group' : '' };
   const players = g.opponent.players.join(' + ');
   if (g.state === 'done' && g.won !== undefined) return { title: `vs ${g.opponent.name}`, sub: players };
   // Zip 74: a shorter game says so with the "Play to 9" pill beside the name (PlayToPill), not in this line.
@@ -167,14 +167,14 @@ function StandingsCard({ day }: { day: PlayerDayView }) {
   );
 }
 
-/** Mocks 51 to 53: Pool A and Pool B, each team's record and where it plays this round (Court 9) or Sits. */
+/** Mocks 51 to 53: the Dink group and the Drive group, each team's record and (Zip 78) its points chip, like the one group's standings. */
 function PoolsCards({ day }: { day: PlayerDayView }) {
   return (
     <>
       {day.standings.map((grp) => (
-        <section key={grp.pool ?? 'all'} className="tc-gd-card" aria-label={`Pool ${grp.pool}`} data-tc-day-pool={grp.pool}>
+        <section key={grp.pool ?? 'all'} className="tc-gd-card" aria-label={groupName(grp.pool)} data-tc-day-pool={grp.pool}>
           <div className="tc-gd-head">
-            <h3 className="tc-gd-label">Pool {grp.pool}</h3>
+            <h3 className="tc-gd-label">{groupName(grp.pool)}</h3>
             <span className="tc-gd-chip tc-gd-chip-label">{grp.rows.length} teams</span>
           </div>
           <ol className="tc-gd-rows">
@@ -195,8 +195,6 @@ function PoolsCards({ day }: { day: PlayerDayView }) {
                   <span className="tc-gd-chip tc-gd-pts" data-tc-day-diff={r.diff}>
                     {diffLabel(r.diff)}
                   </span>
-                ) : r.where ? (
-                  <span className="tc-gd-chip">{r.where}</span>
                 ) : null}
               </li>
             ))}
@@ -631,7 +629,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
       )}
       {day.paused && (
         <p className="tc-gd-paused" role="status" data-tc-day-paused>
-          Paused. Hang tight.
+          Paused.
         </p>
       )}
       {tiePhase === 'tie' && tie && (

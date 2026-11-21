@@ -162,7 +162,7 @@ async function main() {
 
   // ---------------------------------------------------------------- L1: the two drop dialogs
   const words = [
-    [g1, "Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed."],
+    [g1, "Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest’s spot isn’t needed."],
     [g2, 'Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.'],
   ];
   for (const scheme of ['light', 'dark'])
@@ -208,7 +208,7 @@ async function main() {
     await dlg.waitFor();
     await page.waitForTimeout(300);
     await dlg.locator('.btn-row button', { hasText: 'Drop out both' }).click();
-    const toast = page.locator('.toast, [role="status"]').filter({ hasText: "You're out" }).first();
+    const toast = page.locator('.toast, [role="status"]').filter({ hasText: "You’re out" }).first();
     await toast.waitFor({ timeout: 8000 });
     assert(/Your \$14 stays on this game unless someone takes your spot/.test(flat(await toast.innerText())), flat(await toast.innerText()));
     await page.waitForTimeout(6500); // the 5-second Undo goes by, then the drop is sent
@@ -346,7 +346,7 @@ async function main() {
       else await sheet.locator('input[aria-label="Rowan played"]').click();
       await page.waitForTimeout(300);
       const note = flat(await sheet.locator('[data-who-played-note]').innerText());
-      assert(note === "Rowan didn't play, so Sam didn't either. Rowan owes $14, for the 1 spot the game was short.", note);
+      assert(note === "Rowan didn’t play, so Sam didn’t either. Rowan owes $14, for the 1 spot the game was short.", note);
       await noSideScroll(page, 'Who played');
       await page.screenshot({ path: path.join(SHOTS, `W1-${scheme}.png`) });
       await ctx.close();

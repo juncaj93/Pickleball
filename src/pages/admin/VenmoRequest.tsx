@@ -38,7 +38,7 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
   if (games.length === 0) return null;
   const remindGame = games.find((g) => g.s.id === remind)?.s ?? null;
   return (
-    <section className={ctx.d.alertCards === true ? 'ac-stack vr-cards' : 'stack vr-cards'} aria-label="Do this now: who hasn't paid" data-vr-cards>
+    <section className={ctx.d.alertCards === true ? 'ac-stack vr-cards' : 'stack vr-cards'} aria-label="Do this now: who hasn’t paid" data-vr-cards>
       {games.map(({ s, rows }) => {
         const amounts = new Set(rows.map((r) => r.owesCents + (r.extCents ?? 0)));
         const common = amounts.size === 1 ? rows[0].owesCents + (rows[0].extCents ?? 0) : null;
@@ -50,7 +50,7 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
                 <VrTitle cards={ctx.d.alertCards === true}>
                   {formatWeekdayShort(s.startsAt, tz)}
                   {games.filter((g) => dayKey(Date.parse(g.s.startsAt), tz) === dayKey(Date.parse(s.startsAt), tz)).length > 1 ? ` ${formatTime(s.startsAt, tz)}` : ''} game: {rows.length}{' '}
-                  {rows.length === 1 ? "hasn't" : "haven't"} paid
+                  {rows.length === 1 ? "hasn’t" : "haven’t"} paid
                 </VrTitle>
                 <p className={ctx.d.alertCards === true ? 'small muted vr-sub ac-sub' : 'small muted vr-sub'}>
                   {/* Two games on the same weekday (last Tuesday's and the coming one) would read the same: say which date. */}
@@ -178,7 +178,7 @@ export function GuestRequest({ ctx, s, host, guest, cents }: { ctx: AdminCtx; s:
   const first = host.name.trim().split(/\s+/)[0] || host.name;
   const body = guestPaymentText(first, guest, cents, s.startsAt, ctx.d.group.timezone, siteAddress(ctx.d.group.playerLink));
   return (
-    <a className="sc-req sc-req-text" href={smsHref(p.phone, body, isIOS)} data-sc-textone={guest} aria-label={`Text ${host.name} about ${guest}'s ${formatPrice(cents)}`}>
+    <a className="sc-req sc-req-text" href={smsHref(p.phone, body, isIOS)} data-sc-textone={guest} aria-label={`Text ${host.name} about ${guest}’s ${formatPrice(cents)}`}>
       Text
     </a>
   );

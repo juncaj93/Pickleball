@@ -163,14 +163,14 @@ export function lateFeeCutoffMs(startsAtIso: string): number {
  */
 export function lateDropDialogText(time: string, owes: boolean, feeText: string, moneyBackText: string | null, paid = false): string {
   // Zip 76: a player who already paid owes nothing more; their money stays on the game (the toast's own words).
-  if (owes && paid) return `It's past the ${time} cancel-by. Your ${feeText} stays on this game unless someone takes your spot.`;
-  if (owes) return `It's past the ${time} cancel-by. If no one takes your spot, you still owe ${feeText}.`;
-  return moneyBackText ? `It's past the ${time} cancel-by. Enough players are still in, so ${moneyBackText}.` : `It's past the ${time} cancel-by. Enough players are still in, so you owe nothing.`;
+  if (owes && paid) return `It’s past the ${time} cancel-by. Your ${feeText} stays on this game unless someone takes your spot.`;
+  if (owes) return `It’s past the ${time} cancel-by. If no one takes your spot, you still owe ${feeText}.`;
+  return moneyBackText ? `It’s past the ${time} cancel-by. Enough players are still in, so ${moneyBackText}.` : `It’s past the ${time} cancel-by. Enough players are still in, so you owe nothing.`;
 }
 
 /** The drop banner when the drop leaves the game short. */
 export function lateDropToast(feeText: string, paid: boolean): string {
-  return paid ? `You're out. Your ${feeText} stays on this game unless someone takes your spot.` : `You're out. You owe ${feeText} unless someone takes your spot.`;
+  return paid ? `You’re out. Your ${feeText} stays on this game unless someone takes your spot.` : `You’re out. You owe ${feeText} unless someone takes your spot.`;
 }
 
 /**
@@ -180,7 +180,7 @@ export function lateDropToast(feeText: string, paid: boolean): string {
  */
 export function feeClearedNotice(why: 'sub' | 'cleared', day: string, feeText: string, creditText: string | null, guest: string | null = null): string {
   // Zip 49 (F-3): a sub took only the guest's spot of a pair's debt: the host's own share may still be owed, so the words name the guest.
-  if (why === 'sub' && guest) return `Good news: someone took ${guest}'s spot for ${day}. ${creditText ? `Your ${creditText} is back as credit.` : `You no longer owe ${feeText} for ${guest}.`}`;
-  if (why === 'sub') return `Good news: someone took your spot for ${day}. ${creditText ? `Your ${creditText} is back as credit.` : `You no longer owe ${feeText}.`}`;
+  if (why === 'sub' && guest) return `Someone took ${guest}’s spot for ${day}. ${creditText ? `Your ${creditText} is back as credit.` : `You no longer owe ${feeText} for ${guest}.`}`;
+  if (why === 'sub') return `Someone took your spot for ${day}. ${creditText ? `Your ${creditText} is back as credit.` : `You no longer owe ${feeText}.`}`;
   return `You no longer owe ${feeText} for ${day}.${creditText ? ` Your ${creditText} is back as credit.` : ''}`;
 }

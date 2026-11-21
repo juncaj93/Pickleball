@@ -26,7 +26,14 @@ describe('booking alert wording', () => {
         const json = JSON.stringify(nextTasks(now, SCENARIO, marks, OPTS));
         seen += json.split('Then set it to Booked').length - 1;
         expect(json).not.toContain('Then tap I booked it');
-        back.update(json.replaceAll('Then set it to Booked', 'Then tap I booked it'));
+        // Zip 78 (one look): "Booking for Tue Nov 17 opens at 7:00 AM.", "Now cancel the game" and the curly apostrophe are the only other
+        // word changes since; put them back too, so the old fingerprint still proves nothing else moved.
+        const old = json
+          .replaceAll('Then set it to Booked', 'Then tap I booked it')
+          .replaceAll('Booking for ', '')
+          .replaceAll('Now cancel the game', 'Now cancel the session')
+          .replaceAll('’', "'");
+        back.update(old);
       }
       expect(seen).toBeGreaterThan(0);
       expect(back.digest('hex')).toBe(OLD_CARDS[name]);

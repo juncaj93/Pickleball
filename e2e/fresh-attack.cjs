@@ -137,7 +137,7 @@ function scanPrivacy(json, viewerName, where) {
   const others = Object.entries(phones).filter(([n]) => n !== viewerName);
   const text = JSON.stringify(json);
   totalChecks++;
-  for (const [n, ph] of others) if (text.includes(ph)) return fail('privacy', `${n}'s phone number in a response to ${viewerName}`, where);
+  for (const [n, ph] of others) if (text.includes(ph)) return fail('privacy', `${n}’s phone number in a response to ${viewerName}`, where);
   const walk = (v, p) => {
     if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${p}[${i}]`));
     if (!v || typeof v !== 'object') return;
@@ -378,7 +378,7 @@ async function runSequence(browser, seed, t0) {
         const s = pick(notIn);
         const dbl = chance(0.25);
         const res = await withNet(ph, net, async () => {
-          const btn = row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist|Join standby)$/ });
+          const btn = row(ph, s.id).getByRole('button', { name: /^(I’m in|Join waitlist|Join standby)$/ });
           const ok = await tap(btn, dbl);
           await sleep(net === 'offline' ? 1500 : 600);
           return ok;
@@ -437,21 +437,21 @@ async function runSequence(browser, seed, t0) {
             await ph.ctx.setOffline(false);
             await setVis('visible');
             await sleep(ri(100, 900));
-            const btn = row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ });
+            const btn = row(ph, s.id).getByRole('button', { name: /^(I’m in|Join waitlist)$/ });
             const ok = await tap(btn);
             await sleep(slowMs + 2000);
             await ph.page.unroute('**/api/group').catch(() => {});
-            note = ` offline+hidden, back online with /api/group slowed ${slowMs}ms, I'm in${ok ? '' : " (no I'm in button)"}`;
+            note = ` offline+hidden, back online with /api/group slowed ${slowMs}ms, I’m in${ok ? '' : " (no I’m in button)"}`;
           } else if (mode === 'reload-rejoin') {
             // Drop out, reload inside the Undo wait, then I'm in on the same game: they must end up in.
             await sleep(undoAt);
             await ph.page.reload().catch(() => {});
             await row(ph, s.id).waitFor({ timeout: 8000 }).catch(() => {});
-            const btn = row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ });
+            const btn = row(ph, s.id).getByRole('button', { name: /^(I’m in|Join waitlist)$/ });
             await btn.first().waitFor({ timeout: 6000 }).catch(() => {});
             const ok = await tap(btn);
             await sleep(1500);
-            note = ` reload@${undoAt}ms then I'm in${ok ? '' : ' (no I\'m in button)'}`;
+            note = ` reload@${undoAt}ms then I’m in${ok ? '' : ' (no I’m in button)'}`;
           } else if (mode === 'reload') {
             await sleep(undoAt);
             await ph.page.reload().catch(() => {});
@@ -464,8 +464,8 @@ async function runSequence(browser, seed, t0) {
             note = ` close@${undoAt}ms`;
           } else if (mode === 'rejoin') {
             await sleep(undoAt);
-            await tap(row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ }));
-            note = ` I'm-in@${undoAt}ms`;
+            await tap(row(ph, s.id).getByRole('button', { name: /^(I’m in|Join waitlist)$/ }));
+            note = ` I’m-in@${undoAt}ms`;
           } else if (mode === 'switch') {
             await sleep(undoAt);
             const inToo = Object.keys(othersBefore).filter((n) => n !== ph.who && othersBefore[n] === 'confirmed' && !bots.includes(n));
@@ -524,10 +524,10 @@ async function runSequence(browser, seed, t0) {
       case 'didntPay': {
         const s = pick(selfPaid);
         await withNet(ph, net, async () => {
-          await tap(row(ph, s.id).getByRole('button', { name: "Didn't pay?" }), chance(0.2));
+          await tap(row(ph, s.id).getByRole('button', { name: "Didn’t pay?" }), chance(0.2));
           await sleep(500);
         });
-        return `didn't pay ${tag} ${day(s.startsAt)}`;
+        return `didn’t pay ${tag} ${day(s.startsAt)}`;
       }
       case 'cashOut': {
         const amt = chance(0.5) ? Math.floor(g.credit.usableCents / 100) : ri(1, Math.max(1, Math.floor(g.credit.usableCents / 100) + 2));
@@ -554,7 +554,7 @@ async function runSequence(browser, seed, t0) {
         // I'm in on a game, then "Use it" on the cash-out question (or the API, if the question did not come up).
         const s = notIn.length ? pick(notIn) : null;
         if (!s) return `cash out use ${tag}: no game to join`;
-        await tap(row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ }));
+        await tap(row(ph, s.id).getByRole('button', { name: /^(I’m in|Join waitlist)$/ }));
         const asked = await ph.page.locator('[data-cashout-use]').waitFor({ timeout: 2500 }).then(() => true).catch(() => false);
         if (asked) await tap(ph.page.locator('[data-cashout-use]'), chance(0.2));
         await sleep(600);
@@ -572,7 +572,7 @@ async function runSequence(browser, seed, t0) {
         const r2 = await post(ph.ctx.request, `/api/sessions/${vs.id}/paid`, { paid: before.paymentStatus !== 'paid', playerId: idOf(victim) });
         const r3 = await post(ph.ctx.request, `/api/sessions/${vs.id}/withdraw`, { playerId: idOf(victim) });
         const after = (await truthOf(api[victim], victim)).sessions.find((x) => x.id === vs.id).mine;
-        check(after.status === before.status && after.paymentStatus === before.paymentStatus, 'privacy', `${ph.who} changed ${victim}'s seat by putting their id in a request`, `${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+        check(after.status === before.status && after.paymentStatus === before.paymentStatus, 'privacy', `${ph.who} changed ${victim}’s seat by putting their id in a request`, `${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
         check([401, 403].includes(r1.status()), 'privacy', `player phone used an organizer route (${r1.status()})`, ph.label);
         return `hack ${tag} vs ${victim} ${day(vs.startsAt)}: admin ${adm.status()}/${r1.status()}, paid ${r2.status()}, withdraw ${r3.status()}`;
       }
@@ -587,8 +587,8 @@ async function runSequence(browser, seed, t0) {
         const s = sessions.find((x) => !x.canceled && !x.started);
         if (!twin || !s) return `two phones ${ph.label}: no twin`;
         const isIn = s.mine && s.mine.status === 'confirmed';
-        const a = isIn ? tap(row(ph, s.id).getByRole('button', { name: 'Drop out' })).then(() => tap(ph.page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }))) : tap(row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ }));
-        const b = isIn ? tap(row(twin, s.id).locator('[data-use-credit]')).then((ok) => ok || tap(row(twin, s.id).getByRole('button', { name: 'I paid' }))) : tap(row(twin, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ }));
+        const a = isIn ? tap(row(ph, s.id).getByRole('button', { name: 'Drop out' })).then(() => tap(ph.page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }))) : tap(row(ph, s.id).getByRole('button', { name: /^(I’m in|Join waitlist)$/ }));
+        const b = isIn ? tap(row(twin, s.id).locator('[data-use-credit]')).then((ok) => ok || tap(row(twin, s.id).getByRole('button', { name: 'I paid' }))) : tap(row(twin, s.id).getByRole('button', { name: /^(I’m in|Join waitlist)$/ }));
         await Promise.all([a, b]);
         await sleep(5800);
         return `two phones ${ph.who}@${ph.label}+${twin.label} ${day(s.startsAt)} ${isIn ? 'drop vs pay' : 'both join'}`;
@@ -618,7 +618,7 @@ async function runSequence(browser, seed, t0) {
     const errored = toasts.some((x) => x.error);
     if (!after || net === 'offline') return;
     const st = after.mine && after.mine.status;
-    check(['confirmed', 'waitlisted'].includes(st) || errored || after.canceled || after.started, 'intent', "tapped I'm in: not in and no message why", `${ph.label} ${ph.who} ${day(s.startsAt)} status=${st} toasts=${JSON.stringify(toasts)}`);
+    check(['confirmed', 'waitlisted'].includes(st) || errored || after.canceled || after.started, 'intent', "tapped I’m in: not in and no message why", `${ph.label} ${ph.who} ${day(s.startsAt)} status=${st} toasts=${JSON.stringify(toasts)}`);
     const m = toasts.map((x) => x.msg).join(' | ');
     const used = /\$(\d+) credit used/.exec(m);
     if (used && st === 'confirmed') check(balBefore - t.credit.balanceCents === Number(used[1]) * 100 || balBefore - t.credit.balanceCents === 0, 'toast-money', `"${used[0]}" but credit went ${fmt(balBefore)} -> ${fmt(t.credit.balanceCents)}`, `${ph.label} ${ph.who} ${m}`);
@@ -633,7 +633,7 @@ async function runSequence(browser, seed, t0) {
         if (!m || m.started || m.canceled) return;
         const stNow = m.mine ? m.mine.status : 'none';
         if (n === dropper) check(stNow !== 'confirmed', 'intent', `${dropper} dropped out, then Not you? during the Undo wait: ${dropper} is still in`, `${ph.label} ${note}`);
-        else check(stNow === st || st !== 'confirmed', 'wrong-player', `${dropper}'s held drop took ${n} out after Not you? on the same phone`, `${ph.label} ${day(s.startsAt)} ${n}: ${st} -> ${stNow} ${note}`);
+        else check(stNow === st || st !== 'confirmed', 'wrong-player', `${dropper}’s held drop took ${n} out after Not you? on the same phone`, `${ph.label} ${day(s.startsAt)} ${n}: ${st} -> ${stNow} ${note}`);
       }
       return;
     }
@@ -651,17 +651,17 @@ async function runSequence(browser, seed, t0) {
     if (mode === 'undo' && !/Undo gone/.test(note) && !tooLate) check(st === 'confirmed', 'intent', 'tapped Undo in time but ended up out', `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     else if (mode === 'offline-note') {
       // The left-over note's retry runs 15 s later: the seat must still be in after it.
-      if (!/no I'm in button/.test(note)) {
+      if (!/no I’m in button/.test(note)) {
         await sleep(17000);
         const t2 = await truthOf(api[ph.who], ph.who);
         const a2 = t2 && t2.sessions.find((x) => x.id === s.id);
         const st2 = a2 && a2.mine && a2.mine.status;
         const toasts2 = await toastsOf(ph, since);
         const err2 = toasts2.some((x) => x.error && !/offline|signal|connection/i.test(x.msg));
-        if (a2 && !a2.started && !a2.canceled) check(st2 === 'confirmed' || st2 === 'waitlisted' || err2, 'intent', "drop failed offline (note kept), I'm in on the same game when back: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st}->${st2} toasts=${JSON.stringify(toasts2.map((x) => x.msg))}`);
+        if (a2 && !a2.started && !a2.canceled) check(st2 === 'confirmed' || st2 === 'waitlisted' || err2, 'intent', "drop failed offline (note kept), I’m in on the same game when back: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st}->${st2} toasts=${JSON.stringify(toasts2.map((x) => x.msg))}`);
       }
-    } else if (mode === 'reload-rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out, reload, I'm in again: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
-    else if (mode === 'rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out then I'm in during Undo: not in", `${ph.label} ${ph.who} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
+    } else if (mode === 'reload-rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out, reload, I’m in again: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
+    else if (mode === 'rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out then I’m in during Undo: not in", `${ph.label} ${ph.who} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     else if (!errored) check(st !== 'confirmed', 'intent', `dropped out (${mode}) and Undo not tapped, but still in`, `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     // The drop banner says what happens to the money; the pot must move by that much.
     const dm = toasts.map((x) => x.msg).find((x) => /^You dropped out\./.test(x));
@@ -815,8 +815,8 @@ async function runSequence(browser, seed, t0) {
       }
       const hist = g.credit.history;
       const sum = hist.filter((e) => !e.endedAt).reduce((a, e) => a + (e.kind === 'kept' ? e.cents : -e.cents), 0);
-      check(g.credit.balanceCents === sum, 'books', `${n}'s pot ${fmt(g.credit.balanceCents)} != visible history ${fmt(sum)}`, JSON.stringify(hist.slice(0, 8)));
-      check(sum >= 0, 'books', `${n}'s credit below $0 (${fmt(sum)})`, JSON.stringify(hist.slice(0, 8)));
+      check(g.credit.balanceCents === sum, 'books', `${n}’s pot ${fmt(g.credit.balanceCents)} != visible history ${fmt(sum)}`, JSON.stringify(hist.slice(0, 8)));
+      check(sum >= 0, 'books', `${n}’s credit below $0 (${fmt(sum)})`, JSON.stringify(hist.slice(0, 8)));
       check(g.credit.usableCents <= g.credit.balanceCents && g.credit.usableCents >= 0, 'books', `${n} usable ${fmt(g.credit.usableCents)} vs pot ${fmt(g.credit.balanceCents)}`);
       if (g.credit.pending) check(g.credit.pending.cents <= g.credit.balanceCents, 'books', `${n} cash out ${fmt(g.credit.pending.cents)} above pot ${fmt(g.credit.balanceCents)}`);
       check((orgBal.get(idOf(n)) ?? 0) === g.credit.balanceCents, 'books', `${n}: organizer sees ${fmt(orgBal.get(idOf(n)) ?? 0)}, player sees ${fmt(g.credit.balanceCents)}`);
@@ -837,8 +837,8 @@ async function runSequence(browser, seed, t0) {
         if (r.isOrganizer) continue;
         const out = r.status !== 'confirmed' || s.status === 'canceled';
         if (!out) continue;
-        check(!r.creditCents && !r.paidEarlierCents, 'books', `organizer view: credit left on ${r.name}'s ${r.status} seat${s.status === 'canceled' ? ' (canceled game)' : ''}`, `${day(s.startsAt)} credit=${r.creditCents} earlier=${r.paidEarlierCents}`);
-        check(!(r.paymentStatus === 'paid' && !r.refundedAt && !r.selfPaid), 'books', `cash still counted on ${r.name}'s ${r.status} seat${s.status === 'canceled' ? ' (canceled game)' : ''} (not credited back, not a claim)`, `${day(s.startsAt)} ${JSON.stringify({ pay: r.paymentStatus, amt: r.paymentAmountCents, refundedAt: r.refundedAt })}`);
+        check(!r.creditCents && !r.paidEarlierCents, 'books', `organizer view: credit left on ${r.name}’s ${r.status} seat${s.status === 'canceled' ? ' (canceled game)' : ''}`, `${day(s.startsAt)} credit=${r.creditCents} earlier=${r.paidEarlierCents}`);
+        check(!(r.paymentStatus === 'paid' && !r.refundedAt && !r.selfPaid), 'books', `cash still counted on ${r.name}’s ${r.status} seat${s.status === 'canceled' ? ' (canceled game)' : ''} (not credited back, not a claim)`, `${day(s.startsAt)} ${JSON.stringify({ pay: r.paymentStatus, amt: r.paymentAmountCents, refundedAt: r.refundedAt })}`);
       }
     }
   }

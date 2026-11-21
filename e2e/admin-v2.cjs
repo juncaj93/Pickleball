@@ -388,7 +388,7 @@ async function main() {
     assert((await g.getAttribute('data-open')) === 'no', 'closed');
     assert((await g.locator('.mv2-sub').innerText()).includes('canceled'), 'says canceled');
     await g.locator('.mv2-toggle').click();
-    assert((await g.getByText('Session canceled').count()) === 1 && (await g.getByText('Brandon').count()) >= 1, 'notice and credit list');
+    assert((await g.getByText('Game canceled').count()) === 1 && (await g.getByText('Brandon').count()) >= 1, 'notice and credit list');
     await ctx.close();
   });
 

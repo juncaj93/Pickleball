@@ -236,8 +236,8 @@ async function main() {
     const l = d1.creditLedger.find((x) => x.playerId === id.Mitchel);
     const s5 = d1.sessions.find((x) => x.id === nov5.id);
     const seat = s5.roster.find((r) => r.playerId === id.Mitchel);
-    if (!l || l.balanceCents !== 1400) throw new Error(`Mitchel's credit after the cancel: ${JSON.stringify(l)}`);
-    if (!seat || seat.paymentStatus !== 'unpaid' || seat.creditCents !== 0) throw new Error(`Mitchel's Nov 5 seat: ${JSON.stringify(seat)}`);
+    if (!l || l.balanceCents !== 1400) throw new Error(`Mitchel’s credit after the cancel: ${JSON.stringify(l)}`);
+    if (!seat || seat.paymentStatus !== 'unpaid' || seat.creditCents !== 0) throw new Error(`Mitchel’s Nov 5 seat: ${JSON.stringify(seat)}`);
   }
   for (const scheme of ['light', 'dark']) {
     for (const width of WIDTHS) {
@@ -282,7 +282,7 @@ async function main() {
         await nav(page, 'Players').click();
         const row = page.locator('li.player-row[data-player="Mitchel"]');
         assert(/Credit \$14/.test(squash(await row.innerText())), squash(await row.innerText()));
-        const refund = row.getByRole('link', { name: /^Refund Mitchel \$14 credit with Venmo/ });
+        const refund = row.getByRole('link', { name: /^Cash out Mitchel \$14 with Venmo/ });
         await refund.waitFor();
         assert((await refund.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', `href ${await refund.getAttribute('href')}`);
         assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', 'app link');
@@ -331,7 +331,7 @@ async function main() {
         const hist = sheet.locator('[data-credit-history] li');
         assert((await hist.count()) === 1 && / \$14 back from Oct 29 \(canceled\)$/.test(squash(await hist.first().innerText())), `history: ${await hist.allInnerTexts()}`);
         await sheet.locator('[data-request-refund]').waitFor();
-        await sheet.getByText("Your credit goes on a game by itself when you tap I'm in.").waitFor();
+        await sheet.getByText("Your credit goes on a game by itself when you tap I’m in.").waitFor();
         assert((await sheet.locator('[data-refund-pending]').count()) === 0, 'nothing pending');
         assert((await greenButtons(sheet)) <= 1, 'at most one green button on the sheet');
         await tidy(sheet, 'credit sheet');
@@ -350,7 +350,7 @@ async function main() {
       assert((await page.locator('[data-credit-line], [data-credit-sheet]').count()) === 0, 'credit line or sheet');
       assert((await page.locator('[data-use-credit]').count()) === 0, 'use credit');
       const t = squash(await page.locator('body').innerText());
-      assert(!/credit/i.test(t.replace(/If \d+ play, you get \$\d+ back as credit\./g, '').replace(/If you paid, it's now your credit\./g, '')), t.slice(0, 300));
+      assert(!/credit/i.test(t.replace(/If \d+ play, you get \$\d+ back as credit\./g, '').replace(/If you paid, it’s now your credit\./g, '')), t.slice(0, 300));
       const raw = await (await ctx.request.get(BASE + '/api/group')).text();
       assert(!/creditLedger|keptAsCredit|potCredit|refundRequests|Mitchel-K/.test(raw), 'API leaks it');
       assert(/"balanceCents":0/.test(raw), "own credit should be $0");
@@ -410,10 +410,10 @@ async function main() {
     for (const width of WIDTHS) {
       const tag = `${width}px ${scheme}`;
       const { ctx, page, errors } = await open(scheme, width);
-      await check(`${tag}: the organizer's Home card "Mitchel requested a refund of $14": green Refund to his Venmo with the credit note, Not now; the Players tab says refund requested and offers no Refund credit balance; tidy`, async () => {
+      await check(`${tag}: the organizer's Home card "Mitchel asked to cash out $14": green Refund to his Venmo with the credit note, Not now; the Players tab says refund requested and offers no Refund credit balance; tidy`, async () => {
         const card = page.locator('[data-refund-request="Mitchel"]');
         await card.waitFor();
-        assert(squash(await card.locator('h3').innerText()) === 'Mitchel requested a refund of $14', `title was "${await card.locator('h3').innerText()}"`);
+        assert(squash(await card.locator('h3').innerText()) === 'Mitchel asked to cash out $14', `title was "${await card.locator('h3').innerText()}"`);
         const first = await page.locator('main article').first().getAttribute('data-refund-request');
         assert(first === 'Mitchel', 'the refund request comes first on Home');
         const link = card.locator('[data-refund-venmo]');
@@ -430,7 +430,7 @@ async function main() {
         await noSideways(page);
         await nav(page, 'Players').click();
         const row = page.locator('li.player-row[data-player="Mitchel"]');
-        await row.getByText('refund requested').waitFor();
+        await row.getByText('cash out requested').waitFor();
         assert((await row.locator('[data-credit-refund]').count()) === 0, 'the reserved $14 cannot be refunded twice');
         await tidy(row, 'player row');
       });
@@ -466,7 +466,7 @@ async function main() {
       await page.reload();
       await page.locator('[data-refund-request="Mitchel"] [data-mark-refunded]').waitFor();
       await page.locator('[data-refund-request="Mitchel"] [data-mark-refunded]').click();
-      await page.locator('.toast', { hasText: 'Mitchel refunded' }).waitFor();
+      await page.locator('.toast', { hasText: 'Mitchel cashed out' }).waitFor();
       await page.locator('[data-refund-request="Mitchel"]').waitFor({ state: 'detached' });
       const m = await player('Mitchel', 'light', 390);
       assert((await chip(m.page).count()) === 0, 'no chip once the credit was paid back');
@@ -475,10 +475,10 @@ async function main() {
       await nav(page, 'History').click();
       await page.getByRole('button', { name: 'Activity' }).click();
       const acts = page.getByRole('list', { name: 'Activity' });
-      await acts.getByText('Mitchel asked for $14 refund of their credit').first().waitFor();
-      await acts.getByText('Mitchel took back their refund request').first().waitFor();
-      await acts.getByText("Alex put off Mitchel's refund request").first().waitFor();
-      await acts.getByText("Alex paid Mitchel's credit back").first().waitFor();
+      await acts.getByText('Mitchel asked to cash out $14').first().waitFor();
+      await acts.getByText('Mitchel took back their cash out request').first().waitFor();
+      await acts.getByText("Alex put off Mitchel’s cash out request").first().waitFor();
+      await acts.getByText("Alex paid Mitchel’s credit back").first().waitFor();
       assert(!/\bsent\b/i.test(await acts.innerText()), 'says sent');
     });
     await check('Undo on the Players tab takes the refund back: Mitchel has $14 again and his request is waiting again (the card is back); Not now frees it; nothing here ever says money was sent', async () => {
@@ -486,9 +486,9 @@ async function main() {
       const row = page.locator('li.player-row[data-player="Mitchel"]');
       assert(/\$0/.test(squash(await row.innerText())), squash(await row.innerText()));
       await row.locator('[data-credit-undo="Mitchel"]').click();
-      await page.locator('.toast', { hasText: 'Credit refund undone' }).waitFor();
+      await page.locator('.toast', { hasText: 'Cash out undone' }).waitFor();
       await row.getByText('Credit $14').waitFor();
-      await row.getByText('refund requested').waitFor();
+      await row.getByText('cash out requested').waitFor();
       await row.locator('.player-open').click();
       const t = squash(await page.locator('dialog[open] [data-credit-section]').innerText());
       assert(/\$14/.test(t) && /-\$14 refunded/.test(t) && /undone/i.test(t), t);
@@ -522,7 +522,7 @@ async function main() {
     await check('Undo under "Paid with credit" puts the credit back (the chip returns); Use credit works again; the sheet lists it', async () => {
       const undo = page.locator('[data-undo-credit]').first();
       await undo.waitFor();
-      assert((await page.getByRole('button', { name: 'I paid' }).count()) === 0 && (await page.getByText("Didn't pay?").count()) === 0, 'only Undo under the paid tag');
+      assert((await page.getByRole('button', { name: 'I paid' }).count()) === 0 && (await page.getByText("Didn’t pay?").count()) === 0, 'only Undo under the paid tag');
       await undo.click();
       await chip(page).waitFor();
       // The chip counts up to the new amount, so wait for it to finish.
@@ -665,9 +665,9 @@ async function main() {
     await check(`Cancel session ${label}: ${asked ? 'asks' : 'does not ask'} "Were you charged for this court?"`, async () => {
       const card = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Tue, Nov 10' }).first();
       await card.getByRole('button', { name: /^Game menu for/ }).click();
-      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Cancel game' }).click();
       const dlg = page.locator('dialog[open]');
-      await dlg.getByRole('button', { name: 'Cancel session' }).waitFor();
+      await dlg.getByRole('button', { name: 'Cancel game' }).waitFor();
       const q = dlg.getByText('Were you charged for this court?');
       assert((await q.count()) === (asked ? 1 : 0), `question count ${await q.count()}`);
       if (asked) {
@@ -692,12 +692,12 @@ async function main() {
     await check('answering Yes with an amount counts it as that canceled game\'s court cost in Money; the cash payer is listed as "Now their credit" and gets the credit', async () => {
       const card = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Tue, Nov 10' }).first();
       await card.getByRole('button', { name: /^Game menu for/ }).click();
-      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Cancel game' }).click();
       const dlg = page.locator('dialog[open]');
       await dlg.getByRole('button', { name: 'Yes', exact: true }).click();
       await dlg.getByLabel('Amount charged').fill('35');
-      await dlg.getByRole('button', { name: 'Cancel session' }).click();
-      await page.getByText('Session canceled').first().waitFor();
+      await dlg.getByRole('button', { name: 'Cancel game' }).click();
+      await page.getByText('Game canceled').first().waitFor();
       const after = page.locator('dialog[open]');
       const list = after.locator('[data-credit-back-list]');
       await list.getByRole('heading', { name: 'Now their credit' }).waitFor();

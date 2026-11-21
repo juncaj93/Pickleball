@@ -377,7 +377,7 @@ function knownFinding(msg: string): string | null {
   const stepLines = lines.filter((l) => /^\s{9}|steps: /.test(l));
   const last = stepLines[stepLines.length - 1] ?? '';
   if (/unconfirmed I paid (without an answer|turned into confirmed money)/.test(lines[0]) && /finalize|reopen/.test(msg)) return 'F1';
-  if (/credit stuck|more credit than price/.test(lines[0]) && /unmark|didn't pay/.test(last)) return 'F2';
+  if (/credit stuck|more credit than price/.test(lines[0]) && /unmark|didn’t pay/.test(last)) return 'F2';
   return null;
 }
 function prng(seed: number) {
@@ -516,7 +516,7 @@ async function runSeq(seed: number, stats: { steps: number; seqs: number }, mode
     }
     if (a === 'didntpay') {
       const [n, g] = pickSeat(SELF);
-      return { act: "didn't pay?", label: `${n} didn't pay? ${dayOf(g.startsAt)}#${dev}`, kind: 'clear', seat: [g.id, w.ids[n]], run: async () => (await phone(w, n, dev)).call('POST', `/api/sessions/${g.id}/paid`, { paid: false }) };
+      return { act: "didn’t pay?", label: `${n} didn’t pay? ${dayOf(g.startsAt)}#${dev}`, kind: 'clear', seat: [g.id, w.ids[n]], run: async () => (await phone(w, n, dev)).call('POST', `/api/sessions/${g.id}/paid`, { paid: false }) };
     }
     const [n, g] = pickSeat(OWES);
     return {
@@ -555,8 +555,8 @@ async function runSeq(seed: number, stats: { steps: number; seqs: number }, mode
       const [n, g] = pickSeat(CLAIM);
       const paid = a === 'claimY';
       return {
-        act: paid ? 'claim Paid' : "claim Didn't pay",
-        label: `org claim ${paid ? 'Paid' : "Didn't pay"} ${n} ${tagOf(g)}`,
+        act: paid ? 'claim Paid' : "claim Didn’t pay",
+        label: `org claim ${paid ? 'Paid' : "Didn’t pay"} ${n} ${tagOf(g)}`,
         kind: paid ? 'confirm' : 'clear',
         seat: [g.id, w.ids[n]],
         run: () => org.call('POST', `/api/admin/sessions/${g.id}/claim`, { playerId: w.ids[n], paid }),
@@ -756,7 +756,7 @@ describe('claims: every way in x every answer, twice, two devices at once, racin
             }
             await books(w, `${way} ${a} ${mode}`);
             const want = PAIDLIKE.includes(a) ? FLAT : credit;
-            expect(potOf(w, 'Blair'), `${way} ${a} ${mode}: Blair's pot`).toBe(want);
+            expect(potOf(w, 'Blair'), `${way} ${a} ${mode}: Blair’s pot`).toBe(want);
             expect((await dash(w)).paymentClaims, `${way} ${a} ${mode}: claim gone`).toEqual([]);
           }
       });
@@ -869,7 +869,7 @@ describe('claims, then the game changes', () => {
     expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'waitlist' })).status).toBe(200);
     await books(w, 'back to venue waitlist with a paid seat');
     expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'not_opened' })).status).toBe(200);
-    await books(w, "didn't open: canceled with Devon's unconfirmed I paid");
+    await books(w, "didn’t open: canceled with Devon’s unconfirmed I paid");
     expect((await dash(w)).paymentClaims.some((c: any) => c.playerId === w.ids.Devon)).toBe(true);
     await claim(w, 'Devon', g2.id, false);
     await books(w, 'devon cleared');
@@ -1019,7 +1019,7 @@ describe('F2: Unmark (or the player\'s own "Didn\'t pay?") of cash on top of cre
     // The $4 cash is gone; the $10 credit pays the $5 seat and $5 comes back.
     expect(potOf(w, 'Blair'), 'credit above the final price comes back').toBe(500);
   });
-  finding("withheld (unconfirmed $4), then the player's own Didn't pay?: $5 of her own credit stuck on the seat for good", async () => {
+  finding("withheld (unconfirmed $4), then the player’s own Didn’t pay?: $5 of her own credit stuck on the seat for good", async () => {
     const { w, g } = await tenWithCredit(false);
     expect(potOf(w, 'Blair')).toBe(0); // withheld
     expect((await didntPay(w, 'Blair', g.id)).status).toBe(200);
@@ -1284,7 +1284,7 @@ describe("held drop, then I'm in on another game", () => {
             } else {
               // A Waitlist court is a normal seat like Not booked: the drop's credit goes on at I'm in.
               if (court === 'waitlist') expect(sb.status, `${variant}: a Waitlist court gives a normal seat`).toBe('confirmed');
-              expect(pot, `${variant}: the drop's credit went on Nov 5`).toBe(0);
+              expect(pot, `${variant}: the drop’s credit went on Nov 5`).toBe(0);
             }
           }
         } finally {
@@ -1293,7 +1293,7 @@ describe("held drop, then I'm in on another game", () => {
         }
       });
 
-  finding("a drop note older than 2 minutes is sent anyway by the next I'm in (the documented limit is 2 minutes): she is dropped from a game she is in", async () => {
+  finding("a drop note older than 2 minutes is sent anyway by the next I’m in (the documented limit is 2 minutes): she is dropped from a game she is in", async () => {
     vi.useFakeTimers();
     try {
       const w = await world();

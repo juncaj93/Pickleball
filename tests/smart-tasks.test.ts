@@ -65,11 +65,11 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(t[0].steps.map((s) => [s.label, s.done, s.enabled])).toEqual([
       ['Cancel the court', false, true],
       ['Cancel the session', false, true],
-      ["Text everyone it's canceled", false, false],
+      ["Text everyone it’s canceled", false, false],
     ]);
     const alerts = Object.fromEntries(t[0].alerts.map((a) => [a.id, a]));
     expect(alerts.cancel.text).toBe(`Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`);
-    expect(alerts.cancel_followup).toMatchObject({ dueMs: at('2026-11-03T03:30:00Z'), text: `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}` });
+    expect(alerts.cancel_followup).toMatchObject({ dueMs: at('2026-11-03T03:30:00Z'), text: `Tuesday: court canceled? Now cancel the game and text everyone: ${ADMIN}` });
     // Canceled on the site at 10:20 PM: the follow-up has nothing left to say; the text step opens.
     const canceled = { ...tue, canceled: true, canceledAt: '2026-11-03T03:20:00Z' };
     const c = tasksAt('2026-11-03T03:30:00Z', [canceled], [markKey(tue.id, 'court_canceled')]);
@@ -99,13 +99,13 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     const nov17 = game('2026-11-17', { booked: false, confirmedCount: 0 });
     expect(tasksAt('2026-11-03T11:44:00Z', [nov17])).toEqual([]);
     const t = tasksAt('2026-11-03T11:45:00Z', [nov17]); // Tue Nov 3, 6:45 AM EST
-    expect(t[0].text).toBe('Tue Nov 17 opens at 7:00 AM.');
+    expect(t[0].text).toBe('Booking for Tue Nov 17 opens at 7:00 AM.');
     expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve']);
     expect(t[0].alerts[0]).toMatchObject({ id: 'book', dueMs: at('2026-11-03T11:45:00Z') });
-    expect(t[0].alerts[0].text).toBe(`Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
+    expect(t[0].alerts[0].text).toBe(`Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
     expect(t[0].alerts[1]).toMatchObject({ id: 'book_followup', dueMs: at('2026-11-03T12:30:00Z') }); // 7:30 AM
-    expect(t[0].alerts[1].text).toBe(`Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
-    expect(tasksAt('2026-11-03T12:30:00Z', [nov17])[0].text).toBe('Tue Nov 17 opened at 7:00 AM.');
+    expect(t[0].alerts[1].text).toBe(`Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
+    expect(tasksAt('2026-11-03T12:30:00Z', [nov17])[0].text).toBe('Booking for Tue Nov 17 opened at 7:00 AM.');
     expect(tasksAt('2026-11-03T11:45:00Z', [{ ...nov17, booked: true }])).toEqual([]);
     // The next day it is just one of the games with no court yet (no alert).
     const next = tasksAt('2026-11-04T12:00:00Z', [nov17]);
@@ -115,8 +115,8 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
   it('on a holiday: "Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ..."', () => {
     const nov26 = game('2026-11-26', { booked: false, confirmedCount: 0, holiday: 'Thanksgiving' });
     const t = tasksAt('2026-11-12T11:45:00Z', [nov26]); // Thu Nov 12, 6:45 AM
-    expect(t[0].text).toBe('Thu Nov 26 opens at 7:00 AM (Thanksgiving).');
-    expect(t[0].alerts[0].text).toBe(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
+    expect(t[0].text).toBe('Booking for Thu Nov 26 opens at 7:00 AM (Thanksgiving).');
+    expect(t[0].alerts[0].text).toBe(`Booking for Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
   });
 
   it('no booking alert for any other unbooked game: only the one 14 days out', () => {
@@ -472,9 +472,9 @@ describe('the tick endpoint', () => {
     expect(g.sent).toEqual([
       `Tuesday: 3 players in, need a 4th. Text the group: ${GO}`,
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
-      `Tuesday: court canceled? Now cancel the session and text everyone`, // plain words: Open site is the way in
-      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
-      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Tuesday: court canceled? Now cancel the game and text everyone`, // plain words: Open site is the way in
+      `Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
     for (const t of g.sent) {
       expect(t).not.toMatch(/555|\(313\)|\$|venmo/i);
@@ -675,7 +675,7 @@ describe('the tick endpoint', () => {
     // New deadline 8:30 AM: cancel warning 10:30 PM, follow-up 11:00 PM (the game-day check is gone, Zip 11).
     expect(g.sent.filter((t) => !t.includes('Nov 17'))).toEqual([
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
-      `Tuesday: court canceled? Now cancel the session and text everyone`, // plain words: Open site is the way in
+      `Tuesday: court canceled? Now cancel the game and text everyone`, // plain words: Open site is the way in
     ]);
     const card = (await import('../src/pages/admin/doNow')).dashboardTasks(await g.dash(), at('2026-11-03T12:50:00Z'), ADMIN);
     expect(card[0].text).toBe('Tonight: only 3 players in. Cancel court before 8:30 AM.');

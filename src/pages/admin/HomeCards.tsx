@@ -90,7 +90,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           {under ? (
             <>
               <button className="ac-btn ac-out" data-ac-tone="red" disabled={busy} onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
-                Cancel session
+                Cancel game
               </button>
               <button className="ac-btn ac-out" disabled={busy} onClick={() => finalize(inNow.map((r) => r.playerId))}>
                 Finalize anyway
@@ -133,7 +133,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         {under ? (
           <>
             <button className="btn danger" disabled={busy} onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
-              Cancel session
+              Cancel game
             </button>
             <button className="btn secondary" disabled={busy} onClick={() => finalize(inNow.map((r) => r.playerId))}>
               Finalize anyway
@@ -230,7 +230,7 @@ function WhoPlayed({ s, gp, busy, onConfirm, lateFees = false }: { s: AdminSessi
                     <span className="set-label">
                       <span className="set-name">{r.guest!.name}</span>
                       <span className="set-hint">
-                        {r.name}'s guest · {guestOn(r) ? 'played' : 'did not play'}
+                        {r.name}’s guest · {guestOn(r) ? 'played' : 'did not play'}
                       </span>
                     </span>
                     <input
@@ -296,10 +296,10 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
       <AlertCard
         tone="blue"
         icon="credit"
-        label={`${r.name} requested a refund`}
+        label={`${r.name} asked to cash out`}
         titleAs="h3"
         data={{ 'data-refund-request': r.name }}
-        title={`${r.name} requested a refund of ${formatPrice(r.cents)}`}
+        title={`${r.name} asked to cash out ${formatPrice(r.cents)}`}
         sub={pay.addressed ? 'Cash out request' : `Cash out request · ${pickInVenmo(r.name, r.venmo)}`}
         actions={
           <>
@@ -310,7 +310,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
               data-refund-venmo
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Refund ${r.name} ${formatPrice(r.cents)} with Venmo`}
+              aria-label={`Pay ${r.name} ${formatPrice(r.cents)} with Venmo`}
               onClick={(e) => {
                 openVenmo(e, pay);
                 storageSet(`pb_refund_request_opened_${r.id}`, '1');
@@ -320,7 +320,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
               Venmo
             </a>
             {tapped && (
-              <button className="ac-btn ac-out" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} refunded`)}>
+              <button className="ac-btn ac-out" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} cashed out`)}>
                 Mark refunded
               </button>
             )}
@@ -333,9 +333,9 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
     );
   }
   return (
-    <article className="card stack refund-request" aria-label={`${r.name} requested a refund`} data-refund-request={r.name}>
+    <article className="card stack refund-request" aria-label={`${r.name} asked to cash out`} data-refund-request={r.name}>
       <h3>
-        {r.name} requested a refund of {formatPrice(r.cents)}
+        {r.name} asked to cash out {formatPrice(r.cents)}
       </h3>
       <div className="finalize-btns">
         <a
@@ -345,17 +345,17 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
           data-refund-venmo
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Refund ${r.name} ${formatPrice(r.cents)} with Venmo`}
+          aria-label={`Pay ${r.name} ${formatPrice(r.cents)} with Venmo`}
           onClick={(e) => {
             openVenmo(e, pay);
             storageSet(`pb_refund_request_opened_${r.id}`, '1');
             bump((x) => x + 1);
           }}
         >
-          Refund
+          Cash out
         </a>
         {tapped && (
-          <button className="btn secondary" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} refunded`)}>
+          <button className="btn secondary" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} cashed out`)}>
             Mark refunded
           </button>
         )}
@@ -379,7 +379,7 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
     run(() => api('POST', `/api/admin/sessions/${c.sessionId}/claim`, { playerId: c.playerId, paid }), msg, {
       key: `claim:${c.sessionId}:${c.playerId}`,
       patch: (d) => ({ ...d, paymentClaims: (d.paymentClaims ?? []).filter((x) => !(x.sessionId === c.sessionId && x.playerId === c.playerId)) }),
-      what: paid ? 'Paid' : "Didn't pay",
+      what: paid ? 'Paid' : "Didn’t pay",
       ...(ctx.d.adminUndo === true ? { undo: true } : {}),
     });
   // Zip 11, Alert cards: an amber (owes) card: the same words as a title and the rest, Paid and Didn't pay under it.
@@ -396,11 +396,11 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
         sub={rest || undefined}
         actions={
           <>
-            <button className="ac-btn" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}'s ${formatPrice(c.cents)} is credit now`)}>
+            <button className="ac-btn" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}’s ${formatPrice(c.cents)} is credit now`)}>
               Paid
             </button>
             <button className="ac-btn ac-out" disabled={busy} data-claim-not-paid onClick={() => answer(false, 'Cleared')}>
-              Didn't pay
+              Didn’t pay
             </button>
           </>
         }
@@ -411,11 +411,11 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
     <article className="card stack payment-claim" aria-label={`${c.name} payment not confirmed`} data-payment-claim={c.name}>
       <h3>{paymentClaimText(c.name, c.cents, c.why, c.startsAt, ctx.d.group.timezone)}</h3>
       <div className="finalize-btns">
-        <button className="btn secondary" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}'s ${formatPrice(c.cents)} is credit now`)}>
+        <button className="btn secondary" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}’s ${formatPrice(c.cents)} is credit now`)}>
           Paid
         </button>
         <button className="link-btn not-now" disabled={busy} data-claim-not-paid onClick={() => answer(false, 'Cleared')}>
-          Didn't pay
+          Didn’t pay
         </button>
       </div>
     </article>

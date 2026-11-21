@@ -143,10 +143,10 @@ async function main() {
     // The banner, like tapping I'm in.
     const pop = page.locator('.pop');
     await pop.waitFor();
-    assert(squash(await pop.innerText()) === "You're in", `banner: ${await pop.innerText()}`);
+    assert(squash(await pop.innerText()) === "You’re in", `banner: ${await pop.innerText()}`);
     // The answer card is still there (Done not tapped) and shows the short time.
     const answer = page.getByRole('region', { name: 'Your answer' });
-    await answer.getByRole('heading', { name: "You're in" }).waitFor();
+    await answer.getByRole('heading', { name: "You’re in" }).waitFor();
     const at = squash(await answer.innerText());
     assert(/Thu, Nov 5 · 8 PM(?!.*\u2013)/.test(at) && !/8:00|10:00/.test(at), `answer time: ${at}`);
     // The game card below changed already.
@@ -164,7 +164,7 @@ async function main() {
   await check('REAL mode: Yes and "I\'m in" on the same game give the same seat and the same money', async () => {
     const { ctx, page } = await open('Ryan');
     const card = cardOf(page);
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await card.locator('.tile-check').waitFor();
     const ryanSeat = (await (await who.Ryan.get(`${BASE}/api/group`)).json()).sessions.find((s) => s.id === thu.id).mine;
     for (const k of ['status', 'paymentStatus', 'oweCents', 'shareCents', 'creditCents', 'useCreditCents', 'paidWithCredit', 'selfPaid']) {
@@ -195,7 +195,7 @@ async function main() {
     const now = await readCard(card);
     assert(now.joined && now.balls === was.balls + 1 && /Dana/.test(now.names), `demo card after Yes: ${JSON.stringify(now)}`);
     await page.locator('.pop').waitFor();
-    assert(squash(await page.locator('.pop').innerText()) === "You're in", 'demo banner');
+    assert(squash(await page.locator('.pop').innerText()) === "You’re in", 'demo banner');
     const after = (await dash()).sessions.find((s) => s.id === tue.id).confirmedCount;
     assert(after === before, `the demo changed the real game: ${before} to ${after}`);
     await page.close();

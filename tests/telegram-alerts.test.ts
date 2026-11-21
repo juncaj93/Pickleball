@@ -100,8 +100,8 @@ describe('alert wording', () => {
   });
 
   it('the refund request: a name and whole dollars, nothing else', () => {
-    expect(refundRequestMessage('Mitchel', 1400)).toBe('Refund requested: Mitchel wants $14 back.');
-    expect(refundRequestMessage('Mitchel', 500)).toBe('Refund requested: Mitchel wants $5 back.');
+    expect(refundRequestMessage('Mitchel', 1400)).toBe('Cash out: Mitchel wants $14 back.');
+    expect(refundRequestMessage('Mitchel', 500)).toBe('Cash out: Mitchel wants $5 back.');
   });
 });
 
@@ -294,7 +294,7 @@ describe('Telegram alerts', () => {
     expect((await alex.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data.creditBackCents).toBe(1400); // $14 is credit now
     await clear();
     expect((await alex.call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
-    expect(await texts()).toEqual(['Refund requested: Alex wants $14 back.']);
+    expect(await texts()).toEqual(['Cash out: Alex wants $14 back.']);
     expect(sent[0].body.reply_markup.inline_keyboard[0][0]).toEqual({ text: 'Open site', url: 'https://pickleball.juncaj.net/admin' });
     expect(sent[0].body.text).not.toMatch(/555|venmo|organizer/i);
     await clear();
@@ -326,7 +326,7 @@ describe('Telegram alerts', () => {
     // Emery did not play: the $14 is credit. The request is the one thing that alerts; Mark refunded and undo are quiet.
     const emery = await playerPhone(ctx, 'Emery');
     expect((await emery.call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
-    expect(await texts()).toEqual(['Refund requested: Emery wants $14 back.']);
+    expect(await texts()).toEqual(['Cash out: Emery wants $14 back.']);
     await clear();
     const req = (await dash(ctx)).refundRequests[0];
     expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${req.id}`, { action: 'refunded' })).status).toBe(200);
@@ -374,15 +374,15 @@ describe('Telegram alerts', () => {
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']); // the 4th join sends nothing
     expect((await out(ctx, s.id, 'Devon')).status).toBe(200);
     await ctx.app.settle();
-    expect((await dash(ctx)).alerts).toMatchObject({ lastOk: false, lastError: "Couldn't reach Telegram." });
+    expect((await dash(ctx)).alerts).toMatchObject({ lastOk: false, lastError: "Couldn’t reach Telegram." });
     mode = 'error';
     await join(ctx, s.id, ['Devon']);
     expect((await out(ctx, s.id, 'Devon')).status).toBe(200);
     await ctx.app.settle();
-    expect((await dash(ctx)).alerts.lastError).toBe("The bot can't message you yet. Open the bot in Telegram and tap Start.");
+    expect((await dash(ctx)).alerts.lastError).toBe("The bot can’t message you yet. Open the bot in Telegram and tap Start.");
     const test = await ctx.organizer.call('POST', '/api/admin/alerts/test', {});
     expect(test.status).toBe(502);
-    expect(test.data.message).toBe("The bot can't message you yet. Open the bot in Telegram and tap Start.");
+    expect(test.data.message).toBe("The bot can’t message you yet. Open the bot in Telegram and tap Start.");
     // Hanging: the tap answers right away; the send is left running in the background.
     mode = 'hang';
     await join(ctx, s.id, ['Devon']);

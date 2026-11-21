@@ -54,8 +54,8 @@ describe('Adjust credit rules (planAdjust)', () => {
     expect(planAdjust({ ...base, direction: 'remove', cents: 1400 })).toEqual({ ok: true, deltaCents: -1400, afterCents: 0 });
   });
   it('C3 remove cannot go below $0, with the message that names the player and the credit', () => {
-    expect(planAdjust({ ...base, direction: 'remove', cents: 2000 })).toEqual({ ok: false, error: "Can't remove more than the $14 credit Mitchel has." });
-    expect(planAdjust({ ...base, direction: 'remove', cents: 100, potCents: 0 })).toEqual({ ok: false, error: "Can't remove more than the $0 credit Mitchel has." });
+    expect(planAdjust({ ...base, direction: 'remove', cents: 2000 })).toEqual({ ok: false, error: "Can’t remove more than the $14 credit Mitchel has." });
+    expect(planAdjust({ ...base, direction: 'remove', cents: 100, potCents: 0 })).toEqual({ ok: false, error: "Can’t remove more than the $0 credit Mitchel has." });
   });
   it('C4 the amount must be positive whole dollars, at most $500', () => {
     for (const cents of [null, 0, -500, 550, 1.5, 50_100]) expect(planAdjust({ ...base, cents }).ok, String(cents)).toBe(false);
@@ -167,7 +167,7 @@ describe('Adjust credit: saving', () => {
     await adjust(w, 'Blair', body('add', 1400, 0));
     const r = await adjust(w, 'Blair', body('remove', 2000, 1400));
     expect(r.status).toBe(400);
-    expect(r.data.message ?? r.data.error).toBe("Can't remove more than the $14 credit Blair has.");
+    expect(r.data.message ?? r.data.error).toBe("Can’t remove more than the $14 credit Blair has.");
     expect(ledgerRows(w, 'Blair')).toHaveLength(1);
     expect((await adjust(w, 'Blair', body('remove', 1400, 1400))).status).toBe(200);
     expect(await potOf(w, 'Blair')).toBe(0);

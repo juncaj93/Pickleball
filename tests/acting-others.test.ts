@@ -31,10 +31,10 @@ const verdicts = (lines: TaggedLine[], exempt?: (n: string) => boolean) => {
 describe('the rule: when is a tap "for someone else"?', () => {
   it('Mitchel acts as Mitchel 3 times, then as Brandon: the Brandon tap is flagged "from Mitchel\'s phone"', () => {
     const lines = [line('M', 'Mitchel'), line('M', 'Mitchel', 'player_withdraw'), line('M', 'Mitchel', 'player_self_paid'), line('M', 'Brandon')];
-    expect(verdicts(lines)).toEqual([null, null, null, "from Mitchel's phone"]);
+    expect(verdicts(lines)).toEqual([null, null, null, "from Mitchel’s phone"]);
     // ...and then backs out for Brandon: flagged again.
     lines.push(line('M', 'Brandon', 'player_withdraw'));
-    expect(verdicts(lines).at(-1)).toBe("from Mitchel's phone");
+    expect(verdicts(lines).at(-1)).toBe("from Mitchel’s phone");
   });
 
   it('a brand-new phone is never flagged on its first tap, and its own name over and over is never flagged', () => {
@@ -43,13 +43,13 @@ describe('the rule: when is a tap "for someone else"?', () => {
   });
 
   it("Alex's preview case (Nov 11): a phone that has only ever been Parker (one tap: Drop out's Undo swallowed the rest), then Sage: \"from Parker's phone\"", () => {
-    expect(verdicts([line('P', 'Parker'), line('P', 'Sage')])).toEqual([null, "from Parker's phone"]);
-    expect(verdicts([line('P2', 'Mitchel'), line('P2', 'Nathan', 'player_self_paid')])).toEqual([null, "from Mitchel's phone"]);
+    expect(verdicts([line('P', 'Parker'), line('P', 'Sage')])).toEqual([null, "from Parker’s phone"]);
+    expect(verdicts([line('P2', 'Mitchel'), line('P2', 'Nathan', 'player_self_paid')])).toEqual([null, "from Mitchel’s phone"]);
   });
 
   it('a phone used by two names in only 2 taps (no usual name yet) that acts as a THIRD name: "from a new phone"; going back to a used name is not flagged', () => {
-    expect(verdicts([line('Q', 'Mitchel'), line('Q', 'Nathan'), line('Q', 'Brandon')])).toEqual([null, "from Mitchel's phone", 'from a new phone']);
-    expect(verdicts([line('R', 'Mitchel'), line('R', 'Nathan'), line('R', 'Mitchel')])).toEqual([null, "from Mitchel's phone", null]);
+    expect(verdicts([line('Q', 'Mitchel'), line('Q', 'Nathan'), line('Q', 'Brandon')])).toEqual([null, "from Mitchel’s phone", 'from a new phone']);
+    expect(verdicts([line('R', 'Mitchel'), line('R', 'Nathan'), line('R', 'Mitchel')])).toEqual([null, "from Mitchel’s phone", null]);
   });
 
   it('two people sharing one phone: flagged both ways while one of them is the clear majority, quiet while it is a tie', () => {
@@ -58,7 +58,7 @@ describe('the rule: when is a tap "for someone else"?', () => {
     lines.push(line('S', 'Mitchel'));
     // Mitchel x3, then Brandon: flagged while Mitchel has more than half (3 of 3, 3 of 4, 3 of 5); quiet at the 3 to 3 tie; Brandon's own
     // once Brandon has more than half (4 of 7); then Mitchel's tap is flagged the other way, "from Brandon's phone" (5 of 8).
-    expect(verdicts(lines)).toEqual([null, null, null, "from Mitchel's phone", "from Mitchel's phone", "from Mitchel's phone", null, null, "from Brandon's phone"]);
+    expect(verdicts(lines)).toEqual([null, null, null, "from Mitchel’s phone", "from Mitchel’s phone", "from Mitchel’s phone", null, null, "from Brandon’s phone"]);
   });
 
   it('cleared browser data (or a private window, or another browser) is a new code: it looks like a brand-new phone', () => {
@@ -73,7 +73,7 @@ describe('the rule: when is a tap "for someone else"?', () => {
     // Alex's phone is his for EVERY tap, also the ones before his own name first acted from it (signed out, or another browser).
     expect(verdicts([line('A2', 'Brandon'), line('A2', 'Nathan'), line('A2', 'Alex')], alex)).toEqual([null, null, null]);
     // Without the exemption the same taps would be flagged (the test proves the exemption is what keeps them quiet).
-    expect(verdicts([line('B', 'Alex'), line('B', 'Alex'), line('B', 'Alex'), line('B', 'Brandon')])).toEqual([null, null, null, "from Alex's phone"]);
+    expect(verdicts([line('B', 'Alex'), line('B', 'Alex'), line('B', 'Alex'), line('B', 'Brandon')])).toEqual([null, null, null, "from Alex’s phone"]);
   });
 
   it('only a player\'s own taps count: the automatic credit on I\'m in, the organizer\'s own I\'m in and organizer lines are left out', () => {
@@ -104,14 +104,14 @@ describe('the rule: when is a tap "for someone else"?', () => {
     const j = judgeTaps(lines);
     const now = Date.parse(lines.at(-1)!.createdAt) + HOUR;
     const rows = cardRows(lines, j, now);
-    expect(rows.map((r) => `${r.by} ${r.verb} for ${r.name}`)).toEqual(['Mitchel backed out for Brandon', 'Mitchel signed up for Brandon']);
+    expect(rows.map((r) => `${r.by} ${r.verb} for ${r.name}`)).toEqual(['Mitchel dropped out for Brandon', 'Mitchel signed up for Brandon']);
     expect(cardRows(lines, j, now + 8 * DAY)).toEqual([]);
     expect(afterDismiss(rows, rows[0].at)).toEqual([]);
-    expect(afterDismiss(rows, rows[1].at).map((r) => r.verb)).toEqual(['backed out']);
+    expect(afterDismiss(rows, rows[1].at).map((r) => r.verb)).toEqual(['dropped out']);
     expect(afterDismiss(rows, null)).toEqual(rows);
     expect(cardVerb('player_self_paid')).toBe('marked paid');
     expect(cardVerb('player_still_in')).toBe('said still in');
-    expect(cardVerb('refund_requested')).toBe('asked for a refund');
+    expect(cardVerb('refund_requested')).toBe('asked to cash out');
   });
 
   it('a phone code is 16 to 40 safe characters; anything else is no code', () => {
@@ -126,9 +126,9 @@ describe('the rule: when is a tap "for someone else"?', () => {
 
   it('History wording: the note is added only when the server sent one', () => {
     const e = { id: '1', actorLabel: 'Brandon', action: 'player_join', details: { player: 'Brandon', result: 'confirmed' }, createdAt: '2026-11-10T23:12:00.000Z', sessionStartsAt: '2026-11-11T00:00:00.000Z' };
-    expect(activityText(e, 'America/Detroit', 'Alex')).toBe("Brandon said I'm in for Tue, Nov 10");
-    expect(activityText({ ...e, from: "from Mitchel's phone" }, 'America/Detroit', 'Alex')).toBe("Brandon said I'm in for Tue, Nov 10 (from Mitchel's phone)");
-    expect(activityText({ ...e, from: 'from a new phone' }, 'America/Detroit', 'Alex')).toBe("Brandon said I'm in for Tue, Nov 10 (from a new phone)");
+    expect(activityText(e, 'America/Detroit', 'Alex')).toBe("Brandon said I’m in for Tue, Nov 10");
+    expect(activityText({ ...e, from: "from Mitchel’s phone" }, 'America/Detroit', 'Alex')).toBe("Brandon said I’m in for Tue, Nov 10 (from Mitchel’s phone)");
+    expect(activityText({ ...e, from: 'from a new phone' }, 'America/Detroit', 'Alex')).toBe("Brandon said I’m in for Tue, Nov 10 (from a new phone)");
     expect(activityText({ ...e, action: 'acting_others_on', actorLabel: 'organizer', details: {} }, 'America/Detroit', 'Alex')).toBe('Alex switched "Acting for others" on');
   });
 });
@@ -338,12 +338,12 @@ describe('the switch (ships OFF)', () => {
     expect(d.actingOthersForAll).toBeUndefined();
     const entries = await history(w, ON);
     const casey = entries.find((e) => e.actorLabel === 'Casey' && e.action === 'player_join')!;
-    expect(casey.from).toBe("from Blair's phone");
+    expect(casey.from).toBe("from Blair’s phone");
     expect(entries.filter((e) => e.from).length).toBe(1);
     // Casey backs out from the same phone: a second row, newest first.
     await phone.call('POST', `/api/sessions/${s.id}/withdraw`, {}, h);
     const d2 = await dash(w, ON);
-    expect(d2.actingOthers.map((r: { verb: string }) => r.verb)).toEqual(['backed out', 'signed up']);
+    expect(d2.actingOthers.map((r: { verb: string }) => r.verb)).toEqual(['dropped out', 'signed up']);
   });
 
   it('a brand-new phone that acts as one name once, then another: "Devon signed up for Emery"; its very first tap is never on the card', async () => {
@@ -358,7 +358,7 @@ describe('the switch (ships OFF)', () => {
     await phone.call('POST', `/api/sessions/${s.id}/join`, {}, h);
     const rows = (await dash(w, ON)).actingOthers;
     expect(rows.map((r: { by: string | null; verb: string; name: string }) => `${r.by ?? 'A new phone'} ${r.verb} for ${r.name}`)).toEqual(['Devon signed up for Emery']);
-    expect((await history(w, ON)).find((e) => e.actorLabel === 'Emery')?.from).toBe("from Devon's phone");
+    expect((await history(w, ON)).find((e) => e.actorLabel === 'Emery')?.from).toBe("from Devon’s phone");
   });
 
   it("Alex's own player name acting from a phone (not signed in) makes that phone Alex's: never on the card", async () => {
@@ -422,7 +422,7 @@ describe('the switch (ships OFF)', () => {
     await asCasey(w, phone, s, h);
     w.app.advance(8 * DAY);
     expect((await dash(w, ON)).actingOthers).toEqual([]);
-    expect((await history(w, ON)).find((e) => e.actorLabel === 'Casey')?.from).toBe("from Blair's phone");
+    expect((await history(w, ON)).find((e) => e.actorLabel === 'Casey')?.from).toBe("from Blair’s phone");
   });
 });
 

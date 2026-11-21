@@ -250,8 +250,8 @@ async function main() {
         await snap(a, 'organizer', `05-attention-${label}`, `Needs attention: "${await a.getAttribute('aria-label')}"`, t);
       }
       const strips = [
-        [C, '06-card-booked-holiday', 'Court booked, with "Cancel by", the Election Day pill and my own "You\'re in"'],
-        [D, '07-card-court-waitlist', 'On the court waitlist: Court opened / Didn\'t open'],
+        [C, '06-card-booked-holiday', 'Court booked, with "Cancel by", the Election Day pill and my own "You’re in"'],
+        [D, '07-card-court-waitlist', 'On the court waitlist: Court opened / Didn’t open'],
         [E, '08-card-five-going', '5 going after a drop from 6'],
         [F, '09-card-six', '6 playing'],
         [extra.id, '10-card-extra-game', 'Extra game (one-off), court not booked yet'],
@@ -300,11 +300,11 @@ async function main() {
       await page.getByRole('button', { name: 'View as…' }).click();
       await page.locator('dialog[open]').waitFor();
       await snap(page, 'organizer', '21-view-as', 'View as… (a demo: taps work, nothing is saved)', t);
-      await snap(page.locator('.pretend-pick'), 'organizer', '21-view-as-pretend', '"Pretend it\'s…": presets for the next game, or any date and time', t);
+      await snap(page.locator('.pretend-pick'), 'organizer', '21-view-as-pretend', '"Pretend it’s…": presets for the next game, or any date and time', t);
       await page.locator('dialog[open]').getByRole('button', { name: 'Game day, 8:30 AM' }).click();
       await page.locator('.pretend-bar').waitFor();
       await page.waitForTimeout(300);
-      await snap(page, 'organizer', '22-pretending', 'Pretend it\'s game day, 8:30 AM: "Demo, nothing is saved" bar with Reset and End', t);
+      await snap(page, 'organizer', '22-pretending', 'Pretend it’s game day, 8:30 AM: "Demo, nothing is saved" bar with Reset and End', t);
     }
     await ctx.close();
 
@@ -312,11 +312,11 @@ async function main() {
     const ryan = await open('Ryan', t.width, t.scheme);
     const rp = ryan.page;
     await row(rp, C).waitFor();
-    await snap(rp, 'player', '04-home-full', 'Ryan\'s whole page on game day (pay card at the top, then every game)', { ...t, full: true });
+    await snap(rp, 'player', '04-home-full', 'Ryan’s whole page on game day (pay card at the top, then every game)', { ...t, full: true });
     if (!busy) {
       await snap(rp.locator('section[aria-label="Payment"]'), 'player', '05-pay-card-credit', 'Pay card: $9 after his $5 credit (6 played last time)', t);
       const rows = [
-        [C, '06-row-in-booked-holiday', 'I\'m in (I\'m out shows), court booked, Election Day pill'],
+        [C, '06-row-in-booked-holiday', 'I’m in (I’m out shows), court booked, Election Day pill'],
         [D, '07-row-join-standby', 'Waiting on the court: Join standby'],
         [E, '08-row-five-going', '"5 going, need 4 or 6"'],
         [F, '09-row-six-discount', '6 playing: Pay $9 (6-person discount)'],
@@ -370,21 +370,21 @@ async function main() {
     await p.ctx.unroute('**/api/group');
     await p.page.goto(`${BASE}/t/not-a-real-link-0000000000000000000000`);
     await p.page.waitForLoadState('networkidle');
-    await snap(p.page, 'player', '20-bad-link', 'A texted link that isn\'t valid', t);
+    await snap(p.page, 'player', '20-bad-link', 'A texted link that isn’t valid', t);
     await p.ctx.close();
   }
   await call(await phone('Ryan'), 'POST', `/api/sessions/${C.id}/paid`, { paid: true });
   for (const t of themes()) {
     const p = await open('Ryan', t.width, t.scheme);
     await row(p.page, C).waitFor();
-    await snap(row(p.page, C), 'player', '21-paid-didnt-pay', '"✓ Paid" with a small "Didn\'t pay?" (he marked it himself)', t);
+    await snap(row(p.page, C), 'player', '21-paid-didnt-pay', '"✓ Paid" with a small "Didn’t pay?" (he marked it himself)', t);
     await p.ctx.close();
     const o = await open('organizer', t.width, t.scheme);
     await tab(o.page, 'Money').click();
     await o.page.locator('.money-sess').first().waitFor();
     const sess = o.page.locator(`details.money-sess[data-session="${C.id}"]`);
     await sess.evaluate((el) => (el.open = true));
-    await snap(sess, 'organizer', '23-money-self-marked', 'Money: Ryan\'s "self-marked" tag, Mark paid for the rest', t);
+    await snap(sess, 'organizer', '23-money-self-marked', 'Money: Ryan’s "self-marked" tag, Mark paid for the rest', t);
     await o.ctx.close();
   }
 

@@ -185,7 +185,7 @@ async function main() {
           out[port] = (await p.locator('main').innerHTML()).replaceAll(ids[port].game, 'GAME');
           await ctx.close();
         }
-        same(out[PM], out[PB], `${name}'s page`);
+        same(out[PM], out[PB], `${name}’s page`);
       });
 
   const answers = async (port) => {
@@ -204,7 +204,7 @@ async function main() {
     // (Rows made by the setup taps on each copy have their own random ids.)
     const noIds = (s) => s.replace(/"(id|requestId)":"[0-9a-f-]{36}"/g, '"$1":"X"');
     same(a.money, b.money, 'Money');
-    same(noIds(a.sage), noIds(b.sage), "Sage's answer");
+    same(noIds(a.sage), noIds(b.sage), "Sage’s answer");
     // The dashboard: the branch's own "Extended time" Settings row is off (no key), the rest equal.
     same(noIds(a.dash), noIds(b.dash), 'dashboard');
   });
@@ -220,7 +220,7 @@ async function main() {
     same(a.money, b.money, 'Money after Finalize');
     // Ids of the new credit rows are random: compare without them.
     const noIds = (s) => s.replace(/"id":"[0-9a-f-]{36}"/g, '"id":"X"');
-    same(noIds(a.sage), noIds(b.sage), "Sage's answer after Finalize");
+    same(noIds(a.sage), noIds(b.sage), "Sage’s answer after Finalize");
   });
 
   console.log(`\nzip31-off: ${passed} passed, ${failed} failed`);

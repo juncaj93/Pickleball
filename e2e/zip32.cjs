@@ -369,7 +369,7 @@ async function main() {
     await rm.click();
     const ask = page.locator('dialog.sheet[open]').last();
     assert((await ask.locator('h2').first().innerText()).trim() === 'Remove Parker?', 'the question');
-    assert(/They'll show as withdrawn/.test(await ask.innerText()), 'the same words');
+    assert(/They’ll show as withdrawn/.test(await ask.innerText()), 'the same words');
     await ask.getByRole('button', { name: 'Remove', exact: true }).click();
     const undo = page.locator('.pop.toast .toast-action', { hasText: 'Undo' }).first();
     await undo.waitFor({ timeout: 5000 });

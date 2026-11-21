@@ -2,7 +2,7 @@ import type { AdminSessionView } from '../../../shared/api';
 import { type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { rosterLine } from '../../../shared/guestSpot';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
-import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, localParts, weekFade } from '../../../shared/time';
+import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, localParts, ordinal, weekFade } from '../../../shared/time';
 import { useRef, useState } from 'react';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING, CourtReserveLink, PlayersLine, useToast } from '../../ui';
@@ -236,10 +236,10 @@ function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; s
     const me_ = ++latest.current;
     onSeat(goingIn);
     chain.current = chain.current.then(async () => {
-      let said = goingIn ? "You're in" : "You're out";
+      let said = goingIn ? "You’re in" : "You’re out";
       try {
         const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
-        if (goingIn && (res.result === 'waitlisted' || res.result === 'standby')) said = `You're #${res.position} on the waitlist`;
+        if (goingIn && (res.result === 'waitlisted' || res.result === 'standby')) said = `You’re ${ordinal(res.position ?? 1)} on the waitlist`;
         if (me_ === latest.current) toast(said);
       } catch (err) {
         toast(err instanceof ApiError ? `${err.message} It went back.` : 'That did not save, so it went back. Check your connection and try again.', 'error');
@@ -261,7 +261,7 @@ function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; s
   };
   return (
     <div className="r2-seg" role="group" aria-label={`You, ${day}`} data-inout={isIn ? 'in' : 'out'}>
-      <button type="button" className="r2-seg-in" aria-pressed={isIn} aria-label={`I'm in for ${day}${mine?.status === 'waitlisted' && seat === null ? ' (you are on the waitlist)' : ''}`} onClick={() => !isIn && send(true)}>
+      <button type="button" className="r2-seg-in" aria-pressed={isIn} aria-label={`I’m in for ${day}${mine?.status === 'waitlisted' && seat === null ? ' (you are on the waitlist)' : ''}`} onClick={() => !isIn && send(true)}>
         In
       </button>
       <button type="button" className="r2-seg-out" aria-pressed={!isIn} aria-label={`Out of ${day}`} onClick={() => isIn && send(false)}>

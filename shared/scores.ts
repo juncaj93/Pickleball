@@ -11,6 +11,15 @@ export const scorePair = (mine: number, theirs: number): string => `${mine}–${
 export const resultTag = (won: boolean, score?: { mine: number; theirs: number } | null): string =>
   `${won ? 'Won' : 'Lost'}${score ? ` ${scorePair(score.mine, score.theirs)}` : ''}`;
 
+/**
+ * Zip 78: what people read for a pool (12 or more players, two groups, one per court): pool A is the "Dink group" (Court 1), pool B
+ * the "Drive group" (Court 2). `short`: just "Dink" / "Drive" where space is tight. The code keeps 'A' and 'B'.
+ */
+export function groupName(pool: string | null | undefined, short = false): string {
+  const word = pool === 'B' ? 'Drive' : 'Dink';
+  return short ? word : `${word} group`;
+}
+
 /** The point difference chip in Standings: "+4 pts", "0 pts", "−4 pts" (a real minus sign). */
 export const diffLabel = (diff: number): string => (diff > 0 ? `+${diff} pts` : diff < 0 ? `−${-diff} pts` : '0 pts');
 

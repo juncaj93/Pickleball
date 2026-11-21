@@ -46,7 +46,7 @@ export const LEVELS: readonly Level[] = [
   { value: 275, label: '2.7', short: '2.7', text: 'Keeps short rallies going. Avoids the backhand.' },
   { value: 300, label: '3.0', short: '3.0', text: 'Steady rallies. Still learning to dink.' },
   { value: 320, label: '3.2', short: '3.2', text: 'Dinks work about half the time. Learning drop shots.' },
-  { value: 340, label: '3.4', short: '3.4', text: "Steady dinks. Drop shots don't always land. Misses easy ones sometimes." },
+  { value: 340, label: '3.4', short: '3.4', text: "Steady dinks. Drop shots don’t always land. Misses easy ones sometimes." },
   { value: 350, label: '3.5', short: '3.5', text: 'Steady dinks. Drop shots usually land. Smart about speed. Few easy misses.' },
   { value: 360, label: '3.6+', short: '3.6', text: 'Reliable dinks and drop shots. Smart about speed. Almost no easy misses.' },
 ];
@@ -199,8 +199,8 @@ export interface FinalizeView {
   minutes: number;
 }
 
-/** "Locked 3, Americano 6, Either 2" (the organizer's card). */
-export const voteCountsLine = (c: VoteCounts): string => `Locked ${c.locked}, Americano ${c.americano}, Either ${c.either}`;
+/** "Locked doubles 3, Americano 6, Either 2" (the organizer's card). */
+export const voteCountsLine = (c: VoteCounts): string => `Locked doubles ${c.locked}, Americano ${c.americano}, Either ${c.either}`;
 
 /** The player's alert once the date is locked (Home, the site's alert card): the title and the second line. `source` says whether to claim a vote. */
 export function formatAlertWords(name: string, dayKeyOfDate: string, format: TournamentFormat, source: FormatSource): { title: string; sub: string } {
@@ -282,11 +282,11 @@ export const PLANS: Record<Size, readonly Plan[]> = {
     plan(2, 120, 20 * 60, 'Very tight. No time for a tiebreak.'),
   ],
   12: [
-    plan(2, 180, 19 * 60, 'Two pools of 3, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true),
+    plan(2, 180, 19 * 60, 'Dink group of 3 and Drive group of 3, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true),
     plan(2, 120, 20 * 60, 'Two pools of 3 with games to 9. Tight.'),
   ],
   // Zip 57 (mocks 52 and 53, the game plan table): 14 and 16 have their own plan, 2 courts for 3 hours from 7:00 PM.
-  14: [plan(2, 180, 19 * 60, 'Pool A of 4 and Pool B of 3, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true)],
+  14: [plan(2, 180, 19 * 60, 'Dink group of 4 and Drive group of 3, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true)],
   16: [plan(2, 180, 19 * 60, 'Two pools of 4 with pool games to 9, then semifinals, the Final and 3rd place. Call the venue to hold 2 courts.', true)],
 };
 

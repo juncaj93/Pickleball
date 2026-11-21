@@ -326,7 +326,7 @@ async function main() {
     const words = flat(await text.innerText());
     assert(words === 'You come off the list. You can sign up again if you change your mind. Your $16 comes back as credit.', words);
     const sheet = flat(await sheetOpen(p.page).innerText());
-    assert(sheet.includes('Stay signed up') && sheet.includes('Yes, back out'), sheet);
+    assert(sheet.includes('Stay signed up') && sheet.includes('Yes, drop out'), sheet);
     await shot(p.page, 'E-back-out');
     await p.page.locator('dialog[open] [data-confirm-go]').click();
     await p.page.locator('[data-tm-backout-text]').waitFor({ state: 'detached', timeout: 10000 });

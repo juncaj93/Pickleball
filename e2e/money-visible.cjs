@@ -164,8 +164,8 @@ async function main() {
     return (await c.count()) ? squash(await c.innerText()) : '';
   };
   const tapIn = async (page, s) => {
-    await card(page, s).getByRole('button', { name: /^I'm in/ }).click();
-    await card(page, s).getByText("You're in").first().waitFor();
+    await card(page, s).getByRole('button', { name: /^I’m in/ }).click();
+    await card(page, s).getByText("You’re in").first().waitFor();
   };
 
   const banner = page => page.locator('.pop').last();
@@ -194,7 +194,7 @@ async function main() {
       await check(`${width}px ${scheme}: I'm in says "$14 credit used"; Drop out says "$14 credit returned" with Undo; the credit sheet lists both; all fit`, async () => {
         const { ctx, page, errors } = await player('Mitchel', scheme, width);
         await tapIn(page, nov3);
-        await bannerSays(page, /^You're in\. \$14 credit used\.$/, 'I\'m in');
+        await bannerSays(page, /^You’re in\. \$14 credit used\.$/, 'I’m in');
         await fits(page, banner(page), width, 'join banner');
         await card(page, nov3).locator('[data-paid]').waitFor();
         await page.locator('.pop').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
@@ -258,19 +258,19 @@ async function main() {
   await check('Ryan ($3) on a booked game: "You\'re in. $3 credit used, $11 due."', async () => {
     const { ctx, page } = await player('Ryan', 'light', 390);
     await tapIn(page, nov3);
-    await bannerSays(page, /^You're in\. \$3 credit used, \$11 due\.$/, 'part cover');
+    await bannerSays(page, /^You’re in\. \$3 credit used, \$11 due\.$/, 'part cover');
     await ctx.close();
   });
   await check('Bartholomew ($3) on a game with no court: "You\'re in. $3 credit used." (no amount due before Court booked)', async () => {
     const { ctx, page } = await player('Bartholomew', 'dark', 360);
     await tapIn(page, nov5);
-    await bannerSays(page, /^You're in\. \$3 credit used\.$/, 'no court');
+    await bannerSays(page, /^You’re in\. \$3 credit used\.$/, 'no court');
     await ctx.close();
   });
   await check('Julian (no credit, never paid) drops out: just "You dropped out. Undo"', async () => {
     const { ctx, page } = await player('Julian', 'light', 375);
     await tapIn(page, nov3);
-    await bannerSays(page, /^You're in$/, 'no credit');
+    await bannerSays(page, /^You’re in$/, 'no credit');
     await page.locator('.pop').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
     await card(page, nov3).getByRole('button', { name: /^Drop out/ }).click();
     await page.getByRole('button', { name: /^Drop out/ }).last().click();

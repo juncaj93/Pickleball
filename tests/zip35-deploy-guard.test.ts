@@ -175,7 +175,7 @@ describe('main(): the command, with fake git, fake clock, nothing built', () => 
 });
 
 describe('reading what is live from `wrangler pages deployment list --json`', () => {
-  const sample = `▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.\n\n\n[\n  { "Id": "a0f2", "Environment": "Production", "Branch": "main", "Source": "60b446d", "Status": "13 minutes ago" },\n  { "Id": "18582", "Environment": "Production", "Branch": "main", "Source": "0eaa6d5", "Status": "33 minutes ago" }\n]\n`;
+  const sample = `▲ [WARNING] Proxy environment variables detected. We’ll use your proxy for fetch requests.\n\n\n[\n  { "Id": "a0f2", "Environment": "Production", "Branch": "main", "Source": "60b446d", "Status": "13 minutes ago" },\n  { "Id": "18582", "Environment": "Production", "Branch": "main", "Source": "0eaa6d5", "Status": "33 minutes ago" }\n]\n`;
   it('takes the newest Production deployment (the first one), skipping the warning lines', () => {
     expect(liveShaFromList(sample)).toBe('60b446d');
   });

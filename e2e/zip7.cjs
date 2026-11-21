@@ -482,7 +482,7 @@ async function main() {
       const { ctx, page } = await openAdmin({ url });
       const card = page.locator(`#session-${g.id}`);
       await card.getByRole('button', { name: /^Game menu for/ }).click();
-      await card.getByRole('menuitem', { name: 'Cancel session', exact: true }).click();
+      await card.getByRole('menuitem', { name: 'Cancel game', exact: true }).click();
       const dlg = page.locator('dialog[open]');
       await dlg.waitFor();
       const text = (await dlg.innerText()).replace(/\s+/g, ' ');
@@ -572,7 +572,7 @@ async function main() {
     assert((await now.getAttribute('data-mine')) === 'in', "the card says you're in at once");
     // Zip 9 "Card time and buttons" (on in the fake world) turns the icon into the calendar half of the joined button.
     assert((await now.locator('.cal-icon-link, [data-card-calendar]').count()) === 1, 'with the calendar icon');
-    assert(/You're in/.test(await now.innerText()), "You're in text");
+    assert(/You’re in/.test(await now.innerText()), "You're in text");
     await p.page.waitForTimeout(3000);
     assert((await now.getAttribute('data-mine')) === 'in', 'and it stays after the server answers');
     await shot(p.page, 'cards-after-tap');

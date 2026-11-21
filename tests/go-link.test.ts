@@ -115,7 +115,7 @@ describe('the /api/go endpoint', () => {
     const g = await group();
     await (await playerPhone(g.ctx, 'Emery')).call('POST', `/api/sessions/${g.tue.id}/join`, {});
     const t = await makeGoToken(SECRET, g.tue.id, g.tue.startsAt, g.app.now);
-    expect((await g.open(t)).data).toMatchObject({ kind: 'checkin', body: "Pickleball tomorrow, 8:00 PM. Can't make it? Update here: pickleball.juncaj.net" });
+    expect((await g.open(t)).data).toMatchObject({ kind: 'checkin', body: "Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: pickleball.juncaj.net" });
   });
 
   it('expired, canceled, unknown or forged links say so and save nothing', async () => {

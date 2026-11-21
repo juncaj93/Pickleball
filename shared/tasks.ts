@@ -348,16 +348,16 @@ function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions)
     { id: 'session', label: 'Cancel the session', done: s.canceled, enabled: true, buttons: [{ id: 'cancel', label: 'Cancel the session', action: { type: 'cancel' } }] },
     {
       id: 'text',
-      label: "Text everyone it's canceled",
+      label: "Text everyone it’s canceled",
       done: textDone,
       enabled: s.canceled,
-      buttons: [{ id: 'canceled-text', label: "Text everyone it's canceled", action: { type: 'text', text: 'canceled', mark: 'canceled_text' } }],
+      buttons: [{ id: 'canceled-text', label: "Text everyone it’s canceled", action: { type: 'text', text: 'canceled', mark: 'canceled_text' } }],
     },
   ];
   const alerts: TaskAlert[] = [];
   if (!s.canceled) {
     if (!courtDone) alertIf(alerts, s, 'cancel', opens, `${lead} Cancel court: ${o.links.cancel}`, true);
-    alertIf(alerts, s, 'cancel_followup', times.cancelFollowup, `${day}: court canceled? Now cancel the session and text everyone: ${o.links.admin}`, true);
+    alertIf(alerts, s, 'cancel_followup', times.cancelFollowup, `${day}: court canceled? Now cancel the game and text everyone: ${o.links.admin}`, true);
     // The game-day check (6:15 / 7:15 AM) is gone (TEXTS_R2, then deleted for good in Zip 11): the cancel warning the night before and its follow-up are enough.
   }
   return { id: `cancel:${s.id}`, kind: 'cancel', sessionId: s.id, startsAt: s.startsAt, text, buttons: [], steps, alerts, rank: 0 };
@@ -375,13 +375,13 @@ function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | null {
   const date = textDay(s.startsAt, o.tz);
   const holiday = s.holiday ? ` (${s.holiday})` : '';
   const opensAt = timeOf(t.courtOpens, o.tz);
-  const text = `${date} ${nowMs < t.courtOpens ? 'opens' : 'opened'} at ${opensAt}${holiday}.`;
+  const text = `Booking for ${date} ${nowMs < t.courtOpens ? 'opens' : 'opened'} at ${opensAt}${holiday}.`;
   // There is no "I booked it" button any more: the organizer moves the game's court switch to Booked.
   const tail = `Book: ${o.links.book}\nThen set it to Booked: ${o.links.admin}`;
   const alerts: TaskAlert[] = [];
-  alertIf(alerts, s, 'book', t.bookingHeadsUp, `${date} opens at ${opensAt}${holiday}. ${tail}`);
+  alertIf(alerts, s, 'book', t.bookingHeadsUp, `Booking for ${date} opens at ${opensAt}${holiday}. ${tail}`);
   // TEXTS_R2: the reminder goes only while the game is still "not booked" (it fired after a backup was booked and the game set to Waitlist).
-  if (o.textsR2 !== true || !s.waitlisted) alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: ${date} opened at ${opensAt}${holiday}. ${tail}`);
+  if (o.textsR2 !== true || !s.waitlisted) alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: Booking for ${date} opened at ${opensAt}${holiday}. ${tail}`);
   return { id: `book:${s.id}`, kind: 'book', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o)], steps: [], alerts, rank: 1 };
 }
 

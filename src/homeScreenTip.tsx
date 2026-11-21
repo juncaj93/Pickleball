@@ -137,7 +137,7 @@ function StepPicture({ step, children }: { step: TipStep; children: React.ReactN
 }
 
 const PICTURES: Record<number, { alt: string; src?: string; w: number; h: number }> = {
-  1: { alt: "Safari's bottom bar with the Share button circled", w: 1180, h: 200 },
+  1: { alt: "Safari’s bottom bar with the Share button circled", w: 1180, h: 200 },
   2: { alt: 'The share sheet with View More circled', src: '/add-to-home/view-more-row.png', w: 1094, h: 370 },
   3: { alt: 'The Add to Home Screen row highlighted', src: '/add-to-home/add-to-home-screen-row.png', w: 1160, h: 240 },
 };

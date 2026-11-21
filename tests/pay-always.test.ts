@@ -297,9 +297,9 @@ describe('M: sign up on every court status with every credit amount', () => {
           const noCourt = isNoCourt(sOf(await view(w, 'Blair'), g.id));
           expect(noCourt).toBe(court !== 'booked');
           const banner = joinedText(res, noCourt, PRICE, !noCourt || mode !== 'off');
-          if (used > 0 && owe > 0) expect(banner).toBe(hidden ? `You're in. $${used / 100} credit used.` : `You're in. $${used / 100} credit used, $${owe / 100} due.`);
-          else if (used > 0) expect(banner).toBe(`You're in. $${used / 100} credit used.`);
-          else expect(banner).toBe("You're in");
+          if (used > 0 && owe > 0) expect(banner).toBe(hidden ? `You’re in. $${used / 100} credit used.` : `You’re in. $${used / 100} credit used, $${owe / 100} due.`);
+          else if (used > 0) expect(banner).toBe(`You’re in. $${used / 100} credit used.`);
+          else expect(banner).toBe("You’re in");
           // Game day from 8:00 AM: the Pay card at the top lists it the same way.
           w.app.now = Date.parse(g.startsAt) - 6 * HOUR;
           const day = await shown(w, 'Blair');
@@ -708,9 +708,9 @@ describe('Z: the same taps move the same money with the switch off and on', () =
   });
 
   it('Z2 the banner text helper: "$ due" only when the card shows it', () => {
-    expect(joinedCreditText("You're in", 300, PRICE, true)).toBe("You're in. $3 credit used, $11 due.");
-    expect(joinedCreditText("You're in", 300, PRICE, false)).toBe("You're in. $3 credit used.");
-    expect(joinedCreditText("You're in", 1400, PRICE, true)).toBe("You're in. $14 credit used.");
-    expect(joinedCreditText("You're in", 0, PRICE, true)).toBe("You're in");
+    expect(joinedCreditText("You’re in", 300, PRICE, true)).toBe("You’re in. $3 credit used, $11 due.");
+    expect(joinedCreditText("You’re in", 300, PRICE, false)).toBe("You’re in. $3 credit used.");
+    expect(joinedCreditText("You’re in", 1400, PRICE, true)).toBe("You’re in. $14 credit used.");
+    expect(joinedCreditText("You’re in", 0, PRICE, true)).toBe("You’re in");
   });
 });

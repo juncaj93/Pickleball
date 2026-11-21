@@ -111,7 +111,7 @@ async function main() {
   {
     const { ctx, page, card } = await organizer();
     await check('the cancel dialog always has an optional "Reason (optional)" field with a 40 character limit', async () => {
-      await pick(card, 'Cancel session');
+      await pick(card, 'Cancel game');
       const dlg = page.locator('dialog[open]');
       const field = dlg.getByLabel('Reason (optional)');
       await field.waitFor();
@@ -122,11 +122,11 @@ async function main() {
       await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
     });
     await check('cancel with a reason: the card reads "Canceled - <reason>" and the API stores it', async () => {
-      await pick(card, 'Cancel session');
+      await pick(card, 'Cancel game');
       const dlg = page.locator('dialog[open]');
       await dlg.getByLabel('Reason (optional)').fill('Thanksgiving week');
-      await dlg.getByRole('button', { name: 'Cancel session' }).click();
-      await page.getByText('Session canceled').first().waitFor();
+      await dlg.getByRole('button', { name: 'Cancel game' }).click();
+      await page.getByText('Game canceled').first().waitFor();
       await page.keyboard.press('Escape');
       await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       assert((await adminSession()).cancelReason === 'Thanksgiving week', 'stored');
@@ -153,9 +153,9 @@ async function main() {
   {
     const { ctx, page, card } = await organizer();
     await check('reopen clears the reason: organizer card, API and player card', async () => {
-      await pick(card, 'Reopen session');
-      await page.locator('dialog[open]').getByRole('button', { name: 'Reopen session' }).click();
-      await page.getByText('Session reopened').first().waitFor();
+      await pick(card, 'Reopen game');
+      await page.locator('dialog[open]').getByRole('button', { name: 'Reopen game' }).click();
+      await page.getByText('Game reopened').first().waitFor();
       assert((await adminSession()).cancelReason === null, 'still stored');
       assert(!/Canceled/.test(await card.innerText()), 'card still says canceled');
       const p = await playerCard();
@@ -169,9 +169,9 @@ async function main() {
   {
     const { ctx, page, card } = await organizer();
     await check('cancel with no reason reads plain "Canceled"; the player card reads "Canceled" too', async () => {
-      await pick(card, 'Cancel session');
-      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
-      await page.getByText('Session canceled').first().waitFor();
+      await pick(card, 'Cancel game');
+      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
+      await page.getByText('Game canceled').first().waitFor();
       await page.keyboard.press('Escape');
       await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       assert((await adminSession()).cancelReason === null, 'should be null');
@@ -187,14 +187,14 @@ async function main() {
     await check('reopen again, then cancel with an HTML-looking reason', async () => {
       await page.reload();
       const c = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: DATE }).first();
-      await pick(c, 'Reopen session');
-      await page.locator('dialog[open]').getByRole('button', { name: 'Reopen session' }).click();
-      await page.getByText('Session reopened').first().waitFor();
-      await pick(c, 'Cancel session');
+      await pick(c, 'Reopen game');
+      await page.locator('dialog[open]').getByRole('button', { name: 'Reopen game' }).click();
+      await page.getByText('Game reopened').first().waitFor();
+      await pick(c, 'Cancel game');
       const dlg = page.locator('dialog[open]');
       await dlg.getByLabel('Reason (optional)').fill(HTML_REASON);
-      await dlg.getByRole('button', { name: 'Cancel session' }).click();
-      await page.getByText('Session canceled').first().waitFor();
+      await dlg.getByRole('button', { name: 'Cancel game' }).click();
+      await page.getByText('Game canceled').first().waitFor();
       await page.keyboard.press('Escape');
       await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       assert((await adminSession()).cancelReason === HTML_REASON, 'stored as typed');

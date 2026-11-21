@@ -158,7 +158,7 @@ async function main() {
         await page.waitForTimeout(400);
         const after = flat(await page.locator('dialog.sheet[open]').first().innerText());
         assert(after.includes('This just changed.') && after.includes(BACK) && !after.includes(OWES), `after: ${after}`);
-        assert((await page.locator('.toast, [role="status"]').filter({ hasText: "You're out" }).count()) === 0, 'no "You\'re out" toast');
+        assert((await page.locator('.toast, [role="status"]').filter({ hasText: "You’re out" }).count()) === 0, 'no "You\'re out" toast');
         const weight = await page.locator('dialog.sheet[open] [data-drop-changed]').evaluate((el) => Number(getComputedStyle(el).fontWeight));
         assert(weight >= 600, `"This just changed." is bold (${weight})`);
         await noSideScroll(page, 'the refreshed dialog');
@@ -254,7 +254,7 @@ async function main() {
     const dlg = await openDrop(page);
     assert(flat(await dlg.innerText()).includes(OWES), 'starts at "you still owe $14"');
     await dlg.locator('.btn-row button', { hasText: 'Drop out' }).click();
-    await page.locator('.toast').filter({ hasText: "You're out" }).first().waitFor({ timeout: 8000 }).catch(async () => {
+    await page.locator('.toast').filter({ hasText: "You’re out" }).first().waitFor({ timeout: 8000 }).catch(async () => {
       throw new Error(`no first toast: ${JSON.stringify(await page.locator('.toast').allInnerTexts())} dialogs ${await page.locator('dialog.sheet[open]').count()}`);
     });
     await rowan('confirm'); // during the Undo window

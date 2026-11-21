@@ -104,7 +104,7 @@ describe('Check-in: 4 or more in, from the night-before last call (25 hours befo
     const { d, all } = await now(ctx);
     const c = all.find((x) => x.kind === 'checkin')!;
     expect(c).toBeDefined();
-    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
+    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: ${LINK}`);
     // To the players who are in (numbers), not the waitlist.
     expect(c.chat).toBe(false);
     expect(c.who).toBe('4 players');
@@ -112,7 +112,7 @@ describe('Check-in: 4 or more in, from the night-before last call (25 hours befo
     expect(c.missing).toEqual([]);
     // Still there on game day (words change to tonight), until the game starts.
     at(ctx, '2026-11-03T20:00:00Z');
-    expect((await now(ctx)).all.find((x) => x.kind === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
+    expect((await now(ctx)).all.find((x) => x.kind === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Can’t make it? Update here: ${LINK}`);
     at(ctx, '2026-11-04T01:00:00Z');
     expect(kinds((await now(ctx)).all)).not.toContain('checkin');
   });
@@ -185,7 +185,7 @@ describe('Spot opened: right when it happens, while it lasts; the 5th and 6th ne
     expect(p.who).toBe('1 player (Emery)');
     expect(p.chat).toBe(false);
     expect(p.phones).toEqual([phoneOf(d2, 'Emery')]);
-    expect(p.body).toBe(`A spot opened and you're in for pickleball Tue Nov 10, 8:00 PM. ${LINK}`);
+    expect(p.body).toBe(`A spot opened and you’re in for pickleball Tue Nov 10, 8:00 PM. ${LINK}`);
     await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/told`, { playerId: ctx.byName.Emery });
     expect((await now(ctx)).all).toEqual([]);
   });
@@ -259,7 +259,7 @@ describe('Payment reminder: a played game, someone unpaid, 7 or more days ago', 
     c = all.find((x) => x.kind === 'pay')!;
     expect(c.who).toBe('2 players');
     expect(c.phones.sort()).toEqual([phoneOf(d, 'Casey'), phoneOf(d, 'Devon')].sort());
-    expect(c.body).toBe(`Hey, looks like you haven't paid for pickleball yet. Pay here: ${LINK}`);
+    expect(c.body).toBe(`Hey, you haven’t paid for pickleball yet. Pay here: ${LINK}`);
     // Everyone paid: nothing.
     for (const n of ['Casey', 'Devon']) await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName[n], paid: true });
     expect(kinds((await now(ctx)).all)).not.toContain('pay');

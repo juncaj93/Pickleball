@@ -12,13 +12,13 @@ import {
 import { isIOS } from '../../lib';
 import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit';
 import { formatPrice, parseDollars } from '../../../shared/money';
-import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, DEFAULT_VENUE_NAME } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
 import { adminTileDay } from '../../zip7';
 import { ClearChoices, EditableDraft, lateFeeLine, PlayersText } from './LateFees';
 import { lateCancelText } from './textMenu';
 import { feeSplitPrice } from '../../../shared/lateFees';
-import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, weekFade } from '../../../shared/time';
+import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, ordinal, weekFade } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
 import { flushHold, startHold, undoHold, UNDO_MS } from '../../hold';
@@ -294,7 +294,7 @@ export function useOrganizerInOut(ctx: AdminCtx, s: AdminSessionView) {
   const set = (goingIn: boolean) =>
     run(async () => {
       const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
-      toast(!goingIn ? "You're out" : res.result === 'waitlisted' || res.result === 'standby' ? `You're #${res.position} on the waitlist` : "You're in");
+      toast(!goingIn ? "You’re out" : res.result === 'waitlisted' || res.result === 'standby' ? `You’re ${ordinal(res.position ?? 1)} on the waitlist` : "You’re in");
     });
   return { busy, mine, day, set };
 }
@@ -309,14 +309,14 @@ function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, mine, day, set } = useOrganizerInOut(ctx, s);
   if (!mine) {
     return (
-      <button className="btn small secondary me-in" disabled={busy} aria-label={`I'm in for ${day}`} onClick={() => set(true)}>
-        {busy ? 'Saving…' : "I'm in"}
+      <button className="btn small secondary me-in" disabled={busy} aria-label={`I’m in for ${day}`} onClick={() => set(true)}>
+        {busy ? 'Saving…' : "I’m in"}
       </button>
     );
   }
   return (
     <span className="me-state">
-      <span className="me-in-text">{mine.status === 'confirmed' ? "You're in" : 'Waitlist'}</span>
+      <span className="me-in-text">{mine.status === 'confirmed' ? "You’re in" : 'Waitlist'}</span>
       <button className="link-btn me-out" disabled={busy} aria-label={`Out of ${day}`} onClick={() => set(false)}>
         Out
       </button>
@@ -329,7 +329,7 @@ export function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   return (
     <button className="btn small secondary" disabled={busy} onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/show`, { shown: false }), 'Hidden again')}>
-      Hide this session
+      Hide this game
     </button>
   );
 }
@@ -389,7 +389,7 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
               Edit game
             </button>
             <button className="ac-btn ac-out" data-ac-tone="red" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
-              Cancel session
+              Cancel game
             </button>
             {booked && (
               <a className="ac-btn" data-ac-tone="blue" href={COURTRESERVE_CANCEL_URL} target="_blank" rel="noopener noreferrer">
@@ -434,7 +434,7 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
           Edit game
         </button>
         <button className="btn small danger" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
-          Cancel session
+          Cancel game
         </button>
         {booked && (
           <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
@@ -658,7 +658,7 @@ export function useRosterOps(ctx: AdminCtx, s: AdminSessionView) {
     const back = r.dropCreditCents + r.dropCashCents;
     const said =
       r.dropClaimCents > 0
-        ? `${r.name} removed. Their ${formatPrice(r.dropClaimCents)} I paid waits for your Paid or Didn't pay.`
+        ? `${r.name} removed. Their ${formatPrice(r.dropClaimCents)} I paid waits for your Paid or Didn’t pay.`
         : back > 0
           ? `${r.name} removed. ${formatPrice(back)} ${r.dropCashCents > 0 ? 'back as credit' : 'credit returned'}.`
           : `${r.name} removed.`;
@@ -746,7 +746,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       <ConfirmDialog
         open={!!removing}
         title={`Remove ${removing?.name}?`}
-        body="They'll show as withdrawn. If they held a spot, it opens up for someone else."
+        body="They’ll show as withdrawn. If they held a spot, it opens up for someone else."
         confirmLabel="Remove"
         danger
         busy={busy}
@@ -777,7 +777,7 @@ export function payMoneyLine(r: AdminRosterEntry, s: AdminSessionView, tz: strin
     else if (!played && !r.refundedAt) parts.push('not finalized yet');
   } else if (r.status === 'confirmed' && r.shareCents !== null) {
     // Zip 31: extra time riding on this game ("$17 due" on the player's card) shows here too, and Mark paid takes both.
-    parts.push(r.extCents ? `owes ${formatPrice(r.owesCents + r.extCents)} (incl. ${formatPrice(r.extCents)} extension)` : `owes ${formatPrice(r.owesCents)}`);
+    parts.push(r.extCents ? `owes ${formatPrice(r.owesCents + r.extCents)} (incl. ${formatPrice(r.extCents)} extra time)` : `owes ${formatPrice(r.owesCents)}`);
     if (r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} credit used`);
   } else if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
   return parts.join(' · ');
@@ -850,7 +850,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                 : `The venue did not waive the fee: everyone who was in owes their ${formatPrice(price)}.`}
             </Notice>
           ) : (
-            <Notice tone="muted" title="Session canceled">
+            <Notice tone="muted" title="Game canceled">
               Nobody owes for it. Anyone who paid has it as credit.
               {s.chargedCents ? ` The venue charged you ${formatPrice(s.chargedCents)}.` : ''}
             </Notice>
@@ -899,7 +899,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           {s.court && (
             <li className="court-row" data-court={s.id}>
               <div className="pc-top">
-                <strong className="pc-name">You pay Northville Pickleball</strong>
+                <strong className="pc-name">You pay {ctx.d.group.venueName?.trim() || DEFAULT_VENUE_NAME}</strong>
                 <span className="court-cost">{formatPrice(s.court.costCents)}</span>
               </div>
               <div className="pc-sub">
@@ -958,7 +958,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                           className="btn small secondary"
                           disabled={busy}
                           data-unmark-credit={r.name}
-                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`, opTap({ kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }, 'Unmark credit', ctx.d.adminUndo === true))}
+                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}’s credit put back`, opTap({ kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }, 'Unmark credit', ctx.d.adminUndo === true))}
                         >
                           Unmark
                         </button>
@@ -984,7 +984,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           </button>
           {s.reopenBlockedBy.length > 0 && (
             <p className="small muted" data-reopen-blocked>
-              Can't reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
+              Can’t reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
             </p>
           )}
           {s.reopenBlockedBy.length === 0 && s.reopenRequestedBy.length > 0 && (
@@ -1033,11 +1033,11 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   return (
     <ConfirmDialog
       open
-      title={reopening ? 'Reopen this session?' : `Cancel ${formatShortDate(s.startsAt, tz)}?`}
+      title={reopening ? 'Reopen this game?' : `Cancel ${formatShortDate(s.startsAt, tz)}?`}
       body={
         <div className="stack">
           {reopening ? (
-            <p>Players can sign up again. Links from before the cancellation stay dead; prepare new ones if needed.</p>
+            <p>Players can sign up again.</p>
           ) : (
             <>
               {/* COLOR_CLEANUP: the sheet is shorter, this line goes (the Cancel button says it all). */}
@@ -1188,7 +1188,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
           )}
         </div>
       }
-      confirmLabel={reopening ? 'Reopen session' : 'Cancel session'}
+      confirmLabel={reopening ? 'Reopen game' : 'Cancel game'}
       danger={!reopening}
       busy={busy}
       onConfirm={async () => {
@@ -1212,7 +1212,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 ? { decision: 'reopen' }
                 : { decision: 'cancel', confirm: true, ...(chargedCents > 0 ? { chargedCents } : {}), ...(askWaived ? { venueWaived: waived } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}) },
             ),
-          reopening ? 'Session reopened' : 'Session canceled',
+          reopening ? 'Game reopened' : 'Game canceled',
           undo
             ? {
                 key: `cancel:${s.id}`,
@@ -1220,7 +1220,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 patch: (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, status: 'canceled', cancelReason: why, state: { ...x.state, flags: { ...x.state.flags, canceled: true } } } : x)) }),
                 // Once saved: the text for the group, unless another sheet is open by then (it is never pushed away).
                 onSaved: () => {
-                  if (document.querySelector('dialog[open]')) toast('Canceled. Text the group from the game\'s menu.');
+                  if (document.querySelector('dialog[open]')) toast('Canceled. Text the group from the game’s menu.');
                   else ctx.open('canceled', s.id);
                 },
               }

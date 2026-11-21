@@ -208,7 +208,7 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
       )}
       {shown.paused && (
         <p className="tc-gd-paused" role="status" data-tc-day-paused>
-          Paused. Hang tight.
+          Paused.
         </p>
       )}
       {shown.waiting && !next && <WaitingCard />}

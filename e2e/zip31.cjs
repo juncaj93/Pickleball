@@ -307,7 +307,7 @@ async function main() {
           await bigText(page, pct);
           const sage = page.locator('[data-ext-owed] [data-ext-row="Sage"]');
           const text = (await sage.innerText()).replace(/\s+/g, ' ');
-          assert(/Sage/.test(text) && /\$3 extension · Thu, Nov 12/.test(text) && /Mark paid/.test(text), `row: ${text}`);
+          assert(/Sage/.test(text) && /\$3 extra time · Thu, Nov 12/.test(text) && /Mark paid/.test(text), `row: ${text}`);
           // The amount and the date are never cut with "...": the whole line is drawn.
           const what = sage.locator('.xt-what');
           const cut = await what.evaluate((el) => el.scrollWidth > el.clientWidth + 1 || getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth);
@@ -336,7 +336,7 @@ async function main() {
           const alert = page.locator('[data-ext-alert="owe"]');
           await alert.waitFor({ timeout: 10000 });
           const words = (await alert.locator('.xt-alert-text').innerText()).replace(/\s+/g, ' ').trim();
-          assert(words === "You owe $3 for tonight's extra 30 min. It's added to your next game.", `alert: ${words}`);
+          assert(words === "You owe $3 for tonight’s extra 30 min. It’s added to your next game.", `alert: ${words}`);
           assert((await alert.locator('.xt-alert-text b').innerText()).trim() === '$3', 'the amount in bold');
           assert((await alert.locator('[data-ext-paynow]').innerText()).trim() === 'Pay now instead', 'Pay now instead');
           assert((await alert.locator('[data-dismiss]').count()) === 1, 'an X');
@@ -346,7 +346,7 @@ async function main() {
           await card.scrollIntoViewIfNeeded();
           const due = (await card.locator('[data-owe]').first().innerText()).replace(/\s+/g, ' ').trim();
           assert(/^\$17 due/.test(due), `next game: ${due}`);
-          assert((await card.locator('[data-ext-incl]').innerText()).trim() === 'incl. $3 extension', 'the grey note');
+          assert((await card.locator('[data-ext-incl]').innerText()).trim() === 'incl. $3 extra time', 'the grey note');
           await clip(page, 'main');
           // One style for every alert (Alex, after the preview): the extension alert's text is the money card's line (size, weight), its link
           // the money card's "I paid" (size, weight), and every alert on the page has the same badge, X and padding.
@@ -409,7 +409,7 @@ async function main() {
       const alert = page.locator('[data-ext-alert="credit"]');
       await alert.waitFor({ timeout: 10000 });
       const words = (await alert.locator('.xt-alert-text').innerText()).replace(/\s+/g, ' ').trim();
-      assert(words === "Your $3 credit was used for tonight's extra 30 min.", `alert: ${words}`);
+      assert(words === "Your $3 credit was used for tonight’s extra 30 min.", `alert: ${words}`);
       assert((await alert.getAttribute('data-alert-card')) === 'blue', 'blue (credit)');
       await clip(page, 'main');
       const st = await page.evaluate(() => {
@@ -468,7 +468,7 @@ async function main() {
       const alert = page.locator('[data-ext-alert="credit"]');
       await alert.waitFor({ timeout: 10000 });
       const words = (await alert.locator('.xt-alert-text').innerText()).replace(/\s+/g, ' ').trim();
-      assert(words === "$5 of your credit was used for tonight's extra 1 hr. You owe $1 more, added to your next game.", `alert: ${words}`);
+      assert(words === "$5 of your credit was used for tonight’s extra 1 hr. You owe $1 more, added to your next game.", `alert: ${words}`);
       await clip(page, 'main');
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: path.join(SHOTS, `zip31-credit-part-${scheme}.png`) });

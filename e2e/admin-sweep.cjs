@@ -384,7 +384,7 @@ async function main() {
     await page.getByRole('button', { name: 'Nathan', exact: true }).click();
     const bar = page.locator('.pretend-bar');
     await bar.waitFor();
-    const join = page.getByRole('button', { name: "I'm in" }).first();
+    const join = page.getByRole('button', { name: "I’m in" }).first();
     await join.click();
     await sleep(800);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

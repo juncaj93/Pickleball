@@ -404,29 +404,29 @@ async function books(w: World, label = '') {
     const pid = w.ids[name];
     const pot = pots.get(pid) ?? 0;
     const v = await view(w, name);
-    expect(v.credit.balanceCents, at(`${name}'s own balance`)).toBe(pot);
-    expect(v.credit.usableCents, at(`${name}'s usable`)).toBe(Math.max(0, pot - (reserved.get(pid) ?? 0)));
+    expect(v.credit.balanceCents, at(`${name}’s own balance`)).toBe(pot);
+    expect(v.credit.usableCents, at(`${name}’s usable`)).toBe(Math.max(0, pot - (reserved.get(pid) ?? 0)));
     const shownLedger = d.creditLedger.find((l: any) => l.playerId === pid)?.balanceCents ?? 0;
-    expect(shownLedger, at(`${name}'s balance on Players`)).toBe(pot);
+    expect(shownLedger, at(`${name}’s balance on Players`)).toBe(pot);
     for (const o of v.owed) {
       const sp = seats.find((x) => x.session_id === o.sessionId && x.player_id === pid);
       const price = !sp.finalized_at ? FLAT : sp.final_price_cents;
       const usedNC = seatSum(sp, (r) => r.kind === 'used' && r.reason !== 'cash');
       const held = seatSum(sp, (r) => r.kind === 'used' && r.reason === 'cash');
-      expect(o.amountCents, at(`${name}'s owed line`)).toBe(price - usedNC - held);
-      expect(o.creditCents, at(`${name}'s owed credit`)).toBe(usedNC);
+      expect(o.amountCents, at(`${name}’s owed line`)).toBe(price - usedNC - held);
+      expect(o.creditCents, at(`${name}’s owed credit`)).toBe(usedNC);
       expect(o.amountCents, at(`${name} owes nothing but is listed`)).toBeGreaterThan(0);
     }
     for (const s of v.sessions) {
       if (s.canceled || !s.mine) continue;
       for (const other of [...s.confirmed, ...s.waitlist]) {
-        for (const k of Object.keys(other)) expect(/pay|credit|owe|cents|paid/i.test(k), at(`${name} sees another player's ${k}`)).toBe(false);
+        for (const k of Object.keys(other)) expect(/pay|credit|owe|cents|paid/i.test(k), at(`${name} sees another player’s ${k}`)).toBe(false);
       }
       const m = s.mine;
       if (m.status === 'confirmed' && m.paymentStatus === 'unpaid' && m.shareCents !== null) {
-        expect(m.oweCents + m.creditCents + m.paidEarlierCents, at(`${name}'s card: due + credit + paid earlier = price`)).toBe(m.shareCents);
+        expect(m.oweCents + m.creditCents + m.paidEarlierCents, at(`${name}’s card: due + credit + paid earlier = price`)).toBe(m.shareCents);
         const inOwed = v.owed.find((o: any) => o.sessionId === s.id);
-        if (m.oweCents > 0) expect(inOwed?.amountCents, at(`${name}'s card and owed agree`)).toBe(m.oweCents);
+        if (m.oweCents > 0) expect(inOwed?.amountCents, at(`${name}’s card and owed agree`)).toBe(m.oweCents);
       }
     }
     // Every seat that still owes shows up on their screen.
@@ -924,7 +924,7 @@ describe('races: Finalize and Reopen against every other tap', () => {
     await sweep('unmark Devon ⊃ Devon cash out $5', finalized, (s) => unmark(s.w, 'Devon', s.sid), (s) => askCashOut(s.w, 'Devon', 500));
     await sweep('Devon cash out $5 ⊃ unmark Devon', finalized, (s) => askCashOut(s.w, 'Devon', 500), (s) => unmark(s.w, 'Devon', s.sid));
     await sweep('unmark Devon ⊃ Devon joins Nov 3', finalized, (s) => unmark(s.w, 'Devon', s.sid), async (s) => join(s.w, 'Devon', await on(s.w, NOV3)));
-    await sweep('Devon Didn\'t pay ⊃ Devon joins Nov 3', finalized, (s) => iDidNotPay(s.w, 'Devon', s.sid, FLAT), async (s) => join(s.w, 'Devon', await on(s.w, NOV3)));
+    await sweep('Devon Didn’t pay ⊃ Devon joins Nov 3', finalized, (s) => iDidNotPay(s.w, 'Devon', s.sid, FLAT), async (s) => join(s.w, 'Devon', await on(s.w, NOV3)));
   });
 });
 
@@ -1170,7 +1170,7 @@ describe('cut off halfway, then retried', () => {
     ['cancel the game', (s) => cancel(s.w, s.sid)],
     ['Lee asks to cash out more (refused: one open)', (s) => askCashOut(s.w, 'Lee', 500)],
     ['Lee: Mark refunded', (s) => markRefunded(s.w, pendingReq(s.w, 'Lee')?.id ?? 'none', 1000)],
-    ['organizer refunds Blair\'s balance (nothing left)', (s) => refundBalance(s.w, 'Blair')],
+    ['organizer refunds Blair’s balance (nothing left)', (s) => refundBalance(s.w, 'Blair')],
     ['organizer unmarks Casey ($5 credit)', (s) => unmark(s.w, 'Casey', s.sid)],
     ['Blair Undo credit', (s) => undoCredit(s.w, 'Blair', s.sid)],
   ];
@@ -1668,9 +1668,9 @@ describe('pair matrix', () => {
     ['Devon cashes out $5', (s) => askCashOut(s.w, 'Devon', 500)],
     ['Blair joins Nov 3 with the $5', async (s) => join(s.w, 'Blair', await on(s.w, NOV3))],
     ['Emery uses credit (none)', (s) => useCredit(s.w, 'Emery', s.sid)],
-    ['Gale Didn\'t pay (organizer marked)', (s) => iDidNotPay(s.w, 'Gale', s.sid, FLAT)],
+    ['Gale Didn’t pay (organizer marked)', (s) => iDidNotPay(s.w, 'Gale', s.sid, FLAT)],
     ['organizer Mark paid Emery', (s) => markPaid(s.w, 'Emery', s.sid)],
-    ['refund Devon\'s balance', (s) => refundBalance(s.w, 'Devon')],
+    ['refund Devon’s balance', (s) => refundBalance(s.w, 'Devon')],
   ];
   const postPairs: [number, number][] = [];
   for (let i = 0; i < postMenu.length; i++) for (let j = 0; j < postMenu.length; j++) postPairs.push([i, j]);

@@ -18,11 +18,11 @@ function nthWeekday(year: number, month: number, weekday: number, n: number): nu
 export function holidayOn(year: number, month: number, day: number): string | null {
   const md = `${month}-${day}`;
   const fixed: Record<string, string> = {
-    '1-1': "New Year's Day",
+    '1-1': "New Year’s Day",
     '7-4': 'July 4',
     '12-24': 'Christmas Eve',
     '12-25': 'Christmas Day',
-    '12-31': "New Year's Eve",
+    '12-31': "New Year’s Eve",
   };
   if (fixed[md]) return fixed[md];
   if (month === 5 && day === nthWeekday(year, 5, 1, -1)) return 'Memorial Day';

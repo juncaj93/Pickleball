@@ -276,7 +276,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
             onClick={pick(() => ctx.open('cancel', s.id))}
           >
             <CancelIcon />
-            {canceled ? 'Reopen session' : 'Cancel session'}
+            {canceled ? 'Reopen game' : 'Cancel game'}
           </button>
     </div>
   );

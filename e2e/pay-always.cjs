@@ -206,7 +206,7 @@ async function main() {
     const { ctx, page } = await open('Devon', { query: '?payalways=on' });
     await row(page, A).getByRole('button', { name: 'I paid' }).click();
     await page.waitForFunction((id) => /Paid \$14/.test(document.querySelector(`#row-${id}`)?.textContent || ''), A.id, { timeout: 8000 });
-    assert(/Didn't pay\?/.test(await text(page, A)), `undo link: ${await text(page, A)}`);
+    assert(/Didn’t pay\?/.test(await text(page, A)), `undo link: ${await text(page, A)}`);
     const g = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
     const seat = g.sessions.find((s) => s.id === A.id).roster.find((r) => r.name === 'Devon');
     assert(seat.paymentStatus === 'paid' && seat.selfPaid, `seat: ${JSON.stringify(seat)}`);

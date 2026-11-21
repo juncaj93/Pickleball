@@ -21,7 +21,7 @@ const SETUP_TOKEN = 'goodnews-setup-token-0123456789';
 const PIN = '482913';
 const NAMES = ['Alex', 'Nathan', 'Ryan', 'Mitchel', 'Brandon', 'Julian', 'Dana'];
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
-const NEWS = "Good news, a spot opened up, so you're in.";
+const NEWS = 'A spot opened. You’re in.';
 
 let passed = 0;
 let failed = 0;

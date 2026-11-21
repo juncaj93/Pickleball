@@ -26,13 +26,13 @@ const byWhen = (iso: string, tz: string, nowMs: number) => (dayGap(iso, tz, nowM
 /** "tomorrow's game", "tonight's game", "today's game", or "the Tue Nov 17 game". */
 export function whichGame(iso: string, tz: string, nowMs: number): string {
   const w = dayWordR2(iso, tz, nowMs);
-  return w === 'tomorrow' || w === 'tonight' || w === 'today' ? `${w}'s game` : `the ${w} game`;
+  return w === 'tomorrow' || w === 'tonight' || w === 'today' ? `${w}’s game` : `the ${w} game`;
 }
 
 /** 4 or more in: is everyone still in, is anyone else in. Opens with no recipients (the group chat). */
 export function checkInTextLastCall(s: SessionLike, tz: string, nowMs: number, signedUp: number, link: string): string {
   return lines(
-    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in so far. Is everyone still in? Anyone else in?`, `Need to back out? Do it ${byWhen(s.startsAt, tz, nowMs)} to avoid cancel fees.`],
+    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in so far. Is everyone still in? Anyone else in?`, `Need to drop out? Do it ${byWhen(s.startsAt, tz, nowMs)} to avoid cancel fees.`],
     link,
   );
 }

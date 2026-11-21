@@ -254,7 +254,7 @@ describe('day words computed from the API on each day', () => {
     expect(wantInTitle(tue3, TZ, T.satNoon, false)).toBe('Want in Tuesday?');
     expect(wantInTitle(tue10, TZ, T.satNoon, false)).toBe('Want in next Tuesday?');
     expect(wantInTitle(tue3, TZ, T.sun9pm, false)).toBe('Want in Tuesday?'); // 2 days, though 1 day in UTC
-    expect(wantInTitle(tue3, TZ, T.sun9pm, true)).toBe("Want in on Tuesday's waitlist?");
+    expect(wantInTitle(tue3, TZ, T.sun9pm, true)).toBe("Want in on Tuesday’s waitlist?");
     expect(wantInTitle(tue3, TZ, T.mon11pm, false)).toBe('Want in tomorrow?');
   });
 });
@@ -269,8 +269,8 @@ describe('texts for these days say the right day and 8:00 PM', () => {
     expect(plain(shareMessage(s, TZ, T.sun9pm, link))).toBe(`Pickleball Tue Nov 3, 8:00 PM. In or out here: ${link}`);
     expect(plain(shareMessage(s, TZ, T.sun130est, link))).toBe(`Pickleball Tue Nov 3, 8:00 PM. In or out here: ${link}`);
     expect(plain(needPlayersMessage(s, TZ, T.mon11pm, 2, link))).toBe(`Need 2 more for pickleball tomorrow, 8:00 PM. In? ${link}`);
-    expect(plain(checkInMessage(s, TZ, T.tue9am, link))).toBe(`Pickleball tonight, 8:00 PM. Can't make it? Update here: ${link}`);
-    expect(plain(checkInMessage(s, TZ, T.tue759pm, link))).toBe(`Pickleball tonight, 8:00 PM. Can't make it? Update here: ${link}`);
+    expect(plain(checkInMessage(s, TZ, T.tue9am, link))).toBe(`Pickleball tonight, 8:00 PM. Can’t make it? Update here: ${link}`);
+    expect(plain(checkInMessage(s, TZ, T.tue759pm, link))).toBe(`Pickleball tonight, 8:00 PM. Can’t make it? Update here: ${link}`);
     // Late on game night it is already Wed in UTC: the game is still "Tue Nov 3".
     expect(textDay(s.startsAt, TZ)).toBe('Tue Nov 3');
     expect(venmoNote(s.startsAt, TZ, 'Alex')).toBe('Pickleball Tue Nov 3 - Alex');

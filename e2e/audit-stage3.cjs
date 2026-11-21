@@ -108,7 +108,7 @@ async function main() {
   await call(ryan.request, 'POST', `/api/sessions/${nov5.id}/join`, {});
   await call(ryan.request, 'POST', `/api/sessions/${nov3.id}/withdraw`, {});
   const used = await call(ryan.request, 'POST', `/api/sessions/${nov5.id}/use-credit`, {});
-  if (!(used.ok === true && used.usedCents === 1400 && used.paid === true)) throw new Error(`Ryan's Use credit on Nov 5: ${JSON.stringify(used)}`);
+  if (!(used.ok === true && used.usedCents === 1400 && used.paid === true)) throw new Error(`Ryan’s Use credit on Nov 5: ${JSON.stringify(used)}`);
 
   const organizer = async () => {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 860 }, isMobile: true, hasTouch: true });
@@ -125,7 +125,7 @@ async function main() {
     await check('the refund card: Refund opens Venmo for $5 with the note, then Mark refunded appears and works', async () => {
       const card = page.locator('[data-refund-request="Mitchel"]');
       await card.waitFor();
-      assert(squash(await card.locator('h3').innerText()) === 'Mitchel requested a refund of $5', await card.locator('h3').innerText());
+      assert(squash(await card.locator('h3').innerText()) === 'Mitchel asked to cash out $5', await card.locator('h3').innerText());
       const link = card.locator('[data-refund-venmo]');
       assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=5&note=Pickleball%20credit%20refund', await link.getAttribute('data-app-href'));
       assert((await card.locator('[data-mark-refunded]').count()) === 0, 'Mark refunded before Venmo was opened');
@@ -136,7 +136,7 @@ async function main() {
       const mid = (await dash()).creditLedger.find((l) => l.playerId === id.Mitchel);
       assert(mid.balanceCents === before.balanceCents && mid.reservedCents === 500, 'opening Venmo changed the credit');
       await card.locator('[data-mark-refunded]').click();
-      await page.locator('.toast', { hasText: 'Mitchel refunded' }).waitFor();
+      await page.locator('.toast', { hasText: 'Mitchel cashed out' }).waitFor();
       await card.waitFor({ state: 'detached' });
       const after = (await dash()).creditLedger.find((l) => l.playerId === id.Mitchel);
       assert(after.balanceCents === 900 && after.reservedCents === 0, `after: ${JSON.stringify(after)}`);

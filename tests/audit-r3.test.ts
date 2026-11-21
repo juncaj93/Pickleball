@@ -570,7 +570,7 @@ describe('fuzz: claims, Unmark, drops, cancels, finalize in random order, books 
           if (seat.status === 'waitlisted' && live) continue;
           const used = usedOnSeat(ctx, gg.id, x);
           if (live || used) known(`stuck on ${x} ${seat.status} canceled=${canceled}`);
-          expect({ live, used }, `${where}: money stuck on ${x}'s ${seat.status} seat (canceled ${canceled})`).toEqual({ live: false, used: 0 });
+          expect({ live, used }, `${where}: money stuck on ${x}’s ${seat.status} seat (canceled ${canceled})`).toEqual({ live: false, used: 0 });
         }
       }
       // Every dollar: initial pots + cash sent = collected + held + pots (court costs are the organizer's own).

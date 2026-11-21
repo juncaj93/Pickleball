@@ -24,8 +24,8 @@ describe('History > Activity', () => {
     await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
     const got = await lines(ctx);
     expect(got[0]).toBe(`Blair dropped out of ${day}`);
-    expect(got[1]).toBe(`Blair said I'm in for ${day}`);
-    expect(got[2]).toBe(`Alex said I'm in for ${day}`);
+    expect(got[1]).toBe(`Blair said I’m in for ${day}`);
+    expect(got[2]).toBe(`Alex said I’m in for ${day}`);
     const top = (await activity(ctx)).entries[0];
     expect(top.actorLabel).toBe('Blair');
     expect(top.sessionStartsAt).toBe(s.startsAt);

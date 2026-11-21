@@ -323,7 +323,7 @@ async function main() {
       assert((await page.locator('dialog.hs-sheet h2').innerText()) === 'Add to Home Screen', 'title');
       const steps = await page.locator('[data-hs-step]').evaluateAll((els) => els.map((e) => e.querySelector('.hs-step-title').textContent));
       assert(JSON.stringify(steps) === JSON.stringify(['Tap the Share button', 'Tap View More', 'Tap Add to Home Screen']), `steps: ${steps}`);
-      assert((await page.getByText("Scroll down if you don't see it").count()) === 1, 'the hint under step 3');
+      assert((await page.getByText("Scroll down if you don’t see it").count()) === 1, 'the hint under step 3');
       const pics = await page.evaluate(() =>
         [...document.querySelectorAll('.hs-img')].filter((i) => getComputedStyle(i).display !== 'none').map((i) => ({ src: i.getAttribute('src'), ok: i.complete && i.naturalWidth > 0, w: i.getBoundingClientRect().width })),
       );
@@ -406,7 +406,7 @@ async function main() {
       const { ctx, page } = await gdt({ scheme });
       const body = await page.locator('[data-gdt-body]').innerText();
       const lines = body.split('\n');
-      assert(/^Pickleball tonight @ \d{1,2}(:\d{2})?(am|pm)!( \(Court \d+\))?$/.test(lines[0]), `first line: ${lines[0]}`);
+      assert(/^Pickleball (today|tonight) @ \d{1,2}(:\d{2})?(am|pm)!( \(Court \d+\))?$/.test(lines[0]), `first line: ${lines[0]}`);
       assert(lines[1] === '' && lines[2] === 'Northville Pickleball Club', `lines: ${JSON.stringify(lines.slice(0, 5))}`);
       assert(lines[3] === 'Directions: https://maps.apple.com/?daddr=Northville+Pickleball+Club', `Directions and its link on ONE line: ${lines[3]}`);
       assert(lines.length === 4 || (lines.length === 6 && lines[4] === '' && /^Still owe \$\d+\? Pay here: \S+$/.test(lines[5])), `the pay line is one line: ${JSON.stringify(lines.slice(4))}`);

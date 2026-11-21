@@ -83,21 +83,21 @@ describe('TEXTS_R2: day and time words', () => {
 describe('TEXTS_R2: the prefilled texts, exact words', () => {
   it('1. check-in', () => {
     expect(checkInTextR2(TUE, TZ, MON_7PM, 5, LINK)).toBe(
-      ['Pickleball tomorrow @ 8pm!', '5 in so far. Want in? Join now.', 'Need to back out? Do it tonight to avoid cancel fees.', '', LINK].join('\n'),
+      ['Pickleball tomorrow @ 8pm!', '5 in so far. Want in? Join now.', 'Need to drop out? Do it tonight to avoid cancel fees.', '', LINK].join('\n'),
     );
     expect(checkInTextR2(THU_730, TZ, at('2026-11-04T17:00:00Z'), 4, LINK).split('\n')[0]).toBe('Pickleball tomorrow @ 7:30pm!');
     // A game further out says "early", not "tonight".
     const far = checkInTextR2(TUE, TZ, at('2026-10-28T16:00:00Z'), 5, LINK).split('\n');
-    expect(far.slice(0, 3)).toEqual(['Pickleball Tue Nov 3 @ 8pm!', '5 in so far. Want in? Join now.', 'Need to back out? Do it early to avoid cancel fees.']);
+    expect(far.slice(0, 3)).toEqual(['Pickleball Tue Nov 3 @ 8pm!', '5 in so far. Want in? Join now.', 'Need to drop out? Do it early to avoid cancel fees.']);
     // Two days out is "further out"; tomorrow and game day keep "tonight".
-    expect(checkInTextR2(TUE, TZ, at('2026-11-01T17:00:00Z'), 5, LINK).split('\n')[2]).toBe('Need to back out? Do it early to avoid cancel fees.');
-    expect(checkInTextR2(TUE, TZ, TUE_NOON, 5, LINK).split('\n')[2]).toBe('Need to back out? Do it tonight to avoid cancel fees.');
+    expect(checkInTextR2(TUE, TZ, at('2026-11-01T17:00:00Z'), 5, LINK).split('\n')[2]).toBe('Need to drop out? Do it early to avoid cancel fees.');
+    expect(checkInTextR2(TUE, TZ, TUE_NOON, 5, LINK).split('\n')[2]).toBe('Need to drop out? Do it tonight to avoid cancel fees.');
   });
   it('2. need players (also Find a sub, with tonight / today)', () => {
     expect(needPlayersTextR2(TUE, TZ, MON_7PM, 3, 1, LINK)).toBe(
-      ['Pickleball tomorrow @ 8pm!', '3 in, need 1 more.', "Want in? Join tonight, otherwise we'll have to cancel.", '', LINK].join('\n'),
+      ['Pickleball tomorrow @ 8pm!', '3 in, need 1 more.', "Want in? Join tonight, otherwise we’ll have to cancel.", '', LINK].join('\n'),
     );
-    expect(needPlayersTextR2(TUE, TZ, at('2026-10-28T16:00:00Z'), 3, 1, LINK).split('\n').slice(0, 3)).toEqual(['Pickleball Tue Nov 3 @ 8pm!', '3 in, need 1 more.', "Want in? Join early, otherwise we'll have to cancel."]);
+    expect(needPlayersTextR2(TUE, TZ, at('2026-10-28T16:00:00Z'), 3, 1, LINK).split('\n').slice(0, 3)).toEqual(['Pickleball Tue Nov 3 @ 8pm!', '3 in, need 1 more.', "Want in? Join early, otherwise we’ll have to cancel."]);
     expect(needPlayersTextR2(TUE, TZ, TUE_NOON, 2, 2, LINK).split('\n').slice(0, 2)).toEqual(['Pickleball tonight @ 8pm!', '2 in, need 2 more.']);
     expect(needPlayersTextR2({ startsAt: '2026-11-03T17:00:00.000Z' }, TZ, at('2026-11-03T13:00:00Z'), 0, 4, LINK).split('\n').slice(0, 2)).toEqual(['Pickleball today @ 12pm!', '0 in, need 4 more.']);
   });
@@ -115,31 +115,31 @@ describe('TEXTS_R2: the prefilled texts, exact words', () => {
     expect(finalTextR2(TUE, TZ, at('2026-11-04T03:30:00Z'), 5, 1100, 1400, LINK).split('\n')[0]).toBe('Pickleball tonight is final: 5 played, $11 each.');
   });
   it('5. spot opened', () => {
-    expect(promotedTextR2(TUE, TZ, MON_7PM, LINK)).toBe(["A spot opened and you're in for pickleball tomorrow @ 8pm!", '', LINK].join('\n'));
+    expect(promotedTextR2(TUE, TZ, MON_7PM, LINK)).toBe(["A spot opened and you’re in for pickleball tomorrow @ 8pm!", '', LINK].join('\n'));
   });
   it('6a. canceled, credit version: tomorrow, today, tonight, with the reason', () => {
     expect(canceledCreditTextR2(TUE, TZ, MON_7PM, LINK)).toBe(
-      ['Pickleball tomorrow is canceled.', "If you paid, it's now your credit. You can request a cash out on the site.", '', LINK].join('\n'),
+      ['Pickleball tomorrow is canceled.', "If you paid, it’s now your credit. You can request a cash out on the site.", '', LINK].join('\n'),
     );
     expect(canceledCreditTextR2(TUE, TZ, TUE_NOON, LINK, 'Rain')).toBe(
-      ['Pickleball tonight is canceled. Rain.', "If you paid, it's now your credit. You can request a cash out on the site.", '', LINK].join('\n'),
+      ['Pickleball tonight is canceled. Rain.', "If you paid, it’s now your credit. You can request a cash out on the site.", '', LINK].join('\n'),
     );
     expect(canceledCreditTextR2({ startsAt: '2026-11-03T17:00:00.000Z' }, TZ, at('2026-11-03T13:00:00Z'), LINK).split('\n')[0]).toBe('Pickleball today is canceled.');
   });
   it('6b. canceled, fee kept: the live words with line breaks, and the reason', () => {
     expect(canceledFeeKeptTextR2(TUE, TZ, TUE_NOON, 1400, LINK)).toBe(
       [
-        "Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court.",
-        "If you were signed up, your $14 share still applies (if you already paid, you're all set).",
-        'Sorry about that! You can pay on the site:',
+        "Today’s game is canceled. It’s inside 12 hours, so the venue charges us.",
+        "If you were signed up, your $14 share still applies (if you already paid, you’re all set).",
+        'You can pay on the site:',
         '',
         LINK,
       ].join('\n'),
     );
     expect(canceledFeeKeptTextR2(TUE, TZ, TUE_NOON, 1400, LINK, 'Thanksgiving').split('\n')[0]).toBe(
-      "Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. Thanksgiving.",
+      "Today’s game is canceled. It’s inside 12 hours, so the venue charges us. Thanksgiving.",
     );
-    expect(canceledFeeKeptTextR2(TUE, TZ, at('2026-11-03T03:00:00Z'), 1400, LINK).split('\n')[0]).toMatch(/^Heads up: tomorrow's game is canceled/);
+    expect(canceledFeeKeptTextR2(TUE, TZ, at('2026-11-03T03:00:00Z'), 1400, LINK).split('\n')[0]).toMatch(/^Tomorrow’s game is canceled/);
   });
   it('7. moved: line breaks and the reason', () => {
     const was = '2026-11-04T01:00:00.000Z'; // Tue Nov 3
@@ -155,7 +155,7 @@ describe('TEXTS_R2: the prefilled texts, exact words', () => {
     expect(paymentTextR2('Ryan', 2800, [TUE, THU_730], TZ, WED_NOON, LINK)).toBe(['Hey Ryan, you owe $28 for pickleball.', 'Pay here:', '', LINK].join('\n'));
   });
   it('9. remind all unpaid', () => {
-    expect(remindAllTextR2(LINK)).toBe(["Hey, looks like you haven't paid for pickleball yet.", 'Pay here:', '', LINK].join('\n'));
+    expect(remindAllTextR2(LINK)).toBe(["Hey, you haven’t paid for pickleball yet.", 'Pay here:', '', LINK].join('\n'));
   });
   it('10. still in? says confirmed', () => {
     expect(stillInTextR2(THU_730.startsAt, TZ, at('2026-11-04T17:00:00Z'), LINK)).toBe(
@@ -166,12 +166,12 @@ describe('TEXTS_R2: the prefilled texts, exact words', () => {
     const a = courtCanceledTextR2();
     expect(a.split('\n')).toHaveLength(5);
     expect(a.replace(/\n/g, ' ')).toBe(
-      "Hey guys, sorry, I have to back out of today's game. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!",
+      "Hey guys, sorry, I have to back out of today’s game. I canceled the court, so you can still book the same slot as non-members. It’s only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!",
     );
     const b = courtStillBookedTextR2();
     expect(b.split('\n')).toHaveLength(5);
     expect(b.replace(/\n/g, ' ')).toBe(
-      "Hey guys, sorry, I have to back out of today's game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!",
+      "Hey guys, sorry, I have to back out of today’s game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!",
     );
   });
   it('every text: no dashes, the address alone on its last line after a blank line, nothing says sent', () => {
@@ -310,7 +310,7 @@ describe('TEXTS_R2: the Text menu', () => {
     const items = sessionTexts(d, sessionOn(d, '2026-11-03'), Date.parse(d.now));
     expect(items.map((i) => i.id)).toEqual(['share', 'need']);
     expect(items[0].body).toBe(`Pickleball Tue Nov 3 @ 8pm!\nIn or out here:\n\n${LINK}`);
-    expect(items[1].body).toBe(`Pickleball Tue Nov 3 @ 8pm!\n2 in, need 2 more.\nWant in? Join early, otherwise we'll have to cancel.\n\n${LINK}`);
+    expect(items[1].body).toBe(`Pickleball Tue Nov 3 @ 8pm!\n2 in, need 2 more.\nWant in? Join early, otherwise we’ll have to cancel.\n\n${LINK}`);
     for (const i of items) expect([i.chat, i.phones]).toEqual([true, []]);
   });
   it('ON, 4 in: the check-in opens with NO recipients (OFF it goes to the numbers)', async () => {
@@ -335,7 +335,7 @@ describe('TEXTS_R2: the Text menu', () => {
     w.app.now = at('2026-11-04T17:00:00Z'); // Wed noon, the day after
     const d = await dash(w, ON);
     expect(reminderText(d, w.byName.Blair, 'Blair')).toBe(`Hey Blair, you owe $14 for pickleball yesterday.\nPay here:\n\n${LINK}`);
-    expect(unpaidPeople(d).body).toBe(`Hey, looks like you haven't paid for pickleball yet.\nPay here:\n\n${LINK}`);
+    expect(unpaidPeople(d).body).toBe(`Hey, you haven’t paid for pickleball yet.\nPay here:\n\n${LINK}`);
     const off = await dash(w);
     expect(reminderText(off, w.byName.Blair, 'Blair')).toBe(`Hey Blair, you owe $14 for pickleball Tue Nov 3. Pay here: ${LINK}`);
   });
@@ -347,7 +347,7 @@ describe('TEXTS_R2: the Text menu', () => {
     w.app.now = at('2026-11-02T20:00:00Z'); // Mon 3:00 PM: "tomorrow"
     const d = await dash(w, ON);
     const item = sessionTexts(d, sessionOn(d, '2026-11-03'), Date.parse(d.now)).find((i) => i.id === 'canceled')!;
-    expect(item.body).toBe(`Pickleball tomorrow is canceled. Thanksgiving.\nIf you paid, it's now your credit. You can request a cash out on the site.\n\n${LINK}`);
+    expect(item.body).toBe(`Pickleball tomorrow is canceled. Thanksgiving.\nIf you paid, it’s now your credit. You can request a cash out on the site.\n\n${LINK}`);
     expect(item.phones.length).toBe(2);
   });
   it('ON + LATE_FEES, a late cancel: fee kept and waived both carry the reason (OFF drops it)', async () => {
@@ -364,11 +364,11 @@ describe('TEXTS_R2: the Text menu', () => {
     const kept = lateCancelText(on, so, '')!;
     expect(kept.feeKept).toBe(true);
     expect(kept.body).toBe(
-      `Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. Rain.\nIf you were signed up, your $14 share still applies (if you already paid, you're all set).\nSorry about that! You can pay on the site:\n\n${LINK}`,
+      `Today’s game is canceled. It’s inside 12 hours, so the venue charges us. Rain.\nIf you were signed up, your $14 share still applies (if you already paid, you’re all set).\nYou can pay on the site:\n\n${LINK}`,
     );
     const off = await dash(w);
     expect(lateCancelText(off, sessionOn(off, '2026-11-03'), '')!.body).toBe(
-      `Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your $14 share still applies (if you already paid, you're all set). You can pay on the site: ${LINK}. Sorry about that!`,
+      `Today’s game is canceled. It’s inside 12 hours, so the venue charges us. If you were signed up, your $14 share still applies (if you already paid, you’re all set). You can pay on the site: ${LINK}`,
     );
     // Reopen and cancel again with Yes (waived): the credit version, "tonight", with the reason.
     expect((await w.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'reopen' })).status).toBe(200);
@@ -376,7 +376,7 @@ describe('TEXTS_R2: the Text menu', () => {
     const on2 = await dash(w, ON);
     const waived = lateCancelText(on2, sessionOn(on2, '2026-11-03'), '')!;
     expect(waived.feeKept).toBe(false);
-    expect(waived.body).toBe(`Pickleball tonight is canceled. Rain.\nIf you paid, it's now your credit. You can request a cash out on the site.\n\n${LINK}`);
+    expect(waived.body).toBe(`Pickleball tonight is canceled. Rain.\nIf you paid, it’s now your credit. You can request a cash out on the site.\n\n${LINK}`);
   });
 });
 
@@ -394,17 +394,17 @@ describe('TEXTS_R2: drop alerts', () => {
   it('OFF is the old sentence, ON names the game by its day', () => {
     const input = { ...base, before: [...p('A', 'B', 'C'), base.actor], after: p('A', 'B', 'C'), nowMs: at('2026-11-03T03:00:00Z') }; // Mon 10 PM, 22 hrs before
     expect(alertMessage(input)).toBe('Ryan dropped out of Tue Nov 3, 8:00 PM (22 hrs before). 3 in now, under 4.');
-    expect(alertMessage({ ...input, textsR2: true })).toBe("Ryan dropped out of tomorrow's 8:00 PM game (22 hrs before). 3 in now, under 4.");
+    expect(alertMessage({ ...input, textsR2: true })).toBe("Ryan dropped out of tomorrow’s 8:00 PM game (22 hrs before). 3 in now, under 4.");
   });
   it('tonight: "tonight\'s game"; a late drop keeps its label; the count words stay', () => {
     const input = { ...base, before: [...p('A', 'B', 'C', 'D', 'E'), base.actor], after: p('A', 'B', 'C', 'D', 'E'), nowMs: at('2026-11-03T16:00:00Z'), textsR2: true }; // Tue 11 AM
-    expect(alertMessage(input)).toBe("Late drop: Ryan dropped out of tonight's game (9 hrs before). 5 in now.");
+    expect(alertMessage(input)).toBe("Late drop: Ryan dropped out of tonight’s game (9 hrs before). 5 in now.");
   });
   it('the waitlist line and "owes $14" when the drop made a debt', () => {
     const input = { ...base, before: [...p('A', 'B', 'C'), base.actor], after: p('A', 'B', 'C', 'W'), nowMs: at('2026-11-03T16:00:00Z'), textsR2: true };
-    expect(alertMessage({ ...input, dropperOwesCents: 1400 })).toBe("Late drop: Ryan dropped out of tonight's game (9 hrs before). W moved up from the waitlist. 4 in now. Ryan owes $14.");
+    expect(alertMessage({ ...input, dropperOwesCents: 1400 })).toBe("Late drop: Ryan dropped out of tonight’s game (9 hrs before). W moved up from the waitlist. 4 in now. Ryan owes $14.");
     const short = { ...base, before: [...p('A', 'B', 'C'), base.actor], after: p('A', 'B', 'C'), nowMs: at('2026-11-03T16:00:00Z'), textsR2: true };
-    expect(alertMessage({ ...short, dropperOwesCents: 1400 })).toBe("Late drop: Ryan dropped out of tonight's game (9 hrs before). 3 in now, under 4. Ryan owes $14.");
+    expect(alertMessage({ ...short, dropperOwesCents: 1400 })).toBe("Late drop: Ryan dropped out of tonight’s game (9 hrs before). 3 in now, under 4. Ryan owes $14.");
     // No debt, or the switch off: nothing about owing.
     expect(alertMessage({ ...short, dropperOwesCents: null })).not.toMatch(/owes/);
     expect(alertMessage({ ...short, textsR2: false, dropperOwesCents: 1400 })).not.toMatch(/owes/);
@@ -416,9 +416,9 @@ describe('TEXTS_R2: drop alerts', () => {
     expect(alertMessage({ ...input, nowMs: at('2026-10-30T16:00:00Z') })).toBeNull();
   });
   it('alertGame: tomorrow / tonight / today / a date', () => {
-    expect(alertGame(TUE.startsAt, TZ, MON_7PM, '8:00 PM')).toBe("tomorrow's 8:00 PM game");
-    expect(alertGame(TUE.startsAt, TZ, TUE_NOON, '8:00 PM')).toBe("tonight's game");
-    expect(alertGame('2026-11-03T17:00:00.000Z', TZ, at('2026-11-03T13:00:00Z'), '12:00 PM')).toBe("today's game");
+    expect(alertGame(TUE.startsAt, TZ, MON_7PM, '8:00 PM')).toBe("tomorrow’s 8:00 PM game");
+    expect(alertGame(TUE.startsAt, TZ, TUE_NOON, '8:00 PM')).toBe("tonight’s game");
+    expect(alertGame('2026-11-03T17:00:00.000Z', TZ, at('2026-11-03T13:00:00Z'), '12:00 PM')).toBe("today’s game");
     expect(alertGame(TUE.startsAt, TZ, at('2026-10-30T16:00:00Z'), '8:00 PM')).toBe('the Tue Nov 3, 8:00 PM game');
   });
 });
@@ -477,7 +477,7 @@ describe('TEXTS_R2: Telegram wording (clock brain)', () => {
     const list = alertsOver([game('2026-11-03')], R2, '2026-11-02T22:00:00Z', '2026-11-03T05:00:00Z');
     expect(list.filter((a) => a.id !== 'night').map((a) => [when(a.at), a.text])).toEqual([
       ['Mon, 10:00 PM', `Tomorrow: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`],
-      ['Mon, 10:30 PM', `Tomorrow: court canceled? Now cancel the session and text everyone: ${ADMIN}`],
+      ['Mon, 10:30 PM', `Tomorrow: court canceled? Now cancel the game and text everyone: ${ADMIN}`],
     ]);
   });
   it('#4 the game-day check is gone, with the switch on or off (Zip 11 deleted it)', () => {
@@ -515,8 +515,8 @@ describe('TEXTS_R2: #5 booking heads-up at 6:55 AM, #6 reminder only while not b
   it('the words are unchanged and it is sent once, at 6:55 AM on a 5-minute clock', () => {
     const list = day(R2, nov17());
     expect(list.map((a) => [when(a.at), a.id, a.text])).toEqual([
-      ['Tue, 6:55 AM', 'book', `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`],
-      ['Tue, 7:30 AM', 'book_followup', `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`],
+      ['Tue, 6:55 AM', 'book', `Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`],
+      ['Tue, 7:30 AM', 'book_followup', `Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`],
     ]);
     expect(day(OFF, nov17()).map((a) => when(a.at))).toEqual(['Tue, 6:45 AM', 'Tue, 7:30 AM']);
   });
@@ -634,7 +634,7 @@ describe('TEXTS_R2: switched off, nothing about the clock changes', () => {
     }
   });
   it('the old wording functions still say what they said (the clock Worker sends these with the switch off)', () => {
-    expect(checkInMessage(TUE, TZ, MON_7PM, LINK)).toBe(`Pickleball tomorrow, 8:00 PM. Can't make it? Update here: ${LINK}`);
+    expect(checkInMessage(TUE, TZ, MON_7PM, LINK)).toBe(`Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: ${LINK}`);
     expect(needPlayersMessage(TUE, TZ, MON_7PM, 1, LINK)).toBe(`Need 1 more for pickleball tomorrow, 8:00 PM. In? ${LINK}`);
   });
   it('the Home card list is identical with the switch off or missing, and only the labels differ with it on', async () => {
@@ -715,9 +715,9 @@ describe('TEXTS_R2: the real tick endpoint', () => {
     expect(g.sent).toEqual([
       `Tomorrow: 3 players in, need a 4th. Text the group: ${GO}`,
       `Tomorrow: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
-      `Tomorrow: court canceled? Now cancel the session and text everyone`,
-      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
-      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Tomorrow: court canceled? Now cancel the game and text everyone`,
+      `Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
   });
   it('OFF (the default): the same 48 hours send the old five, word for word (the old game-day check is gone, Zip 11)', async () => {
@@ -726,9 +726,9 @@ describe('TEXTS_R2: the real tick endpoint', () => {
     expect(g.sent).toEqual([
       `Tuesday: 3 players in, need a 4th. Text the group: ${GO}`,
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
-      `Tuesday: court canceled? Now cancel the session and text everyone`,
-      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
-      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Tuesday: court canceled? Now cancel the game and text everyone`,
+      `Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
   });
   it('the kill switch (TEXTS_R2 = off) sends the old alerts even with Settings on', async () => {
@@ -755,20 +755,20 @@ describe('TEXTS_R2: the real tick endpoint', () => {
     expect((await g.tick()).data).toMatchObject({ sent: 0 });
     g.app.now += 5 * MIN;
     expect((await g.tick()).data).toMatchObject({ sent: 0 });
-    expect(g.sent).toEqual([`Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`]);
+    expect(g.sent).toEqual([`Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`]);
   });
   it('a tick that missed the 6:55 AM slot by less than an hour still sends the heads-up; an hour late does not', async () => {
     const g = await setup();
     g.app.now = at('2026-11-03T12:50:00Z'); // 7:50 AM: the 6:55 AM heads-up is 55 minutes late
     await g.tick();
     expect(g.sent).toEqual([
-      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
-      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
     const late = await setup();
     late.app.now = at('2026-11-03T13:00:00Z'); // 8:00 AM: both are an hour or more late
     await late.tick();
-    expect(late.sent).toEqual([`Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`]);
+    expect(late.sent).toEqual([`Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`]);
   });
   it('the reminder does not go out once the game was set to Waitlist or Booked (through the real court switch)', async () => {
     const g = await setup();
@@ -789,8 +789,8 @@ describe('TEXTS_R2: the real tick endpoint', () => {
     g.app.now = at('2026-11-03T12:30:00Z');
     await g.tick();
     expect(g.sent).toEqual([
-      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
-      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Booking for Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
+      `Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
   });
   it('nothing fires for a canceled game', async () => {
@@ -865,10 +865,10 @@ describe('TEXTS_R2: the real tick endpoint', () => {
     const token = await makeGoToken(SECRET, tue.id, tue.startsAt, g.app.now);
     const open = (headers: Record<string, string> = {}) => g.ctx.organizer.call('POST', '/api/go', { token }, headers);
     expect((await open()).data.body).toBe(`Need 1 more for pickleball tomorrow, 8:00 PM. In? ${LINK}`);
-    expect((await open({ [TEXTS_R2_HEADER]: 'on' })).data.body).toBe(`Pickleball tomorrow @ 8pm!\n3 in, need 1 more.\nWant in? Join tonight, otherwise we'll have to cancel.\n\n${LINK}`);
+    expect((await open({ [TEXTS_R2_HEADER]: 'on' })).data.body).toBe(`Pickleball tomorrow @ 8pm!\n3 in, need 1 more.\nWant in? Join tonight, otherwise we’ll have to cancel.\n\n${LINK}`);
     await joinAll(g.ctx, tue.id, ['Emery', 'Frankie']);
     await g.ctx.organizer.call('PUT', '/api/admin/texts-r2', { on: true });
-    expect((await open()).data.body).toBe(`Pickleball tomorrow @ 8pm!\n5 in so far. Want in? Join now.\nNeed to back out? Do it tonight to avoid cancel fees.\n\n${LINK}`);
+    expect((await open()).data.body).toBe(`Pickleball tomorrow @ 8pm!\n5 in so far. Want in? Join now.\nNeed to drop out? Do it tonight to avoid cancel fees.\n\n${LINK}`);
   });
 });
 
@@ -892,7 +892,7 @@ describe('TEXTS_R2: a drop through the real API', () => {
       expect((await (await playerPhone(g.ctx, 'Emery')).call('POST', `/api/sessions/${s.id}/withdraw`, {})).status).toBe(200);
       await g.app.settle();
       expect(g.sent).toEqual([
-        r2 ? "Emery dropped out of tomorrow's 8:00 PM game (32 hrs before). 3 in now, under 4." : 'Emery dropped out of Tue Nov 3, 8:00 PM (32 hrs before). 3 in now, under 4.',
+        r2 ? "Emery dropped out of tomorrow’s 8:00 PM game (32 hrs before). 3 in now, under 4." : 'Emery dropped out of Tue Nov 3, 8:00 PM (32 hrs before). 3 in now, under 4.',
       ]);
     }
   });
@@ -906,7 +906,7 @@ describe('TEXTS_R2: a drop through the real API', () => {
     g.app.now = at('2026-11-03T16:00:00Z'); // Tue 11:00 AM: inside the 12 hours
     expect((await (await playerPhone(g.ctx, 'Emery')).call('POST', `/api/sessions/${s.id}/withdraw`, {})).status).toBe(200);
     await g.app.settle();
-    expect(g.sent).toEqual(["Late drop: Emery dropped out of tonight's game (9 hrs before). 3 in now, under 4. Emery owes $14."]);
+    expect(g.sent).toEqual(["Late drop: Emery dropped out of tonight’s game (9 hrs before). 3 in now, under 4. Emery owes $14."]);
   });
   it('a game reaching 4 sends no Telegram (the "has 4 now, it\'s on" alert was removed in Zip 46)', async () => {
     const g = await setup(true);

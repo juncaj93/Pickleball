@@ -332,7 +332,7 @@ describe('back out', () => {
     // The credit sheet says what happened in plain words.
     const credit = (await (await playerPhone(ctx, 'Casey')).call('GET', '/api/group')).data.credit;
     const lines = creditChanges(credit.history, 'America/Detroit', 'Alex').map((c) => c.text);
-    expect(lines).toContain('Oct 26: $6 back from the Winter Classic (you backed out)');
+    expect(lines).toContain('Oct 26: $6 back from the Winter Classic (you dropped out)');
     expect(lines).toContain('Oct 26: $10 returned from the Winter Classic (off the list)');
     expect(lines).toContain('Oct 26: $10 used for the Winter Classic');
   });
@@ -623,7 +623,7 @@ describe("the organizer's own seat and answers", () => {
     const ctx = await world({ signUp: ['Blair', 'Casey', 'Devon'] });
     await lock(ctx, 'Blair');
     await iPaid(ctx, 'Blair', 1600);
-    expect((await answer(ctx, 'Blair', 'reject', 1500)).data.message).toBe("Blair's I paid changed. Look again.");
+    expect((await answer(ctx, 'Blair', 'reject', 1500)).data.message).toBe("Blair’s I paid changed. Look again.");
     expect((await answer(ctx, 'Blair', 'reject', 1600)).data).toMatchObject({ result: 'due', dueCents: 1600 });
     expect(ticketRow(ctx, 'Blair')).toMatchObject({ claim_cents: 0, paid_cents: 0, place: 'none' });
     expect((await answer(ctx, 'Blair', 'reject')).data.message).toBe('Blair has no I paid waiting. Look again.');
@@ -922,7 +922,7 @@ describe('review fixes (fresh reviewer, Zip 56)', () => {
     expect((await backOut(ctx, 'Blair')).data).toMatchObject({ result: 'backed_out', waitingCents: 1600 });
     expect((await answer(ctx, 'Blair', 'confirm', 1600)).data).toMatchObject({ creditCents: 1600 });
     expect(pot(ctx, 'Blair')).toBe(1600);
-    expect(await creditLines(ctx, 'Blair')).toContain('Oct 26: $16 back from the Winter Classic (you backed out)');
+    expect(await creditLines(ctx, 'Blair')).toContain('Oct 26: $16 back from the Winter Classic (you dropped out)');
     books(ctx);
   });
 });

@@ -169,7 +169,7 @@ async function main() {
     await page.locator('[data-pr-row="Kai"]').click();
     await page.locator('[data-pr-edit]').click();
     await page.waitForTimeout(400);
-    return (await page.locator('dialog.sheet[open]').last().innerText()).includes('For refunds. Only you see this.') ? 'old note' : 'NEW NOTE';
+    return (await page.locator('dialog.sheet[open]').last().innerText()).includes('For cash outs. Only you see this.') ? 'old note' : 'NEW NOTE';
   };
   for (const scheme of ['light', 'dark']) {
     // Round 2: the Mark paid card's compact rows are live for everyone (the one intended difference); checked below by its content.

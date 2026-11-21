@@ -280,7 +280,7 @@ export async function secondChanceAction(
     const card = secondChanceCards([game], nowMs, tz, '', pretendNoon(ctx) ? dayKey(ctx.nowMs, tz) : null)[0];
     if (!card || card.kind !== 'open' || card.step !== 'cutoff') throw new HttpError(409, 'changed', 'This game just changed. Look again.');
     // Once 4 had paid (Telegram 2 went), the court may have been booked on CourtReserve: the usual cancel asks about the fee instead.
-    if (sentMarks.has(SC.pingPaid)) throw new HttpError(409, 'maybe_booked', 'Four had paid, so the court may be booked. Use the gear menu > Cancel session to answer the fee question.');
+    if (sentMarks.has(SC.pingPaid)) throw new HttpError(409, 'maybe_booked', 'Four had paid, so the court may be booked. Use the gear menu > Cancel game to answer the fee question.');
     // Never booked, so no fee: the plain cancel (everyone's money back as credit), with the late-fee question answered for it.
     const out = await tools.decide(ctx, { decision: 'cancel', confirm: true, venueWaived: true, chargedCents: 0 });
     await mark(ctx.db, group.id, session.id, SC.cut, null, ctx.nowIso);
@@ -317,7 +317,7 @@ export async function secondChanceAction(
   }
   if (moved) {
     const clash = await ctx.db.prepare('SELECT 1 AS x FROM sessions WHERE group_id = ? AND starts_at = ? AND id <> ?').bind(group.id, newStart, session.id).first();
-    if (clash) throw new HttpError(409, 'time_taken', "There's already a game at that time. Pick another time.");
+    if (clash) throw new HttpError(409, 'time_taken', "There’s already a game at that time. Pick another time.");
   }
   // Booking hours on: the move goes FIRST, while the game is still canceled (one all-or-nothing save: refused means nothing changed, the
   // game stays canceled and no money moves), then the reopen. A reopen that does not go through puts the original time back.

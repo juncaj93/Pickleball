@@ -40,11 +40,11 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       case 'join':
         if (d.result === 'waitlisted') return `${who} joined the waitlist${forDay}`;
         if (d.result === 'standby') return `${who} joined standby${forDay}`;
-        return `${who} said I'm in${forDay}`;
+        return `${who} said I’m in${forDay}`;
       case 'withdraw':
         return `${who} dropped out${ofDay}${late}${via}`;
       case 'check_in':
-        return `${who} confirmed they're coming${forDay}${via}`;
+        return `${who} confirmed they’re coming${forDay}${via}`;
       case 'decline':
         return `${who} said no${forDay}`;
       case 'claim':
@@ -67,10 +67,10 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'player_self_added':
       return `${player} added their own name`;
     case 'marked_paid':
-      return d.confirmed ? `${who} confirmed ${player}'s payment${forDay}` : `${who} marked ${player} paid${forDay}`;
+      return d.confirmed ? `${who} confirmed ${player}’s payment${forDay}` : `${who} marked ${player} paid${forDay}`;
     case 'marked_unpaid':
       return d.previousAmountCents === undefined && typeof d.creditReturnedCents === 'number'
-        ? `${who} took ${player}'s ${formatPrice(d.creditReturnedCents)} credit off the game${forDay}`
+        ? `${who} took ${player}’s ${formatPrice(d.creditReturnedCents)} credit off the game${forDay}`
         : `${who} marked ${player} unpaid${forDay}`;
     case 'court_paid':
       return `${who} marked the court paid${forDay}`;
@@ -87,7 +87,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'court_waitlist':
       return `${who} went on the court waitlist${forDay}`;
     case 'court_not_opened':
-      return `${who} marked the court didn't open${forDay}`;
+      return `${who} marked the court didn’t open${forDay}`;
+    case 'court_not_booked':
+      return `${who} marked the court not booked${forDay}`;
     case 'booking_updated':
       if (changes.booking_status?.to === 'booked') return `${who} booked${day ? ` ${day}` : ' a court'}`;
       return `${who} edited a booking${forDay}`;
@@ -118,13 +120,13 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'credit_back':
       return `${player} got ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'money'} back as credit${forDay}${d.reason === 'dropped' ? ' (dropped out)' : d.reason === 'canceled' ? (d.split === true ? ' (canceled late, fee split)' : ' (canceled)') : d.reason === 'not_played' ? ' (did not play)' : d.reason === 'guest_removed' ? ' (guest removed)' : ''}`;
     case 'refund_requested':
-      return `${player} asked for ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'a'} refund of their credit`;
+      return typeof d.amountCents === 'number' ? `${player} asked to cash out ${formatPrice(d.amountCents)}` : `${player} asked to cash out credit`;
     case 'refund_request_canceled':
-      return `${player} took back their refund request`;
+      return `${player} took back their cash out request`;
     case 'refund_request_declined':
-      return `${who} put off ${player}'s refund request`;
+      return `${who} put off ${player}’s cash out request`;
     case 'late_drop_done':
-      return opts.names && player !== 'someone' ? `${who} handled ${player}'s late drop${forDay}` : `${who} handled a late drop${forDay}`;
+      return opts.names && player !== 'someone' ? `${who} handled ${player}’s late drop${forDay}` : `${who} handled a late drop${forDay}`;
     case 'roster_confirm':
       return `${who} gave ${player} a spot${forDay}`;
     case 'roster_waitlist':
@@ -134,11 +136,11 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'roster_confirm_attendance':
       return `${who} marked ${player} as coming${forDay}`;
     case 'credit_cleared':
-      return `${who} cleared ${player}'s credit`;
+      return `${who} cleared ${player}’s credit`;
     case 'credit_kept':
-      return `${who} kept ${player}'s payment as credit${forDay}`;
+      return `${who} kept ${player}’s payment as credit${forDay}`;
     case 'credit_kept_undone':
-      return `${who} undid keeping ${player}'s payment as credit${forDay}`;
+      return `${who} undid keeping ${player}’s payment as credit${forDay}`;
     case 'credit_used':
       return `${typeof d.amountCents === 'number' ? `${player} used ${formatPrice(d.amountCents)} credit${forDay}` : `${player} used credit${forDay}`}${d.auto === true ? ' (automatic at sign-up)' : ''}`;
     case 'cash_out_used':
@@ -146,9 +148,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'credit_undone':
       return `${player} took back the credit they used${forDay}`;
     case 'credit_refund_marked':
-      return `${who} paid ${player}'s credit back`;
+      return `${who} paid ${player}’s credit back`;
     case 'credit_refund_undone':
-      return `${who} undid paying ${player}'s credit back`;
+      return `${who} undid paying ${player}’s credit back`;
     case 'player_added':
       return `${who} added ${player}`;
     case 'player_updated':
@@ -225,7 +227,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       const to = Number(d.toCents) || 0;
       const back = Number(d.backCents) || 0;
       const used = Number(d.creditUsedCents) || 0;
-      const parts = [`${player}'s extra time share ${from === 0 ? `set to ${formatPrice(to)}` : `went from ${formatPrice(from)} to ${formatPrice(to)}`}${forDay}${d.why === 'reopen' ? ' (reopened)' : ''}`];
+      const parts = [`${player}’s extra time share ${from === 0 ? `set to ${formatPrice(to)}` : `went from ${formatPrice(from)} to ${formatPrice(to)}`}${forDay}${d.why === 'reopen' ? ' (reopened)' : ''}`];
       if (back > 0) parts.push(`${formatPrice(back)} back as credit`);
       if (used > 0) parts.push(`${formatPrice(used)} of their credit used`);
       return parts.join(', ');
@@ -233,13 +235,13 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'extension_i_paid':
       return `${player} marked their extra time paid (${formatPrice(Number(d.amountCents) || 0)})${d.withGame ? forDay : ''}`;
     case 'extension_confirmed':
-      return `${who} confirmed ${player}'s extra time payment (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
+      return `${who} confirmed ${player}’s extra time payment (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
     case 'extension_marked_paid':
-      return `${who} marked ${player}'s extra time paid (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
+      return `${who} marked ${player}’s extra time paid (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
     case 'extension_claim_cleared':
-      return `${who} cleared ${player}'s extra time I paid${forDay}`;
+      return `${who} cleared ${player}’s extra time I paid${forDay}`;
     case 'extension_unmarked':
-      return `${who} unmarked ${player}'s extra time payment (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
+      return `${who} unmarked ${player}’s extra time payment (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
     case 'extension_confirmed_with_seat':
       return `${who} confirmed extra time paid with the next game`;
     case 'extension_unmarked_with_seat':
@@ -257,14 +259,16 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} showed ${theTour(d)} to everyone`;
     case 'tournament_hidden':
       return `${who} set ${theTour(d)} to Only me`;
+    case 'tournament_restored':
+      return `${who} restored ${theTour(d)}`;
     case 'tournament_level':
-      return `${who} set ${player}'s level to ${typeof d.level === 'string' ? d.level : '?'} for ${theTour(d)}`;
+      return `${who} set ${player}’s level to ${typeof d.level === 'string' ? d.level : '?'} for ${theTour(d)}`;
     case 'tournament_date':
       return typeof d.date === 'string' ? `${who} picked ${d.date} for ${theTour(d)}` : `${who} took back the date for ${theTour(d)}`;
     // Zip 60: how the format was set. The players' vote (with the counts), the tie rule, or the organizer.
     case 'tournament_format': {
       const fmt = d.format === 'americano' ? 'Americano' : 'Locked doubles';
-      const counts = typeof d.locked === 'number' ? ` (Locked ${d.locked}, Americano ${num(d.americano)}, Either ${num(d.either)})` : '';
+      const counts = typeof d.locked === 'number' ? ` (Locked doubles ${d.locked}, Americano ${num(d.americano)}, Either ${num(d.either)})` : '';
       if (d.how === 'vote') return `The players' vote made ${theTour(d)} ${fmt}${counts}`;
       if (d.how === 'tie') return `No majority, so the tie rule made ${theTour(d)} ${fmt}${counts}`;
       if (d.how === 'vote_open') return `${who} let the players vote ${theTour(d)} format`;
@@ -282,9 +286,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_back_out':
       // Zip 70: a late drop below 8 keeps the money until someone takes the spot.
       if (num(d.keptCents) > 0) return `${player} dropped out of ${theTour(d)} late (${cents(d.keptCents)} kept: no credit back unless someone takes the spot)`;
-      return `${player} backed out of ${theTour(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+      return `${player} dropped out of ${theTour(d)}${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     case 'tournament_kept_returned':
-      return `${player}'s spot in ${theTour(d)} was taken${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
+      return `${player}’s spot in ${theTour(d)} was taken${num(d.amountCents) > 0 ? ` (${cents(d.amountCents)} back as credit)` : ''}${num(d.waitingCents) > 0 ? ` (${cents(d.waitingCents)} waits for your answer to their I paid)` : ''}`;
     // Zip 56 "Tournaments" piece 2 (server/tournamentTickets.ts): tickets, the waitlist and their money.
     // Since Alex's changes, picking the date opens tickets (no spots count: the smart plan follows the players).
     case 'tournament_tickets_opened':
@@ -300,16 +304,16 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       const used = num(d.creditUsedCents) > 0 ? ` (${cents(d.creditUsedCents)} credit used)` : '';
       if (d.result === 'locked') return `${player} locked in for ${theTour(d)}${used}`;
       if (d.result === 'held') return `${player} paid to hold a standby spot for ${tourName(d)}${used}`;
-      return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock my spot'} for ${theTour(d)}${used}`;
+      return `${player} tapped ${d.intent === 'hold' ? 'Hold my spot' : 'Lock in'} for ${theTour(d)}${used}`;
     }
     case 'tournament_i_paid':
       return `${player} tapped I paid (${cents(d.amountCents)}) for a ${tourName(d)} ticket`;
     case 'tournament_waitlist':
       return `${player} joined standby for ${tourName(d)}`;
     case 'tournament_ticket_confirmed':
-      return `${who} confirmed ${player}'s ${cents(d.amountCents)} for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
+      return `${who} confirmed ${player}’s ${cents(d.amountCents)} for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
     case 'tournament_ticket_rejected':
-      return `${who} said ${player} didn't pay (${cents(d.amountCents)}) for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
+      return `${who} said ${player} didn’t pay (${cents(d.amountCents)}) for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
     case 'tournament_ticket_marked_paid':
       return `${who} marked ${player} paid ${cents(d.amountCents)} for ${theTour(d)}`;
     case 'tournament_taken_off':
@@ -368,15 +372,15 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} switched "Guest spot" off`;
     // Zip 42 "Guest spot": the guest's first name is in the line, never anything else about them.
     case 'guest_added':
-      return `${who} added ${typeof d.guest === 'string' ? d.guest : 'a guest'} as ${player}'s guest${d.waitlisted === true ? ' (waitlist)' : ''}${forDay}`;
+      return `${who} added ${typeof d.guest === 'string' ? d.guest : 'a guest'} as ${player}’s guest${d.waitlisted === true ? ' (waitlist)' : ''}${forDay}`;
     case 'guest_removed':
       // Round 3: a late removal that left the game short ("$14 still owed"), and the organizer clearing that owed spot.
-      if (d.clearedLate === true) return `${who} cleared ${player}'s owed spot for guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}`;
-      return `${d.by === 'host' ? `${player} removed their` : `${who} removed ${player}'s`} guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}${
+      if (d.clearedLate === true) return `${who} cleared ${player}’s owed spot for guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}`;
+      return `${d.by === 'host' ? `${player} removed their` : `${who} removed ${player}’s`} guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''}${forDay}${
         typeof d.lateOwesCents === 'number' && d.lateOwesCents > 0 ? ` (late: ${formatPrice(d.lateOwesCents)} owed unless someone takes the spot)` : ''
       }`;
     case 'guest_moved_in':
-      return `${player}'s guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''} moved up from the waitlist${forDay}`;
+      return `${player}’s guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''} moved up from the waitlist${forDay}`;
     case 'tap_guard_fix_on':
       return `${who} switched "Tap guard fix" on`;
     case 'tap_guard_fix_off':
@@ -537,13 +541,13 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       const debt = typeof d.debtCents === 'number' && d.debtCents > 0 ? formatPrice(d.debtCents) : '$14';
       return d.why === 'sub'
         ? typeof d.guest === 'string'
-          ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s guest's spot: ${d.guest}'s ${debt} cleared${forDay}`
-          : `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s ${debt} cleared${forDay}`
+          ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}’s guest’s spot: ${d.guest}’s ${debt} cleared${forDay}`
+          : `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}’s spot: ${player}’s ${debt} cleared${forDay}`
         : d.why === 'canceled'
-          ? `${player}'s late drop cleared (game canceled)${forDay}`
+          ? `${player}’s late drop cleared (game canceled)${forDay}`
           : d.why === 'moved'
-            ? `${player}'s ${debt} late drop cleared (game moved to another day)${forDay}`
-            : `${who} cleared ${player}'s ${debt} (${d.why === 'venue' ? 'venue waived' : 'my choice'})${forDay}`;
+            ? `${player}’s ${debt} late drop cleared (game moved to another day)${forDay}`
+            : `${who} cleared ${player}’s ${debt} (${d.why === 'venue' ? 'venue waived' : 'my choice'})${forDay}`;
     }
     case 'admin_r2_on':
       return `${who} switched the admin screens round 2 on`;
@@ -555,10 +559,10 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} switched the admin screens round 3 off`;
     case 'payment_claim_confirmed':
       // The words with the player's name are the Money page rework's; without it this reads as it always did (the generic line below).
-      if (opts.names) return `${who} confirmed ${player}'s I paid${forDay}`;
+      if (opts.names) return `${who} confirmed ${player}’s I paid${forDay}`;
       return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
     case 'payment_claim_cleared':
-      if (opts.names) return `${who} cleared ${player}'s I paid${forDay}`;
+      if (opts.names) return `${who} cleared ${player}’s I paid${forDay}`;
       return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
     case 'session_hidden_from_list':
       return `${who} hid${day ? ` ${day}` : ' a game'} from the lists`;
@@ -566,6 +570,22 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} restored${day ? ` ${day}` : ' a game'} to the lists`;
     case 'charge_edited':
       return `${who} changed the venue charge${forDay}${typeof d.chargedCents === 'number' ? (d.chargedCents > 0 ? ` to ${formatPrice(d.chargedCents)}` : ' to none') : ''}`;
+    case 'time_shift_on':
+      return `${who} switched "Moved-game notice" on`;
+    case 'time_shift_off':
+      return `${who} switched "Moved-game notice" off`;
+    case 'pay_always_on':
+      return `${who} switched "Payment on every game" on`;
+    case 'pay_always_off':
+      return `${who} switched "Payment on every game" off`;
+    case 'money_note_on':
+      return `${who} switched "Money change note" on`;
+    case 'money_note_off':
+      return `${who} switched "Money change note" off`;
+    case 'cheaper_fix_on':
+      return `${who} switched "Made cheaper after paying" on`;
+    case 'cheaper_fix_off':
+      return `${who} switched "Made cheaper after paying" off`;
     case 'money_rework_on':
       return `${who} switched the Money page rework on`;
     case 'money_rework_off':

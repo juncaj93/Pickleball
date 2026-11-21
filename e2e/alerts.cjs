@@ -96,10 +96,10 @@ async function main() {
         assert((await switches.count()) === 5, `found ${await switches.count()} switches`);
         for (let i = 0; i < 5; i++) assert(await switches.nth(i).isChecked(), `switch ${i} off`);
         const labels = (await sect.locator('.alert-subs .set-name').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
-        assert(JSON.stringify(labels) === JSON.stringify(['Someone drops within 36 hours', 'A game falls below 4', 'Refund requests', 'Smart alerts ("Do this now" reminders)']), `switches were ${JSON.stringify(labels)}`);
-        assert(!/6 down to 5|reaches 6|reaches 4|it's on|Under 4, or|Finalize reminder/.test(await sect.innerText()), 'old alert wording');
-        await sect.getByRole('button', { name: 'Send test alert' }).waitFor();
-        await sect.getByRole('button', { name: 'Send TEST smart alert' }).waitFor();
+        assert(JSON.stringify(labels) === JSON.stringify(['Someone drops within 36 hours', 'A game falls below 4', 'Cash out requests', 'Smart alerts ("Do this now" reminders)']), `switches were ${JSON.stringify(labels)}`);
+        assert(!/6 down to 5|reaches 6|reaches 4|it’s on|Under 4, or|Finalize reminder/.test(await sect.innerText()), 'old alert wording');
+        await sect.getByRole('button', { name: 'Send test', exact: true }).waitFor();
+        await sect.getByRole('button', { name: 'Send smart test' }).waitFor();
         const text = await sect.innerText();
         assert(!/token|chat id|\d{8,}/i.test(text), 'shows a secret-looking value');
       });
@@ -138,21 +138,21 @@ async function main() {
           const main = sect.getByRole('switch', { name: /Telegram alerts to me/ });
           await main.click();
           await sect.getByText('✓ Saved').first().waitFor({ timeout: 4000 });
-          for (const name of [/drops within 36 hours/, /falls below 4/, /Refund requests/]) assert(await sect.getByRole('switch', { name }).isDisabled(), `${name} not disabled`);
+          for (const name of [/drops within 36 hours/, /falls below 4/, /Cash out requests/]) assert(await sect.getByRole('switch', { name }).isDisabled(), `${name} not disabled`);
           await main.click();
           await sect.getByText('✓ Saved').first().waitFor({ timeout: 4000 });
         });
       }
 
       await check(`${tag}: Send test alert explains Not connected in plain words`, async () => {
-        await sect.getByRole('button', { name: 'Send test alert' }).click();
+        await sect.getByRole('button', { name: 'Send test', exact: true }).click();
         await sect.getByText(/Not connected: the bot token or chat ID is missing on Cloudflare\./).waitFor({ timeout: 4000 });
       });
       await page.screenshot({ path: path.join(SHOTS, `alerts-${width}-${scheme}-not-connected.png`), fullPage: true });
 
       await check(`${tag}: a good send shows "Sent to Telegram"`, async () => {
         await page.route('**/api/admin/alerts/test', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
-        await sect.getByRole('button', { name: 'Send test alert' }).click();
+        await sect.getByRole('button', { name: 'Send test', exact: true }).click();
         await sect.getByText('✓ Sent to Telegram').waitFor({ timeout: 4000 });
         const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert(over <= 0, `page scrolls sideways by ${over}px`);

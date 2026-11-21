@@ -1,7 +1,7 @@
 import { dayLabelR2, shortTime } from '../shared/textsR2';
 import { siteAddress } from '../shared/messages';
 import { headCount } from '../shared/guestSpot';
-import { COURT_NAME } from '../shared/zip9';
+import { DEFAULT_VENUE_NAME } from '../shared/settings';
 import { GAME_DAY_TEXT, GAME_TEXT_TASK, gameDayTextAllowed, gameDayTextBody, recipientNumbers, reminderDue } from '../shared/gameDayText';
 import { playerLinkFor } from './admin';
 import { type AlertRow, connected, deliver, PAUSED_PREFIX, prefsOf, TIMEOUT_ERROR } from './alerts';
@@ -127,8 +127,8 @@ export async function textFor(ctx: Ctx, group: GroupRow, session: SessionRow): P
     tz: group.timezone,
     nowMs: ctx.nowMs,
     court: typeof session.court === 'number' ? session.court : null,
-    // The club's name is ONE constant (shared/zip9.ts COURT_NAME), the same one every Directions link searches; not Settings > Venue name.
-    clubName: COURT_NAME,
+    // Zip 78: Settings > Venue name (blank: the default club name). The Directions link still searches the one constant (shared/zip9.ts).
+    clubName: group.venue_name?.trim() || DEFAULT_VENUE_NAME,
     oweCents: owes ? priceOf(session, settingsOf(group)).flatCents : null,
     siteName: siteAddress(playerLinkFor(ctx, group)),
   });

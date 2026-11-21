@@ -204,7 +204,7 @@ async function main() {
   await same('organizer Money, first game open and its Remind sheet, light: identical', { who: 'admin', url: '/admin', scheme: 'light', tabName: 'Money', before: openThen(async (p) => { await p.locator('[data-remind]').first().click(); }) });
   await same('player credit sheet (Harper), light: identical', { who: 'Harper', url: '/', scheme: 'light', before: openThen(async (p) => { await p.locator('.credit-chip, [aria-label*="credit"]').first().click(); }) });
   await same('player I paid (Jordan), after the tap: identical', { who: 'Jordan', url: '/', scheme: 'light', before: tapThen('I paid') });
-  await same("player I'm in (Casey), after the tap: identical", { who: 'Casey', url: '/', scheme: 'light', before: tapThen(/^I'm in/) });
+  await same("player I’m in (Casey), after the tap: identical", { who: 'Casey', url: '/', scheme: 'light', before: tapThen(/^I’m in/) });
   await browser.close();
   console.log(`\nzip9-off: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

@@ -6,7 +6,7 @@
 import { lazy, Suspense, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDayGame, AdminDayTeam, AdminDayView, AdminTournamentView } from '../../../shared/tournament';
 import { levelShort } from '../../../shared/tournament';
-import { totalLabel } from '../../../shared/tournamentSchedule';
+import { groupName, totalLabel } from '../../../shared/tournamentSchedule';
 import { startMsOf } from '../../../shared/tournamentTickets';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { AlertCard } from '../../AlertCard';
@@ -329,7 +329,7 @@ function TeamList({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d: Adm
             <span className="tm-gd-team-text">
               <span className="tm-gd-tname">
                 {team.name}
-                {team.pool && <span className="tm-gd-poolmark"> · Pool {team.pool}</span>}
+                {team.pool && <span className="tm-gd-poolmark"> · {groupName(team.pool, true)}</span>}
               </span>
               <span className="tm-gd-tplayers">{team.players.map((p) => p.name).join(' + ')}</span>
             </span>
@@ -371,7 +371,7 @@ function PublishedCard({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
         </Suspense>
       </div>
       <p className="tm-card-note">
-        {d.plan ? `${d.games.length} games. ${d.plan.fits ? '' : 'Too tight: games to 7. '}Pool games to ${d.plan.gameTo}.` : ''} Game 1 begins at the start time.
+        {d.plan ? `${d.games.length} games. ${d.plan.fits ? '' : 'Too tight: games to 7. '}Group games to ${d.plan.gameTo}.` : ''} Game 1 begins at the start time.
       </p>
       {!d.anyResult && (
         <button type="button" className="btn block secondary tm-gd-edit" disabled={busy} onClick={() => void save(() => teamsCall(t, { action: 'unpublish' }), 'Back to the draft')} data-tm-unpublish>
@@ -583,7 +583,7 @@ function FixSheet({ ctx, t, g, onClose }: { ctx: AdminCtx; t: AdminTournamentVie
               </button>
             </>
           ) : (
-            <p className="tm-card-note">Both teams of this game are not known yet.</p>
+            <p className="tm-card-note">The teams for this game aren’t set yet.</p>
           )}
           {(g.winner || g.skipped) && (
             <button
@@ -637,7 +637,7 @@ function PlayerLeftSheet({ ctx, t, d, open, onClose, round }: { ctx: AdminCtx; t
               <span className="tm-gd-option-text">
                 <b>Swap in {s.name}</b>
                 <span>
-                  {s.standby ? 'From standby. ' : ''}Takes over {who.name}'s games from Round {round}.
+                  {s.standby ? 'From standby. ' : ''}Takes over {who.name}’s games from Round {round}.
                 </span>
               </span>
               <span className="tm-gd-option-mark">{choice === s.id ? 'Picked' : 'Pick'}</span>
@@ -646,7 +646,7 @@ function PlayerLeftSheet({ ctx, t, d, open, onClose, round }: { ctx: AdminCtx; t
           <button type="button" className="tm-gd-option" aria-pressed={choice === null} onClick={() => setSwapIn(null)} data-tm-left-remove>
             <span className="tm-gd-option-text">
               <b>Remove {who.name}</b>
-              <span>Finished games stay. The team's later games are skipped.</span>
+              <span>Finished games stay. The team’s later games are skipped.</span>
             </span>
             <span className="tm-gd-option-mark">{choice === null ? 'Picked' : 'Pick'}</span>
           </button>
@@ -655,7 +655,7 @@ function PlayerLeftSheet({ ctx, t, d, open, onClose, round }: { ctx: AdminCtx; t
             className="btn block big"
             disabled={busy}
             onClick={async () => {
-              const ok = await save(() => gamesCall(t, { action: 'left', playerId: who.id, ...(choice ? { swapIn: choice } : {}) }), choice ? 'Swapped in' : `${who.name}'s team sits out`);
+              const ok = await save(() => gamesCall(t, { action: 'left', playerId: who.id, ...(choice ? { swapIn: choice } : {}) }), choice ? 'Swapped in' : `${who.name}’s team sits out`);
               if (ok) close();
             }}
             data-tm-left-confirm

@@ -255,7 +255,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               setOpenAccess(confirmedAccess.current);
               auto.clear('openAccess');
               if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
-              else toast("That didn't save. It's back to what it was.", 'error');
+              else toast("That didn’t save. It’s back to what it was.", 'error');
             });
           }}
         />
@@ -328,7 +328,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               <strong>Player link</strong>
               <code className="set-link">{g.playerLink.replace(/^https?:\/\//, '')}</code>
             </span>
-            <button className="btn small" onClick={async () => ((await copyText(g.playerLink)) ? toast('Link copied') : toast("Couldn't copy", 'error'))}>
+            <button className="btn small" onClick={async () => ((await copyText(g.playerLink)) ? toast('Link copied') : toast("Couldn’t copy", 'error'))}>
               Copy
             </button>
           </div>
@@ -429,7 +429,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
                         setFirstDate(confirmedDate.current);
                         auto.clear('firstSessionDate');
                         if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
-                        else toast("That didn't save. It's back to what it was.", 'error');
+                        else toast("That didn’t save. It’s back to what it was.", 'error');
                       }
                     });
                 }}
@@ -591,7 +591,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       <ConfirmDialog
         open={askRotate}
         title="Replace the player link?"
-        body="The old link stops working right away. You'll need to send everyone the new one."
+        body="The old link stops working right away. You’ll need to send everyone the new one."
         confirmLabel="Replace link"
         danger
         onConfirm={async () => {
@@ -601,7 +601,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             await ctx.reload();
             toast('New link ready');
           } catch {
-            toast("Couldn't replace the link.", 'error');
+            toast("Couldn’t replace the link.", 'error');
           }
         }}
         onCancel={() => setAskRotate(false)}
@@ -614,9 +614,11 @@ type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'refundRequests' | 'smartAle
 const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
   { key: 'drop36', label: 'Someone drops within 36 hours' },
   { key: 'belowMin', label: 'A game falls below 4' },
-  { key: 'refundRequests', label: 'Refund requests' },
+  { key: 'refundRequests', label: 'Cash out requests' },
   { key: 'smartAlerts', label: 'Smart alerts ("Do this now" reminders)' },
 ];
+/** Zip 78: the toast after an Alerts switch saves, the same kind as the Feature switches' ("Smart alerts off"). */
+const ALERT_TOAST: Record<AlertKey, string> = { enabled: 'Telegram alerts', drop36: 'Late drop alerts', belowMin: 'Below 4 alerts', refundRequests: 'Cash out alerts', smartAlerts: 'Smart alerts' };
 
 /**
  * Settings > Alerts: Telegram messages to the organizer only. The switches
@@ -645,18 +647,21 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   function flip(key: AlertKey, value: boolean) {
     if (instant && savingAlert.current.has(key)) return;
     setOn((cur) => ({ ...cur, [key]: value }));
-    if (!instant) return void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts');
+    const saved = () => toast(`${ALERT_TOAST[key]} ${value ? 'on' : 'off'}`);
+    // The toast shows when the Feature switches' does (Round 3 or Instant taps), so both kinds of switch answer the same way.
+    if (!instant) return void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts').then((ok) => void (ok && r3 && saved()));
     savingAlert.current.add(key);
     void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts').then((ok) => {
       savingAlert.current.delete(key);
       if (ok) {
         confirmedAlerts.current = { ...confirmedAlerts.current, [key]: value };
+        saved();
         return;
       }
       setOn((cur) => ({ ...cur, [key]: confirmedAlerts.current[key] }));
       auto.clear(`alert-${key}`);
       if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
-      else toast("That didn't save. The switch is back where it was.", 'error');
+      else toast("That didn’t save. The switch is back where it was.", 'error');
     });
   }
 
@@ -666,7 +671,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       await api('POST', '/api/admin/alerts/test', {});
       setTest({ status: 'sent' });
     } catch (err) {
-      setTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn't send the test alert." });
+      setTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn’t send the test alert." });
     }
     void ctx.reload();
   }
@@ -677,7 +682,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       await api('POST', '/api/admin/alerts/smart-test', {});
       setSmartTest({ status: 'sent' });
     } catch (err) {
-      setSmartTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn't send the TEST smart alert." });
+      setSmartTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn’t send the TEST smart alert." });
     }
     void ctx.reload();
   }
@@ -724,7 +729,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           {/* Round 3 (ADMIN_R3): one button. It sends the smart-alert test (a short test message, with the link to the next game). */}
           <div className="alert-test">
             <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending'}>
-              {smartTest?.status === 'sending' ? 'Sending…' : 'Test smart alert'}
+              {smartTest?.status === 'sending' ? 'Sending…' : 'Send test'}
             </button>
             {smartTest?.status === 'sent' && (
               <span className="alert-result ok" role="status">
@@ -738,7 +743,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         <>
           <div className="alert-test">
             <button type="button" className="btn small secondary" onClick={sendTest} disabled={test?.status === 'sending'}>
-              {test?.status === 'sending' ? 'Sending…' : 'Send test alert'}
+              {test?.status === 'sending' ? 'Sending…' : 'Send test'}
             </button>
             {test?.status === 'sent' && (
               <span className="alert-result ok" role="status">
@@ -749,7 +754,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           {test?.status === 'failed' && <Notice tone="danger">{test.message}</Notice>}
           <div className="alert-test">
             <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending' || !on.enabled || !on.smartAlerts}>
-              {smartTest?.status === 'sending' ? 'Sending…' : 'Send TEST smart alert'}
+              {smartTest?.status === 'sending' ? 'Sending…' : 'Send smart test'}
             </button>
             {smartTest?.status === 'sent' && (
               <span className="alert-result ok" role="status">
@@ -810,7 +815,7 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
       toast('Usual time saved');
       setOpen(false);
     } catch (err) {
-      setProblem(err instanceof ApiError ? err.message : "Couldn't save the time.");
+      setProblem(err instanceof ApiError ? err.message : "Couldn’t save the time.");
     } finally {
       setBusy(false);
     }
@@ -895,7 +900,7 @@ function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, p
           // The switch is back where it was, so no "tap to retry" line (a retry would save a value the switch no longer shows).
           auto.clear(key);
           if (viewOnly) toast(VIEW_ONLY_MESSAGE);
-          else toast("That didn't save. The switch is back where it was.", 'error');
+          else toast("That didn’t save. The switch is back where it was.", 'error');
         }
       }
       return ctx.reload();
@@ -1041,7 +1046,7 @@ function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Player screen fixes <SaveMark state={auto.rows.playerFix1All} />
           </span>
-          <span className="set-hint">{ctx.d.moneyRework === true ? "Pay on tonight's card, roomier TONIGHT tag" : <>Pay and I paid on tonight's game card too, and a roomier TONIGHT tag. Off: only phones opened with ?playerfix1=on</>}</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Pay on tonight’s card, roomier TONIGHT tag" : <>Pay and I paid on tonight’s game card too, and a roomier TONIGHT tag. Off: only phones opened with ?playerfix1=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -1352,7 +1357,7 @@ function AdjustCreditRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Adjust credit <SaveMark state={auto.rows.adjustCreditAll} />
           </span>
-          <span className="set-hint">Add or remove a player's credit, with a reason</span>
+          <span className="set-hint">Add or remove a player’s credit, with a reason</span>
         </span>
         <input type="checkbox" role="switch" className="switch" checked={on} data-adjust-credit-all onChange={(e) => flip(e.target.checked)} />
       </label>
@@ -1444,7 +1449,7 @@ function ChristmasSkinRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         setMode(confirmed.current);
         auto.clear(key);
         if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
-        else toast("That didn't save. The switch is back where it was.", 'error');
+        else toast("That didn’t save. The switch is back where it was.", 'error');
       }
       return ctx.reload();
     });
@@ -1483,7 +1488,7 @@ function GameDayTextRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 
 /** Zip 42, "Guest spot" (GUEST_SPOT, server/guestActions.ts): "Add a guest" on the Players sheet, "Remove guest" on the host's card. Moves money (the guest's $14 is on the host's tab). Off: only /admin?guestspot=on. */
 function GuestSpotRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="guestSpotAll" path="/api/admin/guest-spot-switch" name="Guest spot" hint="Players sheet: Add a guest to a player. The guest takes a spot and their $14 goes on that player's tab" flag={!!ctx.d.guestSpotForAll} dataAttr="data-guest-spot-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="guestSpotAll" path="/api/admin/guest-spot-switch" name="Guest spot" hint="Players sheet: Add a guest to a player. The guest takes a spot and their $14 goes on that player’s tab" flag={!!ctx.d.guestSpotForAll} dataAttr="data-guest-spot-all" />;
 }
 
 /** Zip 55, "Tournaments" (TOURNAMENTS, server/tournament.ts): Create tournament in Settings > Schedule and the players' sign-up card. Each tournament also has its own Who can see it (Only me first). No money moves in piece 1. Off: only ?tournaments=on. */
@@ -1503,12 +1508,12 @@ function TapGuardRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 
 /** Zip 31, "Extended time" (EXTENDED_TIME, server/extension.ts): None | +30 min | +1 hr on the Who played sheet, shares on the next game. Moves money. Off: only ?extendedtime=on. */
 function ExtendedTimeRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="extendedTimeAll" path="/api/admin/extended-time-switch" name="Extended time" hint="Finalize: add +30 min or +1 hr. Each player's share goes on their next game" flag={!!ctx.d.extendedTimeForAll} dataAttr="data-extended-time-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="extendedTimeAll" path="/api/admin/extended-time-switch" name="Extended time" hint="Finalize: add +30 min or +1 hr. Each player’s share goes on their next game" flag={!!ctx.d.extendedTimeForAll} dataAttr="data-extended-time-all" />;
 }
 
 /** Zip 30, "Acting for others" (ACTING_FOR_OTHERS, server/actingForOthers.ts): a note in History and a card on Home when a player taps for someone else. Organizer only, look only. Off: only /admin?actingothers=on. */
 function ActingOthersRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="actingOthersAll" path="/api/admin/acting-others-switch" name="Acting for others" hint="Home and History show when a player signs up, backs out or pays for someone else. Nothing is blocked. Organizer only" flag={!!ctx.d.actingOthersForAll} dataAttr="data-acting-others-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="actingOthersAll" path="/api/admin/acting-others-switch" name="Acting for others" hint="Home and History show when a player signs up, drops out or pays for someone else. Nothing is blocked. Organizer only" flag={!!ctx.d.actingOthersForAll} dataAttr="data-acting-others-all" />;
 }
 
 /** Zip 39, "Made cheaper after paying" (CHEAPER_FIX, server/cheaperFix.ts): a late fee on a game made cheaper after people paid keeps only the fee (the rest back as credit), and a new Price per player reprices open seats (Audit A, A-18). Moves money. Off: only /admin?cheaperfix=on on an organizer phone. */
@@ -1523,7 +1528,7 @@ function SpentTotalsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 
 /** Zip 43, "Venue charge alert" (VENUE_ALERT, server/venueAlert.ts): an amber Home card on the venue's charge days with what it should have charged. Organizer only, display only. Off: only /admin?venuealert=on. */
 function VenueAlertRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="venueAlertAll" path="/api/admin/venue-alert-switch" name="Venue charge alert" hint="Home card on the venue's charge days: what Northville Pickleball should have charged you, with Mark paid. Only charge days after you turn it on" flag={!!ctx.d.venueAlertForAll} dataAttr="data-venue-alert-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="venueAlertAll" path="/api/admin/venue-alert-switch" name="Venue charge alert" hint="Home card on the venue’s charge days: what the venue should have charged you, with Mark paid. Only charge days after you turn it on" flag={!!ctx.d.venueAlertForAll} dataAttr="data-venue-alert-all" />;
 }
 
 /**
@@ -1596,7 +1601,7 @@ function ErrorAlertsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       await api('POST', '/api/admin/error-alerts/test', {});
       setTest({ status: 'sent' });
     } catch (err) {
-      setTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn't send the TEST error alert." });
+      setTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn’t send the TEST error alert." });
     }
   }
   return (
@@ -1613,7 +1618,7 @@ function ErrorAlertsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       <SaveProblem state={auto.rows.errorAlertsAll} />
       <div className="alert-test">
         <button type="button" className="btn small secondary" data-error-alert-test onClick={sendTest} disabled={test?.status === 'sending'}>
-          {test?.status === 'sending' ? 'Sending…' : 'Send TEST error alert'}
+          {test?.status === 'sending' ? 'Sending…' : 'Send test'}
         </button>
         {test?.status === 'sent' && (
           <span className="alert-result ok" role="status">
@@ -1627,7 +1632,7 @@ function ErrorAlertsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 /** Zip 17, "Unpaid nudge" (UNPAID_NUDGE, server/unpaidNudge.ts): players only. Off: only ?nudge=on on that phone. */
 function UnpaidNudgeRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="unpaidNudgeAll" path="/api/admin/unpaid-nudge-switch" name="Unpaid nudge" hint={`"You owe" card words, a Please pay toast after I'm in, and no new sign-up at ${UNPAID_LIMIT} unpaid games until they pay. You can still add anyone`} flag={!!ctx.d.unpaidNudgeForAll} dataAttr="data-unpaid-nudge-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="unpaidNudgeAll" path="/api/admin/unpaid-nudge-switch" name="Unpaid nudge" hint={`"You owe" card words, a Please pay toast after I’m in, and no new sign-up at ${UNPAID_LIMIT} unpaid games until they pay. You can still add anyone`} flag={!!ctx.d.unpaidNudgeForAll} dataAttr="data-unpaid-nudge-all" />;
 }
 /** Zip 16, "After-game cards" (AFTER_GAME_CARD, server/afterGame.ts): the player's card after Finalize. Display only. Off: only ?aftergame=on. */
 function AfterGameRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
@@ -1751,7 +1756,7 @@ function MotionRow({ ctx, auto, which }: { ctx: AdminCtx; auto: Autosave; which:
         setOn(confirmed.current);
         auto.clear(key);
         if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
-        else toast("That didn't save. The switch is back where it was.", 'error');
+        else toast("That didn’t save. The switch is back where it was.", 'error');
       }
       return ctx.reload();
     });

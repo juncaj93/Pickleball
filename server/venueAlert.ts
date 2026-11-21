@@ -123,7 +123,7 @@ export async function venueAlertsNow(ctx: Ctx, group: GroupRow, rowOn: boolean):
   // force before each move are kept (venueDays.history), so a charge day that came under the old days stays until Mark paid (shared/venueAlert.ts).
   const onAtMs = await onSince(ctx, group.id, rowOn);
   const paid = await paidRows(ctx.db, group.id);
-  const base = { days, membershipCents: settings.monthlyMembershipCents, nowMs: ctx.nowMs, tz, onAtMs, daysFrom: venueDaysChangedAt(group.settings_json), history: venueDaysHistoryOf(group.settings_json), paid: paid.keys, courtPaidThrough: paid.courtThrough, courtPaidDates: paid.courtDates };
+  const base = { days, membershipCents: settings.monthlyMembershipCents, nowMs: ctx.nowMs, tz, onAtMs, daysFrom: venueDaysChangedAt(group.settings_json), history: venueDaysHistoryOf(group.settings_json), paid: paid.keys, courtPaidThrough: paid.courtThrough, courtPaidDates: paid.courtDates, venueName: group.venue_name };
   const plan = venuePlan(base);
   if (plan.length === 0) return { alerts: [], days };
   // Membership only: no games to load.

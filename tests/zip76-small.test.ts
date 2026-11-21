@@ -30,10 +30,10 @@ describe('Venmo: the page-word guard on the Pay link and the cash-out link', () 
 
 describe('Drop out words (MUST 2)', () => {
   it('late, already paid: the money stays on the game, never "you still owe"', () => {
-    expect(lateDropDialogText('7:00 AM', true, '$14', null, true)).toBe("It's past the 7:00 AM cancel-by. Your $14 stays on this game unless someone takes your spot.");
-    expect(lateDropDialogText('7:00 AM', true, '$14', null, false)).toBe("It's past the 7:00 AM cancel-by. If no one takes your spot, you still owe $14.");
+    expect(lateDropDialogText('7:00 AM', true, '$14', null, true)).toBe("It’s past the 7:00 AM cancel-by. Your $14 stays on this game unless someone takes your spot.");
+    expect(lateDropDialogText('7:00 AM', true, '$14', null, false)).toBe("It’s past the 7:00 AM cancel-by. If no one takes your spot, you still owe $14.");
     expect(hostDropText('Sam', { cancelBy: '7:00 AM', spots: 2, owesCents: 2800, paid: true }, formatPrice)).toBe(
-      "It's past the 7:00 AM cancel-by. Your guest Sam drops out too. Your $28 stays on this game unless someone takes your 2 spots.",
+      "It’s past the 7:00 AM cancel-by. Your guest Sam drops out too. Your $28 stays on this game unless someone takes your 2 spots.",
     );
     expect(hostDropText('Sam', { cancelBy: '7:00 AM', spots: 1, owesCents: 1400, paid: true }, formatPrice)).toContain('Your $14 stays on this game unless someone takes your spot.');
   });

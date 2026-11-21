@@ -364,7 +364,7 @@ async function main() {
     assert(peakBlur >= 12, `it glows (a big soft gold glow first): peak blur ${peakBlur}px`);
     assert(last.gold && !last.fresh && last.scale === 1 && last.blur === 0, `then the steady ring: ${JSON.stringify(last)}`);
     assert(flat(await v.page.locator('.tc-short .tc-state').innerText()) === 'Locked in', 'Locked in (Zip 66b)');
-    console.log(`      C2: gold ${firstGold.t - tapAt} ms after the I paid tap (the save's round trip), ${popped.length} animated frames, peak scale ${peakScale}, peak glow ${peakBlur}px, steady at +${last.t - tapAt} ms`);
+    console.log(`      C2: gold ${firstGold.t - tapAt} ms after the I paid tap (the save’s round trip), ${popped.length} animated frames, peak scale ${peakScale}, peak glow ${peakBlur}px, steady at +${last.t - tapAt} ms`);
     await v.ctx.close();
   });
 

@@ -203,7 +203,7 @@ function DetailsBody({ ctx, player, children }: { ctx: AdminCtx; player: AdminPl
           ))}
         </section>
       )}
-      {load.error && <p className="small muted">Couldn't load the month and All time numbers. Close and open again.</p>}
+      {load.error && <p className="small muted">Couldn’t load the month and All time numbers. Close and open again.</p>}
       {children}
     </div>
   );

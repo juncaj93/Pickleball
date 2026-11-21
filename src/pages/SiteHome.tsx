@@ -138,8 +138,8 @@ function GroupWord({ onDone }: { onDone: () => void }) {
       <main className="page stack-lg">
         <form className="stack" onSubmit={submit}>
           <label className="field">
-            What's the group word?
-            <span className="hint">You only need it once on this phone. Ask in the group chat if you don't know it.</span>
+            What’s the group word?
+            <span className="hint">You only need it once on this phone. Ask in the group chat if you don’t know it.</span>
             <input type="text" value={word} onChange={(e) => setWord(e.target.value)} autoCapitalize="none" autoComplete="off" maxLength={40} autoFocus required />
           </label>
           {error && <Notice tone="danger">{error}</Notice>}

@@ -97,7 +97,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     let said = '';
     const ok = await run(async () => {
       const d = await api<{ guest: { name: string; status: string } }>('POST', `/api/admin/sessions/${s.id}/guest`, { playerId: host.playerId, name });
-      said = d.guest.status === 'waitlisted' ? `${d.guest.name} is on the waitlist behind ${host.name}` : `${d.guest.name} added to ${host.name}'s tab`;
+      said = d.guest.status === 'waitlisted' ? `${d.guest.name} is on the waitlist behind ${host.name}` : `${d.guest.name} added to ${host.name}’s tab`;
     });
     if (ok && said) toast(said);
   }
@@ -105,7 +105,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     let said = '';
     const ok = await run(async () => {
       const d = await api<{ creditBackCents: number }>('POST', `/api/admin/sessions/${s.id}/guest/remove`, { playerId: host.playerId });
-      const what = host.guest?.status === 'late' ? `${host.guest.name}'s spot cleared.` : `${host.guest?.name} removed.`;
+      const what = host.guest?.status === 'late' ? `${host.guest.name}’s spot cleared.` : `${host.guest?.name} removed.`;
       said = d.creditBackCents > 0 ? `${what} ${formatPrice(d.creditBackCents)} back to ${host.name} as credit.` : what;
     });
     if (ok && said) toast(said);
@@ -230,9 +230,9 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       {/* Zip 42: the guest's share is on this tab. */}
                       {r.guest?.status === 'confirmed' ? <span className="ps-with-guest"> (with {r.guest.name})</span> : null}
                       {/* Round 3: a guest removed late whose spot no one has taken yet. */}
-                      {r.guest?.status === 'late' && r.status === 'confirmed' ? <span className="ps-with-guest" data-ps-guest-owed> (incl. {r.guest.name}'s spot)</span> : null}
+                      {r.guest?.status === 'late' && r.status === 'confirmed' ? <span className="ps-with-guest" data-ps-guest-owed> (incl. {r.guest.name}’s spot)</span> : null}
                       {/* Zip 31: extra time riding on this game; Mark paid takes both. */}
-                      {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extension)` : ''}
+                      {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extra time)` : ''}
                       {r.lateFee ? <span className="ps-fee"> · {lateFeeLine(r)?.split(' · ')[0]}</span> : null}
                     </span>
                   ) : (
@@ -348,7 +348,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                   )}
                   {pm && !gPaid && (
                     <>
-                      <button type="button" className="ps-btn ps-amber" disabled={busy} data-ps-markpaid={gst.name} aria-label={`Mark ${gst.name} paid (on ${r.name}'s tab)`} onClick={() => void markShare(r, 'guest', true)}>
+                      <button type="button" className="ps-btn ps-amber" disabled={busy} data-ps-markpaid={gst.name} aria-label={`Mark ${gst.name} paid (on ${r.name}’s tab)`} onClick={() => void markShare(r, 'guest', true)}>
                         Mark paid
                       </button>
                       {ctx.d.venmoRequest === true && <GuestRequest ctx={ctx} s={s} host={r} guest={gst.name} cents={pm.guestOwesCents ?? pm.shareCents!} />}
@@ -408,8 +408,8 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         body={
           // Zip 42: the host's guest comes off with them (mock admin_pair_5).
           removing?.guest && removing.guest.status !== 'late'
-            ? `${removing.guest.name} is ${removing.name}'s guest, so ${removing.guest.name} comes off too. ${removing.guest.status === 'confirmed' ? `Both ${formatPrice(price)} shares are removed.` : 'Both spots open up.'}`
-            : "They'll show as withdrawn. If they held a spot, it opens up for someone else."
+            ? `${removing.guest.name} is ${removing.name}’s guest, so ${removing.guest.name} comes off too. ${removing.guest.status === 'confirmed' ? `Both ${formatPrice(price)} shares are removed.` : 'Both spots open up.'}`
+            : "They’ll show as withdrawn. If they held a spot, it opens up for someone else."
         }
         confirmLabel={removing?.guest && removing.guest.status !== 'late' ? 'Remove both' : 'Remove'}
         danger
@@ -435,13 +435,13 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
             }}
           >
             <label className="field ps-guest-label">
-              Guest's first name
+              Guest’s first name
               <input type="text" data-ps-guest-input autoComplete="off" autoCapitalize="words" maxLength={20} value={guestName} onChange={(e) => setGuestName(e.target.value)} />
             </label>
             <p className="ps-guest-note">
               {guestFor.paymentStatus === 'paid' && !guestFor.refundedAt
-                ? `Their ${formatPrice(price)} goes on ${guestFor.name}'s tab. ${guestFor.name} will owe ${formatPrice(price)} more.`
-                : `Their ${formatPrice(price)} goes on ${guestFor.name}'s tab. ${guestFor.name} will owe ${formatPrice((guestFor.shareCents ?? price) + price)}.`}
+                ? `Their ${formatPrice(price)} goes on ${guestFor.name}’s tab. ${guestFor.name} will owe ${formatPrice(price)} more.`
+                : `Their ${formatPrice(price)} goes on ${guestFor.name}’s tab. ${guestFor.name} will owe ${formatPrice((guestFor.shareCents ?? price) + price)}.`}
             </p>
             <div className="btn-row confirm-row">
               <button type="button" className="btn secondary" onClick={() => setGuestFor(null)}>
@@ -458,17 +458,17 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       {s.roster.some((r) => !!r.guest) && (
       <ConfirmDialog
         open={!!unGuest}
-        title={unGuest?.guest?.status === 'late' ? `Clear ${unGuest.guest.name}'s spot?` : `Remove ${unGuest?.guest?.name ?? 'guest'}?`}
+        title={unGuest?.guest?.status === 'late' ? `Clear ${unGuest.guest.name}’s spot?` : `Remove ${unGuest?.guest?.name ?? 'guest'}?`}
         cancelLabel={unGuest?.guest?.status === 'late' ? 'Keep it' : `Keep ${unGuest?.guest?.name ?? 'guest'}`}
         body={
           unGuest?.guest?.status === 'late'
             ? unGuest.paymentStatus === 'paid' && !unGuest.refundedAt
-              ? `${unGuest.name} gets ${formatPrice(price)} back as credit for ${unGuest.guest.name}'s spot.`
-              : `${unGuest.name} won't owe ${formatPrice(price)} for ${unGuest.guest.name}'s spot any more.`
+              ? `${unGuest.name} gets ${formatPrice(price)} back as credit for ${unGuest.guest.name}’s spot.`
+              : `${unGuest.name} won’t owe ${formatPrice(price)} for ${unGuest.guest.name}’s spot any more.`
             : unGuest?.guest?.status === 'confirmed'
             ? unGuest.paymentStatus === 'paid' && !unGuest.refundedAt
-              ? `${unGuest.guest.name} comes off ${unGuest.name}'s tab. ${unGuest.guest.name}'s ${formatPrice(price)} goes to ${unGuest.name}'s credit.`
-              : `${unGuest.guest.name} comes off ${unGuest.name}'s tab. ${unGuest.name} owes ${formatPrice(price)} less.`
+              ? `${unGuest.guest.name} comes off ${unGuest.name}’s tab. ${unGuest.guest.name}’s ${formatPrice(price)} goes to ${unGuest.name}’s credit.`
+              : `${unGuest.guest.name} comes off ${unGuest.name}’s tab. ${unGuest.name} owes ${formatPrice(price)} less.`
             : `${unGuest?.guest?.name ?? 'The guest'} comes off the waitlist.`
         }
         confirmLabel={unGuest?.guest?.status === 'late' ? 'Clear' : `Remove ${unGuest?.guest?.name ?? 'guest'}`}
@@ -592,13 +592,13 @@ function RowMenu({
               role="menuitem"
               className="ps-pop-item ps-pop-plain"
               data-ps-unpay={name}
-              aria-label={`${name} didn't pay`}
+              aria-label={`${name} didn’t pay`}
               onClick={() => {
                 setOpen(false);
                 onUnpay();
               }}
             >
-              Didn't pay?
+              Didn’t pay?
             </button>
           )}
           {onClearGuest && (
@@ -607,13 +607,13 @@ function RowMenu({
               role="menuitem"
               className="ps-pop-item ps-pop-plain"
               data-ps-clear-guest={name}
-              aria-label={`Clear ${onClearGuest.guest}'s spot for ${name}`}
+              aria-label={`Clear ${onClearGuest.guest}’s spot for ${name}`}
               onClick={() => {
                 setOpen(false);
                 onClearGuest.run();
               }}
             >
-              Clear {onClearGuest.guest}'s spot
+              Clear {onClearGuest.guest}’s spot
             </button>
           )}
           {onAddGuest && (

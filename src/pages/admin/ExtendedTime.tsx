@@ -127,7 +127,7 @@ export function WhoPlayedTiles({
                 className={`xt-tile xt-guest${gOn || locked ? ' on' : ' off'}${locked ? ' locked' : ''}`}
                 aria-pressed={gOn}
                 aria-disabled={locked || undefined}
-                aria-label={`${g.name}, ${r.name}'s guest, ${gOn ? 'played' : 'did not play'}${locked ? ` (${r.name} did not play)` : ''}`}
+                aria-label={`${g.name}, ${r.name}’s guest, ${gOn ? 'played' : 'did not play'}${locked ? ` (${r.name} did not play)` : ''}`}
                 data-tile={g.name}
                 data-guest-tile={g.name}
                 onClick={() => {
@@ -139,7 +139,7 @@ export function WhoPlayedTiles({
                 </span>
                 <span className="xt-name">
                   <b>{g.name}</b>
-                  <span className="xt-guest-of">{r.name}'s guest</span>
+                  <span className="xt-guest-of">{r.name}’s guest</span>
                 </span>
                 {(gOn || locked) && (
                   <span className="xt-check" aria-hidden="true">
@@ -245,11 +245,11 @@ function OwedCard({ ctx, rows }: { ctx: AdminCtx; rows: Owed[] }) {
           <div className="vr-title-wrap">
             {cards ? (
               <AcTitle as="h3" className="vr-title">
-                Extra time: {rows.length} {rows.length === 1 ? "hasn't" : "haven't"} paid
+                Extra time: {rows.length} {rows.length === 1 ? "hasn’t" : "haven’t"} paid
               </AcTitle>
             ) : (
               <h3 className="vr-title">
-                Extra time: {rows.length} {rows.length === 1 ? "hasn't" : "haven't"} paid
+                Extra time: {rows.length} {rows.length === 1 ? "hasn’t" : "haven’t"} paid
               </h3>
             )}
           </div>
@@ -265,7 +265,7 @@ function OwedCard({ ctx, rows }: { ctx: AdminCtx; rows: Owed[] }) {
   );
 }
 
-/** The rows: bold name, "$3 extension · Thu, Nov 12", Mark paid (Confirm after an I paid), then Request / Text / "no Venmo saved". */
+/** The rows: bold name, "$3 extra time · Thu, Nov 12", Mark paid (Confirm after an I paid), then Request / Text / "no Venmo saved". */
 function ExtRows({ ctx, rows, busy, pay }: { ctx: AdminCtx; rows: Owed[]; busy: boolean; pay: (r: Owed, paid: boolean) => unknown }) {
   const tz = ctx.d.group.timezone;
   return (
@@ -279,11 +279,11 @@ function ExtRows({ ctx, rows, busy, pay }: { ctx: AdminCtx; rows: Owed[]; busy: 
                 <span className="mp-name">
                   <strong>{r.name}</strong>
                   <span className="mp-price xt-what">
-                    {formatPrice(amount)} extension · <span className="xt-nowrap">{formatShortDate(r.startsAt, tz)}</span>
+                    {formatPrice(amount)} extra time · <span className="xt-nowrap">{formatShortDate(r.startsAt, tz)}</span>
                     {r.claimCents > 0 ? ' · tapped I paid' : ''}
                   </span>
                 </span>
-                <button type="button" className="mp-btn mp-amber" disabled={busy} data-ext-markpaid={r.name} aria-label={`Mark ${r.name}'s ${formatPrice(amount)} extension paid`} onClick={() => void pay(r, true)}>
+                <button type="button" className="mp-btn mp-amber" disabled={busy} data-ext-markpaid={r.name} aria-label={`Mark ${r.name}’s ${formatPrice(amount)} extra time paid`} onClick={() => void pay(r, true)}>
                   {r.claimCents > 0 ? 'Confirm' : 'Mark paid'}
                 </button>
                 {link ? (

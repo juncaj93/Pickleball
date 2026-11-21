@@ -239,7 +239,7 @@ async function main() {
         const rows = await a.page.locator('[data-tm-home-body] .tm-rows > .tm-row > span:first-child').allInnerTexts();
         assert(JSON.stringify(rows.map(flat)) === JSON.stringify(['Style', 'Votes', 'Not signed up', 'Plan']), JSON.stringify(rows));
         assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Players vote', 'Style');
-        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Doubles 3 · Americano 2 · Either 3', await a.page.locator('[data-tm-vote-counts]').innerText());
+        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 3 · Americano 2 · Either 3', await a.page.locator('[data-tm-vote-counts]').innerText());
         // Zip 70: the Plan's expected players (the 8 signed up), the table's 2 courts and 2 hours for 8.
         assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()) === '8 players · 2 courts · 2 hrs', await a.page.locator('[data-tm-home-plan]').innerText());
         assert((await a.page.locator('[data-tm-open-dates]').count()) === 1 && (await a.page.locator('[data-tm-open-edit]').count()) === 1, 'Pick date and Edit');
