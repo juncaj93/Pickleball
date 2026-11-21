@@ -174,9 +174,13 @@ describe('zip 77: Reveal standings', () => {
     expect(after.credit.history.some((h: any) => h.tourWhy === 'champion' && h.cents === 1400)).toBe(true);
     expect((await group(ctx, second)).credit.balanceCents).toBe(pot0[second] + 700);
     expect((await group(ctx, second)).tourAwards.congrats.title).toBe('Second place, The Cold Open');
-    // The night's card stays (the final standings) for the night, then Home is back to normal.
+    // The night's card stays (the final standings) for the night; Zip 79: then the one results row until midnight of the next day, then gone.
     expect(after.tournament.status).toBe('ended');
     ctx.app.now = tapMs + 6 * 3_600_000 + 60_000;
+    const later = (await group(ctx, first)).tournament;
+    expect(later.status).toBe('ended');
+    expect(later.results.rows[0]).toMatchObject({ name: first, medal: true, me: true });
+    ctx.app.now = tapMs + 3 * 86_400_000;
     expect((await group(ctx, first)).tournament).toBeUndefined();
     books(ctx);
   });

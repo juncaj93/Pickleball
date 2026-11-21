@@ -20,7 +20,9 @@ import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
 import { type DayLook, LevelList, MonthCalendar, useMoreBelow, VoteList } from './parts';
-import { DayBody } from './GameDayView';
+import { DayBody, GamesCard } from './GameDayView';
+import { ResultsRow } from './Results';
+import { LevelUp } from './LevelUp';
 import { RoundsBody } from './RoundsView';
 
 /** Zip 60: the format line on the cards. While the players' vote is open it is "Tournament style TBD" (no other words). */
@@ -159,6 +161,27 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
   // Zip 70 (Alex, the late drop rule): after Pay by, a drop below 8 on 2 courts gives no credit back unless someone takes the spot.
   const keeps = k?.dropKeeps === true;
   const venmo = venmoPayUrl(pay.group.venmoUrl, paying ?? 0, `${t.name} ticket${pay.meName ? ` - ${pay.meName}` : ''}`);
+
+  // Zip 79: an ended tournament is one row (the name and Standings); on the night a player in it keeps Your rounds / Your games under it, and an
+  // Americano night plays Zip 77's reveal first on this phone (RoundsBody: the row takes the card's top once the board is closed).
+  if (t.status === 'ended') {
+    return (
+      <div className="tc-wrap stack" data-tournament="ended">
+        {t.day?.kind === 'americano' && t.reveal ? (
+          <RoundsBody t={t} day={t.day} onChanged={onChanged} />
+        ) : (
+          <>
+            <ResultsRow t={t} />
+            {t.day && t.day.kind !== 'americano' && (
+              <div className="tc-gd stack" data-tc-day="ended">
+                <GamesCard day={t.day} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="tc-wrap stack" data-tournament={t.status}>
@@ -943,8 +966,23 @@ function SignUpSheet({
   const [vote, setVote] = useState<FormatVote>(DEFAULT_FORMAT_VOTE);
   // Alex: a level is picked once. Someone signing up again (after Drop out or Back out) keeps their first level: no level step.
   const locked = t.lockedLevel ?? null;
+  // Zip 79: a player who played before starts on the level agreed at their last tournament ("PREVIOUS RATING"). First-timers: as before.
+  const previous = locked === null ? (t.previousLevel ?? null) : null;
   const [step, setStep] = useState<1 | 2>(locked === null ? 1 : 2);
-  const [level, setLevel] = useState<number | null>(locked);
+  const [level, setLevel] = useState<number | null>(locked ?? previous);
+  // Zip 79: Next on a level HIGHER than the previous one plays the level up first (once per level reached in this sheet: going Back and Next
+  // again on the same level does not play it again; picking higher still does).
+  const [levelUp, setLevelUp] = useState<{ from: number; to: number } | null>(null);
+  const celebrated = useRef<number | null>(null);
+  function next() {
+    if (level === null) return;
+    if (previous !== null && level > previous && (celebrated.current === null || level > celebrated.current)) {
+      celebrated.current = level;
+      setLevelUp({ from: previous, to: level });
+      return;
+    }
+    setStep(2);
+  }
   // Once the date is picked there is one date to pick: it starts picked.
   const [pickedRaw, setPicked] = useState<string[]>(t.openDates.length === 1 ? [...t.openDates] : []);
   // Only the dates still open count: one that closed while the sheet was open (the date was picked, midnight passed) drops out, never sent.
@@ -960,15 +998,25 @@ function SignUpSheet({
       {step === 1 ? (
         <div data-tm-step="1">
           <p className="tm-eyebrow">Step 1 of 2 · Your level</p>
-          <LevelList value={level} onPick={setLevel} />
+          <LevelList value={level} onPick={setLevel} previous={previous ?? undefined} />
           <p className="tm-help tm-level-note" data-tm-level-note>
             Not sure? Ask {org}.
           </p>
           <SheetBottom>
-            <button type="button" className="btn" disabled={level === null} onClick={() => setStep(2)} data-tm-next>
+            <button type="button" className="btn" disabled={level === null || levelUp !== null} onClick={next} data-tm-next>
               Next
             </button>
           </SheetBottom>
+          {levelUp && open && (
+            <LevelUp
+              from={levelUp.from}
+              to={levelUp.to}
+              onDone={() => {
+                setLevelUp(null);
+                setStep(2);
+              }}
+            />
+          )}
         </div>
       ) : (
         <div data-tm-step="2">

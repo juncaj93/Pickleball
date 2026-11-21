@@ -10,6 +10,14 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 79 (🎾79.results skills): the results row (both styles; the row's time: the night and the whole next day) and the skills history.
+  { stage: 'zip79_night', label: 'Results: the night after the reveal (start here)', line: 'Americano, revealed 30 minutes ago. View as Vic: the final board once (X closes it), then one row: The Cold Open and Standings, Your rounds under it. Tap Standings: the final board; X closes it.' },
+  { stage: 'zip79_night_ld', label: 'Results: the night after End (Locked doubles)', line: 'Ended tonight by the real Confirm. View as Vic: the row with Your games under it. Standings lists the teams, Net Ninjas first with the gold medal. View as Reese (did not play): the row alone.' },
+  { stage: 'zip79_next_day', label: 'Results: the day after', line: 'The same night, yesterday. View as Vic: the row alone at the top of Home, above THIS WEEK, until midnight tonight.' },
+  { stage: 'zip79_next_day_ld', label: 'Results: the day after (Locked doubles)', line: 'The Locked doubles night, yesterday: the row alone at the top of Home; Standings lists the teams.' },
+  { stage: 'zip79_gone', label: 'Results: two days after (gone)', line: 'The night two days ago: no row on Home. The winners ticker keeps its own week.' },
+  { stage: 'zip79_skills', label: 'Skills history', line: 'Five finished tournaments over eight months. History > Skills: Most improved (Sage +0.7, Quinn +0.5, Wren +0.2), the Levels table (sort Level, Improved, Name). Tap a name: the trend.' },
+  { stage: 'zip79_prev', label: 'Sign-up with a previous rating', line: 'Skills history plus Winter Classic, sign-up open. View as Vic, Sign up: 3.0 is picked, PREVIOUS RATING. Pick 3.4 and tap Next: the level up, then the dates.' },
   // Zip 77 (🎾77.reveal): Americano's hidden standings and the standings reveal, on the 10 player Americano night (Vic sits Round 4).
   { stage: 'zip77_last', label: 'Americano: last round (standings hidden)', line: 'Tonight, Rounds 1 to 5 in, Round 6 on. View as Vic: no Standings card, “Standings will be revealed at the end of the night.” at the bottom. Home: the scores as before.' },
   { stage: 'zip77_allin', label: 'Americano: all games in', line: 'Every round in, Vic first. View as Vic: no kicker, a thin divider, “Final standings coming soon” with three bouncing balls. Home: Edit awards, then Reveal standings (it plays on every phone).' },

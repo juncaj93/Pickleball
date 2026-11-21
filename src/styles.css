@@ -78,6 +78,14 @@
   --art-xmas-1-deep: #b3261e;
   --art-xmas-2: #37b873;
   --art-xmas-2-deep: #1f7a4a;
+  /* Zip 79: the level up (src/tournament/LevelUp.tsx): the gold number, its glow, the solid gold LEVEL UP banner, the rings and the flash. */
+  --art-lu-gold: #a46c00;
+  --art-lu-glow: rgb(210 150 20 / 45%);
+  --art-lu-bar-1: #e2ac22;
+  --art-lu-bar-2: #f6cf5a;
+  --art-lu-bar-ink: #1a1200;
+  --art-lu-ring: #c48a0c;
+  --art-lu-flash: rgb(255 250 230 / 85%);
   --art-xmas-3: #f2b33d;
   --art-xmas-3-deep: #c28a14;
   --art-xmas-4: #4f7be0;
@@ -201,6 +209,12 @@
     --ok-fg: #8fe0ad;
     --ok-bg: #15301f;
     --ok-edge: #4cc27a;
+    --art-lu-gold: #f6d25c;
+    --art-lu-glow: rgb(255 200 70 / 85%);
+    --art-lu-bar-1: #d9a82a;
+    --art-lu-bar-2: #f6d25c;
+    --art-lu-ring: #ffe9a3;
+    --art-lu-flash: rgb(255 255 255 / 90%);
     --warn-fg: #f4cd70;
     --warn-bg: #33270b;
     --warn-edge: #e0a83e;
@@ -258,6 +272,12 @@
   --ok-fg: #8fe0ad;
   --ok-bg: #15301f;
   --ok-edge: #4cc27a;
+  --art-lu-gold: #f6d25c;
+  --art-lu-glow: rgb(255 200 70 / 85%);
+  --art-lu-bar-1: #d9a82a;
+  --art-lu-bar-2: #f6d25c;
+  --art-lu-ring: #ffe9a3;
+  --art-lu-flash: rgb(255 255 255 / 90%);
   --warn-fg: #f4cd70;
   --warn-bg: #33270b;
   --warn-edge: #e0a83e;

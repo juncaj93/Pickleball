@@ -7,6 +7,7 @@ import { Empty, ErrorState, Sheet, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { SessionCard } from './Sessions';
 import { TournamentHistory } from './TournamentHistory';
+import { SkillsHistory } from './SkillsHistory';
 import { lateDropsAll } from './todo';
 
 /** History: played sessions, or everything anyone did, newest first. Organizer only. */
@@ -20,7 +21,7 @@ export function HistoryTab({ ctx }: { ctx: AdminCtx }) {
 function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
   // Admin screens, round 2 (ADMIN_R2): Activity first and the default, Sessions second.
   const r2 = ctx.d.adminR2 === true;
-  const [view, setView] = useState<'sessions' | 'activity' | 'tournaments'>(r2 ? 'activity' : 'sessions');
+  const [view, setView] = useState<'sessions' | 'activity' | 'tournaments' | 'skills'>(r2 ? 'activity' : 'sessions');
   const sessionsChip = (
     <button aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
       Sessions
@@ -37,7 +38,7 @@ function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
         <h2 id="history-title" className="sr-only">
           History
         </h2>
-        <div className="segmented" role="group" aria-label="Show">
+        <div className={ctx.d.tournaments === true ? 'segmented tm-hist-seg' : 'segmented'} role="group" aria-label="Show">
           {r2 ? activityChip : sessionsChip}
           {r2 ? sessionsChip : activityChip}
           {/* Zip 58 (picture 46): the third chip, only while Tournaments is on. */}
@@ -46,9 +47,23 @@ function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
               Tournaments
             </button>
           )}
+          {/* Zip 79: the fourth option, Skills (each player's levels per tournament), with Tournaments. */}
+          {ctx.d.tournaments === true && (
+            <button aria-pressed={view === 'skills'} onClick={() => setView('skills')} data-history-skills>
+              Skills
+            </button>
+          )}
         </div>
       </div>
-      {view === 'tournaments' && ctx.d.tournaments === true ? <TournamentHistory ctx={ctx} /> : view === 'sessions' ? <PastSessions ctx={ctx} /> : <Activity ctx={ctx} />}
+      {view === 'skills' && ctx.d.tournaments === true ? (
+        <SkillsHistory ctx={ctx} />
+      ) : view === 'tournaments' && ctx.d.tournaments === true ? (
+        <TournamentHistory ctx={ctx} />
+      ) : view === 'sessions' ? (
+        <PastSessions ctx={ctx} />
+      ) : (
+        <Activity ctx={ctx} />
+      )}
     </section>
   );
 }
@@ -185,7 +200,7 @@ const newestMs = (entries: ActivityEntry[] | null) => (entries ?? []).reduce((m,
  * so the NEW group stays visible for the whole visit. The very first visit on a phone has no NEW group.
  */
 function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
-  const [view, setView] = useState<'activity' | 'sessions' | 'tournaments'>('activity');
+  const [view, setView] = useState<'activity' | 'sessions' | 'tournaments' | 'skills'>('activity');
   // Fixed for this whole visit (read once, when the tab opens).
   const [baseline] = useState<string | null>(() => storageGet(HISTORY_SEEN_KEY));
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
@@ -239,7 +254,7 @@ function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
         <h2 id="history-title" className="sr-only">
           History
         </h2>
-        <div className="segmented" role="group" aria-label="Show">
+        <div className={ctx.d.tournaments === true ? 'segmented tm-hist-seg' : 'segmented'} role="group" aria-label="Show">
           <button aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
             Activity
           </button>
@@ -252,9 +267,17 @@ function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
               Tournaments
             </button>
           )}
+          {/* Zip 79: the fourth option, Skills (each player's levels per tournament), with Tournaments. */}
+          {ctx.d.tournaments === true && (
+            <button aria-pressed={view === 'skills'} onClick={() => setView('skills')} data-history-skills>
+              Skills
+            </button>
+          )}
         </div>
       </div>
-      {view === 'tournaments' && ctx.d.tournaments === true ? (
+      {view === 'skills' && ctx.d.tournaments === true ? (
+        <SkillsHistory ctx={ctx} />
+      ) : view === 'tournaments' && ctx.d.tournaments === true ? (
         <TournamentHistory ctx={ctx} />
       ) : view === 'sessions' ? (
         <PastSessions ctx={ctx} />

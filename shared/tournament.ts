@@ -640,6 +640,36 @@ export interface PlayerTournamentView {
    * Reveal standings (server clock, ms) and how many rows the board has. Every phone draws the board from these two and the server's clock.
    */
   reveal?: { tapMs: number; players: number };
+  /**
+   * Zip 79: an ended tournament's final board, for everyone who can see the tournament, from the end (Americano: after the reveal) until midnight
+   * Eastern of the day after its date. The card becomes one row (the name and Standings); a tap opens this board in its final state. Names,
+   * records and Americano points only: never money or levels. `night`: still the night (Your rounds / Your games show under the row).
+   */
+  results?: { night: boolean; rows: ResultBoardRow[] };
+  /**
+   * Zip 79: a player who played a tournament before: the level agreed for them at their LAST tournament (the organizer's level if he changed
+   * it, else their own pick). Sign up starts with it picked ("PREVIOUS RATING"); picking higher plays the level up. Only on a sign-up still open
+   * to them, and never with `lockedLevel` (that one skips the level step).
+   */
+  previousLevel?: number;
+}
+
+/** Zip 79: one row of the final board (Americano: a player; Locked doubles: a team, with its two players). */
+export interface ResultBoardRow {
+  rank: number;
+  name: string;
+  /** Locked doubles: the team's players. */
+  players?: string[];
+  /** "5-0" (wins-losses). */
+  record: string;
+  /** Americano only: total points. */
+  points?: number;
+  /** This phone's player (or their team). */
+  me?: true;
+  /** The gold medal: Americano 1st, Locked doubles the Final's winners (no other medals). */
+  medal?: true;
+  /** Left the night: no place. */
+  out?: true;
 }
 
 /** Zip 74: a game night alert at the top of a player's Home (the site's alert card, dismissed per phone by its key). */

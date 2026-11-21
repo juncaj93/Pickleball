@@ -79,7 +79,9 @@ describe('zip 58: the preview stages', () => {
     await stage('ended');
     expect((await dash()).tournament).toBeUndefined();
     const vic = await group('Vic');
-    expect(vic.tournament).toBeUndefined();
+    // Zip 79: the results row (Net Ninjas first, the gold medal, Vic's team).
+    expect(vic.tournament.status).toBe('ended');
+    expect(vic.tournament.results.rows[0]).toMatchObject({ name: 'Net Ninjas', players: ['Vic', 'Wren'], medal: true, me: true });
     expect(vic.tourAwards.ticker.champions).toEqual({ team: 'Net Ninjas', players: [{ name: 'Vic', medals: 1 }, { name: 'Wren', medals: 1 }] });
     expect(vic.tourAwards.congrats.title).toBe('You won The Cold Open');
     expect(vic.credit.balanceCents).toBe(1400);

@@ -13,6 +13,7 @@ import { resultTag } from '../../shared/scores';
 import { Court, DayHero, glue, type HeldScore, Matchup, PlayToPill, ScoreSheet, Slide, useHeldResult, useSeen } from './GameDayView';
 import './gameday-tour.css';
 import { DoneHero, RevealNight, StandingsLater, WaitingCard } from './Reveal';
+import { ResultsRow } from './Results';
 
 const pair = (a: string, b: string) => `${a} + ${b}`;
 
@@ -183,7 +184,8 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
   if (t.reveal && shown.final) {
     return (
       <div className="tc-gd stack" data-tc-day="revealed" data-tc-americano>
-        <RevealNight t={t} day={shown} rounds={<RoundsCard day={shown} />} after={<PointsCard day={shown} />} />
+        {/* Zip 79: once the board is closed, the card is the one results row (no Standings card under Your rounds). */}
+        <RevealNight t={t} day={shown} rounds={<RoundsCard day={shown} />} after={t.results ? null : <PointsCard day={shown} />} done={t.results ? <ResultsRow t={t} /> : undefined} />
       </div>
     );
   }

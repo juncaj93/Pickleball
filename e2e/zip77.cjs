@@ -9,7 +9,7 @@
  *      the phone checks every 2 s with nobody touching it. Organizer Home: Edit awards and "Reveal standings".
  *   C  the reveal, synced: Vic and Parker (Parker's clock 40 s wrong) waiting; Alex taps Reveal standings; Zoe opens mid-reveal. Every place
  *      lands on all phones within 0.3 s; the countdown starts on both together; the order is the saved one, Vic 1st with the gold medal and YOU;
- *      no money on the board; nothing tells the winner at the top of Home until the hold ends; the X; X folds it away; the final standings card.
+ *      no money on the board; nothing tells the winner at the top of Home until the hold ends; the X; X folds it away; Zip 79: the results row.
  *   D  after: a phone that opens after it finished sees the final board once (X), the next load does not; reduced motion: no rays, sparks or
  *      shake, the same timing.
  *   E  Back closes sheets: the player's score sheet (Back, X, Escape, the backdrop), the organizer's tabs (Back to the last tab), a sheet on a
@@ -201,13 +201,13 @@ const RECORDER = () => {
       assert(!/\$/.test(await vic.page.locator('[data-tc-board]').innerText()), 'money on the board');
       await shot(vic.page, 'C-final-vic');
       await shot(parker.page, 'C-final-parker-dark');
-      // The X is in; it folds the board away; the final standings card follows (no Live chip).
+      // The X is in; it folds the board away; Zip 79: the one results row follows (no Standings card, no Live chip).
       const x = vic.page.locator('[data-tc-reveal-x]');
       assert(await x.isVisible(), 'the X');
       await x.click();
-      await vic.page.locator('[data-tc-day-standings]').waitFor({ timeout: 3000 });
+      await vic.page.locator('[data-tc-results="row"]').waitFor({ timeout: 3000 });
       assert((await vic.page.locator('[data-tc-board]').count()) === 0, 'the board stays');
-      assert((await vic.page.locator('[data-tc-day-stand]').count()) === 10, 'the final standings');
+      assert((await vic.page.locator('[data-tc-day-standings]').count()) === 0, 'the old Standings card');
       assert((await vic.page.locator('.tc-gd-live').count()) === 0, 'a Live chip');
       // After the hold, the ticker and the congratulations come (the next check).
       await sleep(Math.max(0, tapped + 45_000 - Date.now()));
@@ -251,7 +251,7 @@ const RECORDER = () => {
         assert(!split.length, `split or cut at 320: ${split.join(', ')}`);
         await h.noWider(p.page, `D 320 ${scheme}`);
         await p.page.reload();
-        await p.page.locator('[data-tc-day-standings]').waitFor({ timeout: 15000 });
+        await p.page.locator('[data-tc-results="row"]').waitFor({ timeout: 15000 });
         assert((await p.page.locator('[data-tc-board]').count()) === 0, 'the board again');
         assert(!p.errors.length, p.errors.join(' | '));
         await p.ctx.close();

@@ -155,12 +155,16 @@ export function LevelList({
   flat,
   theirPick,
   theirName,
+  previous,
 }: {
   value: number | null;
   onPick: (v: number) => void;
   flat?: boolean;
   theirPick?: number;
   theirName?: string;
+  /** Zip 79 (picture skills/01): the level agreed at the player's last tournament: a small gray "PREVIOUS RATING" over its words; grayed
+   *  while another level is picked (the label stays). */
+  previous?: number;
 }) {
   return (
     <div className={flat ? 'tm-levels tm-levels-flat' : 'tm-levels'} role="radiogroup" aria-label="Level">
@@ -169,18 +173,27 @@ export function LevelList({
         // The organizer's list: the player's own pick is always tinted and named ("SAGE PICKED"), also while it is the selected one;
         // "YOUR PICK" names a different level the organizer chose.
         const theirs = !!flat && theirPick === l.value;
+        const prev = !flat && previous === l.value;
         return (
           <button
             key={l.value}
             type="button"
             role="radio"
             aria-checked={on}
-            className={`tm-level${on ? ' tm-level-on' : ''}${theirs ? ' tm-level-theirs' : ''}`}
+            className={`tm-level${on ? ' tm-level-on' : ''}${theirs ? ' tm-level-theirs' : ''}${prev ? ' tm-level-prev' : ''}${prev && !on ? ' tm-level-prev-off' : ''}`}
             data-level={l.value}
+            data-tm-previous={prev ? '' : undefined}
             onClick={() => onPick(l.value)}
           >
             <span className="tm-level-num">{l.label}</span>
-            <span className="tm-level-text">{l.text}</span>
+            {prev ? (
+              <span className="tm-level-text tm-level-prevwrap">
+                <span className="tm-level-prevtag">Previous rating</span>
+                {l.text}
+              </span>
+            ) : (
+              <span className="tm-level-text">{l.text}</span>
+            )}
             {flat ? (
               theirs ? (
                 <span className="tm-level-tag">{(theirName ?? 'They').split(' ')[0]} picked</span>

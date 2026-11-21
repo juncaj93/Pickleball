@@ -84,7 +84,12 @@ describe('zip 58: End tournament, Locked doubles', () => {
     // No tournament card on either Home any more (and no live view).
     expect((await adminTour(ctx)) ?? null).toBeNull();
     const gw = await group(ctx, winner);
-    expect(gw.tournament).toBeUndefined();
+    // Zip 79: the card is now the one results row (the teams' final board, the Final's winners first with the gold medal) until midnight of the
+    // next day; no live view, no ticket.
+    expect(gw.tournament).toMatchObject({ status: 'ended', format: 'doubles' });
+    expect(gw.tournament.results.rows[0]).toMatchObject({ rank: 1, medal: true, me: true });
+    expect(gw.tournament.results.rows.filter((r: any) => r.medal)).toHaveLength(1);
+    expect(gw.tournament.tickets).toBeUndefined();
     expect(gw.tourAwards.ticker).toMatchObject({ name: 'The Cold Open', format: 'doubles' });
     expect(gw.tourAwards.ticker.champions.players.map((p: any) => p.name)).toContain(winner);
     expect(gw.tourAwards.congrats).toMatchObject({ title: 'You won The Cold Open', sub: '$14 credit toward your next game, plus a medal next to your name.' });

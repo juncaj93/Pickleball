@@ -114,6 +114,22 @@ export const ZIP74_STAGES = ['zip74_short'] as const;
 //   zip77_revealed   the same, revealed 10 minutes ago (the board is done): View as Vic: the final board once (X closes it), then the night's
 //                    final standings, the ticker, You won The Cold Open and the medal.
 export const ZIP77_STAGES = ['zip77_last', 'zip77_allin', 'zip77_running', 'zip77_revealed'] as const;
+// Zip 79 (🎾79.results skills): the results row and the skills history.
+//   zip79_night        Americano, tonight, revealed 40 minutes ago (THE CALM START): View as Vic: the final board once (X closes it), then the
+//                      one row (The Cold Open, Standings) with Your rounds under it. Tap Standings: the final board; X closes it.
+//   zip79_night_ld     Locked doubles, tonight, ended by the real Confirm: View as Vic: the one row with Your games under it; Standings lists the
+//                      teams, Net Ninjas first with the gold medal.
+//   zip79_next_day     the Americano night moved to yesterday: the row alone at the top of Home, above THIS WEEK (until midnight tonight).
+//   zip79_next_day_ld  the same, Locked doubles.
+//   zip79_gone         the Americano night two days ago: no row (the ticker keeps its own week).
+//   zip79_skills       five finished tournaments over eight months, no tournament open: History > Skills (Sage 2.7 to 3.4, Quinn 2.5 to 3.0,
+//                      Wren 3.0 to 3.2, Zoe 3.0 down to 2.7, Christopher missed one, Parker and Rowan steady; Vic picked 3.2 last time and
+//                      Alex set 3.0).
+//   zip79_prev         zip79_skills, plus Winter Classic with sign-up open (Vic not on the list): View as Vic, Sign up: 3.0 picked, "PREVIOUS
+//                      RATING"; pick 3.4 and Next: the level up.
+export const ZIP79_STAGES = ['zip79_night', 'zip79_night_ld', 'zip79_next_day', 'zip79_next_day_ld', 'zip79_gone', 'zip79_skills', 'zip79_prev'] as const;
+type Zip79Stage = (typeof ZIP79_STAGES)[number];
+const isZip79Stage = (s: string): s is Zip79Stage => (ZIP79_STAGES as readonly string[]).includes(s);
 type Zip77Stage = (typeof ZIP77_STAGES)[number];
 const isZip77Stage = (s: string): s is Zip77Stage => (ZIP77_STAGES as readonly string[]).includes(s);
 export const DAY_STAGES = ['day_ready', 'teams_drafted', 'teams_published', 'game1', 'mid', 'pools_done', 'backed_out', 'zip71_taps', 'zip72_scores', 'zip72_circle'] as const;
@@ -164,7 +180,7 @@ const isAmStage = (s: string): s is AmStage => (AM_STAGES as readonly string[]).
 export const ZIP70_STAGES = ['zip70_start', 'zip70_loss', 'zip70_moved', 'zip70_late', 'zip70_finalize'] as const;
 type Zip70Stage = (typeof ZIP70_STAGES)[number];
 const isZip70Stage = (s: string): s is Zip70Stage => (ZIP70_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -321,6 +337,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   if (stage === 'none') return { ok: true, stage };
   if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
   if (isZip77Stage(stage)) return zip77Stage(ctx, group, stage);
+  if (isZip79Stage(stage)) return zip79Stage(ctx, group, stage);
   if (isZip58Stage(stage)) return zip58Stage(ctx, group, stage);
   if (stage === 'zip72_circle') return dayStage(ctx, group, stage, TIE3, CIRCLE_SCORE);
   if (stage === 'zip74_short') {
@@ -1002,6 +1019,96 @@ async function zip77Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
   const tapMs = stage === 'zip77_running' ? ctx.nowMs + 6_000 : ctx.nowMs - 10 * 60_000;
   await ctx.db.prepare('UPDATE tournaments SET ended_at = ? WHERE id = ?').bind(new Date(tapMs).toISOString(), made.id).run();
   return { ...made, stage, tapMs };
+}
+
+/**
+ * Zip 79's stages (see ZIP79_STAGES). The results stages are Zip 77's revealed night (Americano) or Zip 58's ended night (Locked doubles), made
+ * by the real End, then moved back a day or two by their dates only (the date, the reveal's tap, the ticker's end a week after it).
+ */
+async function zip79Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip79Stage): Promise<{ ok?: boolean; id?: string; stage: string }> {
+  if (stage === 'zip79_skills') {
+    await pastLevels(ctx, group);
+    return { ok: true, stage };
+  }
+  if (stage === 'zip79_prev') {
+    const made = (await tournamentTestStage(ctx, { stage: 'signup' })) as { id?: string };
+    await pastLevels(ctx, group);
+    return { ...made, stage };
+  }
+  const ld = stage === 'zip79_night_ld' || stage === 'zip79_next_day_ld';
+  const made = ld ? await zip58Stage(ctx, group, 'ended') : await zip77Stage(ctx, group, 'zip77_revealed');
+  const id = made.id!;
+  const back = stage === 'zip79_gone' ? 2 : stage === 'zip79_next_day' || stage === 'zip79_next_day_ld' ? 1 : 0;
+  const tapMs = ctx.nowMs - back * 86_400_000 - (back ? 0 : 30 * 60_000);
+  const date = todayKeyMinus(ctx.nowMs, group.timezone, back);
+  await ctx.db
+    .prepare('UPDATE tournaments SET final_date = ?, offered_dates = ?, ended_at = ?, banner_until = ? WHERE id = ?')
+    .bind(date, JSON.stringify([date]), new Date(tapMs).toISOString(), new Date(tapMs + 7 * 86_400_000).toISOString(), id)
+    .run();
+  return { ...made, stage };
+}
+
+/** Zip 79: the five finished tournaments of the skills history, oldest first (days back) and each player's level (hundredths; null: missed it). */
+const PAST = [
+  { name: 'Spring Fling', days: 245 },
+  { name: 'Summer Slam', days: 160 },
+  { name: 'Harvest Cup', days: 100 },
+  { name: 'Pumpkin Smash', days: 50 },
+  { name: 'Turkey Trot', days: 16 },
+];
+const PAST_LEVELS: Record<string, (number | null)[]> = {
+  Sage: [275, 300, 300, 320, 340],
+  Quinn: [250, 250, 275, 300, 300],
+  Wren: [300, 320, 320, 320, 320],
+  Zoe: [300, 300, 275, 275, 275],
+  'Christopher Vanderberg': [300, 300, null, 300, 300],
+  Parker: [360, 360, 360, 360, 360],
+  Rowan: [350, 350, 350, 350, 350],
+  Vic: [300, 300, 300, 300, 300],
+  Alex: [340, 340, 340, 340, 340],
+  Reese: [null, null, null, null, 275],
+};
+/** Vic picked 3.2 at the last one and the organizer set 3.0 (so his previous rating is the organizer's 3.0, not his own pick). */
+const PAST_PICKED: Record<string, number> = { Vic: 320 };
+
+async function pastLevels(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>) {
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const statements = [];
+  for (const [k, o] of PAST.entries()) {
+    const tid = newId();
+    const date = todayKeyMinus(ctx.nowMs, group.timezone, o.days);
+    const at = `${date}T23:00:00.000Z`;
+    // No medals, no awards and the ticker long over: these only feed the levels (and History > Tournaments).
+    statements.push(
+      ctx.db
+        .prepare(
+          `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date, status,
+             visibility, created_at, updated_at, format, second_credit_cents, ended_at, end_key, banner_until)
+           VALUES (?, ?, ?, ${STORED_PLAN.size}, 2, 150, 1170, 1600, 1400, ?, ?, 'ended', 'all', ?, ?, 'americano', 700, ?, ?, ?)`,
+        )
+        .bind(tid, group.id, o.name, JSON.stringify([date]), date, at, at, at, newId(), at),
+    );
+    let place = 0;
+    for (const [name, levels] of Object.entries(PAST_LEVELS)) {
+      const pid = idOf.get(name);
+      const level = levels[k];
+      if (!pid || level === null) continue;
+      place++;
+      const last = k === PAST.length - 1;
+      const picked = last && PAST_PICKED[name] ? PAST_PICKED[name] : level;
+      const approved = picked === level ? null : level;
+      statements.push(
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_results (id, tournament_id, player_id, finish, wins, losses, points, picked_level, approved_level, medal, award, credit_cents, seen_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, ?, ?)`,
+          )
+          .bind(newId(), tid, pid, place, Math.max(0, 6 - place), Math.min(5, place - 1), 60 - place * 4, picked, approved, at, at),
+      );
+    }
+  }
+  await ctx.db.batch(statements);
 }
 
 /** The Eastern calendar day `days` before today, 'YYYY-MM-DD'. */

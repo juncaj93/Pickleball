@@ -1,0 +1,305 @@
+/* Zip 79 (🎾79.results skills): the level up (src/tournament/LevelUp.tsx; videos skills/02 and 03). Timings and colors from Alex's approved Zip 65
+   mock, rebuilt with the site's body font and tokens (the gold is named art: --art-lu-*). Every rule names a tm-lu- class
+   (tests/zip48-split.test.ts). The landing moment T is when the last tick lands (1.8 s after the start). */
+
+/* Its own modal dialog over the Sign up sheet: the whole screen, the sheet dimmed and blurred behind it. */
+dialog.tm-lu {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--body);
+  cursor: pointer;
+  outline: none;
+}
+dialog.tm-lu::backdrop {
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  animation: tm-lu-in 0.35s ease both;
+}
+.tm-lu-flash {
+  position: fixed;
+  inset: 0;
+  background: var(--art-lu-flash);
+  opacity: 0;
+  pointer-events: none;
+}
+.tm-lu-card {
+  position: relative;
+  width: min(300px, 100%);
+  padding: 18px 28px 0;
+  border-radius: 16px;
+  box-sizing: border-box;
+  text-align: center;
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    0 22px 50px rgb(0 0 0 / 30%);
+  overflow: hidden;
+  animation: tm-lu-card 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) 0.1s both;
+}
+.tm-lu-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 124px;
+}
+.tm-lu-win {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+}
+/* The big number: the body font, heavy, the numbers all one width. */
+.tm-lu-num {
+  display: block;
+  font: 900 clamp(4.6rem, 26vw, 7.6rem) / 1 var(--body);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+}
+/* Each tick bumps a little more than the last (the mock: 1.10, 1.14, 1.18, 1.24). */
+.tm-lu-bump {
+  animation: tm-lu-bump 0.2s ease-out both;
+}
+.tm-lu-b1 {
+  --tm-lu-s: 1.1;
+}
+.tm-lu-b2 {
+  --tm-lu-s: 1.14;
+}
+.tm-lu-b3 {
+  --tm-lu-s: 1.18;
+}
+.tm-lu-b4 {
+  --tm-lu-s: 1.24;
+}
+.tm-lu-fx {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.tm-lu-ring {
+  position: absolute;
+  left: -60px;
+  top: -60px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid var(--art-lu-ring);
+  box-sizing: border-box;
+  opacity: 0;
+}
+.tm-lu-ring2 {
+  border-width: 1px;
+  border-color: var(--art-lu-gold);
+}
+.tm-lu-streak {
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: var(--l);
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--art-lu-ring));
+  transform-origin: 0 50%;
+  opacity: 0;
+}
+/* The solid gold banner at the bottom of the card. */
+.tm-lu-bar {
+  margin: 2px -28px 0;
+  padding: 13px 0 13px 0.3em;
+  font: 900 1.9rem / 1 var(--body);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--art-lu-bar-ink);
+  background: linear-gradient(100deg, var(--art-lu-bar-1), var(--art-lu-bar-2) 50%, var(--art-lu-bar-1));
+  opacity: 0;
+  transform: translateY(100%);
+}
+
+/* T: the last tick lands. */
+.tm-lu-landed .tm-lu-card {
+  animation:
+    tm-lu-punch 0.5s ease-out both,
+    tm-lu-shake 0.5s linear both;
+}
+.tm-lu-landed .tm-lu-num {
+  color: var(--art-lu-gold);
+  text-shadow: 0 0 28px var(--art-lu-glow);
+  animation: tm-lu-slam 0.6s cubic-bezier(0.2, 1.7, 0.4, 1) both;
+  transition:
+    color 0.3s ease,
+    text-shadow 0.3s ease;
+}
+.tm-lu-landed .tm-lu-flash {
+  animation: tm-lu-flash 0.45s ease-out both;
+}
+.tm-lu-landed .tm-lu-ring {
+  animation: tm-lu-ring 0.7s cubic-bezier(0.1, 0.8, 0.3, 1) both;
+}
+.tm-lu-landed .tm-lu-ring2 {
+  animation-delay: 0.13s;
+}
+.tm-lu-landed .tm-lu-streak {
+  animation: tm-lu-streak 0.55s cubic-bezier(0.1, 0.8, 0.3, 1) both;
+}
+.tm-lu-landed .tm-lu-bar {
+  animation: tm-lu-bar 0.4s cubic-bezier(0.2, 1.2, 0.4, 1) 0.1s both;
+}
+
+/* Reduced motion: the final card as it lands, nothing moving. */
+.tm-lu-calm.tm-lu-landed .tm-lu-card,
+.tm-lu-calm.tm-lu-landed .tm-lu-num,
+.tm-lu-calm.tm-lu-landed .tm-lu-bar,
+.tm-lu-calm .tm-lu-card {
+  animation: none;
+  transition: none;
+}
+.tm-lu-calm .tm-lu-bar {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.tm-lu::backdrop,
+  .tm-lu-card,
+  .tm-lu-num,
+  .tm-lu-bar {
+    animation: none !important;
+    transition: none !important;
+  }
+  .tm-lu-bar {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tm-lu-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes tm-lu-card {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tm-lu-bump {
+  0% {
+    transform: scale(var(--tm-lu-s, 1.1));
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes tm-lu-slam {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes tm-lu-punch {
+  0% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes tm-lu-shake {
+  0% {
+    translate: 0 0;
+  }
+  12% {
+    translate: -9px 4px;
+  }
+  28% {
+    translate: 8px -5px;
+  }
+  44% {
+    translate: -6px -3px;
+  }
+  60% {
+    translate: 5px 4px;
+  }
+  80% {
+    translate: -2px 1px;
+  }
+  100% {
+    translate: 0 0;
+  }
+}
+@keyframes tm-lu-flash {
+  0% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes tm-lu-ring {
+  0% {
+    opacity: 1;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.8);
+  }
+}
+@keyframes tm-lu-streak {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(30px) scaleX(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(150px) scaleX(1.3);
+  }
+}
+@keyframes tm-lu-bar {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -9,6 +9,8 @@ import { ADMIN_COOKIE } from './context';
 import { VIEW_ONLY_COOKIE_PREFIX, VIEW_ONLY_SESSION_PREFIX } from './viewOnly';
 import { audit, type GroupRow, organizerIdOf, organizerIdRead, playersRead, type ReadSpec } from './repo';
 import { localParts } from '../shared/time';
+import { boardRows, resultsShowing } from '../shared/results';
+import { revealHolding } from '../shared/reveal';
 import { formatPrice } from '../shared/money';
 import {
   type AdminTicketView,
@@ -64,7 +66,7 @@ import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, moneyLine, savedExpect, timeMo
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
-import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, LIVE_BEFORE_MS, loadDay, playerDayView, teamsSqlFor, tiesFromJson } from './tournamentDay';
+import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, playerDayView, teamsSqlFor, tiesFromJson } from './tournamentDay';
 import { adminRoundsView, americanoStarted, playerRoundsView } from './americanoDay';
 import { fitWords, nightPlan } from '../shared/tournamentPlan';
 import { adminEndView, type AwardsPre, awardsFrom, awardsReads } from './tournamentEnd';
@@ -288,14 +290,13 @@ async function activeTournamentForPlayer(db: D1Database, group: GroupRow, player
 
 type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string | null; my_signup: string | null; ties_json?: string; ended_at?: string | null };
 /**
- * Zip 77: an Americano night revealed in the last REVEAL_SHOW_HOURS hours (its board, then its final standings, on that night). Worked out
- * from ?2 (the canceled cutoff, now minus CANCELED_DAYS days), so the reads keep their values.
+ * Zip 79 (was Zip 77's Americano-only 6 hours): an ended tournament (either style) whose date is at most 2 days back, so its results card can
+ * show on the night and the whole next day (shared/results.ts resultsShowing decides to the day, Eastern). Worked out from ?2 (the canceled
+ * cutoff, now minus CANCELED_DAYS days), so the reads keep their values; the day check after the read is exact.
  */
-export const REVEAL_SHOW_HOURS = 6;
-const shownRevealed = (t = '') =>
-  `(${t}status = 'ended' AND ${t}format = 'americano' AND ${t}ended_at >= strftime('%Y-%m-%dT%H:%M:%fZ', ?2, '+${CANCELED_DAYS * 24 - REVEAL_SHOW_HOURS} hours'))`;
-/** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else an Americano night just revealed, else one canceled lately. */
-const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownRevealed('t.')} OR ${shownCanceled('t.')})
+const shownEnded = (t = '') => `(${t}status = 'ended' AND ${t}ended_at IS NOT NULL AND ${t}final_date >= date(?2, '+${CANCELED_DAYS - 2} days'))`;
+/** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one ended in the last two days, else one canceled lately. */
+const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownEnded('t.')} OR ${shownCanceled('t.')})
        ORDER BY CASE WHEN t.status = 'canceled' THEN 2 WHEN t.status = 'ended' THEN 1 ELSE 0 END, t.created_at DESC, t.id LIMIT 1`;
 const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')}, ${markDetailSql(TIME_TASK, 't.id')} AS time_moved,
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
@@ -305,7 +306,12 @@ const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')}, ${markDetailSql(
 
 /** Zip 77: a tournament's saved results with the names (the reveal board). Only an ended tournament has any. */
 const resultsSqlFor = (idSql: string) =>
-  `SELECT r.player_id, r.finish, r.wins, r.losses, r.points, p.display_name FROM tournament_results r JOIN players p ON p.id = r.player_id WHERE r.tournament_id = ${idSql} ORDER BY r.rowid`;
+  `SELECT r.player_id, r.finish, r.wins, r.losses, r.points, r.team_name, r.partner_id, p.display_name FROM tournament_results r JOIN players p ON p.id = r.player_id WHERE r.tournament_id = ${idSql} ORDER BY r.rowid`;
+
+/** Zip 79: a player's (?1) finalized level at their last ended tournament in the group (?2): the organizer's level if he changed it, else their pick. */
+const PREVIOUS_LEVEL_SQL = `SELECT COALESCE(r.approved_level, r.picked_level) AS level FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
+       WHERE r.player_id = ?1 AND t.group_id = ?2 AND t.status = 'ended' AND COALESCE(r.approved_level, r.picked_level) IS NOT NULL
+       ORDER BY t.final_date DESC, t.ended_at DESC, t.id LIMIT 1`;
 
 /** A tournament's sign-ups (names, and each player's first level). `idSql`: a `?`, or Zip 62's subquery that picks the tournament in the same trip. */
 const signupsSqlFor = (idSql: string) => `SELECT s.*, p.display_name, p.is_active, ${FIRST_LEVEL_SQL('s')} AS first_level FROM tournament_signups s JOIN players p ON p.id = s.player_id
@@ -344,8 +350,10 @@ export interface TourPre<Row> {
   day?: DayRows;
   /** Zip 58: a player's screen: the winners banners up now, their winners, and every medal (server/tournamentEnd.ts). */
   awards?: AwardsPre;
-  /** Zip 77: a player's screen: the saved results of the picked tournament (only an Americano night just revealed has any). */
+  /** Zip 77: a player's screen: the saved results of the picked tournament (only an ended one has any; Zip 79: either style). */
   results?: ResultRead[];
+  /** Zip 79: a player's screen: their level at their last ended tournament (null: never played one; missing: not read). */
+  previousLevel?: number | null;
   /** Zip 77: the phone's organizer cookie is a real organizer sign-in (read in the same trip; missing: no cookie, or not read). */
   orgSignedIn?: boolean;
 }
@@ -358,6 +366,9 @@ export interface ResultRead {
   losses: number;
   points: number | null;
   display_name: string;
+  /** Zip 79: Locked doubles' team (the board lists teams). */
+  team_name?: string | null;
+  partner_id?: string | null;
 }
 
 /** The reads (for the screen's batch) and how to read their answers back. Only while the switch is on for the request. */
@@ -423,8 +434,10 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string, adm
     { sql: gamesSqlFor(pick), values },
     // Zip 58: after a tournament ends, the ticker, the congratulations card and medals (three small reads, in this same trip).
     ...awardsReads(group.id, ctx.nowMs),
-    // Zip 77: the saved results (only an Americano night just revealed has any: the board's order, as End wrote it).
+    // Zip 77: the saved results (only an ended tournament has any: the board's order, as End wrote it).
     { sql: resultsSqlFor(pick), values },
+    // Zip 79: this player's level at their last ended tournament (Sign up starts on it: "PREVIOUS RATING"). One small read on the player index.
+    { sql: PREVIOUS_LEVEL_SQL, values: [playerId, group.id] },
     // Zip 77: a phone with an organizer cookie: is it a real organizer sign-in (the organizer's own phone keeps the live standings)? In this
     // same trip, so the organizer's own Home makes no more trips than before (zip62-speed). Every other phone: no read.
     ...(adminHash ? [{ sql: 'SELECT id FROM admin_sessions WHERE token_hash = ? AND group_id = ? AND expires_at > ?', values: [adminHash, group.id, ctx.realNowIso] }] : []),
@@ -445,7 +458,8 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string, adm
         day: { teams: rows(6), games: rows(7), ties: tiesFromJson((rows(0)[0] as { ties_json?: string } | undefined)?.ties_json) },
         awards: awardsFrom(res.slice(8, 11)),
         results: rows(11),
-        ...(adminHash ? { orgSignedIn: (rows(12) as { id: string }[]).some((r) => !String(r.id).startsWith(VIEW_ONLY_SESSION_PREFIX)) } : {}),
+        previousLevel: ((rows(12)[0] as { level?: number } | undefined)?.level ?? null) as number | null,
+        ...(adminHash ? { orgSignedIn: (rows(13) as { id: string }[]).some((r) => !String(r.id).startsWith(VIEW_ONLY_SESSION_PREFIX)) } : {}),
       };
     },
   };
@@ -893,8 +907,8 @@ export async function playerTournamentFor(
   const orgOf = orgLookup(ctx, group, pre);
   const seen = await visibleTo(ctx, group, playerId, viewAs, pre, orgOf);
   if (!seen) return null;
-  // Zip 77: an Americano night just revealed: its board, then its final standings (only for the players who were in it).
-  if (statusOf(seen.t) === 'ended') return revealedViewFor(ctx, group, seen.t as ActiveRow, playerId, pre);
+  // Zip 79: an ended tournament: the results row (and, on the night, Zip 77's reveal for the players who were in an Americano night).
+  if (statusOf(seen.t) === 'ended') return endedViewFor(ctx, group, seen.t as ActiveRow, playerId, pre);
   const { onlyMe } = seen;
   const t = await upgradeDatePicked(ctx, group, seen.t, upkeep);
   // A piece 1 date pick that just opened tickets wrote the organizer's seat and the spots: its tickets are read again (as before, after it).
@@ -945,6 +959,8 @@ export async function playerTournamentFor(
     ...(tbd ? { formatTbd: true as const } : {}),
     ...(alert ? { formatAlert: alert } : {}),
     ...(before ? { lockedLevel: before.first_level ?? before.picked_level } : {}),
+    // Zip 79: never on the list of this one: Sign up starts on the level agreed at their last tournament (and picking higher plays the level up).
+    ...(!mine && !before && statusOf(t) !== 'canceled' ? await previousLevelOf(ctx, group, playerId, pre) : {}),
     ...(onlyMe ? { onlyMe: true as const } : {}),
   };
   // Zip 56: the plain Canceled card, with what came back to this player (Zip 62: from the screen's batch when it read this very row).
@@ -972,6 +988,20 @@ export async function playerTournamentFor(
   return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf, readTickets ? pre?.freed : undefined), ...(dayView ? { day: dayView } : {}) };
 }
 
+/** Zip 79: `previousLevel` for the view (from the screen's batch when it read it; else one read), left out for a first-timer. */
+async function previousLevelOf(ctx: Ctx, group: GroupRow, playerId: string, pre?: TourPre<ActiveRow>): Promise<{ previousLevel?: number }> {
+  const level =
+    pre && pre.previousLevel !== undefined
+      ? pre.previousLevel
+      : await ctx.db
+          .prepare(PREVIOUS_LEVEL_SQL)
+          .bind(playerId, group.id)
+          .first<{ level: number }>()
+          .then((r) => r?.level ?? null)
+          .catch(() => null);
+  return typeof level === 'number' && level > 0 ? { previousLevel: level } : {};
+}
+
 /**
  * Zip 77: the organizer's own player on the organizer's own signed-in phone (not the read-only PIN), or the organizer's View as of their own
  * player. Every other phone is answered with no database trip (no organizer cookie, or another player).
@@ -989,18 +1019,16 @@ export async function adminCookieHash(ctx: Ctx): Promise<string | null> {
 }
 
 /**
- * Zip 77: the card of an Americano night the organizer just revealed (Reveal standings, server/tournamentEnd.ts), for a player who was in it:
- * the night as it ended (Your rounds) with the final standings in the order End saved them (tournament_results: Edit awards may have changed
- * 1st and 2nd), and when the tap was (`reveal.tapMs`): every phone runs the board from that moment on the server's clock. Names, records and
- * points only: no money, no levels. Null for anyone who was not in the night (they get the ticker like everyone).
+ * Zip 79 (was Zip 77's revealed Americano card): an ended tournament's card, for everyone who can see the tournament, from the end until
+ * midnight Eastern of the day after its date (shared/results.ts): the final board (`results`, names, records, Americano points; no money, no
+ * levels). On the night (the live window: until 6 hours after the scheduled end) a player who was in it also gets the night as it ended (Your
+ * rounds / Your games) and, on Americano, the reveal's clock (`reveal.tapMs`): every phone runs the board from that moment on the server's
+ * clock, then shows the one row. Someone who was not in an Americano night gets nothing until the reveal's hold is over (nothing tells the
+ * winner before the board does). Null once the row's time is over.
  */
-async function revealedViewFor(ctx: Ctx, group: GroupRow, t: ActiveRow, playerId: string, pre?: TourPre<ActiveRow>): Promise<PlayerTournamentView | null> {
+async function endedViewFor(ctx: Ctx, group: GroupRow, t: ActiveRow, playerId: string, pre?: TourPre<ActiveRow>): Promise<PlayerTournamentView | null> {
   if (!t.ended_at || !t.final_date) return null;
-  const signups = pre ? pre.signups : await signupRows(ctx.db, t.id);
-  const tickets = pre ? pre.tickets : await loadTickets(ctx.db, t.id);
-  const games = (pre?.day ?? (await loadDay(ctx.db, t.id))).games;
-  const day = playerRoundsView(t, signups, tickets, games, playerId, group.timezone, ctx.nowMs, 'final');
-  if (!day) return null;
+  if (!resultsShowing(t.final_date, todayKey(ctx.nowMs, group.timezone))) return null;
   const results =
     pre?.results ??
     (await ctx.db
@@ -1010,21 +1038,17 @@ async function revealedViewFor(ctx: Ctx, group: GroupRow, t: ActiveRow, playerId
       .then((r) => r.results)
       .catch(() => [] as ResultRead[]));
   if (!results.length) return null;
-  // The board's order: the places End saved (1st, 2nd, then the table), anyone without a place (left the night) after them.
-  const order = [...results].sort((a, b) => (a.finish ?? Infinity) - (b.finish ?? Infinity));
-  const standings = order.map((r, i) => ({
-    rank: r.finish ?? i + 1,
-    name: r.display_name,
-    record: `${r.wins}-${r.losses}`,
-    points: r.points ?? 0,
-    ...(r.player_id === playerId ? { me: true as const } : {}),
-    ...(r.finish === null ? { out: true as const } : {}),
-  }));
+  const format = formatOf(t);
   const real = realTimes(t);
-  return {
+  const startMs = startMsOf(t.final_date, real.start, group.timezone);
+  const night = ctx.nowMs >= startMs - LIVE_BEFORE_MS && ctx.nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS;
+  const inIt = results.some((r) => r.player_id === playerId);
+  // Americano: until the board has had its time, someone who was not in the night sees nothing (the ticker waits too).
+  if (format === 'americano' && !inIt && revealHolding(t.ended_at, ctx.nowMs)) return null;
+  const base: PlayerTournamentView = {
     id: t.id,
     name: t.name,
-    format: 'americano',
+    format,
     status: 'ended',
     start: real.start,
     minutes: real.minutes,
@@ -1033,9 +1057,30 @@ async function revealedViewFor(ctx: Ctx, group: GroupRow, t: ActiveRow, playerId
     finalDate: t.final_date,
     names: [],
     me: null,
-    day: { ...day, standings },
-    reveal: { tapMs: Date.parse(t.ended_at), players: standings.length },
+    results: { night, rows: boardRows(format, results, playerId) },
   };
+  if (!night || !inIt) return base;
+  const signups = pre ? pre.signups : await signupRows(ctx.db, t.id);
+  const dayRows = pre?.day ?? (await loadDay(ctx.db, t.id));
+  if (format === 'americano') {
+    const tickets = pre ? pre.tickets : await loadTickets(ctx.db, t.id);
+    const day = playerRoundsView(t, signups, tickets, dayRows.games, playerId, group.timezone, ctx.nowMs, 'final');
+    if (!day) return base;
+    // The reveal's board (Zip 77) reads the same order as the row's board.
+    const standings = [...results].sort((a, b) => (a.finish ?? Infinity) - (b.finish ?? Infinity)).map((r, i) => ({
+      rank: r.finish ?? i + 1,
+      name: r.display_name,
+      record: `${r.wins}-${r.losses}`,
+      points: r.points ?? 0,
+      ...(r.player_id === playerId ? { me: true as const } : {}),
+      ...(r.finish === null ? { out: true as const } : {}),
+    }));
+    return { ...base, day: { ...day, standings }, reveal: { tapMs: Date.parse(t.ended_at), players: standings.length } };
+  }
+  // Locked doubles: Your games as the night ended (only a player who had a team).
+  if (!t.teams_at) return base;
+  const day = playerDayView(t, signups, dayRows, playerId, group.timezone, ctx.nowMs);
+  return day.team ? { ...base, day } : base;
 }
 
 /** Zip 56: the ticket part of one player's card: names only for everyone else, their own money only. */

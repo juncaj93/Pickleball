@@ -241,6 +241,8 @@ route('POST', '/api/admin/tournament/:id/games', tournamentDay.gamesAction);
 // Zip 58 (server/tournamentEnd.ts): Tournaments, piece 4. Edit awards and Confirm winners and end; History > Tournaments.
 route('POST', '/api/admin/tournament/:id/awards', tournamentEnd.awardsAction);
 route('GET', '/api/admin/tournament-history', tournamentEnd.tournamentHistory);
+// Zip 79: History > Skills (every finalized level per ended tournament; its own request, only when the tab opens).
+route('GET', '/api/admin/skills', tournamentEnd.skillsHistory);
 // Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever PREVIEW_CALM is not on (live),
 // after the usual organizer sign-in check.
 route('POST', '/api/admin/tournament-test', tournamentTestStage);

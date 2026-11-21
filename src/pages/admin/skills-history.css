@@ -1,0 +1,345 @@
+/* Zip 79 (🎾79.results skills): History > Skills and the trend sheet (src/pages/admin/SkillsHistory.tsx; pictures skills/04 and 05). Site tokens
+   only: green for higher, the amber family for lower, gray for the same. Every rule names a tm- class (tests/zip48-split.test.ts). */
+
+/* The History tabs with a fourth option: every cell as wide as its word (never broken), the row slides sideways when it cannot fit. */
+.segmented.tm-hist-seg {
+  grid-auto-columns: minmax(max-content, 1fr);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.segmented.tm-hist-seg::-webkit-scrollbar {
+  display: none;
+}
+.segmented.tm-hist-seg button {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  padding: 6px 12px;
+}
+
+.tm-sk-skel {
+  min-height: 260px;
+}
+.tm-sk-chip {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Most improved: the place in a circle (1st gold), the name, "2.7 → 3.4", the green pill. A tap opens the trend. */
+.tm-sk-top {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tm-sk-toprow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-sk-rank {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--fill);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.tm-sk-rank.tm-sk-rank1 {
+  background: var(--gold);
+  color: var(--ball-ink);
+}
+.tm-sk-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.tm-sk-fromto {
+  flex: none;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tm-sk-pill {
+  flex: none;
+  display: inline-block;
+  min-height: var(--chip-h);
+  padding: var(--chip-pad);
+  border-radius: 999px;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.tm-sk-pill.tm-sk-up {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.tm-sk-pill.tm-sk-down {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.tm-sk-pill.tm-sk-same {
+  background: var(--fill);
+  color: var(--ink-2);
+}
+
+/* The Levels card: the sort switch, then the table (it slides sideways on a very narrow phone; names never cut). */
+.tm-sk-sort {
+  margin-bottom: 12px;
+}
+.tm-sk-empty {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+}
+/* The Levels card is a little narrower inside (12 px) so the whole table fits a 390 px phone. */
+.tm-card.tm-sk-levels {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.tm-sk-scroll {
+  margin: 0 -10px;
+  padding: 0 10px;
+  overflow-x: auto;
+}
+.tm-sk-table {
+  width: 100%;
+  min-width: 300px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.tm-sk-table th,
+.tm-sk-table td {
+  padding: 6px 0;
+  text-align: center;
+  vertical-align: middle;
+}
+.tm-sk-table thead th {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: max(11px, 0.7rem);
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tm-sk-table thead .tm-sk-th-name {
+  text-align: left;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.tm-sk-table thead .tm-sk-th-now {
+  color: var(--ink);
+}
+.tm-sk-table tbody tr + tr {
+  border-top: 1px solid var(--line);
+}
+.tm-sk-table .tm-sk-td-name,
+.tm-sk-table thead .tm-sk-th-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 72px;
+  text-align: left;
+  background: var(--surface);
+}
+.tm-sk-namebtn {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 4px 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+  overflow-wrap: break-word;
+  cursor: pointer;
+}
+.tm-sk-cell,
+.tm-sk-now {
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  height: 36px;
+  padding: 0 3px;
+  border-radius: 9px;
+  box-sizing: border-box;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+.tm-sk-cell.tm-sk-up {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.tm-sk-cell.tm-sk-down {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.tm-sk-cell.tm-sk-same {
+  background: var(--fill);
+  color: var(--ink);
+}
+.tm-sk-now {
+  min-width: 42px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.tm-sk-dash {
+  color: var(--ink-2);
+}
+.tm-sk-chg {
+  padding-left: 4px !important;
+  font-size: 0.95rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.tm-sk-chg.tm-sk-t-up {
+  color: var(--ok-fg);
+}
+.tm-sk-chg.tm-sk-t-down {
+  color: var(--warn-fg);
+}
+.tm-sk-chg.tm-sk-t-same {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* The trend sheet: the level big with its pill, the chart, then every tournament newest first. */
+.tm-sk-trend {
+  padding: 4px 0 8px;
+}
+.tm-sk-big {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.tm-sk-bignum {
+  font-size: 3.4rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.tm-sk-big .tm-sk-pill {
+  font-size: 1rem;
+}
+.tm-sk-chart {
+  margin: 20px 0 8px;
+}
+.tm-sk-plot {
+  position: relative;
+  width: 100%;
+}
+.tm-sk-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.tm-sk-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.tm-sk-ylab {
+  font-family: var(--body);
+  font-size: 11px;
+  fill: var(--ink-2);
+}
+.tm-sk-line {
+  fill: none;
+  stroke: var(--court);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.tm-sk-dot {
+  fill: var(--surface);
+  stroke: var(--court);
+  stroke-width: 3;
+}
+.tm-sk-ball {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+}
+.tm-sk-ball .ball {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.tm-sk-xlabs {
+  position: relative;
+  height: 18px;
+  margin-top: 6px;
+}
+.tm-sk-xlabs span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: max(11px, 0.72rem);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tm-sk-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.tm-sk-li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+}
+.tm-sk-li + .tm-sk-li {
+  border-top: 1px dashed var(--line);
+}
+.tm-sk-date {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tm-sk-lvl {
+  margin-left: auto;
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+/* The three dates: the smallest size the site allows, tight, so the table fits a 390 px phone. */
+.tm-sk-table thead .tm-sk-th-date {
+  padding: 0 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.tm-sk-table thead .tm-sk-th-chg {
+  padding-left: 3px;
+  letter-spacing: -0.01em;
+}

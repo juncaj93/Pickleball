@@ -94,7 +94,7 @@ function rowWords(g: PlayerDayGame): { title: string; sub: string } {
   return { title: `vs ${g.opponent.name}`, sub: players };
 }
 
-function GamesCard({ day }: { day: PlayerDayView }) {
+export function GamesCard({ day }: { day: PlayerDayView }) {
   if (!day.games.length) return null;
   return (
     <section className="tc-gd-card" aria-label="Your games" data-tc-day-games>

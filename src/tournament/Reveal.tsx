@@ -435,7 +435,7 @@ function Board({ t, standings, tapMs, onDone, onClose }: { t: PlayerTournamentVi
  * The revealed night (status 'ended', `t.reveal`): before T0 the waiting look; then the board (in step with every phone); after it is closed
  * (or on a phone that already saw it) the card's top and the night's final standings in the usual Standings card (`after`).
  */
-export function RevealNight({ t, day, rounds, after }: { t: PlayerTournamentView; day: PlayerRoundsView; rounds: ReactNode; after: ReactNode }) {
+export function RevealNight({ t, day, rounds, after, done }: { t: PlayerTournamentView; day: PlayerRoundsView; rounds: ReactNode; after: ReactNode; done?: ReactNode }) {
   const reveal = t.reveal!;
   const plan = revealPlan(reveal.players);
   const seen = () => storageGet(seenKey(t.id)) === '1';
@@ -504,9 +504,10 @@ export function RevealNight({ t, day, rounds, after }: { t: PlayerTournamentView
       </>
     );
   }
+  // Zip 79: `done` (the results row) takes the card's top once the board is closed.
   return (
     <>
-      <DoneHero name={t.name} />
+      {done ?? <DoneHero name={t.name} />}
       {rounds}
       {after}
     </>

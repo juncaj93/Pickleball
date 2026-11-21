@@ -40,7 +40,8 @@ import { americanoOutcome } from './americanoDay';
 import { revealHolding } from '../shared/reveal';
 import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
 import { keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
-import { logPlayer, organizerOn, openById, styleDecided, type SignupRow, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
+import { logPlayer, organizerOn, openById, styleDecided, type SignupRow, todayKey, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
+import type { SkillsView } from '../shared/skills';
 import { organizerSignedIn } from './zip13';
 import { ADMIN_COOKIE } from './context';
 import { VIEW_ONLY_COOKIE_PREFIX } from './viewOnly';
@@ -575,3 +576,33 @@ export function adminEndView(t: TournamentRow, format: TournamentFormat, signups
   return endPlan(t as EndRow, format, signups, tickets, day, tz, nowMs, orgId)?.view ?? null;
 }
 
+
+/**
+ * Zip 79: GET /api/admin/skills (History > Skills, organizer only): every ended tournament (not hidden) and each active player's FINALIZED level
+ * at each (the organizer's level when he changed it, else their own pick, as End saved it). The screen works the rest out (shared/skills.ts).
+ * Its own request, only when the tab opens: nothing on Home or the 5 second check.
+ */
+export async function skillsHistory(ctx: Ctx): Promise<SkillsView> {
+  const group = await organizerOn(ctx);
+  const [ts, rs] = await ctx.db.batch([
+    ctx.db
+      .prepare(`SELECT t.id, t.name, t.final_date FROM tournaments t WHERE t.group_id = ? AND t.status = 'ended' AND t.final_date IS NOT NULL AND ${NOT_HIDDEN} ORDER BY t.final_date, t.ended_at, t.id`)
+      .bind(group.id),
+    ctx.db
+      .prepare(
+        `SELECT r.tournament_id, r.player_id, COALESCE(r.approved_level, r.picked_level) AS level, p.display_name, t.final_date
+         FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id JOIN players p ON p.id = r.player_id
+         WHERE t.group_id = ? AND t.status = 'ended' AND t.final_date IS NOT NULL AND p.is_active = 1 AND COALESCE(r.approved_level, r.picked_level) IS NOT NULL AND ${NOT_HIDDEN}
+         ORDER BY t.final_date, t.ended_at, t.id`,
+      )
+      .bind(group.id),
+  ]);
+  const tournaments = (ts.results as { id: string; name: string; final_date: string }[]).map((t) => ({ id: t.id, name: t.name, date: t.final_date }));
+  const by = new Map<string, SkillsView['players'][number]>();
+  for (const r of rs.results as { tournament_id: string; player_id: string; level: number; display_name: string; final_date: string }[]) {
+    const p = by.get(r.player_id) ?? { id: r.player_id, name: r.display_name, levels: [] };
+    p.levels.push({ tournamentId: r.tournament_id, date: r.final_date, level: r.level });
+    by.set(r.player_id, p);
+  }
+  return { today: todayKey(ctx.nowMs, group.timezone), tournaments, players: [...by.values()] };
+}

@@ -1,0 +1,60 @@
+/* Zip 79 (🎾79.results skills): the results row and its board (src/tournament/Results.tsx; pictures results/1 to 4). The card is the
+   tournament's own dark green in light and dark (Zip 77's hero), so the row is too. Every rule names a tc-res- class (tests/zip48-split.test.ts). */
+
+/* One row: the name left (wraps between words, never cut), the lime Standings button right (44 px tall; never moves or shrinks). No kicker,
+   no divider. */
+.tc-res .tc-res-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.tc-res .tc-res-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tc-res-btn {
+  flex: none;
+  min-height: var(--btn-h-sm);
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ball);
+  color: var(--ball-ink);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tc-res-btn:active {
+  transform: translateY(1px);
+}
+.tc-res-btn:focus-visible {
+  outline: 3px solid var(--tour-ink);
+  outline-offset: 3px;
+}
+
+/* The board: final state, no animation (the reveal's own rows, drawn as they end). */
+.tc-res-open .tc-res-board {
+  margin-bottom: -20px;
+}
+.tc-res-row .tc-rv-name {
+  display: block;
+}
+.tc-res-players {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: color-mix(in srgb, currentColor 74%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-res-btn:active {
+    transform: none;
+  }
+}
