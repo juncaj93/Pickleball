@@ -46,6 +46,7 @@ import { siteAddress, smsHref } from '../../../shared/messages';
 import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
 import { AlertCard } from '../../AlertCard';
 import { localParts } from '../../../shared/time';
+import { clashingGames, clashWords, gameDayKey } from '../../../shared/tournamentClash';
 import { api, ApiError, copyText, isIOS, storageGet, storageRemove, storageSet, useNow, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../../ui';
 import { type DayLook, LevelList, MonthCalendar } from '../../tournament/parts';
@@ -176,6 +177,7 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
       {t.oddSwitch && <OddSwitchCard ctx={ctx} t={t} k={t.oddSwitch.key} />}
       {t.switchBack && <SwitchBackCard ctx={ctx} t={t} k={t.switchBack.key} />}
       <VenueAlertCard t={t} />
+      <ClashCard ctx={ctx} t={t} />
       {claims.map((k) => (
         <TicketClaimCard key={k.playerId} ctx={ctx} t={t} k={k} />
       ))}
@@ -1916,6 +1918,43 @@ function readStyleSeen(): string[] {
     return [];
   }
 }
+/**
+ * Zip 80 (Alex): a regular game on the same date as this finalized tournament: "Tue Dec 1 has a regular game and The Cold Open." Cancel game
+ * opens the usual cancel flow for that game (the gear menu's Cancel session sheet); the X hides the card on this phone (per game and date, so
+ * a moved date or another game shows a fresh one). Organizer only; nothing new is read (the dashboard's games and tournament).
+ */
+function ClashCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
+  const tz = ctx.d.group.timezone;
+  const today = gameDayKey(ctx.d.now, tz);
+  const games = clashingGames(
+    ctx.d.sessions.map((x) => ({ id: x.id, startsAt: x.startsAt, canceled: x.state.flags.canceled })),
+    t,
+    tz,
+    today,
+  );
+  const k = games.length ? `clash:${t.id}:${t.finalDate}:${games.map((g) => g.id).join(',')}` : '';
+  const [seen, hide] = useStyleSeen(k);
+  if (!games.length || seen) return null;
+  const title = clashWords(t.finalDate!, t.name, games.length);
+  return (
+    <AlertCard
+      as="section"
+      tone="amber"
+      icon="court"
+      label={title}
+      title={title}
+      data={{ 'data-tm-clash': games.map((g) => g.id).join(',') }}
+      xLabel="Close"
+      onX={hide}
+      action={
+        <button type="button" className="ac-btn ac-out" data-ac-tone="red" onClick={() => ctx.open('cancel', games[0].id)} data-tm-clash-cancel>
+          Cancel game
+        </button>
+      }
+    />
+  );
+}
+
 function useStyleSeen(key: string): [boolean, () => void] {
   const [seen, setSeen] = useState<string[]>(readStyleSeen);
   return [
