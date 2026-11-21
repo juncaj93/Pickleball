@@ -235,26 +235,26 @@ async function measure(page) {
     });
     // ---------- The whole fake world (WORLD=full): owe banners, credit, full Home cards ----------
     const F = { world: 'full' };
-    for (const who of ['Vic', 'Zoe', 'Sage', 'Rowan']) await take(`p-home-${who.toLowerCase()}`, 'none', (o) => b.playerPage(who, o), F);
+    for (const who of ['Vic', 'Zoe', 'Sage', 'Rowan']) await take(`p-home-${who.toLowerCase()}`, 'none', (o) => b.pickedPage(who, o), F);
     await take('p-paysheet-owe', 'none', async (o) => {
-      const p = await b.playerPage('Vic', o);
+      const p = await b.pickedPage('Vic', o);
       await p.page.locator('main [data-pay-card] [data-pay]').first().click();
       await p.page.waitForTimeout(700);
       return p;
     }, { ...F, full: false });
     await take('p-paysheet-card', 'none', async (o) => {
-      const p = await b.playerPage('Vic', o);
+      const p = await b.pickedPage('Vic', o);
       await p.page.locator('main .schedule article').locator('a, button', { hasText: /^Pay\b/ }).first().click();
       await p.page.waitForTimeout(700);
       return p;
     }, { ...F, full: false });
     await take('p-credit', 'none', async (o) => {
-      const p = await b.playerPage('Sage', o);
+      const p = await b.pickedPage('Sage', o);
       await clickText(p.page, 'button', 'CREDIT');
       return p;
     }, { ...F, full: false });
     await take('p-dropout', 'none', async (o) => {
-      const p = await b.playerPage('Vic', o);
+      const p = await b.pickedPage('Vic', o);
       await clickText(p.page, '.schedule article button', 'Drop out');
       return p;
     }, { ...F, full: false });

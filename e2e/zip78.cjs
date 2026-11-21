@@ -122,17 +122,19 @@ const looks = (el) =>
         assert(new Set(stops).size >= 2, `two colors in the sweep: ${a[2]}`);
       });
 
-    await check('E 12 players: Dink group and Drive group, points on the chips, no Pool A / Pool B', async () => {
+    await check('E 12 players: Dink group and Drive group, no Pool A / Pool B, no Court / Sits chips', async () => {
       await calm.stage('game1');
       const p = await calm.newPage({});
       await p.page.goto(`${calm.BASE}/?as=Vic&poolslook=12`);
       await p.page.locator('[data-tc-day-pool]').first().waitFor({ timeout: 30000 });
       await p.page.waitForTimeout(600);
       const words = flat(await p.page.locator('main').innerText());
+      const groups = flat((await p.page.locator('[data-tc-day-pool]').allInnerTexts()).join(' | '));
       await p.ctx.close();
-      assert(/Dink group/.test(words) && /Drive group/.test(words), words.slice(0, 300));
-      assert(!/Pool [AB]\b/.test(words), `still says Pool: ${words.slice(0, 300)}`);
-      assert(/[+−-]?\d+ pts/.test(words), `points on the chips: ${words.slice(0, 300)}`);
+      assert(/Dink group/i.test(groups) && /Drive group/i.test(groups), `group cards: ${groups}`);
+      assert(!/Pool [AB]\b/.test(words), `still says Pool: ${words}`);
+      // The chips show points like normal standings once a group game has a score; never "Court 9" or "Sits".
+      assert(!/\bSits\b|Court \d+\b/.test(groups), `group chips still show courts: ${groups}`);
     });
 
     for (const scheme of ['light', 'dark'])
@@ -157,13 +159,14 @@ const looks = (el) =>
   }
 
   // The whole fake world: the You owe banner, the money rows.
+  const WHO = process.env.ZIP78_PAYER || 'Vic';
   const full = await boot({ name: 'zip78full', port: (Number(process.env.E2E_PORT) || 5481) + 1, calm: false });
   try {
     for (const scheme of ['light', 'dark'])
       await check(`B the Pay sheet's I paid looks the same from the You owe banner and a game card (${scheme})`, async () => {
         const got = [];
         for (const from of ['banner', 'card']) {
-          const p = await full.playerPage('Vic', { scheme });
+          const p = await full.pickedPage(WHO, { scheme });
           const btn = from === 'banner' ? p.page.locator('main [data-pay-card] [data-pay]').first() : p.page.locator('main .schedule article').locator('a, button', { hasText: /^Pay\b/ }).first();
           if (!(await btn.count())) {
             await p.ctx.close();

@@ -102,6 +102,18 @@ async function boot({ port = Number(process.env.E2E_PORT) || 5476, seedIso = '20
     await p.page.waitForTimeout(700);
     return p;
   }
+  /** Zip 78: a phone that picked `who` the way a real phone does (works on the whole fake world too, where ?as= does not). */
+  async function pickedPage(who, opts = {}) {
+    const p = await newPage(opts);
+    const list = (await (await p.ctx.request.get(BASE + '/api/group')).json()).players;
+    const me = list.find((x) => x.name === who);
+    assert(me, `no player ${who}`);
+    await p.ctx.request.post(BASE + '/api/me', { data: { playerId: me.id }, headers: { Origin: BASE } });
+    await p.page.goto(`${BASE}/`);
+    await p.page.locator('.schedule, [data-tc-day]').first().waitFor({ timeout: 30000 });
+    await p.page.waitForTimeout(700);
+    return p;
+  }
   async function adminHome(opts = {}) {
     const p = await newPage({ ...opts, organizer: true });
     await p.page.goto(`${BASE}/admin`);
@@ -117,7 +129,7 @@ async function boot({ port = Number(process.env.E2E_PORT) || 5476, seedIso = '20
     await browser.close();
     stop();
   };
-  return { BASE, PIN, browser, call, stage, phone, newPage, playerPage, adminHome, noWider, setClock, close, dbFile };
+  return { BASE, PIN, browser, call, stage, phone, newPage, playerPage, pickedPage, adminHome, noWider, setClock, close, dbFile };
 }
 
 module.exports = { boot, flat, assert, sleep, ROOT };
