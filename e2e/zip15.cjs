@@ -263,7 +263,7 @@ async function main() {
     assert((await card.locator('.ac-title').innerText()) === 'Reopened for 9:00 PM', 'title');
     assert((await card.locator('.ac-sub').innerText()) === '3 of 4 signed up. Text the group.', 'sub');
     const text = await card.locator('[data-sc-preview]').innerText();
-    assert(text.startsWith('Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight at 9:00 (instead of 8:00), so I reopened signups for 9:00.\n\nIf 4 sign up and pay'), text);
+    assert(text.startsWith('Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight @ 9pm (instead of 8pm), so I reopened signups for 9pm.\n\nIf 4 sign up and pay'), text);
     const href = await card.locator('[data-sc-text]').getAttribute('href');
     assert(/^sms:\?&?body=|^sms:\?body=|^sms:&body=/.test(href) || href.startsWith('sms:'), href);
     assert(!/sms:\+?\d/.test(href), 'Text the group must open with no recipients');
@@ -320,7 +320,7 @@ async function main() {
     const href = await sheet.locator('[data-sc-unpaid-open]').getAttribute('href');
     const kai = d0.players.find((p) => p.name === 'Kai').phone.replace(/\D/g, '');
     assert(href.includes(kai) && href.split(',').length === 1, href);
-    assert(decodeURIComponent(href.split('body=')[1]).startsWith("Hey, we have 4 in for tonight at 8:15. Please pay on the site and I’ll book the court.\n\n"), href);
+    assert(decodeURIComponent(href.split('body=')[1]).startsWith("Hey, we have 4 in for tonight @ 8:15pm. Please pay on the site and I’ll book the court.\n\n"), href);
     assert((await sheet.innerText()).includes('no phone saved for Reese'), 'Reese named');
     await page.screenshot({ path: path.join(SHOTS, 'zip15-unpaid-sheet.png') });
     await ctx.close();
