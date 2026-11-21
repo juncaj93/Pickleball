@@ -1946,7 +1946,8 @@ function ClashCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
       data={{ 'data-tm-clash': games.map((g) => g.id).join(',') }}
       xLabel="Close"
       onX={hide}
-      action={
+      // The button under the words (the actions row, as the style switch card), so the line keeps the card's width at 390 and narrower.
+      actions={
         <button type="button" className="ac-btn ac-out" data-ac-tone="red" onClick={() => ctx.open('cancel', games[0].id)} data-tm-clash-cancel>
           Cancel game
         </button>
