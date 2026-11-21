@@ -8,6 +8,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { levelLabel } from '../../shared/tournament';
+import { openLayer } from '../backStack';
 import './levelup.css';
 
 import { COUNT_FROM_MS, COUNT_MS, countSteps, LEVEL_UP_CALM_MS, LEVEL_UP_MS, tickTimes } from '../../shared/levelUp';
@@ -58,6 +59,9 @@ export function LevelUp({ from, to, onDone }: { from: number; to: number; onDone
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Back (an edge swipe, Android's back) skips it to the dates step instead of closing the Sign up sheet: its own layer on top (src/backStack.ts).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => openLayer(finish), []);
   // A key or a tap skips it (Escape, Enter or Space too).
   useEffect(() => {
     const key = (e: KeyboardEvent) => {

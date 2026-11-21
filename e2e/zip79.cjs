@@ -236,6 +236,17 @@ async function check(name, fn) {
             await p.page.mouse.click(30, 60);
             await p.page.locator('[data-tm-step="2"]').waitFor({ timeout: 1500 });
             assert((await p.page.locator('[data-tm-levelup]').count()) === 0, 'the tap did not skip it');
+            // Back (Android's back, an edge swipe) skips it to the dates step; the Sign up sheet stays open.
+            await p.page.locator('[data-tm-back]').click();
+            await p.page.locator('.tm-level[data-level="360"]').click();
+            await p.page.locator('[data-tm-next]').click();
+            await p.page.locator('[data-tm-levelup]').waitFor({ timeout: 2000 });
+            await sleep(400);
+            await p.page.goBack();
+            await p.page.locator('[data-tm-step="2"]').waitFor({ timeout: 2000 });
+            assert((await p.page.locator('[data-tm-levelup]').count()) === 0, 'Back did not skip it');
+            await sleep(400);
+            assert(await p.page.locator('[data-tm-step="2"]').isVisible(), 'Back closed the Sign up sheet');
           }
           assert(!p.errors.length, p.errors.join(' | '));
           await p.ctx.close();
