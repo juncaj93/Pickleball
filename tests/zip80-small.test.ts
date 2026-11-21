@@ -82,3 +82,27 @@ describe('zip 80: "Most players voted" only for a real majority', () => {
     expect(formatAlertWords('The Cold Open', '2026-12-01', 'americano', 'admin', c(0, 9, 1)).sub).toBe('Format: Americano');
   });
 });
+
+describe('zip 80: the venue charge card counts a tournament night\'s courts', () => {
+  it('Nov 30 court charge: The Cold Open (2 courts x 2.5 hrs at $24) = $120; a canceled one counts nothing; with regular games it adds on', async () => {
+    const ctx = await world(10);
+    expect((await ctx.organizer.call('PUT', '/api/admin/venue-alert-switch', { on: true })).status).toBe(200);
+    // The court charge on the last day of the month (Nov 30), Eastern noon.
+    ctx.app.now = Date.parse('2026-11-30T17:00:00Z');
+    expect((await ctx.organizer.call('POST', '/api/admin/login', { pin: '246810' })).status).toBe(200); // a long jump signs in again
+    const cards = async () => ((await ctx.organizer.call('GET', '/api/admin/dashboard')).data.venueAlerts ?? []) as { kinds: string[]; cents: number; line: string; title: string }[];
+    const court = (await cards()).find((a) => a.kinds.includes('court'));
+    expect(court).toBeDefined();
+    expect(court!.cents - (court!.kinds.includes('membership') ? Number(court!.line.match(/membership \$(\d+)/)?.[1] ?? 0) * 100 : 0)).toBe(12000);
+    expect(court!.line).toMatch(/^The Cold Open \(2 courts\) = \$120/);
+    const raw = ctx.app.db.raw;
+    // A booked regular game in the same period adds on.
+    const g = raw.prepare("SELECT id FROM sessions WHERE starts_at >= '2026-11-16' AND starts_at < '2026-11-30' AND status <> 'canceled' ORDER BY starts_at LIMIT 1").get() as { id: string };
+    raw.prepare("UPDATE sessions SET booking_status = 'booked' WHERE id = ?").run(g.id);
+    expect((await cards()).find((a) => a.kinds.includes('court'))!.line).toMatch(/^1 game x \$48 \+ The Cold Open \(2 courts\) = \$168/);
+    raw.prepare("UPDATE sessions SET booking_status = 'needs_booking' WHERE id = ?").run(g.id);
+    // Canceled before its night: the venue charges nothing for it.
+    raw.prepare("UPDATE tournaments SET status = 'canceled', canceled_at = ? WHERE id = ?").run('2026-11-10T00:00:00.000Z', ctx.tid);
+    expect((await cards()).find((a) => a.kinds.includes('court'))).toBeUndefined();
+  });
+});

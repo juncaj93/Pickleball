@@ -164,6 +164,8 @@ export interface VenueGame {
   booked: boolean;
   canceled: boolean;
   costCents: number;
+  /** Zip 80: a tournament night (its courts all night, priced like Money > Totals: courts x hours x the court rate), not one regular game. */
+  tournament?: { name: string; courts: number };
 }
 
 /** The games a court charge pays for: Booked and not canceled, starting on a date inside the period (Eastern, ends included). */
@@ -173,6 +175,21 @@ export function periodGames(games: VenueGame[], period: { from: string; to: stri
     const day = localYmd(Date.parse(g.startsAt), tz);
     return day >= period.from && day <= period.to;
   });
+}
+
+/**
+ * Zip 80: the court line for a period's games: courtLine for regular games, and a tournament night counted by its courts ("4 games x $48 + The
+ * Cold Open (2 courts) = $312"; only the night: "The Cold Open (2 courts) = $120").
+ */
+export function courtLineOf(games: readonly VenueGame[]): string {
+  const regular = games.filter((g) => !g.tournament).map((g) => g.costCents);
+  const nights = games.filter((g) => g.tournament);
+  if (!nights.length) return courtLine(regular);
+  const total = games.reduce((a, g) => a + g.costCents, 0);
+  const parts = nights.map((g) => `${g.tournament!.name} (${g.tournament!.courts} ${g.tournament!.courts === 1 ? 'court' : 'courts'})`);
+  if (!regular.length) return `${parts.join(' + ')} = ${formatPrice(total)}`;
+  const head = courtLine(regular).replace(/ = [^=]+$/, '');
+  return `${head} + ${parts.join(' + ')} = ${formatPrice(total)}`;
 }
 
 /** "4 games x $48 = $192", or "3 games = $138" when the games' costs differ. Whole dollars, or cents when a cost has them (the site's formatPrice). */
@@ -364,9 +381,9 @@ export function dueAlerts(input: VenueInput): VenueAlert[] {
   const due: { date: string; kind: ChargeKind; month: string; key: string; cents: number; line: string }[] = [];
   for (const c of venuePlan(input)) {
     if (c.kind === 'court') {
-      const costs = periodGames(input.games, { from: c.from!, to: c.date }, tz).map((g) => g.costCents);
-      const total = costs.reduce((a, b) => a + b, 0);
-      if (costs.length > 0 && total > 0) due.push({ date: c.date, kind: 'court', month: c.month, key: c.key, cents: total, line: courtLine(costs) });
+      const games = periodGames(input.games, { from: c.from!, to: c.date }, tz);
+      const total = games.reduce((a, g) => a + g.costCents, 0);
+      if (games.length > 0 && total > 0) due.push({ date: c.date, kind: 'court', month: c.month, key: c.key, cents: total, line: courtLineOf(games) });
     } else {
       due.push({ date: c.date, kind: 'membership', month: c.month, key: c.key, cents: input.membershipCents, line: `Monthly membership, ${COURT_NAME}` });
     }
