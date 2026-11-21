@@ -33,7 +33,7 @@
 //   cashIn = what the group holds from players' seats + every pot + cashedOut
 // where a seat holds its live payment minus what came back from it, or (unpaid)
 // the credit and earlier cash put on it. Nothing created, nothing lost.
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -779,6 +779,7 @@ interface Snapshot {
   holds: number;
 }
 
+const INTEGRITY_SQL = readFileSync(join(process.cwd(), 'scripts/integrity-checks.sql'), 'utf8');
 const effect = (r: any) => (r.kind === 'kept' ? r.amount_cents : r.kind === 'used' ? -r.amount_cents : -(r.amount_cents - r.five_cents));
 
 function checkDb(w: World, out: Violation[]): Snapshot {
@@ -886,6 +887,12 @@ function checkDb(w: World, out: Violation[]): Snapshot {
       else if (price > 0 && x.usedNC + x.usedCash === price) add('I3.unpaid-but-covered', `${who}: unpaid with ${x.usedNC} credit + ${x.usedCash} cash = price ${price}`);
     }
   }
+
+  // 8. Zip 80: the site's "credit given back twice" check (scripts/integrity-checks.sql credit_back_twice) reads 0 after every step, so no
+  // random walk of drops, rejoins, cancels, finalizes, trims and unmarks makes it cry wolf. (Only that column: the fuzz world's own player
+  // cap differs from the check's more_in_than_max.)
+  const twice = Number((raw.prepare(INTEGRITY_SQL).get() as Record<string, number>).credit_back_twice);
+  if (twice !== 0) add('I8.credit-back-twice', `integrity check credit_back_twice = ${twice}`);
 
   // 2. The books.
   const potSum = [...pots.values()].reduce((s, n) => s + n, 0);

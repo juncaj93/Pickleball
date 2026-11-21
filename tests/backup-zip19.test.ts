@@ -285,7 +285,7 @@ describe('safety', () => {
     await expect(runStep(ctx.app.db, backups, { id: 'gone', part: 0, prefix: '', suffix: '', slices: [{ table: 'login_attempts', lo: 1, hi: 2, rows: 1, open: true, close: true, firstTable: false }], columns: { login_attempts: ['id'] } })).rejects.toThrow('Not a backed-up table');
   });
 
-  it('the main run stays small: 3 statements to the live database, 15 to the backup database, whatever the size (each costs CPU)', async () => {
+  it('the main run stays small: 3 statements to the live database, 16 to the backup database, whatever the size (each costs CPU)', async () => {
     const ctx = await busyGroup();
     bigActivity(ctx);
     const backups = store();
@@ -307,7 +307,7 @@ describe('safety', () => {
     const r = await weeklyBackup(live.db, back.db, SUN, { step: steps });
     expect(r.made).toBe(true);
     expect(live.seen).toEqual({ calls: 3, statements: 3 });
-    expect(back.seen).toEqual({ calls: 3, statements: 15 });
+    expect(back.seen).toEqual({ calls: 3, statements: 16 }); // Zip 80: + the newest copy of any kind (an ended tournament asks for one)
     // D1 refuses one statement over 100,000 characters: the measure stays far under it (Zip 56: 17 tables, about 36,000; one statement keeps
     // the copy one consistent moment, so the margin grew instead of the read being split).
     const sql = ctx.app.db.raw.prepare("SELECT m.name AS t, p.name AS c, p.type AS y FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table' ORDER BY m.name, p.cid").all() as { t: string; c: string; y: string }[];
@@ -354,6 +354,38 @@ describe('safety', () => {
     }
     const weeks = (backups.raw.prepare('SELECT week FROM weekly_backups ORDER BY created_at').all() as { week: string }[]).map((x) => x.week);
     expect(weeks).toEqual(['2026-11-08', '2026-11-15', '2026-11-22', '2026-11-25-asked-1500', '2026-11-26-asked-1500', '2026-11-27-asked-1500']);
+  });
+
+  it('Zip 80: a tournament that ended after the newest copy asks for one: made at the next hourly look, once; a later End asks again', async () => {
+    const ctx = await busyGroup();
+    const backups = store();
+    await oldStyleCopy(ctx.app.db, backups, at('2026-11-08T08:00:00Z'), '2026-11-08');
+    const tue = at('2026-11-11T03:00:00Z'); // Tue Nov 10, 10:00 PM EST
+    expect(await weeklyBackup(ctx.app.db, backups, tue)).toEqual({ made: false, reason: 'not due' });
+    // End tournament at 9:50 PM (the end action writes ended_at at the tap).
+    const g = (ctx.app.db.raw.prepare('SELECT id FROM groups').get() as { id: string }).id;
+    const tour = (id: string, status: string, ended: string | null) =>
+      ctx.app.db.raw
+        .prepare(`INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, status, visibility, created_at, updated_at, ended_at)
+                  VALUES (?, ?, 'The Cold Open', 8, 2, 150, 1170, 1800, 1400, '[]', ?, 'all', '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z', ?)`)
+        .run(id, g, status, ended);
+    tour('t-open', 'tickets', null); // an open tournament asks for nothing
+    expect(await weeklyBackup(ctx.app.db, backups, tue)).toEqual({ made: false, reason: 'not due' });
+    tour('t-1', 'ended', '2026-11-11T02:50:00.000Z');
+    const r = await weeklyBackup(ctx.app.db, backups, tue);
+    expect(r).toMatchObject({ made: true, week: '2026-11-10-asked-2200' });
+    // Answered: the next hourly look does nothing.
+    expect(await weeklyBackup(ctx.app.db, backups, tue + 3600_000)).toEqual({ made: false, reason: 'not due' });
+    // Sunday's regular copy comes as always; another tournament ends that week: another copy.
+    expect((await weeklyBackup(ctx.app.db, backups, SUN)).made).toBe(true);
+    tour('t-2', 'ended', '2026-11-18T02:40:00.000Z');
+    expect(await weeklyBackup(ctx.app.db, backups, at('2026-11-18T03:00:00Z'))).toMatchObject({ made: true, week: '2026-11-17-asked-2200' });
+    expect((backups.raw.prepare('SELECT week FROM weekly_backups ORDER BY created_at').all() as { week: string }[]).map((x) => x.week)).toEqual([
+      '2026-11-08',
+      '2026-11-10-asked-2200',
+      '2026-11-15',
+      '2026-11-17-asked-2200',
+    ]);
   });
 
   it('a copy over 20 steps runs as several chains, each started once, and still joins into exactly the one-shot file', async () => {

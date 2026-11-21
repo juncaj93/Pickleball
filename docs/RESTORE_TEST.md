@@ -15,6 +15,9 @@ Claude to look at the lines marked FAIL.
 
 Other ways to run it:
 
+Since Zip 80 the plain command checks all three kinds of backup: the newest weekly copy, the newest SQL export saved at a deploy
+(`node scripts/deploy-export.mjs list`), and a fresh export of live saved as a Settings > Backup file (and by the weekly copy code).
+
 - `npm run restore-test -- --weekly` the newest weekly copy only (or `--weekly 2026-11-08` for one week, as
   `node scripts/weekly-backup.mjs list` shows it)
 - `npm run restore-test -- --live` only a fresh export of the live site
@@ -23,7 +26,8 @@ Other ways to run it:
 ## What it does
 
 1. Gets the backup, with read-only commands only:
-   - the newest weekly copy from the private `pickleball-backups` database (plain SELECTs), and
+   - the newest weekly copy from the private `pickleball-backups` database (plain SELECTs),
+   - the newest SQL export saved there at a deploy (plain SELECTs, Zip 80), and
    - a fresh export of live (`wrangler d1 export pickleball --remote`, a download; it is deleted when the test ends, since it has
      phone numbers). Cloudflare can hold other requests to the database for the second or two an export takes, so run it in a
      quiet window, like the export taken before every deploy.
@@ -31,11 +35,11 @@ Other ways to run it:
    `docs/RESTORE.md` step 1 makes (`scripts/restore-backup.mjs`), in one transaction, then the database's own foreign key check.
    The throwaway disappears when the test ends. It is never the live database and never `pickleball-preview`.
 3. Compares the copy with the source:
-   - **rows per table, and every value of every row** (all 21 backed-up tables, `BACKUP_TABLES` in server/backupData.ts);
+   - **rows per table, and every value of every row** (all backed-up tables, `BACKUP_TABLES` in server/backupData.ts);
    - for a weekly copy, the row counts it saved when it was made;
    - **money**: finalized games, canceled games, total credit (and how many players have some), cash marked paid, unpaid seats and
      what they owe, pending cash-outs;
-   - **the 21 integrity checks** (`scripts/integrity-checks.sql`, the same ones run before and after each deploy): the same answer
+   - **the 22 integrity checks** (`scripts/integrity-checks.sql`, the same ones run before and after each deploy): the same answer
      on the copy as on the source.
 4. For live, it saves the export both ways a backup is made and checks both: the Settings > Backup file (also how weekly copies
    were saved before Zip 19), and a real run of the weekly copy code since Zip 19 (plan, steps, finish, `worker/backup.ts`) into a

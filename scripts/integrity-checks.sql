@@ -66,4 +66,15 @@ SELECT
   ,(SELECT COUNT(*) FROM (SELECT 1 FROM sessions WHERE status <> 'canceled' GROUP BY group_id, starts_at HAVING COUNT(*) > 1)) AS two_games_same_start
   ,(SELECT COUNT(*) FROM sessions WHERE ends_at <= starts_at) AS game_ends_before_start
   ,(SELECT COUNT(*) FROM task_log t LEFT JOIN sessions s ON s.id = t.session_id WHERE t.session_id IS NOT NULL AND s.id IS NULL) AS alert_log_without_game
-  ,(SELECT COUNT(*) FROM (SELECT 1 FROM task_log WHERE kind = 'sent' GROUP BY session_id, task HAVING COUNT(*) > 1)) AS alert_sent_twice;
+  ,(SELECT COUNT(*) FROM (SELECT 1 FROM task_log WHERE kind = 'sent' GROUP BY session_id, task HAVING COUNT(*) > 1)) AS alert_sent_twice
+  -- Zip 80 (the 🎾75 audit): credit given back twice on the same seat. Money comes back from a payment as live 'kept' rows on the seat
+  -- (dropped, canceled, finalized, not_played). While the payment is live (paid, not settled), what came back since it was paid can never be
+  -- more than the payment (the part above the final price, a trim, a guest's share). Once it is settled (refunded_at: it all came back), no
+  -- second row can come back after the one that settled it, until a new payment starts over (which clears refunded_at).
+  ,(SELECT COUNT(*) FROM session_players sp WHERE sp.payment_status = 'paid' AND sp.paid_at IS NOT NULL AND (
+      (sp.refunded_at IS NULL AND (SELECT COALESCE(SUM(l.amount_cents), 0) FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL
+         AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason IN ('dropped', 'canceled', 'finalized', 'not_played')
+         AND l.created_at >= sp.paid_at) > COALESCE(sp.payment_amount_cents, 0))
+      OR (sp.refunded_at IS NOT NULL AND (SELECT COUNT(*) FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL
+         AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason IN ('dropped', 'canceled', 'finalized', 'not_played')
+         AND l.created_at >= sp.refunded_at) > 1))) AS credit_back_twice;
