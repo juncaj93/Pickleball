@@ -16,11 +16,9 @@ import { createNodeD1 } from '../dev/nodeD1';
 import { type Counted, countingDb } from '../dev/countingDb';
 import { buildSmallPreview } from '../scripts/preview-world-small';
 import { previewPin } from '../scripts/seed-preview-world';
-import { ALL_SWITCHES_READ, fewerQueriesDb, SWITCH_READ } from '../server/speed';
 
 vi.setConfig({ testTimeout: 300_000 });
 
-const forcedRun = process.env.PB_SPEED_FORCE === '1';
 const AT = Date.parse('2026-11-18T18:30:00.000Z'); // Wed Nov 18, 2026, 1:30 PM Eastern
 const seeds = new Map<boolean, Promise<string>>();
 const seed = (calm: boolean) => {
