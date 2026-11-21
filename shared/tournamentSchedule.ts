@@ -719,8 +719,10 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
     }
   }
   const first = pools.find((r) => r.playTo > 7);
-  // Zip 80: when the playoffs wait for tie games anyway, shorter pool games may save nothing: then there is nothing to suggest.
-  if (!first || ending(7, first.round) >= finish) return { current: cur.round, behind, finish, suggest: null };
+  // Zip 80: when the playoffs wait for tie games anyway, shorter pool games may save nothing: then there is nothing to suggest. (Only with a
+  // tie: without one, shorter games always save time, and the suggestion is exactly as before.)
+  const tieAhead = [cur, ...after].some((r) => r.tiesEnd !== undefined);
+  if (!first || (tieAhead && ending(7, first.round) >= finish)) return { current: cur.round, behind, finish, suggest: null };
   return { current: cur.round, behind, finish, suggest: { fromRound: first.round, to: 7, stillOver: Math.max(0, Math.round(ending(7, first.round) - limit)) } };
 }
 const minLen = (a: GameTo, b: GameTo): GameTo => (a < b ? a : b);

@@ -194,6 +194,37 @@ describe('the restore test', () => {
     expect(broken[0]).toMatch(/^FAIL {2}could not run the restore test: This export is incomplete/);
   });
 
+  it('Zip 80 (review): one backup that cannot be read is a FAIL line and the others are still checked; an export older than a table passes with a NOTE', async () => {
+    const ctx = await busyGroup();
+    const backups = createNodeD1(':memory:', mkdtempSync(join(tmpdir(), 'no-migrations-')));
+    for (const sql of BACKUP_SCHEMA) await backups.prepare(sql).run();
+    await weeklyBackup(ctx.app.db, backups, SUN);
+    const sql = exportSql(ctx.app.db);
+    const run: Runner = (args) => {
+      if (args[1] === 'export') {
+        writeFileSync(args[5], sql);
+        return '';
+      }
+      return JSON.stringify([{ results: backups.raw.prepare(args[6]).all() }]);
+    };
+    // No saved deploy export yet: that one fails, the weekly copy and live are still checked.
+    const lines: string[] = [];
+    expect(await main([], run, (s) => lines.push(s))).toBe(1);
+    const heads = lines.filter((l) => /^(PASS|FAIL) /.test(l));
+    expect(heads).toHaveLength(4);
+    expect(heads[1]).toBe('FAIL  the newest saved deploy export');
+    expect(lines.join('\n')).toContain('could not be checked: no such table: deploy_exports');
+    expect(heads.filter((h) => h.startsWith('PASS'))).toHaveLength(3);
+    // An export taken before a later migration (no tournament_results table): checked for what it holds, with a NOTE.
+    ctx.app.db.raw.exec('DROP TABLE tournament_results');
+    const old = exportSql(ctx.app.db);
+    backups.raw.exec(saveSql(old, 'live-before-old.sql', 'older', 'exp-old', '2026-11-20T02:00:00.000Z'));
+    const one: string[] = [];
+    const code = await main(['--export'], run, (s) => one.push(s));
+    expect(code, one.join('\n')).toBe(0);
+    expect(one.join('\n')).toContain('NOTE: tournament_results came after this export (a later migration): checked as empty.');
+  });
+
   it('can never write to Cloudflare: only the two read commands get through', () => {
     const ok = [
       ['d1', 'export', 'pickleball', '--remote', '--output', '/tmp/x/live.sql'],

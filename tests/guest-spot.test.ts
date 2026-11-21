@@ -1188,3 +1188,24 @@ describe('round 3: a late pair owes only the spots the game is short', () => {
     expect((await mineOn(w, 'Blair', g.id)).mine?.guestOwed?.name).toBe('Sam');
   });
 });
+
+describe('Zip 80 (the review): confirming a host\'s I paid after Finalize gives back what is above BOTH shares', () => {
+  it('Blair + Sam I paid $28 (not confirmed), 6 played at $9: Paid gives back $10, not $19', async () => {
+    const w = await world({ maxPlayers: 10 });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await addGuest(w, g.id, 'Blair');
+    for (const n of ['Casey', 'Devon', 'Emery', 'Frankie']) expect((await markPaid(w, g.id, n)).status).toBe(200);
+    const p = await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/paid`, { paid: true });
+    expect(p.status, p.text).toBe(200);
+    w.app.now = g.start + 3 * HOUR;
+    const f = await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    expect(f.status, f.text).toBe(200);
+    expect(f.data.played).toBe(6);
+    expect(f.data.priceCents).toBe(900);
+    expect(await credit(w, 'Blair')).toBe(0); // held until the I paid is confirmed
+    const c = await admin(w, 'POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.byName.Blair, paid: true });
+    expect(c.status, c.text).toBe(200);
+    expect(await credit(w, 'Blair')).toBe(2800 - 2 * 900);
+  });
+});

@@ -77,6 +77,9 @@ SELECT
       (sp.refunded_at IS NULL AND (SELECT COALESCE(SUM(l.amount_cents), 0) FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL
          AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason IN ('finalized', 'not_played')
          AND l.created_at > sp.paid_at) > COALESCE(sp.payment_amount_cents, 0))
+      -- (The part above the final price comes back once per payment: the site refuses a second live 'finalized' row on a seat.)
+      OR (sp.refunded_at IS NULL AND (SELECT COUNT(*) FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL
+         AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason = 'finalized') > 1)
       OR (sp.refunded_at IS NOT NULL AND (SELECT COUNT(*) FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL
          AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason IN ('dropped', 'canceled', 'finalized', 'not_played')
          AND l.created_at > sp.refunded_at) > 0))) AS credit_back_twice;

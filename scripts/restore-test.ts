@@ -23,6 +23,8 @@ import { weeklyBackup } from '../worker/backup';
 import { joinParts, WEEK } from './weekly-backup.mjs';
 import { joinExport, looksLikeExport } from './deploy-export.mjs';
 import { type Backup, compare, emptyDb, fileSource, loadExport, printReport, type Report } from './restore-test-lib';
+import { TABLES } from './backup-sql.mjs';
+import { createNodeD1 } from '../dev/nodeD1';
 
 export type Runner = (args: string[]) => string;
 
@@ -85,10 +87,28 @@ export async function savedExportReport(run: Runner, id?: string, nowIso = new D
   const text = joinExport(h as { parts: number; chars: number }, parts);
   if (!looksLikeExport(text)) throw new Error(`The saved export ${h.id} is not a database export.`);
   const source = loadExport(text);
+  // Taken before a deploy: a table a later migration added is not in it yet. It is added empty (as the restore's fresh database has it), so
+  // the export is checked for what it holds.
+  const added = addMissingTables(source);
   const group = source.raw.prepare('SELECT name FROM groups LIMIT 1').get() as { name: string } | undefined;
   if (!group) throw new Error(`The saved export ${h.id} has no group.`);
   const file = JSON.parse(JSON.stringify(await backupObject(source, group.name, nowIso))) as Backup;
-  return compare(`saved deploy export ${h.file_name} (saved ${when(h.saved_at)} Eastern, ${h.chars} characters in ${h.parts} pieces)`, source, file);
+  const r = compare(`saved deploy export ${h.file_name} (saved ${when(h.saved_at)} Eastern, ${h.chars} characters in ${h.parts} pieces)`, source, file);
+  if (added.length) r.notes.push(`NOTE: ${added.join(', ')} came after this export (a later migration): checked as empty.`);
+  return r;
+}
+
+/** Zip 80: the backed-up tables an older export does not have yet, made empty from this checkout's migrations. Returns their names. */
+function addMissingTables(source: ReturnType<typeof loadExport>): string[] {
+  const has = (db: ReturnType<typeof loadExport>, t: string) => !!db.raw.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+  const missing = TABLES.filter((t) => !has(source, t));
+  if (!missing.length) return [];
+  const fresh = createNodeD1(':memory:', join(process.cwd(), 'migrations'));
+  for (const t of missing) {
+    const row = fresh.raw.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(t) as { sql: string } | undefined;
+    if (row) source.raw.exec(row.sql);
+  }
+  return missing;
 }
 
 /** A fresh read-only export of live, as a throwaway database. The export file is deleted at once. */
@@ -138,11 +158,21 @@ export async function main(argv: string[], run: Runner = npxRunner, out: (s: str
     } else if (args[0] === '--live') {
       reports.push(...(await liveReports(run)));
     } else if (args.length === 0) {
-      // Zip 80: all three kinds of backup, every run: the weekly copy, the saved deploy export, and live as a Settings > Backup file.
-      const w = fetchWeekly(run);
-      reports.push(compare(w.label, fileSource(w.backup), w.backup, w.header, true));
-      reports.push(await savedExportReport(run));
-      reports.push(...(await liveReports(run)));
+      // Zip 80: all three kinds of backup, every run: the weekly copy, the saved deploy export, and live as a Settings > Backup file. Each on
+      // its own: one that cannot be read is a FAIL line saying why, and the others are still checked.
+      const one = async (label: string, make: () => Promise<Report[]>) => {
+        try {
+          reports.push(...(await make()));
+        } catch (err) {
+          reports.push({ label, ok: false, checks: [{ ok: false, line: `could not be checked: ${(err as Error).message ?? String(err)}` }], notes: [] });
+        }
+      };
+      await one('the newest weekly copy', async () => {
+        const w = fetchWeekly(run);
+        return [compare(w.label, fileSource(w.backup), w.backup, w.header, true)];
+      });
+      await one('the newest saved deploy export', async () => [await savedExportReport(run)]);
+      await one('a fresh export of live', () => liveReports(run));
     } else {
       throw new Error('Usage: npm run restore-test  [-- --weekly [week] | -- --export [id] | -- --live | -- --file <backup.json>]');
     }

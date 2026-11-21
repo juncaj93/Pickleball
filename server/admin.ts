@@ -1668,7 +1668,9 @@ export async function applyPayment(
       // Finalized and played above the final price: the money back was held until this payment was confirmed
       // (only confirmed money becomes credit); it comes back now, in the same batch.
       const finalCents = session.finalized_at && row.played === 1 ? session.final_price_cents : null;
-      const back = finalCents !== null && finalCents !== undefined ? Math.max(0, (row.payment_amount_cents ?? 0) - finalCents) : 0;
+      // Zip 80 (the review): a host's seat pays one share per person it holds (Finalize's units: the guest who played, or a guest spot still
+      // owed): $28 for Blair and Sam at $9 each gives back $10, not $19.
+      const back = finalCents !== null && finalCents !== undefined ? Math.max(0, (row.payment_amount_cents ?? 0) - finalCents * seatUnits(row)) : 0;
       const confirmedNow = `NOT EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND self_paid_at IS NOT NULL)`;
       // Only while the game is the one read (not finalized, reopened or redone since): the money back worked out
       // above belongs to that finalize. A Finalize or Reopen at the same moment: look again.

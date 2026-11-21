@@ -82,6 +82,12 @@ describe('zip 80: credit given back twice on the same seat (scripts/integrity-ch
     expect(run(raw, SQL).credit_back_twice).toBe(0); // $5 of $14 back: fine
     back('part-2', 1000);
     expect(problems(raw, SQL)).toEqual([['credit_back_twice', 1]]); // $15 back from a $14 payment
+    // The review: the same small part back twice ($4 and $4 of $14) is a double too: one live 'finalized' row per payment at most.
+    raw.prepare("DELETE FROM credit_ledger WHERE id IN ('part-1', 'part-2')").run();
+    back('fin-1', 400);
+    expect(run(raw, SQL).credit_back_twice).toBe(0);
+    back('fin-2', 400);
+    expect(problems(raw, SQL)).toEqual([['credit_back_twice', 1]]);
   });
 });
 

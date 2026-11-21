@@ -55,6 +55,16 @@ describe('zip 80: tie games in the Time check', () => {
     const withTie = timeCheck(rounds(1, [S + 45], { 4: { tiesEnd: S + 101 } }), S, E, S + 46);
     expect(withTie).toMatchObject({ behind: 32, finish: S + 147, suggest: null });
   });
+
+  it('no tie: an overdue round still gets its "play to 7" advice exactly as before (the review\'s probe)', () => {
+    const r: RoundState[] = [
+      { round: 1, pool: true, playTo: 11, done: true, doneAt: 1163 },
+      { round: 2, pool: true, playTo: 11, done: false },
+      { round: 3, pool: false, playTo: 11, done: false },
+      { round: 4, pool: false, playTo: 11, done: false },
+    ];
+    expect(timeCheck(r, 1140, 1240, 1200).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 16 });
+  });
 });
 
 describe('zip 80: a 12 player night on the real server: a three-way tie in a group moves the semifinal time', () => {
