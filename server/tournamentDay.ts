@@ -32,7 +32,7 @@ import {
   shortAlertOf,
 } from '../shared/tournament';
 import { firstAnswer, saidTeamScore, saidWon } from '../shared/partnerTaps';
-import { about, clockLabel, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES } from '../shared/tournamentPlan';
+import { about, clockLabel, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES } from '../shared/tournamentPlan';
 import {
   draftNote,
   draftTeams,
@@ -60,6 +60,7 @@ import {
   type TieBlock,
   tieBlocks,
   tieGames,
+  tieGamesAhead,
   type TieRecord,
   TIE_TO,
 } from '../shared/tournamentSchedule';
@@ -317,6 +318,8 @@ interface DayFacts {
   check: ReturnType<typeof timeCheck> | null;
   /** Shorter games in force for rounds not played yet: from which round, to what. */
   shorter: { fromRound: number; to: GameTo } | null;
+  /** Zip 80: by round, when the tie games it waits for end (minutes after midnight). */
+  tiesEnd: Map<number, number>;
   start: number;
   end: number;
 }
@@ -358,22 +361,39 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   // The Time check, from the rounds as they are.
   const rounds = new Map<number, GameRow[]>();
   for (const g of games) rounds.set(g.round, [...(rounds.get(g.round) ?? []), g]);
-  const states: RoundState[] = [...rounds.entries()].map(([round, list]) => {
-    const times = list.map((g) => g.result_at ?? g.claim_at).filter((x): x is string => !!x);
+  const nowMin = minuteOf(t, tz, nowMs);
+  const states: RoundState[] = [...rounds.entries()].map(([round, all]) => {
+    // Zip 80: a tie's Game A and Game B (to 5) are stored with the first playoff round's number, but they are played as soon as the wheel
+    // spins: the round's own games wait for them (tiesEnd), and they never count as that round's playoff minutes.
+    const tieList = all.filter((g) => g.stage === 'tie');
+    const list = tieList.length && tieList.length < all.length ? all.filter((g) => g.stage !== 'tie') : all;
+    const times = all.map((g) => g.result_at ?? g.claim_at).filter((x): x is string => !!x);
+    const tieTimes = tieList.map((g) => g.result_at ?? g.claim_at).filter((x): x is string => !!x);
+    const tiesEnd =
+      list === all
+        ? undefined
+        : tieList.every(decided)
+          ? tieTimes.length
+            ? minuteOf(t, tz, Math.max(...tieTimes.map((x) => Date.parse(x))))
+            : undefined
+          : nowMin + tieGamesAhead(tieList.filter((g) => !decided(g))) * TIE_MINUTES;
     return {
       round,
       pool: list.every((g) => g.stage === 'pool'),
       playTo: Math.max(...list.map((g) => g.play_to)) as GameTo,
-      done: list.every(decided),
+      done: all.every(decided),
       anyResult: list.some((g) => !!g.winner || !!g.claim || (!!g.skipped && g.result_by !== null)),
-      doneAt: list.every(decided) && times.length ? minuteOf(t, tz, Math.max(...times.map((x) => Date.parse(x)))) : undefined,
+      doneAt: all.every(decided) && times.length ? minuteOf(t, tz, Math.max(...times.map((x) => Date.parse(x)))) : undefined,
+      ...(tiesEnd !== undefined ? { tiesEnd } : {}),
     };
   });
-  const check = started && !over && !t.paused_at && games.length && t.final_date ? timeCheck(states, real.start, real.start + real.minutes, minuteOf(t, tz, nowMs)) : null;
+  const check = started && !over && !t.paused_at && games.length && t.final_date ? timeCheck(states, real.start, real.start + real.minutes, nowMin) : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
   const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
-  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, start: real.start, end: real.start + real.minutes };
+  // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
+  const tiesEnd = new Map(states.filter((r) => r.tiesEnd !== undefined).map((r) => [r.round, r.tiesEnd!]));
+  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes };
 }
 
 /** "1st of the Dink group", "2nd", "Winner of game 9". */
@@ -768,11 +788,13 @@ export function playerDayView(
     let at = real.start;
     let semiAt: number | null = null;
     let finalAt: number | null = null;
-    for (const [round, list] of [...byRound.entries()].sort((a, b) => a[0] - b[0])) {
+    for (const [round, all] of [...byRound.entries()].sort((a, b) => a[0] - b[0])) {
+      // Zip 80: a round waiting for tie games (to 5) starts no earlier than they end; the tie games are not its playoff minutes.
+      const list = all.some((g) => g.stage !== 'tie') ? all.filter((g) => g.stage !== 'tie') : all;
+      at = Math.max(at, f.tiesEnd.get(round) ?? -Infinity);
       if (list.some((g) => g.stage === 'semi') && semiAt === null) semiAt = at;
       if (list.some((g) => g.stage === 'final') && finalAt === null) finalAt = at;
       at += list.every((g) => g.stage === 'pool') ? ROUND_MINUTES[Math.max(...list.map((g) => g.play_to)) as GameTo] : ROUND_MINUTES[PLAYOFF_TO];
-      void round;
     }
     night.push({ label: `Group play · ${poolRounds} rounds`, time: clockLabel(real.start) });
     if (semiAt !== null) night.push({ label: 'Semifinals', time: clockLabel(about(semiAt)) });
