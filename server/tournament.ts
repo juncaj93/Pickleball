@@ -294,7 +294,12 @@ type ActiveRow = TournamentRow & { org_saved: string | null; viewer_name: string
  * show on the night and the whole next day (shared/results.ts resultsShowing decides to the day, Eastern). Worked out from ?2 (the canceled
  * cutoff, now minus CANCELED_DAYS days), so the reads keep their values; the day check after the read is exact.
  */
-const shownEnded = (t = '') => `(${t}status = 'ended' AND ${t}ended_at IS NOT NULL AND ${t}final_date >= date(?2, '+${CANCELED_DAYS - 2} days'))`;
+// Review: ?2 plus CANCELED_DAYS days is now; 5 hours back (Eastern standard time) and one day back is Eastern yesterday, so a tournament dated
+// two days ago is never picked over a canceled card (in summer time the read is one hour wide, from midnight to 1:00 AM, and the day check
+// after it is exact).
+/** Zip 77: a reveal's board can play for this long after the tap. */
+export const REVEAL_SHOW_HOURS = 6;
+const shownEnded = (t = '') => `(${t}status = 'ended' AND ${t}ended_at IS NOT NULL AND ${t}final_date >= date(?2, '+${CANCELED_DAYS - 1} days', '-5 hours'))`;
 /** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one ended in the last two days, else one canceled lately. */
 const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownEnded('t.')} OR ${shownCanceled('t.')})
        ORDER BY CASE WHEN t.status = 'canceled' THEN 2 WHEN t.status = 'ended' THEN 1 ELSE 0 END, t.created_at DESC, t.id LIMIT 1`;
@@ -1059,7 +1064,10 @@ async function endedViewFor(ctx: Ctx, group: GroupRow, t: ActiveRow, playerId: s
     me: null,
     results: { night, rows: boardRows(format, results, playerId) },
   };
-  if (!night || !inIt) return base;
+  // Americano: the reveal keeps Zip 77's own window too (6 hours from the tap), so a reveal tapped late (the next morning, after fixing a score)
+  // still plays its board on every phone that was in the night.
+  const revealing = format === 'americano' && ctx.nowMs < Date.parse(t.ended_at) + REVEAL_SHOW_HOURS * 3_600_000;
+  if (!(night || revealing) || !inIt) return base;
   const signups = pre ? pre.signups : await signupRows(ctx.db, t.id);
   const dayRows = pre?.day ?? (await loadDay(ctx.db, t.id));
   if (format === 'americano') {

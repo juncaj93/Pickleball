@@ -115,6 +115,45 @@ describe('zip 79 part 1: the results row', () => {
     expect((await group('Vic')).tournament).toBeUndefined();
   });
 
+  it('review: a tournament that ended two days ago never hides a canceled card (10 AM Eastern, when the old read still picked it)', async () => {
+    const { ctx, stage, group, c } = await previewWorld();
+    ctx.app.now = Date.parse('2026-11-12T15:00:00.000Z');
+    await stage('zip79_gone');
+    const raw = ctx.app.db.raw;
+    const g = raw.prepare('SELECT group_id FROM tournaments LIMIT 1').get() as { group_id: string };
+    const iso = new Date(ctx.app.now).toISOString();
+    raw
+      .prepare(
+        `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date, status, visibility, created_at, updated_at, canceled_at, format, second_credit_cents)
+         VALUES ('t-canceled', ?, 'The Rain Out', 8, 2, 150, 1170, 1600, 1400, '["2026-11-20"]', '2026-11-20', 'canceled', 'all', ?, ?, ?, 'doubles', 0)`,
+      )
+      .run(g.group_id, iso, iso, iso);
+    raw
+      .prepare(`INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at) VALUES ('s-c', 't-canceled', ?, 'in', 300, NULL, '["2026-11-20"]', ?, ?, ?)`)
+      .run(c.byName.Vic, iso, iso, iso);
+    const vic = (await group('Vic')).tournament;
+    expect(vic?.name).toBe('The Rain Out');
+    expect(vic?.status).toBe('canceled');
+  });
+
+  it('review: a reveal tapped the next morning still plays its board for the players in the night (6 hours from the tap)', async () => {
+    const { ctx, stage, group } = await previewWorld(['Kai']);
+    const id = await stage('zip77_revealed');
+    // The night was Thursday; Alex taps Reveal standings Friday at 9 AM Eastern.
+    ctx.app.now = Date.parse('2026-11-13T14:00:00.000Z');
+    ctx.app.db.raw.prepare('UPDATE tournaments SET ended_at = ? WHERE id = ?').run(new Date(ctx.app.now - 10_000).toISOString(), id);
+    const vic = (await group('Vic')).tournament;
+    expect(vic.results.night).toBe(false);
+    expect(vic.reveal).toBeTruthy();
+    expect(vic.day.kind).toBe('americano');
+    // Kai (not in it) waits for the hold, then the row alone.
+    expect((await group('Kai')).tournament).toBeUndefined();
+    ctx.app.now += 7 * 3_600_000;
+    const later = (await group('Vic')).tournament;
+    expect(later.reveal).toBeUndefined();
+    expect(later.results.rows.length).toBe(10);
+  });
+
   it('Only me: a player gets nothing of an ended tournament (no row, nothing in the answer)', async () => {
     const { ctx, stage, group } = await previewWorld();
     const id = await stage('zip79_night_ld');

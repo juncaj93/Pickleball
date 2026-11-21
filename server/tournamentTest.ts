@@ -115,7 +115,7 @@ export const ZIP74_STAGES = ['zip74_short'] as const;
 //                    final standings, the ticker, You won The Cold Open and the medal.
 export const ZIP77_STAGES = ['zip77_last', 'zip77_allin', 'zip77_running', 'zip77_revealed'] as const;
 // Zip 79 (🎾79.results skills): the results row and the skills history.
-//   zip79_night        Americano, tonight, revealed 40 minutes ago (THE CALM START): View as Vic: the final board once (X closes it), then the
+//   zip79_night        Americano, tonight, revealed 30 minutes ago (THE CALM START): View as Vic: the final board once (X closes it), then the
 //                      one row (The Cold Open, Standings) with Your rounds under it. Tap Standings: the final board; X closes it.
 //   zip79_night_ld     Locked doubles, tonight, ended by the real Confirm: View as Vic: the one row with Your games under it; Standings lists the
 //                      teams, Net Ninjas first with the gold medal.

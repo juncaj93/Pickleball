@@ -1014,6 +1014,8 @@ function SignUpSheet({
               onDone={() => {
                 setLevelUp(null);
                 setStep(2);
+                // Review: Next is gone with step 1, so focus moves to the dates step (not lost on the page).
+                requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-tm-step="2"] button, [data-tm-step="2"]')?.focus({ preventScroll: true }));
               }}
             />
           )}
