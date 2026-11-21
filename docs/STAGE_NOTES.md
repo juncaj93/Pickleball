@@ -7924,3 +7924,19 @@ and next week's games; Vic's Home is the date note and the ticket (nothing new).
   lime as a filled button exactly there (and the organizer's draft pick button and pick chip, lime since before Zip 78) and keeps Enter
   score white; e2e/zip72.cjs A now expects the white Enter score (8 of 8). Pictures before and after, light and dark:
   docs/audits/80-shots/ (ticket, upnext, americano; fake names), made by e2e/zip80-lime-shots.cjs. Browser: zip78 36, zip79 6, zip56 57.
+
+### Live (Fri Nov 20, 2026, about 11:20 PM Eastern, a quiet window; the brief: ship when green, after 🎾79)
+- 🎾79 was live (e4f3eab1, main `d1b8f9f`); the 🎾81 session was told before this deploy.
+- Restore points first, by the new one command (`npm run backup:before-deploy`): SQL export of `pickleball` (316 KB) saved to
+  `pickleball-backups` as `export-20261121041619` (checked against the file); Time Travel bookmark
+  `00001aa0-00000000-0000512a-6e01cadefec4b7d9c4c2475ba8e9d499`.
+- Integrity checks before and after: 22, 8 and 14 columns, every problem column 0 (credit_back_twice and tour_credit_back_twice 0 on live).
+  No kept sign-up on a canceled tournament on live (nothing to repair).
+- Main fast-forwarded `d1b8f9f` to `9451621` and pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **d03ca730-5616-4650-9005-fdea98fbcd14** (bundle `index-DZW8QTID.js`). Clock Worker `pickleball-alerts-clock`: version **c05c9385**
+  (rollback **0a7adcad**: `npx wrangler rollback 0a7adcad-2f27-4022-bc38-00f8e61a02f9 --config worker/wrangler.toml`). No migration, no Error box
+  deploy, no live data touched; The Cold Open unchanged (Tue Dec 1, 2 courts, 7:30 to 10 PM, $18, Pay by Mon Nov 30 7:00 PM).
+- Rollback: deployment **e4f3eab1-e120-4cdb-b67b-c7c0ada09b7f** (🎾79, `48f3a1e`), Cloudflare Deployments > Rollback. No database undo.
+- Read-only live look (pages.dev, only GET requests): Home 200 at 390 light and dark, the new bundle, no page errors, nothing wider than the
+  screen; /setup shows "Already set up"; /admin and /api/status 200; the dashboard 401 without a PIN. Organizer screens not opened on live
+  (no read-only PIN in this session).
