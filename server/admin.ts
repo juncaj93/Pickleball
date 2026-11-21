@@ -2188,11 +2188,15 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const oldMax = settingsOf(group).maxPlayers;
   await ctx.db
     .prepare(
-      `UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ?,
+      // Zip 81: venueHours is taken from the row AT the write (a venue hours save that landed while this request ran is never undone).
+      `UPDATE groups SET name = ?, venmo_url = ?,
+         settings_json = CASE WHEN json_valid(settings_json) AND json_type(settings_json, '$.venueHours') = 'object'
+           THEN json_set(?, '$.venueHours', json(json_extract(settings_json, '$.venueHours'))) ELSE json_remove(?, '$.venueHours') END,
+         organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ?,
          open_access = ?, group_word_hash = ?
        WHERE id = ?`,
     )
-    .bind(name, venmoUrl, JSON.stringify(storedSettings), organizerName, venueName, venueAddress, firstSessionDate, openAccess ? 1 : 0, wordHash, group.id)
+    .bind(name, venmoUrl, JSON.stringify(storedSettings), JSON.stringify(storedSettings), organizerName, venueName, venueAddress, firstSessionDate, openAccess ? 1 : 0, wordHash, group.id)
     .run();
   await audit(
     ctx.db,

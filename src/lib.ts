@@ -16,7 +16,7 @@ import { TAP_GUARD_FIX } from '../shared/tapGuard';
 import { GUEST_SPOT } from '../shared/guestSpot';
 import { TOURNAMENTS } from '../shared/tournament';
 import { phoneTag } from './phoneTag';
-import { BOOKING_HOURS } from '../shared/bookingHours';
+import { BOOKING_HOURS } from '../shared/bookingHoursSwitch';
 import { EXTENDED_TIME } from '../shared/extension';
 import { SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
 import { PREVIEW_CALM } from '../shared/previewCalm';

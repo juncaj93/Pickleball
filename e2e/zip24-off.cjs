@@ -246,7 +246,10 @@ async function main() {
   await check('the switch ON touches no other screen: organizer Home and Players are identical to main', async () => {
     for (const opts of [{ tabName: 'Players' }, {}]) {
       const [x, y] = await Promise.all([screen(A, { ...opts, url: '/admin' }), screen(B, { ...opts, url: '/admin?bookinghours=on' })]);
-      if (x.html !== y.html) throw new Error(diffAt(x.html, y.html));
+      // Zip 81: with the switch on, Home shows the amber "venue hours" card for a game outside its day's hours (this world has Mon Nov 9 to
+      // 10:30 PM): that card is on purpose and set aside here; everything else must still be main's, byte for byte.
+      const yHtml = y.html.replace(/<section class="stack" aria-label="Venue hours" data-venue-conflicts="true">.*?<\/section>/s, '');
+      if (x.html !== yHtml) throw new Error(diffAt(x.html, yHtml));
     }
   });
   await browser.close();

@@ -1,9 +1,9 @@
 // Zip 15: Second Chance, same-day games, the two Telegrams, Venmo Request (SECOND_CHANCE, ships OFF).
 import { describe, expect, it } from 'vitest';
 import { DAY, HOUR, playerPhone, sentText, setupGroup, TestApp } from './harness';
+import { pickTimes } from '../shared/secondChanceTimes';
 import {
   duePing,
-  pickTimes,
   pingInMessage,
   pingPaidMessage,
   reopenText,

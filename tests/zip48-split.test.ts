@@ -159,9 +159,10 @@ describe('Zip 48: /admin', () => {
     expect(added.map((l) => l.trim())).toEqual([
       '<!-- Zip 48: /admin only. The organizer files, started at once (vite.config.ts, adminPage). -->',
       `<link rel="modulepreload" crossorigin href="/assets/${js}">`,
-      // The server code the organizer file and View as's copy share (named zip11 until Zip 57; the build now names the same shared file after
+      // The server code the organizer file and View as's copy share (Zip 81: now named venueHours, the venue hours code moved into it out of the
+      // player's file; named zip11 until Zip 57; the build now names the same shared file after
       // shared/tournamentSchedule.ts, one of the modules in it).
-      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^(zip11|tournamentSchedule)-.*\.js$/)}">`,
+      `<link rel="modulepreload" crossorigin href="/assets/${asset(split, /^(zip11|tournamentSchedule|venueHours)-.*\.js$/)}">`,
       // Zip 56: the ticket rules (shared/tournamentTickets.ts), shared by the organizer file, the player's tournament file and View as's copy of
       // the server, so the build keeps them in one small file of their own (no style). Zip 66: that file also holds the new shared helpers
       // (shared/tournamentNudge.ts), so the build names it after them. Zip 72: the score words (shared/scores.ts) join the same file, and the

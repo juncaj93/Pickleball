@@ -19,12 +19,9 @@
 import { gamePrice, gameMinutes, PICKER_MINUTES, type PriceSettings } from './gameLength';
 import { localParts } from './time';
 
-export const BOOKING_HOURS = { task: 'booking_hours_on', header: 'X-Booking-Hours', link: 'bookinghours', env: 'BOOKING_HOURS', name: 'Booking hours' } as const;
-
-/** A wrangler.toml kill switch: allowed unless it says "off". Who gets it is Settings' call. */
-export function bookingHoursAllowed(flag: string | undefined | null): boolean {
-  return (flag ?? 'on').trim().toLowerCase() !== 'off';
-}
+// The switch's names and the kill switch live in shared/bookingHoursSwitch.ts (Zip 81: the player screen's script reads only those, so it never
+// carries the hours code); they are exported from here too, as before.
+export { BOOKING_HOURS, bookingHoursAllowed } from './bookingHoursSwitch';
 
 /** Opening and closing, in minutes after midnight (local time). */
 export interface DayHours {
@@ -274,7 +271,7 @@ export function checkBookingTimes(startsAtIso: string, endsAtIso: string, tz: st
  * Zip 81: with `normal` (the group's normal week), against both Tuesday's and Thursday's; the message names them.
  */
 export function checkUsualTime(startMin: number, endMin: number, weekday = 2, normal?: readonly DayHours[]): HoursCheck {
-  if (!normal) return checkDay(weekday, startMin, endMin);
+  if (!normal || isDefaultWeek(normal)) return checkDay(weekday, startMin, endMin);
   if (endMin <= startMin) return { ok: false, why: 'order', message: END_BEFORE_START_MESSAGE };
   for (const wd of [2, 4]) {
     const h = normal[wd];

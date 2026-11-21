@@ -3,7 +3,8 @@
 //  - Everything lives in the group's settings_json under `venueHours` ({ normal, specials }): no table, no migration. The general Settings
 //    save keeps it untouched (server/admin.ts updateGroup); only these three routes change it.
 //  - Each save is read, changed and written in ONE guarded statement (the write lands only if settings_json is still what was read), so two
-//    phones saving at once never lose an entry: the second is told to look again.
+//    phones saving at once never lose an entry: the second is told to look again. The general Settings save takes venueHours from the row at
+//    the moment it writes (server/admin.ts updateGroup), so it never undoes one of these.
 //  - Entries whose last date has passed are dropped on every save (they already left the list the day after their last date).
 //  - The rules for a date (shared/bookingHours.ts dayRule) and the checks (shared/venueHours.ts readSpecial / readWeek) are shared with the
 //    screens, so the screen and the server always agree.

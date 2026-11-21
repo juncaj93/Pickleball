@@ -13,6 +13,7 @@
  *   E  The fake clock: Feb 1 2027: the hint says None, no card. Back to Nov 20: Cancel game on the card cancels the game and the card goes.
  *   F  The tournament: finalized 7:30 to 10 PM, a one-day entry closing at 9 PM on its date: "Your tournament ends after that.", Change time
  *      opens the Time row with the hours line and Save off.
+ *   G  On Dec 1 (Winter hours running): Edit Winter hours, change Friday's close, Save: it saves (no browser date check in the way).
  * Screenshots: .data/zip81-shots (not in git).
  */
 const path = require('node:path');
@@ -254,6 +255,26 @@ async function check(name, fn) {
     assert((await a.page.locator('[data-venue-conflict]').count()) === 0, 'no card after the set');
     await openSchedule(a.page);
     assert(flat(await a.page.locator('[data-special-hint]').innerText()) === 'None', 'None after the set');
+    await a.ctx.close();
+  });
+
+  await check('G Edit a range that already started', async () => {
+    // Tue Dec 1 2026: Winter hours started Nov 23. Change Friday's close and Save (the browser's own date check must not block it).
+    await h.setClock(Date.parse('2026-12-01T17:00:00.000Z'));
+    const a = await h.newPage({ width: 390 });
+    assert((await a.ctx.request.post(h.BASE + '/api/admin/login', { data: { pin: h.PIN }, headers: { Origin: h.BASE } })).ok(), 'login');
+    assert((await a.ctx.request.post(h.BASE + '/api/admin/tournament-test', { data: { stage: 'venue_winter' }, headers: { Origin: h.BASE } })).ok(), 'stage');
+    await a.page.goto(`${h.BASE}/admin`);
+    await a.page.locator('.tab-bar, nav').first().waitFor({ timeout: 30000 });
+    await openSchedule(a.page);
+    assert(flat(await a.page.locator('[data-special-hint]').innerText()) === 'Winter hours to Jan 31 · 4 holidays', 'hint while running (Thanksgiving is over)');
+    await a.page.locator('[data-special-change]').click();
+    await a.page.locator('[data-vh-item="Winter hours"] [data-vh-toggle]').click();
+    await a.page.locator('[data-vh-edit]').click();
+    await a.page.locator('[data-vh-close="Fri"]').fill('21:00');
+    await tapSave(a.page);
+    await a.page.waitForFunction(() => document.querySelector('[data-vh-item="Winter hours"]')?.textContent?.includes('Fri 8 AM to 9 PM'), null, { timeout: 5000 });
+    assert(a.errors.length === 0, a.errors.join('; '));
     await a.ctx.close();
   });
 

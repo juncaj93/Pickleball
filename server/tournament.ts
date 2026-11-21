@@ -1759,7 +1759,7 @@ export async function moveTournamentTime(ctx: Ctx, body: Record<string, unknown>
   const next = { start: body.start as number, minutes: body.minutes as number };
   if (next.start === was.start && next.minutes === was.minutes) return { ok: true, changed: false, ...next };
   // Zip 81: a moved start or end must sit inside the venue hours of the night's date (only while Booking hours is on).
-  await enforceTournamentHours(ctx, group, t.final_date, next);
+  await enforceTournamentHours(ctx, group, t.final_date, () => next);
   const closed = changeClosed(t, tz, ctx.nowMs);
   if (closed) throw new HttpError(409, 'time_locked', closed);
   const newStart = startMsOf(t.final_date, next.start, tz);
@@ -1880,7 +1880,10 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
   const t = await openById(ctx, group);
   // Zip 81: Finalize is refused outside that date's venue hours, the same way a game is (only while Booking hours is on). Taking the date back
   // (date: null) is never refused. The preview's Tournament test page calls lockDate itself and is not checked.
-  if (typeof body.date === 'string') await enforceTournamentHours(ctx, group, body.date, readPlays(body, t));
+  // Only for a date the organizer can pick now (lockDate's own refusals stay first for anything else); the times are read only then.
+  if (typeof body.date === 'string' && statusOf(t) !== 'tickets' && storedDays(t.offered_dates).includes(body.date) && body.date >= todayKey(ctx.nowMs, group.timezone)) {
+    await enforceTournamentHours(ctx, group, body.date, () => readPlays(body, t));
+  }
   return lockDate(ctx, group, t, body);
 }
 
@@ -1889,9 +1892,10 @@ export async function setTournamentDate(ctx: Ctx, body: Record<string, unknown>)
  * or before closing (a venue open until midnight lets it end at midnight). 400 invalid_time with the games' own message. Booking hours off:
  * nothing is checked (as before).
  */
-async function enforceTournamentHours(ctx: Ctx, group: GroupRow, date: string, plays: { start: number; minutes: number }): Promise<void> {
+async function enforceTournamentHours(ctx: Ctx, group: GroupRow, date: string, timesOf: () => { start: number; minutes: number }): Promise<void> {
   if (!(await bookingHoursFlags(ctx, group.id)).on) return;
   if (!isDateKey(date)) return;
+  const plays = timesOf();
   const r = checkDay(dayRule(venueHoursOf(group.settings_json), date), plays.start, plays.start + plays.minutes);
   if (!r.ok) throw new HttpError(400, 'invalid_time', r.message);
 }

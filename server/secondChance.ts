@@ -8,6 +8,7 @@
 import type { AdminDashboard, AdminSessionView } from '../shared/api';
 import { headCount } from '../shared/guestSpot';
 import { MIN_PLAYERS } from '../shared/spots';
+import { pickTimes } from '../shared/secondChanceTimes';
 import { checkBookingTimes, dateKeyOf, dayRule, hoursLine, venueHoursOf } from '../shared/bookingHours';
 import { COURTRESERVE_BOOKING_URL } from '../shared/settings';
 import { siteAddress } from '../shared/messages';
@@ -18,7 +19,6 @@ import {
   duePing,
   isChance,
   noonOf,
-  pickTimes,
   pingInMessage,
   pingPaidMessage,
   SC,

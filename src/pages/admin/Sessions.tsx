@@ -345,7 +345,13 @@ export function HolidayControl({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView 
   const { busy, run } = useAction(ctx);
   if (!s.holiday) return null;
   // Zip 81: a one-day special hours entry on this date already says the venue's hours: no question.
-  if (ctx.d.bookingHours === true && holidayCovered(ctx.d.group.venueHours, dateKeyOf(Date.parse(s.startsAt), ctx.d.group.timezone))) return null;
+  if (ctx.d.bookingHours === true && holidayCovered(ctx.d.group.venueHours, dateKeyOf(Date.parse(s.startsAt), ctx.d.group.timezone))) {
+    return (
+      <div className="holiday-actions" data-holiday="covered">
+        <HolidayPill name={s.holiday} />
+      </div>
+    );
+  }
   const set = (ok: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/holiday-hours`, { ok }), ok ? 'Venue hours confirmed' : 'Undone');
   return (

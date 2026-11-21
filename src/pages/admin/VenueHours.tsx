@@ -202,7 +202,8 @@ function EntryForm({ ctx, config, today, entry, onDone }: { ctx: AdminCtx; confi
     }
   }
   return (
-    <form className="stack vh-form" onSubmit={save} data-vh-form={entry ? 'edit' : 'add'}>
+    // noValidate: the checks are ours (readSpecial, the server's too); the browser's own `min` check would refuse editing a range that started.
+    <form className="stack vh-form" onSubmit={save} noValidate data-vh-form={entry ? 'edit' : 'add'}>
       <label className="field">
         Name
         <input type="text" value={name} maxLength={60} disabled={busy} onChange={(e) => setName(e.target.value)} autoComplete="off" data-vh-name />
@@ -220,7 +221,7 @@ function EntryForm({ ctx, config, today, entry, onDone }: { ctx: AdminCtx; confi
           <div className="time-pair">
             <label className="field">
               From
-              <input type="date" value={from} min={today} disabled={busy} onChange={(e) => setFrom(e.target.value)} data-vh-from />
+              <input type="date" value={from} min={entry && entry.from < today ? entry.from : today} disabled={busy} onChange={(e) => setFrom(e.target.value)} data-vh-from />
             </label>
             <label className="field">
               To

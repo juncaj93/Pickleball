@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { setupGroup } from './harness';
 import { activeSpecials, checkBookingTimes, dayRule, DEFAULT_VENUE_HOURS, hoursMessage, type SpecialHours, type VenueHoursConfig, venueHoursOf } from '../shared/bookingHours';
 import { holidayCovered, readSpecial, shortClock, specialHint, specialLines, venueConflicts, weekWords } from '../shared/venueHours';
-import { pickTimes } from '../shared/secondChance';
+import { pickTimes } from '../shared/secondChanceTimes';
 import { activityText } from '../shared/activity';
 import { zonedTimeToUtc } from '../shared/time';
 import { FLYER_HOURS } from '../server/tournamentTest';

@@ -2,7 +2,8 @@
 // get its new time must leave the game exactly as it was (still canceled, nothing moved, no money touched).
 import { describe, expect, it } from 'vitest';
 import { playerPhone, sentText, setupGroup, TestApp } from './harness';
-import { pickTimes, SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
+import { SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
+import { pickTimes } from '../shared/secondChanceTimes';
 import { BOOKING_HOURS } from '../shared/bookingHours';
 
 const TZ = 'America/Detroit';
