@@ -138,8 +138,9 @@ async function main() {
       const b = p.page.locator('[data-copy-venmo]');
       await b.waitFor({ timeout: 8000 });
       const c = await b.evaluate((el) => getComputedStyle(el).color);
-      if (scheme === 'dark') assert(c === 'rgb(127, 217, 163)', `dark: light green text, got ${c}`);
-      else assert(c === 'rgb(30, 106, 72)', `light unchanged, got ${c}`);
+      // Zip 78: the site's one green for words (--ok-fg): light #17603a, dark #8fe0ad (light green, real contrast on the dark sheet).
+      if (scheme === 'dark') assert(c === 'rgb(143, 224, 173)', `dark: light green text, got ${c}`);
+      else assert(c === 'rgb(23, 96, 58)', `light: the site green, got ${c}`);
       await p.page.screenshot({ path: path.join(SHOTS, `C-pay-${scheme}.png`) });
       await p.ctx.close();
     }
