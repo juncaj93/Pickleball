@@ -1,4 +1,4 @@
-import { playerTournamentsFor } from './tournamentEnd';
+import { playerTournamentsFor, playerTournamentsRead } from './tournamentEnd';
 import type { Ctx } from './context';
 import type { D1Database } from './db';
 import { requireAdmin } from './auth';
@@ -9,7 +9,9 @@ import { MEMBERSHIP_FROM } from '../shared/moneyRework';
 import { zip13For } from './zip13';
 import { monthMoneyOf } from './money';
 import { soFarCard } from '../shared/totalsRefresh';
-import { type GroupRow, organizerIdOf } from './repo';
+import { type GroupRow, organizerIdOf, organizerIdRead, playersRead, rostersRead, sessionsRead } from './repo';
+import { ledgerRead } from './credit';
+import { fewerDb } from './speed';
 import * as v from './validate';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import type { PlayerSummary } from '../shared/api';
@@ -101,23 +103,41 @@ async function pastMonthsWithGames(ctx: Ctx, group: GroupRow): Promise<{ year: n
   return [...seen.values()];
 }
 
+const EXISTS_READ = 'SELECT id FROM players WHERE id = ? AND group_id = ?';
+
 /** GET /api/admin/players/:id/summary: the details sheet's month and All time cards. Read only. */
 export async function playerSummary(ctx: Ctx): Promise<PlayerSummary> {
   const group = await requireAdmin(ctx);
   // Only while the Players redo is on for this phone: with it off the address does not exist, as on main.
   if (!(await zip13For(ctx, group.id, 'playersRedo'))) throw new HttpError(404, 'not_found', 'Not found.');
   const id = v.id(ctx.params.id, 'player');
-  const exists = await ctx.db.prepare('SELECT id FROM players WHERE id = ? AND group_id = ?').bind(id, group.id).first();
-  if (!exists) throw new HttpError(404, 'player_not_found', 'Player not found.');
   const tz = group.timezone;
   const now = localParts(ctx.nowMs, tz);
   const range = monthRange(now.year, now.month, tz);
+  const matchTotals = (await spentTotalsFlags(ctx, group.id)).on;
+  // Zip 80 (the 🎾75 audit's speed note): every read below that does not depend on another, in ONE trip with "Fewer database trips" on
+  // (the switch questions come from the switch rows read with the sign-in). A regular player's Spent reads the games, their rosters and the
+  // ledger once for the month and once for all time: listed twice. Off: each on its own, as before.
+  const fast = fewerDb(ctx);
+  if (fast?.isFast()) {
+    const byName = !group.organizer_player_id && (group.organizer_name ?? '').trim() !== '';
+    const spentReads = [sessionsRead(group.id, '0000'), rostersRead(group.id, '0000'), ledgerRead(group.id)];
+    await fast.prefetch([
+      { kind: 'first', sql: EXISTS_READ, values: [id, group.id] },
+      ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : byName ? [{ kind: 'all' as const, ...playersRead(group.id) }] : []),
+      { kind: 'all', ...playedCountsRead(group.id, ctx.nowIso, range) },
+      { kind: 'all', ...playedCountsRead(group.id, ctx.nowIso) },
+      ...[...spentReads, ...spentReads].map((r) => ({ kind: 'all' as const, ...r })),
+      { kind: 'all', ...playerTournamentsRead(group.id, id) },
+    ]);
+  }
+  const exists = await ctx.db.prepare(EXISTS_READ).bind(id, group.id).first();
+  if (!exists) throw new HttpError(404, 'player_not_found', 'Player not found.');
   const organizerId = await organizerIdOf(ctx.db, group);
   const monthPlayed = (await playedCounts(ctx.db, group.id, ctx.nowIso, range)).get(id) ?? 0;
   const allPlayed = (await playedCounts(ctx.db, group.id, ctx.nowIso)).get(id) ?? 0;
   let monthSpent: number;
   let allSpent: number;
-  const matchTotals = (await spentTotalsFlags(ctx, group.id)).on;
   if (id === organizerId) {
     monthSpent = await organizerSpent(ctx, group, now.year, now.month, matchTotals);
     allSpent = monthSpent;

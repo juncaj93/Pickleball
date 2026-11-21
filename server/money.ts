@@ -16,12 +16,12 @@ import type { Ctx } from './context';
 import { HttpError } from './http';
 import { keptRemaining, seatCredit } from '../shared/credit';
 import { seatIsClaim, seatKeptCents } from './seatMoney';
-import { type LedgerRow, loadLedger } from './credit';
-import { courtCostOf, flatOf, type GroupRow, loadCancelCharges, loadRoster, organizerIdOf, priceLockCol, rosterRead, type SessionRow, settingsOf } from './repo';
+import { type LedgerRow, ledgerRead, loadLedger } from './credit';
+import { cancelChargesRead, courtCostOf, flatOf, type GroupRow, loadCancelCharges, loadRoster, organizerIdOf, organizerIdRead, priceLockCol, rosterRead, type SessionRow, settingsOf } from './repo';
 import { fewerDb } from './speed';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 import { membershipMonth, PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
-import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
+import { adminHiddenGameIds, adminHiddenGamesRead, moneyReworkFor, sessionHasMoney } from './moneyRework';
 import { realTimes, tournamentsFlags } from './tournament';
 import { courtCentsOf } from '../shared/tournament';
 
@@ -32,20 +32,32 @@ import { courtCentsOf } from '../shared/tournament';
  * the tournament card) minus the prize credit really given out (the award rows; an organizer who wins gets no credit). Only while Tournaments
  * is on for this phone. One read (the one Zip 56's "Tournament tickets" line made). Replaces that line.
  */
-async function tournamentsOf(ctx: Ctx, groupId: string, year: number, month: number, ledger: LedgerRow[]): Promise<MonthTournament[]> {
-  if (!(await tournamentsFlags(ctx, groupId)).on) return [];
+/** Zip 80: the month's ended tournaments, one read, word for word (monthMoneyOf sends it in its prefetch). */
+export const monthTournamentsRead = (groupId: string, year: number, month: number) => {
   const first = `${year}-${String(month).padStart(2, '0')}-01`;
   const next = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
-  const { results } = await ctx.db
-    .prepare(
-      `SELECT t.id, t.name, t.final_date, t.courts, t.minutes, t.start_minutes,
+  return {
+    sql: `SELECT t.id, t.name, t.final_date, t.courts, t.minutes, t.start_minutes,
          (SELECT COALESCE(SUM(k.credit_cents + k.paid_cents), 0) FROM tournament_tickets k WHERE k.tournament_id = t.id AND k.price_cents > 0) AS tickets,
          (SELECT COUNT(*) FROM tournament_tickets k WHERE k.tournament_id = t.id AND k.price_cents > 0 AND k.credit_cents + k.paid_cents > 0) AS paid
        FROM tournaments t
        WHERE t.group_id = ? AND t.ended_at IS NOT NULL AND t.canceled_at IS NULL AND t.final_date >= ? AND t.final_date < ?
        ORDER BY t.final_date, t.created_at`,
-    )
-    .bind(groupId, first, next)
+    values: [groupId, first, next] as unknown[],
+  };
+};
+/** Zip 80: the month's games, one read, word for word (monthMoneyOf sends it in its prefetch). */
+export const monthSessionsRead = (groupId: string, from: string, to: string) => ({
+  sql: `SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`,
+  values: [groupId, from, to] as unknown[],
+});
+
+async function tournamentsOf(ctx: Ctx, groupId: string, year: number, month: number, ledger: LedgerRow[]): Promise<MonthTournament[]> {
+  if (!(await tournamentsFlags(ctx, groupId)).on) return [];
+  const q = monthTournamentsRead(groupId, year, month);
+  const { results } = await ctx.db
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<{ id: string; name: string; final_date: string; courts: number; minutes: number; start_minutes: number; tickets: number; paid: number }>()
     .catch(() => ({ results: [] as never[] }));
   return results.map((t) => {
@@ -115,9 +127,22 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
   const from = new Date(zonedTimeToUtc(year, month, 1, 0, 0, tz)).toISOString();
   const to = new Date(zonedTimeToUtc(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1, 0, 0, tz)).toISOString();
 
+  // Zip 80 (the 🎾75 audit's speed note): the reads below do not depend on each other, so with "Fewer database trips" on they go in ONE trip
+  // (each then answered from it; the switch questions come from the switch rows read with the sign-in). Off: each on its own, as before.
+  const fast = fewerDb(ctx);
+  if (fast?.isFast())
+    await fast.prefetch([
+      { kind: 'all', ...monthSessionsRead(group.id, from, to) },
+      { kind: 'all', ...adminHiddenGamesRead(group.id) },
+      ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : []),
+      { kind: 'all', ...ledgerRead(group.id) },
+      { kind: 'all', ...cancelChargesRead(group.id) },
+      { kind: 'all', ...monthTournamentsRead(group.id, year, month) },
+    ]);
+  const ms = monthSessionsRead(group.id, from, to);
   const { results: allResults } = await ctx.db
-    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`)
-    .bind(group.id, from, to)
+    .prepare(ms.sql)
+    .bind(...ms.values)
     .all<SessionRow>();
   // "Money page rework": a game the organizer hid from their lists is out of Totals too (nothing about it is deleted).
   const rework = forceRework || (await moneyReworkFor(ctx, group.id));

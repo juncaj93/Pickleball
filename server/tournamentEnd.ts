@@ -546,15 +546,20 @@ export async function tournamentHistory(ctx: Ctx): Promise<TournamentHistoryView
 }
 
 /** The admin Players sheet's TOURNAMENTS card for one player (null when they have played none, or the switch is off). */
-export async function playerTournamentsFor(ctx: Ctx, groupId: string, playerId: string): Promise<PlayerTournamentsView | null> {
-  if (!(await tournamentsFlags(ctx, groupId)).on) return null;
-  const rows = await ctx.db
-    .prepare(
-      `SELECT t.name, t.final_date, t.format, r.finish, p2.display_name AS partner FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
+/** Zip 80: a player's finished tournaments, one read, word for word (the player summary sends it in its prefetch). */
+export const playerTournamentsRead = (groupId: string, playerId: string) => ({
+  sql: `SELECT t.name, t.final_date, t.format, r.finish, p2.display_name AS partner FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
        LEFT JOIN players p2 ON p2.id = r.partner_id
        WHERE r.player_id = ? AND t.group_id = ? AND t.status = 'ended' AND ${NOT_HIDDEN} ORDER BY t.final_date DESC, t.ended_at DESC`,
-    )
-    .bind(playerId, groupId)
+  values: [playerId, groupId] as unknown[],
+});
+
+export async function playerTournamentsFor(ctx: Ctx, groupId: string, playerId: string): Promise<PlayerTournamentsView | null> {
+  if (!(await tournamentsFlags(ctx, groupId)).on) return null;
+  const q = playerTournamentsRead(groupId, playerId);
+  const rows = await ctx.db
+    .prepare(q.sql)
+    .bind(...q.values)
     .all<{ name: string; final_date: string | null; format: string; finish: number | null; partner: string | null }>()
     .then((r) => r.results)
     .catch(() => []);

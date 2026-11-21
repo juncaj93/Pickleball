@@ -74,6 +74,7 @@ import { adminChangeStamp, adminChangeStampAndTour, adminStampTripReads } from '
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 import { everyoneSettingsOf, flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
 import { cancelChargesRead, hiddenSessionsRead, plannedStartsRead, rostersRead, sessionsRead } from './repo';
+import { monthSessionsRead } from './money';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
@@ -2627,9 +2628,24 @@ export async function monthGames(ctx: Ctx): Promise<{ month: string; sessions: A
   const to = new Date(zonedTimeToUtc(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1, 0, 0, tz)).toISOString();
   const settings = settingsOf(group);
   const shownFrom = visibleFrom(group);
+  // Zip 80 (the 🎾75 audit's speed note): the reads below do not depend on each other: with "Fewer database trips" on they go in ONE trip
+  // (then each game's roster in one more, below). Off: each on its own, as before.
+  const fast = fewerDb(ctx);
+  const byName = !group.organizer_player_id && (group.organizer_name ?? '').trim() !== '';
+  if (fast?.isFast())
+    await fast.prefetch([
+      { kind: 'all', ...monthSessionsRead(group.id, from, to) },
+      { kind: 'all', ...playersRead(group.id) },
+      ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : byName ? [{ kind: 'all' as const, ...playersRead(group.id) }] : []),
+      { kind: 'all', ...ledgerRead(group.id) },
+      { kind: 'all', ...cancelChargesRead(group.id) },
+      { kind: 'all', ...adminHiddenGamesRead(group.id) },
+      { kind: 'all', ...hiddenGameIdsRead(group.id) },
+    ]);
+  const ms = monthSessionsRead(group.id, from, to);
   const { results } = await ctx.db
-    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`)
-    .bind(group.id, from, to)
+    .prepare(ms.sql)
+    .bind(...ms.values)
     .all<SessionRow>();
   const rows = results.filter((s) => s.starts_at >= shownFrom || Number(s.shown_early) === 1);
   const players = await getPlayers(ctx.db, group.id);
