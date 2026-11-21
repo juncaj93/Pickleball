@@ -7665,3 +7665,80 @@ Vic and Parker (clock 25 s off) waiting, Alex's real tap, Zoe opened 12 s later:
 - Read-only live look (pages.dev): Home 200 at 390 light and dark, no page errors, only GET requests, nothing wider than the screen, the new
   bundle; /admin and /api/status 200; the organizer dashboard 401 without a PIN. The organizer screens were not opened on live (no read-only
   PIN in this session).
+
+## Zip 78: one look, the audit's look and words cleanup, site wide (🎾78.one look), Fri Nov 20, 2026
+
+Built on main `830d811` (Zip 77 live). Branch `claude/new-session-ixt5hp`. No migration, no Worker deploy, no money logic touched.
+
+### 1. Fonts and cut names
+- The rounded display font is gone from the site: no `--display`, no import, no preload, the package removed (the phone downloads about 75 KB
+  less on a first visit). Titles, names, levels, numbers, money and sheet titles are the body font. Buttons and fields take the page font.
+- Every "…" on a name (about 45 rules) now wraps between words; the header name may take two lines and never breaks inside a word. The only
+  "…" left: a Settings link, a text preview, the label over the name, the Players tab's gray "2 played" line. The Zelle number stays on one line.
+- No text under 11 px (`font-size: max(11px, ...)` wherever a size can shrink); the organizer's small date tile is 58 px so TONIGHT fits.
+
+### 2. Carets and taps
+- Every chevron, caret and › removed (Home folded rows, Money folds, Settings sections and Advanced, Tournament test row, tournament card,
+  Totals folds, court row, Adjust credit, time picker). Rows and folded cards still open on a tap and close on a second tap.
+- Organizer taps at least 44 x 44: Directions half, In, gear, light/dark at 320, tournament card rows, All games / Teams, Totals folds.
+
+### 3. Colors and buttons
+- Every color value lives in the token list at the top of `src/styles.css`; every other file names tokens (shadows may use see-through black
+  or white). Private palettes only point at tokens. One green, red, blue, amber, purple, ink and line (merged: `--cal-red` = `--danger-fg`,
+  `--accent-text` = `--ok-fg`, `--muted-*`, `--court`). Named art: the tournament ticket `--tour-*`, gold, ball light and shade, medal, tie
+  wheel, ornaments, silver (Zip 77's reveal board too). Court switch colors defined once. The court map uses the site tokens light and dark.
+- Filled buttons are green primary or the neutral secondary. Mark paid, Request and Text are one small secondary button (44 px, gray, ink).
+  The ticket's Lock in is green; Enter score on the green Up next card is white with green words. The Pay sheet's I paid is the same from the
+  You owe banner, a ticket and a game card.
+- Size tokens: buttons 46 / 44 / 54 with one corner, one chip size, one card corner (20 px), one segmented control (the History tabs too).
+- `tests/zip78-look.test.ts` locks all of this; `tests/cssTokens.ts` turns tokens into colors for the contrast tests.
+
+### 4. Words (a helper's branch, merged)
+- Tournament "Drop out" everywhere; "cash out" on both sides (Home "Cash out requests", "Vic asked to cash out $14", Players "Cash out $14",
+  Telegram "Cash out: Vic wants $14 back."; "Mark refunded" stays). Chirpy lines gone; "today" before 5 PM; "@ 11am" in Second Chance texts;
+  "tapped Lock in"; "$14" not "14 dollars"; every audit action has a plain Activity line; short Hide player note; curly ’ in 323 strings;
+  the venue name from Settings (the Directions link keeps the club's fixed name); the organizer's first name; Alerts switches toast; "game"
+  not "session" on organizer labels; "extra time" not "extension". The reveal and play-to-9 words are unchanged. The one Error box Worker
+  message was left as it is live, so no Worker deploy was needed.
+
+### 5. Small
+- The tournament card's loading shimmer moves (motion.css no longer stops a `.skel` under main; `:where()` keeps the rule's weight so the
+  skeleton's 250 ms reveal still works) and runs between the card's green and its line green. History > Tournaments' place-holder had no
+  colors at all; the sweep's colors now live on the page.
+- 12 players and up: "Dink group" (Court 1) and "Drive group" (Court 2) everywhere (short "Dink" / "Drive"); each group's rows show points
+  like normal standings once a score is in, no "Court 9" / "Sits".
+- Docs: DESIGN.md has the rules; RESTORE_TEST (21 tables), SMART_ALERTS and FEATURE_SWITCHES backup words; the MONEY_NOTE row.
+
+### Review
+A fresh reviewer read the whole diff (no part in the build). Nothing on money, data or privacy. Fixed: the skeleton's reveal delay (rule
+weight), the dark plain TONIGHT tag (white on light blue), the court map backdrop in dark (now the scrim). Kept as notes: the Directions
+link uses the club's fixed name while the text names the Settings venue; before a group game has a score the group rows show no chip.
+
+### Speed and size
+Organizer Home (scripts/zip68-admin-speed.ts, calm world, Zip 77 main vs this): dashboard 4 trips / 61 statements, same bytes, 8.1 to 9.2
+ms before, 8.2 to 8.9 ms after (none, all_locked, day_ready, mid); the 5 second check 2 trips / 16 statements both. Player first visit
+178.3 KB to 176.5 KB gzipped (script 143.1, style 34.4 to 32.7), plus no 75 KB font file.
+
+### Tests at ship
+Unit: 219 files, 4,218 passed, 2 skipped, 0 failed; `npx tsc -b` clean. Browser: e2e/zip78.cjs 36/36; zip77 7, zip76 12, zip74 7, pay-sheet
+23, zip11 26, credit 153, zip53 10, motion 22, zip70 74 (A updated: rows are 44 px), zip56 57 (a long name may wrap), admin-r2 28 (old
+Money arrows and size fixed), zip15 updated (44 px buttons). zip38 "S Settings" fails the same way on main before this zip (Tournaments,
+a newer row, sits on top of Christmas skin): not touched. Pictures: docs/audits/78-shots (10 before/after, fake names);
+e2e/zip78-shots.cjs takes the whole set (320 and 390, light and dark, Christmas on and off).
+
+### Preview
+`pickleball-preview` (fake): Time Travel bookmark first `000001be-00000000-0000512a-77364d5928815147a8c7fa7789bf6e60`; final deployment
+`f07821f6`, https://claude-new-session-ixt5hp.pickleball-club-9h0.pages.dev; re-seeded, calm start zip70_start (The Cold Open, tickets open,
+6 of 8 locked in). First screen at 390, light and dark: Vic sees the date note, the ticket with a green Lock in and two game cards;
+organizer Home is the Tournament test row, the folded tournament card and the game card.
+
+### Live (Fri Nov 20, 2026, about 8:20 PM Eastern, a quiet window; the brief: ship when green, after 🎾77)
+- Restore points first: Time Travel bookmark `00001a79-00000000-0000512a-a2e4949ef81e62f4391744a85aa10d26`; SQL export of `pickleball`
+  (316 KB) saved to `pickleball-backups` as `export-20261121011819` (checked against the file).
+- Integrity checks before and after: 21, 8 and 13 columns, every problem column 0.
+- Main fast-forwarded `830d811` to `769d5a5` and pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **090d954a-53e7-40f1-adc7-e6c57995f367**. No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **ca5c91b0-8542-4050-9d3d-12a461ff0309** (Zip 77, `41e34be`), Cloudflare Deployments > Rollback. No database undo.
+- Read-only live look (pages.dev, only GET requests): Home 200 at 390 light and dark, body font only, no Bricolage rule, nothing wider than
+  the screen, no page errors; /admin and /api/status 200; the organizer dashboard 401 without a PIN. Organizer screens not opened on live
+  (no read-only PIN in this session).
