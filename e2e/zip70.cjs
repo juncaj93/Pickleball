@@ -243,7 +243,7 @@ async function main() {
         const money = a.page.locator('[data-tm-row-money]');
         assert((await colorOf(money)) === (await varColor(a.page, '--ok-fg')), 'the +$6 is green (--ok-fg)');
         for (const h of await a.page.locator('[data-tm-home-body] .tm-rows > .tm-row').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height)))
-          assert(h <= 40, `a row wraps (${h} px)`);
+          assert(h <= 44, `a row wraps (${h} px)`); // Zip 78: every row is a 44 px tap now; a wrapped row would be taller
         await oneLine(a.page, '[data-tm-home-body] .tm-rows > .tm-row');
         await fits(a.page, '[data-tm-home]');
         await noDash(a.page, 'the card');
