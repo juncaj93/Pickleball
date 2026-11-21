@@ -811,16 +811,20 @@ const shownDate = (t: TournamentRow): string | null => (statusOf(t) === 'date_pi
  * creating it: just "Format: Locked doubles", no vote claim). `key` is new for every date pick (a re-pick or a reschedule shows a fresh
  * alert) and carries the player, so a dismissed alert stays dismissed for that player only. No vote counts, ever.
  */
-function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, nowMs: number, styleTbd = false): { key: string; title: string; sub: string } | null {
+function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, nowMs: number, styleTbd = false, signups: readonly SignupRow[] = []): { key: string; title: string; sub: string } | null {
   // Every tournament gets it when its date is locked (Alex, pass 2); only a real vote majority says "Most players voted". A format chosen when
   // creating it (no source), changed by hand, or decided by the tie rule shows the date and the format only.
   const source: FormatSource = sourceOf(t.format_source) ?? 'admin';
   if (!t.final_date || (statusOf(t) !== 'tickets' && statusOf(t) !== 'date_picked')) return null;
   if (t.final_date < todayKey(nowMs, group.timezone)) return null;
-  const words = formatAlertWords(t.name, t.final_date, formatOf(t), source);
+  // Zip 80: the votes of those who can make the date (the same count Finalize used; from the sign-ups the card already read, no new trip):
+  // "Most players voted" only for a real majority of them.
+  const date = t.final_date;
+  const counts = tallyVotes(signups.filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date)).map((r) => r.format_vote));
+  const words = formatAlertWords(t.name, t.final_date, formatOf(t), source, counts);
   // Zip 64: the style is not final until tickets close: the alert says the vote's result only when it was a real majority, else "TBD".
   // (A real majority's "Most players voted Americano." stays: it is a fact about the vote, not the final style.)
-  if (styleTbd && source !== 'vote') words.sub = 'Tournament style TBD';
+  if (styleTbd && !words.sub.startsWith('Most players')) words.sub = 'Tournament style TBD';
   return { key: `fmt:${t.id}:${t.date_picked_at ?? t.final_date}:${playerId}`, ...words };
 }
 
@@ -938,7 +942,7 @@ export async function playerTournamentFor(
   const styleTbd = !tbd && !decided && (statusOf(t) === 'tickets' || statusOf(t) === 'date_picked') && !!t.final_date;
   const banner = decided ? styleBannerWords(t2.format_source) : null;
   const real = startSetOf(t) ? realTimes(t) : null;
-  const alert = formatAlertFor(t2, group, playerId, ctx.nowMs, styleTbd);
+  const alert = formatAlertFor(t2, group, playerId, ctx.nowMs, styleTbd, all);
   // Zip 70 (picture 6): the organizer moved the time after Finalize: everyone on the list gets one card per change until they dismiss it.
   const moved = mine && real && statusOf(t) === 'tickets' && !nightOver(t, group.timezone, ctx.nowMs) ? readTimeMove(t.time_moved) : null;
   const movedWords = moved && moved.to.start === real!.start && moved.to.minutes === real!.minutes ? timeMoveWords(t.name, moved.from, moved.to) : null;
@@ -2055,6 +2059,11 @@ export async function cancelTournament(ctx: Ctx) {
   const [res] = await ctx.db.batch([
     ctx.db.prepare(`UPDATE tournaments SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, ctx.nowIso, t.id),
     ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId: null, why: 'cancel', endedReason: 'canceled', nowIso: ctx.nowIso, when: tournamentCanceled }),
+    // Zip 80: a kept late drop is off the list like any drop; its money came back just above, so it is no longer 'kept' (it was left 'kept'
+    // forever, though nothing was held any more). Only once the tournament really is canceled (this batch).
+    ctx.db
+      .prepare(`UPDATE tournament_signups SET status = 'out', updated_at = ?1 WHERE tournament_id = ?2 AND status = '${KEPT}' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?2 AND status = 'canceled')`)
+      .bind(ctx.nowIso, t.id),
   ]);
   changedOrLookAgain(res);
   const back = before.filter((k) => k.claim_cents === 0 && k.credit_cents + k.paid_cents > 0);

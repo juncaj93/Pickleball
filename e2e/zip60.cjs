@@ -336,7 +336,7 @@ async function main() {
       await check(`D majority: the alert at the top, the format line back, the counts on Alex's card (${width} ${scheme})`, async () => {
         await stage('vote_majority');
         const t = (await dash()).tournament;
-        assert(t.format === 'americano' && t.formatSource === 'vote' && JSON.stringify(t.votes) === JSON.stringify({ locked: 1, americano: 2, either: 2 }), JSON.stringify(t));
+        assert(t.format === 'americano' && t.formatSource === 'vote' && JSON.stringify(t.votes) === JSON.stringify({ locked: 1, americano: 3, either: 1 }), JSON.stringify(t));
         const v = await playerPage('Vic', { width, scheme });
         const alert = v.page.locator('[data-format-alert]');
         await alert.waitFor({ timeout: 15000 });
@@ -350,7 +350,7 @@ async function main() {
         // Zip 64: the style stays "TBD" on the card until tickets close (Pay by); the stub has the date and the real start (no "~").
         assert(card.includes('Tournament style TBD'), card);
         assert(card.includes('THU 17 DEC 7:30 PM'), `the stub: ${card}`);
-        assert(!/Locked doubles 1|Americano 2|votes/i.test(await v.page.evaluate(() => document.body.innerText)), 'no vote counts on a player screen');
+        assert(!/Locked doubles 1|Americano 3|votes/i.test(await v.page.evaluate(() => document.body.innerText)), 'no vote counts on a player screen');
         await fits(v.page, '[data-format-alert], .tc');
         await shot(v.page, `D-alert-${width}-${scheme}`);
         await noDash(v.page, 'Home');
@@ -358,7 +358,7 @@ async function main() {
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
         // Zip 66 (mock 02): the Votes row (Doubles, not Locked) and the Style row; the "Decided by" line is gone from the card.
-        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 1 · Americano 2 · Either 2', 'counts');
+        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 1 · Americano 3 · Either 1', 'counts');
         assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Americano', 'style');
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `D-admin-${width}-${scheme}`);

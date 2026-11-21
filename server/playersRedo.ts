@@ -8,6 +8,7 @@ import { spentTotalsFlags } from './spentTotals';
 import { MEMBERSHIP_FROM } from '../shared/moneyRework';
 import { zip13For } from './zip13';
 import { monthMoneyOf } from './money';
+import { soFarCard } from '../shared/totalsRefresh';
 import { type GroupRow, organizerIdOf } from './repo';
 import * as v from './validate';
 import { localParts, zonedTimeToUtc } from '../shared/time';
@@ -64,13 +65,18 @@ export async function monthPlayedCounts(ctx: Ctx, group: GroupRow): Promise<{ co
   return { counts: await playedCounts(ctx.db, group.id, ctx.nowIso, monthRange(p.year, p.month, group.timezone)), label: `${MONTHS[p.month - 1]} ${p.year}` };
 }
 
-/** The organizer's "Spent" = Money Totals "Your cost so far", month by month. */
+/**
+ * The organizer's "Spent" = Money Totals' "So far" card, month by month. Zip 80: ONE source with Totals (shared/totalsRefresh.ts soFarCard):
+ * owed to the venue minus what the players paid, plus credit added by hand, minus the month's ended tournaments' results, so a month with a
+ * tournament or hand-added credit reads the same on both screens (before, both were left out here).
+ */
 async function organizerSpent(ctx: Ctx, group: GroupRow, year: number, month: number, matchTotals = false): Promise<number> {
   const m = await monthMoneyOf(ctx, group, year, month, true);
-  // "Spent matches Totals" (Zip 27, A-05): the "So far" total itself, owed to the venue minus what the players paid. Below $0 is a credit
-  // month (the players paid more than the venue was owed), the way Totals shows it; before, it stopped at $0.
-  if (matchTotals) return m.rework ? m.rework.owedToVenueCents - m.rework.collectedCents : 0;
-  return m.rework?.yourCostCents ?? 0;
+  if (!m.rework) return 0;
+  const net = soFarCard(m.rework).netCents;
+  // "Spent matches Totals" (Zip 27, A-05): the "So far" total itself; below $0 is a credit month (the players paid more than the venue was
+  // owed), the way Totals shows it. Without that switch it stops at $0, as before.
+  return matchTotals ? net : Math.max(0, net);
 }
 
 /**

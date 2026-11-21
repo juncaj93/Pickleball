@@ -356,7 +356,7 @@ describe('Edit rules and the preview test stages', () => {
     const vic = (await card(ctx, 'Vic')) as { formatTbd?: boolean; me: unknown };
     expect(vic).toMatchObject({ formatTbd: true, me: null });
     t = await run('vote_majority');
-    expect(t).toMatchObject({ status: 'tickets', format: 'americano', formatSource: 'vote', votes: { locked: 1, americano: 2, either: 2 } });
+    expect(t).toMatchObject({ status: 'tickets', format: 'americano', formatSource: 'vote', votes: { locked: 1, americano: 3, either: 1 } });
     expect((await card(ctx, 'Vic')).formatAlert.sub).toBe('Most players voted Americano.');
     t = await run('vote_tie');
     expect(t).toMatchObject({ status: 'tickets', format: 'doubles', formatSource: 'tie', votes: { locked: 1, americano: 1, either: 2 } });

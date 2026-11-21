@@ -236,8 +236,9 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
   }
   const net = collected - courts;
   // Zip 76: the month's ended tournaments and the credit added by hand (only on the reworked Totals; the tournaments only while Tournaments is on).
-  const tours = rework && !forceRework ? await tournamentsOf(ctx, group.id, year, month, ledger) : [];
-  const handCredit = rework && !forceRework ? handCreditOf(ledger, from, to) : 0;
+  // Zip 80: for the Players "Spent" too (forceRework), so it reads the same So far card as Totals in a month that has them.
+  const tours = rework ? await tournamentsOf(ctx, group.id, year, month, ledger) : [];
+  const handCredit = rework ? handCreditOf(ledger, from, to) : 0;
   const reworkTotals = rework
     ? (() => {
         const p = localParts(ctx.nowMs, tz);
