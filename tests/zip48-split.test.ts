@@ -23,7 +23,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // Zip 77: 142.3 to 143.3 on purpose. Back closes the open sheet (the 🎾75 audit): every sheet of the site is in the player script, so its
 // history steps are too (src/backStack.ts, about 650 bytes gzipped); plus the 2 second check and the server clock readings (src/livecore.ts).
 // The reveal itself and its clock math are in the tournament chunk. Main (Zip 76) 142.08 KB, this zip 143.10 KB; the first visit total 177.8 -> 179.
-export const BUDGET = { scriptKB: 143.3, styleKB: 36.5, pageKB: 1.5, totalKB: 179 };
+// Zip 80: 143.3 to 143.6 on purpose. /setup on a site that is set up asks /api/status first and says "Already set up" (the 🎾75 audit), and the
+// Venmo note names each date once ("4 games on Thu Nov 19"): main (Zip 79) 143.11 KB, this zip 143.44 KB; the first visit 176.7 -> 177.0.
+export const BUDGET = { scriptKB: 143.6, styleKB: 36.5, pageKB: 1.5, totalKB: 179 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

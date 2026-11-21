@@ -730,6 +730,12 @@ describe('the books', () => {
       ['tour_place_left', `UPDATE tournament_signups SET status = 'out' WHERE player_id = '${ctx.byName.Blair}'`],
       ['tour_organizer_paid', `UPDATE tournament_tickets SET price_cents = 1600, paid_cents = 1600 WHERE id = ${tk('Alex')}`],
       ['tour_paid_line_with_open_spot', `UPDATE tournament_tickets SET place = 'line' WHERE id = ${tk('Devon')}`],
+      // Zip 80: credit given back for Blair's cash while the ticket still holds it (a second money-back on the same ticket).
+      [
+        'tour_credit_back_twice',
+        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, five_cents, session_id, created_at, reason)
+         SELECT 'twice', k.group_id, k.id, 'kept', 1600, 0, NULL, '2099-01-01T00:00:00.000Z', 'tour:${ctx.tid}:back' FROM players k WHERE k.id = '${ctx.byName.Blair}'`,
+      ],
     ];
     const names = Object.keys(db.prepare(TOUR_SQL).get() as Record<string, number>).filter((k) => !k.startsWith('info_'));
     expect(names.sort()).toEqual(cases.map(([n]) => n).sort());
