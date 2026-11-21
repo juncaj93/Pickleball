@@ -7742,3 +7742,54 @@ organizer Home is the Tournament test row, the folded tournament card and the ga
 - Read-only live look (pages.dev, only GET requests): Home 200 at 390 light and dark, body font only, no Bricolage rule, nothing wider than
   the screen, no page errors; /admin and /api/status 200; the organizer dashboard 401 without a PIN. Organizer screens not opened on live
   (no read-only PIN in this session).
+
+## Zip 79: the results card, previous level, the level up, History > Skills (🎾79.results skills), Fri Nov 20, 2026
+
+Built on main `ab84771` (Zip 78 live). Branch `claude/new-session-hblsb0`. No migration (levels and results are tournament_results' saved
+rows), no Worker deploy, no money logic touched. Rides the Tournaments switch (no new switch, as Zip 77).
+
+### 1. The results card (pictures results/1 to 4)
+- An ended tournament (both styles) is picked for a player's card from the end until midnight Eastern of the day after its date
+  (`shownEnded` in server/tournament.ts, exact day in shared/results.ts `resultsShowing`). The card is one row: the name, the lime
+  Standings button (44 px), no kicker, no divider; Standings opens the final board in its final state (Zip 77's look, static), X closes it.
+- Americano: the reveal still plays first on a phone that was in the night (6 hours from the tap, or the night window); once closed, the row
+  takes the card's top and the plain Standings card is gone. Someone who was not in it gets nothing until the reveal's hold is over.
+- Locked doubles: the teams in End's order with their players, the Final's winners first with the only gold medal, records only.
+- On the night a player who was in it keeps Your rounds / Your games under the row; after the night window (6 hours after the scheduled end)
+  the row alone sits at the top of Home above THIS WEEK. Everyone who can see the tournament gets it; Only me unchanged.
+- The ticker keeps its own length (DEFAULT_BANNER_WEEKS = 1, checked).
+
+### 2. Skills (pictures skills/01 to 05)
+- `previousLevel` on a player's card (one read in the player's existing batch): COALESCE(approved, picked) at their last ended tournament.
+  Sign up starts on it with "PREVIOUS RATING"; another pick grays it (the label stays).
+- The level up (src/tournament/LevelUp.tsx, its own modal dialog over the sheet; numbers in shared/levelUp.ts): only when the pick is higher;
+  the count in 0.1 steps (at most 6 ticks, speeding up), the landing at 1.8 s (flash, two rings, streaks, shake, gold), the gold LEVEL UP
+  banner, about 3 s; a tap or Escape skips; reduced motion: the final card 1 s. Colors are named art tokens `--art-lu-*` (light and dark).
+- History > Skills (GET /api/admin/skills, its own request when the tab opens; math in shared/skills.ts): Most improved, the Levels table
+  (fits 390 exactly; 320 slides sideways inside its card with the names pinned), the trend sheet. The History tabs slide sideways at 320.
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: an ended tournament dated two days back could be picked over a canceled card for part of a day (the read now uses Eastern yesterday);
+a reveal tapped the next morning would not play its board (the reveal keeps its 6 hours from the tap); focus after the level up. Kept as notes:
+View as reads `previousLevel` with one extra small read (players' own phones use the batch); Android Back during the level up closes the sheet.
+
+### Speed (ADMIN SPEED RULE; scripts/zip68-admin-speed.ts, the calm world)
+Dashboard 4 trips / 61 statements before and after (none, all_locked, day_ready, mid, zip77_last; zip79_night after): 9.0 to 10.8 ms before,
+7.6 to 9.0 ms after. The 5 second check 2 trips / 16 statements both.
+
+### Tests
+Unit: 221 files, 4,230 passed (2 skipped), 0 failed after the updates; tests/zip79-results-skills.test.ts 12. Updated on purpose: zip58-end,
+zip58-stages, zip77-reveal (an ended tournament is now the results row, not nothing), readonly-pin (the Skills route is a Tournaments route).
+Browser: e2e/zip79.cjs 6 of 6 (A row and board 320/390/420 light and dark; B long name at 320; C Locked doubles night, next day, gone;
+D previous level and the level up, skip, same level, reduced motion; E Skills 320/390/420 light and dark, the table fits 390; F Christmas
+skin); zip77 7 of 7 (updated: the row after the X), zip78 36 of 36.
+
+### Preview
+`pickleball-preview` (fake): Time Travel bookmark first `000001c1-00000000-0000512a-e61861637dade72b0f69d0ab7c013464`; deployment `200b0d80`,
+https://claude-new-session-hblsb0.pickleball-club-9h0.pages.dev; re-seeded, calm start zip79_night. First screen at 390, light and dark:
+organizer Home is the Tournament test row and next week's two games; Vic's Home is the congratulations card, the final board once (X), then
+the row and Your rounds.
+
+### Live
+Not shipped yet: this session's permission settings refused reading the live database (the SQL export and the Time Travel bookmark), so no
+live step was taken. Live is still Zip 78 (090d954a).
