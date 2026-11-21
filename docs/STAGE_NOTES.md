@@ -7782,7 +7782,8 @@ Unit: 221 files, 4,230 passed (2 skipped), 0 failed after the updates; tests/zip
 zip58-stages, zip77-reveal (an ended tournament is now the results row, not nothing), readonly-pin (the Skills route is a Tournaments route).
 Browser: e2e/zip79.cjs 6 of 6 (A row and board 320/390/420 light and dark; B long name at 320; C Locked doubles night, next day, gone;
 D previous level and the level up, skip, same level, reduced motion; E Skills 320/390/420 light and dark, the table fits 390; F Christmas
-skin); zip77 7 of 7 (updated: the row after the X), zip78 36 of 36.
+skin); zip77 7 of 7 (updated: the row after the X), zip78 36 of 36, zip74 7 of 7, zip72 7 of 8 (A expects a lime Enter score button; Zip 78
+made it white with green words on purpose: the check is older than Zip 78, this zip does not touch that card).
 
 ### Preview
 `pickleball-preview` (fake): Time Travel bookmark first `000001c1-00000000-0000512a-e61861637dade72b0f69d0ab7c013464`; deployment `200b0d80`,
