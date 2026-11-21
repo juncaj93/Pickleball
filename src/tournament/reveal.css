@@ -40,10 +40,10 @@
   min-width: 0;
   font-family: var(--body);
   /* One line on a phone (390 px and up); a narrower one wraps between words, never cut. */
-  font-size: clamp(1rem, 4.35vw, 1.15rem);
+  font-size: max(11px, clamp(1rem, 4.35vw, 1.15rem));
   font-weight: 800;
   line-height: 1.2;
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-rv-balls {
   flex: none;
@@ -103,7 +103,7 @@
   display: grid;
   place-items: center;
   background: rgb(255 255 255 / 12%);
-  color: #ffffff;
+  color: var(--tour-ink);
   cursor: pointer;
 }
 .tc-rv-x::before {
@@ -127,7 +127,7 @@
   padding: 0 14px 14px;
   overflow: hidden;
   border-radius: 0 0 22px 22px;
-  color: #ffffff;
+  color: var(--tour-ink);
   font-family: var(--body);
 }
 .tc-rv-title {
@@ -135,7 +135,7 @@
   font-size: 1.35rem;
   font-weight: 800;
   line-height: 1.15;
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-rv-stage {
   position: relative;
@@ -178,7 +178,7 @@
   font-size: 88px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-rv-list {
   position: relative;
@@ -201,7 +201,7 @@
   background: rgb(255 255 255 / 6%);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 8%);
   box-sizing: border-box;
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-rv-rk {
   position: relative;
@@ -276,13 +276,13 @@
 }
 .tc-rv-you {
   display: inline-block;
-  font-size: 0.64rem;
+  font-size: max(11px, 0.64rem);
   font-weight: 800;
   letter-spacing: 0.08em;
   padding: 2px 7px;
   border-radius: 99px;
-  background: #d8f03b;
-  color: #14230a;
+  background: var(--ball);
+  color: var(--ball-ink);
   margin-left: 7px;
   vertical-align: 2px;
   white-space: nowrap;
@@ -292,24 +292,24 @@
 }
 .tc-rv-row.tc-rv-third .tc-rv-rk,
 .tc-rv-row.tc-rv-silver .tc-rv-rk {
-  color: #ffffff;
+  color: var(--tour-ink);
 }
 .tc-rv-row.tc-rv-silver {
   background: rgb(255 255 255 / 16%);
 }
 .tc-rv-row.tc-rv-gold {
-  background: #d8f03b;
-  color: #13210a;
+  background: var(--ball);
+  color: var(--ball-ink);
 }
 .tc-rv-gold .tc-rv-dash {
-  color: #13210a;
+  color: var(--ball-ink);
 }
 .tc-rv-gold .tc-rv-pts {
-  background: rgb(19 33 10 / 12%);
+  background: color-mix(in srgb, var(--ball-ink) 12%, transparent);
 }
 .tc-rv-gold .tc-rv-you {
-  background: #13210a;
-  color: #d8f03b;
+  background: var(--ball-ink);
+  color: var(--ball);
 }
 .tc-rv-fx {
   position: absolute;
@@ -327,7 +327,7 @@
   border-radius: 50%;
   pointer-events: none;
   opacity: 0;
-  background: repeating-conic-gradient(from 0deg, rgb(216 240 59 / 22%) 0deg 7deg, rgb(216 240 59 / 0%) 7deg 22deg);
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--ball) 22%, transparent) 0deg 7deg, transparent 7deg 22deg);
   -webkit-mask: radial-gradient(circle, #000 0, #000 18%, transparent 46%);
   mask: radial-gradient(circle, #000 0, #000 18%, transparent 46%);
 }
@@ -336,22 +336,22 @@
   left: 0;
   right: 0;
   border-radius: 16px;
-  border: 3px solid #d8f03b;
+  border: 3px solid var(--ball);
   box-sizing: border-box;
   opacity: 0;
 }
 .tc-rv-wave.tc-rv-s {
-  border-color: #e9eef3;
+  border-color: var(--art-silver);
 }
 .tc-rv-spark {
   position: absolute;
   width: 3px;
   border-radius: 3px;
-  background: linear-gradient(#ffffff, #d8f03b);
+  background: linear-gradient(var(--tour-ink), var(--ball));
   opacity: 0;
 }
 .tc-rv-spark.tc-rv-s {
-  background: linear-gradient(#ffffff, #cfd6de);
+  background: linear-gradient(var(--tour-ink), var(--art-silver-deep));
 }
 
 /* A narrow phone (320 px): the name gets the room, so a long name wraps between words, never inside one ("Christopher Vanderberg"). */

@@ -176,8 +176,8 @@ function drawFrame(root: HTMLElement, hero: HTMLElement, T: number, plan: Reveal
         const k = p === 1 ? 1 : 0.6;
         const w = 0.5 + 0.5 * Math.sin((T - dr) * Math.PI * 2 * (1.6 + (T - dr) * 0.9));
         li.style.boxShadow = calm
-          ? `inset 0 0 0 2px rgba(216,240,59,${(0.35 + 0.4 * w * k).toFixed(3)})`
-          : `inset 0 0 0 2px rgba(216,240,59,${((0.25 + 0.65 * w) * k).toFixed(3)}), 0 0 ${Math.round((8 + 22 * w) * k)}px rgba(216,240,59,${((0.12 + 0.3 * w) * k).toFixed(3)})`;
+          ? `inset 0 0 0 2px color-mix(in srgb, var(--ball) ${Math.round(100 * Number((0.35 + 0.4 * w * k)))}%, transparent)`
+          : `inset 0 0 0 2px color-mix(in srgb, var(--ball) ${Math.round(100 * Number(((0.25 + 0.65 * w) * k)))}%, transparent), 0 0 ${Math.round((8 + 22 * w) * k)}px color-mix(in srgb, var(--ball) ${Math.round(100 * Number(((0.12 + 0.3 * w) * k)))}%, transparent)`;
       } else li.style.boxShadow = '';
       return;
     }
@@ -188,7 +188,7 @@ function drawFrame(root: HTMLElement, hero: HTMLElement, T: number, plan: Reveal
       inEl.style.transform = '';
       inEl.style.filter = '';
       ph.style.opacity = String(1 - a);
-      li.style.boxShadow = a < 1 && p > 1 ? `inset 0 0 0 2px rgba(216,240,59,${(0.9 * (1 - a)).toFixed(3)})` : '';
+      li.style.boxShadow = a < 1 && p > 1 ? `inset 0 0 0 2px color-mix(in srgb, var(--ball) ${Math.round(100 * Number((0.9 * (1 - a))))}%, transparent)` : '';
       li.style.scale = '';
       return;
     }
@@ -209,8 +209,8 @@ function drawFrame(root: HTMLElement, hero: HTMLElement, T: number, plan: Reveal
         const glow = 0.45 + 0.55 * Math.exp(-land * 2.2);
         li.style.boxShadow =
           p === 1
-            ? `0 0 0 2px #ecff7a, 0 0 ${Math.round(30 + 40 * glow)}px rgba(216,240,59,${(0.35 + 0.4 * glow).toFixed(3)})`
-            : `inset 0 0 0 1.5px rgba(255,255,255,${(0.25 + 0.5 * Math.exp(-land * 2.5)).toFixed(3)}), 0 0 ${Math.round(18 * Math.exp(-land * 2))}px rgba(216,240,59,${(0.3 * Math.exp(-land * 2)).toFixed(3)})`;
+            ? `0 0 0 2px var(--ball-hi), 0 0 ${Math.round(30 + 40 * glow)}px color-mix(in srgb, var(--ball) ${Math.round((0.35 + 0.4 * glow) * 100)}%, transparent)`
+            : `inset 0 0 0 1.5px rgb(255 255 255 / ${Math.round((0.25 + 0.5 * Math.exp(-land * 2.5)) * 100)}%), 0 0 ${Math.round(18 * Math.exp(-land * 2))}px color-mix(in srgb, var(--ball) ${Math.round(0.3 * Math.exp(-land * 2) * 100)}%, transparent)`;
         if (p === 1 && md) {
           md.style.transform = `scale(${(1 + 0.4 * Math.exp(-land * 4)).toFixed(3)})`;
           // The dashed ring spins around the medal, then settles away.
@@ -218,7 +218,7 @@ function drawFrame(root: HTMLElement, hero: HTMLElement, T: number, plan: Reveal
           dash.style.transform = `rotate(${(land * 420).toFixed(1)}deg) scale(${(1.25 - 0.25 * clamp(land / 0.4)).toFixed(3)})`;
         } else rk.style.transform = `scale(${(1 + 0.3 * Math.exp(-land * 4)).toFixed(3)})`;
       } else {
-        li.style.boxShadow = `inset 0 0 0 2px rgba(216,240,59,${p === 1 ? 0.9 : 0.6})`;
+        li.style.boxShadow = `inset 0 0 0 2px color-mix(in srgb, var(--ball) ${Math.round(100 * Number(p === 1 ? 0.9 : 0.6))}%, transparent)`;
         li.style.scale = '';
       }
       return;
@@ -231,7 +231,7 @@ function drawFrame(root: HTMLElement, hero: HTMLElement, T: number, plan: Reveal
     inEl.style.transform = `translateY(${(16 * (1 - e)).toFixed(2)}px)`;
     inEl.style.filter = '';
     ph.style.opacity = String(1 - e);
-    li.style.boxShadow = a < 1 ? `inset 0 0 0 2px rgba(216,240,59,${(0.9 * (1 - a)).toFixed(3)})` : '';
+    li.style.boxShadow = a < 1 ? `inset 0 0 0 2px color-mix(in srgb, var(--ball) ${Math.round(100 * Number((0.9 * (1 - a))))}%, transparent)` : '';
     li.style.scale = p === 3 ? String(1 + 0.04 * Math.sin(Math.PI * a)) : '';
   });
 
@@ -406,8 +406,8 @@ function Board({ t, standings, tapMs, onDone, onClose }: { t: PlayerTournamentVi
             <span className="tc-rv-cl">Revealing in</span>
             <div className="tc-rv-ring">
               <svg viewBox="0 0 180 180">
-                <circle cx="90" cy="90" r={RING_R} fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="9" />
-                <circle className="tc-rv-arc" cx="90" cy="90" r={RING_R} fill="none" stroke="#d8f03b" strokeWidth="9" strokeLinecap="round" strokeDasharray={RING_C} strokeDashoffset="0" />
+                <circle cx="90" cy="90" r={RING_R} fill="none" stroke="rgb(255 255 255 / 12%)" strokeWidth="9" />
+                <circle className="tc-rv-arc" cx="90" cy="90" r={RING_R} fill="none" style={{ stroke: 'var(--ball)' }} strokeWidth="9" strokeLinecap="round" strokeDasharray={RING_C} strokeDashoffset="0" />
               </svg>
               <span className="tc-rv-num">5</span>
             </div>

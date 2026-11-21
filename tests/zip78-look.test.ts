@@ -64,7 +64,7 @@ describe('Zip 78: colors only from the tokens', () => {
     expect(bad).toEqual([]);
   });
   it('no color written in screen code (art uses named tokens: the medal, the tie wheel, the ornaments)', () => {
-    const bad = TSX.filter((f) => /['"`]#[0-9a-fA-F]{3,8}['"`]|fill="#|stroke="#|stopColor="#/.test(read(f)));
+    const bad = TSX.filter((f) => /['"`]#[0-9a-fA-F]{3,8}['"`]|fill="#|stroke="#|stopColor="#|rgba?\(\d+,|#ecff7a|#d8f03b/i.test(read(f)));
     expect(bad).toEqual([]);
   });
   it('the court switch colors are defined once, in the token list', () => {
