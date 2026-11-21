@@ -77,6 +77,37 @@ describe('Zip 78: colors only from the tokens', () => {
   });
 });
 
+describe('Zip 80: lime means "tournament" (Alex)', () => {
+  const rule = (f: string, sel: string) => new RegExp(`^${sel.replace(/\./g, '\\.')}\\s*\\{([^}]*)\\}`, 'm').exec(noComments(read(f)))?.[1] ?? '';
+  it('the tournament action buttons are lime (the ball token): the ticket and tournament card (.tc-lime) and the Standings pill', () => {
+    for (const [f, sel] of [
+      ['src/tournament/tournament.css', '.tc-lime'],
+      ['src/tournament/results.css', '.tc-res-btn'],
+    ]) {
+      expect(rule(f, sel), sel).toMatch(/background: var\(--ball\)/);
+      expect(rule(f, sel), sel).toMatch(/color: var\(--ball-ink\)/);
+    }
+  });
+  it('Enter score on the green Up next card is white with green words (both styles share .tc-gd-wewon)', () => {
+    const body = rule('src/tournament/gameday-tour.css', '.tc-gd-wewon');
+    expect(body).toMatch(/background: var\(--tour-ink\)/);
+    expect(body).toMatch(/color: var\(--primary\)/);
+  });
+  it('lime is a filled button ONLY there: every button-like rule filled with the ball token is one of these', () => {
+    const allowed = ['.tc-lime', '.tc-res-btn', ".tm-gd-pbtn[aria-pressed='true']", '.tm-chip.tm-gd-pickchip'];
+    const bad: string[] = [];
+    for (const f of CSS)
+      for (const [sel, prop, val] of decls(read(f))) {
+        if (prop !== 'background' || !/^var\(--(ball|tc-lime)\)$/.test(val)) continue;
+        const last = sel.split('\n').pop()!.trim();
+        if (/btn|button/.test(last) && !allowed.some((a) => last.includes(a))) bad.push(`${f}: ${last}`);
+      }
+    expect(bad).toEqual([]);
+    // Only tournament screens use the lime class; a regular game button keeps the site green.
+    expect(TSX.filter((f) => /\btc-lime\b/.test(read(f)))).toEqual(['src/tournament/TournamentHome.tsx']);
+  });
+});
+
 describe('Zip 78: no carets', () => {
   it('no chevron, caret or › in any screen or style', () => {
     const bad: string[] = [];

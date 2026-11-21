@@ -7915,3 +7915,12 @@ Browser: e2e/zip80.cjs 8 of 8 (the clash card 320/390/420 light and dark, the ca
 `381adcaf`, https://claude-new-session-fy1hug.pickleball-club-9h0.pages.dev; re-seeded (calm start zip70_start). First screen at 390, light
 and dark: organizer Home is the Tournament test row, "Tue Dec 1 has a regular game and The Cold Open." with Cancel game, The Cold Open card
 and next week's games; Vic's Home is the date note and the ticket (nothing new). No page errors. Switches as on live.
+
+### 6. Lime means "tournament" (Alex, added to this zip)
+- Zip 78 made the ticket's action buttons the site green. Lime is back (src/tournament/tournament.css `.tc-lime`: the ball token, `--ball`
+  with `--ball-ink` words, its soft glow): Sign up, Lock in · $18, Hold my spot and every other action button on the dark ticket and
+  tournament card; the results row's Standings pill already was. Regular game buttons stay the site green. Enter score on the green Up next
+  card stays white with green words (both styles share `.tc-gd-wewon`). docs/DESIGN.md says so; tests/zip78-look.test.ts "Zip 80" allows
+  lime as a filled button exactly there (and the organizer's draft pick button and pick chip, lime since before Zip 78) and keeps Enter
+  score white; e2e/zip72.cjs A now expects the white Enter score (8 of 8). Pictures before and after, light and dark:
+  docs/audits/80-shots/ (ticket, upnext, americano; fake names), made by e2e/zip80-lime-shots.cjs. Browser: zip78 36, zip79 6, zip56 57.
