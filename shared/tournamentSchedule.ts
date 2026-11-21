@@ -210,8 +210,7 @@ const SEQUENCE: Record<number, Duel[]> = {
     [1, 3],
     [2, 3],
   ],
-  // The pool of 4 on its own court. With a pool of 3 beside it (7 teams on 2 courts) its last 3 games share 2 rounds, so games 4 and 5 are
-  // two different pairs of teams (they are played side by side).
+  // The pool of 4 on its own court (7 teams on 2 courts have their own order: FOURTEEN_TWO_COURTS).
   4: [
     [1, 2],
     [3, 4],
@@ -267,14 +266,18 @@ function roundRobinRounds(k: number): Duel[][] {
   return out;
 }
 
-/** The 7-team order for Pool A (4 teams) so its games 4 and 5 can share a round: 1-2, 3-4, 1-3, then 1-4 with 2-3, then 2-4. */
-const POOL4_BESIDE_3: Duel[] = [
-  [1, 2],
-  [3, 4],
-  [1, 3],
-  [1, 4],
-  [2, 3],
-  [2, 4],
+/**
+ * Zip 80: 14 players on 2 courts (Pool A of 4 beside Pool B of 3), round by round: [court 1, court 2]. The only kind of order where no team plays
+ * 3 rounds in a row, even counting the semifinal right after the pools, and nobody sits more than 2 in a row (every order was tried): Pool A
+ * opens on both courts, then each Pool B game is played beside a Pool A game (Pool B stays on Court 2, the Drive group's court), and the
+ * last pool round is one Pool A game. Seats are pool places (Pool B's 1 to 3 are seats 5 to 7).
+ */
+const FOURTEEN_TWO_COURTS: [[PoolName, Duel], [PoolName, Duel] | null][] = [
+  [['A', [1, 2]], ['A', [3, 4]]],
+  [['A', [1, 3]], ['B', [1, 2]]],
+  [['A', [2, 4]], ['B', [1, 3]]],
+  [['A', [1, 4]], ['B', [2, 3]]],
+  [['A', [2, 3]], null],
 ];
 
 /**
@@ -310,20 +313,26 @@ export function schedule(teams: number, courts: number): PlannedGame[] {
   }
   // Pools.
   const [a, b] = poolSizes(teams)!;
-  const seqA = (a === 4 && b === 3 ? POOL4_BESIDE_3 : SEQUENCE[a]).map(([x, y]): Duel => [x, y]);
+  const seqA = SEQUENCE[a].map(([x, y]): Duel => [x, y]);
   const seqB = SEQUENCE[b].map(([x, y]): Duel => [a + x, a + y]);
   if (s.courtsUsed === 2) {
-    const common = Math.min(seqA.length, seqB.length);
-    for (let i = 0; i < common; i++) {
-      round++;
-      add(round, 1, 'pool', 'A', T(seqA[i][0]), T(seqA[i][1]));
-      add(round, 2, 'pool', 'B', T(seqB[i][0]), T(seqB[i][1]));
-    }
-    // The pool of 3 is done: the pool of 4 uses both courts for what it has left.
-    for (let i = common; i < seqA.length; i += 2) {
-      round++;
-      add(round, 1, 'pool', 'A', T(seqA[i][0]), T(seqA[i][1]));
-      if (seqA[i + 1]) add(round, 2, 'pool', 'A', T(seqA[i + 1][0]), T(seqA[i + 1][1]));
+    if (a === 4 && b === 3) {
+      for (const both of FOURTEEN_TWO_COURTS) {
+        round++;
+        both.forEach((g, i) => {
+          if (!g) return;
+          const [pool, [x, y]] = g;
+          const off = pool === 'A' ? 0 : a;
+          add(round, i + 1, 'pool', pool, T(off + x), T(off + y));
+        });
+      }
+    } else {
+      // Pools of the same size: one game of each pool every round, side by side.
+      for (let i = 0; i < seqA.length; i++) {
+        round++;
+        add(round, 1, 'pool', 'A', T(seqA[i][0]), T(seqA[i][1]));
+        add(round, 2, 'pool', 'B', T(seqB[i][0]), T(seqB[i][1]));
+      }
     }
     round++;
     add(round, 1, 'semi', null, 'A1', 'B2');
@@ -638,6 +647,19 @@ export interface RoundState {
   anyResult?: boolean;
   /** Zip 61: never shortened (Americano's last round), though it is counted at its own length. */
   keep?: boolean;
+  /**
+   * Zip 80: the tie games (Game A, Game B, to 5) this round waits for end at this time (minutes after midnight): their last result once all
+   * are in, else now plus TIE_MINUTES for each game still to finish on the busiest court (tieGamesAhead). They are played as soon as the wheel
+   * spins, on a free court, so they can run beside a pool game; this round's own games start when both are over.
+   */
+  tiesEnd?: number;
+}
+
+/** Zip 80: how many tie games are played one after another (the most on any one court: a tie's Game A and Game B share a court). */
+export function tieGamesAhead(games: readonly { stage: string; court: number }[]): number {
+  const perCourt = new Map<number, number>();
+  for (const g of games) if (g.stage === 'tie') perCourt.set(g.court, (perCourt.get(g.court) ?? 0) + 1);
+  return Math.max(0, ...perCourt.values());
 }
 
 export interface TimeCheck {
@@ -666,6 +688,7 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   const planned = new Map<number, { start: number; end: number }>();
   let t = startMin;
   for (const r of list) {
+    // Zip 80: the plan never has a tie in it (nobody knew there would be one), so the minutes a tie adds show as time behind.
     planned.set(r.round, { start: t, end: t + lenOf(r) });
     t += lenOf(r);
   }
@@ -673,14 +696,16 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   if (!cur) return { current: null, behind: 0, finish: plannedFinish, suggest: null };
   // When the current round really started: the end of the round before it (when its last result came in), or the planned start.
   const prev = list.filter((r) => r.round < cur.round).pop();
-  const startedAt = Math.max(planned.get(cur.round)!.start, prev?.doneAt ?? planned.get(cur.round)!.start);
+  // Zip 80: a round that waits for tie games starts once they are over too.
+  const startedAt = Math.max(planned.get(cur.round)!.start, prev?.doneAt ?? planned.get(cur.round)!.start, cur.tiesEnd ?? -Infinity);
   const after = list.filter((r) => r.round > cur.round);
   // Rounds that can still change: the ones after this one, and this one while none of its games has a result. Never the playoffs.
   const open = [...(cur.pool && !cur.anyResult && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.keep)];
   /** When the night ends if pool rounds from `from` on (that can still change) are played to `to`. */
   const ending = (to?: GameTo, from?: number) => {
     const len = (r: RoundState) => lenOf(r, to !== undefined && from !== undefined && r.pool && r.round >= from && open.includes(r) ? minLen(r.playTo, to) : undefined);
-    return Math.max(startedAt + len(cur), nowMin) + after.reduce((sum, r) => sum + len(r), 0);
+    // Each later round starts when the one before ends, or (Zip 80) when the tie games it waits for end, whichever is later.
+    return after.reduce((at, r) => Math.max(at, r.tiesEnd ?? -Infinity) + len(r), Math.max(startedAt + len(cur), nowMin));
   };
   const finish = ending();
   const behind = Math.max(0, Math.round(finish - plannedFinish));
@@ -694,7 +719,10 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
     }
   }
   const first = pools.find((r) => r.playTo > 7);
-  if (!first) return { current: cur.round, behind, finish, suggest: null };
+  // Zip 80: when the playoffs wait for tie games anyway, shorter pool games may save nothing: then there is nothing to suggest. (Only with a
+  // tie: without one, shorter games always save time, and the suggestion is exactly as before.)
+  const tieAhead = [cur, ...after].some((r) => r.tiesEnd !== undefined);
+  if (!first || (tieAhead && ending(7, first.round) >= finish)) return { current: cur.round, behind, finish, suggest: null };
   return { current: cur.round, behind, finish, suggest: { fromRound: first.round, to: 7, stillOver: Math.max(0, Math.round(ending(7, first.round) - limit)) } };
 }
 const minLen = (a: GameTo, b: GameTo): GameTo => (a < b ? a : b);

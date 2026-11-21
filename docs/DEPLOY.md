@@ -6,14 +6,19 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 
 1. Quiet window only (not from 6:00 PM the night before a game until 11:00 PM game night, and not in the hour after Alex texts the group).
 2. Main equals live, the change is merged to main, and the full unit suite is green (`npm test`, `npx tsc -b`).
-3. SQL backup of live (keep it out of git, it has phone numbers):
-   `npx wrangler d1 export pickleball --remote --output live-before-<what>-<date>.sql`
-4. Time Travel bookmark: `npx wrangler d1 time-travel info pickleball` (write the bookmark in the stage notes).
-5. Integrity checks, all 21 columns should be 0 (read-only):
+3. and 4. The restore point, ONE command (Zip 80): `npm run backup:before-deploy -- "<what is being deployed>"`. It exports live
+   (read-only), saves the export in the `pickleball-backups` D1 database (scripts/deploy-export.mjs, checked against the file), prints the
+   Time Travel bookmark (write it in the stage notes) and deletes the local file (phone numbers). If it fails, do not deploy; retry once.
+   `pickleball-backups` is a D1 **database**, not an R2 bucket: `wrangler r2 object put pickleball-backups/...` always answers 401
+   "Authentication error" (the API token has no R2 permission and there is no such bucket). Zips 58, 76 and 77 lost their saved copy that way;
+   nothing in Cloudflare needs changing. (By hand, the old way still works: `npx wrangler d1 export pickleball --remote --output <file>.sql`,
+   `npx wrangler d1 time-travel info pickleball`, then the "After" step's `node scripts/deploy-export.mjs save`.)
+5. Integrity checks, all 22 columns should be 0 (read-only):
    `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks.sql)"`
 6. Optional: `npm run restore-test` (docs/RESTORE_TEST.md). Read-only, about 10 seconds (its live export can hold the site's
-   database for a second or two, like step 3). It proves the newest weekly copy
-   and a fresh export of live load back with the same rows, money and integrity checks. Not required for a deploy.
+   database for a second or two, like step 3). It proves all three kinds of backup load back with the same rows, money and integrity checks
+   (Zip 80): the newest weekly copy, the newest saved deploy export, and a fresh export of live saved as a Settings > Backup file. Not required
+   for a deploy.
 
 ## Deploy
 
@@ -59,8 +64,8 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 
 ## After
 
-- Save the step 3 export where it is kept (only after a real deploy, never from tests; writes only to `pickleball-backups`):
-  `node scripts/deploy-export.mjs save live-before-<what>-<date>.sql "<what was deployed>"`. It checks the saved copy against
+- Only if step 3 was done by hand: save the export where it is kept (only for a real deploy, never from tests; writes only to the
+  `pickleball-backups` D1 database, never `wrangler r2`): `node scripts/deploy-export.mjs save live-before-<what>-<date>.sql "<what was deployed>"`. It checks the saved copy against
   the file; then the local file can be deleted. `node scripts/deploy-export.mjs list` shows the saved ones (newest 10 kept).
 - Read-only live check with the read-only PIN (SITE_RULES, "Live check with the read-only PIN").
 - Integrity checks again (step 5).

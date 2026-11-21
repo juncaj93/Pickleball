@@ -202,13 +202,24 @@ export interface FinalizeView {
 /** "Locked doubles 3, Americano 6, Either 2" (the organizer's card). */
 export const voteCountsLine = (c: VoteCounts): string => `Locked doubles ${c.locked}, Americano ${c.americano}, Either ${c.either}`;
 
-/** The player's alert once the date is locked (Home, the site's alert card): the title and the second line. `source` says whether to claim a vote. */
-export function formatAlertWords(name: string, dayKeyOfDate: string, format: TournamentFormat, source: FormatSource): { title: string; sub: string } {
+/**
+ * Zip 80: "Most players" is true only when the format won more than half of everyone who could vote (the sign-ups who can make the date; an
+ * Either or no vote counts for neither side). 2 Locked doubles votes of 10 won the vote, but most players did not vote for it.
+ */
+export const mostPlayersVoted = (counts: VoteCounts, format: TournamentFormat): boolean =>
+  2 * (format === 'doubles' ? counts.locked : counts.americano) > counts.locked + counts.americano + counts.either;
+
+/**
+ * The player's alert once the date is locked (Home, the site's alert card): the title and the second line. `source` says whether to claim a vote;
+ * Zip 80: `counts` (the votes of those who can make the date) must also show a real majority, else it says the format only.
+ */
+export function formatAlertWords(name: string, dayKeyOfDate: string, format: TournamentFormat, source: FormatSource, counts?: VoteCounts): { title: string; sub: string } {
   const s = stubParts(dayKeyOfDate);
   const day = `${s.weekday.charAt(0)}${s.weekday.slice(1).toLowerCase()} ${s.month.charAt(0)}${s.month.slice(1).toLowerCase()} ${s.day}`;
+  const most = source === 'vote' && (!counts || mostPlayersVoted(counts, format));
   return {
     title: `${name} is scheduled for ${day}.`,
-    sub: source === 'vote' ? `Most players voted ${formatName(format)}.` : `Format: ${formatName(format)}`,
+    sub: most ? `Most players voted ${formatName(format)}.` : `Format: ${formatName(format)}`,
   };
 }
 

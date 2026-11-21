@@ -21,7 +21,7 @@ export type Backup = { format: string; version: number; createdAt: string; group
 
 const MIGRATIONS = join(process.cwd(), 'migrations');
 
-/** The 21 integrity checks, exactly as docs say to run them on live (comment lines dropped). */
+/** The 22 integrity checks (Zip 80: credit_back_twice), exactly as docs say to run them on live (comment lines dropped). */
 export function integritySql(): string {
   return readFileSync(join(process.cwd(), 'scripts', 'integrity-checks.sql'), 'utf8')
     .split('\n')

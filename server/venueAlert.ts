@@ -3,6 +3,9 @@ import type { D1Database } from './db';
 import { newId } from './crypto';
 import { courtCostOf, priceLockCol, settingsOf, audit, type GroupRow, type SessionRow } from './repo';
 import { HttpError } from './http';
+import { realTimes } from './tournament';
+import { courtCentsOf } from '../shared/tournament';
+import { startMsOf } from '../shared/tournamentTickets';
 import {
   dueAlerts,
   earliestGameDate,
@@ -131,15 +134,32 @@ export async function venueAlertsNow(ctx: Ctx, group: GroupRow, rowOn: boolean):
   // Every game from the first period's first day through today (Eastern calendar days, so a 11:30 PM game on the 30th is November).
   const from = new Date(startOfDayMs(first, tz)).toISOString();
   const to = new Date(startOfDayMs(addDays(localYmd(ctx.nowMs, tz), 1), tz)).toISOString();
-  const { results } = await ctx.db
-    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`)
-    .bind(group.id, from, to)
-    .all<SessionRow>();
+  // Zip 80: the tournament nights in the same days ride the same trip (one batch): a night's courts are what the venue charges for it.
+  const [sessionsRes, toursRes] = await ctx.db.batch([
+    ctx.db.prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`).bind(group.id, from, to),
+    ctx.db
+      .prepare(
+        `SELECT id, name, final_date, courts, minutes, start_minutes FROM tournaments
+         WHERE group_id = ? AND canceled_at IS NULL AND status IN ('tickets', 'ended') AND final_date >= ? AND final_date <= ?`,
+      )
+      .bind(group.id, first, localYmd(ctx.nowMs, tz)),
+  ]);
+  const results = sessionsRes.results as unknown as SessionRow[];
   // The same per-game cost Money > Totals uses (the game's own court cost, else the Typical court cost, priced by its length).
   const games: VenueGame[] = results.map((s) => ({ startsAt: s.starts_at, booked: s.booking_status === 'booked', canceled: s.status === 'canceled', costCents: courtCostOf(s, settings) }));
+  // Zip 80: a tournament night counts its courts (the night's real courts and hours, priced as Money > Totals prices it), once its night has
+  // started (a night later today is not charged yet).
+  for (const t of toursRes.results as unknown as TourNight[]) {
+    const real = realTimes(t);
+    const courts = Math.max(1, Math.min(4, Number(t.courts) || 1));
+    if (startMsOf(t.final_date, real.start, tz) > ctx.nowMs) continue;
+    games.push({ startsAt: new Date(startMsOf(t.final_date, real.start, tz)).toISOString(), booked: true, canceled: false, costCents: courtCentsOf({ courts, minutes: real.minutes }), tournament: { name: t.name, courts } });
+  }
   const alerts = dueAlerts({ ...base, games });
   return { alerts, days };
 }
+
+type TourNight = { id: string; name: string; final_date: string; courts: number; minutes: number; start_minutes: number };
 
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 const KEY_RE = VENUE_KEY_RE;

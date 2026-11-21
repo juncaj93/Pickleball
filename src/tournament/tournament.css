@@ -213,11 +213,13 @@
   outline: 3px solid var(--tc-lime, var(--ball));
   outline-offset: 2px;
 }
-/* Zip 78 (one look): the ticket's main button is the site's green primary (it was ball yellow). The class keeps its old name. */
+/* Zip 80 (Alex): lime means "tournament": the action buttons on the dark ticket and tournament card (Sign up, Lock in, Hold my spot, ...)
+   are lime again, the one ball token (Zip 78 had made them the site green). Regular game buttons stay the site green; Enter score on the
+   green Up next card stays white with green words (.tc-gd-wewon). */
 .tc-lime {
-  background: var(--primary);
-  color: var(--primary-ink);
-  box-shadow: 0 6px 16px rgb(0 0 0 / 22%);
+  background: var(--ball);
+  color: var(--ball-ink);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--ball) 26%, transparent), 0 6px 16px rgb(0 0 0 / 22%);
 }
 .tc-gray {
   min-height: 46px;

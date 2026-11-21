@@ -355,6 +355,19 @@ export type Finish = {
 export type Plan = Omit<Finish, 'bytes'> & { steps: StepBody[] };
 export type PlanResult = { result: BackupResult } | { plan: Plan };
 
+/** Zip 80: when the newest tournament that ended after `since` ended (null: none, or no tournaments table). Live is only read. */
+export async function endedSince(live: D1Database, since: string | null): Promise<string | null> {
+  try {
+    const r = await live
+      .prepare("SELECT MAX(ended_at) AS at FROM tournaments WHERE status = 'ended' AND ended_at IS NOT NULL AND ended_at > ?")
+      .bind(since ?? '')
+      .first<{ at: string | null }>();
+    return r?.at ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The plan (its own run): is a copy due, the tables' columns and measure (one moment), the steps, and the copy marked INCOMPLETE
  * (a progress row) after clearing any unfinished attempt. Three database calls on each side at most.
@@ -365,10 +378,17 @@ export async function planCopy(live: D1Database, store: D1Database, nowMs: numbe
     // The newest REGULAR copy (a hand-asked one, labeled "...-asked-1930", never changes the Sunday schedule).
     store.prepare(`SELECT week, created_at AS createdAt FROM weekly_backups WHERE week GLOB '${WEEK_GLOB}' ORDER BY created_at DESC LIMIT 1`),
     store.prepare('SELECT MAX(asked_at) AS asked FROM weekly_backup_requests'),
+    // Zip 80: the newest copy of any kind (a tournament that ended after it asks for one, below).
+    store.prepare('SELECT MAX(created_at) AS at FROM weekly_backups'),
   ]);
-  const newest = (ready.at(-2)!.results[0] as { week: string; createdAt: string } | undefined) ?? null;
-  const asked = (ready.at(-1)!.results[0] as { asked: string | null } | undefined)?.asked ?? null;
+  const newest = (ready.at(-3)!.results[0] as { week: string; createdAt: string } | undefined) ?? null;
+  let asked = (ready.at(-2)!.results[0] as { asked: string | null } | undefined)?.asked ?? null;
+  const newestAny = (ready.at(-1)!.results[0] as { at: string | null } | undefined)?.at ?? null;
   const regular = force || backupDue(nowMs, newest);
+  // Zip 80: End tournament (or Reveal standings) moves the night's money (award credit, the results); the regular copy can be days away, so
+  // a tournament that ended after the newest copy counts as a copy asked for, made at the next hourly look (one read of live, only when
+  // nothing else is due; a database before tournaments existed answers nothing).
+  if (!regular && !asked) asked = await endedSince(live, newestAny);
   if (!regular && !asked) return { result: { made: false, reason: 'not due' } };
   if (regular && newest?.week === weekOf(nowMs) && force) return { result: { made: false, reason: 'this week already has a copy' } };
   const p = localParts(nowMs, BACKUP_TZ);

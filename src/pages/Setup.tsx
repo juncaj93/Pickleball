@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS, minutesLabel } from '../../shared/settings';
 import { type FormEvent, useState } from 'react';
-import { api, ApiError, copyText, navigate } from '../lib';
+import { api, ApiError, copyText, navigate, useLoad } from '../lib';
 import { TopBar } from '../Shell';
 import { Notice, NumberField, parseWhole, useToast } from '../ui';
 
@@ -10,6 +10,29 @@ interface PlayerDraft {
 }
 
 export function SetupPage() {
+  // Zip 80 (the 🎾75 audit, LATER): a site that is already set up shows one plain line and a way home, never the first-time form (whose
+  // submit could only be refused). If the check fails, the form shows as before (the server refuses a second setup either way).
+  const status = useLoad(() => api<{ setupComplete: boolean }>('GET', '/api/status'));
+  if (status.data?.setupComplete) {
+    return (
+      <>
+        <TopBar eyebrow="Pickleball" title="Already set up" />
+        <main className="page stack-lg">
+          <div className="card stack" data-setup-done>
+            <p>This group is already set up.</p>
+            <button className="btn block" onClick={() => navigate('/')}>
+              Go to the site
+            </button>
+          </div>
+        </main>
+      </>
+    );
+  }
+  if (status.loading && !status.data && !status.error) return <TopBar eyebrow="Pickleball" title="Setup" />;
+  return <SetupForm />;
+}
+
+function SetupForm() {
   const toast = useToast();
   const [setupToken, setSetupToken] = useState('');
   const [groupName, setGroupName] = useState('');

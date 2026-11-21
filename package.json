@@ -14,7 +14,8 @@
     "db:seed:preview": "vite-node scripts/seed-preview.ts",
     "restore-test": "vite-node scripts/restore-test-run.ts --",
     "deploy": "node scripts/deploy.mjs production",
-    "deploy:preview": "node scripts/deploy.mjs preview"
+    "deploy:preview": "node scripts/deploy.mjs preview",
+    "backup:before-deploy": "node scripts/backup-before-deploy.mjs"
   },
   "dependencies": {
     "react": "19.1.10",

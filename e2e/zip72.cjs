@@ -3,7 +3,8 @@
  *   node e2e/zip72.cjs
  *
  * The world is the preview's calm profile as of Thu Nov 19 2026, 10:00 AM Eastern, and the Tournament test page's Zip 72 stages.
- *   A  picture pair-1 (zip72_scores): Vic's VS card has ONE lime Enter score button (no We won, no "<team> won"). 390/360/320, light and dark.
+ *   A  picture pair-1 (zip72_scores): Vic's VS card has ONE Enter score button (no We won, no "<team> won"), white with green words on the
+ *      green Up next card (Zip 78; Alex kept it in Zip 80). 390/360/320, light and dark.
  *   B  picture pair-2: Enter score opens "Final score" with the two team names, − and +, Submit score; a win lights "✓ Let's go!", the banner
  *      "Net Ninjas won 11 to 7" with Undo and its circle, no drain line; sent after 5 seconds: 11 to 7 is in. A loss says "Onto the next!".
  *   C  picture pair-4: Your games "Won 11–7" (green) / "Lost 7–11" (soft red), the next game blue; Standings "+4 pts", "0 pts", "−4 pts".
@@ -172,7 +173,7 @@ async function main() {
     }
   }
 
-  await check('A pair-1: one lime Enter score button on the VS card, no We won (390/360/320, light and dark)', async () => {
+  await check('A pair-1: one white Enter score button (green words) on the VS card, no We won (390/360/320, light and dark)', async () => {
     await stage('zip72_scores');
     for (const width of SIZES)
       for (const scheme of SCHEMES) {
@@ -183,8 +184,11 @@ async function main() {
         assert((await btns.count()) === 1, `one button: ${await btns.allInnerTexts()}`);
         assert(flat(await btns.first().innerText()) === 'Enter score', `Enter score: ${await btns.first().innerText()}`);
         assert((await p.page.locator('[data-tc-day-wewon], [data-tc-day-theywon]').count()) === 0, 'no We won, no "<team> won"');
-        const bg = await btns.first().evaluate((el) => getComputedStyle(el).backgroundColor);
-        assert(/rgb\(21[0-9], 2[34][0-9], [0-9]{1,2}\)|rgb\(2[0-2][0-9], 2[34][0-9], [0-9]{1,2}\)/.test(bg), `lime: ${bg}`);
+        const [bg, fg] = await btns.first().evaluate((el) => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color]);
+        // Zip 80 (Alex): Enter score on the green Up next card stays white with the site's green words (not lime).
+        assert(bg === 'rgb(255, 255, 255)', `white: ${bg}`);
+        const [r, gg, b] = fg.match(/\d+/g).map(Number);
+        assert(gg > r + 40 && gg > b + 20, `green words: ${fg}`);
         const text = flat(await card.innerText());
         assert(text.includes('Net Ninjas') && text.includes('Third Shot Gang') && text.includes('Vic + Wren') && text.includes('Parker + Quinn'), text);
         await noWider(p.page, `Vic ${width} ${scheme}`);

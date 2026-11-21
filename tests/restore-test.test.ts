@@ -10,6 +10,7 @@ import { BACKUP_SCHEMA, weeklyBackup } from '../worker/backup';
 import { compare, fileSource, loadExport, type Backup } from '../scripts/restore-test-lib';
 import { main, readOnlyCommand, type Runner, wrangler } from '../scripts/restore-test';
 import { firstSession, playerPhone, setupGroup } from './harness';
+import { saveSql } from '../scripts/deploy-export.mjs';
 
 const SUN = Date.parse('2026-11-15T08:00:00Z');
 
@@ -41,7 +42,7 @@ function exportSql(db: ReturnType<typeof createNodeD1>): string {
 }
 
 describe('the restore test', () => {
-  it('passes a good backup: every row and value, money and the 21 integrity checks match, and it says which switches a restore resets', async () => {
+  it('passes a good backup: every row and value, money and the 22 integrity checks match, and it says which switches a restore resets', async () => {
     const ctx = await busyGroup();
     const source = loadExport(exportSql(ctx.app.db));
     const backup = JSON.parse(JSON.stringify(await backupObject(source, 'x', new Date(SUN).toISOString()))) as Backup;
@@ -51,7 +52,7 @@ describe('the restore test', () => {
     const text = r.checks.map((c) => c.line).join('\n');
     expect(text).toMatch(/rows: all \d+ rows in 21 tables match the source, every value/);
     expect(text).toMatch(/money matches: finalized games 0 of \d+/);
-    expect(text).toMatch(/integrity checks: all 21 the same on the copy as on the source \(19 problem checks/);
+    expect(text).toMatch(/integrity checks: all 22 the same on the copy as on the source \(20 problem checks/);
     // Zip 50: a version 2 backup brings the switch rows itself, so there is nothing to warn about.
     expect(text).toContain('task_log 1');
     expect(r.notes.join('\n')).not.toContain('switch rows');
@@ -151,6 +152,77 @@ describe('the restore test', () => {
     expect(() => readFileSync(exported)).toThrow(); // the export (phone numbers) is gone
     expect(lines.filter((l) => /^(PASS|FAIL) /.test(l))).toHaveLength(2);
     expect(lines.at(-1)).toBe('RESULT: PASS (2 of 2). Nothing on Cloudflare was changed.');
+  });
+
+  it('Zip 80: the usual run checks all three kinds of backup: the weekly copy, the newest saved deploy export, and live as a Settings > Backup file', async () => {
+    const ctx = await busyGroup();
+    const backups = createNodeD1(':memory:', mkdtempSync(join(tmpdir(), 'no-migrations-')));
+    for (const sql of BACKUP_SCHEMA) await backups.prepare(sql).run();
+    await weeklyBackup(ctx.app.db, backups, SUN);
+    const sql = exportSql(ctx.app.db);
+    // Two saved deploy exports (an older one and the newest), in small pieces, the way scripts/deploy-export.mjs saves them.
+    backups.raw.exec(saveSql(sql.replace("'Blair'", "'Blair Old'"), 'live-before-zip79.sql', 'older', 'exp-old', '2026-11-20T02:00:00.000Z'));
+    backups.raw.exec(saveSql(sql, 'live-before-zip80.sql', 'newest', 'exp-new', '2026-11-21T02:00:00.000Z'));
+    const calls: string[][] = [];
+    const run: Runner = (args) => {
+      calls.push(args);
+      expect(readOnlyCommand(args)).toBe(true);
+      if (args[1] === 'export') {
+        writeFileSync(args[5], sql);
+        return '';
+      }
+      return JSON.stringify([{ results: backups.raw.prepare(args[6]).all() }]);
+    };
+    const lines: string[] = [];
+    expect(await main([], run, (s) => lines.push(s))).toBe(0);
+    const heads = lines.filter((l) => /^(PASS|FAIL) /.test(l));
+    expect(heads).toHaveLength(4);
+    expect(heads[0]).toMatch(/^PASS {2}weekly copy 2026-11-15/);
+    expect(heads[1]).toMatch(/^PASS {2}saved deploy export live-before-zip80\.sql \(saved Fri, Nov 20, 9:00 PM Eastern, \d+ characters in \d+ pieces\)/);
+    expect(heads[2]).toMatch(/^PASS {2}fresh export of live/);
+    expect(lines.at(-1)).toBe('RESULT: PASS (4 of 4). Nothing on Cloudflare was changed.');
+    // Reads only: plain SELECTs of the backups database, and one export of live.
+    expect(calls.filter((c) => c[1] === 'execute').every((c) => c[2] === 'pickleball-backups' && /^SELECT /.test(c[6]))).toBe(true);
+    expect(calls.filter((c) => c[1] === 'export')).toHaveLength(1);
+    // One export by id, and a saved export with a piece missing fails with the reason (never a half check).
+    const one: string[] = [];
+    expect(await main(['--export', 'exp-old'], run, (s) => one.push(s))).toBe(0);
+    expect(one[0]).toMatch(/^PASS {2}saved deploy export live-before-zip79\.sql/);
+    backups.raw.exec("DELETE FROM deploy_export_parts WHERE export_id = 'exp-new' AND part = 1");
+    const broken: string[] = [];
+    expect(await main(['--export'], run, (s) => broken.push(s))).toBe(1);
+    expect(broken[0]).toMatch(/^FAIL {2}could not run the restore test: This export is incomplete/);
+  });
+
+  it('Zip 80 (review): one backup that cannot be read is a FAIL line and the others are still checked; an export older than a table passes with a NOTE', async () => {
+    const ctx = await busyGroup();
+    const backups = createNodeD1(':memory:', mkdtempSync(join(tmpdir(), 'no-migrations-')));
+    for (const sql of BACKUP_SCHEMA) await backups.prepare(sql).run();
+    await weeklyBackup(ctx.app.db, backups, SUN);
+    const sql = exportSql(ctx.app.db);
+    const run: Runner = (args) => {
+      if (args[1] === 'export') {
+        writeFileSync(args[5], sql);
+        return '';
+      }
+      return JSON.stringify([{ results: backups.raw.prepare(args[6]).all() }]);
+    };
+    // No saved deploy export yet: that one fails, the weekly copy and live are still checked.
+    const lines: string[] = [];
+    expect(await main([], run, (s) => lines.push(s))).toBe(1);
+    const heads = lines.filter((l) => /^(PASS|FAIL) /.test(l));
+    expect(heads).toHaveLength(4);
+    expect(heads[1]).toBe('FAIL  the newest saved deploy export');
+    expect(lines.join('\n')).toContain('could not be checked: no such table: deploy_exports');
+    expect(heads.filter((h) => h.startsWith('PASS'))).toHaveLength(3);
+    // An export taken before a later migration (no tournament_results table): checked for what it holds, with a NOTE.
+    ctx.app.db.raw.exec('DROP TABLE tournament_results');
+    const old = exportSql(ctx.app.db);
+    backups.raw.exec(saveSql(old, 'live-before-old.sql', 'older', 'exp-old', '2026-11-20T02:00:00.000Z'));
+    const one: string[] = [];
+    const code = await main(['--export'], run, (s) => one.push(s));
+    expect(code, one.join('\n')).toBe(0);
+    expect(one.join('\n')).toContain('NOTE: tournament_results came after this export (a later migration): checked as empty.');
   });
 
   it('can never write to Cloudflare: only the two read commands get through', () => {

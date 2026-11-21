@@ -1,8 +1,11 @@
 // The restore test (Zip 19). Proves a backup loads back and gives the same data, into THROWAWAY databases in memory only.
 // Steps and what it checks: docs/RESTORE_TEST.md.
 //
-//   npm run restore-test                      the newest weekly copy AND a fresh export of live (the usual run)
+//   npm run restore-test                      all three kinds of backup (the usual run, Zip 80): the newest weekly copy, the newest SQL export
+//                                             saved at a deploy, and a fresh export of live saved as a Settings > Backup file (and by the
+//                                             weekly copy code)
 //   npm run restore-test -- --weekly [week]   only a weekly copy (the newest, or the week as "node scripts/weekly-backup.mjs list" shows it)
+//   npm run restore-test -- --export [id]     only a saved deploy export (the newest, or the id "node scripts/deploy-export.mjs list" shows)
 //   npm run restore-test -- --live            only a fresh export of live
 //   npm run restore-test -- --file pickleball-backup-2026-11-03.json   a file from Settings > Backup
 //
@@ -18,7 +21,10 @@ import { backupObject } from '../server/backupData';
 import { isReadSql } from '../server/viewOnly';
 import { weeklyBackup } from '../worker/backup';
 import { joinParts, WEEK } from './weekly-backup.mjs';
+import { joinExport, looksLikeExport } from './deploy-export.mjs';
 import { type Backup, compare, emptyDb, fileSource, loadExport, printReport, type Report } from './restore-test-lib';
+import { TABLES } from './backup-sql.mjs';
+import { createNodeD1 } from '../dev/nodeD1';
 
 export type Runner = (args: string[]) => string;
 
@@ -67,6 +73,44 @@ export function fetchWeekly(run: Runner, week?: string): { backup: Backup; heade
   return { backup, header: JSON.parse(h.rows_json), label: `weekly copy ${h.week} (made ${when(h.created_at)} Eastern, ${h.bytes} characters in ${h.parts} pieces)` };
 }
 
+/**
+ * Zip 80: a SQL export saved at a deploy (scripts/deploy-export.mjs, in `pickleball-backups`; reads only): the newest, or the one with this
+ * id. It is a whole `wrangler d1 export` file, so it is checked like a fresh export of live: loaded as is (the source), then saved as a
+ * Settings > Backup file and restored into a throwaway copy, every row and value compared.
+ */
+export async function savedExportReport(run: Runner, id?: string, nowIso = new Date().toISOString()): Promise<Report> {
+  if (id !== undefined && !/^[A-Za-z0-9-]+$/.test(id)) throw new Error(`Not an export id: ${id}`);
+  const [h] = select(run, `SELECT id, saved_at, file_name, chars, parts FROM deploy_exports ${id ? `WHERE id = '${id}' ` : ''}ORDER BY saved_at DESC LIMIT 1`);
+  if (!h) throw new Error(id ? `No saved deploy export ${id}.` : 'No saved deploy exports yet (node scripts/deploy-export.mjs list).');
+  if (!/^[A-Za-z0-9-]+$/.test(h.id)) throw new Error('Unexpected export id.');
+  const parts = select(run, `SELECT part, data FROM deploy_export_parts WHERE export_id = '${h.id}' ORDER BY part`) as { part: number; data: string }[];
+  const text = joinExport(h as { parts: number; chars: number }, parts);
+  if (!looksLikeExport(text)) throw new Error(`The saved export ${h.id} is not a database export.`);
+  const source = loadExport(text);
+  // Taken before a deploy: a table a later migration added is not in it yet. It is added empty (as the restore's fresh database has it), so
+  // the export is checked for what it holds.
+  const added = addMissingTables(source);
+  const group = source.raw.prepare('SELECT name FROM groups LIMIT 1').get() as { name: string } | undefined;
+  if (!group) throw new Error(`The saved export ${h.id} has no group.`);
+  const file = JSON.parse(JSON.stringify(await backupObject(source, group.name, nowIso))) as Backup;
+  const r = compare(`saved deploy export ${h.file_name} (saved ${when(h.saved_at)} Eastern, ${h.chars} characters in ${h.parts} pieces)`, source, file);
+  if (added.length) r.notes.push(`NOTE: ${added.join(', ')} came after this export (a later migration): checked as empty.`);
+  return r;
+}
+
+/** Zip 80: the backed-up tables an older export does not have yet, made empty from this checkout's migrations. Returns their names. */
+function addMissingTables(source: ReturnType<typeof loadExport>): string[] {
+  const has = (db: ReturnType<typeof loadExport>, t: string) => !!db.raw.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+  const missing = TABLES.filter((t) => !has(source, t));
+  if (!missing.length) return [];
+  const fresh = createNodeD1(':memory:', join(process.cwd(), 'migrations'));
+  for (const t of missing) {
+    const row = fresh.raw.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(t) as { sql: string } | undefined;
+    if (row) source.raw.exec(row.sql);
+  }
+  return missing;
+}
+
 /** A fresh read-only export of live, as a throwaway database. The export file is deleted at once. */
 export function fetchLive(run: Runner) {
   const dir = mkdtempSync(join(tmpdir(), 'restore-test-'));
@@ -109,14 +153,28 @@ export async function main(argv: string[], run: Runner = npxRunner, out: (s: str
     } else if (args[0] === '--weekly') {
       const w = fetchWeekly(run, args[1]);
       reports.push(compare(w.label, fileSource(w.backup), w.backup, w.header, true));
+    } else if (args[0] === '--export') {
+      reports.push(await savedExportReport(run, args[1]));
     } else if (args[0] === '--live') {
       reports.push(...(await liveReports(run)));
     } else if (args.length === 0) {
-      const w = fetchWeekly(run);
-      reports.push(compare(w.label, fileSource(w.backup), w.backup, w.header, true));
-      reports.push(...(await liveReports(run)));
+      // Zip 80: all three kinds of backup, every run: the weekly copy, the saved deploy export, and live as a Settings > Backup file. Each on
+      // its own: one that cannot be read is a FAIL line saying why, and the others are still checked.
+      const one = async (label: string, make: () => Promise<Report[]>) => {
+        try {
+          reports.push(...(await make()));
+        } catch (err) {
+          reports.push({ label, ok: false, checks: [{ ok: false, line: `could not be checked: ${(err as Error).message ?? String(err)}` }], notes: [] });
+        }
+      };
+      await one('the newest weekly copy', async () => {
+        const w = fetchWeekly(run);
+        return [compare(w.label, fileSource(w.backup), w.backup, w.header, true)];
+      });
+      await one('the newest saved deploy export', async () => [await savedExportReport(run)]);
+      await one('a fresh export of live', () => liveReports(run));
     } else {
-      throw new Error('Usage: npm run restore-test  [-- --weekly [week] | -- --live | -- --file <backup.json>]');
+      throw new Error('Usage: npm run restore-test  [-- --weekly [week] | -- --export [id] | -- --live | -- --file <backup.json>]');
     }
   } catch (err) {
     const e = err as { message?: string; stderr?: string };

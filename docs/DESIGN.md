@@ -47,14 +47,16 @@ clear type, quick to scan. All of it lives in `src/styles.css`, tokens first.
   colors (`--sw-*`) are defined once. `tests/zip78-look.test.ts` checks all of this.
 - **Filled buttons are green or neutral.** The main action is green (`--primary`); everything else is the neutral secondary (gray fill, ink
   words). Amber, blue and purple are for chips, badges and alert tints only. "Mark paid", "Request" and "Text" are the small secondary
-  button everywhere (44 px, gray fill, ink words). On the dark tournament ticket the main button is green too; on the green Up next card it is white with green words. Tournament action buttons on the dark
-  tournament card are lime (Alex, Zip 79): the results row's Standings pill (`--ball`, `--ball-ink`), an approved exception to the yellow rule below.
+  button everywhere (44 px, gray fill, ink words). **Lime means "tournament"** (Alex, Zip 80): every action button on the dark tournament
+  ticket and tournament card is lime, the one ball token (`--ball` with `--ball-ink` words; `.tc-lime`: Sign up, Lock in · $18, Hold my spot,
+  and the results row's Standings pill, Zip 79). **Enter score on the green Up next card is white with green words** (`.tc-gd-wewon`, both
+  styles; Alex likes it). Regular game buttons stay the site green.
 - **Sizes.** Buttons: normal 46 px (`--btn-h`), small 44 (`--btn-h-sm`), big 54 (`--btn-h-lg`), one corner (`--btn-r`). Chips: one size
   (`--chip-*`). Cards: one corner (`--card-r`, 20 px). One segmented control (the court switch, In / Out, Games / Totals, the History tabs):
   a gray track, 3 px inside, 12 px corners, 44 px cells.
 - **Ball yellow** (`var(--ball)`) only in small doses: the View as bar, the "New" tag, the ball in empty states, the lime words on the
-  tournament ticket. Never a filled button, except the tournament action buttons on the dark tournament card (the results row's Standings
-  pill, Zip 79, approved by Alex).
+  tournament ticket. Never a filled button, except the tournament action buttons on the dark ticket and tournament card (lime, above;
+  `tests/zip78-look.test.ts` allows exactly those).
 - **Level up** (Zip 79): its gold is named art (`--art-lu-*`, light and dark), the number in the body font at weight 900.
 - **Motion** is CSS only: buttons press down a touch, cards fade in, a
   filled spot springs in, sheets slide up, bubbles pop. All of it turns off

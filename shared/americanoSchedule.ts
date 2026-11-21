@@ -35,6 +35,15 @@ export const PATTERN_ROUNDS = 16;
 /** Players on court each round (the table's rule): 4 x the smaller of (courts, players / 4). */
 export const onCourtFor = (players: number, courts: number): number => 4 * Math.max(1, Math.min(courts >= 2 ? 2 : 1, Math.floor(players / 4)));
 
+/**
+ * Zip 80: the most rounds in a row anyone may sit (the saved patterns hold it at every length, tests/zip80-sits.test.ts checks it). 2 wherever
+ * it can be done: 2 courts, and 1 court up to 10 players. On 1 court only 4 play a round, so with 12 or more someone must sit 3 in a row unless
+ * the same three foursomes play all night, and with 13 or more it cannot be done at all; there it is the least the mix allows: 3 for 11 to 13
+ * (11 could sit only 2, but then 11 pairs meet as opponents twice in 11 rounds instead of 5; at 3 nobody meets anyone twice), 4 for 14 to 16
+ * (at 3 some opponents meet twice from round 7; at 4 nobody does in 16 rounds).
+ */
+export const sitLimit = (players: number, onCourt: number): number => (onCourt >= 8 || players <= 10 ? 2 : players <= 13 ? 3 : 4);
+
 /** A small seeded random number source (mulberry32), so the search is the same every time it runs. */
 export function seeded(seed: number): () => number {
   let a = seed >>> 0;
@@ -169,9 +178,12 @@ function placeCourts(t: Tally, games: Duo[]): { games: SeatGame[]; cost: number 
   };
 }
 
-/** One more round with the rules, against the counts so far (`tally` is updated). The best split, ties at random. */
-export function nextRound(t: Tally, onCourt: number, rnd: () => number, courtWeight = 2): SeatRound {
-  const sit = pickSitters(t, t.n - onCourt, rnd);
+/**
+ * One more round with the rules, against the counts so far (`tally` is updated). The best split, ties at random. Zip 80: `sitters` gives who
+ * sits (scripts/americano-patterns-lib.ts picks them with the sit-in-a-row rule); without it, the least-sat seats at random, as before.
+ */
+export function nextRound(t: Tally, onCourt: number, rnd: () => number, courtWeight = 2, sitters?: readonly number[]): SeatRound {
+  const sit = sitters ? [...sitters] : pickSitters(t, t.n - onCourt, rnd);
   const sitting = new Set(sit);
   const playing = [...Array(t.n).keys()].filter((s) => !sitting.has(s));
   let best: SeatGame[] | null = null;
@@ -338,7 +350,7 @@ export function searchPattern(n: number, onCourt: number, rounds: number, tries:
 }
 
 /** The best way round for the courts of the first 10 rounds, every one of the 1,024 tried (then the rest flipped one by one). */
-function bestCourts(n: number, rounds: SeatRound[]): SeatRound[] {
+export function bestCourts(n: number, rounds: SeatRound[]): SeatRound[] {
   const head = Math.min(10, rounds.length);
   if (!rounds.slice(0, head).some((r) => r.games.length === 2)) return rounds;
   let best = rounds;
@@ -360,13 +372,29 @@ function bestCourts(n: number, rounds: SeatRound[]): SeatRound[] {
   return balanceCourts(n, best);
 }
 
-/** Carry a pattern on past its saved rounds with the same rules (a night longer than 16 rounds). */
+/**
+ * Carry a pattern on past its saved rounds with the same rules (a night longer than 16 rounds). Zip 80: who sits keeps the sit rule too: the
+ * least-sat seats, never one that has already sat its limit in a row while another least-sat seat can sit instead (sitLimit), ties at random.
+ */
 export function extendRounds(n: number, onCourt: number, start: readonly SeatRound[], rounds: number): SeatRound[] {
   const out = start.slice(0, rounds);
   if (out.length >= rounds) return out;
   const t = tallyOf(n, out);
   const rnd = seeded(n * 100 + onCourt);
-  while (out.length < rounds) out.push(nextRound(t, onCourt, rnd));
+  const limit = sitLimit(n, onCourt);
+  const run = new Array<number>(n).fill(0);
+  for (const r of out) for (let x = 0; x < n; x++) run[x] = r.sit.includes(x) ? run[x] + 1 : 0;
+  while (out.length < rounds) {
+    const sit = [...Array(n).keys()]
+      .map((s) => ({ s, k: t.sits[s], must: run[s] >= limit ? 1 : 0, r: rnd() }))
+      .sort((a, b) => a.k - b.k || a.must - b.must || a.r - b.r)
+      .slice(0, n - onCourt)
+      .map((x) => x.s)
+      .sort((a, b) => a - b);
+    const round = nextRound(t, onCourt, rnd, 2, sit);
+    for (let x = 0; x < n; x++) run[x] = round.sit.includes(x) ? run[x] + 1 : 0;
+    out.push(round);
+  }
   return out;
 }
 

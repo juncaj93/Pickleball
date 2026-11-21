@@ -53,6 +53,13 @@ SELECT
      AND (SELECT COUNT(*) FROM tournament_tickets WHERE tournament_id = t.id AND place = 'spot') < 16
      AND EXISTS (SELECT 1 FROM tournament_tickets k JOIN tournament_signups s ON s.tournament_id = k.tournament_id AND s.player_id = k.player_id AND s.status = 'in'
                  WHERE k.tournament_id = t.id AND k.place = 'line' AND k.credit_cents + k.paid_cents >= k.price_cents)) AS tour_paid_line_with_open_spot
+  -- Zip 80 (the 🎾75 audit): credit given back twice on the same ticket. Money comes back from a ticket in one step that also empties it
+  -- (its paid_cents, credit and paid_at go to 0 and NULL), so a live money-back row ('tour:<id>:back', 'off', 'cancel' or 'unused') made at or
+  -- after the ticket's current payment, while the ticket still holds that money, is money given back that never left the ticket.
+  ,(SELECT COUNT(*) FROM tournament_tickets k WHERE k.paid_at IS NOT NULL AND k.credit_cents + k.paid_cents > 0
+     AND EXISTS (SELECT 1 FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL AND l.player_id = k.player_id
+       AND l.reason IN ('tour:' || k.tournament_id || ':back', 'tour:' || k.tournament_id || ':off', 'tour:' || k.tournament_id || ':cancel', 'tour:' || k.tournament_id || ':unused')
+       AND l.created_at >= k.paid_at)) AS tour_credit_back_twice
   -- Not a problem, a to-do: I paid taps on tickets still waiting for the organizer's answer.
   ,(SELECT COUNT(*) FROM tournament_tickets WHERE claim_cents > 0) AS info_open_ticket_claims
   -- Not a problem: Zip 70 late drops whose money is kept until someone takes the spot.

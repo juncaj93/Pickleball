@@ -74,6 +74,7 @@ import { adminChangeStamp, adminChangeStampAndTour, adminStampTripReads } from '
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 import { everyoneSettingsOf, flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
 import { cancelChargesRead, hiddenSessionsRead, plannedStartsRead, rostersRead, sessionsRead } from './repo';
+import { monthSessionsRead } from './money';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
@@ -1669,7 +1670,9 @@ export async function applyPayment(
       // Finalized and played above the final price: the money back was held until this payment was confirmed
       // (only confirmed money becomes credit); it comes back now, in the same batch.
       const finalCents = session.finalized_at && row.played === 1 ? session.final_price_cents : null;
-      const back = finalCents !== null && finalCents !== undefined ? Math.max(0, (row.payment_amount_cents ?? 0) - finalCents) : 0;
+      // Zip 80 (the review): a host's seat pays one share per person it holds (Finalize's units: the guest who played, or a guest spot still
+      // owed): $28 for Blair and Sam at $9 each gives back $10, not $19.
+      const back = finalCents !== null && finalCents !== undefined ? Math.max(0, (row.payment_amount_cents ?? 0) - finalCents * seatUnits(row)) : 0;
       const confirmedNow = `NOT EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND self_paid_at IS NOT NULL)`;
       // Only while the game is the one read (not finalized, reopened or redone since): the money back worked out
       // above belongs to that finalize. A Finalize or Reopen at the same moment: look again.
@@ -2643,9 +2646,24 @@ export async function monthGames(ctx: Ctx): Promise<{ month: string; sessions: A
   const to = new Date(zonedTimeToUtc(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1, 0, 0, tz)).toISOString();
   const settings = settingsOf(group);
   const shownFrom = visibleFrom(group);
+  // Zip 80 (the 🎾75 audit's speed note): the reads below do not depend on each other: with "Fewer database trips" on they go in ONE trip
+  // (then each game's roster in one more, below). Off: each on its own, as before.
+  const fast = fewerDb(ctx);
+  const byName = !group.organizer_player_id && (group.organizer_name ?? '').trim() !== '';
+  if (fast?.isFast())
+    await fast.prefetch([
+      { kind: 'all', ...monthSessionsRead(group.id, from, to) },
+      { kind: 'all', ...playersRead(group.id) },
+      ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : byName ? [{ kind: 'all' as const, ...playersRead(group.id) }] : []),
+      { kind: 'all', ...ledgerRead(group.id) },
+      { kind: 'all', ...cancelChargesRead(group.id) },
+      { kind: 'all', ...adminHiddenGamesRead(group.id) },
+      { kind: 'all', ...hiddenGameIdsRead(group.id) },
+    ]);
+  const ms = monthSessionsRead(group.id, from, to);
   const { results } = await ctx.db
-    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`)
-    .bind(group.id, from, to)
+    .prepare(ms.sql)
+    .bind(...ms.values)
     .all<SessionRow>();
   const rows = results.filter((s) => s.starts_at >= shownFrom || Number(s.shown_early) === 1);
   const players = await getPlayers(ctx.db, group.id);

@@ -43,7 +43,7 @@ import { endPlan, type EndRow, readNight, writeEnd } from './tournamentEnd';
 // Zip 60 (🎾60.formatvote): the players vote the format. The tournament is "The Cold Open", created on "Let players vote".
 //   vote_open      sign-up open, the vote open: 3 on the list (Parker votes Locked doubles, Rowan Americano, Sage Either). View as Vic, Sign up, see
 //                  "Format you'd like"; the card says "Tournament style TBD" and "~7:30 PM"
-//   vote_majority  the date locked by the organizer's real Pick date: Americano wins 3 to 1 (Wren and Christopher Either), the alert shows for Vic
+//   vote_majority  the date locked by the organizer's real Pick date: Americano wins 3 to 1 (Christopher Either; Zip 80: 3 of 5 is a real majority), the alert shows for Vic
 //   vote_finalize  the Finalize screen (pass 2): all 10 names on the list and able to make the date, a 6 to 4 vote (Americano 6, Locked doubles 4,
 //                  no Either); NOT locked. As Alex, tap the date on the tournament page: the Finalize screen opens. (The "over" line needs more than 12
 //                  players, and the preview has 10 names, so it does not show here.)
@@ -551,7 +551,8 @@ const VOTERS: Record<VoteStage, { name: string; level: number; vote: 'locked' | 
     { name: 'Parker', level: 360, vote: 'americano' },
     { name: 'Rowan', level: 350, vote: 'americano' },
     { name: 'Sage', level: 300, vote: 'locked' },
-    { name: 'Wren', level: 320, vote: 'either' },
+    // Zip 80: a real majority (3 of 5), so the alert may say "Most players voted Americano." (2 of 5 no longer claims it).
+    { name: 'Wren', level: 320, vote: 'americano' },
     { name: 'Christopher Vanderberg', level: 300, vote: 'either' },
   ],
   vote_finalize: [

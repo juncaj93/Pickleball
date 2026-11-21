@@ -16,6 +16,12 @@ export const GAME_LENGTHS: readonly GameTo[] = [11, 9, 7];
 export const END_BUFFER = 10;
 /** Semifinals, the Final and the 3rd place game are always to 11. */
 export const PLAYOFF_TO: GameTo = 11;
+/**
+ * Zip 80: minutes one tie game takes (Game A or Game B, played to 5; the wheel's games). ROUND_MINUTES's steps (16 at 7, 19 at 9, 23 at 11)
+ * carried down to 5. A tie is not in the plan made before the night (nobody knows there will be one); once its games exist the Time check and
+ * the night's times count them.
+ */
+export const TIE_MINUTES = 13;
 /** Americano: every player gets at least this many games. */
 export const AMERICANO_MIN_GAMES = 4;
 /** The sizes a tournament night is planned for. */
