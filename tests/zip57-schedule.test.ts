@@ -103,12 +103,10 @@ describe('zip 57: the schedule, every size, both court counts', () => {
     const twelve = schedule(6, 2);
     expect(twelve.filter((g) => g.stage === 'pool')).toHaveLength(6);
     expect(twelve.map((g) => g.stage).slice(-4)).toEqual(['semi', 'semi', 'final', 'third']);
-    // 14: Pool A of 4 and Pool B of 3, 5 pool rounds; when Pool B is done, Pool A uses both courts.
+    // 14: Pool A of 4 and Pool B of 3, 5 pool rounds. Zip 80: Pool A opens on both courts, each Pool B game is beside a Pool A game (Pool B
+    // on Court 2), and the last pool round is one Pool A game, so no team plays 3 rounds in a row (tests/zip80-sits.test.ts).
     const fourteen = schedule(7, 2);
-    expect(fourteen.filter((g) => g.round === 4).map((g) => [g.pool, g.court])).toEqual([
-      ['A', 1],
-      ['A', 2],
-    ]);
+    expect([1, 2, 3, 4, 5].map((r) => fourteen.filter((g) => g.round === r).map((g) => `${g.pool}${g.court}`).join(' '))).toEqual(['A1 A2', 'A1 B2', 'A1 B2', 'A1 B2', 'A1']);
     expect(Math.max(...fourteen.filter((g) => g.stage === 'pool').map((g) => g.round))).toBe(5);
     // 16: two pools of 4, one game per pool per round, 6 rounds: 2 teams per pool sit each round.
     const sixteen = schedule(8, 2);

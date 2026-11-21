@@ -210,8 +210,7 @@ const SEQUENCE: Record<number, Duel[]> = {
     [1, 3],
     [2, 3],
   ],
-  // The pool of 4 on its own court. With a pool of 3 beside it (7 teams on 2 courts) its last 3 games share 2 rounds, so games 4 and 5 are
-  // two different pairs of teams (they are played side by side).
+  // The pool of 4 on its own court (7 teams on 2 courts have their own order: FOURTEEN_TWO_COURTS).
   4: [
     [1, 2],
     [3, 4],
@@ -267,14 +266,18 @@ function roundRobinRounds(k: number): Duel[][] {
   return out;
 }
 
-/** The 7-team order for Pool A (4 teams) so its games 4 and 5 can share a round: 1-2, 3-4, 1-3, then 1-4 with 2-3, then 2-4. */
-const POOL4_BESIDE_3: Duel[] = [
-  [1, 2],
-  [3, 4],
-  [1, 3],
-  [1, 4],
-  [2, 3],
-  [2, 4],
+/**
+ * Zip 80: 14 players on 2 courts (Pool A of 4 beside Pool B of 3), round by round: [court 1, court 2]. The only kind of order where no team plays
+ * 3 rounds in a row, even counting the semifinal right after the pools, and nobody sits more than 2 in a row (every order was tried): Pool A
+ * opens on both courts, then each Pool B game is played beside a Pool A game (Pool B stays on Court 2, the Drive group's court), and the
+ * last pool round is one Pool A game. Seats are pool places (Pool B's 1 to 3 are seats 5 to 7).
+ */
+const FOURTEEN_TWO_COURTS: [[PoolName, Duel], [PoolName, Duel] | null][] = [
+  [['A', [1, 2]], ['A', [3, 4]]],
+  [['A', [1, 3]], ['B', [1, 2]]],
+  [['A', [2, 4]], ['B', [1, 3]]],
+  [['A', [1, 4]], ['B', [2, 3]]],
+  [['A', [2, 3]], null],
 ];
 
 /**
@@ -310,20 +313,26 @@ export function schedule(teams: number, courts: number): PlannedGame[] {
   }
   // Pools.
   const [a, b] = poolSizes(teams)!;
-  const seqA = (a === 4 && b === 3 ? POOL4_BESIDE_3 : SEQUENCE[a]).map(([x, y]): Duel => [x, y]);
+  const seqA = SEQUENCE[a].map(([x, y]): Duel => [x, y]);
   const seqB = SEQUENCE[b].map(([x, y]): Duel => [a + x, a + y]);
   if (s.courtsUsed === 2) {
-    const common = Math.min(seqA.length, seqB.length);
-    for (let i = 0; i < common; i++) {
-      round++;
-      add(round, 1, 'pool', 'A', T(seqA[i][0]), T(seqA[i][1]));
-      add(round, 2, 'pool', 'B', T(seqB[i][0]), T(seqB[i][1]));
-    }
-    // The pool of 3 is done: the pool of 4 uses both courts for what it has left.
-    for (let i = common; i < seqA.length; i += 2) {
-      round++;
-      add(round, 1, 'pool', 'A', T(seqA[i][0]), T(seqA[i][1]));
-      if (seqA[i + 1]) add(round, 2, 'pool', 'A', T(seqA[i + 1][0]), T(seqA[i + 1][1]));
+    if (a === 4 && b === 3) {
+      for (const both of FOURTEEN_TWO_COURTS) {
+        round++;
+        both.forEach((g, i) => {
+          if (!g) return;
+          const [pool, [x, y]] = g;
+          const off = pool === 'A' ? 0 : a;
+          add(round, i + 1, 'pool', pool, T(off + x), T(off + y));
+        });
+      }
+    } else {
+      // Pools of the same size: one game of each pool every round, side by side.
+      for (let i = 0; i < seqA.length; i++) {
+        round++;
+        add(round, 1, 'pool', 'A', T(seqA[i][0]), T(seqA[i][1]));
+        add(round, 2, 'pool', 'B', T(seqB[i][0]), T(seqB[i][1]));
+      }
     }
     round++;
     add(round, 1, 'semi', null, 'A1', 'B2');
