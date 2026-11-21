@@ -7791,6 +7791,21 @@ https://claude-new-session-hblsb0.pickleball-club-9h0.pages.dev; re-seeded, calm
 organizer Home is the Tournament test row and next week's two games; Vic's Home is the congratulations card, the final board once (X), then
 the row and Your rounds.
 
-### Live
-Not shipped yet: this session's permission settings refused reading the live database (the SQL export and the Time Travel bookmark), so no
-live step was taken. Live is still Zip 78 (090d954a).
+### Alex's answers (after the first report)
+The lime Standings pill is an approved exception (DESIGN.md: tournament action buttons on the dark card are lime); straight lines on the
+trend chart are fine; the previous rating shows Alex's level on purpose. Back during the level up now skips it to the dates step (its own
+Back layer; the sheet stays open; e2e/zip79.cjs D checks it). zip72 A fails only because it still expects Zip 77's lime Enter score; Zip 78
+made it white with green words on purpose: not a bug, left as is.
+
+### Live (Fri Nov 20, 2026, about 9:30 PM Eastern, a quiet window)
+- The first try at the live backup was refused by the session's permissions; Alex asked for a retry and it went through.
+- Restore points first: Time Travel bookmark `00001a88-00000000-0000512a-1c1353226b8d939e670ce35213ab9cdf`; SQL export of `pickleball`
+  (316 KB) saved to `pickleball-backups` as `export-20261121022749` (checked against the file).
+- Integrity checks before and after: 21, 8 and 13 columns, every problem column 0.
+- The local `main` was a stale branch with unrelated history (kept as `main-stale-local`, never pushed); `main` was made fresh from
+  origin/main `ab84771` and fast-forwarded to `48f3a1e`, pushed; `npm run deploy` from main (the guard rules passed): deployment
+  **e4f3eab1-e120-4cdb-b67b-c7c0ada09b7f** (bundle `index-B0csLGM1.js`). No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **090d954a-53e7-40f1-adc7-e6c57995f367** (Zip 78, `769d5a5`), Cloudflare Deployments > Rollback. No database undo.
+- Read-only live look (pages.dev, only GET requests): Home 200 at 390 light and dark, the new bundle, no page errors, nothing wider than the
+  screen; /admin and /api/status 200; the dashboard and /api/admin/skills 401 without a PIN. Organizer screens not opened on live (no
+  read-only PIN in this session).
