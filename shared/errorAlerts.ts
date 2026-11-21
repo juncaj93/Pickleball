@@ -225,7 +225,7 @@ export const errorText = {
     finish(
       job === 'site check'
         ? `Site error: the clock could not reach the site at ${alertTime(atMs)}.`
-        : `Site error: the clock’s ${job} job failed${database ? ' (a database error)' : ''} at ${alertTime(atMs)}.`,
+        : `Site error: the clock's ${job} job failed${database ? ' (a database error)' : ''} at ${alertTime(atMs)}.`,
       extra,
       atMs,
       adminUrl,
