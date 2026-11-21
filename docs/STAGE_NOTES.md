@@ -7884,3 +7884,34 @@ The Cold Open's settings, tickets and money untouched.
   each regular game on that date that is not canceled: one amber card on the organizer's Home, "Tue Dec 1 has a regular game and The Cold
   Open.", Cancel game (the usual cancel sheet for that game) under the words, and the X (hides it on that phone; a new date or game shows a
   fresh one). Worked out on the phone from the dashboard (no new read). Players see nothing. Live: the Dec 1 game is canceled, so nothing.
+
+### Review (a fresh reviewer, no part in the build)
+Nothing blocking: no legitimate flow found that makes either new money check read non-zero (drop, rejoin, cancel, un-cancel, finalize and
+reopen, not played, late fees, guest trims, the late-cancel split, made cheaper, cash pairs, Unmark, claims; every ticket money-back path).
+Fixed: (1) the "shorter games would not help" guard also hid a real "play to 7" on an overdue round with no tie: now only with a tie;
+(2) a second live 'finalized' row on a seat (a small part back twice) is a double too (the site refuses it); (3) the restore test checks each
+backup on its own (one that cannot be read is a FAIL line, the others still run) and an export older than a migration gets the missing tables
+empty, with a NOTE; (4) found outside this zip and fixed: confirming a host's I paid ($28 with a guest) after Finalize gave back above ONE
+share ($19 at $9 each); it now counts both shares like Finalize ($10) (server/admin.ts, seatUnits; tests/guest-spot.test.ts "Zip 80").
+Kept as notes: a backup copy made because a tournament ended counts among the 3 kept asked copies; with 2 regular games on the date, Cancel
+game opens the first; a tournament canceled after its night started drops out of the venue charge; "Most players voted" reads the sign-ups
+in now (a back out can turn it into "Format: X").
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip80-speed.ts, the calm world, "Fewer database trips" on)
+Dashboard 4 trips / 61 statements before and after, the same bytes at none, all_locked, day_ready, mid: 7.9 to 11.3 ms before, 7.4 to 10.4
+ms after; the 5 second check 2 trips / 16 statements both. The three batched reads in section 4.
+
+### Tests
+Unit: tests/zip80-sits, zip80-tie-time, zip80-double-credit, zip80-small (Spent, kept, voted, venue courts, Venmo note), zip80-clash,
+zip80-speed, zip80-dryrun (Americano 9 and 10 on 2 and 1 courts to the reveal, to the cent); the Zip 80 blocks in restore-test,
+backup-zip19, guest-spot, zip56-tickets (the new column's proof case), ledger-fuzz (the check after every step). Updated on purpose:
+zip57-schedule (14's new order), zip60-formatvote and e2e/zip60.cjs (the majority stage is 3 of 5), error-alerts (curly apostrophe),
+zip48-split (player script budget 143.3 -> 143.6: Already set up and the Venmo dates, 143.11 -> 143.44 KB), restore-test (22 checks).
+Browser: e2e/zip80.cjs 8 of 8 (the clash card 320/390/420 light and dark, the cancel sheet, X, Already set up, Americano for 9); zip70 74 of
+74. zip60 (11) and zip57 (2: the draft swap) fail the same way on main before this zip: older checks, not touched.
+
+### Preview (Sat Nov 21, 2026)
+`pickleball-preview` (fake): Time Travel bookmark first `000001c7-00000000-0000512a-ed24289a0451263d230c0ff962a8a648`; final deployment
+`381adcaf`, https://claude-new-session-fy1hug.pickleball-club-9h0.pages.dev; re-seeded (calm start zip70_start). First screen at 390, light
+and dark: organizer Home is the Tournament test row, "Tue Dec 1 has a regular game and The Cold Open." with Cancel game, The Cold Open card
+and next week's games; Vic's Home is the date note and the ticket (nothing new). No page errors. Switches as on live.
