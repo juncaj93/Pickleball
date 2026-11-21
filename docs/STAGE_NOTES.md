@@ -7997,3 +7997,23 @@ dark: two amber cards (Thu Nov 26 closes at noon; Thu Dec 24 closes at 2 PM, the
 Winter hours Nov 23 2026 to Jan 31 2027 (Mon to Sat 8 AM to 11 PM, Sun 8 AM to 7 PM); Thanksgiving Thu Nov 26 8 AM to noon; Christmas Eve Thu
 Dec 24 8 AM to 2 PM; Christmas Fri Dec 25 Closed; New Year's Eve Thu Dec 31 8 AM to 11 PM; New Year's Day Fri Jan 1 8 AM to 11 PM. Read-only
 look at live (Fri Nov 20): the 5 games still to come and The Cold Open (Tue Dec 1, 7:30 to 10 PM) all fit these, so no card will show.
+
+### Alex's change after the preview: no native time pickers
+Every venue hours time (each weekday, One day start and end, Change normal hours) and Settings > Usual game time's Start and End are buttons
+("8:00 AM") that open the game Start time's own grid, now one component (`TimeGridSheet` in src/pages/admin/TimePicker.tsx, `TimeButton`):
+6:00 AM to 12 AM every 30 minutes (midnight reads "12 AM"), the picked one green, a start after the end (or an end before the start) dimmed;
+titles "Start · Mon" / "End · Thanksgiving". New entries start on each weekday's normal hours (One day: that date's weekday) until a time is
+picked. e2e/zip81.cjs H (Usual game time) and C (the grid: 37 times, dimming, no native pickers).
+
+### Live (Fri Nov 20, 2026, about 11:50 PM Eastern, a quiet window; after 🎾80 went live)
+- 🎾80's main (2ad1677) merged in; unit 229 files, 4,317 passed, 0 failed; e2e/zip81.cjs 8 of 8.
+- The first backup tries were refused by a Cloudflare rate limit (code 971, "wait about 3 minutes"); after a 5 minute wait it went through:
+  `npm run backup:before-deploy`: export `export-20261121044414` saved in pickleball-backups (checked against the file); Time Travel bookmark
+  `00001aa7-00000000-0000512a-0db4287970b1b40ab821728ade131072`.
+- Integrity checks before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `2ad1677` to `6029948`, pushed; `npm run deploy` (the guard rules passed): deployment
+  **44f584bf-0705-4983-88be-61221f4a6987**. No migration, no Worker deploy, no live data touched; no special hours entered (Alex adds them).
+- Rollback: deployment **d03ca730-5616-4650-9005-fdea98fbcd14** (🎾80), Cloudflare Deployments > Rollback. No database undo needed.
+- Read-only live look (pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN. Organizer screens not opened on live
+  (no read-only PIN in this session).
+- Preview redeployed with the grid: https://claude-new-session-aenfpb.pickleball-club-9h0.pages.dev (deployment 3f194714).
