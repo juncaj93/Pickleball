@@ -7809,3 +7809,61 @@ made it white with green words on purpose: not a bug, left as is.
 - Read-only live look (pages.dev, only GET requests): Home 200 at 390 light and dark, the new bundle, no page errors, nothing wider than the
   screen; /admin and /api/status 200; the dashboard and /api/admin/skills 401 without a PIN. Organizer screens not opened on live (no
   read-only PIN in this session).
+
+## Zip 81: special venue hours (🎾81.venue hours), Fri Nov 20 to Sat Nov 21, 2026
+
+Built on main `d1b8f9f` (Zip 79 live). Branch `claude/new-session-aenfpb`. No migration (the hours live in the group's settings_json, `venueHours`),
+no Worker deploy, no money logic touched, nothing new for players. Rides the Booking hours switch (ON on live, read-only check Fri Nov 20).
+
+### What it does (pictures 1 to 5)
+- Settings > Schedule > "Special venue hours" under Usual game time: the hint ("Winter hours to Jan 31 · 5 holidays"; None when empty), Change.
+- The sheet: "Normal: Mon to Sat 8 AM to 10 PM · Sun 8 AM to 7 PM"; the entries soonest first (a range: dates, then hours on the next line; one
+  day: "Thu Nov 26 · 8 AM to noon", Closed in red); a tap opens a row in place with Edit and Remove (no caret), a second tap closes it; the green
+  Add special hours; the quiet Change normal hours link (the fixed table is editable there, the same seven day rows).
+- Add special hours: Name; Dates / One day. Dates: From, To, a start and end per weekday. One day: Date, Open (start and end) or Closed. Save.
+- The rules (`shared/bookingHours.ts` dayRule): a one-day entry beats a range on its date; two ranges never overlap and two one-day entries never
+  share a date (the save refuses it, `shared/venueHours.ts` readSpecial); an entry ends after its last date and leaves the list; no repeats.
+  An end of 12:00 AM means midnight (a game may end exactly then).
+- Where the hours are checked, all by the game's own date: Add game and Edit game (the Start grid only offers that date's times; a closed day says
+  so; the server refuses with the old words plus the entry's name: "The venue is open 8:00 AM to 12:00 PM on this day (Thanksgiving). Pick times
+  inside those hours." / "The venue is closed on this day (Christmas). Pick another date."), the usual time (against the normal Tue and Thu),
+  Second Chance start times (`shared/secondChanceTimes.ts`), and tournaments: Finalize and moving the start or end after Finalize
+  (server/tournament.ts enforceTournamentHours; the Finalize and Time boxes show the same line and keep the button off).
+- Conflicts (picture 5): organizer Home, at the very top, one amber card per game still to come (not canceled, not finalized) and the finalized
+  tournament outside its date's hours: "Thu Nov 26: the venue closes at noon." / "Your 8 PM game is after that." (starts before closing: "ends
+  after that"; opens later: "the venue opens at ..."; closed: "Fri Dec 25: the venue is closed." / "Your 8 PM game is that day."). Cancel game
+  opens the usual Cancel flow; the tournament's Change time opens its card with the Time row. Worked out on the phone from Home's own data.
+- The holiday "hours confirmed?" question is skipped when a one-day entry covers that date (the holiday's name stays).
+- Saves: POST /api/admin/venue-hours/special, POST /api/admin/venue-hours/remove, PUT /api/admin/venue-hours/normal (server/venueHours.ts), one
+  guarded write each; the general Settings save takes venueHours from the row at the moment it writes, so it never undoes an hours save.
+  Activity: "Alex added special venue hours: Thanksgiving, Thu Nov 26 · 8 AM to noon" (changed, removed, normal hours).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: editing a range that already started was blocked by the browser's own date check (noValidate; e2e G); a Settings autosave landing at the
+same moment could undo an hours save (venueHours now merged in the UPDATE); Finalize's other refusals stay first; the usual-time words are the old
+ones while the normal week is the built-in one; the old Sessions holiday pill keeps the name. Kept as a note: only an hours change made in the
+same second as a Zelle or charge-day save can still race those two keys (as before this zip).
+
+### Size and speed
+The player's script no longer carries the hours code at all (the switch names moved to shared/bookingHoursSwitch.ts, Second Chance's times to
+shared/secondChanceTimes.ts): 146.1 KB gzipped on main, 145.4 KB now. The shared organizer chunk is now named venueHours (tests/zip48-split).
+ADMIN SPEED (scripts/zip68-admin-speed.ts, calm world): dashboard 4 trips / 60 statements before and after (none 8.5 to 7.6 ms, all_locked 8.6
+to 8.3, day_ready 7.6 to 7.5; venue_winter 4 / 59); the 5 second check 2 trips / 16 statements both.
+
+### Tests
+Unit: 222 files, 4,256 passed, 2 skipped, 0 failed; tests/zip81-venue-hours.test.ts 26 (fake dates before, during and after the range, the day
+it ends, Thanksgiving, Christmas closed, New Year's Day, midnight, Second Chance, the save checks, the conflicts, the server routes, tournaments).
+Browser: e2e/zip81.cjs 7 of 7 (A Home card 320/390/420 light and dark; B the row and list; C add, edit, remove, overlap refused; D the Start grid
+on Thanksgiving and Christmas; E Cancel game and the clock after the set; F the tournament card and Change time; G edit a running range);
+zip24 25 of 26 (the dark picked-chip color fails the same way on main), zip24-off 26 of 26 (the new card set aside on purpose), zip70 74 of 74,
+zip15 27 of 27.
+
+### Preview
+`pickleball-preview` (fake): Time Travel bookmark first `000001c6-00000000-0000512a-9f91e1fc0e41adebfc1b4951bb8defff`; re-seeded; deployment
+https://claude-new-session-aenfpb.pickleball-club-9h0.pages.dev; stage "Venue hours: winter set and holidays". First screen at 390, light and
+dark: two amber cards (Thu Nov 26 closes at noon; Thu Dec 24 closes at 2 PM, the preview's Dec 24 game) with Cancel game, then the games.
+
+### What Alex should add on live (the flyers)
+Winter hours Nov 23 2026 to Jan 31 2027 (Mon to Sat 8 AM to 11 PM, Sun 8 AM to 7 PM); Thanksgiving Thu Nov 26 8 AM to noon; Christmas Eve Thu
+Dec 24 8 AM to 2 PM; Christmas Fri Dec 25 Closed; New Year's Eve Thu Dec 31 8 AM to 11 PM; New Year's Day Fri Jan 1 8 AM to 11 PM. Read-only
+look at live (Fri Nov 20): the 5 games still to come and The Cold Open (Tue Dec 1, 7:30 to 10 PM) all fit these, so no card will show.
