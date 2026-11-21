@@ -14,6 +14,7 @@
  *   F  The tournament: finalized 7:30 to 10 PM, a one-day entry closing at 9 PM on its date: "Your tournament ends after that.", Change time
  *      opens the Time row with the hours line and Save off.
  *   G  On Dec 1 (Winter hours running): Edit Winter hours, change Friday's close, Save: it saves (no browser date check in the way).
+ *   H  Settings > Usual game time: Start and End are buttons opening the same grid; a new start keeps the length; Save.
  * Screenshots: .data/zip81-shots (not in git).
  */
 const path = require('node:path');
@@ -56,6 +57,17 @@ async function check(name, fn) {
     await sv.scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
     await sv.click();
+  };
+  /** Tap a time button, then a time on the grid sheet that opens (Alex: no native time pickers). */
+  const pickTime = async (page, button, hhmm) => {
+    await page.locator(button).scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await page.locator(button).click();
+    const grid = page.locator('.bh-grid-sheet [data-bh-grid]');
+    await grid.waitFor({ timeout: 5000 });
+    await grid.locator(`[data-chip="${hhmm}"]`).click();
+    await grid.waitFor({ state: 'detached', timeout: 5000 });
+    await page.waitForTimeout(450);
   };
   await h.stage('venue_winter');
 
@@ -137,6 +149,22 @@ async function check(name, fn) {
       await a.page.locator('[data-vh-add]').click();
       await a.page.locator('[data-vh-form="add"]').waitFor();
       assert((await a.page.locator('[data-vh-day]').count()) === 7, 'seven day rows');
+      // A new entry starts on the normal hours: Mon 8 AM to 10 PM, Sun 8 AM to 7 PM, as buttons (no native time boxes).
+      assert((await a.page.locator('.vh-form input[type="time"]').count()) === 0, 'no native time pickers');
+      assert(flat(await a.page.locator('[data-vh-close="Mon"]').innerText()) === '10:00 PM' && flat(await a.page.locator('[data-vh-close="Sun"]').innerText()) === '7:00 PM', 'normal hours filled in');
+      await a.page.waitForTimeout(500);
+      await a.page.locator('[data-vh-close="Mon"]').click();
+      const grid = a.page.locator('.bh-grid-sheet [data-bh-grid]');
+      await grid.waitFor();
+      assert(flat(await a.page.locator('.bh-grid-sheet h2').innerText()) === 'End · Mon', 'grid title');
+      const chips = await grid.locator('[data-chip]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-chip'), e.disabled, e.getAttribute('aria-pressed')]));
+      assert(chips.length === 37 && chips[0][0] === '06:00' && chips[36][0] === '00:00', `6 AM to 12 AM: ${chips.length}`);
+      assert(chips.find((c) => c[0] === '08:00')[1] === true && chips.find((c) => c[0] === '12:00')[1] === false, 'an end at or before the start is dimmed; noon is one tap');
+      assert(chips.find((c) => c[0] === '22:00')[2] === 'true', '10 PM picked');
+      await h.noWider(a.page, `grid ${scheme}`);
+      await shot(a.page, `C-grid-${scheme}`);
+      await a.page.locator('.bh-grid-sheet').getByRole('button', { name: 'Close' }).click();
+      await a.page.waitForTimeout(400);
       await shot(a.page, `C-dates-${scheme}`, true);
       await a.page.locator('[data-vh-kind="day"]').click();
       await a.page.locator('[data-vh-date]').waitFor();
@@ -153,6 +181,7 @@ async function check(name, fn) {
     await a.page.locator('[data-vh-name]').fill('Club night');
     await a.page.locator('[data-vh-kind="day"]').click();
     await a.page.locator('[data-vh-date]').fill('2026-12-10');
+    assert(flat(await a.page.locator('[data-vh-day-close]').innerText()) === '10:00 PM', 'one day starts on that weekday’s normal hours');
     await a.page.locator('[data-vh-closed-day]').click();
     await tapSave(a.page);
     await a.page.locator('[data-vh-item="Club night"]').waitFor({ timeout: 5000 });
@@ -173,8 +202,8 @@ async function check(name, fn) {
     await a.page.locator('[data-vh-item="Club night"] [data-vh-toggle]').click();
     await a.page.locator('[data-vh-edit]').click();
     await a.page.locator('[data-vh-open-day]').click();
-    await a.page.locator('[data-vh-day-open]').fill('10:00');
-    await a.page.locator('[data-vh-day-close]').fill('18:00');
+    await pickTime(a.page, '[data-vh-day-open]', '10:00');
+    await pickTime(a.page, '[data-vh-day-close]', '18:00');
     await tapSave(a.page);
     await a.page.waitForFunction(() => document.querySelector('[data-vh-item="Club night"]')?.textContent?.includes('10 AM to 6 PM'), null, { timeout: 5000 });
     await a.page.waitForTimeout(600);
@@ -271,9 +300,28 @@ async function check(name, fn) {
     await a.page.locator('[data-special-change]').click();
     await a.page.locator('[data-vh-item="Winter hours"] [data-vh-toggle]').click();
     await a.page.locator('[data-vh-edit]').click();
-    await a.page.locator('[data-vh-close="Fri"]').fill('21:00');
+    await pickTime(a.page, '[data-vh-close="Fri"]', '21:00');
     await tapSave(a.page);
     await a.page.waitForFunction(() => document.querySelector('[data-vh-item="Winter hours"]')?.textContent?.includes('Fri 8 AM to 9 PM'), null, { timeout: 5000 });
+    assert(a.errors.length === 0, a.errors.join('; '));
+    await a.ctx.close();
+  });
+
+  await check('H Usual game time: the grid, no native picker', async () => {
+    await h.setClock(NOW);
+    const a = await h.newPage({ width: 390, scheme: 'dark' });
+    assert((await a.ctx.request.post(h.BASE + '/api/admin/login', { data: { pin: h.PIN }, headers: { Origin: h.BASE } })).ok(), 'login');
+    await a.page.goto(`${h.BASE}/admin`);
+    await a.page.locator('.tab-bar, nav').first().waitFor({ timeout: 30000 });
+    await openSchedule(a.page);
+    await a.page.locator('[data-row="usualTime"] button', { hasText: 'Change' }).click();
+    await a.page.locator('[data-usual-start]').waitFor();
+    assert((await a.page.locator('dialog input[type="time"]').count()) === 0, 'no native time pickers');
+    await pickTime(a.page, '[data-usual-start]', '19:00');
+    assert(flat(await a.page.locator('[data-usual-end]').innerText()) === '9:00 PM', 'the end keeps the length');
+    await shot(a.page, 'H-usual-dark');
+    await a.page.locator('dialog button[type="submit"]').click();
+    await a.page.waitForFunction(() => document.querySelector('[data-usual-time]')?.textContent?.includes('7:00 PM'), null, { timeout: 5000 });
     assert(a.errors.length === 0, a.errors.join('; '));
     await a.ctx.close();
   });

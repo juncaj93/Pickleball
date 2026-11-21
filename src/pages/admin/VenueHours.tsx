@@ -7,10 +7,10 @@
 //  - Every save goes to the server (server/venueHours.ts), which runs the same checks as this screen (shared/venueHours.ts).
 import '../../venue-hours.css';
 import { type FormEvent, useState } from 'react';
-import { activeSpecials, dateKeyOf, type DayHours, MIDNIGHT, type SpecialHours, type VenueHoursConfig } from '../../../shared/bookingHours';
+import { activeSpecials, dateKeyOf, type DayHours, MIDNIGHT, weekdayOfDate, type SpecialHours, type VenueHoursConfig } from '../../../shared/bookingHours';
 import { normalLine, readSpecial, readWeek, specialHint, specialLines, venueConflicts } from '../../../shared/venueHours';
 import { AlertCard } from '../../AlertCard';
-import { hhmmToMinutes, minutesToHHMM } from '../../../shared/settings';
+import { TimeButton } from './TimePicker';
 import { api, ApiError } from '../../lib';
 import { Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
@@ -25,10 +25,10 @@ const DAYS: { wd: number; short: string }[] = [
   { wd: 0, short: 'Sun' },
 ];
 
-/** A time box's value: midnight as a closing time shows as 12:00 AM. */
-const boxValue = (m: number) => (m >= MIDNIGHT ? '00:00' : minutesToHHMM(m));
-/** A time box back to minutes (12:00 AM as an end means midnight; the save turns 0 into midnight). Empty: -1, which no check accepts. */
-const fromBox = (v: string) => hhmmToMinutes(v) ?? -1;
+/** Alex (after the preview): no native time pickers. Every time is a button that opens the game Start time's own 30-minute grid
+ *  (src/pages/admin/TimePicker.tsx TimeGridSheet), 6:00 AM to 12:00 AM; a start after the end (or an end before the start) is dimmed. */
+const startOk = (h: DayHours) => (m: number) => m < MIDNIGHT && m < h.close;
+const endOk = (h: DayHours) => (m: number) => m > h.open;
 
 type Face = { kind: 'list' } | { kind: 'form'; entry: SpecialHours | null } | { kind: 'normal' };
 
@@ -158,11 +158,11 @@ function WeekRows({ week, onChange, busy }: { week: DayHours[]; onChange: (wd: n
           <span className="vh-day-name" id={`vh-day-${wd}`}>
             {short}
           </span>
-          <input type="time" step={300} className="vh-time" aria-label={`${short} start`} disabled={busy} value={boxValue(week[wd].open)} onChange={(ev) => onChange(wd, { ...week[wd], open: fromBox(ev.target.value) })} data-vh-open={short} />
+          <TimeButton value={week[wd].open} onChange={(m) => onChange(wd, { ...week[wd], open: m })} title={`Start · ${short}`} label={`${short} start`} allowed={startOk(week[wd])} disabled={busy} data={{ 'data-vh-open': short }} />
           <span className="vh-to" aria-hidden="true">
             to
           </span>
-          <input type="time" step={300} className="vh-time" aria-label={`${short} end`} disabled={busy} value={boxValue(week[wd].close)} onChange={(ev) => onChange(wd, { ...week[wd], close: fromBox(ev.target.value) })} data-vh-close={short} />
+          <TimeButton value={week[wd].close} onChange={(m) => onChange(wd, { ...week[wd], close: m })} title={`End · ${short}`} label={`${short} end`} allowed={endOk(week[wd])} disabled={busy} data={{ 'data-vh-close': short }} />
         </div>
       ))}
     </div>
@@ -178,7 +178,9 @@ function EntryForm({ ctx, config, today, entry, onDone }: { ctx: AdminCtx; confi
   const [date, setDate] = useState(entry && entry.oneDay ? entry.from : '');
   const [week, setWeek] = useState<DayHours[]>(() => (entry?.week ?? config.normal).map((h) => ({ ...h })));
   const [closed, setClosed] = useState(entry ? entry.oneDay && !entry.day : false);
-  const [day, setDay] = useState<DayHours>(() => ({ ...(entry?.day ?? config.normal[1]) }));
+  // One day starts on that date's NORMAL hours (only the times that differ need a tap) until a time is picked.
+  const [dayPicked, setDay] = useState<DayHours | null>(() => (entry?.day ? { ...entry.day } : null));
+  const day: DayHours = dayPicked ?? { ...config.normal[weekdayOfDate(date) ?? 1] };
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function save(ev: FormEvent) {
@@ -246,14 +248,14 @@ function EntryForm({ ctx, config, today, entry, onDone }: { ctx: AdminCtx; confi
           </div>
           {!closed && (
             <div className="time-pair">
-              <label className="field">
-                Start
-                <input type="time" step={300} value={boxValue(day.open)} disabled={busy} onChange={(e) => setDay((d) => ({ ...d, open: fromBox(e.target.value) }))} data-vh-day-open />
-              </label>
-              <label className="field">
-                End
-                <input type="time" step={300} value={boxValue(day.close)} disabled={busy} onChange={(e) => setDay((d) => ({ ...d, close: fromBox(e.target.value) }))} data-vh-day-close />
-              </label>
+              <div className="field">
+                <span className="vh-lab">Start</span>
+                <TimeButton value={day.open} onChange={(m) => setDay({ ...day, open: m })} title={`Start · ${name.trim() || 'One day'}`} label="Start" allowed={startOk(day)} disabled={busy} data={{ 'data-vh-day-open': '' }} />
+              </div>
+              <div className="field">
+                <span className="vh-lab">End</span>
+                <TimeButton value={day.close} onChange={(m) => setDay({ ...day, close: m })} title={`End · ${name.trim() || 'One day'}`} label="End" allowed={endOk(day)} disabled={busy} data={{ 'data-vh-day-close': '' }} />
+              </div>
             </div>
           )}
         </>

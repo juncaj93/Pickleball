@@ -90,18 +90,17 @@
   color: var(--ink-2);
   font-size: 0.9rem;
 }
-.vh-day .vh-time {
-  padding-left: 8px;
-  padding-right: 6px;
-  font-size: 16px;
+.vh-lab {
+  font-weight: 600;
+  font-size: 0.93rem;
 }
 @media (max-width: 359px) {
   .vh-day {
     grid-template-columns: 2.2rem minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 4px;
   }
-  .vh-day .vh-time {
-    padding-left: 4px;
-    padding-right: 2px;
+  .vh-day .tg-btn {
+    padding: 0 2px;
+    font-size: 0.95rem;
   }
 }

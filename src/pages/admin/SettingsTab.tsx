@@ -17,6 +17,8 @@ import type { AdminCtx } from '../Admin';
 import { useInstant } from '../../InstantTaps';
 import { TournamentScheduleRow } from './Tournament';
 import { SpecialHoursRow } from './VenueHours';
+import { TimeButton } from './TimePicker';
+import '../../venue-hours.css';
 import { dayShort } from '../../../shared/tournament';
 import '../../money-rework.css';
 
@@ -849,15 +851,16 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
       <Sheet open={open} title="Usual game time" onClose={() => setOpen(false)}>
         <form className="stack" onSubmit={save}>
           <p className="small muted">For new Tuesday and Thursday games only. Games already on the schedule keep their times; change one from its Edit booking.</p>
+          {/* Zip 81 (Alex): no native time pickers: the game Start time's own 30-minute grid. */}
           <div className="time-pair">
-            <label className="field">
-              Start
-              <input type="time" step={300} value={start} onChange={(e) => pickStart(e.target.value)} required />
-            </label>
-            <label className="field">
-              End
-              <input type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} required aria-invalid={problem ? true : undefined} />
-            </label>
+            <div className="field">
+              <span className="vh-lab">Start</span>
+              <TimeButton value={hhmmToMinutes(start) ?? -1} onChange={(m) => pickStart(minutesToHHMM(m))} title="Start · Usual game" label="Start" allowed={(m) => m <= SETTING_LIMITS.defaultStartMinutes[1]} data={{ 'data-usual-start': '' }} />
+            </div>
+            <div className="field">
+              <span className="vh-lab">End</span>
+              <TimeButton value={hhmmToMinutes(end) ?? -1} onChange={(m) => setEnd(minutesToHHMM(m))} title="End · Usual game" label="End" allowed={(m) => m <= SETTING_LIMITS.defaultEndMinutes[1] && m > (hhmmToMinutes(start) ?? -1)} data={{ 'data-usual-end': '' }} />
+            </div>
           </div>
           {outsideHours && (
             <div className="bh-message" data-bh-message>
