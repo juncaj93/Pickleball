@@ -90,8 +90,8 @@ describe('the pieces (shared)', () => {
 
   it('the "Want in?" line: no waitlist past the old max with no cap', () => {
     expect(wantInSubline(10, 10)).toMatch(/waitlist/);
-    expect(wantInSubline(10, Number.POSITIVE_INFINITY)).toBe("10 are in. You'd make it 11.");
-    expect(wantInSubline(12, Number.POSITIVE_INFINITY)).toBe("12 are in. You'd make it 13.");
+    expect(wantInSubline(10, Number.POSITIVE_INFINITY)).toBe("10 are in. You’d make it 11.");
+    expect(wantInSubline(12, Number.POSITIVE_INFINITY)).toBe("12 are in. You’d make it 13.");
   });
 
   it('Activity lines for the Settings row', () => {
@@ -351,7 +351,7 @@ describe('credit chain with 11 and 12 players (switch on), normal and 1.5 hour g
     for (const [i, step] of plan.entries()) {
       const join = await phones[P].call('POST', `/api/sessions/${step.id}/join`, {});
       expect(join.status, join.text).toBe(200);
-      expect(join.data.creditCents ?? 0, `game ${i + 1}: credit at I'm in`).toBe(step.creditUsed);
+      expect(join.data.creditCents ?? 0, `game ${i + 1}: credit at I’m in`).toBe(step.creditUsed);
       let me = (await game(ctx, step.id)).roster.find((r: any) => r.name === P);
       expect(me.owesCents, `game ${i + 1}: owes`).toBe(step.flat - step.creditUsed);
       for (const n of others.slice(0, step.players - 1)) {

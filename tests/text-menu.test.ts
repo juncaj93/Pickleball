@@ -68,7 +68,7 @@ describe('the Text menu shows only the texts that fit', () => {
     expect(c.phones).toEqual([phoneOf(ctx, d, 'Blair'), phoneOf(ctx, d, 'Casey')]);
     expect(c.missing).toEqual(['Devon']);
     expect(c.who).toBe('Everyone signed up');
-    expect(c.body).toMatch(/^Pickleball (tomorrow|Tue Nov 3), 8:00 PM\. Can\'t make it\? Update here: pickleball\.juncaj\.net$/);
+    expect(c.body).toMatch(/^Pickleball (tomorrow|Tue Nov 3), 8:00 PM\. Can’t make it\? Update here: pickleball\.juncaj\.net$/);
     // It opens one group text to those numbers.
     expect(smsHref(c.phones, c.body, true)).toContain('sms://open?addresses=');
   });
@@ -77,9 +77,9 @@ describe('the Text menu shows only the texts that fit', () => {
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     ctx.app.now = Date.parse('2026-11-02T14:00:00Z'); // Mon 9:00 AM
-    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
+    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: ${LINK}`);
     ctx.app.now = Date.parse('2026-11-03T14:00:00Z'); // Tue 9:00 AM
-    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
+    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Can’t make it? Update here: ${LINK}`);
   });
   it('Check-in goes to everyone signed up, the waitlist too, with the new words', async () => {
     const ctx = await group();
@@ -90,7 +90,7 @@ describe('the Text menu shows only the texts that fit', () => {
     const c = items.find((i) => i.id === 'checkin')!;
     expect(c.who).toBe('Everyone signed up');
     expect(c.phones.sort()).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery'].map((n) => phoneOf(ctx, d, n)).sort());
-    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
+    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: ${LINK}`);
   });
   it('under 4 in: no Check-in, Need players instead', async () => {
     const ctx = await group();
@@ -162,7 +162,7 @@ describe('the Text menu shows only the texts that fit', () => {
     expect(ids(items)).toEqual(['share', 'checkin', 'promoted']);
     const p = items[2];
     expect(p.label).toBe('Spot opened: Emery');
-    expect(p.body).toBe(`A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. ${LINK}`);
+    expect(p.body).toBe(`A spot opened and you’re in for pickleball Tue Nov 3, 8:00 PM. ${LINK}`);
     expect(p.phones).toEqual([phoneOf(ctx, d, 'Emery')]);
     expect(p.who).toBe('Emery · 1');
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/told`, { playerId: ctx.byName.Emery });
@@ -176,7 +176,7 @@ describe('the Text menu shows only the texts that fit', () => {
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true });
     const { d, items } = await menu(ctx, s.id);
     expect(ids(items)).toEqual(['canceled']);
-    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You can request a cash out on the site. ${LINK}`);
+    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. If you paid, it’s now your credit. You can request a cash out on the site. ${LINK}`);
     expect(items[0].phones).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery'].map((n) => phoneOf(ctx, d, n)));
   });
   it('after finalizing: the one Final price text to the group chat; nothing while the game is over but not finalized', async () => {
@@ -268,7 +268,7 @@ describe('payment reminders', () => {
     expect(u.count).toBe(3);
     expect(u.phones).toEqual([phoneOf(ctx, d, 'Blair'), phoneOf(ctx, d, 'Casey')]);
     expect(u.missing).toEqual(['Devon']);
-    expect(u.body).toBe(`Hey, looks like you haven't paid for pickleball yet. Pay here: ${LINK}`);
+    expect(u.body).toBe(`Hey, you haven’t paid for pickleball yet. Pay here: ${LINK}`);
   });
   it("the organizer is never in the unpaid list, and a canceled game owes nothing", async () => {
     const ctx = await group();

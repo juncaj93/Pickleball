@@ -123,22 +123,22 @@ describe('the rules (shared/secondChance.ts)', () => {
     const add = { ...base, canceled: false, canceledAt: null, inCount: 1, createdAt: '2026-11-11T15:00:00.000Z', extra: true };
     const [c] = secondChanceCards([add], noon, TZ, 'pickleball.juncaj.net');
     expect(c).toMatchObject({ kind: 'open', origin: 'sameday', step: 3, inCount: 1 });
-    expect(c.kind === 'open' && c.groupText).toBe("Hey guys, anyone want to play tonight at 7:30? I added it to the site. If 4 sign up and pay, I'll book a court.\n\npickleball.juncaj.net");
+    expect(c.kind === 'open' && c.groupText).toBe("Hey guys, anyone want to play tonight @ 7:30pm? I added it to the site. If 4 sign up and pay, I’ll book a court.\n\npickleball.juncaj.net");
     expect(secondChanceCards([{ ...add, createdAt: '2026-11-01T15:00:00.000Z' }], noon, TZ, 'site')).toEqual([]);
     // A regular game the site made that same day (first session date set to today, new usual days): not a same-day add.
     expect(secondChanceCards([{ ...add, extra: false }], noon, TZ, 'site')).toEqual([]);
   });
   it('TEXT 1 and TEXT 2, exactly, with the line breaks and the site time style', () => {
     expect(reopenText(base.startsAt, base.startsAt, TZ, noon, '[link]')).toBe(
-      "Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight at 7:30, so I reopened signups.\n\nIf 4 sign up and pay, I'll book a court for tonight.\n\nAlready paid for the canceled game? Tap Use Credit.\n\n[link]",
+      "Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight @ 7:30pm, so I reopened signups.\n\nIf 4 sign up and pay, I’ll book a court for tonight.\n\nAlready paid for the canceled game? Tap Use Credit.\n\n[link]",
     );
     const eight = '2026-11-12T01:00:00.000Z';
     expect(reopenText(eight, base.startsAt, TZ, noon, '[link]')).toBe(
-      "Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight at 8:00 (instead of 7:30), so I reopened signups for 8:00.\n\nIf 4 sign up and pay, I'll book a court for tonight.\n\nAlready paid for the canceled game? Tap Use Credit.\n\n[link]",
+      "Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight @ 8pm (instead of 7:30pm), so I reopened signups for 8pm.\n\nIf 4 sign up and pay, I’ll book a court for tonight.\n\nAlready paid for the canceled game? Tap Use Credit.\n\n[link]",
     );
-    expect(sameDayText(eight, TZ, noon, '[link]')).toBe("Hey guys, anyone want to play tonight at 8:00? I added it to the site. If 4 sign up and pay, I'll book a court.\n\n[link]");
-    expect(unpaidText(base.startsAt, 4, TZ, noon, '[link]')).toBe("Hey, we have 4 in for tonight at 7:30. Please pay on the site and I'll book the court.\n\n[link]");
-    expect(textTime(base.startsAt, TZ)).toBe('7:30');
+    expect(sameDayText(eight, TZ, noon, '[link]')).toBe("Hey guys, anyone want to play tonight @ 8pm? I added it to the site. If 4 sign up and pay, I’ll book a court.\n\n[link]");
+    expect(unpaidText(base.startsAt, 4, TZ, noon, '[link]')).toBe("Hey, we have 4 in for tonight @ 7:30pm. Please pay on the site and I’ll book the court.\n\n[link]");
+    expect(textTime(base.startsAt, TZ)).toBe('7:30pm');
   });
   it('the Telegrams: wording, time always in it, phone-less players named', () => {
     const unpaid = [
@@ -146,9 +146,9 @@ describe('the rules (shared/secondChance.ts)', () => {
       { playerId: 'b', name: 'Nathan', owesCents: 1400, phone: null },
     ];
     expect(pingInMessage(base.startsAt, 4, 2, unpaid, TZ, noon, 'https://x/admin?unpaid=1')).toBe(
-      "Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText the 1 who hasn't paid: https://x/admin?unpaid=1\nNo phone saved for Nathan.",
+      "Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText the 1 who hasn’t paid: https://x/admin?unpaid=1\nNo phone saved for Nathan.",
     );
-    expect(pingInMessage(base.startsAt, 4, 2, [unpaid[0], { ...unpaid[0], name: 'Sam' }], TZ, noon, 'L')).toContain("Text the 2 who haven't paid: L");
+    expect(pingInMessage(base.startsAt, 4, 2, [unpaid[0], { ...unpaid[0], name: 'Sam' }], TZ, noon, 'L')).toContain("Text the 2 who haven’t paid: L");
     expect(pingPaidMessage(base.startsAt, 4, 4, TZ, noon, COURTRESERVE_BOOKING_URL)).toBe(`4 paid for tonight 7:30 PM. Book it now: ${COURTRESERVE_BOOKING_URL}`);
     expect(pingPaidMessage(base.startsAt, 6, 4, TZ, noon, 'B')).toBe('4 paid, 6 in for tonight 7:30 PM. Book it now: B');
   });
@@ -180,8 +180,8 @@ describe('the rules (shared/secondChance.ts)', () => {
     expect(ok(`${site}/admin?unpaid=${id}`)).toBe(true);
     expect(ok(`${site}/admin?unpaid=${id}&x=1`)).toBe(false);
     expect(ok(`https://evil.example/admin?unpaid=${id}`)).toBe(false);
-    const linked = linkText(`Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText the 2 who haven't paid: ${site}/admin?unpaid=${id}`, isAdminPage, ok);
-    expect(linked.text).toBe("Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText the 2 who haven't paid");
+    const linked = linkText(`Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText the 2 who haven’t paid: ${site}/admin?unpaid=${id}`, isAdminPage, ok);
+    expect(linked.text).toBe("Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText the 2 who haven’t paid");
     expect(linked.entities).toHaveLength(1);
   });
 });
@@ -226,7 +226,7 @@ describe('Second Chance from start to booked (the live flow, with the real money
     expect(after.confirmedCount).toBe(3);
     const [card] = (await dash(w)).secondChance.cards;
     expect(card).toMatchObject({ kind: 'open', origin: 'reopened', step: 3, inCount: 3, paidCount: 1 }); // Alex counts as covered
-    expect(card.groupText).toContain('open tonight at 8:30 (instead of 8:00), so I reopened signups for 8:30.');
+    expect(card.groupText).toContain('open tonight @ 8:30pm (instead of 8pm), so I reopened signups for 8:30pm.');
     // Blair owes again and her credit pays it exactly: $14 seat, $14 pot -> $0 pot, paid.
     const blair = await playerPhone(w, 'Blair');
     expect((await blair.call('POST', `/api/sessions/${s.id}/use-credit`, {})).status).toBe(200);
@@ -238,8 +238,8 @@ describe('Second Chance from start to booked (the live flow, with the real money
     // Devon joins: 4 in, 2 of 4 paid -> Telegram 1, naming the time, with the unpaid-only link.
     await join(w, 'Devon', s.id);
     expect(w.sent).toHaveLength(1);
-    expect(w.all.filter((t) => /it's on/.test(t))).toEqual([]); // the old "has 4 now, it's on" alert is gone for every game
-    expect(w.sent[0]).toMatch(/^Tonight 8:30 PM: 4 in, 2 of 4 paid\.\nText the 2 who haven't paid: https:\/\/club\.example\/admin\?unpaid=/);
+    expect(w.all.filter((t) => /it’s on/.test(t))).toEqual([]); // the old "has 4 now, it's on" alert is gone for every game
+    expect(w.sent[0]).toMatch(/^Tonight 8:30 PM: 4 in, 2 of 4 paid\.\nText the 2 who haven’t paid: https:\/\/club\.example\/admin\?unpaid=/);
     // More taps: nothing again. Casey pays, then Devon: 4 paid -> Telegram 2 once.
     await markPaid(w, s.id, 'Casey');
     expect(w.sent).toHaveLength(1);
@@ -313,7 +313,7 @@ describe('Telegrams on normal and same-day games', () => {
     await w.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
     for (const n of ['Blair', 'Casey', 'Devon']) await join(w, n, s.id);
     expect(w.sent).toEqual([]);
-    expect(w.all.filter((t) => /it's on/.test(t))).toEqual([]); // a booked game sends no "it's on" alert either (removed in Zip 46)
+    expect(w.all.filter((t) => /it’s on/.test(t))).toEqual([]); // a booked game sends no "it's on" alert either (removed in Zip 46)
     const q = await world();
     await switchOn(q);
     await q.organizer.call('PUT', '/api/admin/alerts', { enabled: false });
@@ -422,7 +422,7 @@ describe('fixes from the fresh review', () => {
     const again = await act(w, s.id, { action: 'reopen', minutes: 21 * 60 });
     expect(again.status).toBe(200);
     expect((await dash(w)).sessions.find((x: any) => x.id === s.id).startsAt).toBe('2026-10-28T01:00:00.000Z');
-    expect((await dash(w)).secondChance.cards[0].groupText).toContain('at 9:00 (instead of 8:00)');
+    expect((await dash(w)).secondChance.cards[0].groupText).toContain('@ 9pm (instead of 8pm)');
   });
   it('Telegram too slow to answer: the claim stays (never sent twice); the hour limit is not a try', async () => {
     let calls = 0;

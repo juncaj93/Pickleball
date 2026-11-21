@@ -165,16 +165,16 @@ async function books(w: W, label = '') {
   const rows = w.app.db.raw.prepare('SELECT * FROM credit_ledger').all() as any[];
   for (const p of d.players) {
     const sum = rows.filter((r) => r.player_id === p.id && !r.ended_at).reduce((n, r) => n + potEffect({ kind: r.kind, cents: r.amount_cents, fiveCents: r.five_cents }), 0);
-    expect(sum, `${label} ${p.name}'s history is never below $0`).toBeGreaterThanOrEqual(0);
-    expect(d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0, `${label} ${p.name}'s balance on Players`).toBe(sum);
+    expect(sum, `${label} ${p.name}’s history is never below $0`).toBeGreaterThanOrEqual(0);
+    expect(d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0, `${label} ${p.name}’s balance on Players`).toBe(sum);
     expect(balanceOf(d, p.id).creditCents).toBe(sum);
     if (p.name !== 'Alex' && p.isActive) {
       const v = await view(w, p.name);
-      expect(v.credit.balanceCents, `${label} ${p.name}'s own balance`).toBe(sum);
+      expect(v.credit.balanceCents, `${label} ${p.name}’s own balance`).toBe(sum);
       // The history the player sees adds up to the balance they see.
       const seen = v.credit.history.filter((e) => !e.endedAt).reduce((n, e) => n + potEffect({ kind: e.kind as any, cents: e.cents, fiveCents: 0 }), 0);
-      expect(seen, `${label} ${p.name}'s visible history adds up`).toBe(v.credit.balanceCents);
-      expect(v.credit.usableCents, `${label} ${p.name}'s usable`).toBe(Math.max(0, v.credit.balanceCents - (v.credit.pending?.cents ?? 0)));
+      expect(seen, `${label} ${p.name}’s visible history adds up`).toBe(v.credit.balanceCents);
+      expect(v.credit.usableCents, `${label} ${p.name}’s usable`).toBe(Math.max(0, v.credit.balanceCents - (v.credit.pending?.cents ?? 0)));
       wayForward(v, `${label} ${p.name}`);
     }
   }
@@ -188,7 +188,7 @@ async function books(w: W, label = '') {
         expect(used, 'the organizer never uses credit').toBe(0);
         continue;
       }
-      expect(used, `${label} credit on ${r.name}'s seat`).toBeLessThanOrEqual(Math.max(price, r.paymentAmountCents ?? 0));
+      expect(used, `${label} credit on ${r.name}’s seat`).toBeLessThanOrEqual(Math.max(price, r.paymentAmountCents ?? 0));
       if (r.status !== 'confirmed' && !(r.paymentStatus === 'paid' && r.selfPaid)) expect(used, `${label} ${r.name} is out, no credit on the seat`).toBe(0);
       if (s.status === 'canceled' && !(r.paymentStatus === 'paid' && r.selfPaid)) expect(used, `${label} canceled game holds no credit`).toBe(0);
       if (r.paymentStatus === 'paid' && !r.refundedAt) expect(r.paymentAmountCents ?? 0, `${label} ${r.name} paid`).toBeLessThanOrEqual(PRICE);
@@ -547,7 +547,7 @@ describe('2. Drop out', () => {
         if (state === 'claim' || state === 'claim_part') {
           // The unconfirmed I paid came back exactly as it was: "Paid $14" with Didn't pay?.
           expect(m).toMatchObject({ paymentStatus: 'paid', selfPaid: true });
-          expect(text).toMatch(/Paid.*Didn't pay\?/);
+          expect(text).toMatch(/Paid.*Didn’t pay\?/);
         } else if (potAfterDrop >= PRICE) {
           expect(r).toMatchObject({ creditCents: 1400, paidWithCredit: true });
           expect(m).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true });
@@ -560,7 +560,7 @@ describe('2. Drop out', () => {
         } else {
           expect(m.paymentStatus).toBe('unpaid');
           if (court === 'booked') expect(text).toMatch(/\$14 due.*Pay/);
-          else expect(text).toMatch(/You're in/);
+          else expect(text).toMatch(/You’re in/);
         }
         await books(w);
       });
@@ -687,7 +687,7 @@ describe('3. Payment states and buttons', () => {
     expect((await iPaid(w, g.id, 'Casey', true, 1400)).data).toEqual({ ok: true, changed: true });
     let v = await shown(w, 'Casey');
     expect(sOf(v, g.id).mine).toMatchObject({ paymentStatus: 'paid', selfPaid: true, oweCents: 0 });
-    expect(card(v, g.id)).toMatch(/Paid \$14.*Didn't pay\?/);
+    expect(card(v, g.id)).toMatch(/Paid \$14.*Didn’t pay\?/);
     expect(v.owed).toEqual([]);
     expect((await iPaid(w, g.id, 'Casey', false)).data).toEqual({ ok: true, changed: true });
     v = await shown(w, 'Casey');
@@ -716,7 +716,7 @@ describe('3. Payment states and buttons', () => {
     await markPaid(w, g.id, 'Casey');
     const v = await shown(w, 'Casey');
     expect(card(v, g.id)).toMatch(/Paid \$14/);
-    expect(card(v, g.id)).not.toMatch(/Didn't pay\?/);
+    expect(card(v, g.id)).not.toMatch(/Didn’t pay\?/);
     const r = await iPaid(w, g.id, 'Casey', false);
     friendly(r, 409);
     expect(r.data.message).toMatch(/organizer marked this paid/);
@@ -1042,7 +1042,7 @@ describe('4. Credit', () => {
   });
 
   const badAsks: [string, unknown, number, RegExp][] = [
-    ['more than usable', 2500, 409, /You have 20 dollars of credit/],
+    ['more than usable', 2500, 409, /You have \$20 credit\./],
     ['not whole dollars', 1050, 400, /whole-dollar/],
     ['zero', 0, 400, /whole-dollar/],
     ['negative', -100, 400, /between/],
@@ -1353,7 +1353,7 @@ describe('6. Time edges (fake clock)', () => {
     w.app.now = Date.parse('2026-12-28T17:00:00.000Z');
     const v = await view(w, 'Casey');
     const dec31 = v.sessions.find((s) => dayOf(s.startsAt) === '2026-12-31')!;
-    expect(dec31.holiday).toBe("New Year's Eve");
+    expect(dec31.holiday).toBe("New Year’s Eve");
     const jan = v.sessions.find((s) => dayOf(s.startsAt).startsWith('2027-01'))!;
     expect(jan).toBeTruthy();
     givePot(w, 'Casey', 1400);
@@ -1467,25 +1467,25 @@ describe('7. Privacy', () => {
   });
 
   const impersonations: [string, (w: W, sid: string) => Promise<any>, (w: W, sid: string) => Promise<void>][] = [
-    ['join with Casey\'s playerId in the body', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/join`, { playerId: w.byName.Casey }), async (w, sid) => {
+    ['join with Casey’s playerId in the body', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/join`, { playerId: w.byName.Casey }), async (w, sid) => {
       expect(seatRow(w, sid, 'Blair').status).toBe('confirmed');
     }],
-    ['drop out with Casey\'s playerId in the body', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/withdraw`, { playerId: w.byName.Casey }), async () => {}],
-    ['I paid with Casey\'s playerId in the body', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/paid`, { paid: true, playerId: w.byName.Casey }), async () => {}],
-    ['Didn\'t pay? with Casey\'s playerId', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/paid`, { paid: false, playerId: w.byName.Casey }), async () => {}],
-    ['Undo credit with Casey\'s playerId', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/undo-credit`, { playerId: w.byName.Casey }), async () => {}],
-    ['Use credit with Casey\'s playerId', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/use-credit`, { playerId: w.byName.Casey }), async () => {}],
-    ['cash out with Casey\'s playerId', (w) => call(w, 'Blair', 'POST', '/api/me/refund-request', { cents: 100, playerId: w.byName.Casey }), async () => {}],
-    ['withdraw Casey\'s cash-out request by its id', (w) => call(w, 'Blair', 'POST', '/api/me/refund-request/cancel', { id: w.app.db.raw.prepare('SELECT id FROM refund_requests').get() ? (w.app.db.raw.prepare('SELECT id FROM refund_requests').get() as any).id : '', playerId: w.byName.Casey }), async () => {}],
-    ['use Casey\'s cash out on a game by its request id', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/use-cash-out`, { cents: 500, requestId: (w.app.db.raw.prepare('SELECT id FROM refund_requests').get() as any).id, playerId: w.byName.Casey }), async () => {}],
-    ['pick Casey\'s name with a forged cookie value', async (w) => {
+    ['drop out with Casey’s playerId in the body', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/withdraw`, { playerId: w.byName.Casey }), async () => {}],
+    ['I paid with Casey’s playerId in the body', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/paid`, { paid: true, playerId: w.byName.Casey }), async () => {}],
+    ['Didn’t pay? with Casey’s playerId', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/paid`, { paid: false, playerId: w.byName.Casey }), async () => {}],
+    ['Undo credit with Casey’s playerId', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/undo-credit`, { playerId: w.byName.Casey }), async () => {}],
+    ['Use credit with Casey’s playerId', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/use-credit`, { playerId: w.byName.Casey }), async () => {}],
+    ['cash out with Casey’s playerId', (w) => call(w, 'Blair', 'POST', '/api/me/refund-request', { cents: 100, playerId: w.byName.Casey }), async () => {}],
+    ['withdraw Casey’s cash-out request by its id', (w) => call(w, 'Blair', 'POST', '/api/me/refund-request/cancel', { id: w.app.db.raw.prepare('SELECT id FROM refund_requests').get() ? (w.app.db.raw.prepare('SELECT id FROM refund_requests').get() as any).id : '', playerId: w.byName.Casey }), async () => {}],
+    ['use Casey’s cash out on a game by its request id', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/use-cash-out`, { cents: 500, requestId: (w.app.db.raw.prepare('SELECT id FROM refund_requests').get() as any).id, playerId: w.byName.Casey }), async () => {}],
+    ['pick Casey’s name with a forged cookie value', async (w) => {
       const c = w.app.client();
       c.groupKey = w.groupKey;
       c.cookies.set('pb_player', 'forged-token-0123456789');
       return c.call('POST', `/api/me/refund-request`, { cents: 100 });
     }, async () => {}],
-    ['act as Casey via the View-as header without the organizer\'s sign-in', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/undo-credit`, undefined).then(() => (phone(w, 'Blair').then((p) => p.call('POST', `/api/sessions/${sid}/undo-credit`, {}, { 'X-View-As': w.byName.Casey })))), async () => {}],
-    ['read Casey\'s screen via the View-as header without sign-in', (w) => phone(w, 'Blair').then((p) => p.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Casey })), async () => {}],
+    ['act as Casey via the View-as header without the organizer’s sign-in', (w, sid) => call(w, 'Blair', 'POST', `/api/sessions/${sid}/undo-credit`, undefined).then(() => (phone(w, 'Blair').then((p) => p.call('POST', `/api/sessions/${sid}/undo-credit`, {}, { 'X-View-As': w.byName.Casey })))), async () => {}],
+    ['read Casey’s screen via the View-as header without sign-in', (w) => phone(w, 'Blair').then((p) => p.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Casey })), async () => {}],
     ['pretend-time header from a player', (w) => phone(w, 'Blair').then((p) => p.call('GET', '/api/group', undefined, { 'X-Pretend-Now': '2026-11-03T20:00' })), async () => {}],
     ['an organizer route from a player phone', (w, sid) => call(w, 'Blair', 'POST', `/api/admin/sessions/${sid}/payment`, { playerId: w.byName.Casey, paid: false }), async () => {}],
     ['the organizer dashboard from a player phone', (w) => call(w, 'Blair', 'GET', '/api/admin/dashboard'), async () => {}],
@@ -1510,7 +1510,7 @@ describe('7. Privacy', () => {
         ledger(w, 'Casey'),
         w.app.db.raw.prepare('SELECT * FROM refund_requests').all(),
       ]);
-      expect(after, 'Casey\'s seat, credit and request are untouched').toBe(before);
+      expect(after, 'Casey’s seat, credit and request are untouched').toBe(before);
       await extra(w, g.id);
     });
   }

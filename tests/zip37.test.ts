@@ -233,10 +233,10 @@ describe('Part B: the words', () => {
     expect(gameDayTextBody(input({ oweCents: 1100 }))).toMatch(/Still owe \$11\? Pay here:/);
     expect(gameDayTextBody(input({ oweCents: 1450 }))).toMatch(/Still owe \$14\.50\? Pay here:/);
   });
-  it('the word is always "tonight" (never the weekday and date, even a day or a week ahead); the time is the real start: 8pm, 7:30pm, 12pm, no leading zero', () => {
+  it('the word is "tonight", or "today" for a game before 5 PM (never the weekday and date, even a day or a week ahead); the time is the real start: 8pm, 7:30pm, 12pm, no leading zero', () => {
     const t = (iso2: string, nowMs: number) => gameDayTextBody(input({ startsAt: iso2, nowMs })).split('\n')[0];
     expect(t('2026-11-12T00:30:00.000Z', Date.parse('2026-11-11T23:30:00Z'))).toBe('Pickleball tonight @ 7:30pm! (Court 12)');
-    expect(t('2026-11-11T17:00:00.000Z', Date.parse('2026-11-11T16:00:00Z'))).toBe('Pickleball tonight @ 12pm! (Court 12)');
+    expect(t('2026-11-11T17:00:00.000Z', Date.parse('2026-11-11T16:00:00Z'))).toBe('Pickleball today @ 12pm! (Court 12)'); // Zip 78: before 5 PM it is today
     expect(t('2026-12-02T00:00:00.000Z', Date.parse('2026-11-12T00:00:00Z'))).toBe('Pickleball tonight @ 7pm! (Court 12)');
     expect(t('2026-11-12T23:05:00.000Z', Date.parse('2026-11-11T13:05:00Z'))).toBe('Pickleball tonight @ 6:05pm! (Court 12)');
   });
@@ -420,10 +420,11 @@ describe('Part B: the page (POST /api/gdt)', () => {
     expect(res.data.withoutNumber).toBe(1);
     expect(res.data.body).toMatch(/^Pickleball tonight @ 8pm!\n\nNorthville Pickleball Club\nDirections: https:\/\/maps\.apple\.com\/\?daddr=Northville\+Pickleball\+Club/);
     expect(res.data.preview).toBeUndefined();
-    // The club's name goes with the court's address (one pair): the venue name typed on bookings in Settings does not change the text.
+    // Zip 78: the club's name is Settings > Venue name (blank: the default name); the Directions link still searches the one club constant.
     g.raw("UPDATE groups SET venue_name = 'Some Booking Name'");
     const again = await g.w.app.client().call('POST', '/api/gdt', { token });
-    expect(again.data.body.split('\n')[2]).toBe('Northville Pickleball Club');
+    expect(again.data.body.split('\n')[2]).toBe('Some Booking Name');
+    expect(again.data.body.split('\n')[3]).toMatch(/daddr=Northville\+Pickleball\+Club/);
   });
 
   it('a second player record with the organizer\'s own number never gets the text; a short number is skipped and counted', async () => {

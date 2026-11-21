@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import type { AdminDayView, AdminEndView, AdminTieView, AdminTournamentView, AwardPick } from '../../../shared/tournament';
 import { BANNER_WEEKS, bannerLabel } from '../../../shared/tournament';
-import { groupName } from '../../../shared/tournamentSchedule';
+import { groupName } from '../../../shared/scores';
 import { formatPrice } from '../../../shared/money';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { Sheet, useToast } from '../../ui';

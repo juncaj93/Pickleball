@@ -65,7 +65,7 @@ describe('Item 1 (M-1): a late host and guest never keep more than the spots the
     expect(card.lateDrop).toMatchObject({ owes: true, paid: true, feeCents: PRICE, guestSpots: 1 });
     const d = await drop(w, g.id, 'Blair');
     expect(d.lateFee).toEqual({ cents: PRICE, paid: true });
-    expect(lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid)).toBe("You're out. Your $14 stays on this game unless someone takes your spot.");
+    expect(lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid)).toBe("You’re out. Your $14 stays on this game unless someone takes your spot.");
     // Charged: Alex confirms the I paid; the guest's $14 comes back at once.
     await markPaid(w, g.id, 'Blair');
     expect(await credit(w, 'Blair')).toBe(1400);
@@ -91,7 +91,7 @@ describe('Item 1 (M-1): a late host and guest never keep more than the spots the
     const card = (await mineOn(w, 'Blair', g.id)).mine!;
     expect(card.lateDrop).toMatchObject({ owes: true, paid: true, feeCents: PRICE, guestSpots: 1, pairBackCents: 1400 });
     expect(hostDropText('Gus', { cancelBy: '7:00 AM', spots: 1, owesCents: card.lateDrop!.feeCents, paid: true, backCents: card.lateDrop!.pairBackCents }, formatPrice)).toBe(
-      "It's past the 7:00 AM cancel-by. Your guest Gus drops out too. Your $14 stays on this game unless someone takes your spot. Your guest's $14 comes back as credit.",
+      "It’s past the 7:00 AM cancel-by. Your guest Gus drops out too. Your $14 stays on this game unless someone takes your spot. Your guest’s $14 comes back as credit.",
     );
     await drop(w, g.id, 'Blair');
     expect(await credit(w, 'Blair')).toBe(1400);
@@ -110,8 +110,8 @@ describe('Item 1 (M-1): a late host and guest never keep more than the spots the
     expect(d.lateFee).toEqual({ cents: 2 * PRICE, paid: true });
     w.app.advance(60_000);
     await join(w, g.id, ['Emery']);
-    expect(await linesOf(w, g.start, /Emery took Blair's guest's spot: Sam's \$14 cleared/)).toHaveLength(1);
-    expect(await notices(w, 'Blair')).toEqual([expect.stringMatching(/^Good news: someone took Sam's spot for .*\. You no longer owe \$14 for Sam\.$/)]);
+    expect(await linesOf(w, g.start, /Emery took Blair’s guest’s spot: Sam’s \$14 cleared/)).toHaveLength(1);
+    expect(await notices(w, 'Blair')).toEqual([expect.stringMatching(/^Someone took Sam’s spot for .*\. You no longer owe \$14 for Sam\.$/)]);
     await markPaid(w, g.id, 'Blair');
     expect(await credit(w, 'Blair')).toBe(1400);
     expect(await keptOn(w, g.id, 'Blair')).toBe(1400);
@@ -177,7 +177,7 @@ describe('Item 1 (M-1): a late host and guest never keep more than the spots the
     await markPaid(w, g.id, 'Blair');
     at(w, g.start, 6);
     const d = await drop(w, g.id, 'Blair');
-    expect(lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid)).toBe("You're out. Your $28 stays on this game unless someone takes your spot.");
+    expect(lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid)).toBe("You’re out. Your $28 stays on this game unless someone takes your spot.");
     expect(await keptOn(w, g.id, 'Blair')).toBe(2800);
     expect(await credit(w, 'Blair')).toBe(0);
 
@@ -216,7 +216,7 @@ describe('Item 2 (F-2): Text all asks each person for one share', () => {
     const d = await dash(w);
     const s = await sessOf(w, g.id);
     expect(gamePriceCents(d, s)).toBe(1400);
-    expect(groupRemindText(d, s)).toContain("If you haven't paid your $14 yet");
+    expect(groupRemindText(d, s)).toContain("If you haven’t paid your $14 yet");
     expect(groupRemindText(d, s)).not.toContain('$28');
     expect(reminderText(d, w.byName.Blair, 'Blair', s)).toContain('you owe $28');
     expect(reminderText(d, w.byName.Casey, 'Casey', s)).toContain('you owe $14');
@@ -243,7 +243,7 @@ describe('Item 3 (F-3): words say the real amount', () => {
     expect(await drop(w, g.id, 'Blair')).toMatchObject({ lateFee: { cents: 2 * PRICE, paid: false } });
     expect(await linesOf(w, g.start, /Blair owes their \$28 \(late drop, game short\)/)).toHaveLength(1);
     expect((await clear(w, g.id, 'Blair')).data.changed).toBe(true);
-    expect(await linesOf(w, g.start, /Alex cleared Blair's \$28 \(my choice\)/)).toHaveLength(1);
+    expect(await linesOf(w, g.start, /Alex cleared Blair’s \$28 \(my choice\)/)).toHaveLength(1);
     expect(await notices(w, 'Blair')).toEqual([expect.stringMatching(/^You no longer owe \$28 for /)]);
   });
 
@@ -256,7 +256,7 @@ describe('Item 3 (F-3): words say the real amount', () => {
     expect(await owedOf(w, 'Blair', g.id)).toMatchObject({ amountCents: 1100 });
     expect((await clear(w, g.id, 'Blair')).data.changed).toBe(true);
     expect(await notices(w, 'Blair')).toEqual([expect.stringMatching(/^You no longer owe \$11 for /)]);
-    expect(await linesOf(w, g.start, /Alex cleared Blair's \$11 \(my choice\)/)).toHaveLength(1);
+    expect(await linesOf(w, g.start, /Alex cleared Blair’s \$11 \(my choice\)/)).toHaveLength(1);
   });
 
   it('$3 credit on an unpaid seat: the dialog and the toast say "You owe $11", the same as what is owed', async () => {
@@ -275,7 +275,7 @@ describe('Item 3 (F-3): words say the real amount', () => {
     expect(m.lateDrop).toMatchObject({ owes: true, paid: false, feeCents: 1100 });
     const d = await drop(w, g.id, 'Blair');
     expect(d.lateFee).toEqual({ cents: 1100, paid: false });
-    expect(lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid)).toBe("You're out. You owe $11 unless someone takes your spot.");
+    expect(lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid)).toBe("You’re out. You owe $11 unless someone takes your spot.");
     expect(await owedOf(w, 'Blair', g.id)).toMatchObject({ amountCents: 1100, lateFee: 'late_drop' });
   });
 
@@ -293,7 +293,7 @@ describe('Item 3 (F-3): words say the real amount', () => {
   it('old History lines without the stored amount still read $14 (nothing rewritten)', async () => {
     const { activityText } = await import('../shared/activity');
     const line = activityText({ action: 'late_fee_cleared', actor: 'organizer', createdAt: '2026-11-03T12:00:00.000Z', details: { player: 'Blair', why: 'choice' } } as never, 'America/Detroit', 'Alex');
-    expect(line).toBe("Alex cleared Blair's $14 (my choice)");
+    expect(line).toBe("Alex cleared Blair’s $14 (my choice)");
   });
 });
 
@@ -429,12 +429,12 @@ describe('Item 7 (Alex): host and guest both did not play owe only the spots the
   it('the Who played note says it', () => {
     const fmt = formatPrice;
     const pair = [{ host: 'Blair', guest: 'Sam', hostPlayed: false, guestOut: false }];
-    expect(whoPlayedNotes(pair, { played: 3, flatCents: 1400, fmt })).toEqual(["Blair didn't play, so Sam didn't either. Blair owes $14, for the 1 spot the game was short."]);
-    expect(whoPlayedNotes(pair, { played: 2, flatCents: 1400, fmt })).toEqual(["Blair didn't play, so Sam didn't either. Blair owes $28, for the 2 spots the game was short."]);
-    expect(whoPlayedNotes(pair, { played: 1, flatCents: 1400, fmt })).toEqual(["Blair didn't play, so Sam didn't either. Blair owes $28, for the 2 spots the game was short."]);
-    expect(whoPlayedNotes(pair, { played: 4, flatCents: 1400, fmt })).toEqual(["Blair didn't play, so Sam didn't either."]);
+    expect(whoPlayedNotes(pair, { played: 3, flatCents: 1400, fmt })).toEqual(["Blair didn’t play, so Sam didn’t either. Blair owes $14, for the 1 spot the game was short."]);
+    expect(whoPlayedNotes(pair, { played: 2, flatCents: 1400, fmt })).toEqual(["Blair didn’t play, so Sam didn’t either. Blair owes $28, for the 2 spots the game was short."]);
+    expect(whoPlayedNotes(pair, { played: 1, flatCents: 1400, fmt })).toEqual(["Blair didn’t play, so Sam didn’t either. Blair owes $28, for the 2 spots the game was short."]);
+    expect(whoPlayedNotes(pair, { played: 4, flatCents: 1400, fmt })).toEqual(["Blair didn’t play, so Sam didn’t either."]);
     // Late fees off: exactly as before.
-    expect(whoPlayedNotes(pair)).toEqual(["Blair didn't play, so Sam didn't either."]);
+    expect(whoPlayedNotes(pair)).toEqual(["Blair didn’t play, so Sam didn’t either."]);
   });
 });
 
@@ -450,7 +450,7 @@ describe('Item 8 (Alex): a game moved to another day clears the old day\'s late-
     expect((await moveBy(w, g, DAY)).status).toBe(200);
     expect(await owedOf(w, 'Blair', g.id)).toBeNull();
     expect((await rowOf(w, g.id, 'Blair')).lateFee ?? null).toBeNull();
-    expect(await linesOf(w, g.start + DAY, /^Blair's \$14 late drop cleared \(game moved to another day\)/)).toHaveLength(1);
+    expect(await linesOf(w, g.start + DAY, /^Blair’s \$14 late drop cleared \(game moved to another day\)/)).toHaveLength(1);
     expect(health(w)).toEqual({});
   });
   it('paid $28 pair debt: all $28 back as credit', async () => {
@@ -463,7 +463,7 @@ describe('Item 8 (Alex): a game moved to another day clears the old day\'s late-
     await drop(w, g.id, 'Blair');
     expect((await moveBy(w, g, DAY)).status).toBe(200);
     expect(await credit(w, 'Blair')).toBe(2800);
-    expect(await linesOf(w, g.start + DAY, /Blair's \$28 late drop cleared \(game moved to another day\)/)).toHaveLength(1);
+    expect(await linesOf(w, g.start + DAY, /Blair’s \$28 late drop cleared \(game moved to another day\)/)).toHaveLength(1);
     expect(health(w)).toEqual({});
   });
   it('a guest spot owed after a late remove comes off too; paid $28 gives $14 back', async () => {
@@ -584,7 +584,7 @@ describe('Fresh review fixes', () => {
 
   it('R6c the Who played note never says the organizer owes', () => {
     expect(whoPlayedNotes([{ host: 'Alex', guest: 'Sam', hostPlayed: false, guestOut: false, organizer: true }], { played: 3, flatCents: 1400, fmt: formatPrice })).toEqual([
-      "Alex didn't play, so Sam didn't either.",
+      "Alex didn’t play, so Sam didn’t either.",
     ]);
   });
 });

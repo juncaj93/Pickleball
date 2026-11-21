@@ -120,7 +120,7 @@ async function main() {
     assert(squash(await page.locator('.dn-card.lead .dn-text').innerText()) === 'Tuesday: only 3 players in.', await page.locator('.dn-text').innerText());
     assert(squash(await page.locator('.dn-eyebrow').first().innerText()).toLowerCase() === 'do this now', 'eyebrow');
     const steps = await page.locator('.dn-step .dn-step-label').allInnerTexts();
-    assert(JSON.stringify(steps.map(squash)) === JSON.stringify(['Cancel the court', 'Cancel the session', "Text everyone it's canceled"]), `steps: ${steps}`);
+    assert(JSON.stringify(steps.map(squash)) === JSON.stringify(['Cancel the court', 'Cancel the session', "Text everyone it’s canceled"]), `steps: ${steps}`);
     assert(squash(await page.locator('.dn-more').innerText()) === '+1 more', 'more button');
     await ctx.close();
   });

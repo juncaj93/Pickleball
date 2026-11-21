@@ -182,7 +182,7 @@ async function main() {
       const href = await b.getByRole('link').getAttribute('href');
       const pill = await page.getByRole('link', { name: /Book a court/ }).first().getAttribute('href');
       assert(href === pill, `booking link ${href} is not the Book a court link ${pill}`);
-      assert((await page.getByRole('button', { name: /^(Court opened|Didn't open|I booked it)$/ }).count()) === 0, 'old court buttons still shown');
+      assert((await page.getByRole('button', { name: /^(Court opened|Didn’t open|I booked it)$/ }).count()) === 0, 'old court buttons still shown');
       // One court card per game.
       for (const g of [gPlayed, gCancel, gNext]) assert((await page.locator(`.do-now article[data-session="${g.id}"]`).count()) === 1, 'one court card per game');
       // Layout: no sideways scroll, every button and link 44 px tall, nothing past the card's edge.
@@ -251,8 +251,8 @@ async function main() {
     await dlg.waitFor();
     assert(/Cancel /.test(await dlg.locator('h2, h3').first().innerText()), 'the Cancel session dialog');
     assert((await dlg.getByText('This does not cancel your court').count()) === 0, 'court-cancel warning on a game that is over');
-    await dlg.getByRole('button', { name: 'Cancel session' }).dblclick();
-    await page.locator('.toast', { hasText: 'Session canceled' }).waitFor();
+    await dlg.getByRole('button', { name: 'Cancel game' }).dblclick();
+    await page.locator('.toast', { hasText: 'Game canceled' }).waitFor();
     await sleep(500);
     assert((await potOf('Alex')) === alex0 + 1400 && (await potOf('Ryan')) === ryan0 + 1400, 'credit back is not exactly $14 each');
     assert((await potOf('Julian')) === 0, 'unpaid player got credit');

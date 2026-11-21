@@ -164,7 +164,7 @@ async function main() {
     const seat = await ryanSeat(S[1]);
     assert(seat.selfPaid === true && posts === 1, `server: ${JSON.stringify(seat)} requests: ${posts}`);
     assert((await sheet(a.page).count()) === 0, 'the sheet is closed');
-    await row(a.page, S[1]).getByRole('button', { name: "Didn't pay?" }).click();
+    await row(a.page, S[1]).getByRole('button', { name: "Didn’t pay?" }).click();
     await a.page.waitForTimeout(600);
     assert((await ryanSeat(S[1])).selfPaid === false, 'put back');
     await a.ctx.close();
@@ -272,7 +272,7 @@ async function main() {
     await top.waitFor({ state: 'detached', timeout: 8000 });
     assert((await ryanSeat(S[1])).selfPaid === true, 'server: paid');
     assert(/Paid \$14/.test(squash(await row(a.page, S[1]).innerText())), 'tonight\'s card reads Paid $14 too');
-    await row(a.page, S[1]).getByRole('button', { name: "Didn't pay?" }).click();
+    await row(a.page, S[1]).getByRole('button', { name: "Didn’t pay?" }).click();
     await top.waitFor({ timeout: 8000 });
     await a.ctx.close();
   });
@@ -290,7 +290,7 @@ async function main() {
     await sheet(a.page).locator('[data-sheet-paid]').click();
     await a.page.locator('section.pay-card').waitFor({ state: 'detached', timeout: 8000 });
     assert((await ryanSeat(S[1])).selfPaid === true, 'server: paid');
-    await row(a.page, S[1]).getByRole('button', { name: "Didn't pay?" }).click();
+    await row(a.page, S[1]).getByRole('button', { name: "Didn’t pay?" }).click();
     await a.page.locator('section.pay-card').waitFor({ timeout: 8000 });
     await a.ctx.close();
   });

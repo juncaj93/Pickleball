@@ -136,7 +136,7 @@ async function main() {
   {
     const r = await post(who.Zed, `/api/sessions/${games[5].id}/use-credit`, {});
     const body = await r.json().catch(() => ({}));
-    if (!r.ok() || body.usedCents !== 900 || body.paid !== false) throw new Error(`Zed's Use credit: ${r.status()} ${JSON.stringify(body)}`);
+    if (!r.ok() || body.usedCents !== 900 || body.paid !== false) throw new Error(`Zed’s Use credit: ${r.status()} ${JSON.stringify(body)}`);
   }
   await post(who.Zed, '/api/me/refund-request/cancel', {});
   for (const n of [...FILLERS, 'Nathan', 'Mitchel', 'Brandon']) await join(n, 7);
@@ -286,7 +286,7 @@ async function main() {
             const row = (c.box.t + c.box.b) / 2;
             const col = (c.right.t + c.right.b) / 2;
             assert(Math.abs(col - row) <= 2, `${name} later row "${c.money}" (${c.label.slice(0, 30)}): right column center is ${col.toFixed(1)}, row center ${row.toFixed(1)}`);
-            const kind = /Credit \$\d+ used \$\d+ due/.test(c.money) ? 'part credit' : /Use credit/.test(c.money) ? 'use credit' : /due/.test(c.money) ? 'due + Pay' : /^Paid/.test(c.money) ? 'paid' : /Leave/.test(c.money) ? 'leave waitlist' : /Join/.test(c.money) ? 'join waitlist' : /I'm in/.test(c.money) ? "I'm in" : c.money;
+            const kind = /Credit \$\d+ used \$\d+ due/.test(c.money) ? 'part credit' : /Use credit/.test(c.money) ? 'use credit' : /due/.test(c.money) ? 'due + Pay' : /^Paid/.test(c.money) ? 'paid' : /Leave/.test(c.money) ? 'leave waitlist' : /Join/.test(c.money) ? 'join waitlist' : /I’m in/.test(c.money) ? "I’m in" : c.money;
             seen.add(kind);
           }
           if (name === 'Sam') {
@@ -296,7 +296,7 @@ async function main() {
           }
           await ctx.close();
         }
-        for (const k of ['due + Pay', 'paid', "I'm in", 'part credit', 'use credit', 'leave waitlist', 'join waitlist']) assert(seen.has(k), `state "${k}" was not on screen (saw ${[...seen]})`);
+        for (const k of ['due + Pay', 'paid', "I’m in", 'part credit', 'use credit', 'leave waitlist', 'join waitlist']) assert(seen.has(k), `state "${k}" was not on screen (saw ${[...seen]})`);
       });
     }
   }
@@ -308,10 +308,10 @@ async function main() {
       for (const idx of [1, 4, 5]) {
         // 1: this week, 4/5: later (the card list is stable: Sam has joined nothing yet).
         const card = page.locator('.schedule article').nth(idx);
-        if (!(await card.getByRole('button', { name: "I'm in" }).count())) continue;
+        if (!(await card.getByRole('button', { name: "I’m in" }).count())) continue;
         const tier = await card.getAttribute('data-tier');
         const before = (await card.boundingBox()).height;
-        await card.getByRole('button', { name: "I'm in" }).click();
+        await card.getByRole('button', { name: "I’m in" }).click();
         await card.locator('.tile-check').waitFor();
         await page.waitForTimeout(600);
         const after = (await page.locator('.schedule article').nth(idx).boundingBox()).height;
@@ -326,7 +326,7 @@ async function main() {
     const { ctx, page } = await open('Sam', 390, 'light');
     const card = page.locator('.schedule article[data-tier="next"]').first();
     const before = (await card.boundingBox()).height;
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await card.locator('.tile-check').waitFor();
     await page.waitForTimeout(600);
     const after = (await card.boundingBox()).height;
@@ -338,7 +338,7 @@ async function main() {
     const { ctx, page } = await open('Julian', 390, 'light');
     const card = page.locator('.schedule article').nth(1);
     assert((await page.locator('[data-credit-chip]').count()) === 0, 'Julian should start with no credit chip');
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
@@ -386,7 +386,7 @@ async function main() {
   await check('reduce motion: the credit chip shows the new number straight away, balls do not animate', async () => {
     const { ctx, page } = await open('Blair', 390, 'light', { reducedMotion: 'reduce' });
     const card = page.locator('.schedule article').nth(1);
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
@@ -406,7 +406,7 @@ async function main() {
     assert((await page.locator('.ball.ball-new').count()) === 0, 'balls animate on first load');
     const card = page.locator('.schedule article').nth(5);
     const before = await card.locator('.ball').count();
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await card.locator('.tile-check').waitFor();
     await card.locator('.ball.ball-new').first().waitFor();
     assert((await card.locator('.ball.ball-new').count()) === 1 && (await card.locator('.ball').count()) === before + 1, 'exactly one new ball');
@@ -415,7 +415,7 @@ async function main() {
     await ctx.close();
     const rm = await open('Emery', 390, 'light', { reducedMotion: 'reduce' });
     const c2 = rm.page.locator('.schedule article').nth(5);
-    await c2.getByRole('button', { name: "I'm in" }).click();
+    await c2.getByRole('button', { name: "I’m in" }).click();
     await c2.locator('.tile-check').waitFor();
     await rm.page.waitForTimeout(200);
     const name = await c2.locator('.ball').last().evaluate((el) => getComputedStyle(el).animationName);
@@ -426,11 +426,11 @@ async function main() {
   await check('one banner for every pop-up: bottom center, 16 to 24 px above the bottom edge, a check icon, stays about 1.5 s then goes, tap closes it early, a new message replaces the old one', async () => {
     const { ctx, page } = await open('Brandon', 390, 'light');
     const card = page.locator('.schedule article').nth(4);
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
     // (The 4th real seat says "Game on!": a court on Waitlist gives real seats, so Brandon's tap is the 4th.)
-    assert(/^(You're in|Game on! 4 in)$/.test(squash(await pop.innerText())), `banner said "${await pop.innerText()}"`);
+    assert(/^(You’re in|Game on! 4 in)$/.test(squash(await pop.innerText())), `banner said "${await pop.innerText()}"`);
     const info = await pop.evaluate(async (el) => {
       await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))); // it slides up the last 8px while fading in
       const r = el.getBoundingClientRect();
@@ -452,7 +452,7 @@ async function main() {
     await page.locator('.pop').click();
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 900 });
     // A new message replaces the old one.
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor();
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'Drop out' }).click();
@@ -482,7 +482,7 @@ async function main() {
   await check('banner timings live in one place at the top of the code, and reduce motion fades only', async () => {
     const { ctx, page } = await open('Nathan', 390, 'light', { reducedMotion: 'reduce' });
     const card = page.locator('.schedule article').nth(5);
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
     const a = await pop.evaluate((el) => getComputedStyle(el).animationName);

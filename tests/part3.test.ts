@@ -302,8 +302,8 @@ describe('holidays', () => {
     expect(holidayOn(2026, 7, 4)).toBe('July 4');
     expect(holidayOn(2026, 12, 24)).toBe('Christmas Eve');
     expect(holidayOn(2026, 12, 25)).toBe('Christmas Day');
-    expect(holidayOn(2026, 12, 31)).toBe("New Year's Eve");
-    expect(holidayOn(2027, 1, 1)).toBe("New Year's Day");
+    expect(holidayOn(2026, 12, 31)).toBe("New Year’s Eve");
+    expect(holidayOn(2027, 1, 1)).toBe("New Year’s Day");
     expect(holidayOn(2026, 11, 5)).toBeNull();
     expect(holidayOn(2026, 11, 10)).toBeNull();
   });

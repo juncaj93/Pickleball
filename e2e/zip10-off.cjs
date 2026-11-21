@@ -201,7 +201,7 @@ async function main() {
   await same('organizer Money, first game open and its Remind sheet, light: identical', { who: 'admin', url: '/admin', scheme: 'light', tabName: 'Money', before: openThen(async (p) => { await p.locator('[data-remind]').first().click(); }) });
   await same('player credit sheet (Harper), light: identical', { who: 'Harper', url: '/', scheme: 'light', before: openThen(async (p) => { await p.locator('.credit-chip, [aria-label*="credit"]').first().click(); }) });
   await same('player I paid (Jordan), after the tap: identical', { who: 'Jordan', url: '/', scheme: 'light', before: tapThen('I paid') });
-  await same("player I'm in (Casey), after the tap: identical", { who: 'Casey', url: '/', scheme: 'light', before: tapThen(/^I'm in/) });
+  await same("player I’m in (Casey), after the tap: identical", { who: 'Casey', url: '/', scheme: 'light', before: tapThen(/^I’m in/) });
   await same("player Leave waitlist dialog (Gray, the standby), light: identical", { who: 'Gray', url: '/', scheme: 'light', before: tapThen(/Leave (waitlist|standby)/) });
   // An 11th I'm in on the full game (through the API on both sites): the waitlist, exactly as before.
   for (const base of [A, B]) {
@@ -219,8 +219,8 @@ async function main() {
     await ctx.close();
   }
   for (const scheme of ['light', 'dark']) {
-    await same(`player home after the 11th I'm in (Harper, #2 on the waitlist), ${scheme}: identical`, { who: 'Harper', url: '/', scheme });
-    await same(`organizer Home after the 11th I'm in, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: 'Home' });
+    await same(`player home after the 11th I’m in (Harper, #2 on the waitlist), ${scheme}: identical`, { who: 'Harper', url: '/', scheme });
+    await same(`organizer Home after the 11th I’m in, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: 'Home' });
   }
   await browser.close();
   console.log(`\nzip10-off: ${passed} passed, ${failed} failed`);

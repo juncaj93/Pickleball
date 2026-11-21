@@ -324,13 +324,13 @@ async function main() {
     const menu = page.getByRole('menu');
     await menu.waitFor();
     const rows = (await menu.getByRole('menuitem').allInnerTexts()).map((t) => t.trim());
-    assert(JSON.stringify(rows) === JSON.stringify(['Text the group', 'Edit game', 'Players', 'Add to calendar', 'Cancel session']), `rows: ${rows}`);
+    assert(JSON.stringify(rows) === JSON.stringify(['Text the group', 'Edit game', 'Players', 'Add to calendar', 'Cancel game']), `rows: ${rows}`);
     const gear = await c.getByRole('button', { name: /^Game menu for/ }).boundingBox();
     const box = await menu.boundingBox();
     assert(Math.abs(box.x + box.width - (gear.x + gear.width)) < 16, `not anchored to the gear (menu right ${box.x + box.width}, gear right ${gear.x + gear.width})`);
     assert(box.y >= gear.y + gear.height - 4 && box.y - (gear.y + gear.height) < 20, 'not directly under the gear');
     assert(box.width < 300, `menu is ${box.width}px wide, that is a sheet, not a pop-up`);
-    const cancel = menu.getByRole('menuitem', { name: 'Cancel session' });
+    const cancel = menu.getByRole('menuitem', { name: 'Cancel game' });
     const color = await cancel.evaluate((e) => getComputedStyle(e).color);
     const [r, g, b] = color.match(/[\d.]+/g).map(Number);
     assert(r > g + 30 && r > b + 30, `Cancel session should be red, got ${color}`);
@@ -352,7 +352,7 @@ async function main() {
     await page.keyboard.press('ArrowDown');
     assert((await page.evaluate(() => document.activeElement?.textContent?.trim())) === 'Edit game', 'ArrowDown');
     await page.keyboard.press('End');
-    assert((await page.evaluate(() => document.activeElement?.textContent?.trim())) === 'Cancel session', 'End');
+    assert((await page.evaluate(() => document.activeElement?.textContent?.trim())) === 'Cancel game', 'End');
     await page.keyboard.press('Escape');
     await page.getByRole('menu').waitFor({ state: 'detached' });
     assert(await gear.evaluate((e) => e === document.activeElement), 'focus did not return to the gear');
@@ -413,7 +413,7 @@ async function main() {
     }, sel);
 
   // ---------- the pop-up never hides behind the bottom bar ----------
-  for (const [height, label] of [[664, 'with Safari\'s bottom bar showing'], [560, 'on a short phone'], [420, 'on a very short screen']]) {
+  for (const [height, label] of [[664, 'with Safari’s bottom bar showing'], [560, 'on a short phone'], [420, 'on a very short screen']]) {
     await check(`390px ${label}: the gear pop-up on the first, a middle and the LAST card has every row on screen and tappable, above the tab bar`, async () => {
       const ctx = await browser.newContext({ ...phone(390, 'light'), viewport: { width: 390, height } });
       await post(ctx.request, '/api/admin/login', { pin: PIN });
@@ -448,8 +448,8 @@ async function main() {
         seen.add(r.place);
         const w = `card ${i + 1}/${n} (${r.place})`;
         const names = r.rows.map((x) => x.text);
-        assert(['Text the group', 'Edit game', 'Players', 'Cancel session'].every((t) => names.includes(t)), `${w}: rows ${names}`);
-        assert(names[names.length - 1] === 'Cancel session', `${w}: Cancel session should be last`);
+        assert(['Text the group', 'Edit game', 'Players', 'Cancel game'].every((t) => names.includes(t)), `${w}: rows ${names}`);
+        assert(names[names.length - 1] === 'Cancel game', `${w}: Cancel session should be last`);
         for (const row of r.rows) {
           assert(row.top >= 0 && row.bottom <= r.barTop + 0.5 && row.bottom <= r.vh && row.left >= 0 && row.right <= r.vw, `${w}: "${row.text}" is off screen or behind the tab bar (top ${Math.round(row.top)}, bottom ${Math.round(row.bottom)}, tab bar at ${Math.round(r.barTop)})`);
           assert(row.tappable, `${w}: "${row.text}" is covered by something else`);
@@ -534,7 +534,7 @@ async function main() {
         await page.getByRole('menu').waitFor({ state: 'detached' });
         assert((await y()) === before, `card ${i + 1}: closing the menu moved the page`);
         // The other pop-ups opened from the menu.
-        for (const row of ['Edit game', 'Players', 'Cancel session']) {
+        for (const row of ['Edit game', 'Players', 'Cancel game']) {
           await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
           await page.getByRole('menu').waitFor();
           await page.getByRole('menuitem', { name: row }).click();
@@ -792,7 +792,7 @@ async function main() {
   await check('Do this now: at most one plain "Court still needs to be booked" card per game, for the next 2 games with no court (Waitlist or Not booked); no Court opened / Didn\'t open anywhere', async () => {
     const { ctx, page } = await openAdmin();
     await page.locator('.do-now [data-task="court_book"]').first().waitFor();
-    assert((await page.getByRole('button', { name: /^(Court opened|Didn't open|I booked it)$/ }).count()) === 0, 'Court opened / Didn\'t open / I booked it still shown');
+    assert((await page.getByRole('button', { name: /^(Court opened|Didn’t open|I booked it)$/ }).count()) === 0, 'Court opened / Didn\'t open / I booked it still shown');
     await page.getByRole('button', { name: /^\+\d+ more/ }).click().catch(() => {});
     const books = await page.locator('.do-now article[data-task="court_book"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-session')));
     assert(books.length >= 1 && books.length <= 2, `court cards: ${books.length}`);

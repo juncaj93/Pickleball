@@ -599,9 +599,9 @@ async function main() {
     await page.locator('.chip-btn', { hasText: 'Activity' }).click();
     await page.locator('.activity-list li').first().waitFor();
     const rows = await page.locator('.activity-list li').evaluateAll((els) => els.map((e) => ({ text: e.querySelector('.a-text').textContent, other: e.getAttribute('data-by-other') === 'yes' })));
-    assert(rows.some((r) => r.other && /said I'm in|dropped out/.test(r.text)), 'a player\'s tap is highlighted');
+    assert(rows.some((r) => r.other && /said I’m in|dropped out/.test(r.text)), 'a player\'s tap is highlighted');
     assert(rows.some((r) => !r.other && /Alex/.test(r.text)), 'Alex\'s own entries are plain');
-    assert(rows.some((r) => /^Alex said I'm in/.test(r.text)) && rows.filter((r) => /^Alex said I'm in/.test(r.text)).every((r) => !r.other), 'Alex\'s own In tap is not highlighted');
+    assert(rows.some((r) => /^Alex said I’m in/.test(r.text)) && rows.filter((r) => /^Alex said I’m in/.test(r.text)).every((r) => !r.other), 'Alex\'s own In tap is not highlighted');
     assert(rows.filter((r) => !r.other).every((r) => !/^(Ryan|Julian|Nathan|Mitchel|Brandon) said/.test(r.text)), 'no player action is left plain');
     const bg = await page.locator('.activity-list li[data-by-other]').first().evaluate((e) => getComputedStyle(e).backgroundColor);
     const plain = await page.locator('.activity-list li:not([data-by-other])').first().evaluate((e) => getComputedStyle(e).backgroundColor);
@@ -675,9 +675,9 @@ async function main() {
     assert((await card.locator('.dots').getAttribute('aria-label')) !== dots0, 'the dots changed at once');
     assert((await card.locator('.names-line').allInnerTexts()).join(' ').includes('Alex'), 'Alex shows in the names at once');
     assert((await card.locator('.r2-seg button:disabled').count()) === 0, 'nothing disabled while it saves');
-    assert((await page.getByText("You're in", { exact: true }).count()) === 0, 'no toast before the server answers');
+    assert((await page.getByText("You’re in", { exact: true }).count()) === 0, 'no toast before the server answers');
     await page.waitForTimeout(2600);
-    assert((await page.getByText("You're in", { exact: true }).count()) >= 1, 'toast when the server answers');
+    assert((await page.getByText("You’re in", { exact: true }).count()) >= 1, 'toast when the server answers');
     assert((await dash()).sessions.find((x) => x.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'saved');
     // Quick taps: Out then In then Out again: the last one wins.
     await card.locator('.r2-seg-out').click();
@@ -863,7 +863,7 @@ async function main() {
   await check('L reduced motion and screen-reader names: footer buttons are named, the paid cell says what it opens', async () => {
     const { ctx, page } = await openAdmin({ extra: { reducedMotion: 'reduce' } });
     const card = await reveal(page, A.id);
-    assert(/I'm in for/.test((await card.locator('.r2-seg-in').getAttribute('aria-label')) || ''), 'In has a name');
+    assert(/I’m in for/.test((await card.locator('.r2-seg-in').getAttribute('aria-label')) || ''), 'In has a name');
     assert(/Out of/.test((await card.locator('.r2-seg-out').getAttribute('aria-label')) || ''), 'Out has a name');
     assert(/of \d+ paid\. Open the players list/.test((await card.locator('[data-paid-cell]').getAttribute('aria-label')) || ''), 'paid cell named');
     await ctx.close();

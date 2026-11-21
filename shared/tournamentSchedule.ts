@@ -9,6 +9,7 @@
 //   timeCheck      is the night running late, and from which round shorter games finish it on time
 // The structure (how many rounds, which courts) is shared/tournamentPlan.ts's doublesStructure, the game plan table.
 import { doublesStructure, END_BUFFER, type GameTo, PLAYOFF_TO, ROUND_MINUTES } from './tournamentPlan';
+import { groupName } from './scores';
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Teams
@@ -603,14 +604,8 @@ export function resolveGames(
 
 const range = (from: number, to: number) => Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
 
-/**
- * Zip 78: what people read for a pool (12 or more players, two groups, one per court): pool A is the "Dink group" (Court 1), pool B
- * the "Drive group" (Court 2). `short`: just "Dink" / "Drive" where space is tight. The code keeps 'A' and 'B'.
- */
-export function groupName(pool: PoolName | string | null | undefined, short = false): string {
-  const word = pool === 'B' ? 'Drive' : 'Dink';
-  return short ? word : `${word} group`;
-}
+// Zip 78: a pool's name in words ("Dink group", "Drive group"), kept in the tiny scores file so the players' download never pulls this one in.
+export { groupName };
 
 /** The seats of each group (Pool A, Pool B, or everyone). */
 export function groupsOf(teams: number): { pool: PoolName | null; seats: number[] }[] {

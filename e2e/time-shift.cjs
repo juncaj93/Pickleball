@@ -248,12 +248,12 @@ async function main() {
   await check("Can't make it: the drop question in the notice's words, Undo brings the notice back, then the drop with $14 credit", async () => {
     const { ctx, page } = await open('Julian');
     const bar = page.locator(`[data-time-bar="${A.id}"]`);
-    await bar.getByRole('button', { name: "Can't make it" }).click();
+    await bar.getByRole('button', { name: "Can’t make it" }).click();
     const dlg = page.locator('dialog[open]');
     await dlg.waitFor();
-    assert((await dlg.getByRole('button', { name: "Can't make it" }).count()) === 1, 'dialog says Can\'t make it');
+    assert((await dlg.getByRole('button', { name: "Can’t make it" }).count()) === 1, 'dialog says Can\'t make it');
     assert(!/drop out/i.test(squash(await dlg.innerText())), `no drop out words: ${await dlg.innerText()}`);
-    await dlg.getByRole('button', { name: "Can't make it" }).click();
+    await dlg.getByRole('button', { name: "Can’t make it" }).click();
     const toast = page.locator('.pop.toast');
     await toast.waitFor();
     const tt = squash(await toast.innerText());
@@ -266,8 +266,8 @@ async function main() {
     await page.waitForTimeout(6000); // past the 5-second hold: Undo really kept the seat
     assert((await record('Julian', A)).mine.status === 'confirmed', 'still in after Undo');
     // Again, and let it go through.
-    await bar.getByRole('button', { name: "Can't make it" }).click();
-    await page.locator('dialog[open]').getByRole('button', { name: "Can't make it" }).click();
+    await bar.getByRole('button', { name: "Can’t make it" }).click();
+    await page.locator('dialog[open]').getByRole('button', { name: "Can’t make it" }).click();
     const sent = page.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 12000 });
     await sent;
     await page.waitForTimeout(600);

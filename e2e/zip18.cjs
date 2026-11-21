@@ -375,7 +375,7 @@ async function main() {
     await join.click();
     await org.page.waitForTimeout(1200);
     // Vic is in on that game in the copy (the card says so), as a real tap would show.
-    const inCopy = await org.page.evaluate(() => [...document.querySelectorAll('.schedule article')].some((a) => /You're in|You’re in/.test(a.textContent)));
+    const inCopy = await org.page.evaluate(() => [...document.querySelectorAll('.schedule article')].some((a) => /You’re in|You’re in/.test(a.textContent)));
     // Parker: Still in on the moved game.
     await org.page.locator('.viewas-banner button, .viewas-banner .ac-btn', { hasText: 'Exit' }).click();
     await org.page.locator('.tabbar').waitFor();
@@ -662,7 +662,7 @@ async function main() {
       if (/^Booking opens/.test(label)) assert(!bookCell.need && !cards.includes('book') && !cards.includes('court_book'), `a booking prompt already at ${label}: ${JSON.stringify(bookCell)} ${cards.join(',')}`);
       if (/^Booking day/.test(label)) assert(bookCell.need || cards.includes('book') || cards.includes('court_book'), `no booking prompt at ${label} (${new Date(ms).toISOString()}): ${JSON.stringify(bookCell)} ${cards.join(',')}`);
       await setClock(NOW_MS);
-      console.log(`      (${label} = ${new Date(pretendAt[label]).toISOString()}: organizer cards ${[...new Set(cards)].join(', ') || 'none'}; booking game on Home ${bookCell.foldedAtFirst ? 'folded at first' : 'open'}, Book cell once open ${bookCell.need ? 'yes' : 'no'}; ${inNext}'s Game day card ${playerP[inNext].gameDay > 0 ? 'yes' : 'no'})`);
+      console.log(`      (${label} = ${new Date(pretendAt[label]).toISOString()}: organizer cards ${[...new Set(cards)].join(', ') || 'none'}; booking game on Home ${bookCell.foldedAtFirst ? 'folded at first' : 'open'}, Book cell once open ${bookCell.need ? 'yes' : 'no'}; ${inNext}’s Game day card ${playerP[inNext].gameDay > 0 ? 'yes' : 'no'})`);
     });
   }
   await browser.close();

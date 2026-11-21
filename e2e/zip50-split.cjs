@@ -224,7 +224,7 @@ async function main() {
     await page.locator('nav.tabbar').waitFor({ timeout: 30000 });
     if (dash.secondChance) {
       await page.locator('[data-sc-unpaid-sheet]').waitFor({ timeout: 15000 });
-      assert(await page.getByText("Text who hasn't paid").first().isVisible(), 'no sheet title');
+      assert(await page.getByText("Text who hasn’t paid").first().isVisible(), 'no sheet title');
     } else {
       console.log('      (Second Chance is off in this world: only the dashboard is checked)');
     }

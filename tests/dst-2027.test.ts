@@ -304,7 +304,7 @@ for (const season of [SPRING, FALL]) {
         `Tue, ${md(d4)}, 10:30 PM | Tuesday: finalize who played`,
         `Wed, ${md(d3, -1)}, 7:00 PM | Thursday: 3 players in, need a 4th. Text the group`,
         `Wed, ${md(d3, -1)}, 10:00 PM | Thursday: only 3 players in. Cancel court: <link>`,
-        `Wed, ${md(d3, -1)}, 10:30 PM | Thursday: court canceled? Now cancel the session and text everyone`,
+        `Wed, ${md(d3, -1)}, 10:30 PM | Thursday: court canceled? Now cancel the game and text everyone`,
       ]);
       // No Telegram in the night (12:00 to 6:44 AM), including the hour that is skipped or repeated.
       for (const s of w.sent) {

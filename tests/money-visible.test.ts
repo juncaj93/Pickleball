@@ -45,22 +45,22 @@ describe('the words', () => {
     expect(droppedText(1400, 0)).toBe('You dropped out. $14 credit returned.');
     expect(droppedText(0, 1400)).toBe('You dropped out. $14 back as credit.');
     expect(droppedText(300, 1100)).toBe('You dropped out. $14 back as credit.');
-    expect(droppedText(1400, 0, "You're out.")).toBe("You're out. $14 credit returned.");
+    expect(droppedText(1400, 0, "You’re out.")).toBe("You’re out. $14 credit returned.");
   });
 
   it('sign up: says the credit used, and what is still due only once the court is booked', () => {
-    expect(joinedCreditText("You're in", 0, 1400, true)).toBe("You're in");
-    expect(joinedCreditText("You're in", 1400, 1400, true)).toBe("You're in. $14 credit used.");
-    expect(joinedCreditText("You're in", 300, 1400, true)).toBe("You're in. $3 credit used, $11 due.");
-    expect(joinedCreditText("You're in", 300, 1400, false)).toBe("You're in. $3 credit used.");
+    expect(joinedCreditText("You’re in", 0, 1400, true)).toBe("You’re in");
+    expect(joinedCreditText("You’re in", 1400, 1400, true)).toBe("You’re in. $14 credit used.");
+    expect(joinedCreditText("You’re in", 300, 1400, true)).toBe("You’re in. $3 credit used, $11 due.");
+    expect(joinedCreditText("You’re in", 300, 1400, false)).toBe("You’re in. $3 credit used.");
     expect(joinedCreditText('Game on!', 1400, 1400, true)).toBe('Game on! $14 credit used.');
-    expect(joinedText({ result: 'confirmed', creditCents: 1400, paidWithCredit: true }, false, 1400)).toBe("You're in. $14 credit used.");
-    expect(joinedText({ result: 'confirmed', creditCents: 300 }, false, 1400)).toBe("You're in. $3 credit used, $11 due.");
-    expect(joinedText({ result: 'confirmed', creditCents: 300 }, true, 1400)).toBe("You're in. $3 credit used.");
-    expect(joinedText({ result: 'confirmed' }, false, 1400)).toBe("You're in");
+    expect(joinedText({ result: 'confirmed', creditCents: 1400, paidWithCredit: true }, false, 1400)).toBe("You’re in. $14 credit used.");
+    expect(joinedText({ result: 'confirmed', creditCents: 300 }, false, 1400)).toBe("You’re in. $3 credit used, $11 due.");
+    expect(joinedText({ result: 'confirmed', creditCents: 300 }, true, 1400)).toBe("You’re in. $3 credit used.");
+    expect(joinedText({ result: 'confirmed' }, false, 1400)).toBe("You’re in");
     // Waitlist and standby wording is unchanged, and a no-court game never says it.
-    expect(joinedText({ result: 'waitlisted', position: 2 }, false, 1400)).toBe("You're #2 on the waitlist");
-    expect(joinedText({ result: 'standby', position: 1 }, true, 1400)).toBe("You're in");
+    expect(joinedText({ result: 'waitlisted', position: 2 }, false, 1400)).toBe("You’re 2nd on the waitlist");
+    expect(joinedText({ result: 'standby', position: 1 }, true, 1400)).toBe("You’re in");
   });
 
   it('the credit sheet: newest first, plain words, returns included, at most 10, no em dashes', () => {
@@ -120,8 +120,8 @@ describe('the words', () => {
 
 describe('Telegram money lines', () => {
   it('carry only a first name and an amount', () => {
-    expect(refundRequestMessage('Ryan S.', 1400)).toBe('Refund requested: Ryan wants $14 back.');
-    expect(refundRequestMessage('Mitchel', 500)).toBe('Refund requested: Mitchel wants $5 back.');
+    expect(refundRequestMessage('Ryan S.', 1400)).toBe('Cash out: Ryan wants $14 back.');
+    expect(refundRequestMessage('Mitchel', 500)).toBe('Cash out: Mitchel wants $5 back.');
     expect(cashOutUsedMessage('Ryan S.', 1000, 1000, '2026-11-06T01:00:00.000Z', TZ)).toBe('Ryan withdrew the $10 cash out request (using it for Thu Nov 5)');
   });
 });

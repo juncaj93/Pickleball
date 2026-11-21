@@ -236,8 +236,8 @@ describe("the error box's rules (shared/errorAlerts.ts boxStep)", () => {
 describe('the messages (short, Eastern 12-hour, no em dashes, the admin link)', () => {
   const at = SUN_3AM + 5 * MIN; // 3:05 AM
   it('the 4 triggers, word for word', () => {
-    expect(errorText.clock('smart alerts', at, null, ADMIN)).toBe(`Site error: the clock's smart alerts job failed at 3:05 AM. Tap to open Admin: ${ADMIN}`);
-    expect(errorText.clock('game check', at, null, ADMIN, true)).toBe(`Site error: the clock's game check job failed (a database error) at 3:05 AM. Tap to open Admin: ${ADMIN}`);
+    expect(errorText.clock('smart alerts', at, null, ADMIN)).toBe(`Site error: the clock’s smart alerts job failed at 3:05 AM. Tap to open Admin: ${ADMIN}`);
+    expect(errorText.clock('game check', at, null, ADMIN, true)).toBe(`Site error: the clock’s game check job failed (a database error) at 3:05 AM. Tap to open Admin: ${ADMIN}`);
     expect(errorText.backup(false, SUN_3AM, null, ADMIN)).toBe(`Site error: the weekly backup failed at 3:00 AM. It tries again in an hour. Tap to open Admin: ${ADMIN}`);
     expect(errorText.backup(true, SUN_3AM, null, ADMIN)).toBe(`Site error: the weekly backup ended INCOMPLETE at 3:00 AM. It tries again in an hour. Tap to open Admin: ${ADMIN}`);
     expect(errorText.database(true, Date.parse('2026-11-08T19:15:00Z'), null, ADMIN)).toBe(`Site error: the database hit its free daily limit at 2:15 PM. The site is down until about 7:00 PM. Tap to open Admin: ${ADMIN}`);
@@ -281,7 +281,7 @@ describe('trigger 1: the clock tick fails (which job)', () => {
     expect((await w.tick()).status).toBe(200);
     const r = await w.failTick();
     expect(r.status).toBe(500);
-    expect(w.sent).toEqual([`Site error: the clock's game check job failed (a database error) at 3:00 AM. Tap to open Admin: ${ADMIN}`]);
+    expect(w.sent).toEqual([`Site error: the clock’s game check job failed (a database error) at 3:00 AM. Tap to open Admin: ${ADMIN}`]);
   });
   it('the job is the one running: a failure after the first read is the smart alerts job', async () => {
     const w = await world({ on: true });
@@ -289,7 +289,7 @@ describe('trigger 1: the clock tick fails (which job)', () => {
     const { tickFailed } = await import('../server/errorAlerts');
     tickFailed(ctx, { ready: true, on: true, job: 'smart alerts' }, new Error('x is undefined'));
     await w.app.settle();
-    expect(w.sent).toEqual([`Site error: the clock's smart alerts job failed at 3:00 AM. Tap to open Admin: ${ADMIN}`]);
+    expect(w.sent).toEqual([`Site error: the clock’s smart alerts job failed at 3:00 AM. Tap to open Admin: ${ADMIN}`]);
   });
   it('the clock Worker: no answer at all from the site is told once; the site\'s own 500 is not (it reports that itself)', async () => {
     expect(siteDidNotAnswer(0, null)).toBe(true);
@@ -444,7 +444,7 @@ describe('anti-spam', () => {
       w.app.now += 5 * MIN;
     }
     expect(w.sent).toHaveLength(3);
-    expect(w.sent[0]).toMatch(/^Site error: the clock's game check job failed/);
+    expect(w.sent[0]).toMatch(/^Site error: the clock’s game check job failed/);
     expect(w.sent[1]).toContain('11 more errors in the last hour.');
     expect(w.sent[2]).toContain('11 more errors in the last hour.');
   });
@@ -699,7 +699,7 @@ describe('Settings > Feature switches > "Error alerts", and the TEST button', ()
   it('the Settings row and test button are in both lists of Feature switches', () => {
     const tsx = readFileSync('src/pages/admin/SettingsTab.tsx', 'utf8');
     expect(tsx.match(/<ErrorAlertsRow ctx=\{ctx\} auto=\{auto\} \/>/g)).toHaveLength(2);
-    expect(tsx).toContain('Send TEST error alert');
+    expect(tsx).toContain("'Sending…' : 'Send test'");
   });
 });
 

@@ -181,16 +181,16 @@ async function main() {
     await check(`${scheme} ${width}px, ${query}: 6 in, cancel with No: the sheet says $9, the Heads up text says "your $9 share", each owes $9, paid players get $5 credit`, async () => {
       const id = await lateGame(note, FIVE, ['Julian', 'Nathan']);
       const { ctx, page } = await openAdmin({ scheme, width, query });
-      await gearPick(page, note, /Cancel session/);
+      await gearPick(page, note, /Cancel game/);
       if (!r2) await page.locator('dialog[open] [data-venue-waived]').getByRole('button', { name: 'No' }).click();
       const t = await dialogText(page);
       assert(/No: the fee is kept\. 6 are in, so everyone signed up owes \$9 \(anything paid above that comes back as credit\)\. Late drops still owe \$14\./.test(t), `hint: ${t}`);
       await noSideScroll(page, 'cancel sheet');
-      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
       const after = page.locator('[data-late-cancel="fee_kept"]');
       await after.waitFor({ timeout: 8000 });
       const body = await after.locator('[data-draft="canceled_fee_kept"] textarea').inputValue();
-      assert(body.includes("your $9 share still applies (if you already paid, you're all set).") && !body.includes('$14'), `text: ${JSON.stringify(body)}`);
+      assert(body.includes("your $9 share still applies (if you already paid, you’re all set).") && !body.includes('$14'), `text: ${JSON.stringify(body)}`);
       await noSideScroll(page, 'after-cancel sheet');
       await ctx.close();
       const s = (await dash()).sessions.find((x) => x.id === id);
@@ -205,11 +205,11 @@ async function main() {
     const id = await lateGame('Split off', FIVE, ['Julian']);
     const before = await potOf('Julian');
     const { ctx, page } = await openAdmin({ query: '?latefees=on&latefeesplit=off' });
-    await gearPick(page, 'Split off', /Cancel session/);
+    await gearPick(page, 'Split off', /Cancel game/);
     await page.locator('dialog[open] [data-venue-waived]').getByRole('button', { name: 'No' }).click();
     const t = await dialogText(page);
     assert(/No: the fee is kept, and everyone signed up still owes their \$14 \(late drops too\)\./.test(t), `hint: ${t}`);
-    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+    await page.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
     const after = page.locator('[data-late-cancel="fee_kept"]');
     await after.waitFor({ timeout: 8000 });
     const body = await after.locator('[data-draft="canceled_fee_kept"] textarea').inputValue();

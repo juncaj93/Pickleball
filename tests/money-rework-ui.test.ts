@@ -205,10 +205,10 @@ describe('History: a quieter list', () => {
   it('N1 names: a line says who it was about, from the id when the entry kept no name', () => {
     const names = (pid: string) => (pid === 'abc' ? 'Casey' : null);
     const claim = entry('payment_claim_confirmed', { playerId: 'abc' });
-    expect(activityText(claim, TZ, 'Alex', { names })).toContain("Casey's I paid");
+    expect(activityText(claim, TZ, 'Alex', { names })).toContain("Casey’s I paid");
     expect(activityText(claim, TZ, 'Alex')).toMatch(/^Alex: payment claim confirmed/); // off: the line it always was
     const done = entry('late_drop_done', { player: 'Blair', playerId: 'x' });
-    expect(activityText(done, TZ, 'Alex', { names })).toContain("Blair's late drop");
+    expect(activityText(done, TZ, 'Alex', { names })).toContain("Blair’s late drop");
     expect(activityText(entry('late_drop_done', {}), TZ, 'Alex', { names })).toContain('handled a late drop');
     // Without the option the old line is unchanged.
     expect(activityText(done, TZ, 'Alex')).toBe(`Alex handled a late drop for ${activityText(done, TZ, 'Alex').split(' for ')[1]}`);
@@ -238,16 +238,16 @@ describe('Remind sheet: Text all', () => {
   });
   it('R2 the message: two lines, a blank line, the site address alone on the last line', () => {
     const t = groupRemindText(d, game(at(11, 4, 12)));
-    expect(t).toBe("Hey everyone, quick reminder for today's pickleball.\nIf you haven't paid your $14 yet, please do it here:\n\npickleball.juncaj.net");
+    expect(t).toBe("Hey everyone, quick reminder for today’s pickleball.\nIf you haven’t paid your $14 yet, please do it here:\n\npickleball.juncaj.net");
     expect(t.split('\n')).toHaveLength(4);
   });
   it('R3 the day words are the same rule as every other text: today, tonight, tomorrow, yesterday, else the date', () => {
     const say = (m: number, day: number, h: number) => groupRemindText(d, game(at(m, day, h))).split('\n')[0];
-    expect(say(11, 4, 12)).toBe("Hey everyone, quick reminder for today's pickleball.");
-    expect(say(11, 4, 19)).toBe("Hey everyone, quick reminder for tonight's pickleball.");
-    expect(say(11, 5, 19)).toBe("Hey everyone, quick reminder for tomorrow's pickleball.");
-    expect(say(11, 3, 19)).toBe("Hey everyone, quick reminder for yesterday's pickleball.");
-    expect(say(11, 10, 19)).toBe("Hey everyone, quick reminder for Tue Nov 10's pickleball.");
+    expect(say(11, 4, 12)).toBe("Hey everyone, quick reminder for today’s pickleball.");
+    expect(say(11, 4, 19)).toBe("Hey everyone, quick reminder for tonight’s pickleball.");
+    expect(say(11, 5, 19)).toBe("Hey everyone, quick reminder for tomorrow’s pickleball.");
+    expect(say(11, 3, 19)).toBe("Hey everyone, quick reminder for yesterday’s pickleball.");
+    expect(say(11, 10, 19)).toBe("Hey everyone, quick reminder for Tue Nov 10’s pickleball.");
   });
   it('R4 the price is that game\'s: the usual price, or the final price once finalized', () => {
     expect(groupRemindText(d, game(at(11, 5)))).toContain('your $14 yet');
@@ -306,7 +306,7 @@ describe('Text all: who Messages opens to', () => {
     const ios = smsHref(phones, body, true);
     expect(ios).toBe(`sms://open?addresses=+13135550101,+13135550102,+13135550103&body=${encodeURIComponent(body)}`);
     expect(smsHref(phones, body, false)).toBe(`sms:+13135550101,+13135550102,+13135550103?body=${encodeURIComponent(body)}`);
-    expect(decodeURIComponent(ios.split('&body=')[1])).toBe("Hey everyone, quick reminder for today's pickleball.\nIf you haven't paid your $14 yet, please do it here:\n\npickleball.juncaj.net");
+    expect(decodeURIComponent(ios.split('&body=')[1])).toBe("Hey everyone, quick reminder for today’s pickleball.\nIf you haven’t paid your $14 yet, please do it here:\n\npickleball.juncaj.net");
     // One person alone keeps its own link: that number only.
     expect(smsHref(num(1), 'x', true)).toBe('sms:+13135550101&body=x');
   });

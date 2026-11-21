@@ -602,7 +602,7 @@ describe('the switch and the Heads up text', () => {
     const s = d.sessions.find((x: any) => x.id === w.sid);
     const old = lateCancelText({ ...d, textsR2: false }, s, '')!;
     expect(old.body).toBe(
-      `Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your $9 share still applies (if you already paid, you're all set). You can pay on the site: ${old.body.split('You can pay on the site: ')[1].split('. Sorry')[0]}. Sorry about that!`,
+      `Today’s game is canceled. It’s inside 12 hours, so the venue charges us. If you were signed up, your $9 share still applies (if you already paid, you’re all set). You can pay on the site: ${old.body.split('You can pay on the site: ')[1]}`,
     );
     const r2 = lateCancelText({ ...d, textsR2: true }, s, '')!;
     expect(r2.body).toContain('your $9 share still applies');

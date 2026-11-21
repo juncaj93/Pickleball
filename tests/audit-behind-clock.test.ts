@@ -336,7 +336,7 @@ describe('the clock at its worst moments (the tick API, Telegram stubbed)', () =
     expect(g0.calls()).toBe(1);
     expect(g0.sent.length).toBe(0);
     const failed = g0.app.db.raw.prepare("SELECT detail FROM task_log WHERE kind = 'failed'").all() as any[];
-    expect(failed.map((f) => f.detail)).toEqual(["Telegram didn't answer in time."]);
+    expect(failed.map((f) => f.detail)).toEqual(["Telegram didn’t answer in time."]);
   });
 
   it('Telegram down (error 500 or no network): retried 15 minutes later, sent once when it is back', async () => {

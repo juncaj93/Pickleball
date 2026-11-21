@@ -238,7 +238,7 @@ async function main() {
     // Remove more than the credit: the mistake message, Save off.
     await page.locator('[data-adjust-dir="remove"]').click();
     await page.locator('[data-adjust-amount]').fill('20');
-    assert((await page.locator('[data-adjust-error]').innerText()) === "Can't remove more than the $14 credit Harper has.", 'the mistake message');
+    assert((await page.locator('[data-adjust-error]').innerText()) === "Can’t remove more than the $14 credit Harper has.", 'the mistake message');
     assert(await save.isDisabled(), 'Save is off over the limit');
     assert((await page.locator('[data-adjust-after]').count()) === 0, 'no "Credit after" for a bad amount');
     await shot(page, 'adjust-error-390-light');
@@ -393,7 +393,7 @@ async function main() {
     );
     const split = all.find((c) => /\$11 each/.test(c.sub));
     assert(split, `a fee-split card at $11: ${JSON.stringify(all.map((c) => c.sub))}`);
-    assert(/^Thu .*game: 3 haven't paid$/.test(split.title), `title: ${split.title}`);
+    assert(/^Thu .*game: 3 haven’t paid$/.test(split.title), `title: ${split.title}`);
     const by = Object.fromEntries(split.rows.map((r) => [r.who, r]));
     assert(by.Kai.href && new URL(by.Kai.href).searchParams.get('amount') === '11', `Kai asked for $11: ${by.Kai.href}`);
     assert(by[LONG].href && new URL(by[LONG].href).searchParams.get('amount') === '11', 'the long name asked for $11');

@@ -28,7 +28,7 @@ async function busyGroup() {
   await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${later.id}/join`, {});
   await ctx.organizer.call('POST', `/api/admin/sessions/${later.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
   await ctx.organizer.call('POST', `/api/admin/sessions/${later.id}/decision`, { decision: 'cancel', confirm: true });
-  await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Robin', venueAddress: "O'Brien's Courts, Northville" });
+  await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Robin', venueAddress: "O'Brien’s Courts, Northville" });
   await ctx.organizer.call('POST', '/api/admin/players', { name: 'Zoë O’Neil 🏓', phone: '(248) 555-0199' });
   ctx.app.advance(Date.parse(s.endsAt) - ctx.app.now + HOUR); // the 6-player game ends
   // Finalized at 6 played: Alex paid $14 and gets $5 back as credit. Blair's canceled $14 is credit too, and asks for it back.
@@ -133,10 +133,10 @@ describe('check-in wording', () => {
   it('says "tonight" for the usual game and "today" for one before 5:00 PM', () => {
     const at = (start: string, end: string) => ({ startsAt: start, endsAt: end });
     const noon = (iso: string) => Date.parse(iso);
-    expect(checkInMessage(at('2026-11-04T01:00:00Z', '2026-11-04T03:00:00Z'), TZ, noon('2026-11-03T15:00:00Z'), 'L')).toBe('Pickleball tonight, 8:00 PM. Can\'t make it? Update here: L');
-    expect(checkInMessage(at('2026-11-07T15:00:00Z', '2026-11-07T17:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 10:00 AM. Can\'t make it? Update here: L');
-    expect(checkInMessage(at('2026-11-07T21:30:00Z', '2026-11-07T23:30:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 4:30 PM. Can\'t make it? Update here: L');
-    expect(checkInMessage(at('2026-11-07T22:00:00Z', '2026-11-08T00:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball tonight, 5:00 PM. Can\'t make it? Update here: L');
+    expect(checkInMessage(at('2026-11-04T01:00:00Z', '2026-11-04T03:00:00Z'), TZ, noon('2026-11-03T15:00:00Z'), 'L')).toBe('Pickleball tonight, 8:00 PM. Can’t make it? Update here: L');
+    expect(checkInMessage(at('2026-11-07T15:00:00Z', '2026-11-07T17:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 10:00 AM. Can’t make it? Update here: L');
+    expect(checkInMessage(at('2026-11-07T21:30:00Z', '2026-11-07T23:30:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 4:30 PM. Can’t make it? Update here: L');
+    expect(checkInMessage(at('2026-11-07T22:00:00Z', '2026-11-08T00:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball tonight, 5:00 PM. Can’t make it? Update here: L');
   });
 });
 

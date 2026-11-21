@@ -70,8 +70,8 @@ describe("credit chain (Alex's scenario, Zip 8)", () => {
       const join = await phone.call('POST', `/api/sessions/${s.id}/join`, {});
       expect(join.status, join.text).toBe(200);
       expect(join.data.result).toBe('confirmed');
-      expect(join.data.creditCents ?? 0, `game ${i + 1}: credit used at I'm in`).toBe(step.creditUsed);
-      expect(await potOf(ctx, P), `game ${i + 1}: pot after I'm in`).toBe(potBefore - step.creditUsed);
+      expect(join.data.creditCents ?? 0, `game ${i + 1}: credit used at I’m in`).toBe(step.creditUsed);
+      expect(await potOf(ctx, P), `game ${i + 1}: pot after I’m in`).toBe(potBefore - step.creditUsed);
       let mine = await seat(ctx, s.id, P);
       expect(mine.owesCents, `game ${i + 1}: owes before paying`).toBe(1400 - step.creditUsed);
       // The others: in and paid $14 cash each.

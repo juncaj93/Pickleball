@@ -104,9 +104,9 @@ describe('rules (pure)', () => {
     expect(cleanGuestName('a'.repeat(21))).toBeNull();
     expect(hostDropText('Sam', null, formatPrice)).toBe('Your guest Sam drops out too. Both spots open up for someone else.');
     expect(hostDropText('Sam', { cancelBy: '9:30 AM', spots: 2, owesCents: 2800 }, formatPrice)).toBe(
-      "It's past the 9:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
+      "It’s past the 9:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
     );
-    expect(removeGuestText('Sam', 1400, true, formatPrice)).toBe("Sam comes off your tab. Sam's $14 goes to your credit.");
+    expect(removeGuestText('Sam', 1400, true, formatPrice)).toBe("Sam comes off your tab. Sam’s $14 goes to your credit.");
   });
   it('kill switch: allowed unless "off"', () => {
     expect(guestSpotAllowed(undefined)).toBe(true);
@@ -504,7 +504,7 @@ describe('alerts and texts', () => {
     await addGuest(w, g.id, 'Blair');
     await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/remove-guest`, {});
     const lines = (await dash(w)).audit.map((a: any) => activityText({ ...a, sessionStartsAt: new Date(g.start).toISOString() }, 'America/Detroit', ORG));
-    expect(lines.some((l: string) => /^Alex added Sam as Blair's guest for /.test(l)), lines.join(' | ')).toBe(true);
+    expect(lines.some((l: string) => /^Alex added Sam as Blair’s guest for /.test(l)), lines.join(' | ')).toBe(true);
     expect(lines.some((l: string) => /^Blair removed their guest Sam for /.test(l)), lines.join(' | ')).toBe(true);
   });
   it('texts: the guest has no row, so no prepared text ever has a guest recipient; the reminder amount is the host\'s $28', async () => {
@@ -934,21 +934,21 @@ describe('round 3: a late pair owes only the spots the game is short', () => {
   it('the dialog wording, one sentence per case (Alex)', () => {
     const at = { cancelBy: '7:30 AM' };
     expect(hostDropText('Sam', { ...at, spots: 2, owesCents: 2800 }, formatPrice)).toBe(
-      "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
+      "It’s past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
     );
     expect(hostDropText('Sam', { ...at, spots: 1, owesCents: 1400 }, formatPrice)).toBe(
-      "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed.",
+      "It’s past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest’s spot isn’t needed.",
     );
     expect(hostDropText('Sam', { ...at, spots: 0, owesCents: 0 }, formatPrice)).toBe(
-      "Your guest Sam drops out too. Both spots open up. You don't owe anything because the game still has 4 players.",
+      "Your guest Sam drops out too. Both spots open up. You don’t owe anything because the game still has 4 players.",
     );
     // Outside the late window: the wording as before.
     expect(hostDropText('Sam', null, formatPrice)).toBe('Your guest Sam drops out too. Both spots open up for someone else.');
     expect(removeGuestText('Sam', 1400, false, formatPrice, at)).toBe(
-      "It's past the 7:30 AM cancel-by and the game would drop below 4. If no one takes Sam's spot, you still owe $14.",
+      "It’s past the 7:30 AM cancel-by and the game would drop below 4. If no one takes Sam’s spot, you still owe $14.",
     );
     expect(removeGuestText('Sam', 1400, true, formatPrice, at)).toBe(
-      "It's past the 7:30 AM cancel-by and the game would drop below 4. Sam's $14 stays on this game unless someone takes the spot.",
+      "It’s past the 7:30 AM cancel-by and the game would drop below 4. Sam’s $14 stays on this game unless someone takes the spot.",
     );
     expect(removeGuestText('Sam', 1400, false, formatPrice, null)).toBe('Sam comes off your tab. You owe $14 less.');
     expect(lateShortSpots(2, 2)).toBe(2);

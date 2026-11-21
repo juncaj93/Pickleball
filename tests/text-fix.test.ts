@@ -20,9 +20,9 @@ const FOUR_OUT = { startsAt: '2026-11-18T01:00:00.000Z' }; // Tue Nov 17, 8:00 P
 const LINK = 'pickleball.juncaj.net';
 
 const cases: [string, { startsAt: string }, string][] = [
-  ['today', TODAY, "today's game"],
-  ['tomorrow', TOMORROW, "tomorrow's game"],
-  ['4 days out', FOUR_OUT, "Tuesday's game"],
+  ['today', TODAY, "today’s game"],
+  ['tomorrow', TOMORROW, "tomorrow’s game"],
+  ['4 days out', FOUR_OUT, "Tuesday’s game"],
 ];
 
 describe('the back-out day words', () => {
@@ -33,20 +33,20 @@ describe('the back-out day words', () => {
   }
   it('uses the Eastern day, never UTC: a 12:30 AM game on Tuesday', () => {
     const night = '2026-11-17T05:30:00.000Z'; // Tue Nov 17, 12:30 AM EST
-    expect(backOutGame(night, TZ, Date.parse('2026-11-17T04:00:00Z'))).toBe("tomorrow's game"); // Mon 11:00 PM EST (already Tuesday in UTC)
-    expect(backOutGame(night, TZ, Date.parse('2026-11-17T06:00:00Z'))).toBe("today's game"); // Tue 1:00 AM EST
-    expect(backOutGame(night, TZ, Date.parse('2026-11-16T03:00:00Z'))).toBe("Tuesday's game"); // Sun 10:00 PM EST
+    expect(backOutGame(night, TZ, Date.parse('2026-11-17T04:00:00Z'))).toBe("tomorrow’s game"); // Mon 11:00 PM EST (already Tuesday in UTC)
+    expect(backOutGame(night, TZ, Date.parse('2026-11-17T06:00:00Z'))).toBe("today’s game"); // Tue 1:00 AM EST
+    expect(backOutGame(night, TZ, Date.parse('2026-11-16T03:00:00Z'))).toBe("Tuesday’s game"); // Sun 10:00 PM EST
     const late = '2026-11-17T07:00:00.000Z'; // Tue Nov 17, 2:00 AM EST
-    expect(backOutGame(late, TZ, Date.parse('2026-11-17T04:59:00Z'))).toBe("tomorrow's game");
-    expect(backOutGame(late, TZ, Date.parse('2026-11-17T05:01:00Z'))).toBe("today's game");
+    expect(backOutGame(late, TZ, Date.parse('2026-11-17T04:59:00Z'))).toBe("tomorrow’s game");
+    expect(backOutGame(late, TZ, Date.parse('2026-11-17T05:01:00Z'))).toBe("today’s game");
   });
   it('the clock change on Sun Nov 1 cannot move the day', () => {
     const mon = '2026-11-03T00:00:00.000Z'; // Mon Nov 2, 7:00 PM EST
-    expect(backOutGame(mon, TZ, Date.parse('2026-11-02T04:59:00Z'))).toBe("tomorrow's game");
-    expect(backOutGame(mon, TZ, Date.parse('2026-11-02T05:01:00Z'))).toBe("today's game");
+    expect(backOutGame(mon, TZ, Date.parse('2026-11-02T04:59:00Z'))).toBe("tomorrow’s game");
+    expect(backOutGame(mon, TZ, Date.parse('2026-11-02T05:01:00Z'))).toBe("today’s game");
   });
   it('with no game given the old words stay', () => {
-    expect(backOutGame(undefined, undefined, undefined)).toBe("today's game");
+    expect(backOutGame(undefined, undefined, undefined)).toBe("today’s game");
     expect(backOutDay(undefined, undefined, undefined)).toBe('today');
   });
 });
@@ -60,7 +60,7 @@ describe('Text the players: both tabs, both wordings', () => {
         expect(b.label).toBe('Court still booked (backup)');
         for (const t of [a, b]) {
           expect(t.body).toContain(`Hey guys, sorry, I have to back out of ${word}.`);
-          if (word !== "today's game") expect(t.body).not.toMatch(/today|tonight|this evening/i);
+          if (word !== "today’s game") expect(t.body).not.toMatch(/today|tonight|this evening/i);
           expect(t.body).not.toMatch(/[–—]/);
         }
         expect(a.body).toContain('https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial');
@@ -73,27 +73,27 @@ describe('Text the players: both tabs, both wordings', () => {
     const before = backOutTexts(false);
     expect(now.map((t) => t.body)).toEqual(before.map((t) => t.body));
     expect(backOutTexts(true, { startsAt: TODAY.startsAt, tz: TZ, nowMs: NOW }).map((t) => t.body)).toEqual(backOutTexts(true).map((t) => t.body));
-    expect(courtCanceledMessage()).toBe(courtCanceledMessage(undefined, undefined, "today's game"));
-    expect(courtStillBookedTextR2()).toBe(courtStillBookedTextR2(undefined, "today's game"));
+    expect(courtCanceledMessage()).toBe(courtCanceledMessage(undefined, undefined, "today’s game"));
+    expect(courtStillBookedTextR2()).toBe(courtStillBookedTextR2(undefined, "today’s game"));
   });
   it('only the day word changes: the rest of each text is identical', () => {
     const t = backOutTexts(false, { startsAt: FOUR_OUT.startsAt, tz: TZ, nowMs: NOW });
     const old = backOutTexts(false);
-    expect(t[0].body.replace("Tuesday's game", "today's game")).toBe(old[0].body);
-    expect(t[1].body.replace("Tuesday's game", "today's game")).toBe(old[1].body);
+    expect(t[0].body.replace("Tuesday’s game", "today’s game")).toBe(old[0].body);
+    expect(t[1].body.replace("Tuesday’s game", "today’s game")).toBe(old[1].body);
   });
 });
 
 describe('the cancel texts that said "today"', () => {
   it('fee kept, old wording: names the day', () => {
-    expect(canceledFeeKeptMessage(1400, LINK)).toContain("Heads up: today's game is canceled");
-    expect(canceledFeeKeptMessage(1400, LINK, backOutGame(TOMORROW.startsAt, TZ, NOW))).toContain("Heads up: tomorrow's game is canceled");
-    expect(canceledFeeKeptMessage(1400, LINK, backOutGame(FOUR_OUT.startsAt, TZ, NOW))).toContain("Heads up: Tuesday's game is canceled");
+    expect(canceledFeeKeptMessage(1400, LINK)).toContain("Today’s game is canceled");
+    expect(canceledFeeKeptMessage(1400, LINK, backOutGame(TOMORROW.startsAt, TZ, NOW))).toContain("Tomorrow’s game is canceled");
+    expect(canceledFeeKeptMessage(1400, LINK, backOutGame(FOUR_OUT.startsAt, TZ, NOW))).toContain("Tuesday’s game is canceled");
   });
   it('fee kept, new wording: already right (today, tomorrow, the date)', () => {
-    expect(canceledFeeKeptTextR2(TODAY as any, TZ, NOW, 1400, LINK)).toContain("today's game is canceled");
-    expect(canceledFeeKeptTextR2(TOMORROW as any, TZ, NOW, 1400, LINK)).toContain("tomorrow's game is canceled");
-    expect(canceledFeeKeptTextR2(FOUR_OUT as any, TZ, NOW, 1400, LINK)).toContain('the Tue Nov 17 game is canceled');
+    expect(canceledFeeKeptTextR2(TODAY as any, TZ, NOW, 1400, LINK)).toContain("Today’s game is canceled");
+    expect(canceledFeeKeptTextR2(TOMORROW as any, TZ, NOW, 1400, LINK)).toContain("Tomorrow’s game is canceled");
+    expect(canceledFeeKeptTextR2(FOUR_OUT as any, TZ, NOW, 1400, LINK)).toContain('The Tue Nov 17 game is canceled');
   });
   it('waived, old wording: Pickleball today / tomorrow / Tuesday is canceled', () => {
     expect(canceledTodayMessage(LINK)).toContain('Pickleball today is canceled.');

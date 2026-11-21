@@ -793,7 +793,7 @@ async function main() {
       await admin.route('**/api/admin/group', (route) => route.abort());
       await last.fill('11');
       await last.blur();
-      const retry = rowOf(last).getByRole('button', { name: "Couldn't save. Tap to retry." });
+      const retry = rowOf(last).getByRole('button', { name: "Couldn’t save. Tap to retry." });
       await retry.waitFor();
       assert((await last.inputValue()) === '11', 'what was typed should stay');
       await admin.unroute('**/api/admin/group');
@@ -882,7 +882,7 @@ async function main() {
     for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) {
       await check(`${name} picks a name and taps "I'm in"`, async () => {
         const p = await openAs(name);
-        await firstCard(p).getByRole('button', { name: "I'm in" }).click();
+        await firstCard(p).getByRole('button', { name: "I’m in" }).click();
         await firstCard(p).locator('.tile-check').waitFor();
       });
     }
@@ -893,7 +893,7 @@ async function main() {
       // Under 4 it reads "3 of 4 in"; from 4 on just the number.
       await card.locator('.in-count', { hasText: /^4 in$/ }).waitFor();
       assert((await card.getByRole('button', { name: 'Join waitlist' }).count()) === 0, 'the 5th person should not be sent to a waitlist');
-      await card.getByRole('button', { name: "I'm in" }).click();
+      await card.getByRole('button', { name: "I’m in" }).click();
       await card.locator('.tile-check').waitFor();
       await card.locator('.in-count', { hasText: /^5 in$/ }).waitFor();
       assert((await card.locator('.dots .ball').count()) === 5, `five balls, got ${await card.locator('.dots .ball').count()}`);
@@ -927,7 +927,7 @@ async function main() {
       // One filled green button per card; "Drop out" is a quiet link, not a button look.
       const filled = await card.locator('.btn:not(.outline)').allInnerTexts();
       assert(filled.length === 1, `expected one filled button, got ${filled} (all: ${buttons})`);
-      assert(buttons.includes('Drop out') && !buttons.includes("I'm out"), `"I'm out" should read "Drop out": ${buttons}`);
+      assert(buttons.includes('Drop out') && !buttons.includes("I’m out"), `"I'm out" should read "Drop out": ${buttons}`);
     });
 
     await check('players never see phone numbers or the PIN', async () => {
@@ -940,7 +940,7 @@ async function main() {
     await check('a 6th person is simply in too: "6 in", six balls, no "Good news, we now have 6" line', async () => {
       const p = await openAs('Frankie');
       const card = firstCard(p);
-      await card.getByRole('button', { name: "I'm in" }).click();
+      await card.getByRole('button', { name: "I’m in" }).click();
       await card.locator('.tile-check').waitFor();
       await card.locator('.in-count', { hasText: /^6 in$/ }).waitFor();
       assert((await card.locator('.dots .ball').count()) === 6 && (await card.locator('.dots .dot').count()) === 0, 'six balls, no empty circles');
@@ -991,7 +991,7 @@ async function main() {
       const card = firstCard(players.Casey);
       await card.getByRole('button', { name: 'Drop out' }).click();
       await confirmDrop(players.Casey);
-      await card.getByRole('button', { name: "I'm in" }).waitFor();
+      await card.getByRole('button', { name: "I’m in" }).waitFor();
       await card.locator('.in-count', { hasText: /^5 in$/ }).waitFor();
       assert((await card.locator('[data-credit-back]').count()) === 0, 'an unpaid drop gives no credit line');
       await admin.reload();
@@ -1039,7 +1039,7 @@ async function main() {
       }
       assert((await sessionCards(admin).locator('.chip').count()) === 0, 'session cards should have no status chip');
       // The court buttons now live only on the "Do this now" card (I booked it for a game with no court, Court opened / Didn't open for a waitlisted one); a game card has just the switch.
-      for (const label of ['I booked it', 'Court opened', "Didn't open"]) {
+      for (const label of ['I booked it', 'Court opened', "Didn’t open"]) {
         const all = await admin.getByRole('button', { name: label, exact: true }).count();
         const inCards = await sessionCards(admin).getByRole('button', { name: label, exact: true }).count();
         const onDoNow = await admin.locator('.do-now').getByRole('button', { name: label, exact: true }).count();
@@ -1079,7 +1079,7 @@ async function main() {
       assert((await sw.getByRole('button').count()) === 3, 'three segments');
       // The old banner and its buttons are gone from the card.
       assert((await card.locator('.court-banner').count()) === 0, 'the old banner is still on the card');
-      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn't open)$/ }).count()) === 0 && (await card.getByRole('link', { name: /^Book/ }).count()) === 0, 'old banner buttons are still on the card');
+      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn’t open)$/ }).count()) === 0 && (await card.getByRole('link', { name: /^Book/ }).count()) === 0, 'old banner buttons are still on the card');
       const look = await card.evaluate((el) => ({ style: getComputedStyle(el).borderTopStyle }));
       assert(look.style === 'dashed', `not-booked border should be dashed, was ${look.style}`);
       for (const scheme of ['light', 'dark']) {
@@ -1151,7 +1151,7 @@ async function main() {
       const tapArea = { w: gb.width, h: Math.max(gb.height, await gear.evaluate((b) => parseFloat(getComputedStyle(b, '::before').height) || 0)) };
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
       // Collapsed: only the one-tap court switch (and the paid pill); no main button, the poll lives in Texts.
-      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && !/^(Undo|Hours OK|I'm in|Out)$/.test(x) && !/ of \d+ paid$/.test(x));
+      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && !/^(Undo|Hours OK|I’m in|Out)$/.test(x) && !/ of \d+ paid$/.test(x));
       assert(JSON.stringify(await visible()) === JSON.stringify(['Not booked', 'Waitlist', 'Booked']), `collapsed card buttons were ${await visible()}`);
       await gear.click();
       assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
@@ -1160,7 +1160,7 @@ async function main() {
       const rows = (await menu.getByRole('menuitem').allInnerTexts()).map((t) => t.trim());
       // Once the court is booked, Add to calendar joins the list; Cancel session is always last.
       const isBooked = (await card.getAttribute('data-court')) === 'booked';
-      const want = isBooked ? ['Text the group', 'Edit game', 'Players', 'Add to calendar', 'Cancel session'] : ['Text the group', 'Edit game', 'Players', 'Cancel session'];
+      const want = isBooked ? ['Text the group', 'Edit game', 'Players', 'Add to calendar', 'Cancel game'] : ['Text the group', 'Edit game', 'Players', 'Cancel game'];
       assert(JSON.stringify(rows) === JSON.stringify(want), `menu rows were ${rows}`);
       const textRow = menu.getByRole('menuitem', { name: 'Text the group', exact: true });
       assert((await textRow.locator('svg[data-icon="message"]').count()) === 1, 'Text the group has a message icon');
@@ -1189,7 +1189,7 @@ async function main() {
       assert((await menu.getByRole('button', { name: /^Copy/ }).count()) === 0 && (await card.locator('.other-texts').count()) === 0, 'no Copy or Other texts');
       const heights = await menu.getByRole('menuitem').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
       assert(heights.every((h) => h >= 44 && h < 60), `menu rows fit on one line, 44px+: ${heights}`);
-      const cancelFg = await menu.getByRole('menuitem', { name: 'Cancel session' }).evaluate((el) => getComputedStyle(el).color);
+      const cancelFg = await menu.getByRole('menuitem', { name: 'Cancel game' }).evaluate((el) => getComputedStyle(el).color);
       const [cr, cg, cbl] = cancelFg.match(/[\d.]+/g).map(Number);
       assert(cr > cg + 30 && cr > cbl + 30, `Cancel session uses the red style: ${cancelFg}`);
       for (const gone of ['Text the group poll', 'Money', 'Texts', 'Reschedule', 'Invite substitutes', 'Change or cancel court', 'Edit booking', 'Modify court', 'Text']) {
@@ -1380,7 +1380,7 @@ async function main() {
       await p.locator('.toast', { hasText: 'Marked paid' }).waitFor();
       const paidTag = firstCard(p).locator('.paid-tag', { hasText: /^Paid/  });
       await paidTag.waitFor();
-      const undo = firstCard(p).getByRole('button', { name: "Didn't pay?" });
+      const undo = firstCard(p).getByRole('button', { name: "Didn’t pay?" });
       const tb = await paidTag.boundingBox();
       const ub = await undo.boundingBox();
       assert(ub.y >= tb.y + tb.height - 1 && Math.abs(ub.x - tb.x) < 4, '"Didn\'t pay?" sits right under Paid');
@@ -1402,7 +1402,7 @@ async function main() {
       assert((await devonRow.locator('.self-tag').count()) === 0, 'no tag when I mark it');
       await p.reload();
       await firstCard(p).locator('.paid-tag', { hasText: /^Paid/  }).waitFor();
-      assert((await firstCard(p).getByRole('button', { name: "Didn't pay?" }).count()) === 0, 'no undo for the organizer\'s mark');
+      assert((await firstCard(p).getByRole('button', { name: "Didn’t pay?" }).count()) === 0, 'no undo for the organizer\'s mark');
       assert((await firstCard(p).getByRole('link', { name: /Pay \$/ }).count()) === 0, 'Pay should be gone once paid');
       // Logged.
       await tab(admin, 'History').click();
@@ -1552,7 +1552,7 @@ async function main() {
       await p.screenshot({ path: path.join(SHOTS, 'player-suggestion.png'), fullPage: true });
       await card.getByRole('button', { name: 'Yes' }).click();
       const answer = p.getByRole('region', { name: 'Your answer' });
-      await answer.getByRole('heading', { name: /You're in|on the waitlist/ }).waitFor();
+      await answer.getByRole('heading', { name: /You’re in|on the waitlist/ }).waitFor();
       // Signing up never asks for money; that waits for game day.
       assert((await answer.locator('a[href*="venmo"]').count()) === 0 && (await answer.getByText(/\$\d/).count()) === 0, 'no payment at sign-up');
       await answer.getByRole('button', { name: 'Done' }).click();
@@ -1630,10 +1630,10 @@ async function main() {
       await autoSet(admin.getByLabel(/Group word/), 'Dink');
       const p = await newPage();
       await p.goto(BASE);
-      await p.getByLabel("What's the group word?").fill('nope');
+      await p.getByLabel("What’s the group word?").fill('nope');
       await p.getByRole('button', { name: 'Continue' }).click();
-      await p.getByText("That's not the group word.").waitFor();
-      await p.getByLabel("What's the group word?").fill('dink');
+      await p.getByText("That’s not the group word.").waitFor();
+      await p.getByLabel("What’s the group word?").fill('dink');
       await p.getByRole('button', { name: 'Continue' }).click();
       await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
       await p.reload();
@@ -1641,7 +1641,7 @@ async function main() {
       // Phones that already picked their name aren't asked.
       await players.Alex.reload();
       await firstCard(players.Alex).waitFor();
-      assert((await players.Alex.getByLabel("What's the group word?").count()) === 0, 'known phones should not be asked');
+      assert((await players.Alex.getByLabel("What’s the group word?").count()) === 0, 'known phones should not be asked');
       await admin.getByRole('button', { name: 'Remove the group word' }).click();
       await admin.getByRole('button', { name: 'Remove the group word' }).waitFor({ state: 'detached' });
       const q = await newPage();
@@ -1677,7 +1677,7 @@ async function main() {
       await p.locator('header').getByRole('button', { name: 'Not you?' }).waitFor();
       const labels = await p.locator('.schedule .week-break').allInnerTexts();
       assert(labels.length >= 2, `expected week dividers on the player screen, got ${labels}`);
-      for (const filler of [/standby list so we're ready/, /Nobody on standby yet/, /so this one is off/]) {
+      for (const filler of [/standby list so we’re ready/, /Nobody on standby yet/, /so this one is off/]) {
         assert((await p.getByText(filler).count()) === 0, `filler still shown: ${filler}`);
       }
       await p.screenshot({ path: path.join(SHOTS, 'player-weeks.png'), fullPage: true });
@@ -1690,9 +1690,9 @@ async function main() {
       const more = p.getByRole('button', { name: /^More sessions/ });
       if (await more.count()) await more.click();
       const rows = p.locator('.schedule article').filter({ has: p.locator('.sched-status[data-court="later"], .sched-status[data-court="needs"]') });
-      const pick = rows.filter({ has: p.getByRole('button', { name: "I'm in", exact: true }) }).last();
+      const pick = rows.filter({ has: p.getByRole('button', { name: "I’m in", exact: true }) }).last();
       const row = p.locator(`article[aria-labelledby="${await pick.getAttribute('aria-labelledby')}"]`);
-      const btn = row.getByRole('button', { name: "I'm in", exact: true });
+      const btn = row.getByRole('button', { name: "I’m in", exact: true });
       await btn.waitFor();
       const look = await btn.evaluate((el) => ({ disabled: el.disabled, opacity: getComputedStyle(el).opacity }));
       assert(!look.disabled && look.opacity === '1', `I'm in looks turned off: ${JSON.stringify(look)}`);
@@ -1719,7 +1719,7 @@ async function main() {
       const pop = p.locator('.pop');
       await pop.waitFor();
       // The tapped button turns into a Drop out link, so the bubble is checked against where the button was just before the tap.
-      assert((await pop.innerText()).trim() === "You're in", `banner said ${await pop.innerText()}`);
+      assert((await pop.innerText()).trim() === "You’re in", `banner said ${await pop.innerText()}`);
       // The banner: bottom center of the screen, just above the bottom edge, never next to the tapped button.
       await pop.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})))); // it slides up the last 8px while fading in
       const pb = await pop.boundingBox();
@@ -1730,7 +1730,7 @@ async function main() {
       assert(vh - (pb.y + pb.height) >= 16 && vh - (pb.y + pb.height) <= 24, `banner sits 16 to 24px above the bottom, it is ${vh - (pb.y + pb.height)}px (see e2e/banner.cjs)`);
       const style = await pop.evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), hidden: el.getAttribute('aria-hidden'), pos: getComputedStyle(el).position, icon: !!el.querySelector('.toast-icon') }));
       assert(style.size >= 13 && style.hidden === 'true' && style.pos === 'fixed' && style.icon, `banner style: ${JSON.stringify(style)}`);
-      await p.locator('[aria-live="polite"]', { hasText: "You're in" }).waitFor({ state: 'attached' });
+      await p.locator('[aria-live="polite"]', { hasText: "You’re in" }).waitFor({ state: 'attached' });
       assert(Math.abs((await row.boundingBox()).y - rowTop) < 2 && (await p.evaluate(() => document.documentElement.scrollHeight)) >= before - 2, 'the bubble must not push the page around');
       assert((await p.locator('.toast:not(.pop)').count()) === 0, 'old white banner should be gone');
       await pop.waitFor({ state: 'detached', timeout: 3500 });
@@ -1843,7 +1843,7 @@ async function main() {
       await p.getByRole('button', { name: 'Continue' }).click();
       await p.getByRole('heading', { name: 'Is this you?' }).waitFor();
       await p.getByRole('button', { name: 'Ryan', exact: true }).waitFor();
-      await p.getByRole('button', { name: "No, I'm new" }).click();
+      await p.getByRole('button', { name: "No, I’m new" }).click();
       await p.getByText(/Someone already uses "ryan"/).waitFor();
       await p.getByLabel('Your name').fill('Morgan');
       await p.getByRole('button', { name: 'Continue' }).click();
@@ -1912,7 +1912,7 @@ async function main() {
         await admin.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
         await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as.png'), fullPage: true });
         const second = admin.locator('article').nth(1);
-        await second.getByRole('button', { name: "I'm in" }).click();
+        await second.getByRole('button', { name: "I’m in" }).click();
         await second.locator('.tile-check').waitFor();
         await second.locator('.names-line', { hasText: 'Blair' }).waitFor();
         // Pay shows the next step and opens nothing.
@@ -1922,18 +1922,18 @@ async function main() {
           await pay.click();
           await second.getByRole('button', { name: 'I paid' }).click();
           await second.locator('.paid-tag', { hasText: 'Paid' }).waitFor();
-          await second.getByRole('button', { name: "Didn't pay?" }).waitFor();
+          await second.getByRole('button', { name: "Didn’t pay?" }).waitFor();
           assert(admin.url() === url && admin.context().pages().length === 1, 'Pay opened something in the demo');
         }
         await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as-after-in.png'), fullPage: true });
         await second.getByRole('button', { name: 'Drop out' }).click();
         await confirmDrop(admin);
-        await second.getByRole('button', { name: "I'm in" }).waitFor();
+        await second.getByRole('button', { name: "I’m in" }).waitFor();
         // Reset throws the demo changes away.
-        await second.getByRole('button', { name: "I'm in" }).click();
+        await second.getByRole('button', { name: "I’m in" }).click();
         await second.locator('.tile-check').waitFor();
         await admin.locator('.pretend-bar').getByRole('button', { name: 'Reset' }).click();
-        await second.getByRole('button', { name: "I'm in" }).waitFor();
+        await second.getByRole('button', { name: "I’m in" }).waitFor();
         assert((await second.locator('.tile-check').count()) === 0, 'Reset should throw the sign-up away');
         await admin.getByRole('button', { name: 'Exit' }).click();
         await tab(admin, 'Home').waitFor();
@@ -1945,7 +1945,7 @@ async function main() {
       assert((await players.Blair.locator('article').nth(1).locator('.tile-check').count()) === 0, 'Blair is not really signed up');
       // Blair signs up on her own phone (the next checks start from here).
       const own = players.Blair.locator('article').nth(1);
-      await own.getByRole('button', { name: "I'm in" }).click();
+      await own.getByRole('button', { name: "I’m in" }).click();
       await own.locator('.tile-check').waitFor();
     });
 
@@ -1955,7 +1955,7 @@ async function main() {
       const sent = await changesSent(admin, async () => {
         await admin.getByRole('button', { name: 'View as…' }).click();
         const sheet = admin.locator('dialog[open]');
-        await sheet.getByRole('heading', { name: "Pretend it's…" }).waitFor();
+        await sheet.getByRole('heading', { name: "Pretend it’s…" }).waitFor();
         await sheet.getByRole('button', { name: 'After the game' }).click();
         const bar = admin.locator('.pretend-bar');
         await bar.waitFor();
@@ -2048,7 +2048,7 @@ async function main() {
         await card.locator('.in-line .in-count').waitFor();
         // Stop at 4 (nobody waits any more: a 5th would simply be in).
         if ((await card.locator('.in-line .in-count').innerText()).trim() === '4 in') break;
-        const btn = card.getByRole('button', { name: "I'm in" });
+        const btn = card.getByRole('button', { name: "I’m in" });
         if (await btn.count()) {
           await btn.click();
           await card.locator('.tile-check').waitFor();
@@ -2070,7 +2070,7 @@ async function main() {
       assert((await card.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Waitlist', 'Waitlist is the chosen segment');
       assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
       assert((await card.locator('.court-banner').count()) === 0, 'the old waitlist banner is gone from the card');
-      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn't open)$/ }).count()) === 0, 'the card itself has no court buttons');
+      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn’t open)$/ }).count()) === 0, 'the card itself has no court buttons');
       // A waitlisted game follows the Not booked rule (Alex, Nov 1): the plain "Court still needs to be booked" card
       // only for the next 2 games with no court. This is the 4th game, so no card; never a second one.
       const task = admin.locator(`.do-now article[data-session="${cardId}"]`);
@@ -2081,7 +2081,7 @@ async function main() {
         assert((await plain.locator('.dn-text').innerText()) === 'Court still needs to be booked', 'the plain court card');
         assert((await plain.getByRole('button').count()) === 0 && (await plain.getByRole('link').count()) === 1, 'only the CourtReserve link on it');
       }
-      assert((await admin.getByRole('button', { name: /^(Court opened|Didn't open)$/ }).count()) === 0, 'the old Court opened / Didn\'t open buttons are gone');
+      assert((await admin.getByRole('button', { name: /^(Court opened|Didn’t open)$/ }).count()) === 0, 'the old Court opened / Didn\'t open buttons are gone');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
@@ -2095,8 +2095,8 @@ async function main() {
         const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
         // With no court booked the game reads like a normal one: Court not booked, I'm in, You're in. Never waiting or standby words.
         await row.locator('.sched-status').getByText('Court not booked', { exact: true }).waitFor();
-        await row.getByRole('button', { name: "I'm in" }).click();
-        await row.locator('.sched-status').getByText("You're in", { exact: true }).waitFor();
+        await row.getByRole('button', { name: "I’m in" }).click();
+        await row.locator('.sched-status').getByText("You’re in", { exact: true }).waitFor();
         assert(!/waitlist|waiting|standby/i.test(await row.innerText()), `no waiting words on a game without a court: ${await row.innerText()}`);
         assert((await row.getByLabel('Money for this session').count()) === 0, 'players owe nothing before a court is booked');
       }
@@ -2155,7 +2155,7 @@ async function main() {
         const href = await open.getAttribute('href');
         assert(/^sms:[&?]body=/.test(href), `should open with no numbers: ${href}`);
         // The game is 20 hours away, so later the same day: "tonight".
-        const want = `Pickleball tonight, 8:00 PM. Can't make it? Update here: ${SITE}`;
+        const want = `Pickleball tonight, 8:00 PM. Can’t make it? Update here: ${SITE}`;
         assert(smsOf(href).body === want, `Messages opens with: ${smsOf(href).body}`);
         assert(!/\bsent\b/i.test(await card.innerText()), 'card must never say sent');
         await admin.screenshot({ path: path.join(SHOTS, 'admin-check-in-card.png'), fullPage: true });
@@ -2220,7 +2220,7 @@ async function main() {
       await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' });
       await more(card);
-      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Cancel game' }).click();
       const dlg = admin.locator('dialog[open]');
       const inDialog = dlg.getByRole('link', { name: /^Cancel court on CourtReserve/ });
       assert((await inDialog.getAttribute('href')) === CANCEL, 'cancel dialog should link to the modify/cancel page');
@@ -2232,13 +2232,13 @@ async function main() {
     await check('canceling needs confirmation and warns it does not cancel the court', async () => {
       const card = sessionCards(admin).nth(1);
       await more(card);
-      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Cancel game' }).click();
       const dlg = admin.locator('dialog[open]');
       await dlg.getByText('This does not cancel your court').waitFor();
       await dlg.getByRole('button', { name: 'Go back' }).click();
       await dlg.waitFor({ state: 'detached' });
       await more(card);
-      await card.getByRole('menuitem', { name: 'Cancel session' }).waitFor();
+      await card.getByRole('menuitem', { name: 'Cancel game' }).waitFor();
       await closeOptions(card);
       assert((await card.getByText('Canceled', { exact: true }).count()) === 0, 'canceled without confirming');
       // Someone pays first (on the Money tab), so there's someone to pay back.
@@ -2248,16 +2248,16 @@ async function main() {
       await admin.locator('.toast', { hasText: 'marked paid' }).waitFor();
       await tab(admin, 'Home').click();
       await more(card);
-      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
-      await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Cancel game' }).click();
+      await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
       const after = admin.locator('dialog[open]');
       await after.getByText(/^Canceled · /).waitFor();
       const bubble = after.locator('.bubble');
-      const want = /^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. If you paid, it's now your credit\. You can request a cash out on the site\. \S+$/;
+      const want = /^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. If you paid, it’s now your credit\. You can request a cash out on the site\. \S+$/;
       assert(want.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
       assert(!/Text me|stays as your credit/.test(await bubble.innerText()), 'old cancel wording');
       await after.getByLabel(/Reason/).fill('Rain');
-      await bubble.getByText(/is canceled\. Rain\. If you paid, it's now your credit\. You can request a cash out on the site\. \S+$/).waitFor();
+      await bubble.getByText(/is canceled\. Rain\. If you paid, it’s now your credit\. You can request a cash out on the site\. \S+$/).waitFor();
       await after.getByRole('link', { name: 'Text the players who were in' }).waitFor();
       assert(!/\bsent\b/i.test(await after.innerText()), 'never say sent');
       // Whoever paid has it as credit now, automatically: a list, nothing to tap.
@@ -2303,7 +2303,7 @@ async function main() {
       assert(/amount=14&note=Pickleball%20credit%20refund$/.test(await refund.getAttribute('href')), `refund link ${await refund.getAttribute('href')}`);
       await refund.click();
       await admin.locator(`[data-credit-mark="${payer}"]`).click();
-      await admin.locator('.toast', { hasText: 'Credit marked refunded' }).waitFor();
+      await admin.locator('.toast', { hasText: 'Credit cashed out' }).waitFor();
       await admin.locator(`li.player-row[data-player="${payer}"]`).getByText(/Credit \$/).waitFor({ state: 'detached' });
       await tab(admin, 'Home').click();
       await p.reload();
@@ -2407,7 +2407,7 @@ async function main() {
       const hidden = admin.getByRole('region', { name: 'Before your first session date' });
       const row = hidden.locator('li').filter({ hasText: 'Nov 3' });
       if (await row.count()) {
-        await row.getByRole('button', { name: 'Show this session' }).click();
+        await row.getByRole('button', { name: 'Show this game' }).click();
         await admin.locator('.toast', { hasText: 'is showing' }).waitFor();
         const shown = sessionCards(admin).filter({ hasText: 'Tue, Nov 3' }).first();
         const shownId = (await shown.getAttribute('id')).replace('session-', '');
@@ -2415,9 +2415,9 @@ async function main() {
         // The court never opened: no "Didn't open" button any more; the organizer cancels the session as usual.
         await admin.locator(`.do-now article[data-task="court_book"][data-session="${shownId}"]`).waitFor();
         await shown.getByRole('button', { name: /^Game menu/ }).click();
-        await admin.getByRole('menuitem', { name: 'Cancel session' }).click();
-        await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
-        await admin.locator('.toast', { hasText: 'Session canceled' }).waitFor();
+        await admin.getByRole('menuitem', { name: 'Cancel game' }).click();
+        await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel game' }).click();
+        await admin.locator('.toast', { hasText: 'Game canceled' }).waitFor();
         // A cancel opens the "text the group" sheet next; close it.
         await admin.locator('dialog[open]').waitFor();
         await admin.keyboard.press('Escape');
@@ -2490,7 +2490,7 @@ async function main() {
         await sug.waitFor();
         // Whichever fits the game now: the spot opened for someone moved in, need players, or the check-in once it is back to 4 or 6.
         const spot = smsOf(await sug.getByRole('link', { name: /^Text/ }).getAttribute('href'));
-        assert(/^(A spot opened and you're in for pickleball [^.]+, \d{1,2}:\d{2} PM\.|Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Can't make it\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
+        assert(/^(A spot opened and you’re in for pickleball [^.]+, \d{1,2}:\d{2} PM\.|Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Can’t make it\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
         assert(!/ASAP|text me/i.test(spot.body), 'no "text me ASAP"');
         assert((await sug.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the card');
         assert(!/\bsent\b/i.test(await sug.innerText()), 'never say sent');
@@ -2515,7 +2515,7 @@ async function main() {
         assert((await admin.locator('[data-credit-mark="Frankie"]').count()) === 0, 'Mark refunded only after Venmo was opened');
         await refund.click();
         await admin.locator('[data-credit-mark="Frankie"]').click();
-        await admin.locator('.toast', { hasText: 'Credit marked refunded' }).waitFor();
+        await admin.locator('.toast', { hasText: 'Credit cashed out' }).waitFor();
         await admin.locator('li.player-row[data-player="Frankie"]').getByText('Credit $14').waitFor({ state: 'detached' });
         await tab(admin, 'Home').click();
         await f.reload();
@@ -2573,14 +2573,14 @@ async function main() {
       await rows.first().waitFor();
       let row = null;
       for (let i = 2; i < (await rows.count()); i++) {
-        if (await rows.nth(i).getByRole('button', { name: "I'm in" }).count()) {
+        if (await rows.nth(i).getByRole('button', { name: "I’m in" }).count()) {
           row = rows.nth(i);
           break;
         }
       }
       assert(row, 'need a session Frankie can join');
       assert((await row.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar link before signing up');
-      await row.getByRole('button', { name: "I'm in" }).click();
+      await row.getByRole('button', { name: "I’m in" }).click();
       const cal = row.getByRole('link', { name: /^Add .* to calendar$/ });
       await cal.waitFor();
       assert((await cal.locator('svg').count()) === 1 && (await cal.innerText()).trim() === '', 'a small calendar icon');
@@ -3106,7 +3106,7 @@ async function main() {
       assert(/, \d{1,2}:\d{2} (AM|PM)$/.test(when), 'AM/PM time');
       // Players' own taps are there too, under their names.
       const all = (await admin.getByRole('list', { name: 'Activity' }).locator('.a-text').allInnerTexts()).join('\n');
-      assert(/^(Alex|Blair|Casey|Devon|Emery|Frankie) said I'm in for /m.test(all), 'player sign-ups should be logged by name');
+      assert(/^(Alex|Blair|Casey|Devon|Emery|Frankie) said I’m in for /m.test(all), 'player sign-ups should be logged by name');
       await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false });
       await tab(admin, 'Home').click();
     });
@@ -3132,7 +3132,7 @@ async function main() {
           assert(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2} \d{1,2}(:\d{2})? (to|PM)/.test(first), `row top was "${first}"`);
           const who = (await rows.first().locator('.h-who').innerText()).trim();
           // "4 in" until the organizer finalizes, then "5 played · $11 each".
-      assert(/^(\d+ in|\d+ played · \$\d+ each|Canceled|Court didn't open)/.test(who), `row said "${who}"`);
+      assert(/^(\d+ in|\d+ played · \$\d+ each|Canceled|Court didn’t open)/.test(who), `row said "${who}"`);
           // Newest first.
           const ids = await rows.evaluateAll((ls) => ls.map((l) => l.dataset.session));
           const starts = await p.evaluate(async (ids) => {
@@ -3477,7 +3477,7 @@ async function main() {
       await sheet.getByLabel('Start').fill('10:00');
       await sheet.getByLabel('End').fill('12:00');
       await sheet.getByRole('button', { name: 'Add game', exact: true }).click();
-      await sheet.getByText(/^There's already a game at (Sat), [A-Z][a-z]{2} \d{1,2}, 10:00 AM\.$/).waitFor();
+      await sheet.getByText(/^There’s already a game at (Sat), [A-Z][a-z]{2} \d{1,2}, 10:00 AM\.$/).waitFor();
       await admin.keyboard.press('Escape');
       const count = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.filter((x) => x.extra).length;
       assert(count === 1, `expected one extra game, found ${count}`);
@@ -3494,7 +3494,7 @@ async function main() {
       assert((await prow.locator('.extra-flag', { hasText: 'EXTRA' }).count()) === 1, 'a small EXTRA tag under the time');
       assert((await prow.getByText('Extra game').count()) === 1 && (await prow.getByText('Extra game').first().evaluate((el) => el.classList.contains('sr-only'))), 'the words "Extra game" stay for screen readers only');
       await prow.getByText('Court 3').waitFor();
-      assert((await prow.getByRole('button', { name: "I'm in" }).count()) === 1, 'players can sign up for it');
+      assert((await prow.getByRole('button', { name: "I’m in" }).count()) === 1, 'players can sign up for it');
       // Logged in Activity.
       await tab(admin, 'History').click();
       await admin.getByRole('button', { name: 'Activity' }).click();
@@ -3521,7 +3521,7 @@ async function main() {
         await p.keyboard.press('Escape');
         await sheet.waitFor({ state: 'detached' });
         // I'm in on a card well ahead (not a late drop when I go Out).
-        const cards = sessionCards(p).filter({ has: p.getByRole('button', { name: /^I'm in for / }) });
+        const cards = sessionCards(p).filter({ has: p.getByRole('button', { name: /^I’m in for / }) });
         const pickId = await cards.nth(Math.min(3, (await cards.count()) - 1)).getAttribute('id');
         const card = p.locator(`#${pickId}`);
         const before = Number((await card.locator('.players-count').innerText()).match(/^(\d+)/)[1]);
@@ -3541,11 +3541,11 @@ async function main() {
         assert((await onRow()).length === 0, `I'm in is off the players row: ${await onRow()}`);
         const states = await p.evaluate(() => [...new Set([...document.querySelectorAll('section[aria-labelledby="sessions-title"] article:has(.me-in)')].map((a) => a.dataset.court))]);
         assert(states.length >= 2, `expected I'm in on cards in several court states, saw ${states}`);
-        const ib = await card.getByRole('button', { name: /^I'm in for / }).boundingBox();
+        const ib = await card.getByRole('button', { name: /^I’m in for / }).boundingBox();
         assert(ib.height >= 33 && ib.height <= 36, `I'm in should be as tall as the other small buttons: ${ib.height}`);
-        await card.getByRole('button', { name: /^I'm in for / }).click();
-        await card.locator('.me-in-text', { hasText: /^(You're in|Waitlist)$/ }).waitFor();
-        const inNow = (await card.locator('.me-in-text').innerText()).trim() === "You're in";
+        await card.getByRole('button', { name: /^I’m in for / }).click();
+        await card.locator('.me-in-text', { hasText: /^(You’re in|Waitlist)$/ }).waitFor();
+        const inNow = (await card.locator('.me-in-text').innerText()).trim() === "You’re in";
         assert((await onRow()).length === 0, `You're in is off the players row: ${await onRow()}`);
         if (inNow) {
           await card.locator('.players-line .names-line[title*="Robin"]').waitFor();
@@ -3558,7 +3558,7 @@ async function main() {
         const cardBox = await card.boundingBox();
         assert(btnBox.x + btnBox.width <= cardBox.x + cardBox.width, 'You\'re in stays inside the card');
         await card.getByRole('button', { name: /^Out of / }).click();
-        await card.getByRole('button', { name: /^I'm in for / }).waitFor();
+        await card.getByRole('button', { name: /^I’m in for / }).waitFor();
         assert((await card.locator('.players-line .names-line[title*="Robin"]').count()) === 0, 'Out takes my name off');
         // Every card state still has no overlaps with the I'm in button there.
         const rep2 = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
@@ -3570,21 +3570,21 @@ async function main() {
     await check('organizer "I\'m in" is logged in Activity under my name, and players see me in the roster', async () => {
       await tab(admin, 'Home').click();
       await showAll(admin);
-      const cardId = await sessionCards(admin).filter({ has: admin.getByRole('button', { name: /^I'm in for / }) }).nth(2).getAttribute('id');
+      const cardId = await sessionCards(admin).filter({ has: admin.getByRole('button', { name: /^I’m in for / }) }).nth(2).getAttribute('id');
       const card = admin.locator(`#${cardId}`);
       const day = (await card.locator('h2').innerText()).trim().replace(/, \d{1,2}:\d{2} (AM|PM)$/, '');
-      await card.getByRole('button', { name: /^I'm in for / }).click();
-      await card.locator('.me-in-text', { hasText: "You're in" }).waitFor();
+      await card.getByRole('button', { name: /^I’m in for / }).click();
+      await card.locator('.me-in-text', { hasText: "You’re in" }).waitFor();
       const id = (await card.getAttribute('id')).replace('session-', '');
       await players.Alex.reload();
       await players.Alex.locator(`#row-${id} .names-line[title*="Robin"]`).waitFor();
       await tab(admin, 'History').click();
       await admin.getByRole('button', { name: 'Activity' }).click();
-      await admin.getByRole('list', { name: 'Activity' }).getByText(`Robin said I'm in for ${day}`).first().waitFor();
+      await admin.getByRole('list', { name: 'Activity' }).getByText(`Robin said I’m in for ${day}`).first().waitFor();
       await tab(admin, 'Home').click();
       await showAll(admin);
       await admin.locator(`#session-${id}`).getByRole('button', { name: /^Out of / }).click();
-      await admin.locator(`#session-${id}`).getByRole('button', { name: /^I'm in for / }).waitFor();
+      await admin.locator(`#session-${id}`).getByRole('button', { name: /^I’m in for / }).waitFor();
     });
 
     // ---------- Design follow-up: paper-calendar tiles, gentle fade, calm cards ----------
@@ -3596,7 +3596,7 @@ async function main() {
       await rows.first().waitFor();
       let id = null;
       for (let i = 2; i < (await rows.count()); i++) {
-        if (await rows.nth(i).getByRole('button', { name: "I'm in" }).count()) {
+        if (await rows.nth(i).getByRole('button', { name: "I’m in" }).count()) {
           id = await rows.nth(i).getAttribute('id');
           break;
         }
@@ -3606,10 +3606,10 @@ async function main() {
       const inAgain = async () => {
         await row.getByRole('button', { name: 'Drop out' }).click();
         await confirmDrop(p);
-        await row.getByRole('button', { name: "I'm in" }).click();
+        await row.getByRole('button', { name: "I’m in" }).click();
         await row.locator('.tile-check').waitFor();
       };
-      await row.getByRole('button', { name: "I'm in" }).click();
+      await row.getByRole('button', { name: "I’m in" }).click();
       const pay = row.getByRole('link', { name: 'Pay $14 with Venmo' });
       await pay.waitFor();
       await venmoLinkOk(pay, 14, 'Frankie');
@@ -3627,7 +3627,7 @@ async function main() {
       // "I paid" without opening Venmo at all: Paid with the small "Didn't pay?".
       await row.getByRole('button', { name: 'I paid' }).click();
       await row.locator('.paid-tag', { hasText: /^Paid/  }).waitFor();
-      await row.getByRole('button', { name: "Didn't pay?" }).waitFor();
+      await row.getByRole('button', { name: "Didn’t pay?" }).waitFor();
       // The organizer confirms it (since Oct 31 only a confirmed payment turns into credit on a drop; an
       // unconfirmed I paid stays a claim for the organizer).
       {
@@ -3645,7 +3645,7 @@ async function main() {
       assert((await row.locator('[data-credit-back]').count()) === 0, 'no refund line on the card after a paid drop');
       await p.locator('header [data-credit-chip]', { hasText: /CREDIT/ }).waitFor();
       assert((await p.locator('header [data-credit-chip]').innerText()).replace(/\s+/g, ' ').trim() === 'CREDIT $14', 'chip after dropping a paid game');
-      await row.getByRole('button', { name: "I'm in" }).click();
+      await row.getByRole('button', { name: "I’m in" }).click();
       await row.locator('.tile-check').waitFor();
       await row.locator('.paid-tag', { hasText: 'Paid with credit' }).waitFor();
       await p.locator('header [data-credit-chip]').waitFor({ state: 'detached' });
@@ -3665,13 +3665,13 @@ async function main() {
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
       await row.getByRole('button', { name: 'Drop out' }).click();
       await confirmDrop(p);
-      await row.getByRole('button', { name: "I'm in" }).waitFor();
+      await row.getByRole('button', { name: "I’m in" }).waitFor();
       await admin.context().route('https://venmo.com/**', (r) => r.abort());
       await admin.reload();
       await tab(admin, 'Players').click();
       await admin.locator('[data-credit-refund="Frankie"]').click();
       await admin.locator('[data-credit-mark="Frankie"]').click();
-      await admin.locator('.toast', { hasText: 'Credit marked refunded' }).waitFor();
+      await admin.locator('.toast', { hasText: 'Credit cashed out' }).waitFor();
       await tab(admin, 'Home').click();
       await p.reload();
       await p.locator('.schedule article').first().waitFor();
@@ -3688,7 +3688,7 @@ async function main() {
         const more = pl.getByRole('button', { name: /^More sessions/ });
         if (await more.count()) await more.click();
         // Sign up for a plain later session (no holiday), so there's a calm signed-in card to measure.
-        const joinable = pl.locator('.schedule article:not([data-extra]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I'm in" }) });
+        const joinable = pl.locator('.schedule article:not([data-extra]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I’m in" }) });
         const joinId = await joinable.nth(Math.min(2, (await joinable.count()) - 1)).getAttribute('id');
         const joined = pl.locator(`#${joinId}`);
         // The names line is counted separately: it's new once someone is in.
@@ -3696,7 +3696,7 @@ async function main() {
           const n = a.querySelector('.names-line');
           return a.getBoundingClientRect().height - (n ? n.getBoundingClientRect().height + 3 : 0);
         });
-        await joined.getByRole('button', { name: "I'm in" }).click();
+        await joined.getByRole('button', { name: "I’m in" }).click();
         await joined.locator('.tile-check').waitFor();
         // Whatever happens below, sign Alex back out of that session for the checks after this one.
         const joinedSession = joinId.replace('row-', '');
@@ -3759,7 +3759,7 @@ async function main() {
           await pl.screenshot({ path: path.join(SHOTS, `design-player-${width}-${scheme}.png`), fullPage: true });
           await joined.getByRole('button', { name: 'Drop out' }).click();
           await confirmDrop(pl);
-          await joined.getByRole('button', { name: "I'm in" }).waitFor();
+          await joined.getByRole('button', { name: "I’m in" }).waitFor();
         } finally {
           await undo();
           await pl.close();
@@ -4082,7 +4082,7 @@ async function main() {
       await p.goto(`${BASE}/t/${'x'.repeat(43)}`);
       await p.waitForFunction(() => window.location.pathname === '/');
       await p.goto(`${BASE}/g/${'y'.repeat(24)}`);
-      await p.getByText("This group link isn't valid").waitFor();
+      await p.getByText("This group link isn’t valid").waitFor();
     });
 
     await check('wrong PIN is rejected in the UI', async () => {
@@ -4115,7 +4115,7 @@ async function main() {
       assert((await api('PUT', '/api/admin/group', { settings: { pricePerPlayerCents: 1400 } })).ok(), 'price back to $14');
       await players.Casey.reload();
       const card = firstCard(players.Casey);
-      await card.getByRole('button', { name: "I'm in" }).click();
+      await card.getByRole('button', { name: "I’m in" }).click();
       await card.locator('.tile-check').waitFor();
       await card.locator('.in-count', { hasText: /^5 in$/ }).waitFor();
       let d = await dashboard();
@@ -4160,12 +4160,12 @@ async function main() {
       assert(squash(await tue.locator('[data-finalize-preview]').innerText()) === '5 played · $11 each · $3 credit back each', `preview was "${await tue.locator('[data-finalize-preview]').innerText()}"`);
       await tue.locator('[data-everyone-played]').waitFor();
       await tue.locator('[data-change-played]').waitFor();
-      assert((await tue.getByRole('button', { name: /Finalize anyway|Cancel session/ }).count()) === 0, 'a 5-in game has no under-4 buttons');
+      assert((await tue.getByRole('button', { name: /Finalize anyway|Cancel game/ }).count()) === 0, 'a 5-in game has no under-4 buttons');
       const four = admin.locator(`[data-finalize="${wedFour.id}"]`);
       assert(squash(await four.locator('[data-finalize-preview]').innerText()) === '4 played · $14 each', `4-in preview was "${await four.locator('[data-finalize-preview]').innerText()}"`);
       const three = admin.locator(`[data-finalize="${wedThree.id}"]`);
       assert(/^Only 3 in\. Cancel it \(everyone paid gets credit\) or finalize anyway at \$14 each\.$/.test(squash(await three.locator('[data-finalize-preview]').innerText())), `3-in preview was "${await three.locator('[data-finalize-preview]').innerText()}"`);
-      await three.getByRole('button', { name: 'Cancel session' }).waitFor();
+      await three.getByRole('button', { name: 'Cancel game' }).waitFor();
       await three.getByRole('button', { name: 'Finalize anyway' }).waitFor();
       assert((await three.locator('[data-everyone-played]').count()) === 0, 'no Everyone played under 4');
       // Above the text cards and the session list; one green button per card; 44px taps.
@@ -4280,7 +4280,7 @@ async function main() {
       assert(squash(await sheet.locator('[data-credit-balance]').innerText()) === '$3 credit', `balance was "${await sheet.locator('[data-credit-balance]').innerText()}"`);
       const hist = sheet.locator('[data-credit-history] li');
       assert((await hist.count()) === 1 && / \$3 back from Oct 27 \(5 played\)$/.test(squash(await hist.first().innerText())), `history: ${await hist.allInnerTexts()}`);
-      await sheet.getByText("Your credit goes on a game by itself when you tap I'm in.").waitFor();
+      await sheet.getByText("Your credit goes on a game by itself when you tap I’m in.").waitFor();
       assert((await sheet.locator('[data-refund-pending]').count()) === 0, 'nothing pending yet');
       await sheet.locator('[data-request-refund]').click();
       const amount = sheet.getByLabel('Cash out amount');
@@ -4314,12 +4314,12 @@ async function main() {
       await admin.reload();
       const card = admin.locator('[data-refund-request="Blair"]');
       await card.waitFor();
-      assert(squash(await card.locator('h3').innerText()) === 'Blair requested a refund of $3', `title was "${await card.locator('h3').innerText()}"`);
+      assert(squash(await card.locator('h3').innerText()) === 'Blair asked to cash out $3', `title was "${await card.locator('h3').innerText()}"`);
       assert((await card.boundingBox()).y < (await admin.locator('[data-finalize]').first().boundingBox()).y, 'refund requests come before the Finalize cards');
       const link = card.locator('[data-refund-venmo]');
       assert((await link.getAttribute('href')) === 'https://venmo.com/?txn=pay&amount=3&note=Pickleball%20credit%20refund', `web link ${await link.getAttribute('href')}`);
       assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&amount=3&note=Pickleball%20credit%20refund', `app link ${await link.getAttribute('data-app-href')}`);
-      assert((await link.getAttribute('aria-label')) === 'Refund Blair $3 with Venmo', 'Refund label');
+      assert((await link.getAttribute('aria-label')) === 'Pay Blair $3 with Venmo', 'Refund label');
       await card.getByText('No Venmo saved for Blair: pick them in Venmo.').waitFor();
       assert((await card.locator('[data-mark-refunded]').count()) === 0, 'Mark refunded only after Venmo was opened');
       await card.locator('[data-not-now]').waitFor();
@@ -4357,7 +4357,7 @@ async function main() {
       assert(admin.url() === before && admin.context().pages().length >= 1, 'Refund left the page');
       assert((await card.count()) === 1, 'opening Venmo must not mark anything');
       await card.locator('[data-mark-refunded]').click();
-      await admin.locator('.toast', { hasText: 'Blair refunded' }).waitFor();
+      await admin.locator('.toast', { hasText: 'Blair cashed out' }).waitFor();
       await card.waitFor({ state: 'detached' });
       await b.reload();
       await b.locator('.schedule article').first().waitFor();
@@ -4365,15 +4365,15 @@ async function main() {
       await tab(admin, 'History').click();
       await admin.getByRole('button', { name: 'Activity' }).click();
       const acts = admin.getByRole('list', { name: 'Activity' });
-      await acts.getByText('Blair asked for $3 refund of their credit').first().waitFor();
-      await acts.getByText("Robin put off Blair's refund request").first().waitFor();
-      await acts.getByText("Robin paid Blair's credit back").first().waitFor();
+      await acts.getByText('Blair asked to cash out $3').first().waitFor();
+      await acts.getByText("Robin put off Blair’s cash out request").first().waitFor();
+      await acts.getByText("Robin paid Blair’s credit back").first().waitFor();
       await acts.getByText('Robin finalized Tue, Oct 27: 5 played, $11 each').first().waitFor();
       await acts.getByText('Alex got $3 back as credit for Tue, Oct 27').first().waitFor();
       assert(!/\bsent\b/i.test(await acts.innerText()), 'never say sent');
       const sheet = await moneyOf(admin, tueId);
       assert(await sheet.locator('[data-reopen]').isDisabled(), 'Reopen should be blocked');
-      assert(squash(await sheet.locator('[data-reopen-blocked]').innerText()) === "Can't reopen: Blair already used or got back credit from this game.", `blocked line was "${await sheet.locator('[data-reopen-blocked]').innerText()}"`);
+      assert(squash(await sheet.locator('[data-reopen-blocked]').innerText()) === "Can’t reopen: Blair already used or got back credit from this game.", `blocked line was "${await sheet.locator('[data-reopen-blocked]').innerText()}"`);
       await tab(admin, 'Home').click();
     });
 
@@ -4432,14 +4432,14 @@ async function main() {
       await sheet.locator('[data-reopen]').click();
       await admin.locator('.toast', { hasText: 'Reopened' }).waitFor();
       await tab(admin, 'Home').click();
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('button', { name: 'Cancel game' }).click();
       const dlg = admin.locator('dialog[open]');
-      await dlg.getByRole('button', { name: 'Cancel session' }).waitFor();
+      await dlg.getByRole('button', { name: 'Cancel game' }).waitFor();
       assert((await dlg.getByText('Were you charged for this court?').count()) === 0, 'no charge question after the game started');
-      await dlg.getByRole('button', { name: 'Cancel session' }).click();
+      await dlg.getByRole('button', { name: 'Cancel game' }).click();
       const after = admin.locator('dialog[open]');
       await after.getByText(/^Canceled · /).waitFor();
-      assert(/^Pickleball Wed Oct 28 is canceled\. If you paid, it's now your credit\. You can request a cash out on the site\. \S+$/.test((await after.locator('.bubble').innerText()).trim()), `cancel text was: ${await after.locator('.bubble').innerText()}`);
+      assert(/^Pickleball Wed Oct 28 is canceled\. If you paid, it’s now your credit\. You can request a cash out on the site\. \S+$/.test((await after.locator('.bubble').innerText()).trim()), `cancel text was: ${await after.locator('.bubble').innerText()}`);
       const back = after.locator('[data-credit-back-list]');
       await back.getByRole('heading', { name: 'Now their credit' }).waitFor();
       await back.locator('li', { hasText: 'Devon' }).getByText('$14 credit', { exact: true }).waitFor();
@@ -4538,7 +4538,7 @@ async function main() {
       await admin.reload();
       const card = admin.locator('[data-refund-request="Devon"]');
       await card.waitFor();
-      assert(squash(await card.locator('h3').innerText()) === 'Devon requested a refund of $17', `title was "${await card.locator('h3').innerText()}"`);
+      assert(squash(await card.locator('h3').innerText()) === 'Devon asked to cash out $17', `title was "${await card.locator('h3').innerText()}"`);
       await card.locator('[data-not-now]').click();
       await card.waitFor({ state: 'detached' });
       for (const name of ['Emery', 'Casey']) {
@@ -4546,7 +4546,7 @@ async function main() {
         await p.reload();
         await p.locator('.schedule article, .pay-card').first().waitFor();
         const text = squash(await p.locator('body').innerText());
-        assert(!/Northville Pickleball(?! Club)|court cost|membership|Credits owed|Collected|Surplus|Venmo-|@[A-Za-z]|Credit \$|requested a refund|Refund credit balance|held/i.test(text), `${name} sees private money: ${text.slice(0, 300)}`);
+        assert(!/Northville Pickleball(?! Club)|court cost|membership|Credits owed|Collected|Surplus|Venmo-|@[A-Za-z]|Credit \$|asked to cash out|Refund credit balance|held/i.test(text), `${name} sees private money: ${text.slice(0, 300)}`);
         const raw = await (await p.request.get(`${BASE}/api/group`)).text();
         assert(!/creditLedger|refundRequests|courtCost|membership|"venmo":|phone/.test(raw), `${name}'s API leaks organizer data`);
       }

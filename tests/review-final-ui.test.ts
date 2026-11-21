@@ -69,7 +69,7 @@ describe('review-final: Text all with REAL server data', () => {
     expect(owes).toEqual([1100, 1100, 1100, 1100]);
     expect(canTextAll(sv)).toBe(true);
     const text = groupRemindText(d, sv);
-    expect(text).toContain("If you haven't paid your $11 yet");
+    expect(text).toContain("If you haven’t paid your $11 yet");
   });
 
   it('E3 the group text on a played, finalized game uses the final price ($11) and a game from last night says yesterday', async () => {
@@ -84,7 +84,7 @@ describe('review-final: Text all with REAL server data', () => {
     const sv = d.sessions.find((s: any) => s.id === s0.id) as AdminSessionView;
     const text = groupRemindText(d, sv);
     expect(text).toContain('$11');
-    expect(text).toMatch(/for (yesterday|today|tonight|tomorrow|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)'s pickleball/);
+    expect(text).toMatch(/for (yesterday|today|tonight|tomorrow|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)’s pickleball/);
   });
 });
 

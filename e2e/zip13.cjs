@@ -245,7 +245,7 @@ async function main() {
       order: [...el.querySelector('form').children].map((c) => (c.matches('[data-adjust-credit-row]') ? 'adjust' : c.matches('[data-hide-player]') ? 'hide' : c.matches('button[type="submit"]') ? 'save' : c.matches('.btn.danger') ? 'remove' : '')).filter(Boolean),
     }));
     assert(m.title === 'Edit Avery' && m.close === 1, `${m.title} ${m.close}`);
-    for (const w of ['Name', 'Phone (optional)', 'Venmo link or @name (optional)', 'For refunds. Only you see this.', 'Hide from the name list']) assert(m.text.includes(w), `has ${w}`);
+    for (const w of ['Name', 'Phone (optional)', 'Venmo link or @name (optional)', 'For cash outs. Only you see this.', 'Hide from the name list']) assert(m.text.includes(w), `has ${w}`);
     assert(!/Plays|Usual days|Regular|Occasional/.test(m.text), 'no Plays or Usual days');
     assert(m.order.join(',') === 'save,adjust,hide,remove', m.order.join(','));
     await shot(page, 'edit');
@@ -445,7 +445,7 @@ async function main() {
       await real.post(`${BASE}/api/admin/sessions/${g.id}/task-mark`, { data: { mark: 'played' }, headers: { Origin: BASE } });
     },
   );
-  await undoCase('Cancel session', async (page) => {
+  await undoCase('Cancel game', async (page) => {
     const d = await dash();
     const g = d.sessions.find((s) => !s.state.flags.canceled && Date.parse(s.startsAt) > NOW_MS + 48 * 3600_000 && s.bookingStatus === 'booked');
     let card = page.locator(`article#session-${g.id}`);
@@ -455,8 +455,8 @@ async function main() {
       if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
     }
     await card.locator('button[aria-label^="Game menu"]').click();
-    await page.getByRole('menuitem', { name: /Cancel session/ }).click();
-    await page.locator('dialog[open] button', { hasText: /^Cancel session$/ }).click();
+    await page.getByRole('menuitem', { name: /Cancel game/ }).click();
+    await page.locator('dialog[open] button', { hasText: /^Cancel game$/ }).click();
   });
   await undoCase('Give spot (add a player to a game)', async (page) => {
     const d = await dash();

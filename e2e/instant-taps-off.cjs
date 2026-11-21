@@ -173,7 +173,7 @@ async function main() {
     await page.waitForTimeout(3500);
   };
   await same('player I paid (Jordan), after the tap: identical', { who: 'Jordan', url: '/', scheme: 'light', before: tapThen('I paid') });
-  await same("player I'm in (Casey), after the tap: identical", { who: 'Casey', url: '/', scheme: 'light', before: tapThen(/^I'm in/) });
+  await same("player I’m in (Casey), after the tap: identical", { who: 'Casey', url: '/', scheme: 'light', before: tapThen(/^I’m in/) });
   await browser.close();
   console.log(`\ninstant-taps-off: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

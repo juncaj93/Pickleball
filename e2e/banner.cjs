@@ -117,7 +117,7 @@ async function main() {
   for (const scheme of ['light', 'dark']) {
     await check(`${scheme}: "You're in" sits ${GAP_MIN} to ${GAP_MAX} px above the bottom of the screen, centered, in the top layer`, async () => {
       const { ctx, page } = await open(scheme === 'light' ? 'Ryan' : 'Julian', scheme);
-      await cards(page).nth(far).getByRole('button', { name: "I'm in" }).click();
+      await cards(page).nth(far).getByRole('button', { name: "I’m in" }).click();
       await page.locator('.pop').waitFor();
       const m = await measure(page);
       assert(m.open, 'banner is not in the top layer');
@@ -129,7 +129,7 @@ async function main() {
     await check(`${scheme}: "You dropped out. Undo" sits ${GAP_MIN} to ${GAP_MAX} px above the bottom, and stays about 5 seconds`, async () => {
       const { ctx, page } = await open(scheme === 'light' ? 'Nathan' : 'Mitchel', scheme);
       const card = cards(page).nth(far);
-      await card.getByRole('button', { name: "I'm in" }).click();
+      await card.getByRole('button', { name: "I’m in" }).click();
       await page.locator('.pop').waitFor({ state: 'detached', timeout: 4000 });
       await dropOut(page, card);
       const pop = page.locator('.pop');
@@ -148,7 +148,7 @@ async function main() {
   await check('the iPhone home-indicator space is counted once, not twice (--safe-bottom 34px)', async () => {
     const { ctx, page } = await open('Brandon');
     await page.evaluate(() => document.documentElement.style.setProperty('--safe-bottom', '34px'));
-    await cards(page).nth(far).getByRole('button', { name: "I'm in" }).click();
+    await cards(page).nth(far).getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor();
     const m = await measure(page);
     assert(m.safe === 34, `--safe-bottom was ${m.safe}`);
@@ -159,7 +159,7 @@ async function main() {
   await check('the 5-second Undo stays tappable the whole time, and Undo puts the player back in', async () => {
     const { ctx, page } = await open('Sam');
     const card = cards(page).nth(far);
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 4000 });
     await dropOut(page, card);
     const pop = page.locator('.pop');
@@ -180,7 +180,7 @@ async function main() {
   await check('with the banner up, the page can be scrolled so no button or link is left under it', async () => {
     const { ctx, page } = await open('Blair');
     const card = cards(page).nth(far);
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 4000 });
     await dropOut(page, card);
     await page.locator('.pop').waitFor();
@@ -199,7 +199,7 @@ async function main() {
 
   await check('once the banner is gone nothing is left on top: the page scrolls and the cards underneath tap normally', async () => {
     const { ctx, page } = await open('Emery');
-    await cards(page).nth(1).getByRole('button', { name: "I'm in" }).click();
+    await cards(page).nth(1).getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor();
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 4000 });
     assert((await page.locator('[popover]:popover-open').count()) === 0, 'a popover is still open');
@@ -210,14 +210,14 @@ async function main() {
     // The bottom strip is free: whatever is at the banner's old spot is the page, not a leftover layer.
     const top = await page.evaluate(({ w, h }) => { const el = document.elementFromPoint(w / 2, h - 40); return !!el && !el.closest('.pop'); }, { w: VIEW.width, h: VIEW.height });
     assert(top, 'a leftover banner layer is still catching taps at the bottom');
-    await cards(page).nth(2).getByRole('button', { name: "I'm in" }).click();
+    await cards(page).nth(2).getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor();
     await ctx.close();
   });
 
   await check('a banner that is leaving (fading and swiping away) no longer catches taps', async () => {
     const { ctx, page } = await open('Wren');
-    await cards(page).first().getByRole('button', { name: "I'm in" }).click();
+    await cards(page).first().getByRole('button', { name: "I’m in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
     // Close it early, and read what it does with taps the moment it starts to leave (before it is removed).
@@ -237,7 +237,7 @@ async function main() {
     await page.goto(`${BASE}/admin`);
     const card = page.locator('section[aria-labelledby="sessions-title"] article').first();
     await card.waitFor();
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor();
     const m = await measure(page);
     const tab = await page.locator('.tabbar').evaluate((el) => { const r = el.getBoundingClientRect(); return { top: r.top }; });
@@ -248,7 +248,7 @@ async function main() {
 
   await check('Reduce Motion: the banner only fades (no slide or swipe) and still goes', async () => {
     const { ctx, page } = await open('Zed', 'light', 'reduce');
-    await cards(page).first().getByRole('button', { name: "I'm in" }).click();
+    await cards(page).first().getByRole('button', { name: "I’m in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
     const anim = await pop.evaluate((el) => getComputedStyle(el).animationName);

@@ -199,7 +199,7 @@ async function main() {
         const a = await playerPage('Alex', { width, scheme, organizer: true });
         await a.page.locator('.tc').waitFor({ timeout: 15000 });
         const strip = flat(await a.page.locator('.tc-strip').innerText());
-        assert(strip.includes('Only you can see this') && strip.includes("Players don't see the Winter Classic yet.") && strip.includes('Show to everyone'), strip);
+        assert(strip.includes('Only you can see this') && strip.includes("Players don’t see the Winter Classic yet.") && strip.includes('Show to everyone'), strip);
         const card = flat(await a.page.locator('.tc').innerText());
         // Under the name: the format and its one rule (no small label above the name any more).
         // Zip 56 (Alex): the format in ONE line, no separate rule line.
@@ -321,7 +321,7 @@ async function main() {
         await v.page.waitForTimeout(300);
         await v.page.locator('[data-tc-drop]').click();
         const confirm = flat(await v.page.locator('dialog[open]').innerText());
-        assert(confirm.includes('Back out of the Winter Classic?') && confirm.includes('You come off the list. You can sign up again if you change your mind.') && confirm.includes('Stay signed up') && confirm.includes('Yes, back out'), confirm);
+        assert(confirm.includes('Drop out of the Winter Classic?') && confirm.includes('You come off the list. You can sign up again if you change your mind.') && confirm.includes('Stay signed up') && confirm.includes('Yes, drop out'), confirm);
         await fits(v.page, 'dialog[open]');
         await shot(v.page, `E-backout-${width}-${scheme}`);
         await v.ctx.close();
@@ -339,7 +339,7 @@ async function main() {
     const me = d.tournament.signups.find((s) => s.name === 'Vic');
     assert(me.pickedLevel === 340 && me.dates.length === 3, JSON.stringify(me));
   });
-  await check('E Back out: Stay signed up keeps Vic on; Yes, back out takes Vic off; the card goes back to Sign up', async () => {
+  await check('E Back out: Stay signed up keeps Vic on; Yes, drop out takes Vic off; the card goes back to Sign up', async () => {
     const v = await playerPage('Vic');
     await v.page.locator('[data-tc-drop]').click();
     await v.page.locator('dialog[open] [data-confirm-safe]').click();

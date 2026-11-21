@@ -1560,10 +1560,10 @@ describe('privacy', () => {
     nobody.groupKey = ctx.groupKey;
     expect((await nobody.call('GET', '/api/group', undefined, { 'X-View-As': ctx.byName.Alex })).status).toBe(401);
     // Telegram: the refund request names only the player and the amount; the drop alert names nobody's number.
-    expect(sent).toContain('Refund requested: Devon wants $14 back.');
+    expect(sent).toContain('Cash out: Devon wants $14 back.');
     for (const t of sent) {
       expect(t).not.toMatch(/555|VenmoSecret|@|\b(4321|3579)\b/);
-      if (!t.startsWith('Refund requested')) expect(t).not.toMatch(/\$/);
+      if (!t.startsWith('Cash out: ')) expect(t).not.toMatch(/\$/);
     }
   });
 

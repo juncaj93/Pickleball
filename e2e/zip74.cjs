@@ -14,8 +14,8 @@
  *      reload); to 7 at Round 3 shows a new alert. The Final row has no pill. Americano: the same alert and pills. 320/390/420, light and dark.
  *   F  picture pair-5: the Final is set: Vic (in it) sees "You're in the Final! It goes to 11 points." / "Head to Court 1."; Rowan (3rd place)
  *      does not. The Final's VS card has no Play to pill. Light and dark.
- *   G  picture pair-6: Back out before Pay by: "Back out of The Cold Open?", the short words; after Pay by below 8 (Parker): the one money
- *      line, Stay signed up / Yes, back out. Never "the The". 390 and 320, light and dark.
+ *   G  picture pair-6: Back out before Pay by: "Drop out of The Cold Open?", the short words; after Pay by below 8 (Parker): the one money
+ *      line, Stay signed up / Yes, drop out. Never "the The". 390 and 320, light and dark.
  * Screenshots: .data/zip74-shots (not in git).
  */
 const path = require('node:path');
@@ -281,12 +281,12 @@ async function main() {
           const d = p.page.locator('dialog[open]');
           await d.waitFor({ timeout: 5000 });
           const text = flat(await d.innerText());
-          assert(text.startsWith('Back out of The Cold Open?'), text.slice(0, 60));
+          assert(text.startsWith('Drop out of The Cold Open?'), text.slice(0, 60));
           assert(!/the The/.test(text), 'never "the The"');
-          assert(text.includes('Stay signed up') && text.includes('Yes, back out'), 'the two buttons');
+          assert(text.includes('Stay signed up') && text.includes('Yes, drop out'), 'the two buttons');
           if (st === 'zip70_late') {
             const keep = flat(await d.locator('[data-tm-backout-keeps]').innerText());
-            assert(keep === 'Backing out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.', keep);
+            assert(keep === 'Dropping out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.', keep);
             assert((await d.locator('[data-tm-backout-text]').count()) === 0, 'only the money line');
           } else {
             const w = flat(await d.locator('[data-tm-backout-text]').innerText());

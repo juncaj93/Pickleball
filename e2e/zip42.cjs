@@ -205,7 +205,7 @@ async function main() {
       const { ctx, page } = await playerPage('Rowan', { scheme });
       for (const [g, want] of [
         // Round 3: "Guest test" has 5 in (Rowan + Sam, Parker + Billy, Christopher): Rowan and Sam leaving leaves 3, so only one spot is owed.
-        [gA, "It's past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed."],
+        [gA, "It’s past the 7:30 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest’s spot isn’t needed."],
         [gB, 'Your guest Sam drops out too. Both spots open up for someone else.'],
       ]) {
         const c = card(page, g.id);
@@ -235,14 +235,14 @@ async function main() {
       const { ctx, page } = await playerPage('Rowan', { scheme });
       const words = [
         [
-          "It's past the 5:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
-          "It's past the 5:30 AM cancel-by and the game would drop below 4. If no one takes Sam's spot, you still owe $14.",
+          "It’s past the 5:30 AM cancel-by. Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.",
+          "It’s past the 5:30 AM cancel-by and the game would drop below 4. If no one takes Sam’s spot, you still owe $14.",
         ],
         [
-          "It's past the 6:00 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest's spot isn't needed.",
+          "It’s past the 6:00 AM cancel-by. Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest’s spot isn’t needed.",
           'Sam comes off your tab. You owe $14 less.',
         ],
-        ["Your guest Sam drops out too. Both spots open up. You don't owe anything because the game still has 4 players.", 'Sam comes off your tab. You owe $14 less.'],
+        ["Your guest Sam drops out too. Both spots open up. You don’t owe anything because the game still has 4 players.", 'Sam comes off your tab. You owe $14 less.'],
       ];
       for (const [i, g] of late.entries()) {
         const c = card(page, g.id);
@@ -278,7 +278,7 @@ async function main() {
       await dlg.waitFor();
       await page.waitForTimeout(350);
       const text = flat(await dlg.innerText());
-      assert(text.includes('Remove Sam?') && text.includes("Sam comes off your tab. Sam's $14 goes to your credit."), text);
+      assert(text.includes('Remove Sam?') && text.includes("Sam comes off your tab. Sam’s $14 goes to your credit."), text);
       assert((await dlg.locator('.btn-row button').allInnerTexts()).map(flat).join('|') === 'Keep Sam|Remove Sam', 'Keep Sam / Remove Sam');
       await equalButtons(dlg, 'Remove Sam confirm');
       await page.screenshot({ path: path.join(SHOTS, `P4-remove-sheet-${scheme}.png`) });
@@ -415,7 +415,7 @@ async function main() {
     await form.waitFor();
     await page.waitForTimeout(350);
     const words = flat(await page.locator('dialog.sheet[open]').last().innerText());
-    assert(words.includes('Add a guest · Christopher Vanderberg') && words.includes("Guest's first name") && words.includes("Their $14 goes on Christopher Vanderberg's tab. Christopher Vanderberg will owe $28."), words);
+    assert(words.includes('Add a guest · Christopher Vanderberg') && words.includes("Guest’s first name") && words.includes("Their $14 goes on Christopher Vanderberg’s tab. Christopher Vanderberg will owe $28."), words);
     await equalButtons(page.locator('dialog.sheet[open]').last(), 'Add a guest panel', false);
     await form.locator('[data-ps-guest-input]').fill('lee');
     assert(flat(await form.locator('[data-ps-guest-add]').innerText()) === 'Add lee', 'button names the guest');
@@ -434,7 +434,7 @@ async function main() {
     const conf = page.locator('dialog.sheet[open]').last();
     await page.waitForTimeout(350);
     const t = flat(await conf.innerText());
-    assert(t.includes('Remove Lee?') && t.includes("Lee comes off Christopher Vanderberg's tab. Christopher Vanderberg owes $14 less."), t);
+    assert(t.includes('Remove Lee?') && t.includes("Lee comes off Christopher Vanderberg’s tab. Christopher Vanderberg owes $14 less."), t);
     await equalButtons(conf, 'Remove Lee confirm');
     await page.screenshot({ path: path.join(SHOTS, 'A3-remove-guest-dark.png') });
     await conf.locator('.btn-row button', { hasText: 'Remove Lee' }).click();
@@ -447,7 +447,7 @@ async function main() {
     await dlg.locator('[data-ps-remove="Rowan"]').click();
     await page.waitForTimeout(350);
     const rm = flat(await page.locator('dialog.sheet[open]').last().innerText());
-    assert(rm.includes("Sam is Rowan's guest, so Sam comes off too. Both $14 shares are removed.") && rm.includes('Remove both'), rm);
+    assert(rm.includes("Sam is Rowan’s guest, so Sam comes off too. Both $14 shares are removed.") && rm.includes('Remove both'), rm);
     await equalButtons(page.locator('dialog.sheet[open]').last(), 'Remove both confirm');
     await page.screenshot({ path: path.join(SHOTS, 'A3-remove-rowan-dark.png') });
     await ctx.close();
@@ -511,19 +511,19 @@ async function main() {
     await page.waitForTimeout(400);
     const tiles = (await sheet.locator('[data-tile]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile'))));
     assert(tiles.indexOf('Billy') === tiles.indexOf('Parker') + 1 && tiles.indexOf('Sam') === tiles.indexOf('Rowan') + 1, `guest right after host: ${tiles}`);
-    assert(/Parker's guest/.test(await sheet.locator('[data-guest-tile="Billy"]').innerText()), 'Parker\'s guest under Billy');
+    assert(/Parker’s guest/.test(await sheet.locator('[data-guest-tile="Billy"]').innerText()), 'Parker\'s guest under Billy');
     const live = async () => flat(await sheet.locator('[data-finalize-live]').innerText());
     assert(/^5 played/.test(await live()), await live());
     await sheet.locator('[data-guest-tile="Billy"]').click();
     await page.waitForTimeout(250);
     assert(/^4 played · \$14 each/.test(await live()), await live());
-    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Billy didn't play. Parker pays for 1 share.", 'guest-out note');
+    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Billy didn’t play. Parker pays for 1 share.", 'guest-out note');
     await page.screenshot({ path: path.join(SHOTS, 'W1-guest-out.png') });
     await sheet.locator('[data-guest-tile="Billy"]').click();
     await sheet.locator('[data-tile="Parker"]').click();
     await page.waitForTimeout(250);
     assert(/^3 played · \$14 each/.test(await live()), await live());
-    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Parker didn't play, so Billy didn't either. Parker owes $14, for the 1 spot the game was short.", 'host-out note (Zip 49: late fees on, 3 played, 1 short)');
+    assert(flat(await sheet.locator('[data-who-played-note]').innerText()) === "Parker didn’t play, so Billy didn’t either. Parker owes $14, for the 1 spot the game was short.", 'host-out note (Zip 49: late fees on, 3 played, 1 short)');
     assert((await sheet.locator('[data-guest-tile="Billy"]').getAttribute('aria-disabled')) === 'true', 'Billy is locked');
     await sheet.locator('[data-guest-tile="Billy"]').click({ force: true });
     await page.waitForTimeout(200);

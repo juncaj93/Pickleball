@@ -56,9 +56,9 @@ describe('review: instant taps', () => {
     expect(state.server.paid).toEqual(['A']); // money DID move for A
     expect(view().paid).toEqual(['A']); // the screen (after the reload) shows A paid
     // The usual words keep the name as written ("I paid", not "i paid"); usePaid replaces them when some games went through.
-    if (res.status === 'failed') expect(failureWords(res.error, 'I paid')).toBe("I paid didn't save. Nothing changed.");
+    if (res.status === 'failed') expect(failureWords(res.error, 'I paid')).toBe("I paid didn’t save. Nothing changed.");
     // Also offline after the first one:
-    expect(failureWords({ status: 0 }, 'I paid')).toBe("No signal. I paid didn't save, nothing changed.");
+    expect(failureWords({ status: 0 }, 'I paid')).toBe("No signal. I paid didn’t save, nothing changed.");
   });
 
   it('after dispose() and attach() again (React StrictMode practice unmount, then the effect runs again) a good poll still drops a saved patch', async () => {

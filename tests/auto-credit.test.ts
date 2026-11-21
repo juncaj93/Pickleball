@@ -102,13 +102,13 @@ async function books(ctx: Ctx) {
   const rows = ctx.app.db.raw.prepare('SELECT * FROM credit_ledger').all() as any[];
   for (const p of d.players) {
     const sum = rows.filter((r) => r.player_id === p.id && !r.ended_at).reduce((n, r) => n + potEffect({ kind: r.kind, cents: r.amount_cents, fiveCents: r.five_cents }), 0);
-    expect(sum, `${p.name}'s history`).toBeGreaterThanOrEqual(0);
+    expect(sum, `${p.name}’s history`).toBeGreaterThanOrEqual(0);
     const shown = d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0;
-    expect(shown, `${p.name}'s balance on Players`).toBe(sum);
+    expect(shown, `${p.name}’s balance on Players`).toBe(sum);
     expect(balanceOf(d, p.id).creditCents).toBe(sum);
     if (p.name !== 'Alex' && p.isActive) {
       const v = await view(ctx, p.name);
-      expect(v.credit.balanceCents, `${p.name}'s own balance`).toBe(sum);
+      expect(v.credit.balanceCents, `${p.name}’s own balance`).toBe(sum);
       expect(v.credit.usableCents).toBeLessThanOrEqual(sum);
       expect(v.credit.usableCents).toBeGreaterThanOrEqual(0);
     }
@@ -121,7 +121,7 @@ async function books(ctx: Ctx) {
         expect(used, 'the organizer never uses credit').toBe(0);
         continue;
       }
-      expect(used, `credit on ${r.name}'s seat`).toBeLessThanOrEqual(Math.max(price, r.paymentAmountCents ?? 0));
+      expect(used, `credit on ${r.name}’s seat`).toBeLessThanOrEqual(Math.max(price, r.paymentAmountCents ?? 0));
       if (r.paymentStatus === 'paid' && !r.refundedAt) expect(r.paymentAmountCents ?? 0, `${r.name} paid`).toBeLessThanOrEqual(PRICE);
     }
   }

@@ -114,13 +114,13 @@ async function main() {
     [1, 'Want in tomorrow?', 'Needs 3 more to play', 10],
     [2, 'Want in tomorrow?', 'Needs 2 more to play', 10],
     [3, 'Want in tomorrow?', 'Needs 1 more to play', 10],
-    [4, 'Want in tomorrow?', "4 are in. You'd make it 5.", 10],
-    [5, 'Want in tomorrow?', "5 are in. You'd make it 6.", 10],
-    [6, 'Want in tomorrow?', "6 are in. You'd make it 7.", 10],
-    [5, 'Want in tomorrow?', "5 are in. You'd make it 6.", 6],
+    [4, 'Want in tomorrow?', "4 are in. You’d make it 5.", 10],
+    [5, 'Want in tomorrow?', "5 are in. You’d make it 6.", 10],
+    [6, 'Want in tomorrow?', "6 are in. You’d make it 7.", 10],
+    [5, 'Want in tomorrow?', "5 are in. You’d make it 6.", 6],
     // Zip 53: a game that is full (6 of 6) is no longer offered on the top card at all (no room for a 5th, so no card for it): the card moves on to
     // the next game with room, here Thursday (4 in).
-    [6, 'Want in Thursday?', "4 are in. You'd make it 5.", 6, 'next-game'],
+    [6, 'Want in Thursday?', "4 are in. You’d make it 5.", 6, 'next-game'],
   ];
   let maxNow = 10;
   for (const [n, title, sub, max, nextGame] of WANT) {

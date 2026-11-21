@@ -554,7 +554,7 @@ async function main() {
       const v = await newPage({ scheme });
       await v.page.goto(`${BASE}/?as=Vic&poolslook=12`);
       await v.page.locator('[data-tc-day-pool="A"]').waitFor({ timeout: 20000 });
-      assert(flat(await v.page.locator('[data-tc-day-progress]').innerText()).toUpperCase() === 'POOL PLAY · ROUND 1 OF 3', await v.page.locator('[data-tc-day-progress]').innerText());
+      assert(flat(await v.page.locator('[data-tc-day-progress]').innerText()).toUpperCase() === 'GROUP PLAY · ROUND 1 OF 3', await v.page.locator('[data-tc-day-progress]').innerText());
       await SH(v.page, `E-pools-390-${scheme}`);
       await v.page.locator('[data-tc-day-night]').scrollIntoViewIfNeeded();
       await SH(v.page, `E-night-390-${scheme}`);
@@ -600,7 +600,7 @@ async function main() {
     const a = await adminPage({});
     await a.page.locator('[data-tm-odd-switch]').waitFor({ timeout: 15000 });
     const text = await a.page.locator('[data-tm-copy-text]').getAttribute('data-tm-copy-text');
-    assert(/^Zoe backed out of The Cold Open\. One spot is open on [A-Z][a-z]{2} [A-Z][a-z]{2} \d+: \$16, pay by .*\. \S+$/.test(text), text);
+    assert(/^Zoe dropped out of The Cold Open\. One spot is open on [A-Z][a-z]{2} [A-Z][a-z]{2} \d+: \$16, pay by .*\. \S+$/.test(text), text);
     await SH(a.page, 'G-odd-admin');
     await a.ctx.close();
     const v = await answerOf('Vic');

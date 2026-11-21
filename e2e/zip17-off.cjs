@@ -152,7 +152,7 @@ async function main() {
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])
       for (const who of ['Vic', 'Wren', 'Zoe'])
-        await same(`player home, ${who}, ${width} px, ${scheme}: identical (the old owe card words, I'm in not dimmed)`, { who, scheme, width });
+        await same(`player home, ${who}, ${width} px, ${scheme}: identical (the old owe card words, I’m in not dimmed)`, { who, scheme, width });
   for (const who of ['Jordan', 'Kai', 'Casey']) await same(`player home, ${who}, light: identical`, { who });
   // I'm in on the first game more than 13 hours away (no late drop afterwards): the banner's spoken words and the page after it.
   const joinFirst = async (page, req, base) => {
@@ -165,8 +165,8 @@ async function main() {
     const after = await (await req.get(base + '/api/group')).json();
     return `${spoken} | sheet ${sheet} | in ${after.sessions.find((x) => x.id === s.id).mine?.status}`;
   };
-  await same("Wren (2 unpaid) taps I'm in: today's banner, no Please pay toast", { who: 'Wren', act: joinFirst });
-  await same("Zoe (3 unpaid) taps I'm in: signs up as today, no sheet", { who: 'Zoe', act: joinFirst });
+  await same("Wren (2 unpaid) taps I’m in: today’s banner, no Please pay toast", { who: 'Wren', act: joinFirst });
+  await same("Zoe (3 unpaid) taps I’m in: signs up as today, no sheet", { who: 'Zoe', act: joinFirst });
   await same(
     'organizer Settings, light: identical apart from the one new switch row',
     { who: 'admin', url: '/admin', tabName: 'Settings' },

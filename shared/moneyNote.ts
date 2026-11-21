@@ -54,7 +54,7 @@ export function moneyNoteText(f: MoneyNoteFacts): string {
         ? `${f.sub || 'Someone'} took one of your 2 spots. ${dollars(f.clearedCents ?? 0)} is cleared, ${dollars(f.stillCents)} still owed.`
         : `${f.sub || 'Someone'} took one of your 2 spots. ${dollars(f.clearedCents ?? 0)} is cleared.`;
     case 'moved':
-      return `${f.day ?? 'The'}${f.day ? "'s" : ''} game moved. Your late drop is cleared.`;
+      return `${f.day ?? 'The'}${f.day ? '’s' : ''} game moved. Your late drop is cleared.`;
     case 'back_in':
       return "You’re back in. Your late drop is cleared.";
   }

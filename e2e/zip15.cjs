@@ -137,7 +137,7 @@ async function main() {
     const { ctx, page } = await admin();
     await page.locator('[data-sc-cards]').waitFor();
     const kinds = await page.evaluate(() => [...document.querySelectorAll('main article.ac, main section.do-now, main [data-refund-request], main [data-payment-claim], main [data-finalize], main [data-vr-cards]')].map((e) => e.getAttribute('aria-label') || e.className));
-    const extra = kinds.filter((k) => !/Mark paid tonight|who hasn't paid|vr-card|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
+    const extra = kinds.filter((k) => !/Mark paid tonight|who hasn’t paid|vr-card|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
     // No note on screen (Alex, Nov 8: the links work, nothing says so).
     assert((await page.locator('[data-preview-calm], [data-sc-pretend]').count()) === 0, 'a preview note on screen');
     // Zip 29: the one money card is "Who hasn't paid" (Mark paid on every row); the second card (Mark paid tonight / Who owes you) is gone.
@@ -212,7 +212,7 @@ async function main() {
         await card.waitFor();
         const title = await card.locator('.ac-title').innerText();
         assert(/^Tue 8:00 PM was 1 short$/.test(title), title);
-        assert((await card.locator('.ac-sub').innerText()) === 'Check if a court is open tonight.', 'sub line');
+        assert(/^Check if a court is open (today|tonight)\.$/.test(await card.locator('.ac-sub').innerText()), 'sub line');
         const lines = await card.locator('.ac-title').evaluate((e) => Math.round(e.offsetHeight / parseFloat(getComputedStyle(e).lineHeight)));
         if (width >= 360) assert(lines === 1, `title on ${lines} lines`);
         const book = await card.locator('[data-sc-book]').boundingBox();
@@ -237,7 +237,7 @@ async function main() {
     await tab.close();
     const step2 = page.locator('[data-sc-step="2"]');
     await step2.waitFor({ timeout: 10000 });
-    assert((await step2.locator('.ac-title').innerText()) === 'Court open tonight?', 'step 2 title');
+    assert(/^Court open (today|tonight)\?$/.test(await step2.locator('.ac-title').innerText()), 'step 2 title');
     assert((await step2.locator('.ac-sub').innerText()) === 'Reopen Tue 8:00 PM, or pick a new time.', 'step 2 sub');
     assert((await step2.locator('[data-sc-time] span').innerText()) === '8:00 PM', 'the original time first');
     const opts = await step2.locator('[data-sc-time] option').allInnerTexts();
@@ -310,7 +310,7 @@ async function main() {
     const d = await dash();
     const t = d.secondChance.fakeTelegrams.filter((x) => x.sessionId === same.id);
     assert(t.length === 1, `${t.length} Telegrams`);
-    assert(/^Tonight 8:15 PM: 4 in, 2 of 4 paid\.\nText the 1 who hasn't paid: http:\/\/localhost:\d+\/admin\?unpaid=[0-9a-f-]{36}\nNo phone saved for Reese\.$/.test(t[0].text), t[0].text);
+    assert(/^Tonight 8:15 PM: 4 in, 2 of 4 paid\.\nText the 1 who hasn’t paid: http:\/\/localhost:\d+\/admin\?unpaid=[0-9a-f-]{36}\nNo phone saved for Reese\.$/.test(t[0].text), t[0].text);
   });
 
   await check("Telegram 1's link: the sheet opens Messages to ONLY the unpaid player with a phone, with the exact text", async () => {
@@ -320,7 +320,7 @@ async function main() {
     const href = await sheet.locator('[data-sc-unpaid-open]').getAttribute('href');
     const kai = d0.players.find((p) => p.name === 'Kai').phone.replace(/\D/g, '');
     assert(href.includes(kai) && href.split(',').length === 1, href);
-    assert(decodeURIComponent(href.split('body=')[1]).startsWith("Hey, we have 4 in for tonight at 8:15. Please pay on the site and I'll book the court.\n\n"), href);
+    assert(decodeURIComponent(href.split('body=')[1]).startsWith("Hey, we have 4 in for tonight at 8:15. Please pay on the site and I’ll book the court.\n\n"), href);
     assert((await sheet.innerText()).includes('no phone saved for Reese'), 'Reese named');
     await page.screenshot({ path: path.join(SHOTS, 'zip15-unpaid-sheet.png') });
     await ctx.close();
@@ -432,7 +432,7 @@ async function main() {
     await ctx.close();
     // The wording: the Edit sheet note (Players > a player > edit). Checked on the rendered sheet of the plain list path.
     const src = readFileSync(path.join(ROOT, 'src/pages/admin/PlayersTab.tsx'), 'utf8');
-    assert(src.includes("'For refunds and requests. Only you see this.'"), 'the new wording');
+    assert(src.includes("'For cash outs and requests. Only you see this.'"), 'the new wording');
   });
 
   await browser.close();

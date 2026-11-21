@@ -20,7 +20,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  *  Zip 74 (Nov 20): script 141.2 -> 141.5 on purpose. The two game night alerts at the top of Home (shorter games, the Final) and the
  *  trophy badge sit with the other tournament alerts in src/pages/PlayerHome.tsx and src/AlertCard.tsx: about 230 bytes gzipped (141.43 KB). */
 // Zip 76: 141.5 to 142.3 on purpose (the Drop out money words, Full, Is this you Back, the Want in time and the Nice toast, about 0.7 KB).
-export const BUDGET = { scriptKB: 142.3, styleKB: 36.5, pageKB: 1.5, totalKB: 177.8 };
+// Zip 78: 142.3 to 142.5 on purpose (one look words: the curly apostrophe is 3 bytes, the Dink and Drive group names, about 10 bytes over).
+export const BUDGET = { scriptKB: 142.5, styleKB: 36.5, pageKB: 1.5, totalKB: 178.0 };
 
 const ROOT = join(__dirname, '..');
 let split = '';
@@ -136,7 +137,7 @@ describe('Zip 48: the player download', () => {
     const script = read(split, `assets/${asset(split, /^index-.*\.js$/)}`);
     const admin = read(split, `assets/${asset(split, /^AdminEntry-.*\.js$/)}`);
     // Words only the organizer screens draw: in the organizer file, not in the player file.
-    for (const w of ['Feature switches', 'Cancel session', 'Mark refunded', 'Add game', 'Edit game', 'Venue charge']) {
+    for (const w of ['Feature switches', 'Cancel game', 'Mark refunded', 'Add game', 'Edit game', 'Venue charge']) {
       expect(admin.includes(w), `"${w}" in the organizer file`).toBe(true);
       expect(script.includes(w), `"${w}" in the player file`).toBe(false);
     }

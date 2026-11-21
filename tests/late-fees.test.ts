@@ -582,8 +582,8 @@ describe('paying and clearing a debt', () => {
       ['Devon', 'sub'],
     ]);
     const lines = (await dash(w)).audit.map((a: any) => activityText({ ...a, sessionStartsAt: new Date(g.start).toISOString() }, 'America/Detroit', ORG));
-    expect(lines.join('\n')).toMatch(/cleared Blair's \$14 \(venue waived\)/);
-    expect(lines.join('\n')).toMatch(/cleared Casey's \$14 \(my choice\)/);
+    expect(lines.join('\n')).toMatch(/cleared Blair’s \$14 \(venue waived\)/);
+    expect(lines.join('\n')).toMatch(/cleared Casey’s \$14 \(my choice\)/);
     expect((await view(w, 'Blair')).credit.history.find((h) => h.sessionId === g.id)!.lateFee).toBe('cleared');
     expect((await sessOf(w, g.id)).roster.filter((r: any) => r.lateFee)).toEqual([]);
     expect(health(w)).toEqual({});
@@ -830,10 +830,10 @@ describe('restore round trip, privacy, and the SQL rule matching the TypeScript 
 
 describe('the words', () => {
   it('dialog, banner and threshold', () => {
-    expect(lateDropDialogText('8:00 AM', true, '$14', null)).toBe("It's past the 8:00 AM cancel-by. If no one takes your spot, you still owe $14.");
-    expect(lateDropDialogText('8:00 AM', false, '$14', 'your $14 comes back as credit')).toBe("It's past the 8:00 AM cancel-by. Enough players are still in, so your $14 comes back as credit.");
-    expect(lateDropToast('$14', false)).toBe("You're out. You owe $14 unless someone takes your spot.");
-    expect(lateDropToast('$14', true)).toBe("You're out. Your $14 stays on this game unless someone takes your spot.");
+    expect(lateDropDialogText('8:00 AM', true, '$14', null)).toBe("It’s past the 8:00 AM cancel-by. If no one takes your spot, you still owe $14.");
+    expect(lateDropDialogText('8:00 AM', false, '$14', 'your $14 comes back as credit')).toBe("It’s past the 8:00 AM cancel-by. Enough players are still in, so your $14 comes back as credit.");
+    expect(lateDropToast('$14', false)).toBe("You’re out. You owe $14 unless someone takes your spot.");
+    expect(lateDropToast('$14', true)).toBe("You’re out. Your $14 stays on this game unless someone takes your spot.");
     expect(dropLeavesShort(4, 0)).toBe(true);
     expect(dropLeavesShort(5, 0)).toBe(false);
     expect(dropLeavesShort(4, 1)).toBe(false);
@@ -843,9 +843,9 @@ describe('the words', () => {
 // ---------- round 2 (Alex, Mon Nov 2 evening) ----------
 
 const A_TEXT =
-  "Hey guys, sorry, I have to back out of today's game. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!";
+  "Hey guys, sorry, I have to back out of today’s game. I canceled the court, so you can still book the same slot as non-members. It’s only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!";
 const B_TEXT =
-  "Hey guys, sorry, I have to back out of today's game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!";
+  "Hey guys, sorry, I have to back out of today’s game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!";
 
 describe('1a. cancel inside 12 hours with the organizer in the game', () => {
   async function setup() {
@@ -1003,7 +1003,7 @@ describe('3. the person who owed is told when the debt is cleared', () => {
     await join(w, g.id, ['Frankie']);
     const n = (await view(w, 'Blair')).feeNotices!;
     expect(n).toEqual([expect.objectContaining({ why: 'sub', creditCents: 0, startsAt: new Date(g.start).toISOString() })]);
-    expect(feeClearedNotice(n[0].why, 'Tue, Oct 27', '$14', null)).toBe('Good news: someone took your spot for Tue, Oct 27. You no longer owe $14.');
+    expect(feeClearedNotice(n[0].why, 'Tue, Oct 27', '$14', null)).toBe('Someone took your spot for Tue, Oct 27. You no longer owe $14.');
     for (const other of ['Casey', 'Frankie']) expect((await view(w, other)).feeNotices).toEqual([]);
     expect(withoutIds(JSON.stringify(await view(w, 'Casey')))).not.toMatch(/someone took your spot|late_fee/);
   });
@@ -1017,7 +1017,7 @@ describe('3. the person who owed is told when the debt is cleared', () => {
     await join(w, g.id, ['Frankie']);
     const n = (await view(w, 'Blair')).feeNotices!;
     expect(n[0]).toMatchObject({ why: 'sub', creditCents: PRICE });
-    expect(feeClearedNotice('sub', 'Tue, Oct 27', '$14', '$14')).toBe('Good news: someone took your spot for Tue, Oct 27. Your $14 is back as credit.');
+    expect(feeClearedNotice('sub', 'Tue, Oct 27', '$14', '$14')).toBe('Someone took your spot for Tue, Oct 27. Your $14 is back as credit.');
   });
   it('cleared by the organizer (venue waived or my choice): "You no longer owe $14 for Tue, Oct 27."', async () => {
     const w = await world();
@@ -1060,7 +1060,7 @@ describe('4. the text after a late cancel follows the venue answer', () => {
     const link = String(d.group.playerLink).replace(/^https?:\/\//, '').replace(/\/$/, '');
     expect(t.feeKept).toBe(true);
     expect(t.body).toBe(
-      `Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your $14 share still applies (if you already paid, you're all set). You can pay on the site: ${t.body.match(/site: (\S+)\. Sorry/)![1]}. Sorry about that!`,
+      `Today’s game is canceled. It’s inside 12 hours, so the venue charges us. If you were signed up, your $14 share still applies (if you already paid, you’re all set). You can pay on the site: ${t.body.match(/site: (\S+)$/)![1]}`,
     );
     expect(t.body).not.toMatch(/credit|tomorrow/);
     expect(t.body).toContain(link.split('/')[0]);
@@ -1076,7 +1076,7 @@ describe('4. the text after a late cancel follows the venue answer', () => {
     const { d, s } = await canceled(true);
     const t = lateCancelText(d, s, 'Rain')!;
     expect(t.feeKept).toBe(false);
-    expect(t.body).toMatch(/^Pickleball today is canceled\. Rain\. If you paid, it's now your credit\. You can request a cash out on the site\. /);
+    expect(t.body).toMatch(/^Pickleball today is canceled\. Rain\. If you paid, it’s now your credit\. You can request a cash out on the site\. /);
     expect(t.reach.count).toBe(5);
   });
   it('switch off: the old text stays', async () => {
@@ -1124,7 +1124,7 @@ describe('reminder texts for late-fee debts', () => {
     const all = unpaidPeople(d);
     expect(all.count).toBe(4);
     expect(all.phones).toContain(phoneOf(d, 'Blair'));
-    expect(all.body).toBe("Hey, looks like you haven't paid for pickleball yet. Pay here: club.example");
+    expect(all.body).toBe("Hey, you haven’t paid for pickleball yet. Pay here: club.example");
     // Paid: the money stays on the game, nothing is owed, no reminder.
     const w2 = await world();
     const g2 = await game(w2);
@@ -1189,7 +1189,7 @@ describe('reminder texts for late-fee debts', () => {
     w2.app.now = g2.start + 8 * 24 * HOUR;
     const d2 = await dash(w2);
     const card2 = suggestions(d2, Date.parse(d2.now)).find((c) => c.kind === 'pay' && c.sessionId === g2.id)!;
-    expect(card2.body).toBe("Hey, looks like you haven't paid for pickleball yet. Pay here: club.example");
+    expect(card2.body).toBe("Hey, you haven’t paid for pickleball yet. Pay here: club.example");
     expect(card2.phones.sort()).toEqual([phoneOf(d2, 'Blair'), phoneOf(d2, 'Casey')].sort());
   });
 
@@ -1211,7 +1211,7 @@ describe('reminder texts for late-fee debts', () => {
     w.app.now = g.start + 8 * 24 * HOUR;
     d = await dash(w);
     const card = suggestions(d, Date.parse(d.now)).find((c) => c.kind === 'pay' && c.sessionId === g.id)!;
-    expect(card.body).toBe("Hey, looks like you haven't paid for pickleball yet. Pay here: club.example");
+    expect(card.body).toBe("Hey, you haven’t paid for pickleball yet. Pay here: club.example");
     expect(card.phones.sort()).toEqual(['Blair', 'Casey', 'Devon'].map((n) => phoneOf(d, n)).sort());
     // Yes (venue waived): nobody owes, nobody is reminded.
     const w2 = await world();

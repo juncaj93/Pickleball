@@ -292,9 +292,9 @@ async function main() {
   console.log(`Player screens (${adminOnly.length} organizer-only selectors checked on each)...`);
   const playerScenes = [
     { name: 'Who are you?', url: '/', ready: (p) => p.getByText('Who are you?').first().waitFor({ timeout: 30000 }) },
-    { name: "Parker's Home", url: '/?as=Parker', ready: (p) => p.locator('.schedule article.sched').first().waitFor({ timeout: 30000 }) },
+    { name: "Parker’s Home", url: '/?as=Parker', ready: (p) => p.locator('.schedule article.sched').first().waitFor({ timeout: 30000 }) },
     {
-      name: "Reese's credit sheet",
+      name: "Reese’s credit sheet",
       url: '/?as=Reese',
       ready: async (p) => {
         await p.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });

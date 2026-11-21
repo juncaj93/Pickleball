@@ -455,11 +455,11 @@ async function main() {
         await p.page.locator('[data-tc-drop]').click();
         const keep = p.page.locator('[data-tm-backout-keeps]');
         await keep.waitFor({ timeout: 5000 });
-        // Zip 74 (picture pair-6): the kept case's body is just the money line, under "Back out of The Cold Open?".
+        // Zip 74 (picture pair-6): the kept case's body is just the money line, under "Drop out of The Cold Open?".
         const words = flat(await keep.innerText());
-        assert(words === 'Backing out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.', words);
+        assert(words === 'Dropping out now means no credit back, unless someone takes your spot. Below 8 players we lose the second court, which is already paid for.', words);
         assert((await p.page.locator('[data-tm-backout-text]').count()) === 0, 'no "comes back as credit" line');
-        assert(flat(await p.page.locator('dialog[open]').innerText()).startsWith('Back out of The Cold Open?'), 'the title');
+        assert(flat(await p.page.locator('dialog[open]').innerText()).startsWith('Drop out of The Cold Open?'), 'the title');
         await p.page.locator('[role="dialog"], .confirm').last().screenshot({ path: path.join(SHOTS, `H-drop-${width}-${scheme}.png`) }).catch(() => undefined);
         await p.ctx.close();
         const z = await vicCard({ who: 'Zoe', width, scheme });
@@ -471,8 +471,8 @@ async function main() {
   await check('H Parker drops: the toast says no credit back; History says $18 kept', async () => {
     const p = await vicCard({ who: 'Parker', width: 390 });
     await p.page.locator('[data-tc-drop]').click();
-    await p.page.getByRole('button', { name: 'Yes, back out' }).click();
-    await p.page.locator('.toast-msg', { hasText: "You're off the list. No credit back unless someone takes your spot." }).waitFor({ timeout: 10000 });
+    await p.page.getByRole('button', { name: 'Yes, drop out' }).click();
+    await p.page.locator('.toast-msg', { hasText: "You’re off the list. No credit back unless someone takes your spot." }).waitFor({ timeout: 10000 });
     await p.ctx.close();
     const h = await (await admin.request.get(BASE + '/api/admin/activity')).json();
     assert(h.entries.some((e) => e.action === 'tournament_back_out' && e.details.keptCents === 1800), 'History: kept $18');

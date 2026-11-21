@@ -33,10 +33,10 @@ describe('the Text menu wording', () => {
   it('Share, Need players, Check-in, Spot opened, Canceled and Final price read exactly as written', () => {
     expect(shareMessage(s, TZ, LONG_BEFORE, link)).toBe('Pickleball Tue Nov 3, 8:00 PM. In or out here: pickleball.juncaj.net');
     expect(needPlayersMessage(s, TZ, LONG_BEFORE, 2, link)).toBe('Need 2 more for pickleball Tue Nov 3, 8:00 PM. In? pickleball.juncaj.net');
-    expect(promotedMessage(s, TZ, LONG_BEFORE, link)).toBe("A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. pickleball.juncaj.net");
-    expect(checkInMessage(s, TZ, Date.parse('2026-11-02T17:00:00Z'), link)).toBe('Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net');
-    expect(canceledMessage(s, TZ, LONG_BEFORE, link)).toBe("Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You can request a cash out on the site. pickleball.juncaj.net");
-    expect(canceledMessage(s, TZ, LONG_BEFORE, link, 'Court flooded')).toBe("Pickleball Tue Nov 3 is canceled. Court flooded. If you paid, it's now your credit. You can request a cash out on the site. pickleball.juncaj.net");
+    expect(promotedMessage(s, TZ, LONG_BEFORE, link)).toBe("A spot opened and you’re in for pickleball Tue Nov 3, 8:00 PM. pickleball.juncaj.net");
+    expect(checkInMessage(s, TZ, Date.parse('2026-11-02T17:00:00Z'), link)).toBe('Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: pickleball.juncaj.net');
+    expect(canceledMessage(s, TZ, LONG_BEFORE, link)).toBe("Pickleball Tue Nov 3 is canceled. If you paid, it’s now your credit. You can request a cash out on the site. pickleball.juncaj.net");
+    expect(canceledMessage(s, TZ, LONG_BEFORE, link, 'Court flooded')).toBe("Pickleball Tue Nov 3 is canceled. Court flooded. If you paid, it’s now your credit. You can request a cash out on the site. pickleball.juncaj.net");
   });
   it('Final price: played count and price each, the credit line only when something comes back', () => {
     const thu = { startsAt: '2026-10-30T00:00:00.000Z', endsAt: '2026-10-30T02:00:00.000Z' }; // Thu Oct 29, 8 PM EDT
@@ -48,16 +48,16 @@ describe('the Text menu wording', () => {
   });
   it('Check-in says tonight, today, tomorrow or the date, whichever fits the time left', () => {
     const at = (iso: string) => checkInMessage(s, TZ, Date.parse(iso), link);
-    expect(at('2026-11-03T15:00:00Z')).toBe('Pickleball tonight, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net'); // Tue 10:00 AM Eastern
-    expect(at('2026-11-02T05:00:00Z')).toBe('Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net'); // Mon 12:00 AM
-    expect(at('2026-10-30T16:00:00Z')).toBe('Pickleball Tue Nov 3, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net');
+    expect(at('2026-11-03T15:00:00Z')).toBe('Pickleball tonight, 8:00 PM. Can’t make it? Update here: pickleball.juncaj.net'); // Tue 10:00 AM Eastern
+    expect(at('2026-11-02T05:00:00Z')).toBe('Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: pickleball.juncaj.net'); // Mon 12:00 AM
+    expect(at('2026-10-30T16:00:00Z')).toBe('Pickleball Tue Nov 3, 8:00 PM. Can’t make it? Update here: pickleball.juncaj.net');
     const morning = { startsAt: '2026-11-07T15:00:00.000Z', endsAt: '2026-11-07T17:00:00.000Z' };
-    expect(checkInMessage(morning, TZ, Date.parse('2026-11-07T11:00:00Z'), link)).toBe('Pickleball today, 10:00 AM. Can\'t make it? Update here: pickleball.juncaj.net');
+    expect(checkInMessage(morning, TZ, Date.parse('2026-11-07T11:00:00Z'), link)).toBe('Pickleball today, 10:00 AM. Can’t make it? Update here: pickleball.juncaj.net');
   });
   it('payment reminders: one game names it, several games give the total', () => {
     expect(paymentMessage('Ryan', 1400, [s], TZ, link)).toBe('Hey Ryan, you owe $14 for pickleball Tue Nov 3. Pay here: pickleball.juncaj.net');
     expect(paymentMessage('Ryan', 2800, [s, s], TZ, link)).toBe('Hey Ryan, you owe $28 for pickleball. Pay here: pickleball.juncaj.net');
-    expect(remindAllMessage(link)).toBe("Hey, looks like you haven't paid for pickleball yet. Pay here: pickleball.juncaj.net");
+    expect(remindAllMessage(link)).toBe("Hey, you haven’t paid for pickleball yet. Pay here: pickleball.juncaj.net");
   });
   it('nothing ever says "sent" or "text me ASAP"', () => {
     const all = [

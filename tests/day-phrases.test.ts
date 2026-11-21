@@ -57,11 +57,11 @@ describe('the "Want in?" titles', () => {
     expect(wantInTitle(game('2026-11-19'), TZ, at('2026-11-02T09:00:00-05:00'), false)).toBe('Want in on Thu, Nov 19?'); // 17 days out: the date
   });
   it('waitlist titles', () => {
-    expect(wantInTitle(game('2026-11-02'), TZ, now, true)).toBe("Want in on tonight's waitlist?");
-    expect(wantInTitle(game('2026-11-03'), TZ, now, true)).toBe("Want in on tomorrow's waitlist?");
-    expect(wantInTitle(game('2026-11-05'), TZ, now, true)).toBe("Want in on Thursday's waitlist?");
-    expect(wantInTitle(game('2026-11-10'), TZ, now, true)).toBe("Want in on next Tuesday's waitlist?");
-    expect(wantInTitle(game('2026-11-12'), TZ, now, true)).toBe("Want in on next Thursday's waitlist?");
+    expect(wantInTitle(game('2026-11-02'), TZ, now, true)).toBe("Want in on tonight’s waitlist?");
+    expect(wantInTitle(game('2026-11-03'), TZ, now, true)).toBe("Want in on tomorrow’s waitlist?");
+    expect(wantInTitle(game('2026-11-05'), TZ, now, true)).toBe("Want in on Thursday’s waitlist?");
+    expect(wantInTitle(game('2026-11-10'), TZ, now, true)).toBe("Want in on next Tuesday’s waitlist?");
+    expect(wantInTitle(game('2026-11-12'), TZ, now, true)).toBe("Want in on next Thursday’s waitlist?");
     expect(wantInTitle(game('2026-11-19'), TZ, now, true)).toBe('Want in on the Nov 19 waitlist?');
     expect(wantInTitle(game('2026-11-19'), TZ, at('2026-11-02T09:00:00-05:00'), true)).toBe('Want in on the Nov 19 waitlist?');
   });
@@ -107,8 +107,8 @@ describe('"next" only when the game is 7 or more days away (Eastern calendar day
     expect(t('2026-11-05', '2026-10-30T23:30:00-04:00')).toBe('Want in Thursday?'); // Fri night: still 6 days
   });
   it('the waitlist title follows the same rule', () => {
-    expect(wantInTitle(game('2026-11-05'), TZ, at('2026-10-30T09:00:00-04:00'), true)).toBe("Want in on Thursday's waitlist?");
-    expect(wantInTitle(game('2026-11-12'), TZ, at('2026-10-30T09:00:00-04:00'), true)).toBe("Want in on next Thursday's waitlist?");
+    expect(wantInTitle(game('2026-11-05'), TZ, at('2026-10-30T09:00:00-04:00'), true)).toBe("Want in on Thursday’s waitlist?");
+    expect(wantInTitle(game('2026-11-12'), TZ, at('2026-10-30T09:00:00-04:00'), true)).toBe("Want in on next Thursday’s waitlist?");
   });
 });
 
@@ -119,16 +119,16 @@ describe('the second line, by how many are in', () => {
       'Needs 3 more to play',
       'Needs 2 more to play',
       'Needs 1 more to play',
-      "4 are in. You'd make it 5.",
-      "5 are in. You'd make it 6.",
-      "6 are in. You'd make it 7.",
-      "9 are in. You'd make it 10.",
+      "4 are in. You’d make it 5.",
+      "5 are in. You’d make it 6.",
+      "6 are in. You’d make it 7.",
+      "9 are in. You’d make it 10.",
     ]);
   });
   it('at the max: the waitlist, whatever the max is', () => {
-    expect(wantInSubline(10, 10)).toBe("10 are in. You'd be on the waitlist.");
-    expect(wantInSubline(6, 6)).toBe("6 are in. You'd be on the waitlist.");
-    expect(wantInSubline(4, 4)).toBe("4 are in. You'd be on the waitlist.");
+    expect(wantInSubline(10, 10)).toBe("10 are in. You’d be on the waitlist.");
+    expect(wantInSubline(6, 6)).toBe("6 are in. You’d be on the waitlist.");
+    expect(wantInSubline(4, 4)).toBe("4 are in. You’d be on the waitlist.");
     expect(wantInSubline(3, 4)).toBe('Needs 1 more to play');
   });
 });

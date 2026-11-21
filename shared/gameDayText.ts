@@ -11,11 +11,12 @@
 //        Directions: https://maps.apple.com/?daddr=Northville+Pickleball+Club
 //
 //        Still owe $14? Pay here: pickleball.juncaj.net
-//    Zip 78: "today" for a game before 5 PM, "tonight" from 5 PM on (dayWordR2), never the weekday and date. "(Court 12)" only when a court number is set; the last line only while somebody signed up still owes.
+//    Zip 78: "today" for a game before 5 PM, "tonight" from 5 PM on (the texts' rule), never the weekday and date. "(Court 12)" only when a court number is set; the last line only while somebody signed up still owes.
 // One builder (gameDayTextBody) makes the words, one (smsGroupHref) makes the Messages link, so the page and the tests ask the same code.
 import { formatPrice } from './money';
 import { normalizePhone } from './messages';
-import { dayWordR2, shortTime } from './textsR2';
+import { shortTime } from './textsR2';
+import { localParts } from './time';
 import { COURT_NAME, directionsUrl } from './zip9';
 
 export const GAME_DAY_TEXT = { task: 'game_day_text_on', env: 'GAME_DAY_TEXT', name: 'Game day text' } as const;
@@ -63,7 +64,7 @@ export interface GameDayTextInput {
 export function gameDayTextBody(i: GameDayTextInput): string {
   const court = i.court !== null && Number.isInteger(i.court) ? ` (Court ${i.court})` : '';
   const lines = [
-    `Pickleball ${dayWordR2(i.startsAt, i.tz, i.nowMs)} @ ${shortTime(i.startsAt, i.tz)}!${court}`,
+    `Pickleball ${localParts(Date.parse(i.startsAt), i.tz).hour < 17 ? 'today' : 'tonight'} @ ${shortTime(i.startsAt, i.tz)}!${court}`,
     '',
     i.clubName,
     `Directions: ${mapsDirectLink()}`,

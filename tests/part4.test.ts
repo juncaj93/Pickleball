@@ -150,7 +150,7 @@ describe('court waitlist', () => {
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'not_opened' })).status).toBe(200);
     const x = await adminSession(ctx, s.id);
     expect(x).toMatchObject({ courtState: 'not_opened', status: 'canceled', canceledBy: 'court_not_opened' });
-    expect(x.state).toMatchObject({ label: 'court_not_opened', text: "Court didn't open" });
+    expect(x.state).toMatchObject({ label: 'court_not_opened', text: "Court didn’t open" });
     const casey = await asPlayer(ctx, 'Casey');
     expect(casey.sessions.find((v: any) => v.id === s.id)).toMatchObject({ canceled: true, courtState: 'not_opened' });
     expect(casey.owed).toEqual([]);

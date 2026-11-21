@@ -87,9 +87,9 @@ async function main() {
     phones[n] = c.request;
   }
   const GAMES = [
-    ['Today game', '2026-11-14T01:00:00Z', "today's game"],
-    ['Tomorrow game', '2026-11-15T01:00:00Z', "tomorrow's game"],
-    ['Fourday game', '2026-11-18T01:00:00Z', "Tuesday's game"],
+    ['Today game', '2026-11-14T01:00:00Z', "today’s game"],
+    ['Tomorrow game', '2026-11-15T01:00:00Z', "tomorrow’s game"],
+    ['Fourday game', '2026-11-18T01:00:00Z', "Tuesday’s game"],
   ];
   const GAME_ID = {};
   for (const [note, startsAt] of GAMES) {
@@ -166,7 +166,7 @@ async function main() {
           await box.locator(`[data-pick="${pick}"]`).click();
           const t = await box.locator('textarea').inputValue();
           assert(t.includes(`back out of ${word}.`), `${pick}: ${t.slice(0, 80)}`);
-          if (word !== "today's game") assert(!/today|tonight|this evening/i.test(t), `${pick} still says today/tonight`);
+          if (word !== "today’s game") assert(!/today|tonight|this evening/i.test(t), `${pick} still says today/tonight`);
         }
         await noSideScroll(page, 'Text the players');
         await ctx.close();

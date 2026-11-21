@@ -548,7 +548,7 @@ async function main() {
       'Keeps short rallies going. Avoids the backhand.',
       'Steady rallies. Still learning to dink.',
       'Dinks work about half the time. Learning drop shots.',
-      "Steady dinks. Drop shots don't always land. Misses easy ones sometimes.",
+      "Steady dinks. Drop shots don’t always land. Misses easy ones sometimes.",
       'Steady dinks. Drop shots usually land. Smart about speed. Few easy misses.',
       'Reliable dinks and drop shots. Smart about speed. Almost no easy misses.',
     ];

@@ -139,7 +139,7 @@ async function main() {
     const t = await text(page, B);
     assert(/3 of 4 in/.test(t), `count line: ${t}`);
     assert(/Ryan, Julian, Nathan/.test(t), `names: ${t}`);
-    assert((await row(page, B).getByRole('button', { name: "I'm in" }).count()) === 1, `I'm in button: ${t}`);
+    assert((await row(page, B).getByRole('button', { name: "I’m in" }).count()) === 1, `I'm in button: ${t}`);
     assert((await row(page, B).getByRole('button', { name: /standby/i }).count()) === 0, 'a standby button is still there');
     await ctx.close();
   });
@@ -147,12 +147,12 @@ async function main() {
   await check('I\'m in, Drop out and I\'m in again on a game with no court: normal words every time, never waiting words', async () => {
     const { ctx, page } = await open('Brandon');
     const pop = page.locator('.pop');
-    await row(page, B).getByRole('button', { name: "I'm in" }).click();
+    await row(page, B).getByRole('button', { name: "I’m in" }).click();
     await pop.waitFor();
     // The 4th real seat on any game says "Game on!" (a court on Waitlist is just Not booked: Nathan's tap counted); never a waiting word.
     const bannerText = squash(await pop.innerText());
-    assert(/^(You're in|Game on!)/.test(bannerText) && !FORBIDDEN.test(bannerText), `banner after I'm in: "${bannerText}"`);
-    await row(page, B).locator('.st-in', { hasText: "You're in" }).waitFor();
+    assert(/^(You’re in|Game on!)/.test(bannerText) && !FORBIDDEN.test(bannerText), `banner after I'm in: "${bannerText}"`);
+    await row(page, B).locator('.st-in', { hasText: "You’re in" }).waitFor();
     let t = await text(page, B);
     assert(/4 in/.test(t) && /Drop out/.test(t) && !FORBIDDEN.test(t), `joined: ${t}`);
     await pop.waitFor({ state: 'detached', timeout: 5000 });
@@ -167,22 +167,22 @@ async function main() {
     const banner = squash(await pop.innerText());
     assert(/You dropped out\./.test(banner) && /Undo/.test(banner) && !FORBIDDEN.test(banner), `drop banner: ${banner}`);
     t = await text(page, B);
-    assert(/I'm in/.test(t) && !FORBIDDEN.test(t), `after the drop: ${t}`);
+    assert(/I’m in/.test(t) && !FORBIDDEN.test(t), `after the drop: ${t}`);
     await sent;
     await page.waitForTimeout(500);
     // Join again.
-    await row(page, B).getByRole('button', { name: "I'm in" }).click();
-    await page.locator('.pop', { hasText: /You're in|Game on!/ }).waitFor();
+    await row(page, B).getByRole('button', { name: "I’m in" }).click();
+    await page.locator('.pop', { hasText: /You’re in|Game on!/ }).waitFor();
     t = await text(page, B);
-    assert(/You're in/.test(t) && /Drop out/.test(t) && !FORBIDDEN.test(t), `joined again: ${t}`);
+    assert(/You’re in/.test(t) && /Drop out/.test(t) && !FORBIDDEN.test(t), `joined again: ${t}`);
     assert(!FORBIDDEN.test(await page.locator('main').innerText()), 'the page says a waiting word');
     await ctx.close();
   });
 
   await check('an Undo straight after dropping out takes the player back in with the normal "You\'re back in"', async () => {
     const { ctx, page } = await open('Mitchel');
-    await row(page, B).getByRole('button', { name: "I'm in" }).click();
-    await page.locator('.pop', { hasText: /You're in|Game on!/ }).waitFor();
+    await row(page, B).getByRole('button', { name: "I’m in" }).click();
+    await page.locator('.pop', { hasText: /You’re in|Game on!/ }).waitFor();
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 5000 });
     await row(page, B).getByRole('button', { name: 'Drop out' }).click();
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
@@ -190,7 +190,7 @@ async function main() {
     await pop.waitFor();
     await new Promise((r) => setTimeout(r, 650)); // a person's Undo, not the 2nd tap of a double tap on Drop out (src/ui.tsx DOUBLE_TAP)
     await pop.getByRole('button', { name: 'Undo' }).click();
-    await row(page, B).locator('.st-in', { hasText: "You're in" }).waitFor();
+    await row(page, B).locator('.st-in', { hasText: "You’re in" }).waitFor();
     assert(!FORBIDDEN.test(await text(page, B)), `after Undo: ${await text(page, B)}`);
     await ctx.close();
   });
@@ -214,7 +214,7 @@ async function main() {
     assert((await page.locator('.pay-card').count()) === 0, 'a Pay card is up with no court booked');
     const t = await text(page, A);
     assert(!payWords.test(t), `pay words on the card: ${t}`);
-    assert(/Drop out/.test(t) && /You're in/.test(t) && /Court not booked/.test(t), `card: ${t}`);
+    assert(/Drop out/.test(t) && /You’re in/.test(t) && /Court not booked/.test(t), `card: ${t}`);
     await ctx.close();
   });
 

@@ -224,7 +224,7 @@ async function main() {
     assert(seat.selfPaid === true && seat.paymentStatus !== 'unpaid', `server: ${JSON.stringify(seat)}`);
     await a.page.locator('section.pay-card').waitFor({ state: 'detached', timeout: 8000 });
     assert(/Paid \$14/.test(await r.innerText()), `card: ${squash(await r.innerText())}`);
-    await r.getByRole('button', { name: "Didn't pay?" }).click();
+    await r.getByRole('button', { name: "Didn’t pay?" }).click();
     await a.page.locator('section.pay-card').waitFor({ timeout: 8000 });
     assert((await ryanSeat()).selfPaid === false, 'server: not paid again');
     await r.locator('a.pay-btn:not(.m-ghost)').waitFor({ timeout: 8000 });
@@ -238,7 +238,7 @@ async function main() {
     await a.page.locator('section.pay-card').waitFor({ state: 'detached', timeout: 8000 });
     assert((await ryanSeat()).selfPaid === true, 'server: paid');
     assert(/Paid \$14/.test(await row(a.page).innerText()), `card: ${squash(await row(a.page).innerText())}`);
-    await row(a.page).getByRole('button', { name: "Didn't pay?" }).click();
+    await row(a.page).getByRole('button', { name: "Didn’t pay?" }).click();
     await a.page.locator('section.pay-card').waitFor({ timeout: 8000 });
     await a.ctx.close();
   });
@@ -255,7 +255,7 @@ async function main() {
     await a.page.waitForTimeout(400);
     assert(posts === 1, `${posts} requests`);
     assert((await ryanSeat()).selfPaid === true, 'paid once');
-    await row(a.page).getByRole('button', { name: "Didn't pay?" }).click();
+    await row(a.page).getByRole('button', { name: "Didn’t pay?" }).click();
     await a.page.locator('section.pay-card').waitFor({ timeout: 8000 });
     await a.ctx.close();
   });

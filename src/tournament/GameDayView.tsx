@@ -11,8 +11,7 @@ import type { PlayerDayGame, PlayerDayView, PlayerTournamentView } from '../../s
 import { api, ApiError, storageGet, storageSet, VIEW_ONLY_MESSAGE } from '../lib';
 import { CourtMap } from '../GameDay';
 import { Sheet, useToast } from '../ui';
-import { diffLabel, MAX_SCORE, resultTag, scoreHint } from '../../shared/scores';
-import { groupName } from '../../shared/tournamentSchedule';
+import { diffLabel, groupName, MAX_SCORE, resultTag, scoreHint } from '../../shared/scores';
 import { AlsoNowCard, PlayoffCard, TieCard, WheelPickedCard } from './TieCards';
 import './gameday-tour.css';
 

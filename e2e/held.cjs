@@ -282,7 +282,7 @@ async function main() {
       await nav(page, 'Players').click();
       await page.locator('[data-credit-mark="Mitchel"]').waitFor(); // survives a reload
       await page.locator('[data-credit-mark="Mitchel"]').click();
-      await page.locator('.toast', { hasText: 'Credit marked refunded' }).waitFor();
+      await page.locator('.toast', { hasText: 'Credit cashed out' }).waitFor();
       await page.locator('li.player-row[data-player="Mitchel"]').getByText('Credit $14').waitFor({ state: 'detached' });
       assert(/\$0/.test(squash(await page.locator('li.player-row[data-player="Mitchel"]').innerText())), 'balance should be $0');
     });
@@ -292,7 +292,7 @@ async function main() {
       assert(/Credits owed \$0/.test(sum) && /Held \$14/.test(sum), `after the refund: ${sum}`);
       await nav(page, 'Players').click();
       await page.locator('[data-credit-undo="Mitchel"]').click();
-      await page.locator('.toast', { hasText: 'Credit refund undone' }).waitFor();
+      await page.locator('.toast', { hasText: 'Cash out undone' }).waitFor();
       await page.locator('li.player-row[data-player="Mitchel"]').getByText('Credit $14').waitFor();
       await nav(page, 'Money').click();
       assert(/Credits owed \$14/.test(squash(await page.locator('.money-sum').innerText())), 'credits owed after undo');

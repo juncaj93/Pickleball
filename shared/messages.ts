@@ -190,7 +190,7 @@ export function backOutGame(startsAt: string | undefined, tz: string | undefined
 
 /** The same day choice for "Pickleball today is canceled": "today", "tomorrow" or "Tuesday". */
 export function backOutDay(startsAt: string | undefined, tz: string | undefined, nowMs: number | undefined): string {
-  return backOutGame(startsAt, tz, nowMs).replace(/'s game$/, '');
+  return backOutGame(startsAt, tz, nowMs).replace(/['’]s game$/, '');
 }
 
 /** A. The main one: the court is canceled, the players can book the same slot as non-members. */

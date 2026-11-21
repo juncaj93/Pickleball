@@ -226,12 +226,12 @@ async function main() {
     await p.open();
     await p.page.locator('[data-saved-copy] article.sched').first().waitFor({ timeout: 2500 });
     // Try the real way a person would: the button by its name.
-    const imIn = p.page.getByRole('button', { name: /^I'm in/ });
+    const imIn = p.page.getByRole('button', { name: /^I’m in/ });
     assert((await imIn.count()) === 0, 'an I\'m in button exists on the saved copy');
     await p.page.locator('[data-saved-copy] article.sched').first().click({ force: true }).catch(() => {});
     assert(p.posts.length === 0, 'something was sent from the saved copy');
     await p.fresh();
-    await p.page.getByRole('button', { name: /^I'm in/ }).first().waitFor({ timeout: 5000 });
+    await p.page.getByRole('button', { name: /^I’m in/ }).first().waitFor({ timeout: 5000 });
     await p.ctx.close();
   });
 

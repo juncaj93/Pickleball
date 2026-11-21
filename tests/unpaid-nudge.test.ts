@@ -102,12 +102,12 @@ describe('the words', () => {
     expect(oweLine(five, TZ)).not.toMatch(/keep/);
   });
   it('the toast', () => {
-    expect(nudgeToast(2, 2800)).toEqual({ title: "You're in!", sub: 'Please pay the $28 you still owe for your 2 previous games.' });
+    expect(nudgeToast(2, 2800)).toEqual({ title: "You’re in!", sub: 'Please pay the $28 you still owe for your 2 previous games.' });
     expect(nudgeToast(1, 1400).sub).toBe('Please pay the $14 you still owe for your previous game.');
   });
   it('the sheet and the server refusal', () => {
-    expect(blockSheet(3, 4200)).toEqual({ title: 'You owe $42', line: "For your last 3 games. Once it's paid, you can sign up again.", pay: 'Pay $42' });
-    expect(blockedMessage(3, 4200)).toBe("You owe $42 for your last 3 games. Once it's paid, you can sign up again.");
+    expect(blockSheet(3, 4200)).toEqual({ title: 'You owe $42', line: "For your last 3 games. Once it’s paid, you can sign up again.", pay: 'Pay $42' });
+    expect(blockedMessage(3, 4200)).toBe("You owe $42 for your last 3 games. Once it’s paid, you can sign up again.");
   });
 });
 
@@ -158,7 +158,7 @@ describe('the server (server/unpaidNudge.ts)', () => {
     // Now 3 unpaid: refused, and the seat is not taken.
     const r = await join(w, 'Blair', games[3].id);
     expect(r.status).toBe(409);
-    expect(r.data).toEqual({ error: BLOCKED_CODE, message: "You owe $42 for your last 3 games. Once it's paid, you can sign up again." });
+    expect(r.data).toEqual({ error: BLOCKED_CODE, message: "You owe $42 for your last 3 games. Once it’s paid, you can sign up again." });
     const v = await view(w, 'Blair');
     expect(v.unpaidNudge).toEqual({ limit: 3 });
     expect(v.sessions.find((s: any) => s.id === games[3].id).mine).toBeFalsy();

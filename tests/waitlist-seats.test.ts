@@ -58,9 +58,9 @@ async function inv(ctx: Ctx, label = '') {
   const ledger = rows(ctx, 'SELECT * FROM credit_ledger');
   for (const p of d.players) {
     const sum = ledger.filter((r) => r.player_id === p.id && !r.ended_at).reduce((n, r) => n + potEffect({ kind: r.kind, cents: r.amount_cents, fiveCents: r.five_cents }), 0);
-    expect(sum, `${label} ${p.name}'s pot is never below $0`).toBeGreaterThanOrEqual(0);
+    expect(sum, `${label} ${p.name}’s pot is never below $0`).toBeGreaterThanOrEqual(0);
     // (The organizer's own pot is not listed: they never use credit.)
-    if (p.name !== 'Alex') expect(d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0, `${label} ${p.name}'s balance`).toBe(sum);
+    if (p.name !== 'Alex') expect(d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0, `${label} ${p.name}’s balance`).toBe(sum);
   }
   for (const s of d.sessions) {
     const confirmed = s.roster.filter((r: any) => r.status === 'confirmed').length;
@@ -71,7 +71,7 @@ async function inv(ctx: Ctx, label = '') {
     if (waiting > 0) expect(confirmed, `${label} ${s.startsAt}: someone is waiting but the game is not full`).toBe(maxP);
     for (const r of s.roster) {
       const used = ledger.filter((x) => x.kind === 'used' && x.session_id === s.id && x.player_id === r.playerId && !x.ended_at).reduce((n, x) => n + x.amount_cents, 0);
-      expect(used, `${label} credit on ${r.name}'s seat`).toBeLessThanOrEqual(1400);
+      expect(used, `${label} credit on ${r.name}’s seat`).toBeLessThanOrEqual(1400);
       if (r.isOrganizer) expect(used, 'the organizer never uses credit').toBe(0);
       if (r.status !== 'confirmed') expect(used, `${label} ${r.name} is not in, so no credit is on the seat`).toBe(0);
     }

@@ -23,8 +23,8 @@ describe('the words, exactly as Alex wrote them', () => {
     expect(moneyNoteText({ kind: 'sub_one', sub: 'Rowan', clearedCents: 1400, stillCents: 1400 })).toBe('Rowan took one of your 2 spots. $14 is cleared, $14 still owed.');
     // Nothing more owed on that game (the seat had paid): the sentence stops at "cleared" (reviewer, Zip 51b).
     expect(moneyNoteText({ kind: 'sub_one', sub: 'Rowan', clearedCents: 1400, stillCents: 0 })).toBe('Rowan took one of your 2 spots. $14 is cleared.');
-    expect(moneyNoteText({ kind: 'moved', day: 'Thu' })).toBe("Thu's game moved. Your late drop is cleared.");
-    expect(moneyNoteText({ kind: 'back_in' })).toBe("You're back in. Your late drop is cleared.");
+    expect(moneyNoteText({ kind: 'moved', day: 'Thu' })).toBe("Thu’s game moved. Your late drop is cleared.");
+    expect(moneyNoteText({ kind: 'back_in' })).toBe("You’re back in. Your late drop is cleared.");
     expect(moneyNoteText({ kind: 'sub', sub: 'Rowan', clearedCents: 1100 })).toBe('Rowan took your spot. Your $11 is cleared.');
     expect(moneyNoteText({ kind: 'sub', sub: 'Rowan', clearedCents: 1350 })).toBe('Rowan took your spot. Your $13.50 is cleared.');
     expect(weekdayOf('2026-11-20T00:00:00.000Z', 'America/Detroit')).toBe('Thu'); // Thu Nov 19, 7:00 PM Eastern
@@ -171,7 +171,7 @@ describe('a game moved to another day (Zip 49)', () => {
     at(w, g.start, 5);
     await drop(w, g.id, 'Blair');
     expect((await moveBy(w, g, DAY)).status).toBe(200);
-    expect(await texts(w, 'Blair')).toEqual([`${oldDay}'s game moved. Your late drop is cleared.`]);
+    expect(await texts(w, 'Blair')).toEqual([`${oldDay}’s game moved. Your late drop is cleared.`]);
     for (const who of ['Casey', 'Devon', 'Emery']) expect(await notes(w, who), who).toEqual([]);
     expect(await owedOf(w, 'Blair', g.id)).toBeNull();
     expect(health(w)).toEqual({});
@@ -207,7 +207,7 @@ describe('the organizer puts you back In after a late drop (F-15)', () => {
     await drop(w, g.id, 'Blair');
     expect((await drop(w, g.id, 'Casey')).lateFee).toEqual({ cents: PRICE, paid: false });
     expect((await roster(w, g.id, 'Casey', 'confirm')).status).toBe(200);
-    expect(await texts(w, 'Casey')).toEqual(["You're back in. Your late drop is cleared."]);
+    expect(await texts(w, 'Casey')).toEqual(["You’re back in. Your late drop is cleared."]);
     expect(await texts(w, 'Blair')).toEqual([]);
     // Casey is a normal seat again: owes the game's $14 like everyone in, no late fee.
     expect((await owedOf(w, 'Casey', g.id))?.lateFee ?? null).toBeNull();

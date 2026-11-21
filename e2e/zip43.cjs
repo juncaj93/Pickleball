@@ -139,7 +139,7 @@ async function main() {
   assert(d0.venueAlert === true && d0.venueAlerts.length === 2, `the preview world should have two cards, has ${JSON.stringify(d0.venueAlerts)}`);
 
   const MEMBERSHIP = 'Membership should have been charged: $30';
-  const COURTS = 'Northville Pickleball should have charged you $96';
+  const COURTS = 'Northville Pickleball Club should have charged you $96';
 
   for (const scheme of ['light', 'dark']) {
     await check(`H1 (${scheme}, 390): the two amber cards are first on Home, with the mock's words, one button each, no Dismiss`, async () => {
@@ -218,7 +218,7 @@ async function main() {
     setDaysDirect(31, 0);
     await page.reload();
     await page.locator('[data-venue-alerts]').waitFor();
-    assert((await text()) === 'Northville Pickleball should have charged you $126 2 games x $48 = $96, plus membership $30 Mark paid', `combined: ${await text()}`);
+    assert((await text()) === 'Northville Pickleball Club should have charged you $126 2 games x $48 = $96, plus membership $30 Mark paid', `combined: ${await text()}`);
     assert((await page.locator('[data-venue-alerts] [data-alert-card="amber"]').count()) === 1, 'one combined card');
     await ctx.close();
   });

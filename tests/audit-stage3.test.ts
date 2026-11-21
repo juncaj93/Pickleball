@@ -160,7 +160,7 @@ describe('Request refund: the amount box', () => {
     const [a, b] = await Promise.all([requestRefund(alex, 1400), requestRefund(alex, 1400)]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     expect((await dashboard(ctx)).refundRequests).toHaveLength(1);
-    expect(await ctx.texts()).toEqual(['Refund requested: Alex wants $14 back.']);
+    expect(await ctx.texts()).toEqual(['Cash out: Alex wants $14 back.']);
   });
 
   it('a request for less than the balance: only the rest is usable on a game; cancel frees the reserved part', async () => {
@@ -305,7 +305,7 @@ describe('Telegram: Refund requested', () => {
     await ctx.app.settle();
     expect(ctx.sent).toHaveLength(1);
     const m = ctx.sent[0];
-    expect(m.body.text).toBe('Refund requested: Alex wants $9 back.');
+    expect(m.body.text).toBe('Cash out: Alex wants $9 back.');
     expect(m.body.chat_id).toBe(CHAT);
     expect(m.body.reply_markup!.inline_keyboard).toEqual([[{ text: 'Open site', url: `https://${LINK}/admin` }]]);
     expect(withoutIds(JSON.stringify(m.body))).not.toMatch(/555|VenmoSecret|\$14|1400/);
@@ -325,7 +325,7 @@ describe('Telegram: Refund requested', () => {
     await cancelRequest(alex);
     await ctx.organizer.call('PUT', '/api/admin/alerts', { enabled: true });
     expect((await requestRefund(alex, 300)).status).toBe(200);
-    expect(await ctx.texts()).toEqual(['Refund requested: Alex wants $3 back.']);
+    expect(await ctx.texts()).toEqual(['Cash out: Alex wants $3 back.']);
     await ctx.clear();
     const id = (await dashboard(ctx)).refundRequests[0].id;
     await resolve(ctx, id, 'refunded');
@@ -380,14 +380,14 @@ describe('Telegram: Refund requested', () => {
       await ctx.app.settle();
       expect((await cancelRequest(alex)).status).toBe(200);
     }
-    expect(await ctx.texts()).toEqual(['Refund requested: Alex wants $1 back.']);
+    expect(await ctx.texts()).toEqual(['Cash out: Alex wants $1 back.']);
     await ctx.clear();
     expect((await requestRefund(blair, 700)).status).toBe(200);
-    expect(await ctx.texts()).toEqual(['Refund requested: Blair wants $7 back.']);
+    expect(await ctx.texts()).toEqual(['Cash out: Blair wants $7 back.']);
     await ctx.clear();
     ctx.app.now += 61 * 60_000;
     expect((await requestRefund(alex, 200)).status).toBe(200);
-    expect(await ctx.texts()).toEqual(['Refund requested: Alex wants $2 back.']);
+    expect(await ctx.texts()).toEqual(['Cash out: Alex wants $2 back.']);
     // The Home card always shows the latest request, sent or not.
     expect((await dashboard(ctx)).refundRequests.map((r: any) => [r.name, r.cents])).toEqual(expect.arrayContaining([['Alex', 200], ['Blair', 700]]));
   });
@@ -498,7 +498,7 @@ describe('the Text menu and Home suggestion cards', () => {
     const { d, all } = await at('2026-11-02T19:00:00-05:00');
     const c = all.find((x) => x.kind === 'checkin')!;
     expect(c).toBeDefined();
-    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can't make it? Update here: ${LINK}`);
+    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can’t make it? Update here: ${LINK}`);
     const phonesOf = (names: string[]) => names.map((n) => d.players.find((p: any) => p.name === n).phone);
     expect([...c.phones].sort()).toEqual(phonesOf(ALL.slice(0, 6)).sort());
     // Still there right before the game; gone once it starts.
@@ -514,11 +514,11 @@ describe('the Text menu and Home suggestion cards', () => {
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
     const d = await dashboard(ctx);
     const item = sessionTexts(d, d.sessions.find((x: any) => x.id === s.id), ctx.app.now).find((i) => i.id === 'canceled')!;
-    expect(item.body).toBe(`Pickleball tomorrow is canceled. If you paid, it's now your credit. You can request a cash out on the site. ${LINK}`);
+    expect(item.body).toBe(`Pickleball tomorrow is canceled. If you paid, it’s now your credit. You can request a cash out on the site. ${LINK}`);
     ctx.app.now = Date.parse('2026-11-01T12:00:00-05:00');
     const d2 = await dashboard(ctx);
     expect(sessionTexts(d2, d2.sessions.find((x: any) => x.id === s.id), ctx.app.now).find((i) => i.id === 'canceled')!.body).toBe(
-      `Pickleball Thu Nov 5 is canceled. If you paid, it's now your credit. You can request a cash out on the site. ${LINK}`,
+      `Pickleball Thu Nov 5 is canceled. If you paid, it’s now your credit. You can request a cash out on the site. ${LINK}`,
     );
   });
 
@@ -734,7 +734,7 @@ describe('privacy of every player-facing answer', () => {
       expect(text, `${what}: phone`).not.toMatch(/\) 555-|\(313\)|313555/);
       expect(text, `${what}: venmo`).not.toMatch(/VenmoSecret/);
       expect(text, `${what}: court cost / membership`).not.toMatch(/4321|3579|43\.21|35\.79/);
-      expect(text, `${what}: someone else's credit or request`).not.toMatch(/2300|\$23\b|"reservedCents"|refundRequests|creditLedger/);
+      expect(text, `${what}: someone else’s credit or request`).not.toMatch(/2300|\$23\b|"reservedCents"|refundRequests|creditLedger/);
       expect(text, `${what}: other players' money`).not.toMatch(/Blair[^"]*\$|Casey[^"]*\$/);
     }
     // The pending part of the answer is Alex's own (nothing pending after his cancel).

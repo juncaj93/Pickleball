@@ -322,7 +322,7 @@ async function main() {
       await page.getByRole('heading', { name: 'Is this you?' }).waitFor();
       const offered = await page.locator('section[aria-label="Is this you?"] .name-grid button').allInnerTexts();
       assert(offered.includes('Ryan'), `offered ${offered}`);
-      await page.getByRole('button', { name: "No, I'm new" }).click();
+      await page.getByRole('button', { name: "No, I’m new" }).click();
       await page.getByRole('heading', { level: 1, name: 'Ryann' }).waitFor();
       assert((await page.getByRole('heading', { name: 'Any preferred days?' }).count()) === 0, 'the preferred days step is gone');
       const p = (await dash()).players.find((x) => x.name === 'Ryann');
@@ -342,7 +342,7 @@ async function main() {
     await check('Add my name exactly "ryan", then "No, I\'m new": friendly "Someone already uses" note, back on the name step', async () => {
       const { ctx, page } = await addFlow('ryan');
       await page.getByRole('heading', { name: 'Is this you?' }).waitFor();
-      await page.getByRole('button', { name: "No, I'm new" }).click();
+      await page.getByRole('button', { name: "No, I’m new" }).click();
       await page.getByText(/Someone already uses/).waitFor();
       assert(await page.getByLabel('Your name').isVisible(), 'not back on the name step');
       assert((await dash()).players.filter((p) => /^ryan$/i.test(p.name)).length === 1, 'a second Ryan was added');
@@ -383,7 +383,7 @@ async function main() {
       }
       const r = await (await areq.delete(`${BASE}/api/admin/players/${idOf('Quinn')}`, { headers: { Origin: BASE } })).json();
       assert(r.result === 'hidden', `remove result ${JSON.stringify(r)}`);
-      await card(page, G[4]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[4]).getByRole('button', { name: "I’m in" }).click();
       const said = await waitBanner(page, /\S/, 4000);
       assert(/name|who are you/i.test(said), `banner: "${said}"`);
       await page.getByRole('heading', { level: 1, name: 'Who are you?' }).waitFor({ timeout: 12000 });
@@ -515,15 +515,15 @@ async function main() {
       assert(seen.withdraw === 1, `withdraws ${seen.withdraw}`);
       assert((await statusOf('Casey', G[0])) === 'withdrawn', 'still in');
       assert((await potOf('Casey')) === 1400, `pot ${await potOf('Casey')}`);
-      await card(page, G[0]).getByRole('button', { name: "I'm in" }).waitFor();
+      await card(page, G[0]).getByRole('button', { name: "I’m in" }).waitFor();
       assert(/^\$14 credit/.test((await chipLabel(page)) || ''), `chip ${await chipLabel(page)}`);
       await ctx.close();
     });
     await check('the Oct 31 bug path: after a paid drop, I\'m in on the same game uses the credit by itself ("Paid with credit", pot $0)', async () => {
       const { ctx, page } = await open('Casey');
-      await card(page, G[0]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[0]).getByRole('button', { name: "I’m in" }).click();
       // Casey is the 4th in, so the banner may be "Game on!" with the money.
-      const b = await waitBanner(page, /You're in|Game on!/);
+      const b = await waitBanner(page, /You’re in|Game on!/);
       assert(/\$14 credit used/.test(b), b);
       await card(page, G[0]).getByText('Paid with credit').waitFor({ timeout: 4000 });
       const m = await mineOf('Casey', G[0]);
@@ -583,17 +583,17 @@ async function main() {
     });
     await check('Go back on the "Out for ...?" question changes nothing (no hold, no banner, nothing sent)', async () => {
       const { ctx, page, seen } = await open('Frankie');
-      await card(page, G[0]).getByRole('button', { name: "I'm in" }).click();
-      await waitBanner(page, /You're in/);
+      await card(page, G[0]).getByRole('button', { name: "I’m in" }).click();
+      await waitBanner(page, /You’re in/);
       await card(page, G[0]).getByRole('button', { name: 'Drop out' }).click();
       await page.locator('dialog[open]').getByRole('button', { name: 'Go back' }).click();
       await sleep(6000);
       assert(seen.withdraw === 0 && (await statusOf('Frankie', G[0])) === 'confirmed' && (await isIn(page, G[0])), 'changed');
       await ctx.close();
     });
-    await check('waitlisted: card says "Waitlist, 1st in line"; Leave waitlist goes at once (no Undo) with "You\'re off the list"', async () => {
+    await check('waitlisted: card says "1st on the waitlist"; Leave waitlist goes at once (no Undo) with "You\'re off the list"', async () => {
       const { ctx, page } = await open('Gus');
-      assert(/Waitlist, 1st in line/.test(await card(page, G[2]).innerText()), squash(await card(page, G[2]).innerText()));
+      assert(/1st on the waitlist/.test(await card(page, G[2]).innerText()), squash(await card(page, G[2]).innerText()));
       await card(page, G[2]).getByRole('button', { name: 'Leave waitlist' }).click();
       await page.locator('dialog[open]').getByRole('button', { name: 'Leave waitlist' }).click();
       const b = await waitBanner(page, /off the list/);
@@ -612,7 +612,7 @@ async function main() {
       await sleep(650); // a person's deliberate Undo, not the second half of a double tap (src/ui.tsx DOUBLE_TAP)
       await banner(page).getByRole('button', { name: 'Undo' }).click();
       const b = await waitBanner(page, /Too late/);
-      assert(/Too late, you're already out\. Tap I'm in to rejoin\./.test(b), b);
+      assert(/Too late, you’re already out\. Tap I’m in to rejoin\./.test(b), b);
       await sleep(800);
       assert(!(await isIn(page, G[1])), 'card claims I am in');
       assert((await statusOf('Hal', G[1])) === 'withdrawn', 'server');
@@ -659,8 +659,8 @@ async function main() {
       await tapDrop(page, G[4]);
       await waitBanner(page, /You dropped out/);
       await sleep(700);
-      await card(page, G[4]).getByRole('button', { name: "I'm in" }).click();
-      await waitBanner(page, /You're back in/);
+      await card(page, G[4]).getByRole('button', { name: "I’m in" }).click();
+      await waitBanner(page, /You’re back in/);
       await sleep(6000);
       assert(seen.withdraw === 0 && seen.join === 0, `sent: ${seen.order}`);
       const m = await mineOf('Kai', G[4]);
@@ -673,8 +673,8 @@ async function main() {
       await tapDrop(page, G[4]);
       await waitBanner(page, /You dropped out/);
       await sleep(700);
-      await card(page, G[5]).getByRole('button', { name: "I'm in" }).click();
-      const b = await waitBanner(page, /You're in/, 8000);
+      await card(page, G[5]).getByRole('button', { name: "I’m in" }).click();
+      const b = await waitBanner(page, /You’re in/, 8000);
       assert(/\$14 credit used/.test(b), b);
       await sleep(1500);
       assert(seen.order.join(',') === `withdraw:${G[4].id},join:${G[5].id}`, `order ${seen.order}`);
@@ -693,7 +693,7 @@ async function main() {
       await page.reload();
       await card(page, G[1]).waitFor();
       await until(async () => (await statusOf('Lee', G[1])) === 'withdrawn', 4000);
-      const btn = card(page, G[1]).getByRole('button', { name: "I'm in" });
+      const btn = card(page, G[1]).getByRole('button', { name: "I’m in" });
       await btn.waitFor({ timeout: 8000 });
       await btn.click();
       await until(async () => (await statusOf('Lee', G[1])) === 'confirmed', 4000);
@@ -805,7 +805,7 @@ async function main() {
       await setHidden(page, false);
       await sleep(300);
       // While that check is still loading, I'm in on the same game.
-      const btn = card(page, G[7]).getByRole('button', { name: "I'm in" });
+      const btn = card(page, G[7]).getByRole('button', { name: "I’m in" });
       await btn.waitFor({ timeout: 5000 });
       await btn.click();
       await sleep(6000);
@@ -908,15 +908,15 @@ async function main() {
 
   // ==================================================================================== I'M IN
   if (want('join')) {
-    console.log("\nI'm in");
+    console.log("\nI’m in");
     await check("double tap I'm in: one request, one seat, one banner", async () => {
       const { ctx, page, seen } = await open('Olive');
-      const btn = card(page, G[4]).getByRole('button', { name: "I'm in" });
+      const btn = card(page, G[4]).getByRole('button', { name: "I’m in" });
       await btn.evaluate((b) => {
         b.click();
         b.click();
       });
-      await waitBanner(page, /You're in/);
+      await waitBanner(page, /You’re in/);
       await sleep(1500);
       assert(seen.join === 1, `joins ${seen.join}`);
       assert((await statusOf('Olive', G[4])) === 'confirmed', 'server');
@@ -929,10 +929,10 @@ async function main() {
         await sleep(2500);
         await route.continue();
       });
-      await card(page, G[5]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[5]).getByRole('button', { name: "I’m in" }).click();
       await page.waitForFunction((id) => document.getElementById(`row-${id}`).dataset.mine === 'in', G[5].id, { timeout: 600 });
       // "Game on!" instead when this tap made the 4th (it depends on what ran before in a full run).
-      await waitBanner(page, /You're in|Game on!/, 6000);
+      await waitBanner(page, /You’re in|Game on!/, 6000);
       await card(page, G[5]).getByText('$14 due').waitFor({ timeout: 3000 });
       await sleep(500);
       assert(!/Saving/.test(await page.locator('main').innerText()), 'Saving… still on screen');
@@ -941,11 +941,11 @@ async function main() {
     const errorJoin = async (name, s, fulfil, re) => {
       const { ctx, page } = await open(name);
       await page.route('**/api/sessions/*/join', fulfil);
-      await card(page, s).getByRole('button', { name: "I'm in" }).click();
+      await card(page, s).getByRole('button', { name: "I’m in" }).click();
       const b = await waitBanner(page, re, 5000);
       assert(await banner(page).evaluate((e) => e.classList.contains('pop-error')), `not an error banner: ${b}`);
       await page.waitForFunction((id) => document.getElementById(`row-${id}`).dataset.mine !== 'in', s.id, { timeout: 3000 });
-      const btn = card(page, s).getByRole('button', { name: "I'm in" });
+      const btn = card(page, s).getByRole('button', { name: "I’m in" });
       await btn.waitFor({ timeout: 3000 });
       assert(await btn.isEnabled(), 'button stuck disabled');
       assert(!/Saving/.test(await card(page, s).innerText()), 'stuck on Saving…');
@@ -965,7 +965,7 @@ async function main() {
     await check('offline phone (setOffline): I\'m in says "No signal, try again", the card rolls back, the 5-second checks stay silent', async () => {
       const { ctx, page } = await open('Olive');
       await ctx.setOffline(true);
-      await card(page, G[3]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[3]).getByRole('button', { name: "I’m in" }).click();
       await waitBanner(page, /No signal, try again/);
       await page.waitForFunction((id) => document.getElementById(`row-${id}`).dataset.mine !== 'in', G[3].id, { timeout: 3000 });
       await page.waitForFunction(() => document.querySelectorAll('.pop').length === 0, null, { timeout: 7000 });
@@ -977,7 +977,7 @@ async function main() {
     await check('FIXED (Nov 1): after a failed tap offline, the red "Something went wrong" card goes away once the signal is back (it should not sit over the schedule)', async () => {
       const { ctx, page } = await open('Olive');
       await ctx.setOffline(true);
-      await card(page, G[3]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[3]).getByRole('button', { name: "I’m in" }).click();
       await waitBanner(page, /No signal, try again/);
       await sleep(1500);
       const alertWhileOffline = await page.getByRole('alert').count();
@@ -986,8 +986,8 @@ async function main() {
       const still = await page.getByRole('alert').count();
       const text = still ? squash(await page.getByRole('alert').first().innerText()) : '';
       // Back online, I'm in works.
-      await card(page, G[3]).getByRole('button', { name: "I'm in" }).click();
-      await waitBanner(page, /You're in/);
+      await card(page, G[3]).getByRole('button', { name: "I’m in" }).click();
+      await waitBanner(page, /You’re in/);
       assert((await statusOf('Olive', G[3])) === 'confirmed', 'server');
       await ctx.close();
       assert(still === 0, `an error card ("${text}") still sits above the schedule 12 s after the signal came back (it appeared while offline: ${alertWhileOffline > 0})`);
@@ -1077,7 +1077,7 @@ async function main() {
     await check('stale I\'m in on a game canceled after the page loaded: "This game was canceled.", no seat, card shows the reason', async () => {
       const { ctx, page } = await stale('Rex');
       await post(areq, `/api/admin/sessions/${X.X1.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Court closed' });
-      await card(page, X.X1).getByRole('button', { name: "I'm in" }).click();
+      await card(page, X.X1).getByRole('button', { name: "I’m in" }).click();
       await waitBanner(page, /This game was canceled/);
       await card(page, X.X1).getByText('Canceled - Court closed').waitFor({ timeout: 4000 });
       assert((await statusOf('Rex', X.X1)) === null, 'seat on a canceled game');
@@ -1088,10 +1088,10 @@ async function main() {
       for (const n of ['Ryan', 'Julian', "O'Brien", 'José', '🏓 Sam']) await join(n, X.X7);
       const { ctx, page } = await stale('Rex');
       await join(LONG, X.X7);
-      await card(page, X.X7).getByRole('button', { name: "I'm in" }).click();
-      const b = await waitBanner(page, /waitlist|You're in/);
-      assert(/#1 on the waitlist/.test(b), b);
-      await card(page, X.X7).getByText(/Waitlist, 1st in line/).waitFor({ timeout: 4000 });
+      await card(page, X.X7).getByRole('button', { name: "I’m in" }).click();
+      const b = await waitBanner(page, /waitlist|You’re in/);
+      assert(/1st on the waitlist/.test(b), b);
+      await card(page, X.X7).getByText(/1st on the waitlist/).waitFor({ timeout: 4000 });
       assert(!(await isIn(page, X.X7)), 'card shows in');
       assert((await statusOf('Rex', X.X7)) === 'waitlisted' && (await potOf('Rex')) === 1400, 'server');
       await ctx.close();
@@ -1116,7 +1116,7 @@ async function main() {
     await check('stale "Didn\'t pay?" after the organizer confirmed the payment: a clear answer, still Paid', async () => {
       const { ctx, page } = await open('Olive');
       await page.route('**/api/group/version', (r) => r.abort('internetdisconnected'));
-      const btn = card(page, X.X6).getByRole('button', { name: "Didn't pay?" });
+      const btn = card(page, X.X6).getByRole('button', { name: "Didn’t pay?" });
       await btn.waitFor();
       await post(areq, `/api/admin/sessions/${X.X6.id}/payment`, { playerId: idOf('Olive'), paid: true });
       await btn.click();
@@ -1371,7 +1371,7 @@ async function main() {
       const ctx = await browser.newContext(phone(390, 'light'));
       const page = await ctx.newPage();
       await page.goto(`${BASE}/g/not-a-real-key-000000000000`);
-      await page.getByText("This group link isn't valid").waitFor();
+      await page.getByText("This group link isn’t valid").waitFor();
       assert(/Ask the organizer/.test(await page.locator('main').innerText()), 'no next step');
       await ctx.close();
     });
@@ -1391,7 +1391,7 @@ async function main() {
     await check('empty state: My games with no games says "You\'re not in any games yet" and See all games goes back', async () => {
       const { ctx, page } = await open('Pia');
       await page.locator('.filter-toggle').click();
-      await page.getByText("You're not in any games yet").waitFor();
+      await page.getByText("You’re not in any games yet").waitFor();
       await page.getByRole('button', { name: /See all games/ }).click();
       await page.waitForFunction(() => document.querySelectorAll('.schedule article').length > 3);
       await ctx.close();
@@ -1474,7 +1474,7 @@ async function main() {
     await post(who.Tess, '/api/me/refund-request', { cents: 1400 });
     await check('"Use the $14 you asked to cash out for this game?" after I\'m in: Use it -> Paid with credit, the request is gone', async () => {
       const { ctx, page } = await open('Tess');
-      await card(page, G[4]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[4]).getByRole('button', { name: "I’m in" }).click();
       const q = page.locator('[data-cashout-prompt]');
       await q.waitFor({ timeout: 5000 });
       assert(/Use the \$14 you asked to cash out for this game\?/.test(await q.innerText()), await q.innerText());
@@ -1488,7 +1488,7 @@ async function main() {
     await post(who.Sky, '/api/me/refund-request', { cents: 1400 });
     await check('the same question, "No, keep cash out": it closes, the card owes $14, the $14 request stays', async () => {
       const { ctx, page } = await open('Sky');
-      await card(page, G[4]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[4]).getByRole('button', { name: "I’m in" }).click();
       const q = page.locator('[data-cashout-prompt]');
       await q.waitFor({ timeout: 5000 });
       await q.getByRole('button', { name: 'No, keep cash out' }).click();
@@ -1605,7 +1605,7 @@ async function main() {
       const { ctx, page } = await open('Rex', { clockAt: startT - 30_000 });
       await page.route('**/api/group/version', (r) => r.abort('internetdisconnected'));
       await setClock(startT + 3000);
-      await card(page, G[1]).getByRole('button', { name: "I'm in" }).click();
+      await card(page, G[1]).getByRole('button', { name: "I’m in" }).click();
       const b = await waitBanner(page, /started|try again/i, 6000);
       assert(/This game already started\./.test(b), b);
       assert((await statusOf('Rex', G[1])) === null, 'seat after start');

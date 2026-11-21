@@ -130,7 +130,7 @@ async function main() {
     assert((await page.evaluate(() => document.documentElement.getAttribute('data-motion'))) === null, 'no data-motion');
     assert((await page.locator('.m-ptr, .m-roll, .m-cascade, .m-toast').count()) === 0, 'no motion parts');
     assert((await page.evaluate(() => (document.querySelector('[data-credit-chip]') ? 1 : 0))) === 0, 'no chip needed');
-    await rowOf(page, C).getByRole('button', { name: "I'm in" }).click();
+    await rowOf(page, C).getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop.toast').waitFor();
     assert((await page.locator('.pop.toast.m-toast').count()) === 0, 'plain toast');
     assert((await page.locator('.m-roll, .m-burst, .m-undo-ring').count()) === 0, 'nothing rolls');
@@ -225,7 +225,7 @@ async function main() {
     const row = rowOf(page, A);
     const before = squash(await row.locator('.in-count').innerText());
     assert(/3 of 4 in/.test(before), before);
-    await row.getByRole('button', { name: "I'm in" }).click();
+    await row.getByRole('button', { name: "I’m in" }).click();
     // Right after the tap: the card already shows it, and the animations are the ones the spec names.
     await page.waitForTimeout(60);
     if (process.env.E2E_DEBUG) console.log('balls', await row.locator('.dots .ball').evaluateAll((els) => els.map((e) => e.getAttribute('class'))), await page.evaluate(() => document.querySelector('html').getAttribute('data-motion')));
@@ -260,7 +260,7 @@ async function main() {
     for (const scheme of ['light', 'dark']) {
       const { ctx, page } = await open('Brandon', { scheme });
       await settle(page);
-      await rowOf(page, B).getByRole('button', { name: "I'm in" }).click();
+      await rowOf(page, B).getByRole('button', { name: "I’m in" }).click();
       const toast = page.locator('.pop.m-toast');
       await toast.waitFor();
       await page.waitForTimeout(350);
@@ -318,7 +318,7 @@ async function main() {
   await check('toast holds about 3 seconds', async () => {
     const { ctx, page } = await open('Brandon');
     await settle(page);
-    await rowOf(page, B).getByRole('button', { name: "I'm in" }).click();
+    await rowOf(page, B).getByRole('button', { name: "I’m in" }).click();
     const t0 = Date.now();
     await page.locator('.pop.m-toast').waitFor();
     await page.locator('.pop.m-toast').waitFor({ state: 'detached', timeout: 6000 });
@@ -347,7 +347,7 @@ async function main() {
       await page.waitForTimeout(40);
     }
     assert(seen.has('m-roll-in-down'), `count rolls down: ${[...seen]}`);
-    assert((await row.getByRole('button', { name: "I'm in" }).count()) === 1, "back to I'm in");
+    assert((await row.getByRole('button', { name: "I’m in" }).count()) === 1, "back to I'm in");
     await page.waitForTimeout(700);
     await toast.getByRole('button', { name: 'Undo' }).click();
     await page.waitForTimeout(500);
@@ -585,12 +585,12 @@ async function main() {
     const quiet = async () => (await names(page)).filter((n) => !/^banner-fade/.test(n));
     assert((await quiet()).length === 0, `no animation at load: ${await names(page)}`);
     const row = rowOf(page, B);
-    await row.getByRole('button', { name: "I'm in" }).click();
+    await row.getByRole('button', { name: "I’m in" }).click();
     await page.waitForTimeout(80);
     assert((await quiet()).length === 0, `no animation after a tap: ${await names(page)}`);
     assert((await page.locator('.m-roll').count()) === 0, 'no rolling parts');
     const t = squash(await page.locator('.pop.toast').innerText());
-    assert(/You're in/.test(t), `toast still reads: ${t}`);
+    assert(/You’re in/.test(t), `toast still reads: ${t}`);
     assert(await page.locator('.pop.toast').isVisible(), 'visible');
     await post(phones.Mitchel, `/api/sessions/${B.id}/withdraw`, {});
     await ctx.close();

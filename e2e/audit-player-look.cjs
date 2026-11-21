@@ -768,7 +768,7 @@ async function main() {
           }
           if (s.mine?.status === 'confirmed' && !hasBtn(c, /^Drop out$/)) bad.push(`${where}: in, but no Drop out`);
           if (s.mine?.status === 'waitlisted' && !hasBtn(c, /^Leave waitlist$/)) bad.push(`${where}: waiting, no Leave waitlist`);
-          if (!s.mine || !['confirmed', 'waitlisted'].includes(s.mine.status)) if (!hasBtn(c, /^(I'm in|Join waitlist)$/)) bad.push(`${where}: not in, no I'm in`);
+          if (!s.mine || !['confirmed', 'waitlisted'].includes(s.mine.status)) if (!hasBtn(c, /^(I’m in|Join waitlist)$/)) bad.push(`${where}: not in, no I’m in`);
           if (s.mine?.status === 'confirmed' && s.mine.paymentStatus !== 'paid' && s.mine.useCreditCents > 0 && !hasBtn(c, /Use .*credit/) && !onTop) bad.push(`${where}: has credit to use but no Use credit`);
         }
       }
@@ -847,7 +847,7 @@ async function main() {
   await check('My games with no games: "You\'re not in any games yet", See all games (44 px), the switch keeps its own line', async () => {
     const { ctx, page } = await open('Quinn', 320, 'light', {}, { filter: 'mine' });
     const f = await page.evaluate(collectFacts);
-    assert(/You're not in any games yet/.test(f.empty) && /See all games/.test(f.empty), f.empty);
+    assert(/You’re not in any games yet/.test(f.empty) && /See all games/.test(f.empty), f.empty);
     assert(f.tiers.length === 1 && f.tiers[0].filterOnly && f.tiers[0].toggle, JSON.stringify(f.tiers));
     const taps = await page.evaluate(measureTaps, 'main');
     const see = taps.find((t) => t.name === 'See all games');
@@ -878,9 +878,9 @@ async function main() {
   });
   await check('started 5 minutes ago: card stays, "You\'re in · Court booked", no Drop out, no I\'m in for others, time 9:30 AM to 11 AM', async () => {
     const c = fact('Ryan', E.started);
-    assert(/You're in/.test(c.status) && !hasBtn(c, /Drop out/), c.text);
+    assert(/You’re in/.test(c.status) && !hasBtn(c, /Drop out/), c.text);
     const o = fact('Wren', E.started);
-    assert(!hasBtn(o, /I'm in|Join/), `others can still join: ${o.text}`);
+    assert(!hasBtn(o, /I’m in|Join/), `others can still join: ${o.text}`);
     assert(c.time.map((t) => t.t).join('') === '9:30 AM–11 AM', JSON.stringify(c.time));
   });
   await check('finished and finalized: no card; the top Pay card lists it at the final price ($5, "final price")', async () => {
@@ -890,7 +890,7 @@ async function main() {
   });
   await check('canceled with a reason: "Canceled - Thanksgiving", "If you paid, it\'s now your credit.", no controls', async () => {
     const c = fact('Ryan', S[8]);
-    assert(c.off && c.status === 'Canceled - Thanksgiving' && /If you paid, it's now your credit\./.test(c.text) && btns(c).length === 0, c.text);
+    assert(c.off && c.status === 'Canceled - Thanksgiving' && /If you paid, it’s now your credit\./.test(c.text) && btns(c).length === 0, c.text);
   });
   await check('canceled with a 40-character reason: whole reason shows, inside the card, at 320 px light and dark', async () => {
     for (const tag of ['320px light', '320px dark']) {
@@ -907,11 +907,11 @@ async function main() {
   });
   await check('not in, 4 already in, room left: I\'m in + "If 5 play, you get $3 back as credit."', async () => {
     const c = fact('Ryan', E.note);
-    assert(hasBtn(c, /^I'm in$/) && /If 5 play, you get \$3 back as credit\./.test(c.text), c.text);
+    assert(hasBtn(c, /^I’m in$/) && /If 5 play, you get \$3 back as credit\./.test(c.text), c.text);
   });
   await check('booked court reads "Court booked"; joined: "You\'re in · Court booked" with the check badge', async () => {
     const c = fact('Ryan', S[2]);
-    assert(/^You're in\s*·\s*Court booked$/.test(c.status) && c.mine && !c.badgeCovered, c.status);
+    assert(/^You’re in\s*·\s*Court booked$/.test(c.status) && c.mine && !c.badgeCovered, c.status);
   });
   await check('10 players in: "10 in, full", ten balls, every long name and emoji on the names line', async () => {
     const { ctx, page } = await open(ZOE, 320, 'light');
@@ -971,11 +971,11 @@ async function main() {
   });
   await check('Paid $14 + "Didn\'t pay?" after my own I paid (Ryan, Nov 10)', async () => {
     const c = fact('Ryan', S[3]);
-    assert(/Paid \$14/.test(c.text) && hasBtn(c, /^Didn't pay\?$/) && hasBtn(c, /^Drop out$/), c.text);
+    assert(/Paid \$14/.test(c.text) && hasBtn(c, /^Didn’t pay\?$/) && hasBtn(c, /^Drop out$/), c.text);
   });
   await check('Paid $14 marked by the organizer: no "Didn\'t pay?" (Ryan, Sat 10:30 AM)', async () => {
     const c = fact('Ryan', E.sat);
-    assert(/Paid \$14/.test(c.text) && !hasBtn(c, /Didn't pay/), c.text);
+    assert(/Paid \$14/.test(c.text) && !hasBtn(c, /Didn’t pay/), c.text);
     assert(c.time.map((t) => t.t).join('') === '10:30 AM', JSON.stringify(c.time));
   });
   await check('Paid with credit + Undo (Sam, Nov 10)', async () => {
@@ -994,9 +994,9 @@ async function main() {
     const c = fact('Wren', S[4]);
     assert(hasBtn(c, /^Use \$9 credit$/) && !/due/.test(c.text), c.text);
   });
-  await check('waitlist: "Waitlist, 2nd in line", "You\'re in if someone drops.", Leave waitlist (Ryan, Dec 1)', async () => {
+  await check('waitlist: "2nd on the waitlist", "You\'re in if someone drops.", Leave waitlist (Ryan, Dec 1)', async () => {
     const c = fact('Ryan', S[9]);
-    assert(c.status === 'Waitlist, 2nd in line' && /You're in if someone drops\./.test(c.text) && hasBtn(c, /^Leave waitlist$/), c.text);
+    assert(c.status === '2nd on the waitlist' && /You’re in if someone drops\./.test(c.text) && hasBtn(c, /^Leave waitlist$/), c.text);
   });
   await check('full booked game, not in: Join waitlist (Wren, Dec 1)', async () => {
     assert(hasBtn(fact('Wren', S[9]), /^Join waitlist$/), fact('Wren', S[9]).text);
@@ -1301,7 +1301,7 @@ async function main() {
       );
     assert((await running()).length === 0, `on load: ${await running()}`);
     const card = page.locator(`#row-${S[11]}`);
-    await card.getByRole('button', { name: "I'm in" }).click();
+    await card.getByRole('button', { name: "I’m in" }).click();
     await page.locator('.pop').waitFor();
     const r = await running();
     assert(r.length === 0, `after I'm in: ${r}`);

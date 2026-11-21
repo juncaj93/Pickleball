@@ -173,10 +173,10 @@ async function main() {
       assert(!c.wrappedBtn, `${label}: a button on "${c.title}" wraps its words`);
       for (const b of c.balls) assert(Math.abs(b.w - b.h) < 0.5 && b.w === 16, `${label}: a ball on "${c.title}" is ${b.w} x ${b.h} (not a 16 px circle)`);
       // Zip 53: every player gets the needs-people card now, so a longer day word can show ("Wednesday" in the fake world's extra Wednesday game, or "Next Tuesday"); the card shrinks its text and wraps on two lines there. Not a look bug in the card.
-      if (c.title && width >= 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, |^(Wednesday|Next [A-Z][a-z]+day) (needs \d more|has \d+ in)|^[A-Z][a-z]+ \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines === 1, `${label}: "${c.title}" wraps at ${width} (${c.titleLines} lines, ${c.titleSize} px)`);
+      if (c.title && width >= 360 && !/asked to cash out|tapped I paid|haven’t paid|hasn’t paid|going, |^(Wednesday|Next [A-Z][a-z]+day) (needs \d more|has \d+ in)|^[A-Z][a-z]+ \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines === 1, `${label}: "${c.title}" wraps at ${width} (${c.titleLines} lines, ${c.titleSize} px)`);
       // Zip 76: the Want in title names the game's time ("Wed 7:30 PM needs 1 more"): two lines at most at any width.
       if (c.title && /^[A-Z][a-z]+ \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(c.title)) assert(c.titleLines <= 2, `${label}: "${c.title}" takes ${c.titleLines} lines at ${width}`);
-      if (c.title && width < 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, /.test(c.title)) assert(c.titleLines <= 2, `${label}: "${c.title}" takes ${c.titleLines} lines at ${width}`);
+      if (c.title && width < 360 && !/asked to cash out|tapped I paid|haven’t paid|hasn’t paid|going, /.test(c.title)) assert(c.titleLines <= 2, `${label}: "${c.title}" takes ${c.titleLines} lines at ${width}`);
       assert(c.borderW !== '0px', `${label}: card "${c.title}" has no border`);
       assert(contrast(c.titleColor, c.bg) >= 4.5, `${label}: title of "${c.title}" is ${contrast(c.titleColor, c.bg).toFixed(2)}:1`);
       if (c.subColor) assert(contrast(c.subColor, c.bg) >= 4.5, `${label}: sub line of "${c.title}" is ${contrast(c.subColor, c.bg).toFixed(2)}:1`);
@@ -237,7 +237,7 @@ async function main() {
     const all = texts.join('\n');
     assert(/Credit adjusted: \+\$5/.test(all) && /Thanks for bringing balls/.test(all), `no Credit adjusted card:\n${all}`);
     assert(/You no longer owe \$14/.test(all) && /Someone took your .* spot/.test(all), `no cleared debt card:\n${all}`);
-    assert(/moved to 7:30 PM|moved to 7:30 PM/.test(all) && /Still in/.test(all) && /Can't make it/.test(all), `no moved game card:\n${all}`);
+    assert(/moved to 7:30 PM|moved to 7:30 PM/.test(all) && /Still in/.test(all) && /Can’t make it/.test(all), `no moved game card:\n${all}`);
     assert(/You owe \$\d+/.test(all) && /\bPay\b/.test(all), `no Pay card:\n${all}`);
     assert(!/Want in/.test(all), `the old Want in words are still on a card:\n${all}`);
     console.log(`      cards seen:\n        ${texts.join('\n        ')}`);
@@ -260,7 +260,7 @@ async function main() {
     // Zip 76: the title names the game's time ("Tonight 9:30 PM needs 1 more", "Sun 6 PM needs 3 more").
     assert(/^(Tonight|Tomorrow|[A-Z][a-z]{2}|Next [A-Z][a-z]+day|[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+) \d+(:\d\d)? [AP]M (needs \d more|has \d+ in)/.test(t), `the title reads "${t}"`);
     if (/needs/.test(t)) assert((await found.c.locator('.ac-seats .dots > *').count()) >= 4, 'needs N more without the circles');
-    else assert(/You'd make it \d+/.test(t), `no "You'd make it": ${t}`);
+    else assert(/You’d make it \d+/.test(t), `no "You'd make it": ${t}`);
     assert(!/waitlist|full|max|spots? left/i.test(t), `the card implies a cap: ${t}`);
     // Zip 76: the X only hides the card on this phone: no decline call.
     let declined = false;
@@ -293,7 +293,7 @@ async function main() {
     assert(await bar.count(), 'Indy has no moved game card');
     await bar.locator('.ts-no').click();
     await p.page.locator('dialog[open]').waitFor({ timeout: 3000 });
-    assert(/Can't make it/.test(await p.page.locator('dialog[open]').innerText()), 'the drop question does not say Can\'t make it');
+    assert(/Can’t make it/.test(await p.page.locator('dialog[open]').innerText()), 'the drop question does not say Can\'t make it');
     await p.page.keyboard.press('Escape');
     const saved = p.page.waitForResponse((r) => /\/still-in$/.test(r.url()));
     await bar.locator('.ts-yes').click();
@@ -324,7 +324,7 @@ async function main() {
     const tones = list.map((c) => `${c.tone}: ${c.title}`);
     console.log(`      organizer cards:\n        ${tones.join('\n        ')}`);
     const has = (re, tone) => list.some((c) => re.test(c.title) && (!tone || c.tone === tone));
-    assert(has(/requested a refund/, 'blue'), `no blue cash-out request: ${tones.join(' | ')}`);
+    assert(has(/asked to cash out/, 'blue'), `no blue cash-out request: ${tones.join(' | ')}`);
     assert(has(/tapped I paid/, 'amber'), `no amber unconfirmed I paid: ${tones.join(' | ')}`);
     assert(list.some((c) => c.tone === 'purple'), `no purple text card: ${tones.join(' | ')}`);
     assert(list.some((c) => c.tone === 'green'), `no green after-the-game card: ${tones.join(' | ')}`);

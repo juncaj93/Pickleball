@@ -18,27 +18,27 @@ const mon6pm = Date.parse('2026-11-02T23:00:00Z'); // the night before, 6:00 PM 
 describe('the words', () => {
   it('4 or more in: is everyone still in, anyone else in (old words kept for comparison)', () => {
     expect(checkInTextR2(tue7, TZ, mon6pm, 5, LINK)).toBe(
-      'Pickleball tomorrow @ 7pm!\n5 in so far. Want in? Join now.\nNeed to back out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net',
+      'Pickleball tomorrow @ 7pm!\n5 in so far. Want in? Join now.\nNeed to drop out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net',
     );
     expect(checkInTextLastCall(tue7, TZ, mon6pm, 5, LINK)).toBe(
-      'Pickleball tomorrow @ 7pm!\n5 in so far. Is everyone still in? Anyone else in?\nNeed to back out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net',
+      'Pickleball tomorrow @ 7pm!\n5 in so far. Is everyone still in? Anyone else in?\nNeed to drop out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net',
     );
   });
 
   it('3 or fewer in: we need X more or tomorrow\'s game is canceled to avoid fees', () => {
     expect(needPlayersTextR2(tue7, TZ, mon6pm, 3, 1, LINK)).toBe(
-      "Pickleball tomorrow @ 7pm!\n3 in, need 1 more.\nWant in? Join tonight, otherwise we'll have to cancel.\n\npickleball.juncaj.net",
+      "Pickleball tomorrow @ 7pm!\n3 in, need 1 more.\nWant in? Join tonight, otherwise we’ll have to cancel.\n\npickleball.juncaj.net",
     );
     expect(needPlayersTextLastCall(tue7, TZ, mon6pm, 3, 1, LINK)).toBe(
-      "Pickleball tomorrow @ 7pm!\n3 in. We need 1 more or tomorrow's game is canceled to avoid fees.\nWant in? Join tonight.\n\npickleball.juncaj.net",
+      "Pickleball tomorrow @ 7pm!\n3 in. We need 1 more or tomorrow’s game is canceled to avoid fees.\nWant in? Join tonight.\n\npickleball.juncaj.net",
     );
-    expect(needPlayersTextLastCall(tue7, TZ, mon6pm, 1, 3, LINK)).toContain('1 in. We need 3 more or tomorrow\'s game is canceled to avoid fees.');
+    expect(needPlayersTextLastCall(tue7, TZ, mon6pm, 1, 3, LINK)).toContain('1 in. We need 3 more or tomorrow’s game is canceled to avoid fees.');
     expect(needPlayersTextLastCall(tue7, TZ, mon6pm, 0, 4, LINK)).toContain('0 in. We need 4 more');
   });
 
   it('names the right game on other days', () => {
-    expect(whichGame(tue7.startsAt, TZ, Date.parse('2026-11-03T15:00:00Z'))).toBe("tonight's game");
-    expect(whichGame('2026-11-03T15:00:00.000Z', TZ, Date.parse('2026-11-03T12:00:00Z'))).toBe("today's game"); // 10:00 AM game
+    expect(whichGame(tue7.startsAt, TZ, Date.parse('2026-11-03T15:00:00Z'))).toBe("tonight’s game");
+    expect(whichGame('2026-11-03T15:00:00.000Z', TZ, Date.parse('2026-11-03T12:00:00Z'))).toBe("today’s game"); // 10:00 AM game
     expect(whichGame(tue7.startsAt, TZ, Date.parse('2026-10-30T15:00:00Z'))).toBe('the Tue Nov 3 game');
     expect(needPlayersTextLastCall(tue7, TZ, Date.parse('2026-10-30T15:00:00Z'), 2, 2, LINK)).toContain('Want in? Join early.');
   });
@@ -81,7 +81,7 @@ describe('the switch', () => {
     expect(d.lastCallTextsForAll).toBe(false);
     expect(await goBody(w)).toContain('3 in, need 1 more.');
     const s = d.sessions.find((x: any) => x.id === w.tue.id);
-    expect(sessionTexts(d, s, w.app.now).find((i) => i.id === 'need')!.body).toContain("otherwise we'll have to cancel");
+    expect(sessionTexts(d, s, w.app.now).find((i) => i.id === 'need')!.body).toContain("otherwise we’ll have to cancel");
   });
 
   it('this phone only (/admin?lastcall=on header): the new words on the alert link and in the Text menu, no recipients', async () => {
@@ -89,7 +89,7 @@ describe('the switch', () => {
     const H = { 'X-Last-Call': 'on' };
     for (const n of ['Blair', 'Casey', 'Devon']) await (await playerPhone(w, n)).call('POST', `/api/sessions/${w.tue.id}/join`, {});
     w.app.now = Date.parse('2026-11-02T23:05:00Z');
-    expect(await goBody(w, H)).toContain("3 in. We need 1 more or tomorrow's game is canceled to avoid fees.");
+    expect(await goBody(w, H)).toContain("3 in. We need 1 more or tomorrow’s game is canceled to avoid fees.");
     let d = await w.dash(H);
     expect(d.lastCallTexts).toBe(true);
     let need = sessionTexts(d, d.sessions.find((x: any) => x.id === w.tue.id), w.app.now).find((i) => i.id === 'need')!;
@@ -113,7 +113,7 @@ describe('the switch', () => {
     expect((await w.organizer.call('PUT', '/api/admin/last-call-switch', { on: true })).status).toBe(200);
     w.app.now = Date.parse('2026-11-02T23:05:00Z');
     expect((await w.dash()).lastCallTextsForAll).toBe(true);
-    expect(await goBody(w)).toContain("We need 4 more or tomorrow's game is canceled to avoid fees.");
+    expect(await goBody(w)).toContain("We need 4 more or tomorrow’s game is canceled to avoid fees.");
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.map((e: any) => e.action);
     expect(act).toContain('last_call_texts_on');
     expect((await w.organizer.call('PUT', '/api/admin/last-call-switch', { on: false })).status).toBe(200);

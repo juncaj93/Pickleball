@@ -177,12 +177,12 @@ async function main() {
   await same('player Pay card, I paid (Jordan), after the tap: identical', { who: 'Jordan', url: '/', scheme: 'light', before: tap('.pay-card .btn.secondary') });
   await same('player Pay card, Pay opens the Pay sheet (Jordan): identical', { who: 'Jordan', url: '/', scheme: 'light', before: tap('.pay-card a.btn') });
   await same('player moved game, Still in (Indy), after the tap: identical', { who: 'Indy', url: '/', scheme: 'light', before: tap('.ts-yes') });
-  await same("player moved game, Can't make it (Indy), the drop question: identical", { who: 'Indy', url: '/', scheme: 'light', before: tap('.ts-no') });
+  await same("player moved game, Can’t make it (Indy), the drop question: identical", { who: 'Indy', url: '/', scheme: 'light', before: tap('.ts-no') });
   await same('player cleared debt, Dismiss (Blake), after the tap: identical', { who: 'Blake', url: '/', scheme: 'light', before: tap('.fee-notice button') });
-  await same("player cash-out question (Gray taps I'm in), identical", { who: 'Gray', url: '/', scheme: 'light', before: tap('.schedule article [data-join]') });
+  await same("player cash-out question (Gray taps I’m in), identical", { who: 'Gray', url: '/', scheme: 'light', before: tap('.schedule article [data-join]') });
   await same('organizer Did you guys play?, Yes (after the tap): identical', { who: 'admin', url: '/admin', scheme: 'light', tabName: 'Home', before: tap('[data-action="played"]') });
   await same('organizer cash-out request, Not now (after the tap): identical', { who: 'admin', url: '/admin', scheme: 'light', tabName: 'Home', before: tap('[data-not-now]') });
-  await same("organizer unconfirmed I paid, Didn't pay (after the tap): identical", { who: 'admin', url: '/admin', scheme: 'light', tabName: 'Home', before: tap('[data-claim-not-paid]') });
+  await same("organizer unconfirmed I paid, Didn’t pay (after the tap): identical", { who: 'admin', url: '/admin', scheme: 'light', tabName: 'Home', before: tap('[data-claim-not-paid]') });
   await same('organizer +N more opened: identical', { who: 'admin', url: '/admin', scheme: 'light', tabName: 'Home', before: tap('.dn-more') });
   await browser.close();
   console.log(`\nzip11-off: ${passed} passed, ${failed} failed`);

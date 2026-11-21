@@ -792,7 +792,7 @@ function checkDb(w: World, out: Violation[]): Snapshot {
   for (const r of live) pots.set(r.player_id, (pots.get(r.player_id) ?? 0) + effect(r));
 
   // 1. No pot below $0.
-  for (const [pid, n] of pots) if (n < 0) add('I1.pot-negative', `${w.nameOf(pid)}'s pot is ${n}`);
+  for (const [pid, n] of pots) if (n < 0) add('I1.pot-negative', `${w.nameOf(pid)}’s pot is ${n}`);
 
   // 4. The organizer never has credit: no ledger row of any kind, no refund request.
   for (const r of ledger) if (r.player_id === orgId) add('I4.organizer-ledger', `organizer has a ${r.kind}/${r.reason} row of ${r.amount_cents} on ${r.session_id ? w.gameOf(r.session_id) : '-'}${r.ended_at ? ' (ended)' : ''}`);

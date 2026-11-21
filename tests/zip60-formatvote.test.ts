@@ -58,7 +58,7 @@ describe('the rule (a pure function)', () => {
   });
   it('counts: no vote and odd values are Either; the words', () => {
     expect(tallyVotes(['locked', 'americano', 'americano', null, undefined, 'either', 'nonsense'])).toEqual({ locked: 1, americano: 2, either: 4 });
-    expect(voteCountsLine({ locked: 3, americano: 6, either: 2 })).toBe('Locked 3, Americano 6, Either 2');
+    expect(voteCountsLine({ locked: 3, americano: 6, either: 2 })).toBe('Locked doubles 3, Americano 6, Either 2');
     expect(VOTE_ROWS.map((r) => [r.name, r.line])).toEqual([
       ['Locked doubles', 'teams balanced by skill, same partner all night'],
       ['Americano', 'new partner every round'],
@@ -323,7 +323,7 @@ describe('History and the words', () => {
     expect(d).toMatchObject({ format: 'doubles', how: 'tie', locked: 1, americano: 1, either: 1 });
     const text = activityText({ id: 'x', actorLabel: 'organizer', action: 'tournament_format', details: d, createdAt: '2026-10-26T16:00:00.000Z', sessionStartsAt: null }, 'America/Detroit', 'Alex');
     expect(text).toContain('tie rule');
-    expect(text).toContain('Locked 1, Americano 1, Either 1');
+    expect(text).toContain('Locked doubles 1, Americano 1, Either 1');
     expect(text).not.toContain('\u2014');
   });
 });

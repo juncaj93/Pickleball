@@ -238,7 +238,7 @@ async function runSequence(seed: number) {
   // left unused beside a seat that owes (court booked or not booked; a venue-waitlist court is standby, owing nothing).
   const s2 = seatOf2();
   if (joinedAfterDrop && out && court2 !== 'waitlist' && s2?.status === 'confirmed' && s2.payment_status === 'unpaid' && !log.slice(log.lastIndexOf('in2') + 1).includes('book'))
-    expect(potOf(ctx), `seed ${seed} [${log.join(' ')}]: game 2 owes while the drop's credit sits unused`).toBe(0);
+    expect(potOf(ctx), `seed ${seed} [${log.join(' ')}]: game 2 owes while the drop’s credit sits unused`).toBe(0);
   flushHold(false);
 }
 

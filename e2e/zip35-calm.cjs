@@ -123,7 +123,7 @@ async function main() {
       const fit = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, w: window.innerHeight }));
       assert(fit.h <= fit.w * 2 + 2, `Home needs more than two screens: page ${fit.h}px, screen ${fit.w}px`);
       const text = await page.locator('body').innerText();
-      for (const bad of ['Remind', 'Finalize', "haven't paid", 'Who owes']) assert(!text.includes(bad), `unrelated money text on Home: "${bad}"`);
+      for (const bad of ['Remind', 'Finalize', "haven’t paid", 'Who owes']) assert(!text.includes(bad), `unrelated money text on Home: "${bad}"`);
       assert((await page.locator('article').count()) <= 7, `${await page.locator('article').count()} games on Home`);
       await ctx.close();
     });

@@ -170,7 +170,7 @@ async function main() {
     for (const width of [390, 360, 320]) await same(`player home, Indy (in tonight), ${width} px, ${scheme}: identical`, { who: 'Indy', url: '/', scheme, width });
     for (const who of ['Jordan', 'Avery', 'Gray', 'Harper']) await same(`player home, ${who}, ${scheme}: identical`, { who, url: '/', scheme });
     for (const t of ['Home', 'Players', 'Money', 'History']) await same(`organizer ${t}, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: t });
-    await same(`organizer Edit game on tonight's game, ${scheme}: identical, no Court row`, { who: 'admin', url: '/admin', scheme, act: editTonight });
+    await same(`organizer Edit game on tonight’s game, ${scheme}: identical, no Court row`, { who: 'admin', url: '/admin', scheme, act: editTonight });
     await same(`organizer Add game, ${scheme}: identical, no Court row`, { who: 'admin', url: '/admin', scheme, act: addGame });
     await same(
       `organizer Settings, ${scheme}: identical apart from the one new switch row`,

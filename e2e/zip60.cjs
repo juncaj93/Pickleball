@@ -319,14 +319,14 @@ async function main() {
     const a = await adminPage();
     await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
     // Zip 66: the Votes row says Doubles, not Locked; the Style row says Players vote (mock 02).
-    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Doubles 2 · Americano 1 · Either 1', await a.page.locator('[data-tm-vote-counts]').innerText());
+    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 2 · Americano 1 · Either 1', await a.page.locator('[data-tm-vote-counts]').innerText());
     assert(flat(await a.page.locator('[data-tm-home-format]').first().innerText()) === 'Players vote', 'Style row');
     await shot(a.page, 'C-admin-card');
     await noDash(a.page, 'organizer Home');
     await a.ctx.close();
     for (const who of ['Vic', 'Parker', 'Rowan']) {
       const { text } = await answerOf(who);
-      assert(!/format_vote|"votes"|Locked 2/.test(text), `${who} got a count`);
+      assert(!/format_vote|"votes"|Locked doubles 2/.test(text), `${who} got a count`);
     }
   });
 
@@ -350,7 +350,7 @@ async function main() {
         // Zip 64: the style stays "TBD" on the card until tickets close (Pay by); the stub has the date and the real start (no "~").
         assert(card.includes('Tournament style TBD'), card);
         assert(card.includes('THU 17 DEC 7:30 PM'), `the stub: ${card}`);
-        assert(!/Locked 1|Americano 2|votes/i.test(await v.page.evaluate(() => document.body.innerText)), 'no vote counts on a player screen');
+        assert(!/Locked doubles 1|Americano 2|votes/i.test(await v.page.evaluate(() => document.body.innerText)), 'no vote counts on a player screen');
         await fits(v.page, '[data-format-alert], .tc');
         await shot(v.page, `D-alert-${width}-${scheme}`);
         await noDash(v.page, 'Home');
@@ -358,7 +358,7 @@ async function main() {
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
         // Zip 66 (mock 02): the Votes row (Doubles, not Locked) and the Style row; the "Decided by" line is gone from the card.
-        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Doubles 1 · Americano 2 · Either 2', 'counts');
+        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 1 · Americano 2 · Either 2', 'counts');
         assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Americano', 'style');
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `D-admin-${width}-${scheme}`);
@@ -398,7 +398,7 @@ async function main() {
     const a = await adminPage();
     await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
     // Zip 66: the Votes row; the tie rule's pick on the Style row (the first tournament: Locked doubles).
-    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Doubles 1 · Americano 1 · Either 2', 'counts');
+    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 1 · Americano 1 · Either 2', 'counts');
     assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Locked doubles', 'style');
     await shot(a.page, 'E-tie-admin');
     await a.ctx.close();
@@ -461,7 +461,7 @@ async function main() {
         // Zip 57: the plan line became the Fits / Too tight line under the rows (mocks 60 and 61).
         assert(/^(Locked doubles|Americano) for 10: /.test(flat(await a.page.locator('[data-tm-fin-fit]').innerText())), await a.page.locator('[data-tm-fin-fit]').innerText());
         assert((await a.page.locator('[data-tm-fin-over]').count()) === 0, 'no over line with 10 players');
-        assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Doubles 4 · Americano 6 · Either 0', await a.page.locator('[data-tm-fin-counts]').innerText());
+        assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Locked doubles 4 · Americano 6 · Either 0', await a.page.locator('[data-tm-fin-counts]').innerText());
         assert((await a.page.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true', 'the chooser starts on Auto');
         assert(flat(await a.page.locator('[data-format="vote"]').innerText()) === 'Auto Americano', 'Auto names the winner');
         await oneLine(a.page, '[data-tm-fin-format] button');
@@ -548,7 +548,7 @@ async function main() {
     const notice = flat(await a.page.locator('[data-tm-fin-notice]').innerText());
     assert(/votes changed/i.test(notice) && /Locked doubles wins now/.test(notice), notice);
     assert((await dash()).tournament.status === 'signup', 'nothing was locked');
-    assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Doubles 7 · Americano 3 · Either 0', 'new counts shown');
+    assert(flat(await a.page.locator('[data-tm-fin-counts]').innerText()) === 'Votes: Locked doubles 7 · Americano 3 · Either 0', 'new counts shown');
     assert(flat(await a.page.locator('[data-format="vote"]').innerText()) === 'Auto Doubles', 'the new winner under Auto');
     await shot(a.page, 'H-votes-changed');
     // The site's double-tap guard drops a second tap on the same button that comes straight after the first (it is not a bug here): a person reads the note first.

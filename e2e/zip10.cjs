@@ -175,7 +175,7 @@ async function main() {
         assert(cards.length > 10, `cards: ${cards.length}`);
         for (const c of cards) {
           assert(!c.inCount, `${c.id}: .in-count`);
-          assert(!/\b\d+ of 4 in\b|\b\d+ in\b(?!\s*·)|\bfull\b/i.test(c.text.replace(/You're in|I'm in/g, '')), `${c.id}: count text in «${c.text}»`);
+          assert(!/\b\d+ of 4 in\b|\b\d+ in\b(?!\s*·)|\bfull\b/i.test(c.text.replace(/You’re in|I’m in/g, '')), `${c.id}: count text in «${c.text}»`);
           if (!c.balls.length) continue;
           const tops = new Set(c.balls.map((b) => Math.round(b.top)));
           assert(tops.size === 1, `${c.id}: balls on ${tops.size} rows`);
@@ -236,7 +236,7 @@ async function main() {
       const { ctx, page, errors } = await openPlayer('Jordan', { scheme });
       const owing = page.locator('.schedule > article.sched[data-mine="in"]', { has: page.locator('[data-owe]') }).first();
       const t = await owing.innerText();
-      assert(/^You're in/m.test(t), t);
+      assert(/^You’re in/m.test(t), t);
       const head = await owing.locator('.sched-head').boundingBox();
       const btn = await owing.locator('[data-card-buttons]').boundingBox();
       const body = await owing.locator('.sched-body').boundingBox();
@@ -309,7 +309,7 @@ async function main() {
       const first = cards.first();
       for (const sel of ['.court-switch, .court-line', '.r2-inout', '.r2-paidcell', '.r2-gear']) assert((await first.locator(sel).count()) > 0, `${sel} on the card`);
       const cardText = await cards.evaluateAll((els) => els.map((e) => e.innerText).join('\n'));
-      assert(!/\b\d+ of 4 in\b|\b\d+ in\b(?!\s*·)|\b\d+ in, full\b/.test(cardText.replace(/You're in|I'm in/g, '')), 'no count text on the organizer cards');
+      assert(!/\b\d+ of 4 in\b|\b\d+ in\b(?!\s*·)|\b\d+ in, full\b/.test(cardText.replace(/You’re in|I’m in/g, '')), 'no count text on the organizer cards');
       // Tighter Home cards (Alex, after the preview): about 10 px from the note line to the circles, about 6 px from the circles to the names.
       const gaps = await page.evaluate(() =>
         [...document.querySelectorAll('[data-r2-card]')]

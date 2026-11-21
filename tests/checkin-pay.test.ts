@@ -135,8 +135,8 @@ async function go(w: W, id: string, startsAt: string, h: Record<string, string> 
   return res.data as { body: string; kind: string };
 }
 const PAY_LINE = 'Pickleball tomorrow @ 8pm!\n5 in. Still in? Pay $14 to confirm.\nNeed out? Tell me tonight.\n\npickleball.juncaj.net';
-const PLAIN = 'Pickleball tomorrow @ 8pm!\n5 in so far. Want in? Join now.\nNeed to back out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net';
-const LAST = 'Pickleball tomorrow @ 8pm!\n5 in so far. Is everyone still in? Anyone else in?\nNeed to back out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net';
+const PLAIN = 'Pickleball tomorrow @ 8pm!\n5 in so far. Want in? Join now.\nNeed to drop out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net';
+const LAST = 'Pickleball tomorrow @ 8pm!\n5 in so far. Is everyone still in? Anyone else in?\nNeed to drop out? Do it tonight to avoid cancel fees.\n\npickleball.juncaj.net';
 
 describe('the switch', () => {
   it('ships off: no flag on the dashboard, and an unpaid game gives the old words in the gear menu, the Home card and the Telegram link', async () => {
@@ -312,8 +312,8 @@ describe('the switch', () => {
     await w.organizer.call('PUT', '/api/admin/checkin-pay-switch', { on: true });
     await w.organizer.call('PUT', '/api/admin/texts-r2', { on: false });
     await join(w, w.tue.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']);
-    expect((await go(w, w.tue.id, w.tue.startsAt)).body).toMatch(/^Pickleball tomorrow, 8:00 PM\. Can't make it\?/);
-    expect((await gear(w, w.tue.id)).body).toMatch(/^Pickleball tomorrow, 8:00 PM\. Can't make it\?/);
+    expect((await go(w, w.tue.id, w.tue.startsAt)).body).toMatch(/^Pickleball tomorrow, 8:00 PM\. Can’t make it\?/);
+    expect((await gear(w, w.tue.id)).body).toMatch(/^Pickleball tomorrow, 8:00 PM\. Can’t make it\?/);
   });
 
   it('Last call texts on: unpaid -> the pay line; everyone paid -> the last call words as before', async () => {

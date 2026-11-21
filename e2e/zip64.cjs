@@ -418,7 +418,7 @@ async function main() {
         // Zip 57: the plan line became the Fits / Too tight line under the rows (mocks 60 and 61).
         assert(/^(Locked doubles|Americano) for 8: /.test(flat(await sheet.locator('[data-tm-fin-fit]').innerText())), await sheet.locator('[data-tm-fin-fit]').innerText());
         assert(/STYLE|Style/.test(text) && /Auto/.test(text) && /Doubles/.test(text) && /Americano/.test(text), 'the three styles');
-        assert(/Votes: Doubles 3 · Americano 2 · Either 3/.test(text), `votes: ${text}`);
+        assert(/Votes: Locked doubles 3 · Americano 2 · Either 3/.test(text), `votes: ${text}`);
         assert(!/plan fits|Nobody picked|Ticket price/.test(text), 'removed lines');
         assert((await sheet.locator('[data-tm-fin-start]').inputValue()) === String(19 * 60 + 30) && (await sheet.locator('[data-tm-fin-end]').inputValue()) === String(22 * 60), 'Plays 7:30 PM to 10:00 PM');
         await oneLine(a.page, 'dialog.tm-date-sheet[open] .tm-fin-row, dialog.tm-date-sheet[open] .tm-fin-votes, dialog.tm-date-sheet[open] .tm-fin-style button, dialog.tm-date-sheet[open] .tm-fin-actions .btn');

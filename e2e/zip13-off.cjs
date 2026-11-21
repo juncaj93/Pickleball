@@ -141,7 +141,7 @@ async function main() {
   const noProjected = (h) => h.replace(/<section class="card mrw-card" data-card="projected".*?<\/section>/gs, '');
   for (const scheme of ['light', 'dark']) {
     for (const who of ['Jordan', 'Avery', 'Gray', 'Casey']) await same(`player home, ${who}, ${scheme}: identical`, { who, url: '/', scheme });
-    await same(`the organizer's own player page (signed in as organizer), ${scheme}: identical, no Go to Admin`, { who: 'organizer-page', url: '/', scheme });
+    await same(`the organizer’s own player page (signed in as organizer), ${scheme}: identical, no Go to Admin`, { who: 'organizer-page', url: '/', scheme });
     for (const t of ['Home', 'Players', 'Money', 'History']) await same(`organizer ${t}, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: t });
     for (const width of [360, 320]) await same(`organizer Players at ${width} px, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: 'Players', width });
     await same(
