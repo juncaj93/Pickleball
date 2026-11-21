@@ -173,7 +173,7 @@ async function main() {
 
   for (const scheme of ['light', 'dark']) {
     for (const width of [390, 360, 320]) {
-      await check(`merged money card (Zip 29), ${width} px, ${scheme}: 50 px rows, name on one line, 34 px buttons with 14 px words, Mark paid and Request or Text on every row`, async () => {
+      await check(`merged money card (Zip 29), ${width} px, ${scheme}: 50 px rows, name on one line, 44 px buttons with 14 px words (Zip 78: the small secondary size), Mark paid and Request or Text on every row`, async () => {
         const { ctx, page } = await admin(width, scheme, '/admin?noontest=on&alerts=all');
         const card = page.locator('[data-vr-card]').first();
         await card.waitFor();
@@ -192,7 +192,7 @@ async function main() {
           };
         });
         assert(m.rows >= 1 && m.heights.every((h) => h === 50), `rows ${m.rows}, heights ${m.heights}`);
-        assert(m.btn.every((b) => b.h === 34 && b.fs === '14px' && b.r === '10px' && !b.cut && !b.out), `buttons ${JSON.stringify(m.btn.slice(0, 3))}`);
+        assert(m.btn.every((b) => b.h === 44 && b.fs === '14px' && b.r === '12px' && !b.cut && !b.out), `buttons ${JSON.stringify(m.btn.slice(0, 3))}`);
         assert(m.nameFs === '16px', `name ${m.nameFs}`);
         assert(m.mark && m.second, `Mark paid and Request/Text on every row: ${m.mark} ${m.second}`);
         assert(m.leftGap <= 20, `empty left column ${m.leftGap} px`);
