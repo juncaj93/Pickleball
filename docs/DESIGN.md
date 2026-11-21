@@ -47,7 +47,7 @@ clear type, quick to scan. All of it lives in `src/styles.css`, tokens first.
   colors (`--sw-*`) are defined once. `tests/zip78-look.test.ts` checks all of this.
 - **Filled buttons are green or neutral.** The main action is green (`--primary`); everything else is the neutral secondary (gray fill, ink
   words). Amber, blue and purple are for chips, badges and alert tints only. "Mark paid", "Request" and "Text" are the small secondary
-  button everywhere. On the dark tournament ticket the main button is green too; on the green Up next card it is white with green words.
+  button everywhere (44 px, gray fill, ink words). On the dark tournament ticket the main button is green too; on the green Up next card it is white with green words.
 - **Sizes.** Buttons: normal 46 px (`--btn-h`), small 44 (`--btn-h-sm`), big 54 (`--btn-h-lg`), one corner (`--btn-r`). Chips: one size
   (`--chip-*`). Cards: one corner (`--card-r`, 20 px). One segmented control (the court switch, In / Out, Games / Totals, the History tabs):
   a gray track, 3 px inside, 12 px corners, 44 px cells.

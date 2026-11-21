@@ -419,11 +419,13 @@ html[data-input='pointer'] :focus-visible {
   gap: 6px 10px;
 }
 
-/* The name shrinks first (with an ellipsis) down to this much; below it the buttons, credit and date move to a row
+/* The name shrinks down to this much (Zip 78: never cut, never inside a word); below it the buttons, credit and date move to a row
    of their own, so nothing on the right is ever squeezed. rem grows with big text, so this only happens then. */
 .topbar-text {
   flex: 1 1 4.5rem;
-  min-width: 0;
+  /* Zip 78: never narrower than the longest word of the name (a name wraps between words, never inside one); the buttons, credit and date
+     move to a row of their own first. */
+  min-width: min-content;
 }
 
 .topbar-end {
@@ -4395,7 +4397,7 @@ dialog.sheet[open]::backdrop {
 .mv2-btncell .btn,
 .mv2-extra .btn {
   width: 100%;
-  min-height: 36px;
+  min-height: var(--btn-h-sm);
   padding: 4px;
   font-size: 0.8rem;
   line-height: 1.1;

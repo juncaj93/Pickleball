@@ -54,7 +54,7 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
       </div>
       <div className="month-picker">
         <button className="btn small secondary" aria-label="Previous month" onClick={() => setMonth((x) => shiftMonth(x, -1))}>
-          Back
+          ←
         </button>
         <label className="sr-only" htmlFor="mm-month">
           Month
@@ -79,7 +79,7 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
           />
         </div>
         <button className="btn small secondary" aria-label="Next month" onClick={() => setMonth((x) => shiftMonth(x, 1))}>
-          Next
+          →
         </button>
       </div>
       {load.loading && !m && <Spinner />}

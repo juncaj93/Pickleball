@@ -186,7 +186,7 @@ async function main() {
     assert(r.page[0] <= r.page[1], `the page is wider than the screen (${r.page[0]} > ${r.page[1]})`);
     assert(r.bad.length === 0, `sticks out: ${r.bad.slice(0, 4).join(' | ')}`);
   }
-  /** Every row of the lists in `sel` is one line: no piece of text in it runs onto a second line (a long name ends in "..." instead). */
+  /** Every row of the lists in `sel` is one line: no piece of text in it runs onto a second line, except a long name (Zip 78: it wraps between words, never cut). */
   async function oneLineRows(page, sel) {
     const bad = await page.evaluate((s) => {
       const out = [];
@@ -197,6 +197,8 @@ async function main() {
           const range = document.createRange();
           range.selectNodeContents(n);
           const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+          // Zip 78: a name is never cut; it may wrap between its words (a long name on a 320 px phone).
+          if (tops.size > 1 && /\s/.test(n.textContent.trim()) && /name/.test(n.parentElement?.className || '')) continue;
           if (tops.size > 1) out.push(`${li.textContent.replace(/\s+/g, ' ').trim()} ("${n.textContent.trim()}" on ${tops.size} lines)`);
         }
       }

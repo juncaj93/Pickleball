@@ -51,7 +51,7 @@ export function MoneyTabV2({ ctx }: { ctx: AdminCtx }) {
       <div className="mv2-controls">
         <div className="month-picker" role="group" aria-label="Month">
           <button className="btn small secondary" aria-label="Previous month" onClick={() => setMonth((x) => shiftMonth(x, -1))}>
-            Back
+            ←
           </button>
           <label className="sr-only" htmlFor="mv2-month">
             Month
@@ -76,7 +76,7 @@ export function MoneyTabV2({ ctx }: { ctx: AdminCtx }) {
             />
           </div>
           <button className="btn small secondary" aria-label="Next month" onClick={() => setMonth((x) => shiftMonth(x, 1))}>
-            Next
+            →
           </button>
         </div>
         <div className="segmented compact" role="group" aria-label="Who paid or Totals">

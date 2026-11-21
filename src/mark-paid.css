@@ -162,28 +162,21 @@ html[data-alert-cards] .mp-head .ac-title {
   margin-top: 8px;
 }
 .vr-cards .mp-row .sc-req {
-  color: var(--mp-blue);
-  border-color: var(--mp-blue-line);
-}
-.vr-cards .mp-row .sc-req.sc-req-text {
-  color: var(--mp-purple);
-  border-color: var(--mp-purple-line);
-}
-.vr-cards .mp-row .sc-req {
   position: relative;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  height: 34px;
+  height: var(--btn-h-sm);
   padding: 0 12px;
-  border: 1.5px solid;
-  border-radius: 10px;
-  background: transparent;
+  border: 1.5px solid var(--fill);
+  border-radius: var(--btn-r);
+  background: var(--fill);
+  color: var(--ink);
   font-family: var(--body);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
