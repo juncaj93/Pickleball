@@ -67,14 +67,16 @@ SELECT
   ,(SELECT COUNT(*) FROM sessions WHERE ends_at <= starts_at) AS game_ends_before_start
   ,(SELECT COUNT(*) FROM task_log t LEFT JOIN sessions s ON s.id = t.session_id WHERE t.session_id IS NOT NULL AND s.id IS NULL) AS alert_log_without_game
   ,(SELECT COUNT(*) FROM (SELECT 1 FROM task_log WHERE kind = 'sent' GROUP BY session_id, task HAVING COUNT(*) > 1)) AS alert_sent_twice
-  -- Zip 80 (the 🎾75 audit): credit given back twice on the same seat. Money comes back from a payment as live 'kept' rows on the seat
-  -- (dropped, canceled, finalized, not_played). While the payment is live (paid, not settled), what came back since it was paid can never be
-  -- more than the payment (the part above the final price, a trim, a guest's share). Once it is settled (refunded_at: it all came back), no
-  -- second row can come back after the one that settled it, until a new payment starts over (which clears refunded_at).
+  -- Zip 80 (the 🎾75 audit): credit given back twice on the same seat. Money comes back from a payment as live 'kept' rows on the seat.
+  -- While the payment is live (paid, not settled), what came back above the final price after it was paid ('finalized', 'not_played') can
+  -- never be more than the payment. (A trim, 'dropped' on a live payment, lowers the payment itself, so it is left out.) Once the payment is
+  -- settled (refunded_at: a drop or a cancel gave it all back), no row (dropped, canceled, finalized, not_played) can come back after the one
+  -- that settled it, until a new payment starts over (which clears refunded_at). "After" is strictly later: a drop and a rejoin in the same
+  -- instant must not count the drop's row against the new payment.
   ,(SELECT COUNT(*) FROM session_players sp WHERE sp.payment_status = 'paid' AND sp.paid_at IS NOT NULL AND (
       (sp.refunded_at IS NULL AND (SELECT COALESCE(SUM(l.amount_cents), 0) FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL
-         AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason IN ('dropped', 'canceled', 'finalized', 'not_played')
-         AND l.created_at >= sp.paid_at) > COALESCE(sp.payment_amount_cents, 0))
+         AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason IN ('finalized', 'not_played')
+         AND l.created_at > sp.paid_at) > COALESCE(sp.payment_amount_cents, 0))
       OR (sp.refunded_at IS NOT NULL AND (SELECT COUNT(*) FROM credit_ledger l WHERE l.kind = 'kept' AND l.ended_at IS NULL
          AND l.session_id = sp.session_id AND l.player_id = sp.player_id AND l.reason IN ('dropped', 'canceled', 'finalized', 'not_played')
-         AND l.created_at >= sp.refunded_at) > 1))) AS credit_back_twice;
+         AND l.created_at > sp.refunded_at) > 0))) AS credit_back_twice;
