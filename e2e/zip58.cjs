@@ -358,7 +358,8 @@ async function main() {
       const done = flat(await a.page.locator('[data-tm-end-done]').innerText());
       assert(/^FINAL IS DONE Net Ninjas won Vic \+ Wren beat Third Shot Gang \(Parker \+ Quinn\)\.$/i.test(done), done);
       const rows = (await a.page.locator('[data-tm-end-row]').allInnerTexts()).map(flat);
-      assert(rows.join(' | ') === 'Winners Net Ninjas Vic + Wren | Medal for each Yes | Game credit for each $14 | 2nd place Third Shot Gang Parker + Quinn | 2nd place credit for each None | Winners banner 1 week | 3rd place Dill With It Sage + Christopher Vanderberg', rows.join(' | '));
+      // Zip 83 (Alex): Locked doubles has no 2nd place rows, ever.
+      assert(rows.join(' | ') === 'Winners Net Ninjas Vic + Wren | Medal for each Yes | Game credit for each $14 | Winners banner 1 week | 3rd place Dill With It Sage + Christopher Vanderberg', rows.join(' | '));
       assert((await a.page.locator('[data-tm-round]').count()) === 0 && (await a.page.locator('[data-tm-pause]').count()) === 0, 'no round results, no Pause');
       for (const w of SIZES) {
         await a.page.setViewportSize({ width: w, height: 844 });

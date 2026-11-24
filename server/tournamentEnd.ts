@@ -108,7 +108,9 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
   const pick = pickOf(t);
   const weeks = weeksOf(t);
   const championCents = t.champion_credit_cents;
-  const secondCents = t.second_credit_cents ?? 0;
+  // Zip 83 (Alex, Nov 24): Locked doubles has NO 2nd place credit, ever (Zip 82's runner-up credit is gone). Whatever a doubles row has saved
+  // (a voting tournament keeps Americano's amount in case it switches) is never paid, shown or counted.
+  const secondCents = format === 'americano' ? (t.second_credit_cents ?? 0) : 0;
   // An I paid still waiting: the organizer answers it first (only confirmed money is real; after the end nothing on the ticket can change).
   const waiting = tickets.filter((k) => k.claim_cents > 0).map((k) => k.display_name);
   const blocked = waiting.length ? `${waiting.join(', ')} tapped I paid. Confirm or undo it first.` : undefined;
@@ -124,15 +126,7 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       return x ? [x.player_a, x.player_b].filter((id): id is string => !!id).map(nameOf) : [];
     };
     const asPick = (seat: number): AwardPick => ({ key: String(seat), name: team(seat)?.name ?? `Team ${seat}`, players: playersOf(seat) });
-    const seatOf = (k: string | undefined): number | null => (k && team(Number(k)) && !o.out.has(Number(k)) ? Number(k) : null);
-    const firstSeat = seatOf(pick.first) ?? o.champion;
-    // Zip 82: 2nd place is the Final's runner-up (Edit awards can change it, like Americano's): each of its players gets the 2nd place credit, no
-    // medal. With the 2nd place credit at $0 (The Cold Open on live) nothing is written for it, exactly as before.
-    const pickedSecond = seatOf(pick.second);
-    const secondSeat =
-      // Review: with no pick, the next team in the Final's order (the champion when 1st was moved to another team, so the Final's winner is
-      // never saved below the team it beat).
-      pickedSecond !== null && pickedSecond !== firstSeat ? pickedSecond : (o.order.find((x) => x !== firstSeat && !o.out.has(x)) ?? null);
+    const firstSeat = pick.first && team(Number(pick.first)) && !o.out.has(Number(pick.first)) ? Number(pick.first) : o.champion;
     const champ = asPick(o.champion);
     const done = {
       kicker: 'Final is done',
@@ -140,8 +134,7 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       sub: o.runnerUp !== null ? `${plusList(champ.players!)} beat ${asPick(o.runnerUp).name} (${plusList(playersOf(o.runnerUp))}).` : `${plusList(champ.players!)} won the Final.`,
     };
     const winners = [team(firstSeat)?.player_a, team(firstSeat)?.player_b].filter((id): id is string => !!id);
-    const seconds = secondSeat === null ? [] : [team(secondSeat)?.player_a, team(secondSeat)?.player_b].filter((id): id is string => !!id);
-    const order = [firstSeat, ...(secondSeat !== null ? [secondSeat] : []), ...o.order.filter((s) => s !== firstSeat && s !== secondSeat)];
+    const order = [firstSeat, ...o.order.filter((s) => s !== firstSeat)];
     const results: ResultRow[] = [];
     for (const x of o.teams) {
       const finish = o.out.has(x.seat) ? null : order.indexOf(x.seat) + 1 || null;
@@ -152,23 +145,10 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       ] as [string | null, string | null][]) {
         if (!id) continue;
         const won = x.seat === firstSeat;
-        const second = !won && x.seat === secondSeat && secondCents > 0;
-        results.push({
-          playerId: id,
-          finish,
-          wins: rec.wins,
-          losses: rec.losses,
-          points: null,
-          teamName: x.name,
-          partnerId: partner,
-          medal: won,
-          award: won ? 'champion' : second ? 'second' : null,
-          creditCents: won ? credit(id, championCents) : second ? credit(id, secondCents) : 0,
-        });
+        results.push({ playerId: id, finish, wins: rec.wins, losses: rec.losses, points: null, teamName: x.name, partnerId: partner, medal: won, award: won ? 'champion' : null, creditCents: won ? credit(id, championCents) : 0 });
       }
     }
     const org = winners.find((id) => id === orgId);
-    const orgSecond = seconds.find((id) => id === orgId);
     // Zip 82: the final order of the teams, exactly the board players see after End (shared/results.ts boardRows over the rows End saves), with
     // each team's point difference.
     const board = boardRows(
@@ -183,15 +163,15 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
         hero: 'Final',
         done,
         first: asPick(firstSeat),
-        second: secondSeat !== null ? asPick(secondSeat) : null,
-        third: o.third !== null && o.third !== firstSeat && o.third !== secondSeat ? asPick(o.third) : null,
+        second: null,
+        third: o.third !== null && o.third !== firstSeat ? asPick(o.third) : null,
         championCents,
         secondCents,
         weeks,
         choices: o.teams.filter((x) => !o.out.has(x.seat)).map((x) => asPick(x.seat)),
-        ...(org && championCents > 0 ? { noCredit: nameOf(org) } : orgSecond && secondCents > 0 ? { noCredit: nameOf(orgSecond) } : {}),
+        ...(org && championCents > 0 ? { noCredit: nameOf(org) } : {}),
         ...(blocked ? { blocked } : {}),
-        seen: JSON.stringify([String(firstSeat), secondSeat === null ? null : String(secondSeat), championCents, secondCents, weeks]),
+        seen: JSON.stringify([String(firstSeat), null, championCents, secondCents, weeks]),
         standings: board.map((r) => {
           const seat = seatByName.get(r.name);
           return {
@@ -319,15 +299,11 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
   if (action === 'save') {
     const keys = view.choices.map((c) => c.key);
     const first = typeof body.first === 'string' && keys.includes(body.first) ? body.first : bad('invalid_pick', 'Pick the winners again.');
-    // Zip 82: Locked doubles has a 2nd place too (the Final's runner-up). A screen from before Zip 82 sends neither: the saved ones stay.
-    const doublesOld = view.format === 'doubles' && body.second === undefined && body.secondCents === undefined;
-    const second = doublesOld
-      ? (pickOf(t).second ?? null)
-      : typeof body.second === 'string' && keys.includes(body.second) && body.second !== first
-        ? body.second
-        : bad('invalid_pick', 'Pick 2nd place again.');
+    // Zip 83: Locked doubles has no 2nd place (no pick, no credit; anything sent for it is ignored and the saved amount is left as it is).
+    const second =
+      view.format === 'americano' ? (typeof body.second === 'string' && keys.includes(body.second) && body.second !== first ? body.second : bad('invalid_pick', 'Pick 2nd place again.')) : null;
     const champion = cents(body.championCents, view.format === 'americano' ? '1st place credit' : 'Credit for each winner');
-    const secondCents = doublesOld ? (t.second_credit_cents ?? 0) : cents(body.secondCents, view.format === 'americano' ? '2nd place credit' : '2nd place credit for each');
+    const secondCents = view.format === 'americano' ? cents(body.secondCents, '2nd place credit') : (t.second_credit_cents ?? 0);
     const weeks = Number(body.weeks);
     if (!(BANNER_WEEKS as readonly number[]).includes(weeks)) throw new HttpError(400, 'invalid_weeks', 'Pick 1 to 4 weeks.');
     const pickJson = JSON.stringify({ first, ...(second ? { second } : {}) });
@@ -340,8 +316,8 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
     if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
     const nameOf = (k: string | null) => view.choices.find((c) => c.key === k)?.name ?? '';
     const words = [
-      view.format === 'americano' ? `1st ${nameOf(first)}, 2nd ${nameOf(second)}` : `winners ${nameOf(first)}${second ? `, 2nd ${nameOf(second)}` : ''}`,
-      `${formatPrice(champion)}${view.format === 'americano' ? ` and ${formatPrice(secondCents)}` : secondCents > 0 ? ` and ${formatPrice(secondCents)} each` : ' each'}`,
+      view.format === 'americano' ? `1st ${nameOf(first)}, 2nd ${nameOf(second)}` : `winners ${nameOf(first)}`,
+      `${formatPrice(champion)}${view.format === 'americano' ? ` and ${formatPrice(secondCents)}` : ' each'}`,
       `banner ${bannerLabel(weeks)}`,
     ].join(', ');
     await audit(ctx.db, group.id, null, 'tournament_awards', { tournament: t.name, words }, nowIso);
@@ -379,11 +355,12 @@ export async function writeEnd(ctx: Ctx, group: GroupRow, t: EndRow, night: Awai
     ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'ended', ended_at = ?, end_key = ?, banner_until = ?, updated_at = ?
-         WHERE id = ? AND status = 'tickets' AND end_key IS NULL AND champion_credit_cents = ? AND second_credit_cents = ? AND COALESCE(banner_weeks, ?) = ?
+         WHERE id = ? AND status = 'tickets' AND end_key IS NULL AND champion_credit_cents = ? AND COALESCE(second_credit_cents, 0) = ? AND COALESCE(banner_weeks, ?) = ?
            AND award_pick IS ?
            AND (SELECT MAX(updated_at) FROM tournament_games WHERE tournament_id = tournaments.id) IS ?`,
       )
-      .bind(nowIso, key, until, nowIso, t.id, view.championCents, view.secondCents, DEFAULT_BANNER_WEEKS, weeks, t.award_pick ?? null, lastGameChange(night.day)),
+      // Zip 83: the saved 2nd place amount as read (Locked doubles shows and pays $0 for it whatever is saved; nothing changed in between).
+      .bind(nowIso, key, until, nowIso, t.id, view.championCents, t.second_credit_cents ?? 0, DEFAULT_BANNER_WEEKS, weeks, t.award_pick ?? null, lastGameChange(night.day)),
     ...plan.results.map((r) =>
       ctx.db
         .prepare(
@@ -422,7 +399,7 @@ export async function writeEnd(ctx: Ctx, group: GroupRow, t: EndRow, night: Awai
   const words =
     view.format === 'americano'
       ? `1st ${view.first.name} (medal${awards.find((r) => r.award === 'champion') ? `, ${formatPrice(view.championCents)}` : ''}), 2nd ${view.second?.name ?? ''}${awards.find((r) => r.award === 'second') ? ` (${formatPrice(view.secondCents)})` : ''}`
-      : `${view.first.name} (${(view.first.players ?? []).join(' + ')}), a medal each${awards.length ? `, ${awards.map((r) => `${nameOf(r.playerId)} ${formatPrice(r.creditCents)}`).join(', ')}` : ''}${view.second && view.secondCents > 0 ? `; 2nd ${view.second.name}` : ''}`;
+      : `${view.first.name} (${(view.first.players ?? []).join(' + ')}), a medal each${awards.length ? `, ${awards.map((r) => `${nameOf(r.playerId)} ${formatPrice(r.creditCents)}`).join(', ')}` : ''}`;
   await audit(ctx.db, group.id, null, 'tournament_ended', { tournament: t.name, words: `${words}, banner ${bannerLabel(weeks)}`, creditCents: awards.reduce((s, r) => s + r.creditCents, 0) }, nowIso);
   return { ok: true, granted: awards.map((r) => ({ playerId: r.playerId, cents: r.creditCents })) };
 }
@@ -765,7 +742,7 @@ export async function adminWins(ctx: Ctx): Promise<WinsView> {
  * (nothing on any page load). Only medals the viewer sees (shownMedal): Everyone tournaments, never Only me or test ones, and an Americano
  * night only once its reveal is over. The same rows as the medal counts and the wins sheet, so the three always agree.
  */
-export async function championsOf(ctx: Ctx, groupId: string): Promise<ChampionsView> {
+export async function championsOf(ctx: Ctx, groupId: string, holdReveal = true): Promise<ChampionsView> {
   const { results } = await ctx.db
     .prepare(
       `SELECT t.id AS tournament_id, t.name, t.final_date, t.format, t.visibility, t.ended_at, r.medal, r.team_name, p.display_name
@@ -774,9 +751,9 @@ export async function championsOf(ctx: Ctx, groupId: string): Promise<ChampionsV
        ORDER BY t.final_date DESC, t.ended_at DESC, t.id, r.rowid`,
     )
     .bind(groupId, groupId)
-    .all<ChampionRow & { visibility: string; ended_at: string | null; medal: number }>()
-    .catch(() => ({ results: [] as never[] }));
-  return championsFrom(results.filter((r) => shownMedal(r, ctx.nowMs)));
+    // Review: no catch: a failed read is an error the sheet shows ("Could not load", Try again), never an empty wall.
+    .all<ChampionRow & { visibility: string; ended_at: string | null; medal: number }>();
+  return championsFrom(results.filter((r) => (holdReveal ? shownMedal(r, ctx.nowMs) : r.medal === 1 && r.visibility === 'all')));
 }
 
 /** GET /api/tournament/champions: a player's tap on the cup (only while Tournaments is on for this phone, as the medals and the cup). */
@@ -786,21 +763,24 @@ export async function playerChampions(ctx: Ctx, who: TournamentActor): Promise<C
   return championsOf(ctx, who.group.id);
 }
 
-/** GET /api/admin/champions: the organizer's tap on the cup. The same rows players get. */
+/**
+ * GET /api/admin/champions: the organizer's tap on the cup. The same rows players get, except that an Americano night joins at once (review:
+ * the organizer tapped Reveal standings and saw the standings first, so there is nothing to spoil; and the organizer's Home has no check that
+ * would bring the cup in when the hold ends).
+ */
 export async function adminChampions(ctx: Ctx): Promise<ChampionsView> {
   const group = await organizerOn(ctx);
-  return championsOf(ctx, group.id);
+  return championsOf(ctx, group.id, false);
 }
 
 /**
  * The organizer's Home: is there a champion to show (the cup)? One tiny read that rides the dashboard's shared trip (no trip of its own while
- * "Fewer database trips" is on, as on live), only while Tournaments is on. The newest few ended Everyone tournaments with a medal; one whose
- * Americano reveal is still playing does not count yet (the same rule as the medals).
+ * "Fewer database trips" is on, as on live), only while Tournaments is on: an ended Everyone tournament with a gold medal. No reveal hold for
+ * the organizer (the same rows as GET /api/admin/champions).
  */
 export const championsAnyRead = (groupId: string): ReadSpec => ({
-  sql: `SELECT t.format, t.ended_at FROM tournaments t WHERE t.group_id = ? AND t.status = 'ended' AND t.visibility = 'all'
-        AND EXISTS (SELECT 1 FROM tournament_results r JOIN players p ON p.id = r.player_id WHERE r.tournament_id = t.id AND r.medal = 1 AND p.group_id = t.group_id)
-        ORDER BY t.ended_at DESC LIMIT 3`,
+  sql: `SELECT 1 AS yes FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id JOIN players p ON p.id = r.player_id
+        WHERE t.group_id = ? AND p.group_id = t.group_id AND t.status = 'ended' AND t.visibility = 'all' AND r.medal = 1 LIMIT 1`,
   values: [groupId],
 });
 
@@ -809,8 +789,8 @@ export async function championsAny(ctx: Ctx, groupId: string): Promise<boolean> 
   const rows = await ctx.db
     .prepare(q.sql)
     .bind(...q.values)
-    .all<{ format: string; ended_at: string | null }>()
+    .all<{ yes: number }>()
     .then((r) => r.results)
     .catch(() => []);
-  return rows.some((r) => shownMedal({ medal: 1, visibility: 'all', format: r.format, ended_at: r.ended_at }, ctx.nowMs));
+  return rows.length > 0;
 }

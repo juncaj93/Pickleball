@@ -235,6 +235,8 @@ async function main() {
     const first = a.page.locator('main > *').first();
     assert((await first.getAttribute('data-row')) === 'tournament-test', 'the test row is the first thing on Home');
     await a.page.locator('[data-tm-test-row="home"]').click();
+    // Zip 83: older stages sit behind the small "All tests" link at the bottom.
+    await a.page.locator('[data-tm-test-all-link]').click();
     await a.page.locator('[data-tm-stage="signup"]').click();
     await a.page.locator('[data-tm-test-now]').filter({ hasText: /sign-up open/i }).waitFor({ timeout: 10000 });
     await shot(a.page, 'B-test-page');

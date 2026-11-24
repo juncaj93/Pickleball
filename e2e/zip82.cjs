@@ -12,7 +12,7 @@
  *      names with their two players under them; 320/390/420, light and dark.
  *   D  The End card (picture 1): Americano last round in: "Only you see this until the reveal.", every player, the gold on 1st; Edit awards:
  *      "Tickets $... − courts $... = $... left.", "Suggested: ...", Use these fills the boxes; Locked doubles Final done: the teams with
- *      their players, 2nd place rows.
+ *      their players, no 2nd place (Zip 83: Locked doubles never has one).
  *   E  The price check: the tournament card's Time box shows "After full prizes: ..." next to the money line.
  *   F  Tap a medal (pictures 5 and 6): History stage. Parker's own medal at the top: "Your wins", Spring Fling; Vic: 2 rows, newest first;
  *      the tap area is 44 x 44 and the layout did not move; the winners ticker's medals are not buttons. Organizer History > Tournaments: tap
@@ -223,7 +223,18 @@ const SIZES = [320, 390, 420].flatMap((width) => ['light', 'dark'].map((scheme) 
       assert((await list.locator('[data-sl-row]').count()) === 4, 'four teams');
       assert((await list.locator('[data-sl-row]').first().locator('.sl-medal').count()) === 1, 'gold on the winners');
       assert((await list.locator('.sl-players').count()) === 4, 'players under each team');
-      assert((await end.locator('[data-tm-end-row="second"]').count()) === 1 && (await end.locator('[data-tm-end-row="second-credit"]').count()) === 1, '2nd place rows');
+      // Zip 83 (Alex): Locked doubles has no 2nd place, ever: no 2nd place rows on the End card, no 2nd place box in Edit awards; the
+      // suggestion is "$14 each to the winners" or medals only.
+      assert((await end.locator('[data-tm-end-row="second"]').count()) === 0 && (await end.locator('[data-tm-end-row="second-credit"]').count()) === 0, 'no 2nd place rows');
+      if (scheme === 'light') {
+        await a.page.locator('[data-tm-edit-awards]').click();
+        await a.page.locator('[data-tm-suggest]').waitFor({ timeout: 5000 });
+        assert((await a.page.locator('[data-tm-award-money="second"]').count()) === 0 && (await a.page.locator('[data-tm-award-pick="second"]').count()) === 0, 'no 2nd place in Edit awards');
+        const w = await a.page.locator('[data-tm-suggest-words]').innerText();
+        assert(/^Suggested: (\$14 each to the winners|medals only)$/.test(w), `doubles words: ${w}`);
+        await shot(a.page, 'D-edit-awards-ld-light');
+        await a.page.keyboard.press('Escape');
+      }
       await end.scrollIntoViewIfNeeded();
       await shot(a.page, `D-end-ld-${scheme}`);
       await a.ctx.close();

@@ -10,3 +10,16 @@
   flex-wrap: wrap;
   row-gap: 0;
 }
+.cw-file-failed p {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+}
+/* The organizer's header (round 2): with the cup, View as… is a little narrower and the gaps a touch smaller, so the logo, Admin, View as…,
+   the cup, light/dark and the date still fit on one line on a 360 to 390 px phone (as before the cup). */
+.r2-hdr-actions:has(.cup-btn) .topbar-btn {
+  padding: 0 10px;
+}
+.topbar-row:has(.r2-hdr-actions .cup-btn),
+.topbar-row:has(.r2-hdr-actions .cup-btn) .topbar-end {
+  column-gap: 6px;
+}

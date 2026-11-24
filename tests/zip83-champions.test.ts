@@ -143,7 +143,7 @@ describe('zip 83: the cup and the Champions wall', () => {
     expect((await ctx.organizer.call('GET', '/api/admin/champions')).data).toEqual({ tournaments: [] });
   });
 
-  it('an Americano reveal still playing: no cup from it, the wall JSON has no trace of it; once the board is done it joins', async () => {
+  it('an Americano reveal still playing: no cup from it for players, their wall JSON has no trace of it; once the board is done it joins', async () => {
     const ctx = await world(9, { format: 'americano' });
     ctx.app.now = START_MS + 60_000;
     await playAmericano(ctx);
@@ -159,7 +159,10 @@ describe('zip 83: the cup and the Champions wall', () => {
       const r = await shay.call('GET', '/api/tournament/champions');
       expect(r.data).toEqual({ tournaments: [] });
       expect(r.text).not.toContain(first);
-      expect((await dash(ctx)).champions).toBeUndefined();
+      // The organizer tapped Reveal and saw the standings first: their cup and wall have the night at once (review: nothing would bring the
+      // organizer's cup in when the hold ends).
+      expect((await dash(ctx)).champions).toBe(true);
+      expect((await ctx.organizer.call('GET', '/api/admin/champions')).data.tournaments.map((t: any) => t.winners)).toEqual([[first]]);
     }
     ctx.app.now = tap + REVEAL_HOLD_MS;
     expect(hasChampions((await group(ctx, 'Shay')).tourAwards?.medals)).toBe(true);

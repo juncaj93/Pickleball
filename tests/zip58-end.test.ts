@@ -34,8 +34,7 @@ describe('zip 58: End tournament, Locked doubles', () => {
     const t = await adminTour(ctx);
     const end = t.end;
     const winners = [await playerOfSeat(ctx, 1, 0), await playerOfSeat(ctx, 1, 1)];
-    // Zip 82: 2nd place (the Final's runner-up, seat 2) shows too; its credit is $0 here, so it gets nothing (checked below, to the cent).
-    expect(end).toMatchObject({ format: 'doubles', hero: 'Final', championCents: 1400, secondCents: 0, weeks: 1, second: { key: '2' }, done: { kicker: 'Final is done' } });
+    expect(end).toMatchObject({ format: 'doubles', hero: 'Final', championCents: 1400, weeks: 1, second: null, done: { kicker: 'Final is done' } });
     expect(end.first.players.sort()).toEqual([...winners].sort());
     expect(end.third.key).toBe('3');
     expect(end.done.sub).toMatch(/ beat .+ \(.+ \+ .+\)\.$/);

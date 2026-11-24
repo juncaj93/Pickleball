@@ -61,40 +61,49 @@ export function timeMoveWords(name: string, from: { start: number; minutes: numb
 // Finalize box and the tournament card's money lines all read these.
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** The caps, never more: 1st place a free game ($14 credit per player), 2nd place half off ($7 per player). No early bird prize. */
+/** The caps, never more: 1st place a free game ($14 credit per player), 2nd place half off ($7 per player, Americano only). No early bird prize. */
 export const PRIZE_FIRST_CENTS = 1400;
 export const PRIZE_SECOND_CENTS = 700;
 
-/** The three tiers, best first. Amounts only go down a whole tier at a time, never to an odd amount. */
+/** The tiers, best first. Amounts only go down a whole tier at a time, never to an odd amount. */
 export type PrizeTier = 'full' | 'first' | 'medals';
+/** Americano: full (1st $14 + 2nd $7 = $21), 1st only ($14), medals only. */
 export const PRIZE_TIERS: readonly PrizeTier[] = ['full', 'first', 'medals'];
+/** Zip 83 (Alex): Locked doubles has NO 2nd place, ever: 1st $14 each ($28 for the team) or medals only. */
+export const DOUBLES_PRIZE_TIERS: readonly PrizeTier[] = ['first', 'medals'];
+export const tiersOf = (format: TournamentFormat): readonly PrizeTier[] => (format === 'doubles' ? DOUBLES_PRIZE_TIERS : PRIZE_TIERS);
 
 /** Players per place: Locked doubles pays each of the team's 2 players, Americano one player. */
 const perPlace = (format: TournamentFormat): number => (format === 'doubles' ? WINNERS : 1);
 
-/** What a tier gives each player: 1st and 2nd place credit per player. */
-export function tierAmounts(tier: PrizeTier): { firstCents: number; secondCents: number } {
-  if (tier === 'full') return { firstCents: PRIZE_FIRST_CENTS, secondCents: PRIZE_SECOND_CENTS };
-  if (tier === 'first') return { firstCents: PRIZE_FIRST_CENTS, secondCents: 0 };
-  return { firstCents: 0, secondCents: 0 };
+/** What a tier gives each player: 1st and 2nd place credit per player (Locked doubles never has a 2nd place). */
+export function tierAmounts(tier: PrizeTier, format: TournamentFormat = 'americano'): { firstCents: number; secondCents: number } {
+  if (tier === 'medals') return { firstCents: 0, secondCents: 0 };
+  if (tier === 'first' || format === 'doubles') return { firstCents: PRIZE_FIRST_CENTS, secondCents: 0 };
+  return { firstCents: PRIZE_FIRST_CENTS, secondCents: PRIZE_SECOND_CENTS };
 }
 
-/** What a tier costs the organizer: Americano full $21, 1st only $14; Locked doubles full $42, 1st only $28 (two players a team). */
+/** What a tier costs the organizer: Americano full $21, 1st only $14; Locked doubles 1st $28 (two players a team). */
 export function tierCostCents(tier: PrizeTier, format: TournamentFormat): number {
-  const a = tierAmounts(tier);
+  const a = tierAmounts(tier, format);
   return perPlace(format) * (a.firstCents + a.secondCents);
 }
 
-/** The highest tier what is left (tickets minus courts) can pay; medals only when it cannot pay 1st only. */
+/** The style's best tier (what the price check counts): Americano full, Locked doubles 1st. */
+export const topTier = (format: TournamentFormat): PrizeTier => tiersOf(format)[0];
+
+/** The highest tier of the style that what is left (tickets minus courts) can pay; medals only when it cannot pay the lowest money tier. */
 export function suggestedTier(leftCents: number, format: TournamentFormat): PrizeTier {
-  return PRIZE_TIERS.find((x) => tierCostCents(x, format) <= leftCents) ?? 'medals';
+  return tiersOf(format).find((x) => tierCostCents(x, format) <= leftCents) ?? 'medals';
 }
 
-/** "Suggested: full prizes (1st $14 · 2nd $7 each)" / "Suggested: 1st only ($14 each)" / "Suggested: medals only". */
-export function suggestionWords(tier: PrizeTier): string {
+/** "Suggested: full prizes (1st $14 · 2nd $7 each)" / "Suggested: 1st only ($14 each)" / Locked doubles "Suggested: $14 each to the winners" /
+ *  "Suggested: medals only". */
+export function suggestionWords(tier: PrizeTier, format: TournamentFormat = 'americano'): string {
+  if (tier === 'medals') return 'Suggested: medals only';
+  if (format === 'doubles') return `Suggested: ${formatPrice(PRIZE_FIRST_CENTS)} each to the winners`;
   if (tier === 'full') return `Suggested: full prizes (1st ${formatPrice(PRIZE_FIRST_CENTS)} · 2nd ${formatPrice(PRIZE_SECOND_CENTS)} each)`;
-  if (tier === 'first') return `Suggested: 1st only (${formatPrice(PRIZE_FIRST_CENTS)} each)`;
-  return 'Suggested: medals only';
+  return `Suggested: 1st only (${formatPrice(PRIZE_FIRST_CENTS)} each)`;
 }
 
 /** "Tickets $162 − courts $120 = $42 left." (short: "= $8 short."). */
@@ -103,8 +112,8 @@ export function leftWords(ticketsCents: number, courtCents: number): string {
   return `Tickets ${formatPrice(ticketsCents)} − courts ${formatPrice(courtCents)} = ${formatPrice(Math.abs(left))} ${left >= 0 ? 'left' : 'short'}.`;
 }
 
-/** The price check: what is left after the FULL tier (tickets minus courts minus full prizes). Below 0: that much short. */
-export const afterFullCents = (ticketsCents: number, courtCents: number, format: TournamentFormat): number => ticketsCents - courtCents - tierCostCents('full', format);
+/** The price check: what is left after the style's FULL prizes (Americano $21, Locked doubles $28). Below 0: that much short. */
+export const afterFullCents = (ticketsCents: number, courtCents: number, format: TournamentFormat): number => ticketsCents - courtCents - tierCostCents(topTier(format), format);
 
 /** "After full prizes: +$21" (0 or more) or "After full prizes: $9 short" (red, no plus sign). */
 export const afterFullWords = (cents: number): string => (cents >= 0 ? `After full prizes: +${formatPrice(cents)}` : `After full prizes: ${formatPrice(-cents)} short`);

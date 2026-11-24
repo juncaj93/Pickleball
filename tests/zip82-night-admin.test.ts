@@ -8,6 +8,7 @@ import {
   PRIZE_TIERS,
   suggestedTier,
   suggestionWords,
+  tiersOf,
   tierAmounts,
   tierCostCents,
 } from '../shared/tournamentMoney';
@@ -213,24 +214,28 @@ async function doublesTie() {
 }
 
 describe('zip 82: suggested prizes and the price check (Alex’s rules)', () => {
-  it('the tiers cost: Americano full $21, 1st only $14; Locked doubles full $42, 1st only $28; medals $0', () => {
+  it('the tiers cost: Americano full $21, 1st only $14; Locked doubles (Zip 83: no 2nd place) 1st $28 or medals; medals $0', () => {
     expect(PRIZE_TIERS).toEqual(['full', 'first', 'medals']);
+    expect(tiersOf('americano')).toEqual(['full', 'first', 'medals']);
+    expect(tiersOf('doubles')).toEqual(['first', 'medals']);
     expect(tierCostCents('full', 'americano')).toBe(2100);
     expect(tierCostCents('first', 'americano')).toBe(1400);
-    expect(tierCostCents('full', 'doubles')).toBe(4200);
     expect(tierCostCents('first', 'doubles')).toBe(2800);
+    expect(tierCostCents('full', 'doubles')).toBe(2800);
     expect(tierCostCents('medals', 'doubles')).toBe(0);
     expect(tierAmounts('full')).toEqual({ firstCents: 1400, secondCents: 700 });
+    expect(tierAmounts('full', 'doubles')).toEqual({ firstCents: 1400, secondCents: 0 });
     expect(tierAmounts('first')).toEqual({ firstCents: 1400, secondCents: 0 });
     expect(tierAmounts('medals')).toEqual({ firstCents: 0, secondCents: 0 });
-    // The money line's prize total follows the same amounts (Locked doubles: two players a place).
-    expect(prizeCentsOf('doubles', 1400, 700)).toBe(tierCostCents('full', 'doubles'));
+    // The money line's prize total follows the same amounts (Locked doubles: two winners, never a 2nd place, whatever is saved for it).
+    expect(prizeCentsOf('doubles', 1400, 700)).toBe(tierCostCents('first', 'doubles'));
+    expect(prizeCentsOf('doubles', 1400, 0)).toBe(2800);
     expect(prizeCentsOf('americano', 1400, 700)).toBe(tierCostCents('full', 'americano'));
   });
 
   it('the highest tier what is left can pay, whole tiers only, never an odd amount', () => {
     for (const [left, am, ld] of [
-      [4200, 'full', 'full'],
+      [4200, 'full', 'first'],
       [4199, 'full', 'first'],
       [2800, 'full', 'first'],
       [2799, 'full', 'medals'],
@@ -247,6 +252,8 @@ describe('zip 82: suggested prizes and the price check (Alex’s rules)', () => 
     expect(suggestionWords('full')).toBe('Suggested: full prizes (1st $14 · 2nd $7 each)');
     expect(suggestionWords('first')).toBe('Suggested: 1st only ($14 each)');
     expect(suggestionWords('medals')).toBe('Suggested: medals only');
+    expect(suggestionWords('first', 'doubles')).toBe('Suggested: $14 each to the winners');
+    expect(suggestionWords('medals', 'doubles')).toBe('Suggested: medals only');
     expect(leftWords(16200, 12000)).toBe('Tickets $162 − courts $120 = $42 left.');
     expect(leftWords(9000, 12000)).toBe('Tickets $90 − courts $120 = $30 short.');
   });
@@ -254,10 +261,12 @@ describe('zip 82: suggested prizes and the price check (Alex’s rules)', () => 
   it('the price check: what is left after the full tier, red and "short" when below 0', () => {
     expect(afterFullCents(16200, 12000, 'americano')).toBe(2100);
     expect(afterFullWords(2100)).toBe('After full prizes: +$21');
-    expect(afterFullCents(16200, 12000, 'doubles')).toBe(0);
+    // Zip 83: Locked doubles counts $28 (1st $14 each, no 2nd place). The Cold Open at 9 paid: $162 − $120 − $28 = +$14.
+    expect(afterFullCents(16200, 12000, 'doubles')).toBe(1400);
+    expect(afterFullWords(1400)).toBe('After full prizes: +$14');
+    expect(afterFullCents(14000, 12000, 'doubles')).toBe(-800);
+    expect(afterFullWords(-800)).toBe('After full prizes: $8 short');
     expect(afterFullWords(0)).toBe('After full prizes: +$0');
-    expect(afterFullCents(15300, 12000, 'doubles')).toBe(-900);
-    expect(afterFullWords(-900)).toBe('After full prizes: $9 short');
   });
 
   it('Edit awards gets the real money: tickets in (as Totals) and the courts from the final time and courts', async () => {
@@ -276,53 +285,43 @@ describe('zip 82: suggested prizes and the price check (Alex’s rules)', () => 
   });
 });
 
-describe('zip 82: Locked doubles 2nd place (the Final’s runner-up), to the cent', () => {
-  it('2nd place gets the 2nd place credit for each player (no medal); credit once; the books read zero', async () => {
+describe('zip 83: Locked doubles has NO 2nd place, ever (Alex; Zip 82’s runner-up credit is gone), to the cent', () => {
+  it('even with $7 saved for 2nd: no 2nd place on the End card, only the winners get credit (once), no 2nd place row or card; the books read zero', async () => {
     const ctx = await doublesDone(8);
+    expect(raw(ctx).prepare('SELECT second_credit_cents AS c FROM tournaments WHERE id = ?').get(ctx.tid)).toEqual({ c: 700 });
     const end = (await adminTour(ctx)).end;
-    expect(end.second).toBeTruthy();
-    expect(end.secondCents).toBe(700);
+    expect(end.second).toBeNull();
+    expect(end.secondCents).toBe(0);
     const firsts = end.first.players as string[];
-    const seconds = end.second.players as string[];
     const all = (await dash(ctx)).players.map((p: any) => p.name) as string[];
     const before = Object.fromEntries(all.map((n) => [n, potOf(ctx, n)]));
     expect((await awards(ctx, { action: 'end', seen: end.seen })).status).toBe(200);
     expect((await awards(ctx, { action: 'end', seen: end.seen })).status).toBe(409);
-    for (const n of all) expect(potOf(ctx, n), n).toBe(before[n] + (firsts.includes(n) ? 1400 : seconds.includes(n) ? 700 : 0));
+    for (const n of all) expect(potOf(ctx, n), n).toBe(before[n] + (firsts.includes(n) ? 1400 : 0));
+    expect(raw(ctx).prepare("SELECT COUNT(*) AS c FROM tournament_results WHERE tournament_id = ? AND award = 'second'").get(ctx.tid)).toEqual({ c: 0 });
+    expect(raw(ctx).prepare('SELECT COUNT(*) AS c FROM tournament_results WHERE tournament_id = ? AND award IS NOT NULL').get(ctx.tid)).toEqual({ c: 2 });
     const medals = raw(ctx).prepare('SELECT p.display_name AS n FROM tournament_results r JOIN players p ON p.id = r.player_id WHERE r.tournament_id = ? AND r.medal = 1').all(ctx.tid) as { n: string }[];
     expect(medals.map((m) => m.n).sort()).toEqual([...firsts].sort());
+    // Nobody but the winners gets a card ("Second place, ..." never shows for Locked doubles).
+    for (const n of all.filter((x) => !firsts.includes(x))) expect((await group(ctx, n)).tourAwards?.congrats, n).toBeUndefined();
     books(ctx);
   });
 
-  it('a 2nd place credit of $0 (The Cold Open on live) writes nothing for 2nd place, exactly as before', async () => {
+  it('Edit awards: a 2nd place pick or amount sent for Locked doubles is ignored; moving 1st keeps the Final’s winner right below it', async () => {
     const ctx = await doublesDone(8);
     const end = (await adminTour(ctx)).end;
-    expect((await awards(ctx, { action: 'save', first: end.first.key, second: end.second.key, championCents: 0, secondCents: 0, weeks: 1 })).status).toBe(200);
+    const other = end.choices.find((c: any) => c.key !== end.first.key);
+    expect((await awards(ctx, { action: 'save', first: other.key, second: end.first.key, championCents: 1400, secondCents: 900, weeks: 1 })).status).toBe(200);
     const end2 = (await adminTour(ctx)).end;
+    expect(end2.second).toBeNull();
+    expect(end2.secondCents).toBe(0);
+    expect(end2.standings.slice(0, 2).map((r: any) => r.name)).toEqual([other.name, end.first.name]);
     const all = (await dash(ctx)).players.map((p: any) => p.name) as string[];
     const before = Object.fromEntries(all.map((n) => [n, potOf(ctx, n)]));
     expect((await awards(ctx, { action: 'end', seen: end2.seen })).status).toBe(200);
-    for (const n of all) expect(potOf(ctx, n), n).toBe(before[n]);
-    expect(raw(ctx).prepare('SELECT COUNT(*) AS c FROM tournament_results WHERE tournament_id = ? AND award IS NOT NULL').get(ctx.tid)).toEqual({ c: 2 });
+    const winners = other.players as string[];
+    for (const n of all) expect(potOf(ctx, n), n).toBe(before[n] + (winners.includes(n) ? 1400 : 0));
     books(ctx);
-  });
-
-  it('Edit awards moves 1st to a team outside the Final: 2nd is the Final’s winner, never below the team it beat (review)', async () => {
-    const ctx = await doublesDone(8);
-    const end = (await adminTour(ctx)).end;
-    const other = end.choices.find((c: any) => c.key !== end.first.key && c.key !== end.second.key);
-    expect((await awards(ctx, { action: 'save', first: other.key, second: end.first.key, championCents: 1400, secondCents: 700, weeks: 1 })).status).toBe(200);
-    const end2 = (await adminTour(ctx)).end;
-    expect(end2.standings.slice(0, 3).map((r: any) => r.name)).toEqual([other.name, end.first.name, end.second.name]);
-  });
-
-  it('a screen from before Zip 82 (no second, no secondCents) keeps the saved ones', async () => {
-    const ctx = await doublesDone(8);
-    const end = (await adminTour(ctx)).end;
-    expect((await awards(ctx, { action: 'save', first: end.first.key, championCents: 1400, weeks: 2 })).status).toBe(200);
-    const end2 = (await adminTour(ctx)).end;
-    expect(end2).toMatchObject({ secondCents: 700, weeks: 2 });
-    expect(end2.second.key).toBe(end.second.key);
   });
 });
 

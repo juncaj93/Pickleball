@@ -1520,3 +1520,23 @@ a.tm-hc-copy {
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
+
+/* Zip 83: the small "All tests" link at the bottom of the Tournament test page (older stages and look tools). Tokens only. */
+.tm-test-all-link {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.9rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.tm-test-all-link:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}

@@ -203,16 +203,6 @@ export function EndCards({ ctx, t, end }: { ctx: AdminCtx; t: AdminTournamentVie
                 sub={end.noCredit && end.first.players?.includes(end.noCredit) ? `${end.noCredit}: medal only` : undefined}
                 data="credit"
               />
-              {/* Zip 82: 2nd place (the Final's runner-up): the 2nd place credit for each, no medal. */}
-              {end.second && <EndRow label="2nd place" value={end.second.name} sub={end.second.players?.join(' + ')} data="second" />}
-              {end.second && (
-                <EndRow
-                  label="2nd place credit for each"
-                  value={money(end.secondCents)}
-                  sub={end.noCredit && end.second.players?.includes(end.noCredit) ? `${end.noCredit}: no credit` : undefined}
-                  data="second-credit"
-                />
-              )}
               <EndRow label="Winners banner" value={bannerLabel(end.weeks)} data="banner" />
               {end.third && <EndRow label="3rd place" value={end.third.name} sub={end.third.players?.join(' + ')} data="third" />}
             </>
@@ -308,12 +298,13 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
   // "Use these" puts new numbers in the boxes: a new key draws them again with the new amounts (the boxes keep what is typed otherwise).
   const [filled, setFilled] = useState(0);
   const pickOf = (k: string | null) => end.choices.find((c) => c.key === k) ?? null;
-  const ok = champion !== null && secondCents !== null && second !== null && second !== first;
+  // Zip 83: Locked doubles has no 2nd place (no pick, no credit box).
+  const ok = champion !== null && (doubles || (secondCents !== null && second !== null && second !== first));
   // Zip 82 (Alex's rules): what is left after the courts, and the best tier it pays (shared/tournamentMoney.ts, the same as the price check).
   const money = end.money;
   const tier = money ? suggestedTier(money.ticketsCents - money.courtCents, end.format) : null;
-  const amounts = tier ? tierAmounts(tier) : null;
-  const same = !!amounts && champion === amounts.firstCents && secondCents === amounts.secondCents;
+  const amounts = tier ? tierAmounts(tier, end.format) : null;
+  const same = !!amounts && champion === amounts.firstCents && (doubles || secondCents === amounts.secondCents);
   return (
     <div className="stack tm-awards" data-tm-awards>
       <PickRow
@@ -329,18 +320,20 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
         }}
         data="first"
       />
-      <PickRow
-        label="2nd place"
-        pick={pickOf(second)}
-        open={changing === 'second'}
-        onToggle={() => setChanging(changing === 'second' ? null : 'second')}
-        choices={end.choices.filter((c) => c.key !== first)}
-        onPick={(k) => {
-          setSecond(k);
-          setChanging(null);
-        }}
-        data="second"
-      />
+      {!doubles && (
+        <PickRow
+          label="2nd place"
+          pick={pickOf(second)}
+          open={changing === 'second'}
+          onToggle={() => setChanging(changing === 'second' ? null : 'second')}
+          choices={end.choices.filter((c) => c.key !== first)}
+          onPick={(k) => {
+            setSecond(k);
+            setChanging(null);
+          }}
+          data="second"
+        />
+      )}
       {money && tier && amounts && (
         <div className="tm-awards-suggest" data-tm-suggest={tier}>
           <p className="tm-awards-left" data-tm-suggest-left>
@@ -348,7 +341,7 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
           </p>
           <div className="tm-awards-suggest-row">
             <p className="tm-awards-suggest-words" data-tm-suggest-words>
-              {suggestionWords(tier)}
+              {suggestionWords(tier, end.format)}
             </p>
             <button
               type="button"
@@ -356,7 +349,7 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
               disabled={same}
               onClick={() => {
                 setChampion(amounts.firstCents);
-                setSecondCents(amounts.secondCents);
+                if (!doubles) setSecondCents(amounts.secondCents);
                 setFilled((n) => n + 1);
               }}
               data-tm-suggest-use
@@ -370,10 +363,12 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
         <span>{doubles ? 'Credit for each winner' : '1st place credit'}</span>
         <Dollars key={`c${filled}`} cents={champion} onChange={setChampion} label={doubles ? 'Credit for each winner' : '1st place credit'} data="champion" />
       </div>
-      <div className="tm-row tm-awards-row">
-        <span>{doubles ? '2nd place credit for each' : '2nd place credit'}</span>
-        <Dollars key={`s${filled}`} cents={secondCents} onChange={setSecondCents} label={doubles ? '2nd place credit for each' : '2nd place credit'} data="second" />
-      </div>
+      {!doubles && (
+        <div className="tm-row tm-awards-row">
+          <span>2nd place credit</span>
+          <Dollars key={`s${filled}`} cents={secondCents} onChange={setSecondCents} label="2nd place credit" data="second" />
+        </div>
+      )}
       <div className="tm-awards-banner">
         <span>Banner stays up</span>
         <div className="tm-awards-weeks" role="radiogroup" aria-label="Banner stays up">
@@ -389,7 +384,7 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
         className="btn block big tm-end-go"
         disabled={busy || !ok}
         onClick={async () => {
-          const r = await save(() => api('POST', `/api/admin/tournament/${t.id}/awards`, { action: 'save', first, second, secondCents, championCents: champion, weeks }), 'Awards saved');
+          const r = await save(() => api('POST', `/api/admin/tournament/${t.id}/awards`, doubles ? { action: 'save', first, championCents: champion, weeks } : { action: 'save', first, second, secondCents, championCents: champion, weeks }), 'Awards saved');
           if (r) onClose();
         }}
         data-tm-awards-save

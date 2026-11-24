@@ -42,7 +42,7 @@ export function SiteHome() {
           // Zip 83: the saved copy's cup too (its medal counts), so the header does not move when the real screen comes.
           tools={
             <>
-              {hasChampions(saved.view.tourAwards?.medals) && <CupButton path="/api/tournament/champions" />}
+              {hasChampions(saved.view.tourAwards?.medals) && <CupButton path="/api/tournament/champions" held />}
               <ModeButton preview={false} />
             </>
           }

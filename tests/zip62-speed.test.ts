@@ -117,14 +117,14 @@ const SAME_TRIPS = ['none', 'signup', 'speed_check', 'vote_open', 'vote_majority
 /** Never more trips with the switch on than off on the same rows (once tickets are sold the dashboard even saves one: the tournament names
  * a ticket credit line shows now ride in the shared trip while the switch is on; switched off that read is exactly main's). `extra`: screens
  * allowed one more (named in each test). The 5-second checks are always exactly equal. */
-function noMore(on: Record<string, number>, off: Record<string, number>, extra: (k: string) => boolean = () => false) {
+function noMore(on: Record<string, number>, off: Record<string, number>, extra: (k: string) => boolean | number = () => false) {
   expect(Object.keys(on).sort()).toEqual(Object.keys(off).sort());
   for (const k of Object.keys(on)) {
     // View as is answered by the organizer's own in-browser copy (src/lib.ts, demo): its reads never cross the network, and it builds its
     // card the old way on purpose (it decides Only me by its own rule). Its answers are in the byte for byte comparison below.
     if (k.endsWith('view as')) continue;
     if (k.endsWith('check') || k.endsWith('check, organizer phone')) expect(on[k], k).toBe(off[k]);
-    else expect(on[k], k).toBeLessThanOrEqual(off[k] + (extra(k) ? 1 : 0));
+    else expect(on[k], k).toBeLessThanOrEqual(off[k] + Number(extra(k)));
   }
 }
 
@@ -184,8 +184,9 @@ describe('the switch on costs no database trip (Fewer database trips on, as live
     const on = tripsOf(await w.screens());
     w.setSwitch(false);
     // Only the two small reads that exist only while the switch is on, which "Fewer database trips" sends in the shared trip: the dashboard's
-    // Hidden tournaments list, and the tournament names on a ticket buyer's credit lines.
-    noMore(on, tripsOf(await w.screens()), () => true);
+    // Hidden tournaments list, and the tournament names on a ticket buyer's credit lines. Zip 83: plus, on the dashboard, the cup's one tiny
+    // read (is there a champion players see?), which rides the shared trip when "Fewer database trips" is on (as on live: no trip of its own).
+    noMore(on, tripsOf(await w.screens()), (k) => (k === 'dashboard' ? 2 : 1));
   });
 });
 

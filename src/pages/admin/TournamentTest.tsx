@@ -9,6 +9,12 @@ import type { AdminCtx } from '../Admin';
 import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
+/**
+ * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
+ * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
+ */
+const THIS_ZIP: readonly string[] = ['history', 'zip83_none'];
+
 const STAGES = [
   // Zip 83 (🎾83.champions): the gold cup and the Champions wall. "History with tournaments" (below) has three past winners: the cup on every
   // header, the wall (The Cold Open's Vic and Wren reigning; Summer Slam's Vic and Spring Fling's Parker below).
@@ -157,6 +163,8 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   const t = ctx.d.tournament ?? null;
   // Which format the stage buttons build (starts on the open tournament's).
   const [format, setFormat] = useState<'doubles' | 'americano'>(t?.format ?? 'doubles');
+  // Zip 83: older stages and look tools behind the "All tests" link (closed each time the page opens).
+  const [allTests, setAllTests] = useState(false);
   const now = t
     ? `${t.formatPending ? 'Players vote' : t.format === 'americano' ? 'Americano' : 'Locked doubles'} · ${nowWords[t.status] ?? 'Sign-up open'}${t.finalDate && (t.status === 'date_picked' || t.status === 'tickets') ? `: ${dayLong(t.finalDate)}` : ''}`
     : 'No tournament';
@@ -187,6 +195,14 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
     }
   }
   const names = ctx.d.players.filter((p) => p.isActive).map((p) => p.name);
+  const stageRow = (s: (typeof STAGES)[number]) => (
+    <div key={s.stage} className="tm-test-stage">
+      <button type="button" className={`btn block${s.stage === 'none' ? ' secondary' : ''}`} disabled={!!busy} onClick={() => void go(s.stage, s.label)} data-tm-stage={s.stage}>
+        {busy === s.stage ? 'Working…' : s.label}
+      </button>
+      <p className="tm-card-note">{s.line}</p>
+    </div>
+  );
   return (
     <div className="tm-form stack" data-tm-test>
       <section className="tm-card" aria-label="Stage">
@@ -204,17 +220,18 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
             Americano
           </button>
         </div>
-        <div className="stack">
-          {STAGES.map((s) => (
-            <div key={s.stage} className="tm-test-stage">
-              <button type="button" className={`btn block${s.stage === 'none' ? ' secondary' : ''}`} disabled={!!busy} onClick={() => void go(s.stage, s.label)} data-tm-stage={s.stage}>
-                {busy === s.stage ? 'Working…' : s.label}
-              </button>
-              <p className="tm-card-note">{s.line}</p>
-            </div>
-          ))}
+        <div className="stack" data-tm-test-current>
+          {STAGES.filter((s) => THIS_ZIP.includes(s.stage)).map(stageRow)}
         </div>
       </section>
+      {allTests && (
+        <section className="tm-card" aria-label="All tests" data-tm-test-all>
+          <div className="tm-card-head">
+            <h3 className="tm-label">All tests</h3>
+          </div>
+          <div className="stack">{STAGES.filter((s) => !THIS_ZIP.includes(s.stage)).map(stageRow)}</div>
+        </section>
+      )}
       {t && (
         <section className="tm-card" aria-label="Who can see it">
           <div className="tm-card-head">
@@ -230,6 +247,8 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
           </div>
         </section>
       )}
+      {allTests && (
+        <>
       {/* Zip 63: the preview has 10 names, so a real card never shows 12 to 16 balls. These links draw that many on Vic's card (look only, that
           page only); every other word and button is the real one. */}
       <section className="tm-card" aria-label="Ball look" data-tm-test-balls>
@@ -258,6 +277,8 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
         </a>
         <p className="tm-card-note">Look only, as Vic: the Dink group and the Drive group (3 teams each, points once a score is in), The night. Start from a Game night stage. The 6th team is Kai + Guest (no 12th name on the preview).</p>
       </section>
+        </>
+      )}
       <section className="tm-card" aria-label="View as">
         <div className="tm-card-head">
           <h3 className="tm-label">View as</h3>
@@ -274,6 +295,10 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
         </div>
         <p className="tm-card-note">A name opens the player page as that player on this phone (real taps, fake data). Alex sees Only me.</p>
       </section>
+      {/* Zip 83: every older stage and look tool, one small link at the bottom. */}
+      <button type="button" className="tm-test-all-link" aria-expanded={allTests} onClick={() => setAllTests((x) => !x)} data-tm-test-all-link>
+        {allTests ? 'Hide older tests' : 'All tests'}
+      </button>
     </div>
   );
 }

@@ -156,6 +156,11 @@ const DATE_RE = /^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2}, \d{4}$/;
     for (const { width, scheme } of SIZES) {
       const a = await h.adminHome({ width, scheme });
       await cupLook(a.page, `admin ${width} ${scheme}`);
+      // 390 and wider: the logo, Admin, View as, the cup, light/dark and the date stay on one line (as before the cup).
+      if (width >= 390) {
+        const rows = await a.page.evaluate(() => [document.querySelector('.topbar h1').getBoundingClientRect().top, document.querySelector('[data-cup]').getBoundingClientRect().bottom]);
+        assert(rows[1] > rows[0], `admin ${width}: the cup dropped under the title`);
+      }
       await h.noWider(a.page, `admin ${width} ${scheme}`);
       if (width === 390) {
         await shot(a.page, `C-admin-${scheme}`);

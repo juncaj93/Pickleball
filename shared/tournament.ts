@@ -382,9 +382,9 @@ export function smartPlan(locked: number): SmartPlan {
 /** The court bill for a plan: courts x hours x $24. */
 export const courtCentsOf = (p: Pick<SmartPlan, 'courts' | 'minutes'>): number => Math.round((p.courts * p.minutes * COURT_CENTS_PER_HOUR) / 60);
 
-/** The winners' credits: Locked doubles, the champion and (Zip 82) 2nd place credit for each of a team's 2 players; Americano, 1st place plus 2nd place. */
+/** The winners' credits: Locked doubles, the champion credit for each of the 2 winners (no 2nd place, ever: Zip 83); Americano, 1st place plus 2nd place. */
 export const prizeCentsOf = (format: TournamentFormat, championCents: number, secondCents: number): number =>
-  format === 'americano' ? championCents + secondCents : WINNERS * (championCents + secondCents);
+  format === 'americano' ? championCents + secondCents : WINNERS * championCents;
 
 /**
  * The organizer's cost for the plan: the court bill, minus the tickets, plus the winners' credits (the organizer plays and pays no ticket).

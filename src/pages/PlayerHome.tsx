@@ -763,7 +763,7 @@ export function PlayerHome({
         // first answer, the saved copy's, so nothing moves). A tap opens the Champions wall.
         tools={
           <>
-            {!pickName && hasChampions(g ? g.tourAwards?.medals : showSaved ? saved!.view.tourAwards?.medals : null) && <CupButton path="/api/tournament/champions" />}
+            {!pickName && hasChampions(g ? g.tourAwards?.medals : showSaved ? saved!.view.tourAwards?.medals : null) && <CupButton path="/api/tournament/champions" held={!g} />}
             <ModeButton preview={!!viewAs} />
           </>
         }

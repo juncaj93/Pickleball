@@ -1130,8 +1130,8 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   const canVote = !editing || !editing.finalDate || editing.formatPending === true || editing.formatSource === 'vote' || editing.formatSource === 'tie';
   const autoLabel = !!editing?.finalDate && editing.formatPending !== true;
   // Americano's 2nd place: what an Americano tournament has, else the $7 start (a Doubles one switched to Americano starts there too).
-  // Zip 82: Locked doubles has a 2nd place credit too (the Final's runner-up, each player), so a saved tournament keeps its own amount.
-  const [second, setSecond] = useState<number | null>(editing ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
+  // Zip 83 (Alex): Locked doubles has NO 2nd place, ever (Zip 82's doubles 2nd place credit is gone); a Locked doubles tournament saves $0.
+  const [second, setSecond] = useState<number | null>(editing && (editing.format === 'americano' || editing.formatPending) ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
   const formatLocked = editing?.formatLocked === true;
   // Zip 56: once tickets have been open, the price, the spots and Only me stay as they are (players hold tickets; the server refuses too).
   const sold = editing?.settingsLocked === true;
@@ -1161,13 +1161,13 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
               ? 'Type a ticket price.'
               : credit === null
                 ? 'Type a credit amount ($0 to skip it).'
-                : second === null
+                : (americano || voting) && second === null
                   ? 'Type a 2nd place credit ($0 to skip it).'
                   : null;
     setError(problem);
     if (problem) return;
     // Alex: no players expected and no court plan (the smart plan follows the players locked in, on the tournament page).
-    const body = { name: n, dates, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: second };
+    const body = { name: n, dates, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: americano || voting ? second : 0 };
     const ok = editing
       ? await save(() => api('PUT', `/api/admin/tournament/${editing.id}`, body), 'Saved')
       : await save(() => api('POST', '/api/admin/tournament', body), visibility === 'me' ? 'Sign-up is open. Only you can see it.' : 'Sign-up is open for everyone');
@@ -1251,18 +1251,18 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
               <span>Game credit for each winner</span>
               <MoneyBox id="tm-credit" cents={credit} onChange={setCredit} label="Game credit for each winner" />
             </label>
-            <label className="tm-row" htmlFor="tm-credit2">
-              <span>2nd place credit for each</span>
-              <MoneyBox id="tm-credit2" cents={second} onChange={setSecond} label="2nd place credit for each" />
-            </label>
+            <div className="tm-row">
+              <span>Winners</span>
+              <b>{WINNERS} players</b>
+            </div>
             <div className="tm-row">
               <span>Total credit</span>
-              <b data-tm-total>{credit === null || second === null ? '$?' : formatPrice((credit + second) * WINNERS)}</b>
+              <b data-tm-total>{credit === null ? '$?' : formatPrice(credit * WINNERS)}</b>
             </div>
           </div>
         )}
         <p className="tm-card-note">
-          {americano || voting ? '1st place also gets a medal. Set either credit to $0 to skip it.' : 'Each of the 2 winners gets a medal and the credit; each 2nd place player the 2nd credit. Set a credit to $0 to skip it.'}
+          {americano || voting ? '1st place also gets a medal. Set either credit to $0 to skip it.' : 'Medal and banner are automatic. Set the credit to $0 to skip it.'}
         </p>
       </Card>
 
@@ -1526,16 +1526,10 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               </div>
             </>
           ) : (
-            <>
-              <div className="tm-row">
-                <span>Champion credit</span>
-                <b>{formatPrice(t.championCreditCents)}</b>
-              </div>
-              <div className="tm-row">
-                <span>2nd place credit</span>
-                <b>{formatPrice(t.secondCreditCents)}</b>
-              </div>
-            </>
+            <div className="tm-row">
+              <span>Champion credit</span>
+              <b>{formatPrice(t.championCreditCents)}</b>
+            </div>
           )}
           {t.status === 'tickets' && t.payBy && (
             <div className="tm-row">

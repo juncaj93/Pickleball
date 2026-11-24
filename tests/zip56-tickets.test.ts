@@ -141,9 +141,7 @@ describe('the shared rules', () => {
     ]);
     // $24 an hour per court (SITE_RULES: $48, $60, $72 a court).
     expect([0, 5, 7, 9].map((l) => courtCentsOf(smartPlan(l)))).toEqual([6000, 9600, 12000, 14400]);
-    // Zip 82: Locked doubles pays 2nd place too (each of the 2 players): $14 + $7 for each = $42; with no 2nd place credit, $28 as before.
-    expect(prizeCentsOf('doubles', 1400, 700)).toBe(4200);
-    expect(prizeCentsOf('doubles', 1400, 0)).toBe(2800);
+    expect(prizeCentsOf('doubles', 1400, 700)).toBe(2800);
     expect(prizeCentsOf('americano', 1400, 700)).toBe(2100);
     // 8 players, 2 courts, 2 hours: $96 court, 7 tickets of $16 = $112 if it fills, $28 of credits: $12; with 5 paid now: $96 - $80 + $28 = $44.
     expect(organizerCost(smartPlan(6), 1600, 2800, 5)).toEqual({ courtCents: 9600, ifFillsCents: 1200, nowCents: 4400 });

@@ -25,7 +25,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // The reveal itself and its clock math are in the tournament chunk. Main (Zip 76) 142.08 KB, this zip 143.10 KB; the first visit total 177.8 -> 179.
 // Zip 80: 143.3 to 143.6 on purpose. /setup on a site that is set up asks /api/status first and says "Already set up" (the 🎾75 audit), and the
 // Venmo note names each date once ("4 games on Thu Nov 19"): main (Zip 79) 143.11 KB, this zip 143.44 KB; the first visit 176.7 -> 177.0.
-export const BUDGET = { scriptKB: 143.6, styleKB: 36.5, pageKB: 1.5, totalKB: 179 };
+// Zip 83: 143.6 to 144.6 on purpose. The gold cup on every player Home (its drawing, the round button, the one GET on a tap, and a safe loader
+// that shows "Could not load" instead of a blank page if the wall's own file cannot be fetched): about 1.0 KB gzipped (main 143.2, this zip
+// 144.5). The Champions wall itself is its own file (ChampionsSheet), fetched only on the first tap.
+export const BUDGET = { scriptKB: 144.6, styleKB: 36.5, pageKB: 1.5, totalKB: 179 };
 
 const ROOT = join(__dirname, '..');
 let split = '';
