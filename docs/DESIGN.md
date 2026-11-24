@@ -9,11 +9,11 @@ clear type, quick to scan. All of it lives in `src/styles.css`, tokens first.
   action (I'm in, Pay, Yes, we played). Everything else is soft
   gray or outlined. The browser tests count this on every screen.
 - **Status colors keep their meaning.** Green: court booked. Amber: court
-  not booked. Gray: booking not open yet. Blue: on the court waitlist. Red:
-  cancel only. Zip 86: on the organizer's Home card the status button carries
-  the color (solid green Booked with a ball-yellow dot, amber Not booked, calm
-  blue Waitlist); the card itself is one floating frame (1 px line, soft
-  shadow), with a green left stripe only while the organizer is In.
+  not booked. Gray: booking not open yet. Red: cancel only. Zip 86: no court
+  Waitlist anywhere (Alex, round 2). On the organizer's Home card the status
+  button carries the color (solid green Booked with a ball-yellow dot, amber
+  Not booked); the card itself is one floating frame (1 px line, soft
+  shadow), no stripe, In or Out.
 - **Date tiles** look like a paper calendar: white with a thin outline, the
   weekday in red, the big day number dark, the month small and gray. Dark
   mode: dark tile, light outline, a softer red. The header's today square

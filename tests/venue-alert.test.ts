@@ -136,7 +136,7 @@ describe('the cards and the math', () => {
     const w = await world();
     await on(w); // Mon Oct 26, 12:00 PM Eastern
     await booked(w, ['2026-10-27', '2026-10-29']);
-    // A Not booked game and a Waitlist game in the same month never count.
+    // A Not booked game in the same month never counts.
     const sess = (await dash(w)).sessions.filter((s: any) => day(s.startsAt) === '2026-11-03');
     expect(sess).toHaveLength(1);
     w.app.now = edt(10, 30, 23, 59);
@@ -153,12 +153,14 @@ describe('the cards and the math', () => {
     expect(n.map((x: any) => x.keys.join('+'))).toEqual(['court:2026-10', 'membership:2026-11']);
     expect(n[1]).toMatchObject({ cents: 3000, title: 'Membership should have been charged: $30', line: 'Monthly membership, Northville Pickleball Club' });
   });
-  it('Waitlist, Not booked and canceled games do not count; a canceled game that was Booked drops out', async () => {
+  it('Not booked (also an old waitlist row) and canceled games do not count; a canceled game that was Booked drops out', async () => {
     const w = await world();
     await on(w);
     const [a, b] = await booked(w, ['2026-10-27', '2026-10-29']);
     const waitlist = sessionOn(await dash(w), '2026-11-03').id;
-    expect((await w.organizer.call('POST', `/api/admin/sessions/${waitlist}/court-status`, { status: 'waitlist' })).status).toBe(200);
+    // Zip 86 round 2 (Alex): no court Waitlist (refused with 400); an old row stored on the waitlist (raw SQL) reads as Not booked.
+    expect((await w.organizer.call('POST', `/api/admin/sessions/${waitlist}/court-status`, { status: 'waitlist' })).status).toBe(400);
+    raw(w).prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").run(waitlist);
     w.app.now = edt(10, 31, 8);
     expect((await dash(w)).venueAlerts[0].line).toBe('2 games x $48 = $96');
     // Cancel one of the two booked games (nobody in it): the court charge is for the other one.

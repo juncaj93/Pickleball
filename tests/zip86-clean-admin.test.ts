@@ -192,3 +192,34 @@ describe('Zip 86: the look rules', () => {
     expect(r).toMatch(/main\.page > \.schedule \+ \.btn\.ghost\.block\s*\{\s*margin-top: -8px;/);
   });
 });
+
+describe('Zip 86 round 2 (Alex): no court Waitlist anywhere', () => {
+  it('a game saved on the old waitlist reads and acts as Not booked; Waitlist is refused; Booked logs court booked', async () => {
+    const ctx = await setupGroup(new TestApp());
+    const dash = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const s = dash.sessions.find((x: any) => !x.state.flags.canceled && !x.state.flags.started);
+    expect(s, 'an upcoming game').toBeTruthy();
+    // Both old shapes: the third booking value and the venue-waitlist flag.
+    ctx.app.db.raw.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").run(s.id);
+    const after = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((x: any) => x.id === s.id);
+    expect(after.bookingStatus).toBe('needs_booking');
+    expect(after.courtState).toBeNull();
+    expect(after.state.label).not.toBe('court_waitlist');
+    const player = await playerPhone(ctx, Object.keys(ctx.byName).find((n) => n !== 'Alex')!);
+    const mine = (await player.call('GET', '/api/group')).data.sessions.find((x: any) => x.id === s.id);
+    expect(mine.bookingStatus).toBe('needs_booking');
+    expect(mine.courtState).toBeNull();
+    // Waitlist is refused; the route only for the venue waitlist is gone.
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'waitlist' })).status).toBe(400);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' })).status).toBe(404);
+    // Booked: the old values are cleared and History says "court booked" (never "court opened").
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' })).status).toBe(200);
+    const row = ctx.app.db.raw.prepare('SELECT booking_status, court_state FROM sessions WHERE id = ?').get(s.id) as any;
+    expect(row).toEqual({ booking_status: 'booked', court_state: null });
+    const acts = ctx.app.db.raw.prepare("SELECT action FROM admin_audit_log WHERE session_id = ? AND action LIKE 'court_%'").all(s.id) as any[];
+    expect(acts.map((a) => a.action)).toEqual(['court_booked']);
+    // Not booked clears it the same way.
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'not_booked' })).status).toBe(200);
+    expect(ctx.app.db.raw.prepare('SELECT booking_status, court_state FROM sessions WHERE id = ?').get(s.id)).toEqual({ booking_status: 'needs_booking', court_state: null });
+  });
+});

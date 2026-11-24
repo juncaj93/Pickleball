@@ -133,10 +133,11 @@ async function main() {
     await settle(page);
     assert((await attr(page, 'data-motion')) === null && (await attr(page, 'data-motion-admin')) === null, 'no marks on the page');
     assert((await page.locator('.cs-glide, .tab-glide, .m-cascade, .m-roll, .m-blink, .m-loading').count()) === 0, 'no motion parts');
-    await card(page, C).locator('.court-switch button[data-seg="waitlist"]').click();
+    // Zip 86: no Waitlist segment: Booked, then back to Not booked.
+    await card(page, C).locator('.court-switch button[data-seg="booked"]').click();
     await page.locator('.pop.toast').waitFor();
     assert((await page.locator('.pop.toast.m-toast').count()) === 0, 'plain toast');
-    assert((await record(C)).courtState === 'waitlist' || (await record(C)).bookingStatus === 'waitlist' || true, 'saved');
+    assert((await record(C)).bookingStatus === 'booked', 'saved');
     await page.waitForTimeout(300);
     await card(page, C).locator('.court-switch button[data-seg="not_booked"]').click();
     await page.waitForTimeout(400);
@@ -416,7 +417,7 @@ async function main() {
     const { ctx, page } = await openAdmin();
     await settle(page);
     await openEdit(page, B);
-    await page.locator('dialog[open] .court-switch button[data-seg="waitlist"]').click();
+    await page.locator('dialog[open] .court-switch button[data-seg="not_booked"]').click(); // Zip 86: was the removed Waitlist segment
     const save = page.locator('dialog[open] button[type="submit"]');
     await save.click();
     await page.waitForSelector('dialog[open] .btn.m-saved', { timeout: 4000 });
@@ -441,7 +442,7 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- 8. court switch
-  await check('8. court switch: the highlight glides (about 150 ms, transform only), the edge color follows, "Not booked" stays two lines, heights hold', async () => {
+  await check('8. court switch: the highlight glides (about 150 ms, transform only), the edge color follows, heights hold', async () => {
     const { ctx, page } = await openAdmin();
     await settle(page);
     const sw = card(page, C).locator('.court-switch');
@@ -450,7 +451,7 @@ async function main() {
     const edge0 = await card(page, C).evaluate((e) => getComputedStyle(e).borderTopColor);
     const tr = await sw.locator('.cs-glide').evaluate((e) => getComputedStyle(e).transitionProperty + '/' + getComputedStyle(e).transitionDuration);
     assert(tr === 'transform, background-color/0.15s, 0.15s', `glide timing (${tr})`);
-    await sw.locator('button[data-seg="waitlist"]').click();
+    await sw.locator('button[data-seg="booked"]').click(); // Zip 86: was the removed Waitlist segment
     await page.waitForTimeout(40);
     const mid = await sw.locator('.cs-glide').evaluate((e) => new DOMMatrix(getComputedStyle(e).transform).m41);
     await page.waitForTimeout(300);
@@ -459,7 +460,8 @@ async function main() {
     const edge1 = await card(page, C).evaluate((e) => getComputedStyle(e).borderTopColor);
     assert(edge0 !== edge1, `edge color follows (${edge0} -> ${edge1})`);
     const g1 = await geo();
-    assert(JSON.stringify(g0) === JSON.stringify(g1) && g0.lines === 2 && g0.h.every((h) => h >= 44), `heights and two lines hold ${JSON.stringify(g0)} ${JSON.stringify(g1)}`);
+    // Zip 86: with two segments "Not booked" is one line (no two-line rule any more).
+    assert(JSON.stringify(g0) === JSON.stringify(g1) && g0.lines === 0 && g0.h.every((h) => h >= 44), `heights hold and "Not booked" is one line ${JSON.stringify(g0)} ${JSON.stringify(g1)}`);
     const fit = await sw.evaluate((e) => { const g = e.querySelector('.cs-glide').getBoundingClientRect(); const b = e.querySelector('[aria-pressed="true"]').getBoundingClientRect(); return [Math.abs(g.left - b.left), Math.abs(g.width - b.width), Math.abs(g.top - b.top), Math.abs(g.height - b.height)].map((n) => Math.round(n)); });
     assert(fit.every((n) => n <= 1), `glider matches the chosen segment ${fit}`);
     await sw.locator('button[data-seg="not_booked"]').click();
@@ -572,7 +574,7 @@ async function main() {
     for (const scheme of ['light', 'dark']) {
       const { ctx, page } = await openAdmin({ scheme });
       await settle(page);
-      await card(page, C).locator('.court-switch button[data-seg="waitlist"]').click();
+      await card(page, C).locator('.court-switch button[data-seg="booked"]').click(); // Zip 86: was Waitlist
       await page.waitForSelector('.pop.toast.m-toast');
       await page.waitForTimeout(350);
       const t = await page.evaluate(() => { const p = document.querySelector('.pop.toast').getBoundingClientRect(); const tb = document.querySelector('.tabbar').getBoundingClientRect(); return { bg: getComputedStyle(document.querySelector('.pop.toast')).backgroundColor, above: p.bottom <= tb.top + 1 }; });
@@ -603,12 +605,12 @@ async function main() {
     const { ctx, page } = await openAdmin({ reduced: true });
     await page.waitForTimeout(300);
     assert((await idle(page)).length === 0, `no animation at load: ${await names(page)}`);
-    await card(page, C).locator('.court-switch button[data-seg="waitlist"]').click();
+    await card(page, C).locator('.court-switch button[data-seg="booked"]').click(); // Zip 86: was Waitlist
     await page.waitForTimeout(80);
     assert((await idle(page)).length === 0, `no animation after a tap: ${await names(page)}`);
     assert((await page.locator('.m-roll').count()) === 0, 'no rolling parts');
     const t = squash(await page.locator('.pop.toast').innerText());
-    assert(/waitlist/i.test(t), `toast still reads: ${t}`);
+    assert(/booked/i.test(t), `toast still reads: ${t}`);
     await card(page, B).locator('button.icon-round').click();
     assert((await idle(page)).length === 0, `menu: ${await names(page)}`);
     await card(page, B).locator('[role="menuitem"]', { hasText: 'Edit game' }).click();

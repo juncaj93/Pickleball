@@ -29,8 +29,6 @@ export interface TaskSession {
   cancellationDeadlineAt: string | null;
   finalized: boolean;
   holiday: string | null;
-  /** The court is on the venue's waitlist (Waitlist, not Booked). Only TEXTS_R2 reads it: the booking reminder skips such a game. */
-  waitlisted?: boolean;
 }
 
 /** Taps the organizer made on the card, saved on the server. */
@@ -380,8 +378,8 @@ function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | null {
   const tail = `Book: ${o.links.book}\nThen set it to Booked: ${o.links.admin}`;
   const alerts: TaskAlert[] = [];
   alertIf(alerts, s, 'book', t.bookingHeadsUp, `Booking for ${date} opens at ${opensAt}${holiday}. ${tail}`);
-  // TEXTS_R2: the reminder goes only while the game is still "not booked" (it fired after a backup was booked and the game set to Waitlist).
-  if (o.textsR2 !== true || !s.waitlisted) alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: Booking for ${date} opened at ${opensAt}${holiday}. ${tail}`);
+  // Zip 86: no court Waitlist, so the reminder goes for every game still not booked.
+  alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: Booking for ${date} opened at ${opensAt}${holiday}. ${tail}`);
   return { id: `book:${s.id}`, kind: 'book', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o)], steps: [], alerts, rank: 1 };
 }
 

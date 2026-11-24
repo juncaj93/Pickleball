@@ -1,8 +1,8 @@
 // "Ask for payment on every game" (PAY_ALWAYS, Nov 2, 2026). The scenario list is docs/AUDIT_SCENARIOS_payalways.md;
 // the ids in the test names (S1, M3, E7...) point at it.
 //
-// What the switch does: a player who is in (a real spot) is asked to pay on every game, Booked, Waitlist or Not
-// booked, with the same Pay, I paid, $14 and credit as a booked game. It is display only: the server has always
+// What the switch does: a player who is in (a real spot) is asked to pay on every game, Booked or Not
+// booked (Zip 86 round 2: no court Waitlist; an old row stored as waitlist acts as Not booked), with the same Pay, I paid, $14 and credit as a booked game. It is display only: the server has always
 // worked out what is owed, used credit at I'm in, and given money back on a drop or a cancel the same way on every
 // court status. These tests prove both halves: the screens follow the switch, and the money never depends on it.
 vi.hoisted(() => {
@@ -26,9 +26,10 @@ import { type Client, HOUR, PIN, setupGroup, TestApp } from './harness';
 
 const PRICE = 1400;
 const INTEGRITY = readFileSync(join(process.cwd(), 'scripts/integrity-checks.sql'), 'utf8');
-type Court = 'booked' | 'not_booked' | 'waitlist';
+type Court = 'booked' | 'not_booked';
 type Mode = 'off' | 'header' | 'settings';
-const COURTS: Court[] = ['not_booked', 'waitlist', 'booked'];
+// Zip 86 round 2 (Alex): no court Waitlist; the switch has two values.
+const COURTS: Court[] = ['not_booked', 'booked'];
 
 // ---------- the world ----------
 
@@ -107,6 +108,10 @@ const setCourt = async (w: W, sid: string, status: Court) => {
   const r = await w.organizer.call('POST', `/api/admin/sessions/${sid}/court-status`, { status });
   expect(r.status, r.text).toBe(200);
 };
+/** Zip 86 round 2: a game saved on the old court waitlist before it was removed (raw SQL, as the old Waitlist tap wrote it). */
+function oldWaitlist(w: W, sid: string) {
+  w.app.db.raw.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned' WHERE id = ?").run(sid);
+}
 const cancelGame = async (w: W, sid: string) => {
   const r = await w.organizer.call('POST', `/api/admin/sessions/${sid}/decision`, { decision: 'cancel', confirm: true });
   expect(r.status, r.text).toBe(200);
@@ -327,12 +332,13 @@ describe('M: sign up on every court status with every credit amount', () => {
 
 // ---------- E: events ----------
 
-for (const court of ['not_booked', 'waitlist'] as const) {
-  describe(`E: events on a ${court === 'not_booked' ? 'Not booked' : 'Waitlist'} court, switch on`, () => {
+// Zip 86 round 2 (Alex): no court Waitlist; the second run is an old row stored as waitlist, which acts as Not booked.
+for (const court of ['not_booked', 'old_waitlist'] as const) {
+  describe(`E: events on a ${court === 'not_booked' ? 'Not booked' : 'old Waitlist (reads as Not booked)'} court, switch on`, () => {
     it('E1 pay $14 cash (I paid, organizer confirms), then drop out: all $14 back as credit', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       await join_(w, g.id, 'Blair');
       await iPaid(w, g.id, 'Blair');
       // The organizer confirms it (the Home card's Paid is Mark paid on the seat).
@@ -350,7 +356,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E1b an "I paid" not confirmed yet, then drop out: it waits for the organizer, then becomes credit (same rule as booked games)', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       await join_(w, g.id, 'Blair');
       await iPaid(w, g.id, 'Blair');
       expect(sOf(await view(w, 'Blair'), g.id).mine!.dropClaimCents).toBe(PRICE);
@@ -364,7 +370,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E2 organizer Mark paid, then drop out: $14 back as credit', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       await join_(w, g.id, 'Blair');
       await markPaid(w, g.id, 'Blair');
       expect((await drop(w, g.id, 'Blair')).creditBackCents).toBe(PRICE);
@@ -375,7 +381,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E3 part credit ($3) plus $11 cash, then drop out: $3 back to the pot and $11 back as credit', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       givePot(w, 'Blair', 300);
       expect((await join_(w, g.id, 'Blair')).creditCents).toBe(300);
       const before = card(await shown(w, 'Blair'), g.id);
@@ -393,7 +399,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E4 organizer cancels after cash, part credit and full credit: everything back as credit', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       givePot(w, 'Casey', 300);
       givePot(w, 'Devon', 1400);
       for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await join_(w, g.id, n);
@@ -419,7 +425,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E5 an "I paid" not confirmed yet when the game is canceled waits for the organizer, then becomes credit (same rule as booked games)', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       await join_(w, g.id, 'Blair');
       await iPaid(w, g.id, 'Blair');
       await cancelGame(w, g.id);
@@ -434,7 +440,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E6 court booked later: nothing about the money moves, Pay and Paid stay as they were', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       await join_(w, g.id, 'Blair');
       await join_(w, g.id, 'Casey');
       await markPaid(w, g.id, 'Blair');
@@ -455,7 +461,8 @@ for (const court of ['not_booked', 'waitlist'] as const) {
       await join_(w, g.id, 'Blair');
       await join_(w, g.id, 'Casey');
       await markPaid(w, g.id, 'Blair');
-      await setCourt(w, g.id, court);
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
+      else await setCourt(w, g.id, 'not_booked');
       expect(card(await shown(w, 'Blair'), g.id)).toContain('Paid $14');
       expect(card(await shown(w, 'Casey'), g.id)).toMatch(/\$14 due Pay I paid/);
       await w.organizer.call('PUT', '/api/admin/pay-always', { on: false });
@@ -467,7 +474,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E8 standby for a full game owes nothing and uses no credit; promoted, they are asked to pay (credit first)', async () => {
       const w = await world({ mode: 'settings', maxPlayers: 4 });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await join_(w, g.id, n);
       givePot(w, 'Frankie', 300);
       const res = await join_(w, g.id, 'Frankie');
@@ -496,7 +503,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E9 Undo on "Paid with credit": the credit goes back to the pot and $14 is due again (Pay shows)', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       givePot(w, 'Blair', 1400);
       await join_(w, g.id, 'Blair');
       expect(card(await shown(w, 'Blair'), g.id)).toContain('Paid with credit');
@@ -512,7 +519,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E10 the organizer is never asked to pay, on any court', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       const r = await w.organizer.call('POST', `/api/admin/sessions/${g.id}/me`, { in: true });
       expect(r.status, r.text).toBe(200);
       const v = await shown(w, 'Alex');
@@ -526,7 +533,7 @@ for (const court of ['not_booked', 'waitlist'] as const) {
     it('E11 drop out with nothing paid: nothing moves, no credit made', async () => {
       const w = await world({ mode: 'settings' });
       const [g] = await games(w);
-      if (court === 'waitlist') await setCourt(w, g.id, 'waitlist');
+      if (court === 'old_waitlist') oldWaitlist(w, g.id);
       await join_(w, g.id, 'Blair');
       const res = await drop(w, g.id, 'Blair');
       expect(res.creditBackCents).toBe(0);
@@ -538,17 +545,22 @@ for (const court of ['not_booked', 'waitlist'] as const) {
 }
 
 describe('E: the court that never opens, and games that never get a court', () => {
-  it('E12 Waitlist court "Didn\'t open": the game is canceled and every payment comes back as credit', async () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; "Didn't open" (the /court route) was removed. An old waitlist game is canceled the usual way.
+  it('E12 an old Waitlist game: "Didn\'t open" is gone (404, nothing moves); canceling gives every payment back as credit', async () => {
     const w = await world({ mode: 'settings' });
     const [g] = await games(w);
-    await setCourt(w, g.id, 'waitlist');
+    oldWaitlist(w, g.id);
     givePot(w, 'Casey', 300);
     await join_(w, g.id, 'Blair');
     await join_(w, g.id, 'Casey');
     await markPaid(w, g.id, 'Blair');
     await markPaid(w, g.id, 'Casey');
     const r = await w.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'not_opened' });
-    expect(r.status, r.text).toBe(200);
+    expect(r.status, r.text).toBe(404);
+    expect((await adminGame(w, g.id)).status).not.toBe('canceled');
+    expect(await pot(w, 'Blair')).toBe(0);
+    await books(w, 300, 2500, 'before cancel');
+    await cancelGame(w, g.id);
     expect((await adminGame(w, g.id)).status).toBe('canceled');
     expect(await pot(w, 'Blair')).toBe(PRICE);
     expect(await pot(w, 'Casey')).toBe(PRICE);
@@ -602,10 +614,10 @@ describe('E: the court that never opens, and games that never get a court', () =
 // ---------- O: the organizer's money screens ----------
 
 describe('O: organizer money screens show early payments', () => {
-  it('O1 "x of y paid", Players and Money held count payments on Not booked and Waitlist games', async () => {
+  it('O1 "x of y paid", Players and Money held count payments on Not booked and old Waitlist games', async () => {
     const w = await world({ mode: 'settings' });
     const [g1, g2] = await games(w);
-    await setCourt(w, g2.id, 'waitlist');
+    oldWaitlist(w, g2.id);
     for (const g of [g1, g2]) {
       await join_(w, g.id, 'Blair');
       await join_(w, g.id, 'Casey');
@@ -660,12 +672,12 @@ describe('O: organizer money screens show early payments', () => {
 // ---------- Z: the switch never changes money ----------
 
 describe('Z: the same taps move the same money with the switch off and on', () => {
-  it('Z1 a 40-step script on Not booked and Waitlist games ends with identical books either way', async () => {
+  it('Z1 a 40-step script on Not booked and old Waitlist games ends with identical books either way', async () => {
     const out: string[] = [];
     for (const mode of ['off', 'header', 'settings'] as const) {
       const w = await world({ mode, maxPlayers: 5 });
       const gs = (await games(w)).slice(0, 3);
-      await setCourt(w, gs[1].id, 'waitlist');
+      oldWaitlist(w, gs[1].id);
       givePot(w, 'Casey', 300);
       givePot(w, 'Devon', 2000);
       const names = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper'];
@@ -683,7 +695,7 @@ describe('Z: the same taps move the same money with the switch off and on', () =
         else if (r < 0.7) await w.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.byName[n], paid: true });
         else if (r < 0.78) await call(w, n, 'POST', `/api/sessions/${g.id}/use-credit`, {});
         else if (r < 0.84) await call(w, n, 'POST', `/api/sessions/${g.id}/undo-credit`, {});
-        else if (r < 0.92) await w.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: COURTS[Math.floor(rand() * 3)] });
+        else if (r < 0.92) await w.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: COURTS[Math.floor(rand() * COURTS.length)] });
         else if (r < 0.96) await w.organizer.call('POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true });
         else await w.organizer.call('POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'reopen' });
         healthy(w, `${mode} step ${step}`);

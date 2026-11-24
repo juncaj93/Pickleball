@@ -36,18 +36,20 @@ function injectBefore(app: any, re: RegExp, inject: () => Promise<unknown>) {
 }
 
 describe('races between two requests', () => {
-  it('a cancel landing inside "court waitlist" keeps the game canceled and everyone\'s money as credit', async () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; the "court waitlist" races now run through the Booked -> Not booked switch.
+  it('a cancel landing inside "court Not booked" keeps the game canceled and everyone\'s money as credit', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) {
       await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
       await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName[n], paid: true });
     }
     let cancel: any;
-    const inj = injectBefore(ctx.app, /SET court_state = 'waitlist', booking_status = 'needs_booking'/, async () => {
+    const inj = injectBefore(ctx.app, /SET booking_status = 'needs_booking', status = 'planned'/, async () => {
       cancel = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true });
     });
-    const wait = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' });
+    const wait = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'not_booked' });
     inj.restore();
     expect(inj.fired()).toBe(true);
     expect(cancel.status).toBe(200);
@@ -56,7 +58,7 @@ describe('races between two requests', () => {
     expect(row.status).toBe('canceled');
   });
 
-  it('"court waitlist" on a finalized game is refused and changes nothing (fresh review, round 2)', async () => {
+  it('"court Not booked" (and the gone Waitlist) on a finalized game is refused and changes nothing (fresh review, round 2)', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
@@ -64,8 +66,10 @@ describe('races between two requests', () => {
     ctx.app.now = Date.parse(s.endsAt) + 60_000;
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
     const before = JSON.stringify(ctx.app.db.raw.prepare('SELECT * FROM sessions WHERE id = ?').get(s.id)) + JSON.stringify(ctx.app.db.raw.prepare("SELECT task FROM task_log WHERE session_id = ?").all(s.id));
-    const r = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' });
+    const r = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'not_booked' });
     expect(r.status).toBe(409);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'waitlist' })).status).toBe(400);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' })).status).toBe(404);
     const after = JSON.stringify(ctx.app.db.raw.prepare('SELECT * FROM sessions WHERE id = ?').get(s.id)) + JSON.stringify(ctx.app.db.raw.prepare("SELECT task FROM task_log WHERE session_id = ?").all(s.id));
     expect(after).toBe(before);
   });

@@ -144,7 +144,6 @@ route('POST', '/api/admin/sessions/:id/late-fee', admin.clearLateFee);
 route('PUT', '/api/admin/late-fees', admin.setLateFees);
 route('POST', '/api/admin/sessions/:id/booked', admin.markBooked);
 route('POST', '/api/admin/sessions/:id/court-answer', admin.courtAnswer);
-route('POST', '/api/admin/sessions/:id/court', admin.courtWaitlist);
 route('POST', '/api/admin/sessions/:id/court-status', admin.setCourtStatus);
 route('GET', '/api/admin/version', (ctx) => admin.adminVersion(ctx));
 route('POST', '/api/admin/sessions/:id/show', admin.showSession);

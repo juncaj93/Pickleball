@@ -46,7 +46,7 @@ export interface PlayerSessionView {
   joinAs: 'in' | 'waitlist';
   /** US holiday on this date, e.g. "Thanksgiving". */
   holiday: string | null;
-  courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  courtState: 'opened' | 'not_opened' | null;
   /** A one-off game the organizer added, with its optional note. */
   extra: boolean;
   note: string | null;
@@ -122,8 +122,6 @@ export interface PlayerSessionView {
    * `wasStartsAt` is the time they last agreed to. Null when there is nothing to ask (or TIME_SHIFT is off).
    */
   timeAsk: { wasStartsAt: string } | null;
-  /** Set by the player screen only (src/courtDisplay.ts): the court is on the venue's waitlist (players see Court not booked). */
-  venueWaitlist?: boolean;
 }
 
 /** One line of a player's credit history. */
@@ -321,8 +319,7 @@ export interface GroupView {
     holiday: string | null;
     /** How many are in now. */
     confirmedCount: number;
-    /** The venue's court waitlist: players go on standby. */
-    courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+    courtState: 'opened' | 'not_opened' | null;
     /** Screen only (set by src/courtDisplay.ts): the court is not booked, so the prompt reads like a normal game. */
     noCourt?: boolean;
   } | null;
@@ -463,7 +460,7 @@ export interface AdminSessionView {
   courtCostCents: number | null;
   /** A canceled game the venue still charged for (answered Yes to "Were you charged?"): that amount counts as its court cost. */
   chargedCents: number | null;
-  courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  courtState: 'opened' | 'not_opened' | null;
   /** Moved from its usual time (rescheduled). */
   moved: boolean;
   /** The usual time it was moved from, when moved. */

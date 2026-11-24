@@ -22,8 +22,6 @@
   --z7-text-ink: var(--ink);
   --z7-credit-fg: var(--info-fg);
   --z7-credit-bg: var(--info-bg);
-  --z7-wait-bg: var(--ink-2);
-  --z7-wait-ink: var(--primary-ink);
   --z7-cancel-fg: var(--ink-2);
   --z7-cancel-bg: var(--fill);
   --z7-gray-line: var(--line-strong);
@@ -35,7 +33,6 @@
   --z7-tomorrow-ink: var(--ok-fg);
   --z7-glow: 76 197 138;
   --z7-sweep: rgb(255 255 255 / 12%);
-  --z7-wait-ink: var(--bg);
   --z7-cancel-bg: var(--fill);
 }
 @media (prefers-color-scheme: dark) {
@@ -45,7 +42,6 @@
     --z7-tomorrow-ink: var(--ok-fg);
     --z7-glow: 76 197 138;
     --z7-sweep: rgb(255 255 255 / 12%);
-    --z7-wait-ink: var(--bg);
     --z7-cancel-bg: var(--fill);
   }
 }
@@ -216,27 +212,6 @@
 /* =====================================================================================================================
    B. COLOR_CLEANUP
    ===================================================================================================================== */
-
-/* Waitlist is neutral gray (selected: dark gray with white text in light mode, light gray with dark text in dark mode). */
-:root[data-color-cleanup] .court-switch,
-:root[data-color-cleanup] .hv2-short {
-  --sw-wait-bg: var(--z7-wait-bg);
-  --sw-wait-fg: var(--z7-wait-ink);
-}
-:root[data-color-cleanup] .scard.court-waitlist {
-  border-color: var(--line-strong);
-}
-:root[data-color-cleanup] .court-waitlist .court-banner {
-  background: var(--muted-bg);
-  color: var(--muted-fg);
-  border-bottom-color: var(--line-strong);
-}
-:root[data-color-cleanup] .sched-status.court-waitlist .court-status {
-  color: var(--muted-fg);
-}
-:root[data-color-cleanup] .court-waitlist .court-dot {
-  background: var(--muted-fg);
-}
 
 /* "Extra game" is a gray outline (purple belongs to texting only). The organizer's holiday note follows: its purple becomes gray. */
 :root[data-color-cleanup] {

@@ -145,7 +145,7 @@ describe('what the server sends the popup', () => {
       for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${other.id}/join`, {});
     }
     for (const n of inNames) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
-    if (standby) await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' });
+    if (standby) ctx.app.db.raw.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").run(s.id);
     ctx.app.now = Date.parse('2026-11-02T09:00:00-05:00');
     const g = (await (await playerPhone(ctx, 'Frankie')).call('GET', '/api/group')).data;
     return g.suggestion;
@@ -156,7 +156,8 @@ describe('what the server sends the popup', () => {
       expect(sg, `${n} in`).toMatchObject({ confirmedCount: n, holiday: 'Election Day', courtState: null });
     }
   });
-  it('a game on the court waitlist is marked standby', async () => {
-    expect(await popup(['Alex'], true)).toMatchObject({ courtState: 'waitlist' });
+  // Zip 86 round 2 (Alex): no court Waitlist; an old waitlist row (raw SQL) is no longer marked standby: it reads as Not booked.
+  it('a game stored on the old court waitlist is not marked standby', async () => {
+    expect(await popup(['Alex'], true)).toMatchObject({ confirmedCount: 1, courtState: null });
   });
 });

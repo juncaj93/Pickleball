@@ -243,7 +243,7 @@ function findClipping(opts) {
       }
     }
   }
-  // 4b: a sliding highlight sits exactly on the chosen choice (the court switch: Not booked | Waitlist | Booked).
+  // 4b: a sliding highlight sits exactly on the chosen choice (the court switch in Edit game: Not booked | Booked).
   for (const sw of root.querySelectorAll('.court-switch')) {
     const glide = sw.querySelector('.cs-glide');
     const on = sw.querySelector('button[aria-pressed="true"]');

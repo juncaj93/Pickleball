@@ -6,7 +6,8 @@
  *       buttons and their second lines, Change (Date, Time, Courts, Players you expect, Courts cost), Money (to the cent) and Prizes
  *       (the suggestion); nothing wider than the screen, no word cut.
  *   B   The game card (picture 10): the status button moves on with Undo (and Undo leaves the server as it was), In / Out flips with Undo,
- *       the bottom row is 44 px and on one line, the balls and names on one line, no focus ring on load, the green stripe only while In.
+ *       the bottom row is 44 px and on one line, the balls and names on one line, no focus ring on load, no green stripe (round 2), the
+ *       quick court picker (one tap saves, Undo), and no Waitlist anywhere (round 2).
  *   C   The TONIGHT and TOMORROW tiles keep the normal tile width at 100%, 125% and 150% text (picture 8).
  *   D   The admin mini row on the tournament's day (picture 9), no button.
  *   E   The player rows (pictures 1 to 3): next week no button; two weeks Sign up (opens Sign up), Lock in (runs Lock in), Who's in (opens it);
@@ -159,7 +160,10 @@ const cutOrBroken = (page, sel) =>
         for (const width of [320, 390, 420]) {
           const { page, ctx, errors } = await b.adminHome({ width, scheme });
           const first = page.locator('.scard86').first();
-          assert((await first.getAttribute('data-me-in')) === 'yes', 'stripe while In');
+          assert((await first.getAttribute('data-me-in')) === 'yes', 'In');
+          // Round 2: no green stripe on the left, In or Out (the floating frame only).
+          const lb = await first.evaluate((e) => [getComputedStyle(e).borderLeftWidth, getComputedStyle(e).borderTopWidth]);
+          assert(lb[0] === lb[1], `no stripe: left ${lb[0]} vs top ${lb[1]}`);
           assert(flat(await first.locator('.r86-status').textContent()) === 'Booked', 'Booked');
           assert(flat(await first.locator('.r86-inout').textContent()) === 'In', 'In');
           assert((await page.locator('.court-switch').count()) === 0, 'no 3-way switch on Home');
@@ -178,7 +182,7 @@ const cutOrBroken = (page, sel) =>
           const second = page.locator('.scard86').nth(1);
           assert(flat(await second.locator('.r86-status').textContent()) === 'Not booked', 'Not booked');
           assert(flat(await second.locator('.r86-inout').textContent()) === 'Out', 'Out');
-          assert((await second.getAttribute('data-me-in')) === null, 'no stripe while Out');
+          assert((await second.getAttribute('data-me-in')) === null, 'Out');
           const border = await second.evaluate((e) => getComputedStyle(e).borderTopStyle);
           assert(border === 'solid', `no dashed outline (${border})`);
           const bad = await cutOrBroken(page, '.scard86');
@@ -203,17 +207,49 @@ const cutOrBroken = (page, sel) =>
         assert(s.courtState === 'booked' || s.status === 'booked' || s.bookingStatus === 'booked' || flat(await first.locator('.r86-status').textContent()) === 'Booked', 'Undo left it booked');
         assert(flat(await first.locator('.r86-status').textContent()) === 'Booked', 'back to Booked');
       }
-      // Next, Waitlist, Booked (the order), saved.
+      // Round 2: the button only flips Booked / Not booked. Two taps inside the Undo window: back to Booked, nothing sent.
+      await sleep(600);
       await first.locator('.r86-status').click();
       // The site's double-tap guard drops a second tap on the same button within 0.4 s (on purpose); a real next tap comes later.
       await sleep(600);
       await first.locator('.r86-status').click();
-      assert(flat(await first.locator('.r86-status').textContent()) === 'Waitlist', 'then Waitlist');
+      assert(flat(await first.locator('.r86-status').textContent()) === 'Booked', 'flips back to Booked');
+      // Not booked for real (saved after the Undo window), then back to Booked.
       await sleep(600);
       await first.locator('.r86-status').click();
-      assert(flat(await first.locator('.r86-status').textContent()) === 'Booked', 'then Booked');
       await page.waitForTimeout(7000);
-      assert(flat(await first.locator('.r86-status').textContent()) === 'Booked', 'saved Booked');
+      let s1 = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
+      assert(s1.bookingStatus === 'needs_booking', `Not booked saved (${s1.bookingStatus})`);
+      await first.locator('.r86-status').click();
+      await page.waitForTimeout(7000);
+      s1 = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
+      assert(s1.bookingStatus === 'booked', 'Booked saved');
+      // No Waitlist anywhere on the card, and the Edit game switch has two choices.
+      assert(!/waitlist/i.test(await first.locator('.r86-actions').textContent()), 'no Waitlist on the card');
+      const refused = await b.call('POST', `/api/admin/sessions/${id}/court-status`, { status: 'waitlist' }).then(() => 'ok', (e) => String(e));
+      assert(/400/.test(refused), `waitlist refused (${refused})`);
+      // The quick court picker: Court 4 opens it; one tap on 7 saves (after the Undo window), Clear clears.
+      await first.locator('.r86-court').click();
+      await page.waitForTimeout(500);
+      assert((await page.locator('[data-court-picker] .r86-pick').count()) === 16, '16 courts');
+      assert((await page.locator('[data-court-pick="4"]').getAttribute('aria-pressed')) === 'true', 'court 4 lit');
+      await page.locator('[data-court-pick="7"]').click();
+      assert(flat(await first.locator('.r86-court').textContent()) === 'Court 7', 'Court 7 at once');
+      await page.waitForTimeout(7000);
+      s1 = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
+      assert(s1.courtNum === 7, `court 7 saved (${s1.courtNum})`);
+      if (undo) {
+        await first.locator('.r86-court').click();
+        await page.waitForTimeout(500);
+        await page.locator('[data-court-pick-clear]').click();
+        assert(flat(await first.locator('.r86-court').textContent()) === 'Court ?', 'Court ? at once');
+        await page.locator('.toast-action').click();
+        await page.waitForTimeout(6500);
+        assert(flat(await first.locator('.r86-court').textContent()) === 'Court 7', 'Undo keeps Court 7');
+        s1 = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
+        assert(s1.courtNum === 7, 'Undo: nothing saved');
+      }
+      await sleep(600);
       // In -> Out with Undo; then Out for real.
       await first.locator('.r86-inout').click();
       assert(flat(await first.locator('.r86-inout').textContent()) === 'Out', 'Out at once');
@@ -240,7 +276,7 @@ const cutOrBroken = (page, sel) =>
       await page.waitForTimeout(7000);
       const after = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
       assert(!after.roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'Out saved');
-      assert((await first.getAttribute('data-me-in')) === null, 'stripe gone');
+      assert((await first.getAttribute('data-me-in')) === null, 'shows Out');
       await ctx.close();
     });
 

@@ -2360,15 +2360,14 @@ function SuggestionCard({
   // Zip 17, Unpaid nudge (null when off): the same block as the game cards' I'm in.
   const nudge = useNudge();
   const nudgeBlocked = !!nudge?.state.blocked;
-  // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
+  // At the max they would wait (Zip 86: no court waitlist, so no standby).
   // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
   // warns first. With room, a game with no court booked reads like a normal one.
   // "Card cleanup" (Zip 10): no waitlist and no cap, so the popup never says waitlist or standby ("12 are in. You'd make it 13.").
   const cleanup = g.cardCleanup === true;
-  const standby = !cleanup && s.courtState === 'waitlist';
-  const waitlistForm = !cleanup && !standby && s.confirmedCount >= g.group.maxPlayers;
+  const waitlistForm = !cleanup && s.confirmedCount >= g.group.maxPlayers;
   // At the database's 12 the popup only says how many are in (an I'm in there gets the plain refusal).
-  const subline = standby ? '' : cleanup && s.confirmedCount >= g.group.maxPlayers ? `${s.confirmedCount} are in.` : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
+  const subline = cleanup && s.confirmedCount >= g.group.maxPlayers ? `${s.confirmedCount} are in.` : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     if (instant && !yes) {
@@ -2419,10 +2418,10 @@ function SuggestionCard({
     // Zip 76: the title says which game ("Tonight 9:30 PM needs 1 more"), so nobody commits to a game without seeing its time.
     // Compact so it stays short on a phone: "Tonight 9:30 PM", "Sun 6 PM".
     const when = `${word === 'tonight' || word === 'tomorrow' ? day : day.slice(0, 3)} ${formatTime(s.startsAt, tz).replace(':00', '')}`;
-    const title = standby ? wantInTitle(s.startsAt, tz, Date.parse(g.now), false) : short ? `${when} needs ${MIN_PLAYERS - n} more` : `${when} has ${n} in`;
+    const title = short ? `${when} needs ${MIN_PLAYERS - n} more` : `${when} has ${n} in`;
     if (hidden) return null;
     const atLimit = cleanup && n >= g.group.maxPlayers;
-    const sub = standby ? undefined : short ? <AcBalls inCount={n} /> : waitlistForm ? "You’d be on the waitlist" : atLimit ? undefined : `You’d make it ${n + 1}`;
+    const sub = short ? <AcBalls inCount={n} /> : waitlistForm ? "You’d be on the waitlist" : atLimit ? undefined : `You’d make it ${n + 1}`;
     return (
       <AlertCard
         as="section"
@@ -2576,7 +2575,6 @@ const NOTE_PILL_MAX = 18;
 const noteLook = (text: string) => (text.trim().length <= NOTE_PILL_MAX ? 'note-pill' : 'note-box');
 
 function countLine(s: PlayerSessionView): string {
-  if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
   return s.countText;
 }
 
@@ -2898,9 +2896,7 @@ export function ScheduleRow({
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
   const waiting = mine?.status === 'waitlisted';
-  // src/courtDisplay.ts draws an open venue-waitlist game as a normal one before it gets here; a game that already STARTED on a court
-  // still on Waitlist keeps it, so the standby words below stay (a Zip 11 fresh review found them still reachable, so they are kept).
-  const courtWait = s.courtState === 'waitlist';
+  // Zip 86: no court waitlist, so no standby words (a full game keeps its real waitlist).
   const open = !s.canceled && !s.started;
   const nowMs = Date.parse(g.now);
   const motion = useMotion();
@@ -3112,7 +3108,7 @@ export function ScheduleRow({
 
   const court = courtStatus(s, tz);
   // The court on the tile's border and the time under it (always on; only the moved-game notice has a switch).
-  const ts: TsKind | null = tsKind(court.kind, !!s.venueWaitlist);
+  const ts: TsKind | null = tsKind(court.kind);
   const flip = useCourtFlip(s.id, ts);
   const asking = !held && !!s.timeAsk && g.timeShift !== false && inSession && open;
   useEffect(() => {
@@ -3147,7 +3143,6 @@ export function ScheduleRow({
   const dayTag: TileDay | undefined = g.tonightGlow === true ? (gameDay ? 'tonight' : tileDay(s.startsAt, tz, nowMs, open && !s.canceled)) : undefined;
   const simple = g.playerCardsSimple === true;
   // Standby is the venue-waitlist game's word for the list; PLAYER_CARDS_SIMPLE says waitlist (or nothing) everywhere.
-  const standbyWord = courtWait && !simple;
   // Zip 9, CARD_TIME_BUTTONS: the start and the length under the tile, and one joined Calendar | Directions button instead of the icon.
   const cardButtons = g.cardTimeButtons === true;
   // Zip 10, CARD_CLEANUP: no count text (only the circles, one row), the people icon before the names, the content centered to the
@@ -3184,7 +3179,7 @@ export function ScheduleRow({
       </a>
     ));
   // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
-  const showCount = !s.canceled && (simple || s.confirmed.length > 0 || !courtWait);
+  const showCount = !s.canceled;
   // Zip 42 "Guest spot": the host's own guest. "Remove guest" sits right before Drop out while the switch is on for this screen.
   const myGuest = mine?.guest ?? null;
   const removeGuestLink = !held && isIn && open && !!myGuest && g.guestSpot === true && (
@@ -3211,7 +3206,7 @@ export function ScheduleRow({
   const notIn = !held && open && !(inSession || waiting);
   // The flat LATER row (switch off) puts the note in the middle column; every card (and every Card cleanup card) puts it under the button.
   const flatLater = tier === 'later' && !cleanup;
-  const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? s.shortGame
+  const note = notIn && s.joinAs === 'in' && !s.full ? s.shortGame
         ? gameCreditBackNote(viewPrice(s, { pricePerPlayerCents: g.group.priceCents, typicalCourtCostCents: 0 }), s.confirmed.length, g.group.maxPlayers, formatPrice)
         : creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice)
       : null;
@@ -3223,7 +3218,7 @@ export function ScheduleRow({
   const reasonShown = s.canceled && s.courtState !== 'not_opened' && !!s.cancelReason;
   if (s.canceled) status = <span className={`st-canceled${reasonShown ? ` ${noteLook(s.cancelReason!)}` : ''}`}>{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
   else if (waiting)
-    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">{ordinal(mine.waitlistPosition ?? 1)} on {courtWait ? 'standby' : 'the waitlist'}</span>;
+    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">{ordinal(mine.waitlistPosition ?? 1)} on the waitlist</span>;
   else if (isIn && simple)
     // PLAYER_CARDS_SIMPLE: "You're in" and the calendar icon, nothing about the court.
     status = (
@@ -3271,12 +3266,12 @@ export function ScheduleRow({
       aria-busy={busy}
       onClick={join}
     >
-      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I’m in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I’m in" : 'Join waitlist'}
+      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I’m in" : s.joinAs === 'in' ? "I’m in" : 'Join waitlist'}
     </button>
   );
   const leaveBtn = !held && waiting && open && (
     <button className="btn sched-btn outline" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
-      {standbyWord ? 'Leave standby' : 'Leave waitlist'}
+      Leave waitlist
     </button>
   );
   const noteEl = note && (
@@ -3367,7 +3362,7 @@ export function ScheduleRow({
             ))}
           {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} {...(line.guestAt ? { guestAt: line.guestAt } : {})} />}
           {!s.canceled && !waiting && !simple && !cleanup && (
-            <NamesLine {...guestLine(s.waitlist)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
+            <NamesLine {...guestLine(s.waitlist)} me={g.me?.name} everyone={everyone} label="Waitlist" />
           )}
           {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You’re in if someone drops.</p>}
           {/* Zip 42 round 3: a guest removed late whose spot is still owed. */}
@@ -3406,7 +3401,7 @@ export function ScheduleRow({
       {celebrating && motion && !gameDay && <Burst />}
       <ConfirmDialog
         open={askOut && (inSession || waiting)}
-        title={waiting ? (standbyWord ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
+        title={waiting ? 'Leave the waitlist?' : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
         {...(myGuest && !waiting ? { cancelLabel: 'Stay in' } : {})}
         body={
           <>
@@ -3453,7 +3448,7 @@ export function ScheduleRow({
                 `Your spot opens up for someone else.${mine ? dropMoneyLine(mine.dropCreditCents, mine.dropCashCents, mine.dropClaimCents ?? 0, firstNameOf(g.group.organizerName)) : ''}`}
           </>
         }
-        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can’t make it" : myGuest ? 'Drop out both' : 'Drop out'}
+        confirmLabel={waiting ? 'Leave waitlist' : fromNotice ? "Can’t make it" : myGuest ? 'Drop out both' : 'Drop out'}
         danger
         busy={busy}
         onConfirm={() => {

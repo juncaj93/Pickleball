@@ -83,7 +83,7 @@ async function main() {
   let d = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
   for (const h of d.hiddenSessions || []) await post(areq, `/api/admin/sessions/${h.id}/show`, { shown: true });
   d = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
-  // Games far enough out that no deadline is near: A booked (the changed one), B on the venue's waitlist, C not booked.
+  // Games far enough out that no deadline is near: A booked (the changed one), B and C not booked (Zip 86: no court Waitlist, so no B on the venue's waitlist).
   const ahead = d.sessions.filter((s) => !s.state.flags.past && Date.parse(s.startsAt) > clock.now() + 36 * 3600_000);
   const [A, B, C] = ahead;
   const idOf = (n) => d.players.find((p) => p.name === n).id;
@@ -95,7 +95,6 @@ async function main() {
   }
   const join = (n, s) => post(phones[n], `/api/sessions/${s.id}/join`, {});
   await post(areq, `/api/admin/sessions/${A.id}/booked`, {});
-  await post(areq, `/api/admin/sessions/${B.id}/court`, { action: 'waitlist' });
   for (const n of ['Ryan', 'Julian', 'Nathan']) await join(n, A);
   await join('Ryan', B);
   await join('Ryan', C);
@@ -126,7 +125,9 @@ async function main() {
     await page.waitForTimeout(800);
     assert((await page.locator('[data-time-bar]').count()) === 0, 'no notice by default');
     const cls = await page.evaluate((id) => document.querySelector(`#row-${id} .tile`).className, B.id);
-    assert(/ts-wait/.test(cls), `the court look is on: ${cls}`);
+    // Zip 86: no court Waitlist, so no "~7 PM": a not-booked game has the plain no-court look.
+    assert(/ts-none/.test(cls), `the court look is on: ${cls}`);
+    assert(!(await page.locator(`#row-${B.id} [data-sched-time]`).innerText()).startsWith('~'), 'no tilde for players');
     await page.goto(`${BASE}/?timeshift=on`);
     await page.locator(`[data-time-bar="${A.id}"]`).waitFor();
     await page.goto(BASE);
@@ -211,8 +212,9 @@ async function main() {
       else assert(lum(info.bg) > 0.95, `white card ${info.bg}`);
       assert(/solid/.test(info.outline) && !/0, 0, 0, 0/.test(info.outline), `green outline on the game ${info.outline}`);
       assert(/0, 0, 0, 0/.test(info.otherOutline), 'no outline on other games');
-      assert(/ts-booked/.test(info.tiles[0]) && /ts-wait/.test(info.tiles[1]) && /ts-none/.test(info.tiles[2]), `tiles ${info.tiles}`);
-      assert(info.times[1].startsWith('~') && !info.times[0].startsWith('~') && !info.times[2].startsWith('~'), `times ${info.times}`);
+      // Zip 86: no court Waitlist: B is a plain not-booked game, and no time ever has the "~".
+      assert(/ts-booked/.test(info.tiles[0]) && /ts-none/.test(info.tiles[1]) && /ts-none/.test(info.tiles[2]), `tiles ${info.tiles}`);
+      assert(info.times.every((t) => !t.startsWith('~')), `times ${info.times}`);
       assert(info.timeColors[1] === info.timeColors[2] && info.timeColors[0] !== info.timeColors[1], `muted vs bright ${info.timeColors}`);
       assert(new Set(info.outlines).size === 1 && /^solid /.test(info.outlines[0]), `booked, ~time and no-court tiles share one solid outline ${info.outlines}`);
       if (scheme === 'dark') assert(/rgb\(139, 217, 163\)$|rgb\(142, 152, 143\)$/.test(info.outlines[0]), `dark outline is the row's mint (this week) or charcoal (next week, later) ${info.outlines[0]}`);
@@ -305,17 +307,17 @@ async function main() {
     const href = await line.getByRole('link', { name: /^Text Nathan/ }).getAttribute('href');
     assert(/^sms:/.test(href) && /Still%20in%3F%20Open%20the%20site%20and%20tap%20Still%20in/.test(href) && /is%20now/.test(href), href);
     const tile = await page.evaluate((id) => document.querySelector(`#session-${id} .tile`).className, B.id);
-    assert(/ts-wait/.test(tile), tile);
-    assert((await page.locator(`#session-${B.id} [data-card-time]`).innerText()).startsWith('~'), 'tilde on the organizer card');
+    assert(/ts-none/.test(tile), tile);
+    assert(!(await page.locator(`#session-${B.id} [data-card-time]`).innerText()).startsWith('~'), 'no tilde on the organizer card (Zip 86: no court Waitlist)');
     await page.screenshot({ path: path.join(SHOTS, 'time-shift-admin-390-light.png'), fullPage: true });
 
     // B flips to Booked: the tile goes solid, the tilde goes.
     const player = await open('Ryan');
     const tsB = player.page.locator(`#row-${B.id} [data-sched-time]`);
-    assert((await tsB.innerText()).startsWith('~'), 'tilde before');
+    assert(!(await tsB.innerText()).startsWith('~'), 'no tilde before');
     await post(areq, `/api/admin/sessions/${B.id}/court-status`, { status: 'booked' });
     await player.page.waitForFunction((id) => document.querySelector(`#row-${id} .tile`).className.includes('ts-booked'), B.id, { timeout: 12000 });
-    assert(!(await tsB.innerText()).startsWith('~'), 'tilde gone');
+    assert(!(await tsB.innerText()).startsWith('~'), 'no tilde after');
     await player.ctx.close();
 
     // Edit game: the note before saving a new start time on a game with players in.

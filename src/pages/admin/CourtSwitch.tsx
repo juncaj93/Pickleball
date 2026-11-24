@@ -3,16 +3,13 @@ import type { CourtSwitch as CourtSwitchValue } from '../../../shared/court';
 import { useMotion } from '../../motion';
 
 const OPTIONS: { value: CourtSwitchValue; label: string; lines?: [string, string] }[] = [
-  { value: 'not_booked', label: 'Not booked', lines: ['Not', 'booked'] },
-  { value: 'waitlist', label: 'Waitlist' },
+  { value: 'not_booked', label: 'Not booked' },
   { value: 'booked', label: 'Booked' },
 ];
 
 /**
- * Not booked | Waitlist | Booked: always visible, no dropdown. The chosen
- * segment is filled (amber, blue or green, each with a mark besides the
- * color so it reads in both themes). The card saves on tap; the Edit game
- * sheet holds the choice until Save.
+ * Not booked | Booked (Zip 86: no Waitlist): always visible, no dropdown. The chosen segment is filled (amber or green, each with a mark
+ * besides the color so it reads in both themes). The Edit game sheet holds the choice until Save.
  */
 export function CourtSwitch({
   value,

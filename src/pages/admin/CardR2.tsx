@@ -9,14 +9,14 @@ import { useRef, useState } from 'react';
 import { api, ApiError, isIOS, useNow } from '../../lib';
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { stillInTextR2 } from '../../../shared/textsR2';
-import { BANNER_TIMING, CourtReserveLink, PlayersLine, useToast } from '../../ui';
+import { BANNER_TIMING, CourtReserveLink, PlayersLine, Sheet, useToast } from '../../ui';
+import { COURT_MAX, COURT_MIN } from '../../../shared/gameDay';
 import { type Hold, startHold, trackHeld } from '../../undoHold';
 import { actingStamp } from '../../InstantTaps';
 import { ADMIN_UNDO_MS } from '../../../shared/zip13';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import { gameMinutes, lengthWords } from '../../../shared/gameLength';
 import { COURT_NAME, directionsUrl } from '../../../shared/zip9';
-import { CourtMap } from '../../GameDay';
 import { DirectionsArrowIcon } from '../../CardButtons';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 import { stillInText, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
@@ -86,7 +86,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   const showSwitch = !canceled && !s.state.flags.past && !s.state.flags.started;
   const start = cardTime(s.startsAt, s.endsAt, tz).start;
   const inCount = s.payableCount;
-  const ts: TsKind | null = tsKind(court.kind, false);
+  const ts: TsKind | null = tsKind(court.kind);
   const flip = useCourtFlip(`admin-${s.id}`, ts);
   const whoKey = s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => `${r.playerId}:${r.status}`).join(',');
   const whoChanged = useLiveChanged(whoKey);
@@ -140,7 +140,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
             <h2 id={`as-${s.id}`} className="sr-only">
               {formatShortDate(s.startsAt, tz)}, {formatTime(s.startsAt, tz)}
             </h2>
-            {/* Zip 86 (picture 10): the court status as ONE button (a tap moves it on, with Undo) and the organizer's In / Out beside it. */}
+            {/* Zip 86 (picture 10): the court status as ONE button (a tap flips Booked / Not booked, with Undo) and the organizer's In / Out beside it. */}
             {showSwitch ? (
               <div className="r86-actions" data-r86-actions>
                 <StatusButton ctx={ctx} s={s} value={switchValue} onPicked={setPicked} />
@@ -222,7 +222,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
                 </CourtReserveLink>
               </span>
             ) : (
-              todayOrComing && <CourtButton ctx={ctx} s={s} dayLabel={formatShortDate(s.startsAt, tz)} />
+              todayOrComing && (ctx.d.gameDayCard === true || s.courtNum !== undefined) && <CourtButton ctx={ctx} s={s} dayLabel={formatShortDate(s.startsAt, tz)} />
             )}
             {todayOrComing && <DirectionsButton dayLabel={formatShortDate(s.startsAt, tz)} />}
           </div>
@@ -258,25 +258,125 @@ function ConfirmLine({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 }
 
 /**
- * Zip 86: the court button: "Court 4" opens the court map (as before); "Court ?" (gray) until a court is set opens today's court entry (Edit
- * game, where the court number is picked).
+ * Zip 86 (round 2, Alex): the court button. "Court 4", or a gray "Court ?" until a court is set; a tap opens the quick court picker right away
+ * (the venue's courts 1 to 16 as big buttons, and Clear). One tap saves it (the same PUT .../court-number as Edit game) and the button shows it
+ * at once; with Undo on the toast has Undo and the save waits 5 seconds (a second pick inside that time replaces the first, nothing sent for
+ * it). Only while "Game day card" is on (the server takes court numbers only then).
  */
 function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView; dayLabel: string }) {
-  const [mapOpen, setMapOpen] = useState(false);
-  const courtRef = useRef<HTMLButtonElement>(null);
-  if (s.courtNum === undefined) {
-    return (
-      <button type="button" className="r86-court r86-court-none" aria-label={`No court set for ${dayLabel}. Set the court.`} onClick={() => ctx.open('edit', s.id)} data-court-num="none">
-        Court ?
-      </button>
-    );
-  }
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  // What was just picked (undefined: show the server's court).
+  const [picked, setPicked] = useState<number | null | undefined>(undefined);
+  const latest = useRef(0);
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const held = useRef<Hold | null>(null);
+  // Review fix: saves sent and not yet read back (until then `saved` may be stale, so a pick is never skipped as "already saved").
+  const inflight = useRef(0);
+  const undoOn = ctx.d.adminUndo === true;
+  const saved = s.courtNum ?? null;
+  const shown = picked !== undefined ? picked : saved;
+  const pick = (court: number | null) => {
+    setOpen(false);
+    // An earlier pick is still on its way (held or saving): this one always goes too, so the last pick wins.
+    let pending = picked !== undefined;
+    const mine = ++latest.current;
+    setPicked(court);
+    const said = court === null ? 'Court cleared' : `Court ${court} saved`;
+    let hold: Hold | null = null;
+    if (undoOn) {
+      const dropped = held.current?.undo() === true;
+      held.current = null;
+      if (dropped && court === saved && inflight.current === 0) {
+        setPicked(undefined);
+        toast('Undone. Nothing was saved.', 'ok', { keep: true });
+        return;
+      }
+      if (dropped && inflight.current === 0) pending = false;
+    }
+    if (court === saved && !pending && inflight.current === 0) {
+      setPicked(undefined);
+      return;
+    }
+    if (undoOn) {
+      const h = startHold();
+      hold = held.current = h;
+      toast(said, 'ok', {
+        keep: true,
+        stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            if (!h.undo()) return void toast('Already saved. Change it back by hand.', 'ok');
+            if (mine === latest.current) setPicked(undefined);
+            toast('Undone. Nothing was saved.', 'ok', { keep: true });
+            void ctx.reload().catch(() => {});
+          },
+        },
+      });
+    }
+    const as = hold ? actingStamp() : '';
+    chain.current = chain.current.then(async () => {
+      if (hold && !(await hold.decided)) return;
+      try {
+        if (hold && actingStamp() !== as) throw new ApiError(409, 'screen_changed', 'Nothing was sent: the screen changed before it could save.');
+        inflight.current++;
+        try {
+          await api('PUT', `/api/admin/sessions/${s.id}/court-number`, { court });
+        } finally {
+          inflight.current--;
+        }
+        if (mine === latest.current && !hold) toast(said);
+      } catch (err) {
+        toast(err instanceof ApiError ? `${err.message} It went back.` : 'That did not save, so it went back. Check your connection and try again.', 'error');
+        if (mine === latest.current) {
+          await ctx.reload().catch(() => {});
+          if (mine === latest.current) setPicked(undefined);
+        }
+        return;
+      }
+      // Read back after every save (not only the newest), so `saved` is never stale when the next pick is judged.
+      inflight.current++;
+      try {
+        await ctx.reload();
+      } catch {
+        /* the next refresh brings it */
+      } finally {
+        inflight.current--;
+      }
+      if (mine === latest.current) setPicked(undefined);
+    });
+    if (hold) trackHeld(chain.current);
+  };
   return (
     <>
-      <button ref={courtRef} type="button" className="r86-court" data-court-joined data-court-num={s.courtNum} aria-haspopup="dialog" aria-label={`Court ${s.courtNum}, show it on the court map`} onClick={() => setMapOpen(true)}>
-        Court {s.courtNum}
+      <button
+        type="button"
+        className={shown === null ? 'r86-court r86-court-none' : 'r86-court'}
+        aria-haspopup="dialog"
+        aria-label={shown === null ? `No court set for ${dayLabel}. Pick the court.` : `Court ${shown} for ${dayLabel}. Change the court.`}
+        onClick={() => setOpen(true)}
+        data-court-num={shown ?? 'none'}
+        {...(shown !== null ? { 'data-court-joined': true } : {})}
+      >
+        {shown === null ? 'Court ?' : `Court ${shown}`}
       </button>
-      <CourtMap open={mapOpen} onClose={() => setMapOpen(false)} lit={s.courtNum} anchor={courtRef} label={`Court map. This game is on Court ${s.courtNum}.`} />
+      <Sheet calmFocus open={open} title={`Court for ${dayLabel}`} onClose={() => setOpen(false)} className="r86-picker-sheet">
+        {(
+          <div className="r86-picker" data-court-picker>
+            <div className="r86-picker-grid" role="group" aria-label="Courts">
+              {Array.from({ length: COURT_MAX - COURT_MIN + 1 }, (_, i) => COURT_MIN + i).map((n) => (
+                <button key={n} type="button" className="r86-pick" aria-pressed={shown === n} onClick={() => pick(n)} data-court-pick={n}>
+                  {n}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn block secondary r86-pick-clear" disabled={shown === null} onClick={() => pick(null)} data-court-pick-clear>
+              Clear
+            </button>
+          </div>
+        )}
+      </Sheet>
     </>
   );
 }
@@ -434,15 +534,15 @@ function HolidayTab({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   );
 }
 
-/** Zip 86: the court status order on the one button: a tap moves to the next one. */
-const NEXT_STATUS: Record<CourtSwitchValue, CourtSwitchValue> = { not_booked: 'waitlist', waitlist: 'booked', booked: 'not_booked' };
-const STATUS_WORDS: Record<CourtSwitchValue, string> = { not_booked: 'Not booked', waitlist: 'Waitlist', booked: 'Booked' };
+/** Zip 86: the court status on the one button: a tap flips it (Alex: no Waitlist). */
+const NEXT_STATUS: Record<CourtSwitchValue, CourtSwitchValue> = { not_booked: 'booked', booked: 'not_booked' };
+const STATUS_WORDS: Record<CourtSwitchValue, string> = { not_booked: 'Not booked', booked: 'Booked' };
 
 /**
- * Zip 86 (picture 10): the court status as ONE button: solid green "Booked" with a small ball-yellow dot, amber "Not booked", Waitlist in its
- * own calm blue. A tap moves it on (Not booked, Waitlist, Booked, Not booked) and answers at once: the button and the card's marks follow, the
- * save goes out in the background (with Undo on: the toast has Undo and the save waits 5 seconds). If the server refuses or cannot be reached,
- * it snaps back and says so. Quick taps are sent in order, the last one wins. Same request, same rules as the old 3-way switch.
+ * Zip 86 (picture 10): the court status as ONE button: solid green "Booked" with a small ball-yellow dot, or amber "Not booked" (Alex, round 2:
+ * no Waitlist). A tap flips it and answers at once: the button and the card's marks follow, the save goes out in the background (with Undo on:
+ * the toast has Undo and the save waits 5 seconds; a second tap inside that time drops the first, so nothing is sent). If the server refuses or
+ * cannot be reached, it snaps back and says so. The same court-status call as the old switch.
  */
 function StatusButton({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue; onPicked: (v: CourtSwitchValue | null) => void }) {
   const toast = useToast();
@@ -455,7 +555,7 @@ function StatusButton({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSess
   const pick = (to: CourtSwitchValue) => {
     const mine = ++latest.current;
     onPicked(to);
-    const said = to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked';
+    const said = to === 'booked' ? 'Court booked' : 'Court not booked';
     let hold: Hold | null = null;
     if (undoOn) {
       // Review fix: the next tap while the last is still held drops it, so only the status the organizer stops on is saved (Not booked to

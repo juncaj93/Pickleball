@@ -88,7 +88,7 @@ async function main() {
   let d = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
   for (const h of d.hiddenSessions || []) await post(areq, `/api/admin/sessions/${h.id}/show`, { shown: true });
   d = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
-  // A: Not booked. B: Waitlist. C: Booked.
+  // A: Not booked. B: Not booked (Zip 86: the court Waitlist was removed). C: Booked.
   const [A, B, C] = d.sessions.filter((s) => !s.state.flags.past).slice(0, 3);
   const idOf = (n) => d.players.find((p) => p.name === n).id;
   const phones = {};
@@ -98,7 +98,6 @@ async function main() {
     phones[n] = c.request;
   }
   const join = (n, s) => post(phones[n], `/api/sessions/${s.id}/join`, {});
-  await post(areq, `/api/admin/sessions/${B.id}/court-status`, { status: 'waitlist' });
   await post(areq, `/api/admin/sessions/${C.id}/court-status`, { status: 'booked' });
   for (const s of [A, B, C]) await join('Devon', s);
   await join('Casey', A);
@@ -139,7 +138,7 @@ async function main() {
 
   const before = await moneyNow();
 
-  await check('off (ship state): no Pay on Not booked or Waitlist games; the booked game keeps its Pay', async () => {
+  await check('off (ship state): no Pay on the two Not booked games; the booked game keeps its Pay', async () => {
     const { ctx, page } = await open('Devon');
     for (const s of [A, B]) {
       const t = await text(page, s);
@@ -152,7 +151,7 @@ async function main() {
   });
 
   for (const scheme of ['light', 'dark']) {
-    await check(`${scheme}: ?payalways=on shows "$14 due", Pay and I paid on Not booked and Waitlist games (this phone only)`, async () => {
+    await check(`${scheme}: ?payalways=on shows "$14 due", Pay and I paid on the two Not booked games (this phone only)`, async () => {
       const { ctx, page } = await open('Devon', { scheme, query: '?payalways=on' });
       for (const s of [A, B, C]) {
         const t = await text(page, s);

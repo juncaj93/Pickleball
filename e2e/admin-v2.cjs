@@ -88,14 +88,13 @@ async function main() {
     phones[n] = c.request;
   }
   const join = (n, s) => post(phones[n], `/api/sessions/${s.id}/join`, {});
-  // A booked (4 in + Alex), B booked (2 in + Alex), C and D not booked, E waitlist, F booked then canceled with money back.
+  // A booked (4 in + Alex), B booked (2 in + Alex), C, D and E not booked (Zip 86: E was on the court Waitlist, removed), F booked then canceled with money back.
   const [A, B, C, D, E, F] = ahead;
   for (const s of [A, B, F]) await post(areq, `/api/admin/sessions/${s.id}/booked`, {});
   for (const n of ['Ryan', 'Julian', 'Nathan', 'Mitchel']) await join(n, A);
   for (const n of ['Ryan', 'Brandon']) await join(n, B);
   await join('Ryan', C);
   for (const n of ['Julian', 'Nathan', 'Brandon']) await join(n, D);
-  await post(areq, `/api/admin/sessions/${E.id}/court-status`, { status: 'waitlist' });
   for (const s of [A, B, D]) await post(areq, `/api/admin/sessions/${s.id}/me`, { in: true });
   const payOf = async (s, name) => (await dash()).sessions.find((x) => x.id === s.id).roster.find((r) => r.name === name);
   const markPaid = async (s, name) => {
@@ -428,7 +427,7 @@ async function main() {
     assert((await rows.count()) >= 3, 'short rows');
     const r = rows.first();
     const t = (await r.innerText()).replace(/\s+/g, ' ');
-    assert(/\d+ (of 4 )?in · \d/.test(t) && /(Booked|Not booked|Waitlist)/.test(t), `row text "${t}"`);
+    assert(/\d+ (of 4 )?in · \d/.test(t) && /(Booked|Not booked)/.test(t), `row text "${t}"`);
     assert((await r.locator('.tile').count()) === 1 && (await r.locator('.hv2-chev').count()) === 1, 'tile and chevron');
     // A card keeps everything it had.
     const c = page.locator(`article#session-${A.id}`);

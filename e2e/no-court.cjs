@@ -89,11 +89,11 @@ async function main() {
     phones[n] = c.request;
   }
   const join = (n, s) => post(phones[n], `/api/sessions/${s.id}/join`, {});
-  // C has a court. B: two in, then the organizer puts it on the court waitlist and a third taps I'm in (a real seat).
+  // C has a court. B: two in, then a third taps I'm in (a real seat).
   await post(areq, `/api/admin/sessions/${C.id}/booked`, {});
   await join('Ryan', B);
   await join('Julian', B);
-  await post(areq, `/api/admin/sessions/${B.id}/court`, { action: 'waitlist' });
+  // Zip 86: the court Waitlist was removed (that route is gone): B stays Not booked.
   await join('Nathan', B);
   // A has no court: Devon is in and owes $14, Casey is in and already paid.
   await join('Devon', A);
@@ -120,7 +120,7 @@ async function main() {
   };
 
   for (const scheme of ['light', 'dark']) {
-    await check(`${scheme}: a game with no court (and one on the court waitlist) never says waitlist, waiting or standby`, async () => {
+    await check(`${scheme}: two games with no court never say waitlist, waiting or standby`, async () => {
       const { ctx, page } = await open('Brandon', scheme);
       for (const s of [A, B]) {
         const t = await text(page, s);
@@ -134,7 +134,7 @@ async function main() {
     });
   }
 
-  await check('the court-waitlist game counts everyone who tapped I\'m in ("3 of 4 in", never "0 on standby") and offers I\'m in', async () => {
+  await check('the second not-booked game counts everyone who tapped I\'m in ("3 of 4 in", never "0 on standby") and offers I\'m in', async () => {
     const { ctx, page } = await open('Brandon');
     const t = await text(page, B);
     assert(/3 of 4 in/.test(t), `count line: ${t}`);
@@ -149,7 +149,7 @@ async function main() {
     const pop = page.locator('.pop');
     await row(page, B).getByRole('button', { name: "I’m in" }).click();
     await pop.waitFor();
-    // The 4th real seat on any game says "Game on!" (a court on Waitlist is just Not booked: Nathan's tap counted); never a waiting word.
+    // The 4th real seat on any game says "Game on!" (Nathan's tap on a Not booked game counted); never a waiting word.
     const bannerText = squash(await pop.innerText());
     assert(/^(You’re in|Game on!)/.test(bannerText) && !FORBIDDEN.test(bannerText), `banner after I'm in: "${bannerText}"`);
     await row(page, B).locator('.st-in', { hasText: "You’re in" }).waitFor();
@@ -197,7 +197,7 @@ async function main() {
 
   await check('the records behind the screen: someone who tapped I\'m in on a court set to Waitlist has a real seat, and a payment stays a payment', async () => {
     const nathan = await record('Nathan', B);
-    assert(nathan.status === 'confirmed', `Nathan's record is "${nathan.status}"; a court on Waitlist gives a real seat`);
+    assert(nathan.status === 'confirmed', `Nathan's record is "${nathan.status}"; a Not booked game gives a real seat`);
     const devon = await record('Devon', A);
     assert(devon.oweCents === 1400 && devon.paymentStatus === 'unpaid', `Devon's record: ${JSON.stringify({ owe: devon.oweCents, pay: devon.paymentStatus })}`);
     const casey = await record('Casey', A);

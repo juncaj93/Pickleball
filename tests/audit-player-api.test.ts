@@ -117,7 +117,17 @@ const useCredit = (w: W, sid: string, name: string) => call(w, name, 'POST', `/a
 const undoCredit = (w: W, sid: string, name: string) => call(w, name, 'POST', `/api/sessions/${sid}/undo-credit`, {});
 const askCashOut = (w: W, name: string, cents: number) => call(w, name, 'POST', '/api/me/refund-request', { cents });
 const markPaid = (w: W, sid: string, name: string, paid = true) => w.organizer.call('POST', `/api/admin/sessions/${sid}/payment`, { playerId: w.byName[name], paid });
-const setCourt = (w: { organizer: Client }, sid: string, status: Court) => w.organizer.call('POST', `/api/admin/sessions/${sid}/court-status`, { status });
+/** Zip 86 round 2 (Alex): no court Waitlist: the switch refuses it with 400, so 'waitlist' here stores an old waitlist row with raw SQL
+ *  (as the old switch did), which must read and act as Not booked everywhere. */
+const setCourt = async (w: { organizer: Client; app: TestApp }, sid: string, status: Court): Promise<{ status: number; text?: string }> => {
+  if (status !== 'waitlist') return w.organizer.call('POST', `/api/admin/sessions/${sid}/court-status`, { status });
+  expect((await w.organizer.call('POST', `/api/admin/sessions/${sid}/court-status`, { status })).status).toBe(400);
+  await w.app.db
+    .prepare("UPDATE sessions SET court_state = 'waitlist', booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
+    .bind(new Date(w.app.now).toISOString(), sid)
+    .run();
+  return { status: 200 };
+};
 const cancelGame = (w: W, sid: string, reason?: string) => w.organizer.call('POST', `/api/admin/sessions/${sid}/decision`, { decision: 'cancel', confirm: true, ...(reason ? { reason } : {}) });
 const finalize = (w: W, sid: string, played?: string[]) => w.organizer.call('POST', `/api/admin/sessions/${sid}/finalize`, played ? { played: played.map((n) => w.byName[n]) } : { everyone: true });
 const setMax = (w: W, maxPlayers: number) => w.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers } });
@@ -297,7 +307,7 @@ describe('1. Sign up', () => {
   }
 
   for (const court of ['not_booked', 'waitlist'] as const) {
-    it(`${court} court: I'm in gives a normal seat (never standby), 'Court not booked', no Pay`, async () => {
+    it(`${court === 'waitlist' ? 'old waitlist (raw SQL)' : court} court: I'm in gives a normal seat (never standby), 'Court not booked', no Pay`, async () => {
       const w = await world();
       const g = await on(w, '2026-11-05');
       if (court === 'waitlist') expect((await setCourt(w, g.id, 'waitlist')).status).toBe(200);
@@ -418,7 +428,7 @@ describe('1. Sign up', () => {
   });
 
   const races: [string, (w: W, sid: string) => Promise<unknown>][] = [
-    ['court switched to Waitlist', (w, sid) => setCourt(w, sid, 'waitlist')],
+    // Zip 86 round 2 (Alex): no court Waitlist; the "court switched to Waitlist" race was removed.
     ['court switched to Booked', (w, sid) => setCourt(w, sid, 'booked')],
     ['court switched to Not booked', (w, sid) => setCourt(w, sid, 'not_booked')],
     ['time moved 30 minutes later', async (w, sid) => {
@@ -972,7 +982,7 @@ describe('3. Payment states and buttons', () => {
         else if (act === 'undo') await undoCredit(w, gid, n);
         else if (act === 'cash') await askCashOut(w, n, 100 * (1 + Math.floor(rnd() * 5)));
         else if (act === 'nocash') await call(w, n, 'POST', '/api/me/refund-request/cancel', {});
-        else if (act === 'court') await setCourt(w, gid, pick(['booked', 'not_booked', 'waitlist'] as Court[]));
+        else if (act === 'court') await setCourt(w, gid, pick(['booked', 'not_booked', 'not_booked'] as Court[])); // Zip 86 round 2 (Alex): no court Waitlist to switch to
         else await markPaid(w, gid, n, rnd() < 0.7);
         if (step % 6 === 5) await books(w, `seed ${seed} step ${step} (${act} ${n})`);
       }
@@ -1899,11 +1909,12 @@ describe('11. Live refresh code (/api/group/version)', () => {
     const g = await on(w, '2026-11-05');
     const v = async () => (await call(w, 'Blair', 'GET', '/api/group/version')).data.v as string;
     const seen = new Set([await v()]);
-    await setCourt(w, g.id, 'waitlist');
-    seen.add(await v());
+    // Zip 86 round 2 (Alex): no court Waitlist; the two court switches are Booked, then Not booked (after the time move).
     await setCourt(w, g.id, 'booked');
     seen.add(await v());
     await w.organizer.call('PUT', `/api/admin/sessions/${g.id}/time`, { startsAt: '2026-11-06T00:30:00.000Z', endsAt: '2026-11-06T02:30:00.000Z' });
+    seen.add(await v());
+    await setCourt(w, g.id, 'not_booked');
     seen.add(await v());
     await cancelGame(w, g.id, 'Rain');
     seen.add(await v());
