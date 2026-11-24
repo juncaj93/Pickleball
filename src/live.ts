@@ -22,6 +22,7 @@ export function useLiveUpdates({
   path = '/api/group/version',
   onChecked,
   fastMs = null,
+  nightUntil = null,
 }: {
   enabled: boolean;
   version: string | null;
@@ -32,6 +33,8 @@ export function useLiveUpdates({
   onChecked?: () => void;
   /** Zip 77: check every this many ms whatever the person does (the Americano night's waiting card); null for the usual rhythm. */
   fastMs?: number | null;
+  /** Zip 85: a tournament night: keep the active rhythm (no slow-down, no stop) until this time (this phone's clock), null otherwise. */
+  nightUntil?: number | null;
 }) {
   const poller = useRef<LivePoller | null>(null);
   const reloadRef = useRef(reload);
@@ -52,6 +55,11 @@ export function useLiveUpdates({
   useEffect(() => {
     poller.current?.setFast(fastMs);
   }, [fastMs]);
+  const nightRef = useRef(nightUntil);
+  nightRef.current = nightUntil;
+  useEffect(() => {
+    poller.current?.setNight(nightUntil);
+  }, [nightUntil]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -91,6 +99,7 @@ export function useLiveUpdates({
     });
     p.setKnown(version);
     p.setFast(fastRef.current);
+    p.setNight(nightRef.current);
     poller.current = p;
     const stopWaiting = onLiveQuiet(() => {
       if (pending.current && Date.now() >= cooldown.current.until) void apply();

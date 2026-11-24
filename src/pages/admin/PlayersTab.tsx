@@ -24,7 +24,7 @@ const ENDED_TEXT: Record<NonNullable<CreditEntryView['endedReason']>, string> = 
   dropped: 'went back, they dropped out',
   canceled: 'went back, game canceled',
 };
-const CREDIT_NOTE = 'Pickleball credit refund';
+const CREDIT_NOTE = 'Pickleball cash out';
 
 export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const [editing, setEditing] = useState<AdminPlayer | 'new' | null>(null);

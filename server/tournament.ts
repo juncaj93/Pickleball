@@ -53,7 +53,6 @@ import {
   NIGHT_END_MINUTES,
   NIGHT_START_MINUTES,
   suggestedPlan,
-  prizeCentsOf,
   smartPlan,
   planCount,
   planRange,
@@ -63,8 +62,9 @@ import {
   tournamentsAllowed,
   type TournamentStatus,
   type Visibility,
+  type OwedTicketView,
 } from '../shared/tournament';
-import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, moneyLine, savedExpect, timeMoveWords } from '../shared/tournamentMoney';
+import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, planMoney, savedExpect, timeMoveWords } from '../shared/tournamentMoney';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
@@ -363,7 +363,15 @@ export interface TourPre<Row> {
   previousLevel?: number | null;
   /** Zip 77: the phone's organizer cookie is a real organizer sign-in (read in the same trip; missing: no cookie, or not read). */
   orgSignedIn?: boolean;
+  /** Zip 85: a player's screen: their tickets marked Didn't pay after the night started (missing: not read). */
+  owed?: OwedTicketView[];
 }
+
+/** Zip 85: the tickets one player owes after a Didn't pay on the night (OWED_MARK), newest night first. */
+export const OWED_TICKETS_SQL = `SELECT k.tournament_id AS id, t.name, t.final_date, k.claim_cents FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id
+  WHERE k.player_id = ? AND t.group_id = ? AND k.claim_cents > 0 AND k.claim_at = 'owed' ORDER BY t.final_date DESC, t.id`;
+export const owedFrom = (rows: unknown[]): OwedTicketView[] =>
+  (rows as { id: string; name: string; final_date: string | null; claim_cents: number }[]).map((r) => ({ tournamentId: r.id, name: r.name, date: r.final_date, cents: Number(r.claim_cents) || 0 }));
 
 /** Zip 77: one row of a tournament's saved results, as the reveal board shows it (names only; never money or levels). */
 export interface ResultRead {
@@ -445,6 +453,9 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string, adm
     { sql: resultsSqlFor(pick), values },
     // Zip 79: this player's level at their last ended tournament (Sign up starts on it: "PREVIOUS RATING"). One small read on the player index.
     { sql: PREVIOUS_LEVEL_SQL, values: [playerId, group.id] },
+    // Zip 85: this player's tickets marked Didn't pay after the night started (OWED_MARK): their You owe card, whatever tournament the card
+    // shows. One small read on the player index, in this same trip.
+    { sql: OWED_TICKETS_SQL, values: [playerId, group.id] },
     // Zip 77: a phone with an organizer cookie: is it a real organizer sign-in (the organizer's own phone keeps the live standings)? In this
     // same trip, so the organizer's own Home makes no more trips than before (zip62-speed). Every other phone: no read.
     ...(adminHash ? [{ sql: 'SELECT id FROM admin_sessions WHERE token_hash = ? AND group_id = ? AND expires_at > ?', values: [adminHash, group.id, ctx.realNowIso] }] : []),
@@ -466,7 +477,8 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string, adm
         awards: awardsFrom(res.slice(8, 11)),
         results: rows(11),
         previousLevel: ((rows(12)[0] as { level?: number } | undefined)?.level ?? null) as number | null,
-        ...(adminHash ? { orgSignedIn: (rows(13) as { id: string }[]).some((r) => !String(r.id).startsWith(VIEW_ONLY_SESSION_PREFIX)) } : {}),
+        owed: owedFrom(rows(13)),
+        ...(adminHash ? { orgSignedIn: (rows(14) as { id: string }[]).some((r) => !String(r.id).startsWith(VIEW_ONLY_SESSION_PREFIX)) } : {}),
       };
     },
   };
@@ -1251,7 +1263,6 @@ export async function adminTournamentFor(
   });
   const plan = smartPlan(count);
   const paidNow = locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).length;
-  const prize = prizeCentsOf(formatOf(ts), t.champion_credit_cents, t.second_credit_cents ?? 0);
   // Zip 70: the Plan's expected players: the organizer's saved Expect number, else the site's suggestion (the real count above), never fewer
   // than the players locked in, 6 to 16. Before the date is finalized the courts and hours are the table's suggestion for that many (the saved
   // courts once the organizer saved a plan).
@@ -1262,8 +1273,19 @@ export async function adminTournamentFor(
   // Zip 57: once the date is finalized the plan line, the cost and the venue card use the courts the organizer chose there (and the real hours).
   const courts = real || savedN !== null ? (t.courts === 1 ? 1 : 2) : sug.courts;
   const planMinutes = real ? real.minutes : sug.minutes;
-  // Zip 70: THE money line (shared/tournament.ts moneyLine) for the expected players: the card, the Time and Plan boxes and the Plan card.
-  const money = moneyLine({ expected, courts, minutes: planMinutes, ticketCents: t.ticket_cents, prizeCents: prize });
+  // Zip 70: THE money line for the expected players: the card, the Time and Plan boxes and the Plan card. Zip 85: the prizes (and the price
+  // check) by the style the expected count really plays, the one shared function Finalize and the boxes call too (shared/tournamentMoney.ts).
+  const money = planMoney({
+    format: formatOf(ts),
+    closed: salesClosed(t, tz, ctx.nowMs),
+    expected,
+    courts,
+    minutes: planMinutes,
+    ticketCents: t.ticket_cents,
+    championCents: t.champion_credit_cents,
+    secondCents: t.second_credit_cents ?? 0,
+  });
+  const prize = money.ticketsCents - money.courtCents - money.youCents;
   // Zip 70: Time and Plan can change until the night starts: the teams are published, or the night window opens (30 minutes before the start).
   const changeOpen =
     statusOf(t) !== 'canceled' && !nightOver(t, tz, ctx.nowMs) && !t.teams_at && !(real && t.final_date && ctx.nowMs >= startMsOf(t.final_date, real.start, tz) - LIVE_BEFORE_MS);

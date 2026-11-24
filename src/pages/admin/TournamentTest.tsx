@@ -13,9 +13,12 @@ import './tournament-admin.css';
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['history', 'zip83_none'];
+const THIS_ZIP: readonly string[] = ['zip85_idle', 'zip85_owed'];
 
 const STAGES = [
+  // Zip 85 (🎾85.final fixes): the idle phone on the night, and Didn't pay after the night.
+  { stage: 'zip85_idle', label: 'Americano: idle phone at the reveal', line: 'The last round is playing. Open a player’s Home on a phone (or View as Vic) and leave it untouched for 10 minutes or more, screen on. Then enter the last scores and tap Reveal standings: the board starts on time on that phone, then the cup and the winners ticker.' },
+  { stage: 'zip85_owed', label: 'Didn’t pay after the night', line: 'Every round is in; Alex said Didn’t pay for Parker after the start. Parker stays in the night and owes $16: View as Parker shows the You owe card (Pay, I paid); Money > Games shows Tournament tickets with Mark paid. End tournament still works.' },
   // Zip 83 (🎾83.champions): the gold cup and the Champions wall. "History with tournaments" (below) has three past winners: the cup on every
   // header, the wall (The Cold Open's Vic and Wren reigning; Summer Slam's Vic and Spring Fling's Parker below).
   { stage: 'history', label: 'Champions: three past winners (start here)', line: 'The Cold Open ended tonight (Net Ninjas: Vic + Wren), plus Summer Slam (Vic) and Spring Fling (Parker). The gold cup sits left of light/dark here and on every player’s Home: tap it for Champions. Also History > Tournaments; Players > Vic: TOURNAMENTS (two medals).' },

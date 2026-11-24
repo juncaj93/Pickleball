@@ -84,8 +84,8 @@ async function boot({ port = Number(process.env.E2E_PORT) || 5476, seedIso = '20
     return { ctx, post, group, id: p.id };
   }
   async function newPage(opts = {}) {
-    const { width = 390, scheme = 'light', height = 844, organizer = false, reducedMotion = 'reduce' } = opts;
-    const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, colorScheme: scheme, isMobile: true, hasTouch: true, userAgent: UA, reducedMotion });
+    const { width = 390, scheme = 'light', height = 844, organizer = false, reducedMotion = 'reduce', userAgent = UA } = opts;
+    const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, colorScheme: scheme, isMobile: true, hasTouch: true, userAgent, reducedMotion });
     await shift(ctx);
     if (organizer) await ctx.addCookies(adminCookies.map((c) => ({ ...c })));
     const page = await ctx.newPage();

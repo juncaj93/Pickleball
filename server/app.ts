@@ -79,6 +79,8 @@ route('POST', '/api/tournament/back-out', player.tournamentBackOut);
 // Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Lock my spot (or Hold my spot), I paid, Join waitlist.
 route('POST', '/api/tournament/lock', player.tournamentLock);
 route('POST', '/api/tournament/paid', player.tournamentPaid);
+// Zip 85: I paid on the You owe card of a ticket marked Didn't pay after the night started.
+route('POST', '/api/tournament/owed-paid', player.tournamentOwedPaid);
 route('POST', '/api/tournament/waitlist', player.tournamentWaitlist);
 // Zip 57 (server/tournamentDay.ts): Tournaments, piece 3. A player's result on game night.
 route('POST', '/api/tournament/game', player.tournamentGame);

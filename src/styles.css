@@ -4646,6 +4646,19 @@ dialog.sheet[open]::backdrop {
   grid-column: 2;
   justify-self: center;
 }
+/* Zip 85 (🎾84 dry run): on a narrow phone (320 and 360) the right side stacks, the court chip with "In" under it (no empty columns kept for
+   them), so the time and the names get the room and wrap between words only, never in the middle of one. */
+@container pbwide (max-width: 21rem) {
+  .hv2-side {
+    grid-template-columns: auto;
+    justify-items: end;
+    row-gap: 4px;
+  }
+  .hv2-side > .hv2-pill,
+  .hv2-side > .hv2-in {
+    grid-column: 1;
+  }
+}
 .hv2-pill {
   border-radius: 999px;
   padding: var(--chip-pad);

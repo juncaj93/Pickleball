@@ -1284,3 +1284,23 @@ export function heatColors(n: number, min: number, max: number): { light: { bg: 
 export function dateCounts(offered: readonly string[], signups: readonly Pick<TournamentSignupView, 'name' | 'dates'>[]): { day: string; names: string[] }[] {
   return offered.map((day) => ({ day, names: signups.filter((s) => s.dates.includes(day)).map((s) => s.name) }));
 }
+
+/** Zip 85: one ticket a player owes after the organizer said Didn't pay on the night (shared/tournamentTickets.ts OWED_MARK): their You owe card. */
+export interface OwedTicketView {
+  tournamentId: string;
+  name: string;
+  /** The night's date (YYYY-MM-DD). */
+  date: string | null;
+  cents: number;
+}
+
+/** Zip 85: the organizer's view of one ticket owed after a Didn't pay on the night (`waiting`: the player tapped I paid on it since). */
+export interface AdminOwedTicket {
+  tournamentId: string;
+  name: string;
+  date: string | null;
+  playerId: string;
+  playerName: string;
+  cents: number;
+  waiting: boolean;
+}

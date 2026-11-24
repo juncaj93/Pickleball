@@ -258,8 +258,9 @@ function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
           <button aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
             Activity
           </button>
-          <button aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
-            Sessions
+          {/* Zip 85: "Games" (the site's word since Zip 76), so the four tabs fit at 320 with no cut word at the edge. */}
+          <button aria-pressed={view === 'sessions'} onClick={() => setView('sessions')} data-history-games>
+            Games
           </button>
           {/* Zip 58 (picture 46): the third chip, only while Tournaments is on. */}
           {ctx.d.tournaments === true && (

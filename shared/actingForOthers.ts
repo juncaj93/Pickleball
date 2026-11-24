@@ -136,7 +136,7 @@ export function cardVerb(action: string): string {
     case 'credit_undone':
       return 'undid credit';
     case 'cash_out_used':
-      return 'used cash-out credit';
+      return 'used cash out credit';
     case 'refund_requested':
       return 'asked to cash out';
     case 'refund_request_canceled':

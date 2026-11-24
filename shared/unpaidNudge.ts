@@ -76,17 +76,21 @@ export function oweTitle(cents: number): string {
 const MAX_DATES = 4;
 
 /**
- * The owe card's second line. One game: "For Tue, Nov 3". Several: "$14 each: Nov 3 and Nov 5" (same amounts), "Nov 3 and Nov 5" (amounts
- * differ), "$14 each: Nov 3, 5 and 10" (three or more in one month: the month only when it changes), "$14 each: 5 games since Oct 29" (more
- * than four days). Two games on one day: "Nov 8 (2 games)". Always one line.
+ * The owe card's second line. One game: "For Tue, Nov 3". Several (Zip 85: the total first): "$14 each, 2 games: Nov 3 and Nov 5" (same
+ * amounts), "2 games: Nov 3 and Nov 5" (amounts differ), "$14 each, 3 games: Nov 3, 5 and 10" (three or more days in one month: the month only
+ * when it changes), "$14 each, 5 games since Oct 29" (more than four days), "$14 each, 2 games on Nov 8" (one day). Two games on one day among
+ * others: "Nov 8 (2)".
  */
 export function oweLine(due: readonly { startsAt: string; amountCents: number }[], tz: string): string {
   if (due.length === 0) return '';
   const sorted = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   if (sorted.length === 1) return `For ${formatShortDate(sorted[0].startsAt, tz)}`;
   const same = sorted.every((o) => o.amountCents === sorted[0].amountCents);
-  const lead = same ? `${formatPrice(sorted[0].amountCents)} each: ` : '';
-  // One entry per day: two games on the same day read "Nov 8 (2 games)", never "Nov 8 and Nov 8".
+  // Zip 85 (🎾84 dry run): the line leads with the TOTAL number of games, so the dates never read as fewer games than the amount is for:
+  // "$14 each, 3 games: Nov 12 (2) and Nov 19" (two games on one day: "(2)" after that day).
+  const n = sorted.length;
+  const lead = same ? `${formatPrice(sorted[0].amountCents)} each, ${n} games` : `${n} games`;
+  // One entry per day: two games on the same day read "Nov 8 (2)", never "Nov 8 and Nov 8".
   const days: { label: string; n: number }[] = [];
   for (const o of sorted) {
     const label = formatMonthDay(o.startsAt, tz);
@@ -94,10 +98,10 @@ export function oweLine(due: readonly { startsAt: string; amountCents: number }[
     if (last && last.label === label) last.n++;
     else days.push({ label, n: 1 });
   }
-  if (days.length === 1) return `${lead}${sorted.length} games on ${days[0].label}`;
-  if (days.length > MAX_DATES) return `${lead}${sorted.length} games since ${days[0].label}`;
-  const tail = (d: { n: number }) => (d.n > 1 ? ` (${d.n} games)` : '');
-  if (days.length === 2) return `${lead}${days[0].label}${tail(days[0])} and ${days[1].label}${tail(days[1])}`;
+  if (days.length === 1) return `${lead} on ${days[0].label}`;
+  if (days.length > MAX_DATES) return `${lead} since ${days[0].label}`;
+  const tail = (d: { n: number }) => (d.n > 1 ? ` (${d.n})` : '');
+  if (days.length === 2) return `${lead}: ${days[0].label}${tail(days[0])} and ${days[1].label}${tail(days[1])}`;
   // Three or four days: "Nov 3, 5 and 10" (the month word once per month).
   let month = '';
   const short = days.map((d) => {
@@ -106,7 +110,7 @@ export function oweLine(due: readonly { startsAt: string; amountCents: number }[
     month = m;
     return `${out}${tail(d)}`;
   });
-  return `${lead}${short.slice(0, -1).join(', ')} and ${short[short.length - 1]}`;
+  return `${lead}: ${short.slice(0, -1).join(', ')} and ${short[short.length - 1]}`;
 }
 
 /** The toast after I'm in with 1 or 2 unpaid games. */

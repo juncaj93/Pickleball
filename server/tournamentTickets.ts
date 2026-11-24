@@ -19,7 +19,7 @@ import * as v from './validate';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { formatPrice } from '../shared/money';
 import { dayLong, MAX_SPOTS } from '../shared/tournament';
-import { payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
+import { isOwedClaim, OWED_MARK, payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
 import {
   changedOrLookAgain,
   logPlayer,
@@ -199,6 +199,34 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
 }
 
 /**
+ * Zip 85: POST /api/tournament/owed-paid { tournamentId, cents }: "I paid" on the You owe card of a ticket the organizer marked Didn't pay after
+ * the night started (OWED_MARK), for exactly the amount the card showed. It waits for the organizer like every I paid (Paid or Didn't pay on the
+ * tournament's Players list, or Mark paid on Money). Works after the night and after End (the ticket's only change then). A second tap changes
+ * nothing.
+ */
+export async function playerOwedPaid(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
+  if (who.viewAsName && !ctx.env.SANDBOX) throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
+  if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
+  const id = v.id(body.tournamentId, 'tournamentId');
+  const cents = v.cents(body.cents, 'cents') ?? 0;
+  const k = await ctx.db
+    .prepare('SELECT k.*, t.name AS tournament_name FROM tournament_tickets k JOIN tournaments t ON t.id = k.tournament_id WHERE k.tournament_id = ? AND k.player_id = ? AND t.group_id = ?')
+    .bind(id, who.playerId, who.group.id)
+    .first<TicketRow & { tournament_name: string }>();
+  if (!k || k.claim_cents === 0) throw new HttpError(409, 'nothing_owed', 'There is nothing to pay. Look again.');
+  // Already sent (a second tap, another phone): nothing new.
+  if (!isOwedClaim(k)) return { ok: true, result: 'waiting' as const, claimCents: k.claim_cents };
+  if (cents !== k.claim_cents) throw new HttpError(409, 'amount_changed', `The amount changed to ${formatPrice(k.claim_cents)}. Look again.`);
+  const res = await ctx.db
+    .prepare(`UPDATE tournament_tickets SET claim_at = ?1, updated_at = ?1 WHERE id = ?2 AND claim_at = '${OWED_MARK}' AND claim_cents = ?3`)
+    .bind(ctx.nowIso, k.id, cents)
+    .run();
+  if ((res.meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
+  await logPlayer(ctx, who.group, who.playerId, 'tournament_i_paid', { tournament: k.tournament_name, amountCents: cents });
+  return { ok: true, result: 'waiting' as const, claimCents: cents };
+}
+
+/**
  * POST /api/tournament/paid { tournamentId, cents }: "I paid" on the Pay sheet, for exactly what the sheet showed. It waits for the organizer
  * (Paid or Didn't pay on their Home card) like every I paid on the site; it holds no spot until then. A second tap changes nothing.
  */
@@ -323,24 +351,41 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
   // Why the money comes back is worked out when the answer lands (a Cancel or a Back out in between counts), not from the read above.
   const back = ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId, why: 'auto', endedReason: 'auto', nowIso: ctx.nowIso, when: settle });
 
+  // Zip 85: a debt from "Didn't pay" after the night started (shared/tournamentTickets.ts OWED_MARK). Mark paid on it is Paid.
+  const owedBefore = !!k && isOwedClaim(k);
+  if (action === 'mark_paid' && owedBefore) return adminTicket(ctx, { ...body, action: 'confirm' });
   if (action === 'confirm' || action === 'reject') {
     if (!k || k.claim_cents === 0) throw new HttpError(409, 'nothing_waiting', `${name} has no I paid waiting. Look again.`);
     if (shown !== null && shown !== k.claim_cents) throw new HttpError(409, 'amount_changed', `${name}’s I paid changed. Look again.`);
-    const answer =
-      action === 'confirm'
+    if (owedBefore && action === 'reject') throw new HttpError(409, 'nothing_waiting', `${name} already owes ${formatPrice(k.claim_cents)}. Look again.`);
+    // Zip 85 (🎾84 dry run, Alex approved): from the start of the night, a ticket that counts as locked in by this I paid (outside the line,
+    // the I paid paying the rest, on the list) has played (or plays): Didn't pay keeps them in the night and leaves the amount owed, like any
+    // unpaid game (OWED_MARK), instead of dropping them out of the night with nothing owed.
+    const started = statusOf(t) !== 'canceled' && salesClosed(t, group.timezone, ctx.nowMs);
+    const owes =
+      action === 'reject' && started && k.place !== 'line' && k.credit_cents + k.paid_cents + k.claim_cents >= k.price_cents && signup?.status === 'in';
+    // A ticket paid in full after the night started takes its spot at once (they played), never a place in line that the night's end would
+    // hand back as credit.
+    const lineOrSpot = started ? "'spot'" : "'line'";
+    const answer = owes
+      ? ctx.db
+          .prepare(`UPDATE tournament_tickets SET claim_at = '${OWED_MARK}', updated_at = ?1 WHERE id = ?2 AND ${ticketAsRead(k)} AND claim_at IS NOT '${OWED_MARK}'`)
+          .bind(ctx.nowIso, k.id)
+      : action === 'confirm'
         ? // SQLite reads every right-hand side from the row as it was: each CASE sees the old claim and the old place.
           ctx.db
             .prepare(
               `UPDATE tournament_tickets SET paid_cents = paid_cents + claim_cents, claim_cents = 0, claim_at = NULL,
                  paid_at = CASE WHEN credit_cents + paid_cents + claim_cents >= price_cents THEN ?1 ELSE paid_at END,
-                 place = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN 'line' ELSE place END,
-                 place_at = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN COALESCE(claim_at, ?1) ELSE place_at END,
+                 place = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN ${lineOrSpot} ELSE place END,
+                 place_at = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN (CASE WHEN claim_at IS NULL OR claim_at = '${OWED_MARK}' THEN ?1 ELSE claim_at END) ELSE place_at END,
                  updated_at = ?1
-               WHERE id = ?2 AND ${ticketAsRead(k)}`,
+               WHERE id = ?2 AND ${ticketAsRead(k)} AND claim_at IS ${owedBefore ? `'${OWED_MARK}'` : `NOT '${OWED_MARK}'`}`,
             )
             .bind(ctx.nowIso, k.id)
         : ctx.db.prepare(`UPDATE tournament_tickets SET claim_cents = 0, claim_at = NULL, updated_at = ?1 WHERE id = ?2 AND ${ticketAsRead(k)}`).bind(ctx.nowIso, k.id);
-    const res = await ctx.db.batch([answer, ...back, ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
+    // Zip 85: an owed ticket keeps nothing to give back (its debt is the claim), so no money-back statement runs with that answer.
+    const res = await ctx.db.batch([answer, ...(owes ? [] : back), ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
     if ((res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', `${name}’s ticket just changed. Look again.`);
     const after = await ticketOf(ctx.db, t.id, playerId);
     // What came back as credit at once (the ticket was settled because they left, a cancel, or the night is over).
@@ -349,11 +394,11 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
       ctx.db,
       group.id,
       null,
-      action === 'confirm' ? 'tournament_ticket_confirmed' : 'tournament_ticket_rejected',
-      { tournament: t.name, player: name, playerId, amountCents: k.claim_cents, ...(credited ? { creditCents: credited } : {}) },
+      action === 'confirm' ? 'tournament_ticket_confirmed' : owes ? 'tournament_ticket_owed' : 'tournament_ticket_rejected',
+      { tournament: t.name, player: name, playerId, amountCents: k.claim_cents, ...(credited ? { creditCents: credited } : {}), ...(body.action === 'mark_paid' ? { marked: true } : {}) },
       ctx.nowIso,
     );
-    return { ok: true, ...answerOf(after), creditCents: credited };
+    return { ok: true, ...answerOf(after), creditCents: credited, ...(owes ? { owedCents: k.claim_cents } : {}) };
   }
 
   if (action === 'mark_paid') {

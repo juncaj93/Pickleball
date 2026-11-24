@@ -22,7 +22,7 @@ import { gameDayCardForAll } from './gameDay';
 import { afterGameCardForAll } from './afterGame';
 import { adminCookieHash, adminTournamentStamp, adminTourReads, playerTournamentStamp, playerTourReads, type TourReads, tournamentsFlags } from './tournament';
 import { playerAwardsFor } from './tournamentEnd';
-import type { AdminTournamentView, PlayerTournamentView, TourAwardsView } from '../shared/tournament';
+import type { AdminTournamentView, OwedTicketView, PlayerTournamentView, TourAwardsView } from '../shared/tournament';
 import type { D1PreparedStatement, D1Result } from './db';
 import { isPretend } from './pretend';
 
@@ -76,7 +76,7 @@ export async function changeStampAndTour(
   ctx: Ctx,
   group: GroupRow,
   playerId: string | null,
-): Promise<{ stamp: string; tour?: PlayerTournamentView | null; awards?: TourAwardsView | null }> {
+): Promise<{ stamp: string; tour?: PlayerTournamentView | null; awards?: TourAwardsView | null; owed?: OwedTicketView[] }> {
   const me = playerId ?? '';
   const upcomingFrom = new Date(ctx.nowMs - 36 * 3_600_000).toISOString();
   const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
@@ -117,6 +117,8 @@ export async function changeStampAndTour(
   ]);
   const { results, pre } = await batchWithTour(ctx, () => ctx.db.batch(queries(true)).catch(() => ctx.db.batch(queries(false))), queries(true), tour);
   const [sessions, roster, mine, ledger, requests, players, self] = results;
+  // Zip 85: read in the tournament card's part of this trip (none while the switch is off for this phone).
+  const owedView: OwedTicketView[] = pre?.owed ?? [];
   // Built once (last, where it always was): the stamp's part here, and the same card for GET /api/group.
   let tourView: PlayerTournamentView | null | undefined;
   let awardsView: TourAwardsView | null | undefined;
@@ -188,8 +190,15 @@ export async function changeStampAndTour(
       awardsView = a;
       return a ? [`awards:${JSON.stringify(a)}`] : [];
     })()),
+    // Zip 85: the tickets this player owes after a Didn't pay on the night (a segment only while there is one, so the stamp is as before).
+    ...(owedView.length ? [`owed:${JSON.stringify(owedView)}`] : []),
   ].join('|');
-  return { stamp: (await sha256(raw)).slice(0, 16), ...(tourView !== undefined ? { tour: tourView } : {}), ...(awardsView !== undefined ? { awards: awardsView } : {}) };
+  return {
+    stamp: (await sha256(raw)).slice(0, 16),
+    ...(tourView !== undefined ? { tour: tourView } : {}),
+    ...(awardsView !== undefined ? { awards: awardsView } : {}),
+    ...(tour ? { owed: owedView } : {}),
+  };
 }
 
 /**

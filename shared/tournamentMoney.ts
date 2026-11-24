@@ -1,6 +1,6 @@
 // Zip 70 (🎾70.time): the organizer's money line, the Plan's expected players and the players' time card words. Its own file on purpose: the
 // player download reads shared/tournament.ts, so these organizer and server pieces stay out of it (tests/zip48-split.test.ts's size budget).
-import { courtCentsOf, MAX_SPOTS, shortClock, type TournamentFormat, WINNERS } from './tournament';
+import { courtCentsOf, MAX_SPOTS, prizeCentsOf, shortClock, styleAtClose, type TournamentFormat, WINNERS } from './tournament';
 import { formatPrice } from './money';
 
 /** The Plan box's Expect stepper runs 6 to 16. */
@@ -24,6 +24,14 @@ export function savedExpect(detail: string | null | undefined): number | null {
 }
 
 export interface MoneyLine {
+  /** Zip 85: the style the prizes are priced by (shared/tournamentMoney.ts planMoney: the style the expected count really plays). */
+  style?: TournamentFormat;
+  /** Zip 85: what is left after that style's FULL prizes (the price check, "After full prizes: +$14"). */
+  afterFullCents?: number;
+  /** Zip 85: ticket sales are closed, so the style is the one really played (no odd-count switch any more). */
+  closed?: boolean;
+  /** Zip 85: the style saved (or the vote's leader), before any odd-count switch: what the boxes start from as the count changes. */
+  baseStyle?: TournamentFormat;
   /** Courts x hours x the court rate ($24 per court per hour). */
   courtCents: number;
   /** (expected players minus the organizer, who plays free) x the ticket price. */
@@ -97,13 +105,14 @@ export function suggestedTier(leftCents: number, format: TournamentFormat): Priz
   return tiersOf(format).find((x) => tierCostCents(x, format) <= leftCents) ?? 'medals';
 }
 
-/** "Suggested: full prizes (1st $14 · 2nd $7 each)" / "Suggested: 1st only ($14 each)" / Locked doubles "Suggested: $14 each to the winners" /
+/** "Suggested: full prizes (1st $14 · 2nd $7)" / "Suggested: 1st only ($14)" / Locked doubles "Suggested: $14 each to the winners" /
  *  "Suggested: medals only". */
 export function suggestionWords(tier: PrizeTier, format: TournamentFormat = 'americano'): string {
   if (tier === 'medals') return 'Suggested: medals only';
   if (format === 'doubles') return `Suggested: ${formatPrice(PRIZE_FIRST_CENTS)} each to the winners`;
-  if (tier === 'full') return `Suggested: full prizes (1st ${formatPrice(PRIZE_FIRST_CENTS)} · 2nd ${formatPrice(PRIZE_SECOND_CENTS)} each)`;
-  return `Suggested: 1st only (${formatPrice(PRIZE_FIRST_CENTS)} each)`;
+  // Zip 85: Americano has one player per place, so never "each" (Locked doubles keeps "$14 each to the winners").
+  if (tier === 'full') return `Suggested: full prizes (1st ${formatPrice(PRIZE_FIRST_CENTS)} · 2nd ${formatPrice(PRIZE_SECOND_CENTS)})`;
+  return `Suggested: 1st only (${formatPrice(PRIZE_FIRST_CENTS)})`;
 }
 
 /** "Tickets $162 − courts $120 = $42 left." (short: "= $8 short."). */
@@ -117,3 +126,28 @@ export const afterFullCents = (ticketsCents: number, courtCents: number, format:
 
 /** "After full prizes: +$21" (0 or more) or "After full prizes: $9 short" (red, no plus sign). */
 export const afterFullWords = (cents: number): string => (cents >= 0 ? `After full prizes: +${formatPrice(cents)}` : `After full prizes: ${formatPrice(-cents)} short`);
+
+/**
+ * Zip 85 (🎾84 dry run): ONE prize number everywhere. The style a plan prices its prizes by: until ticket sales close, the style the expected
+ * count really plays (an odd count is Americano, as Finalize's fit line and the close of tickets say); after that, the style saved.
+ */
+export const expectedStyle = (format: TournamentFormat, expected: number, closed: boolean): TournamentFormat => (closed ? format : styleAtClose(format, Math.round(expected)));
+
+/**
+ * Zip 85: THE money line and the price check together, for the Time box, the Plan box, Finalize, the Home card and the tournament page's Plan
+ * card: the winners' credits now set and "After full prizes" both follow the expected style, so every place shows the same numbers.
+ */
+export function planMoney(o: {
+  format: TournamentFormat;
+  closed: boolean;
+  expected: number;
+  courts: number;
+  minutes: number;
+  ticketCents: number;
+  championCents: number;
+  secondCents: number;
+}): MoneyLine & { style: TournamentFormat; afterFullCents: number; closed: boolean; baseStyle: TournamentFormat } {
+  const style = expectedStyle(o.format, o.expected, o.closed);
+  const line = moneyLine({ expected: o.expected, courts: o.courts, minutes: o.minutes, ticketCents: o.ticketCents, prizeCents: prizeCentsOf(style, o.championCents, o.secondCents) });
+  return { ...line, style, afterFullCents: afterFullCents(line.ticketsCents, line.courtCents, style), closed: o.closed, baseStyle: o.format };
+}

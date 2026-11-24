@@ -33,6 +33,13 @@ export type LiveConfig = typeof LIVE_UPDATES;
 export const FAST_STOP_MS = 30 * 60_000;
 
 /**
+ * Zip 85 (🎾84 dry run): on a tournament night the usual 10 minute stop and the 2 minute slow-down do not apply (a phone left on the table in the
+ * last round still sees the last score, the waiting card, the reveal on time, then the cup and the ticker), but not forever: this long without a
+ * touch stops it like any other (a whole night is under 5 hours).
+ */
+export const NIGHT_STOP_MS = 5 * 60 * 60_000;
+
+/**
  * Zip 77: the server's clock as each check saw it ([sent, got, server time], this phone's clock for the first two), the last 12. Only kept here;
  * src/serverClock.ts (the reveal's own download) works the offset out from them, so the player script stays small.
  */
@@ -73,6 +80,11 @@ export class LivePoller {
    * Americano night's "Final standings coming soon" card sets it (2 s), so a phone left on the table still starts the reveal with the rest.
    */
   private fastMs: number | null = null;
+  /**
+   * Zip 85: on a tournament night (the night running, or the reveal and its hold), this phone's clock time until which the usual rhythm keeps
+   * its active wait whatever the person does; null otherwise. It ends by itself at that time (the reveal's hold over), no new render needed.
+   */
+  private nightUntil: number | null = null;
 
   constructor(
     private env: LiveEnv,
@@ -119,6 +131,13 @@ export class LivePoller {
     if (this.running && !this.dead && !this.inFlight) this.plan();
   }
 
+  /** Zip 85: hold the active rhythm until `untilMs` (this phone's clock; Infinity for the whole night), or null for the usual rhythm. */
+  setNight(untilMs: number | null) {
+    if (untilMs === this.nightUntil) return;
+    this.nightUntil = untilMs;
+    if (this.running && !this.dead && !this.inFlight) this.plan();
+  }
+
   /** The tab went hidden / the screen turned off. */
   hide() {
     this.clear();
@@ -143,6 +162,8 @@ export class LivePoller {
     const quiet = this.env.now() - this.lastTouch;
     // Zip 77 (review): the fast rhythm ignores the usual slow-down, but not forever: 30 minutes without a touch stops it like any other.
     if (this.fastMs !== null) return quiet >= FAST_STOP_MS ? null : Math.max(this.fastMs, this.backoff);
+    // Zip 85: a tournament night keeps the active wait (no slow-down, no stop) until the night's hold ends, or NIGHT_STOP_MS without a touch.
+    if (this.nightUntil !== null && this.env.now() < this.nightUntil && quiet < NIGHT_STOP_MS) return Math.max(this.cfg.activeMs, this.backoff);
     if (quiet >= this.cfg.stopAfterMs) return null;
     const base = quiet >= this.cfg.slowAfterMs ? this.cfg.idleMs : this.cfg.activeMs;
     return Math.max(base, this.backoff);

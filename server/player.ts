@@ -1,5 +1,6 @@
 import { awardSeen, playerAwardsFor, playerChampions, playerWins } from './tournamentEnd';
 import type { CreditEntryView, GroupView, PlayerSessionView } from '../shared/api';
+import type { OwedTicketView } from '../shared/tournament';
 import { DROP_CHANGED, DROP_CHANGED_MESSAGE, dropQuote, quoteOfBody } from '../shared/dropQuote';
 import { claimShares, extendedTimeFor, extRowsOf, followSeat, hasViaShares, myExtShares, playerExtensionPaid, playerExtensionSeen, seatIdOf, undoClaimAt } from './extension';
 import { headCount } from '../shared/guestSpot';
@@ -137,8 +138,8 @@ import { homeScreenTipFor } from './homeScreenTip';
 import { christmasSkinFor, christmasSkinModeFor, setChristmasSkinMeOn } from './christmasSkin';
 import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
-import { playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup, tournamentsFlags } from './tournament';
-import { playerTicketLock, playerTicketPaid, playerTicketWaitlist } from './tournamentTickets';
+import { OWED_TICKETS_SQL, owedFrom, playerTournamentBackOut, playerTournamentEdit, playerTournamentFor, playerTournamentSignup, tournamentsFlags } from './tournament';
+import { playerOwedPaid, playerTicketLock, playerTicketPaid, playerTicketWaitlist } from './tournamentTickets';
 import { playerGameAction, playerSpin, playerTeamName } from './tournamentDay';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
@@ -191,7 +192,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const { group, playerId: meId, viewAsName } = await viewer(ctx);
   // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
   // Zip 62: it also brings the tournament card it built for this phone (its reads rode in the stamp's own trip), so it is not built twice.
-  const { stamp: version, tour: stampTour, awards: stampAwards } = await changeStampAndTour(ctx, group, meId);
+  const { stamp: version, tour: stampTour, awards: stampAwards, owed: stampOwed } = await changeStampAndTour(ctx, group, meId);
   await ensureSessions(ctx.db, group, ctx.nowMs);
   // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off).
   // Their own player's reads only when there is one (and it is not the organizer's own, who has no credit).
@@ -228,6 +229,17 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   // Zip 58: after a tournament ends: the ticker, the congratulations card and medals (the stamp built it in its own trip; View as builds its own).
   const tourAwards =
     stampAwards !== undefined && !viewAsName && (me?.id ?? null) === meId ? stampAwards : await playerAwardsFor(ctx, group, me?.id ?? null, !!viewAsName).catch(() => null);
+  const ticketsOwed: OwedTicketView[] =
+    stampOwed !== undefined && !viewAsName && (me?.id ?? null) === meId
+      ? stampOwed
+      : me?.id && (await tournamentsFlags(ctx, group.id)).on
+        ? await ctx.db
+            .prepare(OWED_TICKETS_SQL)
+            .bind(me.id, group.id)
+            .all()
+            .then((r) => owedFrom(r.results ?? []))
+            .catch(() => [])
+        : [];
   const timeShift = await timeShiftFor(ctx, group.id);
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
@@ -413,6 +425,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...(moneyNotes.length ? { moneyNotes } : {}),
     ...(tournament ? { tournament } : {}),
     ...(tourAwards ? { tourAwards } : {}),
+    // Zip 85: tickets this player owes after a Didn't pay on the night (their You owe card). The stamp read them in its trip; View as (the
+    // organizer's demo copy, where nothing is saved) reads the viewed player's own once, only while Tournaments is on.
+    ...(ticketsOwed.length ? { ticketsOwed } : {}),
     sessions: upcoming,
     owed,
     payDue,
@@ -543,6 +558,11 @@ export async function tournamentLock(ctx: Ctx, body: Record<string, unknown>) {
 /** Zip 56: POST /api/tournament/paid { tournamentId, cents }: I paid on the Pay sheet (waits for the organizer). */
 export async function tournamentPaid(ctx: Ctx, body: Record<string, unknown>) {
   return playerTicketPaid(ctx, await viewer(ctx), body);
+}
+
+/** Zip 85: POST /api/tournament/owed-paid { tournamentId, cents }: I paid on the You owe card of a ticket marked Didn't pay after the night. */
+export async function tournamentOwedPaid(ctx: Ctx, body: Record<string, unknown>) {
+  return playerOwedPaid(ctx, await viewer(ctx), body);
 }
 
 /** Zip 56: POST /api/tournament/waitlist { tournamentId }: Join waitlist. */

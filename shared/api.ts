@@ -274,6 +274,8 @@ export interface GroupView {
   }[];
   /** Zip 51b "Money change note" (shared/moneyNote.ts): this player's notes still to show, oldest first. Only while on and only when there is one. */
   moneyNotes?: { id: string; kind: 'sub' | 'sub_one' | 'moved' | 'back_in'; text: string }[];
+  /** Zip 85: tournament tickets this player owes after the organizer said Didn't pay on the night: one You owe card each (Pay, I paid). */
+  ticketsOwed?: import('./tournament').OwedTicketView[];
   /** Zip 55 "Tournaments" (server/tournament.ts): the pinned ticket card. Only while the switch is on and the tournament is visible to this player
    *  (Everyone, or Only me on the organizer's own signed-in phone). Missing otherwise: a player gets nothing about an Only me tournament. */
   tournament?: PlayerTournamentView;
@@ -704,6 +706,8 @@ export interface AdminDashboard {
   /** Zip 59: canceled tournaments the organizer hid (Settings > Advanced > Hidden tournaments, each with Restore). Only while Tournaments is on. */
   hiddenTournaments?: { id: string; name: string; finalDate: string | null; canceledAt: string | null }[];
   /** Zip 83 (🎾83.champions): a champion players can see exists: the cup shows left of the light/dark button. Left out otherwise (and while Tournaments is off). */
+  /** Zip 85: tournament tickets owed after a Didn't pay on the night, and an I paid waiting on one (Money's Tournament tickets card). */
+  ticketsOwed?: import('./tournament').AdminOwedTicket[];
   champions?: true;
   /** Zip 55: the Settings > Feature switches row is on (for everyone). Missing: off. */
   tournamentsForAll?: true;

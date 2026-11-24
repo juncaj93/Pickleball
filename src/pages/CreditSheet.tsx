@@ -153,7 +153,7 @@ export function CreditSheet({ open, credit, tz, organizerName = 'the organizer',
         </p>
         {adjustment && (
           <p className="credit-adjusted" data-adjust-note>
-            <b>{adjustedPlayerLine(adjustment.deltaCents)}</b>
+            <b>{adjustedPlayerLine(adjustment.deltaCents, organizerName === 'the organizer' ? null : organizerName)}</b>
             {adjustment.note && <span>{adjustment.note}</span>}
           </p>
         )}

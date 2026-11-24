@@ -1,6 +1,7 @@
 import type { Ctx } from './context';
 import { HttpError } from './http';
 import { newId } from './crypto';
+import { OWED_MARK } from '../shared/tournamentTickets';
 import { requireAdmin } from './auth';
 import * as v from './validate';
 import { hiddenTask, lockDate, setTournamentsForAll, type SignupRow, todayKey, type TournamentRow } from './tournament';
@@ -197,7 +198,15 @@ const isVenueStage = (s: string): s is VenueStage => (VENUE_STAGES as readonly s
  * anywhere, so no cup on any header. "History with tournaments" (history) is the other side: three past winners on the Champions wall.
  */
 export const ZIP83_STAGES = ['zip83_none'] as const;
-export const TEST_STAGES = [...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+/**
+ * Zip 85 (🎾85.final fixes): "Americano: idle phone at the reveal" (zip85_idle): the night's last round playing (am_standings): leave a phone
+ * on Home untouched for 10 minutes or more, enter the last scores, then Reveal standings: the board lands on time, then the cup and the ticker.
+ * "Didn't pay after the night" (zip85_owed): every round in (am_done) and Parker's ticket as Alex's Didn't pay after the start leaves it
+ * (shared/tournamentTickets.ts OWED_MARK): Parker still in the night, owing $16: View as Parker shows the You owe card; Money shows the
+ * Tournament tickets card with Mark paid. End is not held up.
+ */
+export const ZIP85_STAGES = ['zip85_idle', 'zip85_owed'] as const;
+export const TEST_STAGES = [...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -353,6 +362,19 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   ]);
   if (stage === 'none') return { ok: true, stage };
   if (stage === 'zip83_none') return { ...(await zip70Stage(ctx, group, 'zip70_start')), stage };
+  if (stage === 'zip85_idle') return { ...(await americanoStage(ctx, group, 'am_standings')), stage };
+  if (stage === 'zip85_owed') {
+    const made = await americanoStage(ctx, group, 'am_done');
+    // Parker's ticket exactly as "Didn't pay" after the start leaves it: the money not on it, the amount owed (OWED_MARK), still locked in.
+    await ctx.db
+      .prepare(
+        `UPDATE tournament_tickets SET place = 'none', place_at = NULL, paid_cents = 0, paid_at = NULL, claim_cents = price_cents, claim_at = '${OWED_MARK}', updated_at = ?
+         WHERE tournament_id = ? AND price_cents > 0 AND credit_cents = 0 AND player_id = (SELECT id FROM players WHERE group_id = ? AND display_name = 'Parker')`,
+      )
+      .bind(ctx.nowIso, made.id, group.id)
+      .run();
+    return { ...made, stage };
+  }
   if (isVenueStage(stage)) return venueStage(ctx, group, stage);
   if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
   if (isZip77Stage(stage)) return zip77Stage(ctx, group, stage);

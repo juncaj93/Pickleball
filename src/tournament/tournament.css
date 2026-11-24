@@ -1617,7 +1617,9 @@ dialog.sheet.tc-tw-overlay {
   font-size: max(11px, min(0.8rem, 5.5cqw));
   font-weight: 650;
   line-height: 1.25;
-  white-space: nowrap;
+  /* Zip 85 (🎾84 dry run): "Locked doubles (same partner all night)" wraps between words at 320 and 360, never cut. */
+  white-space: normal;
+  overflow-wrap: normal;
 }
 .tc-short .tc-punch-sub {
   text-align: left;

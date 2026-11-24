@@ -61,6 +61,7 @@ import { Medals, MedalsContext } from '../Medals';
 import { WinsProvider } from '../WinsSheet';
 import { CupButton } from '../Champions';
 import { hasChampions } from '../../shared/champions';
+import { REVEAL_HOLD_MS } from '../../shared/reveal';
 // Zip 58: the ticker and the congratulations card are their own small file, fetched only when a tournament has winners to show.
 const TourAwards = lazy(() => import('../TourAwards'));
 
@@ -471,7 +472,19 @@ export function PlayerHome({
   // Zip 77: while the Americano night's "Final standings coming soon" card shows (every game in, not revealed yet, on that night), Home checks
   // every 2 seconds whatever the phone is doing, so every phone starts the reveal together. Only then; the usual rhythm otherwise.
   const waitingReveal = g?.tournament?.day?.kind === 'americano' && g.tournament.day.waiting === true;
-  useLiveUpdates({ enabled: !!g && !!g.me && !switching && !viewAs && !pretend && !holdRefresh, version: g?.version ?? null, reload: load.quiet, fastMs: waitingReveal ? 2000 : null });
+  // Zip 85 (🎾84 dry run): a phone left on but untouched on a tournament night still follows it: while the night runs (and an Americano
+  // reveal plays and holds the winner back, plus a minute), Home keeps its 5 second check instead of stopping after 10 quiet minutes, so the
+  // reveal starts on time and the cup and the ticker arrive after. A hidden tab or a dark screen still checks nothing. The 2 second check stays
+  // only on the waiting card. Locked doubles: until End tournament (the results row then brings the cup and the ticker at once).
+  const nightDay = g?.tournament?.day;
+  const nightUntil = !nightDay || !nightDay.started ? null : g?.tournament?.reveal ? g.tournament.reveal.tapMs + REVEAL_HOLD_MS + 60_000 : g?.tournament?.results ? null : Infinity;
+  useLiveUpdates({
+    enabled: !!g && !!g.me && !switching && !viewAs && !pretend && !holdRefresh,
+    version: g?.version ?? null,
+    reload: load.quiet,
+    fastMs: waitingReveal ? 2000 : null,
+    nightUntil,
+  });
 
   // One-time moments: a game I'm in reached 4, and a cash out the organizer sent.
   const celebrated = useRef<Set<string> | null>(null);
@@ -889,13 +902,15 @@ export function PlayerHome({
             {/* Zip 31 "Extended time" (only while on): "You owe $3 for the extra 30 min..." and the credit-used alerts. */}
             {g.extension && <ExtensionAlerts g={view!} onChanged={load.reload} />}
             {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} enter={live} />}
+            {/* Zip 85: a tournament ticket marked Didn't pay after the night: the same amber You owe card, Pay (the same Pay sheet) and I paid. */}
+            {view!.ticketsOwed?.map((o) => <TicketOweCard key={o.tournamentId} g={view!} o={o} onChanged={load.reload} />)}
             {/* Zip 16 (AFTER_GAME_CARD): "$5 back to your credit" after Finalize, once, until closed or 7 days old. */}
             {g.afterGameCard === true && <AfterGameCard g={view!} />}
             {/* The organizer's hand adjustment to this player's credit (recent ones): always told, even with no pay card and no credit chip (credit taken to $0). */}
             {view!.payDue.length === 0 && recentAdjustment && g.alertCards === true && <AdjustedCard adj={recentAdjustment} />}
             {view!.payDue.length === 0 && recentAdjustment && g.alertCards !== true && (
               <p className="credit-adjusted" data-adjust-note data-adjust-home>
-                <b>{adjustedPlayerLine(recentAdjustment.deltaCents)}</b>
+                <b>{adjustedPlayerLine(recentAdjustment.deltaCents, g.group.organizerName)}</b>
                 {recentAdjustment.note && <span>{recentAdjustment.note}</span>}
               </p>
             )}
@@ -932,6 +947,7 @@ export function PlayerHome({
             )}
             {/* Preview only (calm): just the cards the zips being built change: the owe card (Unpaid nudge on, or it owes more after Finalize) and the after-game card. */}
             {g.previewCalm === true && view!.payDue.length > 0 && (nudge || (g.afterGameCard === true && view!.payDue.every((o) => !!o.more))) && <PayCard g={view!} onChanged={load.reload} enter={live} />}
+            {g.previewCalm === true && view!.ticketsOwed?.map((o) => <TicketOweCard key={o.tournamentId} g={view!} o={o} onChanged={load.reload} />)}
             {g.previewCalm === true && g.afterGameCard === true && <AfterGameCard g={view!} />}
             {g.previewCalm === true && g.extension && <ExtensionAlerts g={view!} onChanged={load.reload} />}
             {/* Zip 57: the tournament's live window: the week's game cards fold into one button, opened and folded in place. */}
@@ -1003,12 +1019,12 @@ export function PlayerHome({
                       if (laterShown) requestAnimationFrame(() => btn.scrollIntoView({ block: 'nearest' }));
                     }}
                   >
-                    {laterShown ? 'Show fewer' : 'More sessions'}
+                    {laterShown ? 'Show fewer' : 'More games'}
                   </button>
                 )
               : filtered.length > SHOW_FIRST && (
                   <button className="btn ghost block" onClick={() => setShowAll((v) => !v)}>
-                    {showAll ? 'Show fewer' : `More sessions (${filtered.length - SHOW_FIRST})`}
+                    {showAll ? 'Show fewer' : `More games (${filtered.length - SHOW_FIRST})`}
                   </button>
                 )}
             </>
@@ -1903,6 +1919,65 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard
  * "Pickleball Tue Nov 3 - Ryan" when Venmo allows it; otherwise the note shows
  * with Copy. Opening Venmo never marks anyone paid.
  */
+/**
+ * Zip 85 (🎾84 dry run, Alex approved): a tournament ticket the organizer marked Didn't pay after the night started. They played, so they owe it
+ * like any unpaid game: the same amber You owe card ("You owe $18" / "For The Cold Open, Tue, Dec 1"), Pay opening the same Pay sheet (the
+ * ticket's Venmo note), and I paid, which waits for the organizer like every I paid (the card goes until they answer). Its own card, so it stays
+ * after the tournament card has gone from Home.
+ */
+function TicketOweCard({ g, o, onChanged }: { g: GroupView; o: NonNullable<GroupView['ticketsOwed']>[number]; onChanged: () => Promise<void> }) {
+  const toast = useToast();
+  const [sheet, setSheet] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const tz = g.group.timezone || DEFAULT_TIMEZONE;
+  const day = o.date ? formatShortDate(`${o.date}T17:00:00Z`, tz) : null;
+  const pay = venmoPayUrl(g.group.venmoUrl, o.cents, `${o.name} ticket${g.me?.name ? ` - ${g.me.name}` : ''}`);
+  async function paid() {
+    setSheet(false);
+    if (demoOn()) {
+      toast(DEMO_PAY_TOAST);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api('POST', '/api/tournament/owed-paid', { tournamentId: o.tournamentId, cents: o.cents });
+      toast(`Thanks. ${firstNameOf(g.group.organizerName)} will confirm it.`);
+      await onChanged();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not save. Try again.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <AlertCard
+        as="section"
+        tone="amber"
+        icon="owe"
+        label="Payment"
+        titleAs="h2"
+        data={{ 'data-ticket-owe': o.tournamentId }}
+        title={oweTitle(o.cents)}
+        sub={`For ${o.name}${day ? `, ${day}` : ''}`}
+        links={
+          <button type="button" className="ac-link" data-ticket-owe-paid disabled={busy} onClick={() => void paid()}>
+            {busy ? 'Saving…' : 'I paid'}
+          </button>
+        }
+        action={
+          pay.url ? (
+            <button type="button" className="ac-btn" aria-label={`Pay ${formatPrice(o.cents)} with Venmo`} data-ticket-owe-pay disabled={busy} onClick={() => setSheet(true)}>
+              Pay
+            </button>
+          ) : undefined
+        }
+      />
+      <PaySheet g={g} open={sheet} onClose={() => setSheet(false)} cents={o.cents} pay={pay} onTapPay={() => undefined} onPaid={() => void paid()} busy={busy} saving={busy} />
+    </>
+  );
+}
+
 function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: () => Promise<void>; enter?: boolean }) {
   // Only a card that appears after the page has settled enters; a later refresh never replays it.
   const enter = useRef(enterNow).current;
@@ -2119,7 +2194,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
       )}
       {adjustNote && (
         <p className="small pay-adjusted" data-adjust-note>
-          <b>{adjustedPlayerLine(adjustNote.deltaCents)}</b>
+          <b>{adjustedPlayerLine(adjustNote.deltaCents, g.group.organizerName)}</b>
           {adjustNote.note && <span>{adjustNote.note}</span>}
         </p>
       )}

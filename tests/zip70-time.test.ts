@@ -356,7 +356,7 @@ describe('Time and Plan (pictures 1, 2, 3, 6, 7)', () => {
     const t = await dash(ctx);
     // 8 can make the date: the Plan expects 8 (the real count), 2 courts, the real 2.5 hours. $16 tickets, $28 of credits: 7 x $16 - $120 - $28.
     expect(t).toMatchObject({ expected: 8, suggested: 8, expectSaved: false, spots: 8, courts: 2, minutes: 150, start: 1170, timeOpen: true, planOpen: true });
-    expect(t.money).toEqual({ courtCents: 12000, ticketsCents: 11200, youCents: 11200 - 12000 - 2800 });
+    expect(t.money).toMatchObject({ courtCents: 12000, ticketsCents: 11200, youCents: 11200 - 12000 - 2800 });
     expect(t.cost.ifFillsCents).toBe(-t.money.youCents);
   });
 
@@ -424,7 +424,7 @@ describe('Time and Plan (pictures 1, 2, 3, 6, 7)', () => {
     const t = await dash(ctx);
     expect(t).toMatchObject({ expected: 10, suggested: 8, expectSaved: true, courts: 1, spots: 10 });
     // 1 court x 2.5 hours = $60; 9 x $16 = $144; $28 credits: +$56.
-    expect(t.money).toEqual({ courtCents: 6000, ticketsCents: 14400, youCents: 5600 });
+    expect(t.money).toMatchObject({ courtCents: 6000, ticketsCents: 14400, youCents: 5600 });
     expect((ctx.app.db.raw.prepare('SELECT courts FROM tournaments WHERE id = ?').get(ctx.tid) as { courts: number }).courts).toBe(1);
     expect((await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/plan`, { expected: 17, courts: 2 })).status).toBe(400);
     // The same numbers again (a double tap): nothing written.

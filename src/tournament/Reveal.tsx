@@ -15,6 +15,7 @@ import { storageGet, storageSet } from '../lib';
 import { Pickleball } from '../ui';
 import { MedalIcon } from '../Medals';
 import { clockKnown, serverNow, syncServerClock } from '../serverClock';
+import { openLayer } from '../backStack';
 import './reveal.css';
 
 type Standing = PlayerRoundsView['standings'][number];
@@ -307,7 +308,7 @@ function BoardRow({ r, p }: { r: Standing; p: number }) {
           {r.name}
           {r.me && <span className="tc-rv-you">YOU</span>}
         </span>
-        <span className="tc-rv-rec">{r.record.replace('-', ' - ')}</span>
+        <span className="tc-rv-rec">{r.record}</span>
         <span className="tc-rv-pts">{r.points} pts</span>
       </span>
     </li>
@@ -328,6 +329,15 @@ function Board({ t, standings, tapMs, onDone, onClose }: { t: PlayerTournamentVi
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
   const calm = useRef(reduced()).current;
+  // Zip 85 (🎾84 dry run): the board is a layer like every sheet: Back (an iPhone edge swipe, Android's back) folds it away like the X, never
+  // leaving the site. The layer is given up the moment the fold starts (whichever way), so the history entry goes back exactly once.
+  const releaseRef = useRef<() => void>(() => undefined);
+  const foldRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    const release = openLayer(() => foldRef.current());
+    releaseRef.current = release;
+    return release;
+  }, []);
 
   useLayoutEffect(() => {
     const root = boardRef.current;
@@ -380,6 +390,7 @@ function Board({ t, standings, tapMs, onDone, onClose }: { t: PlayerTournamentVi
   }, [tapMs]);
 
   function fold() {
+    releaseRef.current();
     const root = boardRef.current;
     if (!root || calm) return onClose();
     setFolding(true);
@@ -390,6 +401,7 @@ function Board({ t, standings, tapMs, onDone, onClose }: { t: PlayerTournamentVi
     root.style.opacity = '0';
     setTimeout(onClose, FOLD_MS);
   }
+  foldRef.current = fold;
 
   return (
     <section ref={heroRef} className="tc-gd-hero tc-rv-hero tc-rv-open" aria-label={`${t.name}, final standings`} data-tc-day-hero data-tc-reveal>

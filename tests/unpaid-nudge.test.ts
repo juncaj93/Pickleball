@@ -88,16 +88,16 @@ describe('the words', () => {
   });
   it('the owe card: several games, same amount, different amounts, one month, more than four', () => {
     expect(oweTitle(2800)).toBe('You owe $28');
-    expect(oweLine([at('2026-11-06T00:30:00Z'), at('2026-11-04T00:00:00Z')], TZ)).toBe('$14 each: Nov 3 and Nov 5');
-    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-06T00:30:00Z', 1100)], TZ)).toBe('Nov 3 and Nov 5');
-    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-06T00:30:00Z'), at('2026-11-11T00:30:00Z')], TZ)).toBe('$14 each: Nov 3, 5 and 10');
-    expect(oweLine([at('2026-10-30T00:00:00Z'), at('2026-11-04T00:00:00Z'), at('2026-11-06T00:30:00Z')], TZ)).toBe('$14 each: Oct 29, Nov 3 and 5');
+    expect(oweLine([at('2026-11-06T00:30:00Z'), at('2026-11-04T00:00:00Z')], TZ)).toBe('$14 each, 2 games: Nov 3 and Nov 5');
+    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-06T00:30:00Z', 1100)], TZ)).toBe('2 games: Nov 3 and Nov 5');
+    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-06T00:30:00Z'), at('2026-11-11T00:30:00Z')], TZ)).toBe('$14 each, 3 games: Nov 3, 5 and 10');
+    expect(oweLine([at('2026-10-30T00:00:00Z'), at('2026-11-04T00:00:00Z'), at('2026-11-06T00:30:00Z')], TZ)).toBe('$14 each, 3 games: Oct 29, Nov 3 and 5');
     const five = ['2026-10-28', '2026-10-30', '2026-11-04', '2026-11-06', '2026-11-11'].map((d) => at(`${d}T00:30:00Z`));
-    expect(oweLine(five, TZ)).toBe('$14 each: 5 games since Oct 27');
+    expect(oweLine(five, TZ)).toBe('$14 each, 5 games since Oct 27');
     // Two games on one day: grouped, never the same date twice.
-    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-08T22:00:00Z'), at('2026-11-09T02:30:00Z')], TZ)).toBe('$14 each: Nov 3 and Nov 8 (2 games)');
-    expect(oweLine([at('2026-11-08T22:00:00Z'), at('2026-11-09T02:30:00Z')], TZ)).toBe('$14 each: 2 games on Nov 8');
-    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-05T00:00:00Z'), at('2026-11-08T22:00:00Z'), at('2026-11-09T02:30:00Z')], TZ)).toBe('$14 each: Nov 3, 4 and 8 (2 games)');
+    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-08T22:00:00Z'), at('2026-11-09T02:30:00Z')], TZ)).toBe('$14 each, 3 games: Nov 3 and Nov 8 (2)');
+    expect(oweLine([at('2026-11-08T22:00:00Z'), at('2026-11-09T02:30:00Z')], TZ)).toBe('$14 each, 2 games on Nov 8');
+    expect(oweLine([at('2026-11-04T00:00:00Z'), at('2026-11-05T00:00:00Z'), at('2026-11-08T22:00:00Z'), at('2026-11-09T02:30:00Z')], TZ)).toBe('$14 each, 4 games: Nov 3, 4 and 8 (2)');
     // Never "pay to keep it clear".
     expect(oweLine(five, TZ)).not.toMatch(/keep/);
   });

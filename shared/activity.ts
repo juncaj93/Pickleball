@@ -181,51 +181,51 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'session_shown_to_players':
       return `${who} showed${day ? ` ${day}` : ' a canceled game'} on the player screen again`;
     case 'pay_note_on':
-      return `${who} switched the "No Venmo?" note on`;
+      return `${who} switched the “No Venmo?” note on`;
     case 'pay_note_off':
-      return `${who} switched the "No Venmo?" note off`;
+      return `${who} switched the “No Venmo?” note off`;
     case 'credit_adjusted': {
       const delta = typeof d.deltaCents === 'number' ? d.deltaCents : 0;
       const after = typeof d.balanceAfterCents === 'number' ? `, ${formatPrice(d.balanceAfterCents)} now` : '';
       return `${player}: credit ${delta < 0 ? '-' : '+'}${formatPrice(Math.abs(delta))}${after}. Adjusted by organizer${typeof d.reason === 'string' && d.reason ? `. Reason: ${d.reason}` : ''}`;
     }
     case 'adjust_credit_on':
-      return `${who} switched "Adjust credit" on`;
+      return `${who} switched “Adjust credit” on`;
     case 'adjust_credit_off':
-      return `${who} switched "Adjust credit" off`;
+      return `${who} switched “Adjust credit” off`;
     case 'players_redo_on':
-      return `${who} switched "Players redo" on`;
+      return `${who} switched “Players redo” on`;
     case 'players_redo_off':
-      return `${who} switched "Players redo" off`;
+      return `${who} switched “Players redo” off`;
     case 'swap_button_on':
-      return `${who} switched "Swap to Alex" on`;
+      return `${who} switched “Swap to Alex” on`;
     case 'swap_button_off':
-      return `${who} switched "Swap to Alex" off`;
+      return `${who} switched “Swap to Alex” off`;
     case 'admin_undo_on':
-      return `${who} switched "Undo on admin toasts" on`;
+      return `${who} switched “Undo on admin toasts” on`;
     case 'admin_undo_off':
-      return `${who} switched "Undo on admin toasts" off`;
+      return `${who} switched “Undo on admin toasts” off`;
     case 'second_chance_on':
-      return `${who} switched "Second Chance" on`;
+      return `${who} switched “Second Chance” on`;
     case 'second_chance_off':
-      return `${who} switched "Second Chance" off`;
+      return `${who} switched “Second Chance” off`;
     case 'error_alerts_on':
-      return `${who} switched "Error alerts" on`;
+      return `${who} switched “Error alerts” on`;
     case 'error_alerts_off':
-      return `${who} switched "Error alerts" off`;
+      return `${who} switched “Error alerts” off`;
     case 'unpaid_nudge_on':
-      return `${who} switched "Unpaid nudge" on`;
+      return `${who} switched “Unpaid nudge” on`;
     case 'unpaid_nudge_off':
-      return `${who} switched "Unpaid nudge" off`;
+      return `${who} switched “Unpaid nudge” off`;
     case 'booking_hours_on':
-      return `${who} switched "Booking hours" on`;
+      return `${who} switched “Booking hours” on`;
     case 'booking_hours_off':
-      return `${who} switched "Booking hours" off`;
+      return `${who} switched “Booking hours” off`;
     // Zip 31 "Extended time" (server/extension.ts): one plain line for the game and one per share that moved.
     case 'extended_time_on':
-      return `${who} switched "Extended time" on`;
+      return `${who} switched “Extended time” on`;
     case 'extended_time_off':
-      return `${who} switched "Extended time" off`;
+      return `${who} switched “Extended time” off`;
     case 'extension_set': {
       const m = typeof d.minutes === 'number' ? d.minutes : 0;
       if (m <= 0) return `${who} finalized with no extra time${forDay}`;
@@ -257,9 +257,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} unmarked extra time paid with the next game`;
     // Zip 55 "Tournaments" (server/tournament.ts): the switch, the organizer's taps and each player's own sign-up. Names and levels only, no money.
     case 'tournaments_on':
-      return `${who} switched "Tournaments" on`;
+      return `${who} switched “Tournaments” on`;
     case 'tournaments_off':
-      return `${who} switched "Tournaments" off`;
+      return `${who} switched “Tournaments” off`;
     case 'tournament_created':
       return `${who} opened sign-up for ${theTour(d)}${d.visibility === 'all' ? '' : ' (only you can see it)'}`;
     case 'tournament_edited':
@@ -323,6 +323,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} confirmed ${player}’s ${cents(d.amountCents)} for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
     case 'tournament_ticket_rejected':
       return `${who} said ${player} didn’t pay (${cents(d.amountCents)}) for ${theTour(d)}${num(d.creditCents) > 0 ? ` (${cents(d.creditCents)} back as credit)` : ''}`;
+    // Zip 85: Didn't pay after the night started: they played, so they owe it (their You owe card, Money's Tournament tickets card).
+    case 'tournament_ticket_owed':
+      return `${who} said ${player} didn’t pay for ${theTour(d)}: ${player} owes ${cents(d.amountCents)}`;
     case 'tournament_ticket_marked_paid':
       return `${who} marked ${player} paid ${cents(d.amountCents)} for ${theTour(d)}`;
     case 'tournament_taken_off':
@@ -376,9 +379,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'tournament_award_seen':
       return `${player} saw their ${tourName(d)} award`;
     case 'guest_spot_on':
-      return `${who} switched "Guest spot" on`;
+      return `${who} switched “Guest spot” on`;
     case 'guest_spot_off':
-      return `${who} switched "Guest spot" off`;
+      return `${who} switched “Guest spot” off`;
     // Zip 42 "Guest spot": the guest's first name is in the line, never anything else about them.
     case 'guest_added':
       return `${who} added ${typeof d.guest === 'string' ? d.guest : 'a guest'} as ${player}’s guest${d.waitlisted === true ? ' (waitlist)' : ''}${forDay}`;
@@ -391,122 +394,122 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'guest_moved_in':
       return `${player}’s guest${typeof d.guest === 'string' ? ` ${d.guest}` : ''} moved up from the waitlist${forDay}`;
     case 'tap_guard_fix_on':
-      return `${who} switched "Tap guard fix" on`;
+      return `${who} switched “Tap guard fix” on`;
     case 'tap_guard_fix_off':
-      return `${who} switched "Tap guard fix" off`;
+      return `${who} switched “Tap guard fix” off`;
     case 'checkin_pay_line_on':
-      return `${who} switched "Check-in pay line" on`;
+      return `${who} switched “Check-in pay line” on`;
     case 'checkin_pay_line_off':
-      return `${who} switched "Check-in pay line" off`;
+      return `${who} switched “Check-in pay line” off`;
     case 'christmas_skin_everyone':
-      return `${who} switched "Christmas skin" to Everyone`;
+      return `${who} switched “Christmas skin” to Everyone`;
     case 'christmas_skin_me':
-      return `${who} switched "Christmas skin" to Just me`;
+      return `${who} switched “Christmas skin” to Just me`;
     case 'christmas_skin_on':
-      return `${who} switched "Christmas skin" on`;
+      return `${who} switched “Christmas skin” on`;
     case 'christmas_skin_off':
-      return `${who} switched "Christmas skin" off`;
+      return `${who} switched “Christmas skin” off`;
     case 'home_screen_tip_on':
-      return `${who} switched "Home Screen tip" on`;
+      return `${who} switched “Home Screen tip” on`;
     case 'home_screen_tip_off':
-      return `${who} switched "Home Screen tip" off`;
+      return `${who} switched “Home Screen tip” off`;
     case 'game_day_text_on':
-      return `${who} switched "Game day text" on`;
+      return `${who} switched “Game day text” on`;
     case 'game_day_text_off':
-      return `${who} switched "Game day text" off`;
+      return `${who} switched “Game day text” off`;
     case 'players_sheet_redo_on':
-      return `${who} switched "Players sheet redo" on`;
+      return `${who} switched “Players sheet redo” on`;
     case 'players_sheet_redo_off':
-      return `${who} switched "Players sheet redo" off`;
+      return `${who} switched “Players sheet redo” off`;
     case 'acting_others_on':
-      return `${who} switched "Acting for others" on`;
+      return `${who} switched “Acting for others” on`;
     case 'acting_others_off':
-      return `${who} switched "Acting for others" off`;
+      return `${who} switched “Acting for others” off`;
     case 'spent_totals_on':
-      return `${who} switched "Spent matches Totals" on`;
+      return `${who} switched “Spent matches Totals” on`;
     case 'spent_totals_off':
-      return `${who} switched "Spent matches Totals" off`;
+      return `${who} switched “Spent matches Totals” off`;
     case 'venue_alert_on':
-      return `${who} switched "Venue charge alert" on`;
+      return `${who} switched “Venue charge alert” on`;
     case 'venue_alert_off':
-      return `${who} switched "Venue charge alert" off`;
+      return `${who} switched “Venue charge alert” off`;
     case 'venue_charge_paid':
       // Zip 43: the whole line is the History entry Alex asked for ("Venue charge marked paid: $192"); the amount is the card's total in cents.
       return `Venue charge marked paid: ${formatPrice(typeof d.cents === 'number' ? d.cents : 0)}`;
     case 'totals_refresh_on':
-      return `${who} switched "Totals refresh" on`;
+      return `${who} switched “Totals refresh” on`;
     case 'totals_refresh_off':
-      return `${who} switched "Totals refresh" off`;
+      return `${who} switched “Totals refresh” off`;
     case 'after_game_card_on':
-      return `${who} switched "After-game cards" on`;
+      return `${who} switched “After-game cards” on`;
     case 'after_game_card_off':
-      return `${who} switched "After-game cards" off`;
+      return `${who} switched “After-game cards” off`;
     case 'game_day_card_on':
-      return `${who} switched "Game day card" on`;
+      return `${who} switched “Game day card” on`;
     case 'game_day_card_off':
-      return `${who} switched "Game day card" off`;
+      return `${who} switched “Game day card” off`;
     case 'session_court_changed':
       return `${who} ${typeof d.to === 'number' ? `set the court${forDay} to Court ${d.to}` : `cleared the court${forDay}`}`;
     case 'seat_dots_on':
-      return `${who} switched "Seat dots" on`;
+      return `${who} switched “Seat dots” on`;
     case 'seat_dots_off':
-      return `${who} switched "Seat dots" off`;
+      return `${who} switched “Seat dots” off`;
     case 'alert_cards_on':
-      return `${who} switched "Alert cards" on`;
+      return `${who} switched “Alert cards” on`;
     case 'alert_cards_off':
-      return `${who} switched "Alert cards" off`;
+      return `${who} switched “Alert cards” off`;
     case 'speed_fewer_queries_on':
-      return `${who} switched "Fewer database trips" on`;
+      return `${who} switched “Fewer database trips” on`;
     case 'speed_fewer_queries_off':
-      return `${who} switched "Fewer database trips" off`;
+      return `${who} switched “Fewer database trips” off`;
     case 'speed_direct_load_on':
-      return `${who} switched "Load games at once" on`;
+      return `${who} switched “Load games at once” on`;
     case 'speed_direct_load_off':
-      return `${who} switched "Load games at once" off`;
+      return `${who} switched “Load games at once” off`;
     case 'speed_last_screen_admin_on':
-      return `${who} switched "Instant admin" on`;
+      return `${who} switched “Instant admin” on`;
     case 'speed_last_screen_admin_off':
-      return `${who} switched "Instant admin" off`;
+      return `${who} switched “Instant admin” off`;
     case 'speed_last_screen_on':
-      return `${who} switched "Show last screen at once" on`;
+      return `${who} switched “Show last screen at once” on`;
     case 'speed_last_screen_off':
-      return `${who} switched "Show last screen at once" off`;
+      return `${who} switched “Show last screen at once” off`;
     case 'card_cleanup_on':
-      return `${who} switched "Card cleanup" on`;
+      return `${who} switched “Card cleanup” on`;
     case 'card_cleanup_off':
-      return `${who} switched "Card cleanup" off`;
+      return `${who} switched “Card cleanup” off`;
     case 'short_games_on':
-      return `${who} switched "Short games" on`;
+      return `${who} switched “Short games” on`;
     case 'short_games_off':
-      return `${who} switched "Short games" off`;
+      return `${who} switched “Short games” off`;
     case 'card_time_buttons_on':
-      return `${who} switched "Card time and buttons" on`;
+      return `${who} switched “Card time and buttons” on`;
     case 'card_time_buttons_off':
-      return `${who} switched "Card time and buttons" off`;
+      return `${who} switched “Card time and buttons” off`;
     case 'last_call_texts_on':
-      return `${who} switched "Last call texts" on`;
+      return `${who} switched “Last call texts” on`;
     case 'last_call_texts_off':
-      return `${who} switched "Last call texts" off`;
+      return `${who} switched “Last call texts” off`;
     case 'home_collapse_on':
-      return `${who} switched "Home collapse" on`;
+      return `${who} switched “Home collapse” on`;
     case 'home_collapse_off':
-      return `${who} switched "Home collapse" off`;
+      return `${who} switched “Home collapse” off`;
     case 'tonight_glow_on':
-      return `${who} switched "Tonight glow" on`;
+      return `${who} switched “Tonight glow” on`;
     case 'tonight_glow_off':
-      return `${who} switched "Tonight glow" off`;
+      return `${who} switched “Tonight glow” off`;
     case 'color_cleanup_on':
-      return `${who} switched "Color cleanup" on`;
+      return `${who} switched “Color cleanup” on`;
     case 'color_cleanup_off':
-      return `${who} switched "Color cleanup" off`;
+      return `${who} switched “Color cleanup” off`;
     case 'player_cards_on':
-      return `${who} switched "Simpler player cards" on`;
+      return `${who} switched “Simpler player cards” on`;
     case 'player_cards_off':
-      return `${who} switched "Simpler player cards" off`;
+      return `${who} switched “Simpler player cards” off`;
     case 'venmo_request_on':
-      return `${who} switched "Venmo request" on`;
+      return `${who} switched “Venmo request” on`;
     case 'venmo_request_off':
-      return `${who} switched "Venmo request" off`;
+      return `${who} switched “Venmo request” off`;
     case 'motion_on':
       return `${who} switched the player animations on`;
     case 'motion_off':
@@ -516,17 +519,17 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'motion_admin_off':
       return `${who} switched the organizer animations off`;
     case 'instant_taps_on':
-      return `${who} switched "Instant taps" on`;
+      return `${who} switched “Instant taps” on`;
     case 'instant_taps_off':
-      return `${who} switched "Instant taps" off`;
+      return `${who} switched “Instant taps” off`;
     case 'player_fix1_on':
-      return `${who} switched "Player screen fixes" on`;
+      return `${who} switched “Player screen fixes” on`;
     case 'player_fix1_off':
-      return `${who} switched "Player screen fixes" off`;
+      return `${who} switched “Player screen fixes” off`;
     case 'texts_r2_on':
-      return `${who} switched "Texts and alerts, round 2" on`;
+      return `${who} switched “Texts and alerts, round 2” on`;
     case 'texts_r2_off':
-      return `${who} switched "Texts and alerts, round 2" off`;
+      return `${who} switched “Texts and alerts, round 2” off`;
     case 'pay_sheet_on':
       return `${who} switched the Pay sheet on`;
     case 'pay_sheet_off':
@@ -538,9 +541,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'late_fees_on':
       return `${who} switched "Late drops owe $14" on`;
     case 'late_fee_split_on':
-      return `${who} switched "Late-cancel fee split" on`;
+      return `${who} switched “Late-cancel fee split” on`;
     case 'late_fee_split_off':
-      return `${who} switched "Late-cancel fee split" off`;
+      return `${who} switched “Late-cancel fee split” off`;
     case 'late_fees_off':
       return `${who} switched "Late drops owe $14" off`;
     case 'late_fee_owed':
@@ -580,21 +583,21 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
     case 'charge_edited':
       return `${who} changed the venue charge${forDay}${typeof d.chargedCents === 'number' ? (d.chargedCents > 0 ? ` to ${formatPrice(d.chargedCents)}` : ' to none') : ''}`;
     case 'time_shift_on':
-      return `${who} switched "Moved-game notice" on`;
+      return `${who} switched “Moved-game notice” on`;
     case 'time_shift_off':
-      return `${who} switched "Moved-game notice" off`;
+      return `${who} switched “Moved-game notice” off`;
     case 'pay_always_on':
-      return `${who} switched "Payment on every game" on`;
+      return `${who} switched “Payment on every game” on`;
     case 'pay_always_off':
-      return `${who} switched "Payment on every game" off`;
+      return `${who} switched “Payment on every game” off`;
     case 'money_note_on':
-      return `${who} switched "Money change note" on`;
+      return `${who} switched “Money change note” on`;
     case 'money_note_off':
-      return `${who} switched "Money change note" off`;
+      return `${who} switched “Money change note” off`;
     case 'cheaper_fix_on':
-      return `${who} switched "Made cheaper after paying" on`;
+      return `${who} switched “Made cheaper after paying” on`;
     case 'cheaper_fix_off':
-      return `${who} switched "Made cheaper after paying" off`;
+      return `${who} switched “Made cheaper after paying” off`;
     case 'money_rework_on':
       return `${who} switched the Money page rework on`;
     case 'money_rework_off':

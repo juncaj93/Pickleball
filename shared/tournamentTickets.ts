@@ -25,6 +25,17 @@ export interface TicketMoney {
   claimCents: number;
 }
 
+/**
+ * Zip 85 (🎾84 dry run, Alex approved): "Didn't pay" AFTER the tournament night has started, on a ticket that counted as locked in by its I paid.
+ * They played, so they still owe it like any unpaid game: the I paid's amount stays on the ticket as the debt (claim_cents), marked with this
+ * value in claim_at (a time otherwise). They stay in the night (nothing about the games changes); their own You owe card shows it with Pay and
+ * I paid; the organizer's Money shows it with Mark paid. An I paid on it sets claim_at back to the tap time (an I paid waiting, as always);
+ * Paid or Mark paid moves it into paid_cents and the ticket takes its spot; Didn't pay again puts the mark back. No table or column change.
+ */
+export const OWED_MARK = 'owed';
+export const isOwedClaim = (k: { claimCents?: number; claim_cents?: number; claimAt?: string | null; claim_at?: string | null }): boolean =>
+  (k.claimCents ?? k.claim_cents ?? 0) > 0 && (k.claimAt ?? k.claim_at) === OWED_MARK;
+
 /** Still to pay: the price minus credit on it, confirmed cash and an I paid that waits. Never below $0. */
 export const ticketOwed = (k: TicketMoney): number => Math.max(0, k.priceCents - k.creditCents - k.paidCents - k.claimCents);
 

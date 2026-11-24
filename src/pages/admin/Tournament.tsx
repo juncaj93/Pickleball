@@ -39,10 +39,10 @@ import {
   DEFAULT_SECOND_CREDIT_CENTS,
   MAX_SPOTS,
   type TournamentSignupView,
-  prizeCentsOf,
 } from '../../../shared/tournament';
-import { afterFullCents, afterFullWords, EXPECT_MAX, EXPECT_MIN, expectedPlayers, type MoneyLine, moneyLine, moneyRowLabel } from '../../../shared/tournamentMoney';
+import { afterFullWords, EXPECT_MAX, EXPECT_MIN, expectedPlayers, type MoneyLine, moneyRowLabel, planMoney } from '../../../shared/tournamentMoney';
 import { formatPrice, parseDollars } from '../../../shared/money';
+import { isOwedClaim } from '../../../shared/tournamentTickets';
 import { evensWarning, payByAt, payByDays, payByLabel, payByParts, salesCutoffMs, startMsOf, tournamentRemindText } from '../../../shared/tournamentTickets';
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
@@ -114,7 +114,8 @@ const lockedNum = (t: AdminTournamentView): number => t.lockedIn ?? lockedOf(t).
 /** Zip 56: the waitlist, in the order they joined it. */
 const lineOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.place === 'line' && !k.out);
 /** Zip 56: I paid taps waiting for the organizer's answer. */
-const claimsOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.claimCents > 0);
+// Zip 85: a ticket marked Didn't pay after the night started is a debt (Money's Tournament tickets card), not an I paid waiting.
+const claimsOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => k.claimCents > 0 && !isOwedClaim(k));
 /** Zip 56: tickets holding money or a spot (a Reschedule keeps them). */
 const heldOf = (t: AdminTournamentView) => (t.tickets ?? []).filter((k) => !k.out && (k.place === 'spot' || k.creditCents + k.paidCents + k.claimCents > 0)).length;
 /** Zip 56: paid in full with money that counts (credit and confirmed cash). */
@@ -196,8 +197,19 @@ const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Locked dou
 // Zip 70: the Plan's expected players (the saved Expect number, else the site's suggestion), not the plan size.
 const planShort = (t: AdminTournamentView) => `${t.expected ?? t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
 
-/** Zip 70: the winners' credits now set, as the server's money line counted them (Tickets minus Courts minus You). */
-const prizeOf = (t: AdminTournamentView) => (t.money ? t.money.ticketsCents - t.money.courtCents - t.money.youCents : 0);
+/**
+ * Zip 85: the money line for a count, courts and hours, from the ONE shared function the server's card line uses (shared/tournamentMoney.ts
+ * planMoney): the prizes and "After full prizes" by the style the count really plays, so the boxes, Finalize and the card always agree.
+ */
+const boxMoney = (t: AdminTournamentView, o: { expected: number; courts: number; minutes: number }) =>
+  planMoney({
+    format: t.money?.baseStyle ?? t.format,
+    closed: !!t.money?.closed,
+    ...o,
+    ticketCents: t.ticketCents,
+    championCents: t.championCreditCents,
+    secondCents: t.secondCreditCents,
+  });
 
 /** Zip 70 (pictures 1 and 3): "+$6" in green when the organizer makes money, "$30" in red (no minus) when it costs them. */
 function MoneyValue({ cents, data }: { cents: number; data?: string }) {
@@ -209,9 +221,10 @@ function MoneyValue({ cents, data }: { cents: number; data?: string }) {
 }
 
 /** Zip 70 (pictures 2, 4 and 7): "Courts $96 · Tickets $126 · You +$30" (or "Your cost $30" in red), from THE money line. */
-function MoneyLineText({ m, format }: { m: MoneyLine; format: TournamentFormat }) {
+function MoneyLineText({ m }: { m: MoneyLine & { afterFullCents: number } }) {
   // Zip 82 (the price check): what is left after the FULL prizes (shared/tournamentMoney.ts, the same tiers as Edit awards' suggestion).
-  const after = afterFullCents(m.ticketsCents, m.courtCents, format);
+  // Zip 85: worked out once, with the money line, by the style the count really plays (planMoney).
+  const after = m.afterFullCents;
   return (
     <p className="tm-money-line" data-tm-money-line={`${m.courtCents}/${m.ticketsCents}/${m.youCents}`}>
       {/* Each word stays with its amount on a narrow phone. */}
@@ -263,7 +276,7 @@ function TimeBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
   const starts = PLAY_STARTS.includes(start) ? PLAY_STARTS : [...PLAY_STARTS, start].sort((a, b) => a - b);
   const ends = playEnds(start, end);
   const n = t.expected ?? t.size;
-  const m = moneyLine({ expected: n, courts: t.courts, minutes: end - start, ticketCents: t.ticketCents, prizeCents: prizeOf(t) });
+  const m = boxMoney(t, { expected: n, courts: t.courts, minutes: end - start });
   const outside = venueHoursProblem(ctx, t.finalDate, start, end);
   return (
     <div className="tm-hc-box tm-hc-edit" data-tm-time-box>
@@ -297,7 +310,7 @@ function TimeBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
         </select>
       </span>
       <FitLine n={n} courts={t.courts} minutes={end - start} start={start} format={t.format} />
-      <MoneyLineText m={m} format={t.format} />
+      <MoneyLineText m={m} />
       {outside && (
         <p className="field-error" role="alert" data-tm-hours>
           {outside}
@@ -331,7 +344,7 @@ function PlanBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
   const low = Math.max(EXPECT_MIN, t.lockedIn ?? 0);
   const [n, setN] = useState(Math.min(EXPECT_MAX, Math.max(low, t.expected ?? t.size)));
   const [courts, setCourts] = useState<1 | 2>(t.courts === 1 ? 1 : 2);
-  const m = moneyLine({ expected: n, courts, minutes: t.minutes, ticketCents: t.ticketCents, prizeCents: prizeOf(t) });
+  const m = boxMoney(t, { expected: n, courts, minutes: t.minutes });
   return (
     <div className="tm-hc-box tm-hc-edit" data-tm-plan-box>
       <div className="tm-fin-row tm-hc-plan-row" role="group" aria-label="Expect">
@@ -359,7 +372,7 @@ function PlanBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
         </span>
       </div>
       <FitLine n={n} courts={courts} minutes={t.minutes} start={t.start} format={t.format} />
-      <MoneyLineText m={m} format={t.format} />
+      <MoneyLineText m={m} />
       <button
         type="button"
         className="btn block tm-hc-save"
@@ -621,6 +634,15 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
                   <div className="tm-row">
                     <span data-tm-money-label>{moneyRowLabel(t.money.youCents)}</span>
                     <MoneyValue cents={t.money.youCents} data="data-tm-row-money" />
+                  </div>
+                )}
+                {/* Zip 85: the price check on the card too, the same number the Time and Plan boxes and Finalize show (planMoney). */}
+                {t.money && typeof t.money.afterFullCents === 'number' && (
+                  <div className="tm-row">
+                    <span>After full prizes</span>
+                    <b className={t.money.afterFullCents >= 0 ? 'tm-money-up' : 'tm-money-down'} data-tm-row-after-full={t.money.afterFullCents}>
+                      {t.money.afterFullCents >= 0 ? `+${formatPrice(t.money.afterFullCents)}` : `${formatPrice(-t.money.afterFullCents)} short`}
+                    </b>
                   </div>
                 )}
                 <div className="tm-row">
@@ -974,7 +996,7 @@ function TicketsCard({ ctx, t, scrollRef }: { ctx: AdminCtx; t: AdminTournamentV
         {locked.map((k) => row(k.playerId, k.name, paidWords(k), 'tm-tk-in'))}
         {line.length > 0 && <li className="tm-tk-head">Standby</li>}
         {line.map((k, i) => row(k.playerId, `${i + 1}. ${k.name}`, ticketIsPaid(k) ? (i === firstPaid ? 'Paid, first in line' : 'Paid') : k.claimCents > 0 ? 'I paid, waiting' : 'Not paid', '', k.name))}
-        {tickets.filter((k) => !k.out && k.place === 'none' && k.claimCents > 0).map((k) => row(k.playerId, k.name, 'I paid, waiting'))}
+        {tickets.filter((k) => !k.out && k.place === 'none' && k.claimCents > 0).map((k) => row(k.playerId, k.name, isOwedClaim(k) ? `Owes ${formatPrice(k.claimCents)}` : 'I paid, waiting'))}
         {others.length > 0 && <li className="tm-tk-head">No ticket yet</li>}
         {others.map((s) => row(s.playerId, s.name, 'Not paid'))}
       </ul>
@@ -1011,12 +1033,17 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
             </div>
             {k && k.claimCents > 0 && (
               <div className="tm-row">
-                <span>I paid, not confirmed</span>
+                <span>{isOwedClaim(k) ? 'Owes (Didn’t pay)' : 'I paid, not confirmed'}</span>
                 <b>{formatPrice(k.claimCents)}</b>
               </div>
             )}
           </div>
-          {k && k.claimCents > 0 ? (
+          {k && isOwedClaim(k) ? (
+            // Zip 85: owed after a Didn't pay on the night: Mark paid when the money comes in (the same answer as Money's Mark paid).
+            <button type="button" className="btn block" disabled={busy} onClick={() => void act('mark_paid', k.claimCents, `${name}’s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-mark>
+              Mark paid {formatPrice(k.claimCents)}
+            </button>
+          ) : k && k.claimCents > 0 ? (
             <div className="btn-row confirm-row">
               <button type="button" className="btn confirm-safe" disabled={busy} onClick={() => void act('confirm', k.claimCents, `${name}’s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-paid>
                 Paid
@@ -1794,7 +1821,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
   const autoFormat = winner?.format ?? view.format;
   const styles: { key: FormatChoice; name: string; sub?: string }[] = [
     { key: 'vote', name: 'Auto', sub: shortStyle(autoFormat) },
-    { key: 'doubles', name: 'Doubles' },
+    { key: 'doubles', name: 'Locked doubles' },
     { key: 'americano', name: 'Americano' },
   ];
   const picked = choice === 'doubles' || choice === 'americano' ? choice : 'vote';
@@ -1805,12 +1832,16 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
   const count = t.expectSaved && t.expected ? t.expected : view.players.length;
   const plan = nightPlan(count, courts, end - start, picked === 'vote' ? autoFormat : picked);
   const fit = count >= 6 ? fitWords(plan, start) : { fits: false, text: `${view.players.length} can play. A tournament needs at least 6.` };
-  const money = moneyLine({
+  // Zip 85: the same shared function as the Time and Plan boxes and the card (the style picked here, then the odd-count rule).
+  const money = planMoney({
+    format: picked === 'vote' ? autoFormat : picked,
+    closed: false,
     expected: expectedPlayers({ saved: t.expectSaved ? (t.expected ?? null) : null, suggested: view.players.length, locked: 0 }),
     courts,
     minutes: end - start,
     ticketCents: view.ticketCents,
-    prizeCents: prizeCentsOf(plan.style, t.championCreditCents, t.secondCreditCents),
+    championCents: t.championCreditCents,
+    secondCents: t.secondCreditCents,
   });
   const outside = venueHoursProblem(ctx, day, start, end);
   return (
@@ -1927,7 +1958,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
           {fit.text}
         </p>
       )}
-      <MoneyLineText m={money} format={plan.style} />
+      <MoneyLineText m={money} />
       {outside && (
         <p className="field-error" role="alert" data-tm-fin-hours>
           {outside}
@@ -2096,7 +2127,7 @@ function SwitchBackCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; 
 /** Zip 64: "Tue Dec 8" (the Finalize screen's words, no comma). */
 const dayWords = (d: string) => dayLong(d).replace(',', '');
 /** Zip 64: the style's short name on the Finalize screen ("Doubles" under Auto). */
-const shortStyle = (f: TournamentFormat) => (f === 'americano' ? 'Americano' : 'Doubles');
+const shortStyle = (f: TournamentFormat) => (f === 'americano' ? 'Americano' : 'Locked doubles');
 /** Zip 64: "Plays" starts from 4:00 PM to 9:30 PM, on the half hour. */
 const PLAY_STARTS = Array.from({ length: 12 }, (_, i) => 16 * 60 + i * 30);
 /** The ends for a start: 1 to 6 hours after it, on the half hour, never past midnight (the current end always listed). */

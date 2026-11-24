@@ -3,9 +3,10 @@
 // button on the right (44 px; it never moves or shrinks). A tap opens the final board inside the card, in its final state with no animation
 // (Zip 77's board look), and the X closes it. The server decides how long it shows (shared/results.ts) and what is on it (names, records,
 // Americano points; never money or levels). Part of the tournament card's own download.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PlayerTournamentView, ResultBoardRow } from '../../shared/tournament';
 import { MedalIcon } from '../Medals';
+import { openLayer } from '../backStack';
 import './reveal.css';
 import './results.css';
 
@@ -29,7 +30,7 @@ function StaticRow({ r, p }: { r: ResultBoardRow; p: number }) {
           {r.me && <span className="tc-rv-you">YOU</span>}
           {r.players && r.players.length > 0 && <span className="tc-res-players">{r.players.join(' + ')}</span>}
         </span>
-        <span className="tc-rv-rec">{r.record.replace('-', ' - ')}</span>
+        <span className="tc-rv-rec">{r.record}</span>
         {r.points !== undefined && <span className="tc-rv-pts">{r.points} pts</span>}
       </span>
     </li>
@@ -41,6 +42,8 @@ export function ResultsRow({ t }: { t: PlayerTournamentView }) {
   const [open, setOpen] = useState(false);
   const standingsRef = useRef<HTMLButtonElement>(null);
   const xRef = useRef<HTMLButtonElement>(null);
+  // Zip 85 (🎾84 dry run): the open board is a layer like every sheet: Back (an iPhone edge swipe, Android's back) closes it, never the site.
+  useEffect(() => (open ? openLayer(() => setOpen(false)) : undefined), [open]);
   const rows = t.results?.rows ?? [];
   if (!rows.length) return null;
   if (!open) {

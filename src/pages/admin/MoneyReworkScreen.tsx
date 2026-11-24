@@ -15,6 +15,7 @@ import { unpaidRows, owedCentsOf } from './moneyList';
 import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, monthRows, type RwGame, splitGames } from './moneyRework';
 import { ReworkOpsProvider, useReworkPatch } from './ReworkOps';
 import { TotalsRefresh } from './TotalsRefresh';
+import { TicketsOwedCard } from './TicketsOwed';
 import '../../money-rework.css';
 import { viewFlat } from '../../../shared/gameLength';
 
@@ -198,9 +199,19 @@ function GamesRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
   const remindSession = all.find((g) => g.s.id === remind)?.s ?? null;
   const sameDay = (s: AdminSessionView) => all.filter((g) => formatShortDate(g.s.startsAt, tz) === formatShortDate(s.startsAt, tz)).length > 1;
   if (older && !own) return loaded.error ? <ErrorState error={loaded.error} onRetry={loaded.reload} /> : <Spinner />;
-  if (all.length === 0) return <p className="muted small" data-no-games>No games in {monthName(month)}.</p>;
+  // Zip 85: tournament tickets owed after a Didn't pay on the night sit at the top of every month (a debt, like an unpaid game).
+  if (all.length === 0)
+    return (
+      <>
+        <TicketsOwedCard ctx={ctx} />
+        <p className="muted small" data-no-games>
+          No games in {monthName(month)}.
+        </p>
+      </>
+    );
   return (
     <>
+      <TicketsOwedCard ctx={ctx} />
       <div className="mrw-games">
         {main.map((g) => (
           <GameCard key={g.s.id} ctx={ctx} g={g} open={isOpen(g.s.id)} onToggle={() => toggle(g.s.id)} onRemind={() => setRemind(g.s.id)} sameDay={sameDay(g.s)} />

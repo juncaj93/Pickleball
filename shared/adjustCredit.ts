@@ -73,7 +73,7 @@ export function planAdjust(i: AdjustInput): AdjustPlan {
         ok: false,
         error:
           i.reservedCents > 0 && c <= i.potCents
-            ? `Can’t remove ${formatPrice(c)}: ${formatPrice(i.reservedCents)} of ${i.name}’s credit is held for a cash-out request.`
+            ? `Can’t remove ${formatPrice(c)}: ${formatPrice(i.reservedCents)} of ${i.name}’s credit is held for a cash out request.`
             : `Can’t remove more than the ${formatPrice(usable)} credit ${i.name} has.`,
       };
     }
@@ -86,9 +86,11 @@ export function planAdjust(i: AdjustInput): AdjustPlan {
 /** "+$5" or "-$5". */
 export const signedPrice = (deltaCents: number) => `${deltaCents < 0 ? '-' : '+'}${formatPrice(Math.abs(deltaCents))}`;
 
-/** The player's line: "Credit adjusted by organizer: +$5". */
-export function adjustedPlayerLine(deltaCents: number): string {
-  return `Credit adjusted by organizer: ${signedPrice(deltaCents)}`;
+/** The player's line: "Credit adjusted by Alex: +$5" (Zip 85: the organizer's first name, as everywhere else players read; "organizer" only
+ *  when no name is set). */
+export function adjustedPlayerLine(deltaCents: number, organizerName?: string | null): string {
+  const who = (organizerName ?? '').trim().split(/\s+/)[0] || 'organizer';
+  return `Credit adjusted by ${who}: ${signedPrice(deltaCents)}`;
 }
 
 /** Adjustments newer than this show on the player's pay card. */

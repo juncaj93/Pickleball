@@ -40,8 +40,9 @@ import {
 import { americanoOutcome } from './americanoDay';
 import { boardRows } from '../shared/results';
 import { diffLabel } from '../shared/scores';
-import { courtCentsOf } from '../shared/tournament';
+import { type AdminOwedTicket, courtCentsOf } from '../shared/tournament';
 import { revealHolding } from '../shared/reveal';
+import { isOwedClaim, OWED_MARK } from '../shared/tournamentTickets';
 import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
 import { KEPT, keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
 import { logPlayer, organizerOn, openById, realTimes, styleDecided, type SignupRow, todayKey, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
@@ -112,7 +113,8 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
   // (a voting tournament keeps Americano's amount in case it switches) is never paid, shown or counted.
   const secondCents = format === 'americano' ? (t.second_credit_cents ?? 0) : 0;
   // An I paid still waiting: the organizer answers it first (only confirmed money is real; after the end nothing on the ticket can change).
-  const waiting = tickets.filter((k) => k.claim_cents > 0).map((k) => k.display_name);
+  // Zip 85: a ticket marked Didn't pay after the night started (OWED_MARK) is a debt, not an I paid waiting: it never holds End up.
+  const waiting = tickets.filter((k) => k.claim_cents > 0 && !isOwedClaim(k)).map((k) => k.display_name);
   const blocked = waiting.length ? `${waiting.join(', ')} tapped I paid. Confirm or undo it first.` : undefined;
   const credit = (id: string, cents: number) => (id === orgId ? 0 : cents);
 
@@ -793,4 +795,35 @@ export async function championsAny(ctx: Ctx, groupId: string): Promise<boolean> 
     .then((r) => r.results)
     .catch(() => []);
   return rows.length > 0;
+}
+
+/**
+ * Zip 85 (🎾84 dry run): the organizer's tournament tickets still to settle after a Didn't pay on the night: owed (OWED_MARK, Mark paid on
+ * Money) and an I paid sent on one, or any I paid on an ended tournament (End refuses while one waits, so those come from an owed ticket),
+ * waiting for Paid or Didn't pay. One small read riding the dashboard's shared trip ("Fewer database trips" on, as on live).
+ */
+export const ticketsOwedRead = (groupId: string): ReadSpec => ({
+  sql: `SELECT k.tournament_id AS id, t.name, t.final_date, k.player_id, p.display_name, k.claim_cents, k.claim_at FROM tournament_tickets k
+        JOIN tournaments t ON t.id = k.tournament_id JOIN players p ON p.id = k.player_id
+        WHERE t.group_id = ? AND k.claim_cents > 0 AND (k.claim_at = 'owed' OR t.status = 'ended') ORDER BY t.final_date DESC, p.display_name, p.id`,
+  values: [groupId],
+});
+
+export async function ticketsOwedAdmin(ctx: Ctx, groupId: string): Promise<AdminOwedTicket[]> {
+  const q = ticketsOwedRead(groupId);
+  const rows = await ctx.db
+    .prepare(q.sql)
+    .bind(...q.values)
+    .all<{ id: string; name: string; final_date: string | null; player_id: string; display_name: string; claim_cents: number; claim_at: string | null }>()
+    .then((r) => r.results)
+    .catch(() => []);
+  return rows.map((r) => ({
+    tournamentId: r.id,
+    name: r.name,
+    date: r.final_date,
+    playerId: r.player_id,
+    playerName: r.display_name,
+    cents: Number(r.claim_cents) || 0,
+    waiting: r.claim_at !== OWED_MARK,
+  }));
 }

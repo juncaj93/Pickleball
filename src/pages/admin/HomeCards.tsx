@@ -20,7 +20,7 @@ import { type GamePrice, gameFinalPreview, viewPrice } from '../../../shared/gam
 import type { ExtraMinutes } from '../../../shared/extension';
 import { WhoPlayedTiles } from './ExtendedTime';
 
-const CREDIT_NOTE = 'Pickleball credit refund';
+const CREDIT_NOTE = 'Pickleball cash out';
 
 // The same helper as every other organizer tap (it used to be a copy of it).
 const useRun = useAction;
