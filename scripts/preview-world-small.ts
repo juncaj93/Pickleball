@@ -746,11 +746,15 @@ export async function buildSmallPreview(
       // Zip 82 (🎾82.night admin): the calm start is the Americano night at Round 3 (am_round3): organizer Home: Round 3 · Scores with All rounds
       // (the scoreboard, "Needs a score · 2") and Standings ("After Round 2. Only you see this until the reveal."). Last round in (the End card's
       // standings, Edit awards' suggestion), Final done (Locked doubles), the tie game and History (Vic's 2 medals) are one tap away.
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'am_round3' });
+      // Zip 83 (🎾83.champions): the calm start is History with tournaments (history): The Cold Open ended tonight (Net Ninjas, Vic + Wren),
+      // with Summer Slam (Vic) and Spring Fling (Parker) before it. The gold cup sits left of light/dark on organizer Home and every player's
+      // Home; a tap opens Champions. "Champions: none" (zip83_none, no cup) and every Zip 82 stage are one tap away (Tournament test).
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'history' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 82 (on, the calm start, am_round3): "The Cold Open", Americano, tonight at Round 3. Organizer Home: All rounds (the scoreboard, Needs a score · 2 | All, Enter score / Fix) and Standings (only you see it). Tournament test: Americano: last round in (the End card standings, Edit awards: Suggested and Use these), Final done (Locked doubles), Tie game on (All games), History (View as Parker, tap a medal)');
+    summary.push('Zip 83 (on, the calm start, history): The Cold Open ended tonight (Vic + Wren, Net Ninjas), plus Summer Slam (Vic) and Spring Fling (Parker). The gold cup left of light/dark on organizer Home and on every player Home (View as Parker): tap it for Champions (Reigning champs, Past champions). Tournament test > Champions: none: no cup');
+    summary.push('Zip 82 (one tap away, am_round3): "The Cold Open", Americano, tonight at Round 3. Organizer Home: All rounds (the scoreboard, Needs a score · 2 | All, Enter score / Fix) and Standings (only you see it). Tournament test: Americano: last round in (the End card standings, Edit awards: Suggested and Use these), Final done (Locked doubles), Tie game on (All games), History (View as Parker, tap a medal)');
     summary.push('Zip 80 (one tap away, zip70_start): "The Cold Open", tickets open, Tue Dec 1, and the regular Tue Dec 1 game. Organizer Home: "Tue Dec 1 has a regular game and The Cold Open." with Cancel game (the cancel sheet) and X. Tournament test > Americano: switched from Locked doubles (9 locked in): View as Vic, Your rounds (nobody sits 2 rounds in a row). /setup says Already set up');
     summary.push('Zip 79 (one tap away, zip79_night): "The Cold Open", Americano, tonight, revealed 30 minutes ago. View as Vic: the final board once (X), then the one row (The Cold Open, Standings) with Your rounds; tap Standings. Tournament test: the day after, two days after, both styles, Skills history (History > Skills) and Sign-up with a previous rating (View as Vic, Sign up, pick 3.4, Next: the level up)');
     summary.push('Zip 78 (one tap away, zip70_start): "The Cold Open", tickets open, 6 locked in of 8 (Vic and Zoe unpaid). View as Vic: the ticket (Lock in is green), the game cards in the one body font. Organizer Home: the tournament card opens on a tap (no chevron), every row 44 px. The 12 players groups (Dink group, Drive group) are one tap away (Tournament test > Pools look)');

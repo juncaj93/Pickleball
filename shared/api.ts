@@ -703,6 +703,8 @@ export interface AdminDashboard {
   tournament?: AdminTournamentView;
   /** Zip 59: canceled tournaments the organizer hid (Settings > Advanced > Hidden tournaments, each with Restore). Only while Tournaments is on. */
   hiddenTournaments?: { id: string; name: string; finalDate: string | null; canceledAt: string | null }[];
+  /** Zip 83 (🎾83.champions): a champion players can see exists: the cup shows left of the light/dark button. Left out otherwise (and while Tournaments is off). */
+  champions?: true;
   /** Zip 55: the Settings > Feature switches row is on (for everyone). Missing: off. */
   tournamentsForAll?: true;
   /** Zip 55, PREVIEW ONLY: this is a preview where the Tournament test page works (PREVIEW_CALM is set). Never on live. */

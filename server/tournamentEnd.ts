@@ -46,6 +46,7 @@ import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
 import { KEPT, keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
 import { logPlayer, organizerOn, openById, realTimes, styleDecided, type SignupRow, todayKey, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
 import type { SkillsView } from '../shared/skills';
+import { type ChampionRow, type ChampionsView, championsFrom } from '../shared/champions';
 import { organizerSignedIn } from './zip13';
 import { ADMIN_COOKIE } from './context';
 import { VIEW_ONLY_COOKIE_PREFIX } from './viewOnly';
@@ -753,4 +754,63 @@ export async function playerWins(ctx: Ctx, who: TournamentActor): Promise<WinsVi
 export async function adminWins(ctx: Ctx): Promise<WinsView> {
   const group = await organizerOn(ctx);
   return winsOf(ctx, group.id, nameParam(ctx));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 83 (🎾83.champions): the Champions wall (pictures 1 to 3)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Every gold medal players see, newest tournament first, the winners in the order End saved them: ONE small read, only on the cup's tap
+ * (nothing on any page load). Only medals the viewer sees (shownMedal): Everyone tournaments, never Only me or test ones, and an Americano
+ * night only once its reveal is over. The same rows as the medal counts and the wins sheet, so the three always agree.
+ */
+export async function championsOf(ctx: Ctx, groupId: string): Promise<ChampionsView> {
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT t.id AS tournament_id, t.name, t.final_date, t.format, t.visibility, t.ended_at, r.medal, r.team_name, p.display_name
+       FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id JOIN players p ON p.id = r.player_id
+       WHERE t.group_id = ? AND p.group_id = ? AND t.status = 'ended' AND t.visibility = 'all' AND r.medal = 1
+       ORDER BY t.final_date DESC, t.ended_at DESC, t.id, r.rowid`,
+    )
+    .bind(groupId, groupId)
+    .all<ChampionRow & { visibility: string; ended_at: string | null; medal: number }>()
+    .catch(() => ({ results: [] as never[] }));
+  return championsFrom(results.filter((r) => shownMedal(r, ctx.nowMs)));
+}
+
+/** GET /api/tournament/champions: a player's tap on the cup (only while Tournaments is on for this phone, as the medals and the cup). */
+export async function playerChampions(ctx: Ctx, who: TournamentActor): Promise<ChampionsView> {
+  if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
+  if (!(await tournamentsFlags(ctx, who.group.id)).on) return { tournaments: [] };
+  return championsOf(ctx, who.group.id);
+}
+
+/** GET /api/admin/champions: the organizer's tap on the cup. The same rows players get. */
+export async function adminChampions(ctx: Ctx): Promise<ChampionsView> {
+  const group = await organizerOn(ctx);
+  return championsOf(ctx, group.id);
+}
+
+/**
+ * The organizer's Home: is there a champion to show (the cup)? One tiny read that rides the dashboard's shared trip (no trip of its own while
+ * "Fewer database trips" is on, as on live), only while Tournaments is on. The newest few ended Everyone tournaments with a medal; one whose
+ * Americano reveal is still playing does not count yet (the same rule as the medals).
+ */
+export const championsAnyRead = (groupId: string): ReadSpec => ({
+  sql: `SELECT t.format, t.ended_at FROM tournaments t WHERE t.group_id = ? AND t.status = 'ended' AND t.visibility = 'all'
+        AND EXISTS (SELECT 1 FROM tournament_results r JOIN players p ON p.id = r.player_id WHERE r.tournament_id = t.id AND r.medal = 1 AND p.group_id = t.group_id)
+        ORDER BY t.ended_at DESC LIMIT 3`,
+  values: [groupId],
+});
+
+export async function championsAny(ctx: Ctx, groupId: string): Promise<boolean> {
+  const q = championsAnyRead(groupId);
+  const rows = await ctx.db
+    .prepare(q.sql)
+    .bind(...q.values)
+    .all<{ format: string; ended_at: string | null }>()
+    .then((r) => r.results)
+    .catch(() => []);
+  return rows.some((r) => shownMedal({ medal: 1, visibility: 'all', format: r.format, ended_at: r.ended_at }, ctx.nowMs));
 }

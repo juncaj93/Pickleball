@@ -192,7 +192,12 @@ const isZip70Stage = (s: string): s is Zip70Stage => (ZIP70_STAGES as readonly s
 export const VENUE_STAGES = ['venue_winter', 'venue_none'] as const;
 type VenueStage = (typeof VENUE_STAGES)[number];
 const isVenueStage = (s: string): s is VenueStage => (VENUE_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+/**
+ * Zip 83 (🎾83.champions): "Champions: none": The Cold Open as on live (zip70_start: tickets open, nobody has won anything yet): no medal
+ * anywhere, so no cup on any header. "History with tournaments" (history) is the other side: three past winners on the Champions wall.
+ */
+export const ZIP83_STAGES = ['zip83_none'] as const;
+export const TEST_STAGES = [...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -347,6 +352,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (stage === 'zip83_none') return { ...(await zip70Stage(ctx, group, 'zip70_start')), stage };
   if (isVenueStage(stage)) return venueStage(ctx, group, stage);
   if (isZip70Stage(stage)) return zip70Stage(ctx, group, stage);
   if (isZip77Stage(stage)) return zip77Stage(ctx, group, stage);

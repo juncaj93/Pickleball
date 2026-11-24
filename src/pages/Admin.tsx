@@ -16,6 +16,7 @@ import '../admin-held.css';
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { ModeButton, TopBar } from '../Shell';
+import { CupButton } from '../Champions';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
 import { setSiteName } from '../siteName';
@@ -353,6 +354,8 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
               <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
                 {swap ? 'View as' : 'View as…'}
               </button>
+              {/* Zip 83: the gold cup left of light/dark, only when a champion players see exists (the dashboard says so; no trip of its own). */}
+              {d.champions === true && <CupButton path="/api/admin/champions" />}
               <ModeButton />
             </span>
           ) : (

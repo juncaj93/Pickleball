@@ -1,0 +1,128 @@
+/* Zip 83 (🎾83.champions), picture 2: the Champions wall. Tokens only: the reigning card is the dark tournament card (--tour-*, the same in
+   both themes), the kicker the ball yellow, the medals the site's gold (src/Medals.tsx). Names wrap, never cut. */
+.cw {
+  display: grid;
+  gap: 22px;
+}
+.cw-reign {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--card-r);
+  padding: 18px 18px 20px;
+  color: var(--tour-ink);
+  background:
+    radial-gradient(120% 90% at 18% 0%, var(--tour-bg-top) 0%, rgb(0 0 0 / 0%) 60%),
+    linear-gradient(180deg, var(--tour-bg) 0%, var(--tour-bg) 62%, var(--tour-bg-deep) 100%);
+  box-shadow: inset 0 0 0 1px var(--tour-line);
+  overflow-wrap: anywhere;
+}
+.cw-kicker {
+  margin: 0;
+  font-size: max(11px, 0.78rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ball);
+}
+.cw-name {
+  margin: 4px 0 0;
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--tour-ink);
+}
+.cw-line {
+  margin: 4px 0 0;
+  color: var(--tour-sub);
+}
+.cw-winners {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cw-winner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--tour-ink);
+}
+.cw-winner span {
+  min-width: 0;
+}
+.cw-medal {
+  flex: none;
+  width: 26px;
+  height: 34px;
+}
+.cw-team {
+  margin: 12px 0 0;
+  color: var(--tour-sub);
+}
+.cw-past-h {
+  margin: 0 0 4px;
+  font-size: max(11px, 0.78rem);
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.cw-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.cw-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 0;
+}
+.cw-row + .cw-row {
+  border-top: 1px solid var(--line);
+}
+.cw-row-medal {
+  flex: none;
+  width: 22px;
+  height: 29px;
+}
+.cw-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cw-row-text b {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.cw-row-text > span {
+  color: var(--ink-2);
+}
+.cw-empty {
+  margin: 8px 0;
+  color: var(--ink-2);
+}
+.cw-empty p {
+  margin: 0 0 12px;
+}
+.cw-skel {
+  height: 220px;
+  border-radius: var(--card-r);
+  background: var(--fill);
+}
+/* A date or a style stays in one piece; lines break at the dots. */
+.cw-whole {
+  white-space: nowrap;
+}

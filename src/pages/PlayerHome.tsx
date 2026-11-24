@@ -59,6 +59,8 @@ import { navigate, rememberDirectLoad, takeEarly } from '../lib';
 import { isOrganizerPhone, preloadAdminSoon } from '../adminChunk';
 import { Medals, MedalsContext } from '../Medals';
 import { WinsProvider } from '../WinsSheet';
+import { CupButton } from '../Champions';
+import { hasChampions } from '../../shared/champions';
 // Zip 58: the ticker and the congratulations card are their own small file, fetched only when a tournament has winners to show.
 const TourAwards = lazy(() => import('../TourAwards'));
 
@@ -757,7 +759,14 @@ export function PlayerHome({
             </>
           ) : undefined
         }
-        tools={<ModeButton preview={!!viewAs} />}
+        // Zip 83: the gold cup left of light/dark, only when someone has a medal players see (the medal counts already on screen; before the
+        // first answer, the saved copy's, so nothing moves). A tap opens the Champions wall.
+        tools={
+          <>
+            {!pickName && hasChampions(g ? g.tourAwards?.medals : showSaved ? saved!.view.tourAwards?.medals : null) && <CupButton path="/api/tournament/champions" />}
+            <ModeButton preview={!!viewAs} />
+          </>
+        }
         chip={
           showChip ? (
             <CreditChip credit={credit!} startFrom={chipStart} enter={chipEnter} onOpen={() => setCreditOpen(true)} />

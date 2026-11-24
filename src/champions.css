@@ -1,0 +1,12 @@
+/* Zip 83 (🎾83.champions), pictures 1 and 3: the cup button. It IS the light/dark button (.mode-btn: the 44 x 44 tap area, the 36 px circle,
+   its ring and shadow in both themes); only the drawing inside is the 26 px gold cup. Tokens only. */
+.mode-btn.cup-btn svg {
+  width: 26px;
+  height: 26px;
+}
+/* With the cup there is less room at the top (as with the CREDIT chip, src/styles.css): "not you?" moves under the name when both don't fit,
+   so at 320 px the buttons and the date stay on the name's row. A long name still wraps between words, never cut. */
+.topbar-row:has(.cup-btn) .title-line {
+  flex-wrap: wrap;
+  row-gap: 0;
+}

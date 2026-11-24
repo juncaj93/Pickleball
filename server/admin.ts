@@ -107,6 +107,7 @@ import { removeGuestCore } from './guestActions';
 import { guestIn, guestOwed, headCount, seatUnits } from '../shared/guestSpot';
 import { phoneTagOf } from './phoneTag';
 import { adminTournamentFor, hiddenTournamentsRead, hiddenTournamentsView, setTournamentsForAll, tournamentsFlags } from './tournament';
+import { championsAny, championsAnyRead } from './tournamentEnd';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, previewSiteFor, secondChanceAction, secondChanceFlags, secondChanceMarksRead, secondChanceView, setSecondChanceForAll } from './secondChance';
@@ -182,7 +183,7 @@ async function dashboardReads(ctx: Ctx, group: GroupRow, tourOn: boolean): Promi
     { kind: 'first', ...motionSettingRead(group.id, 'admin') },
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
-    ...(tourOn ? [{ kind: 'all' as const, ...hiddenTournamentsRead(group) }, { kind: 'all' as const, ...tourNamesRead(group.id) }] : []),
+    ...(tourOn ? [{ kind: 'all' as const, ...hiddenTournamentsRead(group) }, { kind: 'all' as const, ...tourNamesRead(group.id) }, { kind: 'all' as const, ...championsAnyRead(group.id) }] : []),
     // Zip 68: the rest of the screen's reads, in the order the screen asks them.
     ...(adminR2 ? [all(adminHiddenPlayersRead(group.id))] : []),
     // Players "Spent" (round 3): every game, every seat, and the credit pot a second time (the money picture asks it first).
@@ -241,7 +242,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
     { kind: 'first', ...motionSettingRead(group.id, 'player') },
     // Zip 62: Settings > Advanced > Hidden tournaments, and the tournament names ticket credit entries show (both only while on).
-    ...(tour.on ? [{ kind: 'all' as const, ...hiddenTournamentsRead(group) }, { kind: 'all' as const, ...tourNamesRead(group.id) }] : []),
+    // Zip 83: is there a champion (the cup in the header)? One tiny read in this same trip.
+    ...(tour.on ? [{ kind: 'all' as const, ...hiddenTournamentsRead(group) }, { kind: 'all' as const, ...tourNamesRead(group.id) }, { kind: 'all' as const, ...championsAnyRead(group.id) }] : []),
   ]);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);
@@ -369,6 +371,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   // Zip 55 "Tournaments": the view the stamp built above (Zip 62), else (it could not be built there) built here as before.
   const tourView = tour.on ? (stampTour !== undefined ? stampTour : await adminTournamentFor(ctx, group)) : null;
   const hiddenTournaments = tour.on ? await hiddenTournamentsView(ctx.db, group) : null;
+  // Zip 83 (🎾83.champions): the cup left of the light/dark button, only when a champion players can see exists (the read rode the trip above).
+  const champions = tour.on ? await championsAny(ctx, group.id) : false;
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -533,6 +537,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(tour.on ? { tournaments: true as const } : {}),
     ...(tourView ? { tournament: tourView } : {}),
     ...(hiddenTournaments ? { hiddenTournaments } : {}),
+    ...(champions ? { champions: true as const } : {}),
     ...(tour.forAll ? { tournamentsForAll: true as const } : {}),
     // Preview only (PREVIEW_CALM exists only in [env.preview.vars]): the Tournament test page, while the switch is on. Never on live.
     ...(tour.on && previewSiteFor(ctx) ? { tournamentTest: true as const } : {}),

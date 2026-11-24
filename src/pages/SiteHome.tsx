@@ -3,6 +3,8 @@ import { SITE_NAME } from '../../shared/settings';
 import { api, ApiError, demoOn, navigate, storageGet, takeEarly, useLoad } from '../lib';
 import { clearLastScreen, readLastScreen } from '../lastScreen';
 import { ModeButton, TopBar } from '../Shell';
+import { CupButton } from '../Champions';
+import { hasChampions } from '../../shared/champions';
 import { ErrorState, Notice, Spinner } from '../ui';
 import { PlayerHome, SavedScreenView } from './PlayerHome';
 
@@ -34,7 +36,17 @@ export function SiteHome() {
   if (status.loading && !s && saved && saved.view.sessions.length > 0) {
     return (
       <>
-        <TopBar eyebrow={saved.view.group.name} title={saved.view.me!.name} tools={<ModeButton preview={false} />} />
+        <TopBar
+          eyebrow={saved.view.group.name}
+          title={saved.view.me!.name}
+          // Zip 83: the saved copy's cup too (its medal counts), so the header does not move when the real screen comes.
+          tools={
+            <>
+              {hasChampions(saved.view.tourAwards?.medals) && <CupButton path="/api/tournament/champions" />}
+              <ModeButton preview={false} />
+            </>
+          }
+        />
         <main className="page stack-lg">
           <SavedScreenView saved={saved} />
         </main>

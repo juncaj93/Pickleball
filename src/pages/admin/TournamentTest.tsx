@@ -10,6 +10,10 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 83 (🎾83.champions): the gold cup and the Champions wall. "History with tournaments" (below) has three past winners: the cup on every
+  // header, the wall (The Cold Open's Vic and Wren reigning; Summer Slam's Vic and Spring Fling's Parker below).
+  { stage: 'history', label: 'Champions: three past winners (start here)', line: 'The Cold Open ended tonight (Net Ninjas: Vic + Wren), plus Summer Slam (Vic) and Spring Fling (Parker). The gold cup sits left of light/dark here and on every player’s Home: tap it for Champions. Also History > Tournaments; Players > Vic: TOURNAMENTS (two medals).' },
+  { stage: 'zip83_none', label: 'Champions: none', line: 'The Cold Open as on live, tickets open, nobody has won yet: no cup on any header (Home, View as Vic).' },
   // Zip 82 (🎾82.night admin): standings before the reveal, the scoreboards, suggested prizes, tap a medal. Also: Americano: Round 3 (start
   // here), Americano: last round in, Final done: End tournament, History with tournaments (below).
   { stage: 'zip82_tie', label: 'Tie game on (All games)', line: 'Three teams level, the wheel already spun: Game A is on, Game B up next. Home: All games shows Needs a score and the Game A card.' },
@@ -51,7 +55,7 @@ const STAGES = [
   { stage: 'final_on', label: 'Final', line: 'The Final (Net Ninjas vs Third Shot Gang) and 3rd place on court 2. View as Vic: Enter score and Also now · Court 2 · 3rd place. His score is the result at once: Home shows End tournament.' },
   { stage: 'final_done', label: 'Final done: End tournament', line: 'Net Ninjas won the Final, Dill With It 3rd place. Home: Final is done, End tournament, Edit awards, Confirm winners and end.' },
   { stage: 'ended', label: 'Tournament ended', line: 'Ended by the real Confirm: Vic and Wren each have $14 credit and a medal. View as Vic: the ticker, You won The Cold Open, the medal by the name.' },
-  { stage: 'history', label: 'History with tournaments', line: 'Ended, plus Summer Slam and Spring Fling. History > Tournaments; Players > Vic: TOURNAMENTS. Vic has two medals.' },
+  // History with tournaments: the Zip 83 row at the top (its own row; also History > Tournaments, Players > Vic: TOURNAMENTS, Vic's two medals).
   { stage: 'am_done', label: 'Americano: last round in', line: 'Every round in, Vic first. Home: Round 6 is done, End tournament with 1st and 2nd place, Edit awards.' },
   // Zip 61 (🎾61.americano): the Americano night. "The Cold Open", Americano, all 10 names locked in, courts 1 and 2, 2.5 hours (6 rounds to 11,
   // 2 sit each round). Vic plays Rounds 1 to 3, sits Round 4, plays 5 and 6. The format above does not apply.
