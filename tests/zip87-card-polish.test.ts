@@ -314,6 +314,12 @@ describe('zip 87: "6 of 10", the buttons over time, the status line, the pill', 
     expect(words(all)).toMatchObject({ tickets: 'solid|white|All 10 locked in', remind: 'quiet|gray|Everyone paid' });
     expect(pillOf(all)).toEqual({ words: '10 locked in', unpaid: false });
     expect(statusWords(all, now, tz, 0)).toBe('Payments · all paid');
+    // Review fixes: every spot taken is not "all paid"; no Pay by: nobody to remind (never a crash on a missing date).
+    const full = view(ten, { tickets: [...view(ten).tickets!, ...Array.from({ length: 6 }, (_, i) => spot(`X${i}`))] });
+    expect(statusWords(full, now, tz, dueOf(full).length)).toBe('Payments · every spot taken');
+    const noPayBy = view(['Alex', 'P'], { payBy: null });
+    expect(dueOf(noPayBy)).toEqual([]);
+    expect(words(noPayBy).remind).toBe('quiet|gray|No pay by set');
     // Below 0 the money is red with a real minus sign.
     expect(words(view(ten, { money: { courtCents: 12000, ticketsCents: 11400, youCents: -600, style: 'doubles' } })).money).toBe('plain|red|−$6 if all pay');
   });

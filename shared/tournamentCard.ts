@@ -50,6 +50,8 @@ export function statusWords(t: AdminTournamentView, nowIso: string, tz: string, 
   if (step === 3) return 'Done';
   if (step === 2) return t.startSet ? `Game night · ${shortClock(t.start)}` : 'Game night';
   if (step === 1) {
+    // Review fix: nobody left to remind because every spot is taken is not "all paid".
+    if (due === 0 && (t.tickets ?? []).filter((k) => k.place === 'spot' && !k.out).length >= MAX_SPOTS) return 'Payments · every spot taken';
     if (due === 0) return 'Payments · all paid';
     if (t.payBy && Date.parse(nowIso) < Date.parse(t.payBy)) {
       const today = dayKeyOf(Date.parse(t.payBy), tz) === dayKeyOf(Date.parse(nowIso), tz);
@@ -175,7 +177,8 @@ export const ticketWords = (c: { locked: number; total: number }): string => (c.
  * same people are past due.
  */
 export function dueOf(t: AdminTournamentView): AdminTournamentView['signups'] {
-  if (t.status !== 'tickets' || !t.finalDate || t.closed) return [];
+  // No Pay by (a row from before tickets had one): nobody to remind (Remind says "No pay by set"), as before.
+  if (t.status !== 'tickets' || !t.finalDate || !t.payBy || t.closed) return [];
   const tickets = t.tickets ?? [];
   if (tickets.filter((k) => k.place === 'spot' && !k.out).length >= MAX_SPOTS) return [];
   const byId = new Map(tickets.map((k) => [k.playerId, k]));

@@ -922,8 +922,9 @@ function PrizesBody({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView;
   const [draft, setDraft] = useState<BoxesDraft>(() => draftOf(prizesOf(t)));
   const m = t.money;
   const night = !!t.closed;
-  const tickets = night ? (t.cost?.paidNow ?? 0) * t.ticketCents : (m?.ticketsCents ?? 0);
-  const courts = m?.courtCents ?? 0;
+  // On the night: the tickets actually paid. Once End is ready, exactly Edit awards' numbers (the night's money as Totals counts it).
+  const tickets = t.end?.money ? t.end.money.ticketsCents : night ? (t.cost?.paidNow ?? 0) * t.ticketCents : (m?.ticketsCents ?? 0);
+  const courts = t.end?.money ? t.end.money.courtCents : (m?.courtCents ?? 0);
   const planned = plannedStyle(t);
   const sendable = sendOf(draft);
   async function go() {
@@ -1363,6 +1364,16 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   // Zip 64: after the date is finalized, a style the vote decided starts on "Auto" (the vote's winner), until tickets close.
   const autoNow = !!editing?.finalDate && (editing.formatSource === 'vote' || editing.formatSource === 'tie') && !editing.styleDecided;
   const [format, setFormat] = useState<FormatChoice>(editing ? (editing.formatPending || autoNow ? 'vote' : editing.format) : DEFAULT_FORMAT_CHOICE);
+  // Zip 87 (review): the amounts follow the style picked here (each style has its own saved box), so what the form shows is what it saves.
+  const boxOf = (f: FormatChoice) => (boxes ? (f === 'doubles' ? boxes.doubles : boxes.americano) : null);
+  const firstFormat = useRef(format);
+  useEffect(() => {
+    if (format === firstFormat.current) return;
+    firstFormat.current = format;
+    const b = boxOf(format);
+    if (b) setCredit(b.first);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [format]);
   // The vote can be switched on until the date is locked. Zip 64: after that, the same choice is "Auto" (the vote's winner for that date).
   const canVote = !editing || !editing.finalDate || editing.formatPending === true || editing.formatSource === 'vote' || editing.formatSource === 'tie';
   const autoLabel = !!editing?.finalDate && editing.formatPending !== true;
@@ -1406,7 +1417,8 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
     // Alex: no players expected and no court plan (the smart plan follows the players locked in, on the tournament page).
     // Zip 87: once both prize boxes are saved, the Edit save sends them: as they are when the amounts here were not touched, else with the
     // style shown here changed (the vote: both 1st places and Americano's 2nd place).
-    const untouched = !!shownBox && credit === shownBox.first && (!(americano || voting) || second === boxes!.americano.second);
+    const picked = boxOf(format);
+    const untouched = !!picked && credit === picked.first && (!(americano || voting) || second === boxes!.americano.second);
     const prizes =
       boxes && boxes.saved
         ? untouched
@@ -1765,20 +1777,29 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
           </div>
           {t.format === 'americano' || t.formatPending ? (
             <>
+              {/* Zip 87: the box the night pays (the saved boxes; the columns hold the planned box only). */}
               <div className="tm-row">
                 <span>1st place credit</span>
-                <b>{formatPrice(t.championCreditCents)}</b>
+                <b>{formatPrice(prizesOf(t).americano.first)}</b>
               </div>
               <div className="tm-row">
                 <span>2nd place credit</span>
-                <b>{formatPrice(t.secondCreditCents)}</b>
+                <b>{formatPrice(prizesOf(t).americano.second)}</b>
               </div>
             </>
           ) : (
-            <div className="tm-row">
-              <span>Champion credit</span>
-              <b>{formatPrice(t.championCreditCents)}</b>
-            </div>
+            <>
+              <div className="tm-row">
+                <span>Champion credit</span>
+                <b>{formatPrice(prizesOf(t).doubles.first)}</b>
+              </div>
+              {prizesOf(t).doubles.second > 0 && (
+                <div className="tm-row">
+                  <span>2nd place credit, each</span>
+                  <b>{formatPrice(prizesOf(t).doubles.second)}</b>
+                </div>
+              )}
+            </>
           )}
           {t.status === 'tickets' && t.payBy && (
             <div className="tm-row">

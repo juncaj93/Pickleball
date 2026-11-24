@@ -277,7 +277,9 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
   const doubles = end.format === 'doubles';
   const [first, setFirst] = useState(end.first.key);
   // Zip 87: Locked doubles has a 2nd place team again (only while its credit is above $0): the Final's runner-up unless changed.
-  const runnerUp = end.second?.key ?? end.choices.find((c) => c.key !== end.first.key)?.key ?? null;
+  // Review fix: the Final's order (the standings), not the seat order: the team right below the winners.
+  const below = end.standings.find((r, i) => i > 0 && r.name !== end.first.name && !r.out)?.name;
+  const runnerUp = end.second?.key ?? end.choices.find((c) => c.name === below && c.key !== end.first.key)?.key ?? end.choices.find((c) => c.key !== end.first.key)?.key ?? null;
   const [second, setSecond] = useState<string | null>(runnerUp);
   // Zip 87 (picture 9): the same Prizes sheet as before the night, both styles (the style played on top, "Tonight"), the night's real money.
   const [draft, setDraft] = useState<BoxesDraft>(() => draftOf(prizesOf(t)));
