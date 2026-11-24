@@ -18,7 +18,6 @@ export function NightCard({
   onStandings,
   onPause,
   onLeft,
-  end,
 }: {
   name: string;
   m: NightModel;
@@ -32,12 +31,16 @@ export function NightCard({
   onStandings: () => void;
   onPause: () => void;
   onLeft: () => void;
-  /** When every game is in: what takes the boxes' place (Reveal standings / End tournament). */
-  end?: React.ReactNode;
 }) {
   const [ask, setAsk] = useState<null | 'pause' | 'left'>(null);
   return (
-    <section className="nc" aria-label={`${name}, ${m.inCount} of ${m.boxes.length} in`} data-nc={m.kind} data-tm-night data-tm-am-night={m.kind === 'americano' ? true : undefined}>
+    <section
+      className="nc"
+      aria-label={`${name}, ${m.inCount} of ${m.boxes.length} in`}
+      data-nc={m.kind}
+      data-tm-night
+      data-tm-am-night={m.kind === 'americano' ? true : undefined}
+    >
       <div className="nc-head">
         <span className="nc-ball" aria-hidden="true">
           <Pickleball />
@@ -72,28 +75,22 @@ export function NightCard({
             </li>
           ))}
         </ol>
-        {end ? (
-          <div className="nc-end" data-nc-end>
-            {end}
-          </div>
-        ) : (
-          <>
-            {m.boxes.map((b) => (
-              <CourtBox key={b.court} b={b} busy={busy} onScore={() => onScore(b.num)} />
-            ))}
-            {m.sitting.length > 0 && (
-              <p className="nc-sit" data-nc-sitting={m.sitting.length}>
-                <span className="nc-sit-word">Sitting:</span>
-                <span className="nc-sit-balls" aria-hidden="true">
-                  {m.sitting.map((s) => (
-                    <Pickleball key={s} />
-                  ))}
-                </span>
-                <span className="nc-sit-names">{m.sitting.join(', ')}</span>
-              </p>
-            )}
-          </>
-        )}
+        <>
+          {m.boxes.map((b) => (
+            <CourtBox key={b.court} b={b} busy={busy} onScore={() => onScore(b.num)} />
+          ))}
+          {m.sitting.length > 0 && (
+            <p className="nc-sit" data-nc-sitting={m.sitting.length}>
+              <span className="nc-sit-word">Sitting:</span>
+              <span className="nc-sit-balls" aria-hidden="true">
+                {m.sitting.map((_, i) => (
+                  <Pickleball key={i} />
+                ))}
+              </span>
+              <span className="nc-sit-names">{m.sitting.join(', ')}</span>
+            </p>
+          )}
+        </>
         <div className="nc-btns">
           <button type="button" className="nc-btn" onClick={onAll} data-nc-all data-tm-am-all>
             All rounds
@@ -102,41 +99,40 @@ export function NightCard({
             Standings
           </button>
         </div>
-        {!end &&
-          (ask ? (
-            <div className="nc-ask" role="group" aria-label="Are you sure?" data-nc-ask={ask}>
-              <span className="nc-ask-q">{ask === 'pause' ? 'Pause the night?' : 'Did a player leave?'} Are you sure?</span>
-              <span className="nc-ask-btns">
-                <button
-                  type="button"
-                  className="nc-quiet nc-yes"
-                  disabled={busy}
-                  onClick={() => {
-                    const was = ask;
-                    setAsk(null);
-                    if (was === 'pause') onPause();
-                    else onLeft();
-                  }}
-                  data-nc-yes
-                >
-                  Yes
-                </button>
-                <button type="button" className="nc-quiet" onClick={() => setAsk(null)} data-nc-no>
-                  No
-                </button>
-              </span>
-            </div>
-          ) : (
-            <div className="nc-quiet-row">
-              {/* Resume needs no question: it only puts the night back on. */}
-              <button type="button" className="nc-quiet" disabled={busy} onClick={() => (paused ? onPause() : setAsk('pause'))} data-tm-pause>
-                {paused ? 'Resume' : 'Pause'}
+        {ask ? (
+          <div className="nc-ask" role="group" aria-label="Are you sure?" data-nc-ask={ask}>
+            <span className="nc-ask-q">{ask === 'pause' ? 'Pause the night?' : 'Did a player leave?'} Are you sure?</span>
+            <span className="nc-ask-btns">
+              <button
+                type="button"
+                className="nc-quiet nc-yes"
+                disabled={busy}
+                onClick={() => {
+                  const was = ask;
+                  setAsk(null);
+                  if (was === 'pause') onPause();
+                  else onLeft();
+                }}
+                data-nc-yes
+              >
+                Yes
               </button>
-              <button type="button" className="nc-quiet" disabled={busy} onClick={() => setAsk('left')} data-tm-player-left>
-                Player left
+              <button type="button" className="nc-quiet" onClick={() => setAsk(null)} data-nc-no>
+                No
               </button>
-            </div>
-          ))}
+            </span>
+          </div>
+        ) : (
+          <div className="nc-quiet-row">
+            {/* Resume needs no question: it only puts the night back on. */}
+            <button type="button" className="nc-quiet" disabled={busy} onClick={() => (paused ? onPause() : setAsk('pause'))} data-tm-pause>
+              {paused ? 'Resume' : 'Pause'}
+            </button>
+            <button type="button" className="nc-quiet" disabled={busy} onClick={() => setAsk('left')} data-tm-player-left>
+              Player left
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -147,7 +143,13 @@ function CourtBox({ b, busy, onScore }: { b: NightBox; busy: boolean; onScore: (
   const scored = b.scoreA !== null && b.scoreB !== null;
   const side = (s: 'a' | 'b') => (b.winner === null ? 'nc-side' : b.winner === s ? 'nc-side nc-win' : 'nc-side nc-lose');
   return (
-    <article className={`nc-box nc-box-${b.status}`} aria-label={`${b.where}, ${b.pill.text}, ${b.status === 'playing' ? 'Playing' : 'Done'}`} data-nc-court={b.court} data-nc-game={b.num} data-status={b.status}>
+    <article
+      className={`nc-box nc-box-${b.status}`}
+      aria-label={`${b.where}, ${b.pill.text}, ${b.status === 'playing' ? 'Playing' : 'Done'}`}
+      data-nc-court={b.court}
+      data-nc-game={b.num}
+      data-status={b.status}
+    >
       <div className="nc-box-head">
         <span className="nc-box-left">
           <span className="nc-court">{b.where}</span>
@@ -177,7 +179,14 @@ function CourtBox({ b, busy, onScore }: { b: NightBox; busy: boolean; onScore: (
             Score
           </button>
         ) : (
-          <button type="button" className="nc-score-box" disabled={busy} onClick={onScore} aria-label={scored ? `${b.scoreA} to ${b.scoreB}. Fix the score.` : 'Off. Fix.'} data-nc-fix={b.num}>
+          <button
+            type="button"
+            className="nc-score-box"
+            disabled={busy}
+            onClick={onScore}
+            aria-label={scored ? `${b.scoreA} to ${b.scoreB}. Fix the score.` : 'Off. Fix.'}
+            data-nc-fix={b.num}
+          >
             {scored ? `${b.scoreA} – ${b.scoreB}` : 'Off'}
           </button>
         )}

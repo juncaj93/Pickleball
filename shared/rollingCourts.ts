@@ -11,8 +11,8 @@
 // Two more rules keep the night fair and the phones simple:
 //   - a player's (Locked doubles: a team's) games are played in their own schedule order: a game starts only when it is the next game of each of
 //     its players, so "Up next" on a phone is always the game it will play next, and nobody plays a later game before an earlier one;
-//   - a playoff game (a tie's Game A or B, a semifinal, the Final, 3rd place) starts only when every game of the stage before it is in, so its
-//     teams are known; the Final and 3rd place start side by side.
+//   - a semifinal starts only when every pool game is in and its two teams are known; the Final and 3rd place also wait for every semifinal;
+//     a tie's Game A or B starts as soon as the wheel has made it; the Final and 3rd place start side by side.
 // A court with nothing it may start waits, as before.
 
 export interface RollGame {
@@ -66,7 +66,10 @@ export function rollCourts(games: readonly RollGame[], courts: number): RollResu
   });
   const busy = () => new Set(onCourt.flatMap((num) => (num === null ? [] : [...list[index.get(num)!].players])));
   const isNext = (p: string, i: number) => (byPlayer.get(p) ?? []).every((j) => j >= i || done.has(list[j].num) || started.has(list[j].num));
-  const stageReady = (g: RollGame) => g.rank === 0 || list.every((x) => x.rank >= g.rank || done.has(x.num));
+  // A tie's games start as soon as they exist (the wheel spins only once its group is done). A semifinal, the Final or 3rd place waits for
+  // every pool game; its teams decide the rest (a place still tied has no players yet, so that game waits for the tie by itself). Review fix:
+  // waiting for the tie games too could take a semifinal whose teams were known OFF its court when the wheel spun later.
+  const stageReady = (g: RollGame) => g.rank <= 1 || list.every((x) => (x.rank !== 0 && (g.rank < 3 || x.rank !== 2)) || done.has(x.num));
   const fill = (t: number) => {
     for (let c = 0; c < n; c++) {
       if (onCourt[c] !== null) continue;
@@ -120,7 +123,7 @@ export function startable(games: readonly RollGame[], r: RollResult): number[] {
       if (doneOrOn(g) || !g.players.length) return false;
       if (g.players.some((p) => on.has(p))) return false;
       if (list.some((x, j) => j < k && !doneOrOn(x) && x.players.some((p) => g.players.includes(p)))) return false;
-      return g.rank === 0 || list.every((x) => x.rank >= g.rank || x.doneAt !== null);
+      return g.rank <= 1 || list.every((x) => (x.rank !== 0 && (g.rank < 3 || x.rank !== 2)) || x.doneAt !== null);
     })
     .map((g) => g.num);
 }

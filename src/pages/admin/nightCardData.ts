@@ -83,7 +83,7 @@ export function americanoNightModel(r: AdminRoundsView): NightModel {
   }));
   const bars: NightBar[] = rounds.map((n, i) => ({ key: `r${n}`, label: `RD${n}`, state: states[i], rounds: [n] }));
   const nowRound = rounds[states.indexOf('now')] ?? Infinity;
-  const boxes: NightBox[] = shownOn(r.courtsNow).map(({ court, num, playing }) => {
+  const boxes: NightBox[] = shownOn(r.courtsNow).map(({ court, num }) => {
     const g = r.games.find((x) => x.num === num)!;
     const scored = g.scoreA !== null && g.scoreB !== null;
     return {
@@ -92,7 +92,8 @@ export function americanoNightModel(r: AdminRoundsView): NightModel {
       where: whereOf(court, r.courtNumbers),
       playTo: g.playTo,
       pill: { text: `RD${g.round}`, tone: g.round > nowRound ? 'purple' : 'green' },
-      status: playing && !isIn(g.status) ? 'playing' : 'done',
+      // A score cleared on a waiting court's last game: it needs one (Score), it is not in.
+      status: !isIn(g.status) ? 'playing' : 'done',
       a: pairOf(g.a.names),
       b: pairOf(g.b.names),
       scoreA: g.scoreA,
@@ -126,10 +127,10 @@ export function doublesNightModel(d: AdminDayView): NightModel {
     ...(semis.length ? [{ key: 'semi', label: 'SEMIS', games: [...ties, ...semis] }] : []),
     ...(finals.length ? [{ key: 'final', label: 'FINAL', games: semis.length ? finals : [...ties, ...finals], ...(semis.length ? {} : { wide: true as const }) }] : []),
   ];
-  const states = barStates(groups.map((x) => ({ done: x.games.every(done), started: x.games.some((g) => !!g.started || done(g)) })));
+  const states = barStates(groups.map((x) => ({ done: x.games.every(done), started: x.games.some((g) => !!g.started || !!g.winner) })));
   const bars: NightBar[] = groups.map((x, i) => ({ key: x.key, label: x.label, state: states[i], rounds: [...new Set(x.games.map((g) => g.round))].sort((a, b) => a - b), ...(x.wide ? { wide: true as const } : {}) }));
   const nowIndex = states.indexOf('now');
-  const boxes: NightBox[] = shownOn(d.courtsNow).map(({ court, num, playing }) => {
+  const boxes: NightBox[] = shownOn(d.courtsNow).map(({ court, num }) => {
     const g = d.games.find((x) => x.num === num)!;
     const barIndex = groups.findIndex((x) => x.games.includes(g));
     const text = g.tieLabel ?? (g.stage === 'pool' ? `RD${g.round}` : (PLAYOFF_PILL[g.stage] ?? 'Playoff'));
@@ -139,7 +140,7 @@ export function doublesNightModel(d: AdminDayView): NightModel {
       where: whereOf(court, d.courtNumbers),
       playTo: g.playTo,
       pill: { text, tone: g.stage === 'pool' && nowIndex >= 0 && barIndex > nowIndex ? 'purple' : 'green' },
-      status: playing && !done(g) ? 'playing' : 'done',
+      status: !done(g) ? 'playing' : 'done',
       a: (g.a?.players.length ? pairOf(g.a.players) : g.a?.name) || g.waitA || 'Not decided',
       b: (g.b?.players.length ? pairOf(g.b.players) : g.b?.name) || g.waitB || 'Not decided',
       scoreA: g.skipped ? null : g.scoreA,

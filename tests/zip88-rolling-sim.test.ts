@@ -160,9 +160,9 @@ describe('zip 88: rolling courts on Locked doubles nights (pools, groups, playof
     it(`${players} players: every game once, no double-booking, no idle court, playoffs only when ready`, () => {
       const { base, playersAt } = doubles(players / 2);
       const sim = simulate(base, 2, uneven, playersAt);
-      // Playoffs start only after every game of the stage before is in.
+      // Playoffs start only after every pool game is in (the Final and 3rd place after every semifinal too).
       for (const g of sim.games.filter((x) => x.rank > 0)) {
-        const before = sim.games.filter((x) => x.rank < g.rank);
+        const before = sim.games.filter((x) => x.rank === 0 || (g.rank === 3 && x.rank === 2));
         for (const b of before) expect(b.doneAt!, `game ${g.num} after ${b.num}`).toBeLessThanOrEqual(sim.starts.get(g.num)!);
       }
       // The Final and 3rd place start side by side (the same moment).
@@ -209,5 +209,21 @@ describe('zip 88: finishes replayed', () => {
     const r = rollCourts(games, 2);
     const r2 = base.filter((g) => g.round === 2).map((g) => g.num);
     expect(r.onCourt).toEqual(r2);
+  });
+});
+
+describe('zip 88 review fixes', () => {
+  it('a semifinal whose teams are known keeps its court when a tie wheel is spun later (the tie game takes the other court)', async () => {
+    const { rollCourts } = await import('../shared/rollingCourts');
+    const pool = [1, 2, 3, 4].map((num) => ({ num, round: num, rank: 0, players: [`T${num}`, `T${num + 4}`], doneAt: 10 * num }));
+    const semiKnown = { num: 7, round: 5, rank: 2, players: ['T1', 'T6'], doneAt: null };
+    const semiTied = { num: 8, round: 5, rank: 2, players: [] as string[], doneAt: null };
+    const before = rollCourts([...pool, semiKnown, semiTied], 2);
+    expect(before.onCourt).toEqual([7, null]);
+    const tie = { num: 9, round: 5, rank: 1, players: ['T2', 'T3'], doneAt: null, from: 50 };
+    const after = rollCourts([...pool, tie, semiKnown, semiTied], 2);
+    expect(after.court.get(7)).toBe(1);
+    expect(after.startAt.get(7)).toBe(40);
+    expect(after.onCourt).toEqual([7, 9]);
   });
 });

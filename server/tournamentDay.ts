@@ -1238,7 +1238,8 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     if (seen && (!sideOk(seen.winner ?? null) || !numOk(seen.scoreA) || !numOk(seen.scoreB))) throw new HttpError(400, 'invalid_seen', 'Look again.');
     const res = await ctx.db
       .prepare(
-        `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, skipped = 0, result_at = COALESCE(result_at, ?), result_by = ?,
+        `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, skipped = 0,
+           result_at = CASE WHEN skipped = 1 THEN ? ELSE COALESCE(result_at, ?) END, result_by = ?,
            seat_a = ?, seat_b = ?, updated_at = ?
          WHERE id = ? AND updated_at = ? ${seen ? "AND (CASE WHEN skipped = 1 THEN NULL WHEN winner IS NOT NULL THEN winner WHEN disputed_at IS NULL THEN claim END) IS ? AND score_a IS ? AND score_b IS ?" : ''}
            AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
@@ -1247,6 +1248,8 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
         winner,
         pair ? pair[0] : null,
         pair ? pair[1] : null,
+        // Zip 88: a game called off (skipped) and then cleared was never played: no finish time, it is to play (it goes on a court as usual).
+        winner ? nowIso : null,
         winner ? nowIso : null,
         winner ? 'organizer' : null,
         winner ? r!.a : null,

@@ -370,11 +370,6 @@
   color: var(--ink);
   font-weight: 800;
 }
-.nc-end {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
 /* Narrow phones: the boxes' header wraps between its two sides; the names keep their room. */
 @media (max-width: 359px) {

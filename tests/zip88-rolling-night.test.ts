@@ -307,3 +307,49 @@ describe('zip 88: the night card model on real nights (src/pages/admin/nightCard
     }
   }, 180_000);
 });
+
+describe('zip 88 review fixes on the real server', () => {
+  it('a cleared score on a waiting court: the box asks for a score again (not "in", not Off)', async () => {
+    const { americanoNightModel } = await import('../src/pages/admin/nightCardData');
+    const ctx = await world(10, { format: 'americano' });
+    ctx.app.now = START_MS + 60_000;
+    // Rounds 1 and 2 in on both courts, then Court 1's Round 3 game: Court 1 waits (10 players never start a round early).
+    for (let r = 0; r < 2; r++) {
+      const n = await night(ctx);
+      for (const c of n.courts) {
+        const g = n.games.find((x) => x.num === c.num);
+        ctx.app.now += 60_000;
+        expect((await score(ctx, g.a.names[0], g.num, 11, 6)).status).toBe(200);
+      }
+    }
+    const n3 = await night(ctx);
+    const g3 = n3.games.find((x) => x.num === n3.courts[0].num);
+    ctx.app.now += 60_000;
+    expect((await score(ctx, g3.a.names[0], g3.num, 11, 7)).status).toBe(200);
+    const waiting = await night(ctx);
+    expect(waiting.courts[0]).toEqual({ court: 1, num: null, last: g3.num });
+    expect(americanoNightModel(waiting.v).inCount).toBe(1);
+    const stamp = waiting.games.find((x) => x.num === g3.num).stamp;
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'clear', num: g3.num, seen: stamp })).status).toBe(200);
+    const m = americanoNightModel((await night(ctx)).v);
+    const box = m.boxes.find((b) => b.court === 1)!;
+    expect(box).toMatchObject({ num: g3.num, status: 'playing', scoreA: null });
+    expect(m.inCount).toBe(0);
+  });
+
+  it('Locked doubles: a game skipped when a team left, then cleared, is a game to play again (it is not stuck as finished)', async () => {
+    const ctx = await world(10, { format: 'doubles' });
+    await draftAndPublish(ctx);
+    ctx.app.now = START_MS + 60_000;
+    const { v } = await night(ctx);
+    const team = v.teams[v.teams.length - 1];
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'left', playerId: team.players[0].id })).status).toBe(200);
+    const after = await night(ctx);
+    const off = after.games.find((g) => g.skipped && !g.started);
+    expect(off).toBeTruthy();
+    const clr = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'result', num: off.num, winner: null, seen: { winner: null, scoreA: off.scoreA, scoreB: off.scoreB } });
+    expect(clr.status, clr.text).toBe(200);
+    const row = ctx.app.db.raw.prepare('SELECT skipped, result_at FROM tournament_games WHERE tournament_id = ? AND num = ?').get(ctx.tid, off.num) as any;
+    expect(row).toEqual({ skipped: 0, result_at: null });
+  });
+});
