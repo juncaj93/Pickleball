@@ -36,7 +36,7 @@ const stageName = (g: AdminDayGame) => (g.tieLabel ? g.tieLabel : g.stage === 's
  * Zip 82: one Locked doubles game as a scoreboard card. Playing: both teams known, no result, its round has come (any earlier round still
  * without a result is due too); Up next: later rounds or a side still to be decided. A playoff names itself ("Final · Court 1").
  */
-export function boardGame(g: AdminDayGame, d: Pick<AdminDayView, 'round' | 'started' | 'over'>): BoardGame {
+export function boardGame(g: AdminDayGame, d: Pick<AdminDayView, 'round' | 'started' | 'over'>, openRound: number | null = null): BoardGame {
   const stage = g.tieLabel || g.stage !== 'pool' ? `${stageName(g)} · ${where(g)}` : where(g);
   const sides: BoardGame['sides'] = [
     { name: sideName(g, 'a'), ...(sidePlayers(g, 'a') ? { players: sidePlayers(g, 'a') } : {}) },
@@ -48,7 +48,8 @@ export function boardGame(g: AdminDayGame, d: Pick<AdminDayView, 'round' | 'star
     const scored = g.scoreA !== null && g.scoreB !== null;
     return { ...base, status: 'done', scores: scored ? [g.scoreA, g.scoreB] : [null, null], winner: g.winner === 'a' ? 0 : 1, needs: false, fixable: true };
   }
-  const due = !!g.a && !!g.b && d.started && (d.round === null ? d.over : g.round <= d.round);
+  // Review: during a pause (or once the night's time is up) the server sends no round: then the first round with a game still open counts.
+  const due = !!g.a && !!g.b && d.started && (d.over || g.round <= (d.round ?? openRound ?? 0));
   return { ...base, status: due ? 'playing' : 'next', scores: [null, null], winner: null, needs: due, fixable: false };
 }
 
@@ -86,3 +87,9 @@ export function afterRoundWords(games: readonly AdminRoundGame[]): string {
   return part ? `After Round ${full}, plus ${games_(part)} of Round ${full + 1}.` : `After Round ${full}.`;
 }
 
+
+/** The first round with a game that still has no result (both teams known), or null. */
+export function firstOpenRound(games: readonly AdminDayGame[]): number | null {
+  const open = games.filter((g) => !g.winner && !g.skipped && g.a && g.b).map((g) => g.round);
+  return open.length ? Math.min(...open) : null;
+}

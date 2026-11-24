@@ -128,7 +128,9 @@ function AllRoundsSheet({ r, open, onClose, onFix, busy }: { r: AdminRoundsView;
 
 /** Zip 82 (picture 2): the Standings sheet during the night (organizer only): the reveal board's rows as they stand. */
 function StandingsSheet({ r, open, onClose }: { r: AdminRoundsView; open: boolean; onClose: () => void }) {
-  const rows = (r.standings ?? []).map((x, i) => ({ name: x.name, record: x.record, chip: `${x.points} pts`, ...(i === 0 ? { medal: true as const } : {}), ...(x.out ? { out: true as const } : {}) }));
+  // Review: the gold only once a score is in (before that everyone is level).
+  const scored = r.games.some((g) => g.status === 'done');
+  const rows = (r.standings ?? []).map((x, i) => ({ name: x.name, record: x.record, chip: `${x.points} pts`, ...(i === 0 && scored ? { medal: true as const } : {}), ...(x.out ? { out: true as const } : {}) }));
   return (
     <Sheet calmFocus open={open} title="Standings" onClose={onClose} className="tm-gd-sheet">
       {open && <StandingsList rows={rows} note={`${afterRoundWords(r.games)} Only you see this until the reveal.`} data="night" />}

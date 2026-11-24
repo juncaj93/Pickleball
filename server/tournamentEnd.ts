@@ -43,7 +43,7 @@ import { diffLabel } from '../shared/scores';
 import { courtCentsOf } from '../shared/tournament';
 import { revealHolding } from '../shared/reveal';
 import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
-import { keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
+import { KEPT, keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
 import { logPlayer, organizerOn, openById, realTimes, styleDecided, type SignupRow, todayKey, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
 import type { SkillsView } from '../shared/skills';
 import { organizerSignedIn } from './zip13';
@@ -129,7 +129,9 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
     // medal. With the 2nd place credit at $0 (The Cold Open on live) nothing is written for it, exactly as before.
     const pickedSecond = seatOf(pick.second);
     const secondSeat =
-      pickedSecond !== null && pickedSecond !== firstSeat ? pickedSecond : ([o.runnerUp, ...o.order].find((x): x is number => x !== null && x !== firstSeat && !o.out.has(x)) ?? null);
+      // Review: with no pick, the next team in the Final's order (the champion when 1st was moved to another team, so the Final's winner is
+      // never saved below the team it beat).
+      pickedSecond !== null && pickedSecond !== firstSeat ? pickedSecond : (o.order.find((x) => x !== firstSeat && !o.out.has(x)) ?? null);
     const champ = asPick(o.champion);
     const done = {
       kicker: 'Final is done',
@@ -200,7 +202,7 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
             ...(r.out ? { out: true as const } : {}),
           };
         }),
-        money: nightMoney(t, tickets),
+        money: nightMoney(t, tickets, day),
       },
       results,
     };
@@ -249,7 +251,7 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
         results.map((r) => ({ player_id: r.playerId, finish: r.finish, wins: r.wins, losses: r.losses, points: r.points, display_name: nameOf(r.playerId) })),
         null,
       ).map((r) => ({ name: r.name, record: r.record, chip: `${r.points ?? 0} pts`, ...(r.medal ? { medal: true as const } : {}), ...(r.out ? { out: true as const } : {}) })),
-      money: nightMoney(t, tickets),
+      money: nightMoney(t, tickets, day),
     },
     results,
   };
@@ -259,8 +261,12 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
  * Zip 82: the night's real money, as Money > Totals counts it (server/money.ts monthTournamentsRead and tournamentsOf): tickets in (credit used
  * and cash confirmed, on tickets with a price) and the courts (the court rate x courts x the final hours). From the rows already read.
  */
-export function nightMoney(t: TournamentRow, tickets: readonly TicketWithName[]): { ticketsCents: number; courtCents: number } {
-  const ticketsCents = tickets.filter((k) => k.price_cents > 0).reduce((a, k) => a + (Number(k.credit_cents) || 0) + (Number(k.paid_cents) || 0), 0);
+export function nightMoney(t: TournamentRow, tickets: readonly TicketWithName[], day: DayRows): { ticketsCents: number; courtCents: number } {
+  // Review: only the money that STAYS after End (as Totals reads it then): a spot, a kept late drop, or a standby who took over on a team.
+  // An unused standby hold goes back as credit at End (writeEnd), so it never counts.
+  const onTeam = new Set(t.teams_at ? day.teams.flatMap((x) => [x.player_a, x.player_b]).filter((id): id is string => !!id) : []);
+  const stays = (k: TicketWithName) => k.place === 'spot' || k.signup_status === KEPT || onTeam.has(k.player_id);
+  const ticketsCents = tickets.filter((k) => k.price_cents > 0 && stays(k)).reduce((a, k) => a + (Number(k.credit_cents) || 0) + (Number(k.paid_cents) || 0), 0);
   const courts = Math.max(1, Math.min(4, Number(t.courts) || 1));
   return { ticketsCents, courtCents: courtCentsOf({ courts, minutes: realTimes(t).minutes }) };
 }

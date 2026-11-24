@@ -17,7 +17,7 @@ import { AmericanoCards, Stepper } from './AmericanoDay';
 import { scoreHint } from '../../../shared/scores';
 import { AdminTieCards, EndCards } from './TournamentEnd';
 import { ScoreboardSheet } from './Scoreboard';
-import { boardGame } from './scoreboardData';
+import { boardGame, firstOpenRound } from './scoreboardData';
 
 // The court picker (the site's court map) is loaded when the published card draws it, not with this file: a static import here would pull
 // src/GameDay.tsx (and its styles) in ahead of the other organizer screens in the one-file build, changing the style order (tests/zip48-split).
@@ -494,7 +494,7 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
         title="All games"
         open={all}
         onClose={() => setAll(false)}
-        games={d.games.map((g) => boardGame(g, d))}
+        games={d.games.map((g) => boardGame(g, d, firstOpenRound(d.games)))}
         busy={busy}
         onScore={(num) => {
           const g = d.games.find((x) => x.num === num);

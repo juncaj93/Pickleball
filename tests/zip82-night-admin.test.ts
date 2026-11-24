@@ -12,7 +12,7 @@ import {
   tierCostCents,
 } from '../shared/tournamentMoney';
 import { prizeCentsOf } from '../shared/tournament';
-import { afterRoundWords, boardGame } from '../src/pages/admin/scoreboardData';
+import { afterRoundWords, boardGame, firstOpenRound } from '../src/pages/admin/scoreboardData';
 import { winDate, winLine, winsTitle } from '../shared/wins';
 import { REVEAL_HOLD_MS } from '../shared/reveal';
 
@@ -174,6 +174,11 @@ describe('zip 82: the scoreboards', () => {
     expect(final).toMatchObject({ head: 'Final · Court 3', status: 'next', needs: false });
     const tieA = boardGame({ ...base, num: 7, round: 2, stage: 'tie' as any, tieLabel: 'Game A', a: team(1, 'Net Ninjas'), b: team(2, 'Kitchen Crew') }, d);
     expect(tieA).toMatchObject({ head: 'Game A · Court 3', status: 'playing', needs: true });
+    // Paused (the server sends no round): the first round with a game still open counts, so Enter score stays (review).
+    const games = [due, playing, next].map((x) => ({ ...base, num: x.key, round: x.round, stage: 'pool' as const, a: team(1, 'A'), b: team(2, 'B') }));
+    expect(firstOpenRound(games)).toBe(1);
+    expect(boardGame(games[0], { round: null, started: true, over: false }, firstOpenRound(games)).needs).toBe(true);
+    expect(boardGame(games[2], { round: null, started: true, over: false }, firstOpenRound(games)).needs).toBe(false);
     // Before the night: nothing needs a score.
     expect(boardGame({ ...base, num: 1, round: 1, stage: 'pool', a: team(1, 'Net Ninjas'), b: team(3, 'Dill With It') }, { round: null, started: false, over: false }).needs).toBe(false);
   });
@@ -262,6 +267,12 @@ describe('zip 82: suggested prizes and the price check (Alex’s rules)', () => 
     // 9 locked in at $16 each, all with credit: $144; 2 courts x 2.5 hours x $24 = $120.
     expect(end.money).toEqual({ ticketsCents: 9 * 1600, courtCents: 12000 });
     expect(suggestedTier(end.money.ticketsCents - end.money.courtCents, 'americano')).toBe('full');
+    // A standby hold that never got a spot goes back at End, so it never counts (review): only spots, as Totals reads them after End.
+    // Shay (not in the night) on standby with $16 paid: still $144.
+    raw(ctx)
+      .prepare("INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, credit_cents, paid_cents, claim_cents, created_at, updated_at) VALUES ('standby-1', ?, ?, 'line', ?, 1600, 0, 1600, 0, ?, ?)")
+      .run(ctx.tid, ctx.byName.Shay, new Date(ctx.app.now).toISOString(), new Date(ctx.app.now).toISOString(), new Date(ctx.app.now).toISOString());
+    expect((await adminTour(ctx)).end.money).toEqual({ ticketsCents: 9 * 1600, courtCents: 12000 });
   });
 });
 
@@ -294,6 +305,15 @@ describe('zip 82: Locked doubles 2nd place (the Final’s runner-up), to the cen
     for (const n of all) expect(potOf(ctx, n), n).toBe(before[n]);
     expect(raw(ctx).prepare('SELECT COUNT(*) AS c FROM tournament_results WHERE tournament_id = ? AND award IS NOT NULL').get(ctx.tid)).toEqual({ c: 2 });
     books(ctx);
+  });
+
+  it('Edit awards moves 1st to a team outside the Final: 2nd is the Final’s winner, never below the team it beat (review)', async () => {
+    const ctx = await doublesDone(8);
+    const end = (await adminTour(ctx)).end;
+    const other = end.choices.find((c: any) => c.key !== end.first.key && c.key !== end.second.key);
+    expect((await awards(ctx, { action: 'save', first: other.key, second: end.first.key, championCents: 1400, secondCents: 700, weeks: 1 })).status).toBe(200);
+    const end2 = (await adminTour(ctx)).end;
+    expect(end2.standings.slice(0, 3).map((r: any) => r.name)).toEqual([other.name, end.first.name, end.second.name]);
   });
 
   it('a screen from before Zip 82 (no second, no secondCents) keeps the saved ones', async () => {
