@@ -251,11 +251,10 @@ async function check(name, fn) {
       assert(text.includes('the venue closes at 9 PM.') && text.includes('Your tournament ends after that.'), text);
       await shot(a.page, `F-card-${scheme}`);
       await card.locator('[data-vh-change-time]').click();
-      // Zip 86: the Time row's box is gone; Change time opens the Change sheet (Date, Time, Courts) with its own Save.
-      await a.page.locator('[data-tm86-change-sheet]').waitFor({ timeout: 5000 });
+      await a.page.locator('[data-tm-time-box]').waitFor({ timeout: 5000 });
       const line = flat(await a.page.locator('[data-tm-hours]').innerText());
       assert(line.startsWith('The venue is open 8:00 AM to 9:00 PM on this day (Early close).'), line);
-      assert(await a.page.locator('[data-tm86-save]').isDisabled(), 'Save is off outside the hours');
+      assert(await a.page.locator('[data-tm-time-save]').isDisabled(), 'Save is off outside the hours');
       await shot(a.page, `F-time-${scheme}`);
       assert(a.errors.length === 0, a.errors.join('; '));
       await a.ctx.close();

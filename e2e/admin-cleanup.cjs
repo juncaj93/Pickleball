@@ -559,7 +559,11 @@ async function main() {
     page.evaluate((cardsSel) => {
       const lines = (btn) => {
         const spans = [...btn.querySelectorAll('.seg-line')];
-        return spans.length ? new Set(spans.map((e) => Math.round(e.getBoundingClientRect().top))).size : 1;
+        if (spans.length) return new Set(spans.map((e) => Math.round(e.getBoundingClientRect().top))).size;
+        // Zip 86: no seg-line spans any more: count the text's own lines.
+        const r = document.createRange();
+        r.selectNodeContents(btn);
+        return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size;
       };
       return [...document.querySelectorAll(cardsSel)].map((sw) => {
         const b = [...sw.querySelectorAll('button')];

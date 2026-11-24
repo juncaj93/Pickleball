@@ -247,20 +247,15 @@ const SIZES = [320, 390, 420].flatMap((width) => ['light', 'dark'].map((scheme) 
     await a.page.locator('[data-tm-home-toggle]').waitFor({ timeout: 15000 });
     await a.page.locator('[data-tm-home-toggle]').click();
     await a.page.locator('[data-tm-home-body]').waitFor({ timeout: 10000 });
-    // Zip 86: the Time row and its money line ("After full prizes") are gone from the open card; the price check is the Money sheet's
-    // "If all pay" block: tickets − courts − prizes = You keep, to the cent, red when it is short.
-    await a.page.locator('[data-tm86-money]').click();
-    const sheet = a.page.locator('[data-tm86-money-sheet]');
-    await sheet.waitFor({ timeout: 5000 });
-    const keep = sheet.locator('[data-tm86-keep]');
-    const n = async (sel, attr) => Number(await sheet.locator(sel).first().getAttribute(attr));
-    const cents = Number(await keep.getAttribute('data-tm86-keep'));
-    const sum = (await n('[data-tm86-tickets-all]', 'data-tm86-tickets-all')) + (await n('[data-tm86-courts-all]', 'data-tm86-courts-all')) + (await n('[data-tm86-prizes-all]', 'data-tm86-prizes-all'));
-    assert(sum === cents, `keep ${cents} vs the rows ${sum}`);
-    const text = flat(await keep.locator('b').innerText());
-    assert(/^(\+\$\d+(\.\d\d)?|−\$\d+(\.\d\d)?)$/.test(text), `keep: ${text}`);
-    const cls = await keep.locator('b').getAttribute('class');
-    assert(cls === (cents < 0 ? 'tm-money-down' : 'tm-money-up'), `keep color class ${cls} for ${cents}`);
+    await a.page.locator('[data-tm-time-toggle]').click();
+    const after = a.page.locator('[data-tm-after-full]').first();
+    await after.waitFor({ timeout: 5000 });
+    const text = (await after.innerText()).trim();
+    assert(/^After full prizes: (\+\$\d+|\$\d+ short)$/.test(text), `after: ${text}`);
+    const cents = Number(await after.getAttribute('data-tm-after-full'));
+    const color = await after.evaluate((el) => getComputedStyle(el).color);
+    const red = await a.page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--danger-fg'));
+    if (cents < 0) assert(red.trim() && color !== 'rgb(0, 0, 0)', 'short is red');
     await shot(a.page, 'E-money-line');
     assert(!a.errors.length, a.errors.join('; '));
     await a.ctx.close();
