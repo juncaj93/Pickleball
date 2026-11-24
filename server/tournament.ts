@@ -65,6 +65,7 @@ import {
   type OwedTicketView,
 } from '../shared/tournament';
 import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, planMoney, savedExpect, timeMoveWords } from '../shared/tournamentMoney';
+import { columnsOf, prizesOfRow, readPrizes, withPrizes } from '../shared/tournamentPrizes';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
@@ -141,6 +142,8 @@ export interface TournamentRow {
   canceled_at: string | null;
   format: string;
   second_credit_cents: number;
+  /** Zip 58 (migration 0029): Edit awards' picks as JSON; Zip 87: also both styles' prize boxes (shared/tournamentPrizes.ts). */
+  award_pick?: string | null;
   /** Zip 56 (migration 0024): when ticket money is due; NULL until tickets first open. Missing on a database before 0024. */
   pay_by?: string | null;
   /** Zip 60 (migration 0025): how the format was set ('vote', 'tie', 'admin', or NULL for the organizer's own choice). Missing before 0025. */
@@ -1273,6 +1276,7 @@ export async function adminTournamentFor(
   // Zip 57: once the date is finalized the plan line, the cost and the venue card use the courts the organizer chose there (and the real hours).
   const courts = real || savedN !== null ? (t.courts === 1 ? 1 : 2) : sug.courts;
   const planMinutes = real ? real.minutes : sug.minutes;
+  const prizes = prizesOfRow(t);
   // Zip 70: THE money line for the expected players: the card, the Time and Plan boxes and the Plan card. Zip 85: the prizes (and the price
   // check) by the style the expected count really plays, the one shared function Finalize and the boxes call too (shared/tournamentMoney.ts).
   const money = planMoney({
@@ -1284,6 +1288,8 @@ export async function adminTournamentFor(
     ticketCents: t.ticket_cents,
     championCents: t.champion_credit_cents,
     secondCents: t.second_credit_cents ?? 0,
+    // Zip 87: the box of the style priced (both styles are set on the Prizes sheet).
+    prizes,
   });
   const prize = money.ticketsCents - money.courtCents - money.youCents;
   // Zip 70: Time and Plan can change until the night starts: the teams are published, or the night window opens (30 minutes before the start).
@@ -1371,6 +1377,7 @@ export async function adminTournamentFor(
     ticketCents: t.ticket_cents,
     championCreditCents: t.champion_credit_cents,
     secondCreditCents: t.second_credit_cents ?? 0,
+    prizes,
     offeredDates: storedDays(t.offered_dates),
     finalDate: shownDate(t),
     createdAt: t.created_at,
@@ -1655,6 +1662,26 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
   if (t.final_date && dateFixed(t) && !s.dates.includes(t.final_date)) {
     throw new HttpError(409, 'final_date_kept', 'That date is the one you picked. Pick another date first.');
   }
+  // Zip 87 (picture 9): both styles' prize boxes. The Prizes sheet and the Edit page send them; an older screen sends only the credit amounts,
+  // which go into the box of the style it showed once boxes were saved (before that, the columns alone, exactly as before). The columns keep the
+  // planned style's box (what older code reads).
+  const sent = body.prizes === undefined ? null : readPrizes(body.prizes);
+  if (body.prizes !== undefined && !sent) bad('invalid_prizes', 'Type whole dollars for each prize ($0 to skip it).');
+  const had = prizesOfRow(t);
+  const voting = isVoteSource(nextSource) && !t.final_date;
+  const boxes =
+    sent ??
+    (had.saved
+      ? nextFormat === 'americano' || voting
+        ? { doubles: voting ? { first: s.creditCents, second: had.doubles.second } : had.doubles, americano: { first: s.creditCents, second: s.secondCreditCents } }
+        : { doubles: { first: s.creditCents, second: had.doubles.second }, americano: had.americano }
+      : null);
+  if (boxes) {
+    const planned = nextFormat === 'americano' || voting ? boxes.americano : boxes.doubles;
+    s.creditCents = columnsOf(planned).championCents;
+    s.secondCreditCents = voting ? boxes.americano.second : columnsOf(planned).secondCents;
+  }
+  const awardPick = boxes ? withPrizes(t.award_pick, boxes) : (t.award_pick ?? null);
   // For History only: how many players on the list (shown on the level list) lose a date they had picked. The trim itself runs on the rows as
   // they are when the save lands (below), so a player's own edit that lands in between is never overwritten.
   const offer = JSON.stringify(s.dates);
@@ -1665,12 +1692,13 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
     ctx.db
       .prepare(
         `UPDATE tournaments SET name = ?, ticket_cents = ?, champion_credit_cents = ?, offered_dates = ?,
-           visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?, format_source = ?
+           visibility = ?, shown_at = CASE WHEN ? = 'all' THEN COALESCE(shown_at, ?) ELSE shown_at END, updated_at = ?, format = ?, second_credit_cents = ?, format_source = ?,
+           award_pick = ?
          WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))
            AND format_source IS ?
            AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND ? = 'all'))`,
       )
-      .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, nextFormat, s.secondCreditCents, nextSource, t.id, group.id, offer, wasSource, s.ticketCents, s.visibility),
+      .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, nextFormat, s.secondCreditCents, nextSource, awardPick, t.id, group.id, offer, wasSource, s.ticketCents, s.visibility),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
     // tournament holds exactly the new offer and is still open).
     ctx.db

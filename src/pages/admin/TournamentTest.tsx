@@ -13,9 +13,17 @@ import './tournament-admin.css';
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip86_payments', 'zip86_home', 'zip86_next', 'zip86_signup', 'zip86_lockin', 'zip86_whosin'];
+const THIS_ZIP: readonly string[] = ['zip87_early', 'zip87_payday', 'zip87_past', 'zip87_paid', 'zip87_gameday', 'zip87_allset', 'zip87_prizes'];
 
 const STAGES = [
+  // Zip 87 (🎾87.card polish): the tournament card before the night, by time, and Prizes for both styles. Tap the card open on Home.
+  { stage: 'zip87_early', label: 'Card: early payments (start here)', line: 'Pay by is the night before. Tickets soft green “6 of 10 locked in”, Remind plain with amber “4 haven’t paid”, Prizes “Not set yet”, Money green “+$42 if all pay”. The gear opens Change (Plans changed? at the bottom).' },
+  { stage: 'zip87_payday', label: 'Card: Pay by day', line: 'The night is tomorrow and Pay by is today. Tickets “8 of 10 locked in”, Remind amber “2 left · due 7 PM” (11:30 PM when it is past 7 PM), the status line “pay by today”.' },
+  { stage: 'zip87_past', label: 'Card: past Pay by', line: 'Pay by passed an hour ago, Quinn and Reese have not paid. Tickets “8 of 10 locked in”, Remind red “2 past due” (opens Messages), pill “2 unpaid”. (9 locked in would switch to Americano by the odd-count rule.)' },
+  { stage: 'zip87_paid', label: 'Card: everyone paid', line: 'Everyone paid before game day. Tickets solid green “All 10 locked in”, Remind quiet “Everyone paid” (does nothing), pill “10 locked in”.' },
+  { stage: 'zip87_gameday', label: 'Card: game day, prizes not set', line: 'The night is today (7:30 PM, later in the evening). TONIGHT on the tile, Game night is the step. Teams amber “Draft before 7:30” (opens the draft above), Prizes amber “Set before tonight”.' },
+  { stage: 'zip87_allset', label: 'Card: game day, all set', line: 'The 5 teams are published and the prizes are set. Teams soft green “5 teams set”, Prizes soft green “$14 each to winners”, Money “You keep +$14”.' },
+  { stage: 'zip87_prizes', label: 'Prizes: both styles', line: 'Tap the card open, then Prizes. “Tickets $162 − courts $120 = $42 left”, Use these fills Locked doubles $14 / $0 (Costs $28, You keep +$14) and If Americano $14 / $7 (Costs $21, You keep +$21). Save, then Prizes shows “$14 each to winners”.' },
   // Zip 86 (🎾86.clean admin): the cleaner tournament card and game cards, the tournament row in the week lists.
   { stage: 'zip86_payments', label: 'Tournament card: payments (start here)', line: 'The Cold Open’s numbers: 6 of 8 locked in, 4 haven’t paid, 10 expected. Home: tap the card open: the 4 steps, Tue Dec 1 · 7:30 to 10 PM, Change, then Tickets, Remind, Prizes and Money. Money: 5 paid $90, courts $120, so far −$30; if all 10 pay +$14 after the suggested $28.' },
   { stage: 'zip86_home', label: 'Admin Home: booked tonight + not booked', line: 'A game tonight (tomorrow after 7 PM): Booked, you In, Parker, Sage and Christopher Vanderberg, 3 of 3 paid, Court 4. The next day: Not booked, Rowan only, Book (the court still needs booking). Tap Booked (it moves to Not booked, Undo in the toast) and In (it goes Out, Undo).' },

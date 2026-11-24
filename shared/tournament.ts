@@ -1213,6 +1213,8 @@ export interface AdminTournamentView {
   championCreditCents: number;
   /** Americano: 2nd place (no medal). Doubles ignores it. */
   secondCreditCents: number;
+  /** Zip 87: both styles' prize boxes (shared/tournamentPrizes.ts): the night pays the box of the style played. */
+  prizes?: import('./tournamentPrizes').StylePrizes;
   offeredDates: string[];
   finalDate: string | null;
   createdAt: string;

@@ -1,0 +1,196 @@
+/* ---------- Zip 87 (🎾87.card polish, pictures 1 to 8): the organizer's tournament card before the night ---------- */
+/* Colors only from the tokens (docs/DESIGN.md); tints mix a token with the surface. */
+
+/* Even gaps (picture 1): no flex gap; the steps flush under the head, 12 px above and below the date row, a line, 12 px, the buttons, 12 px. */
+.tm86-body.tm87-body {
+  gap: 0;
+  padding: 0 16px 12px;
+}
+
+/* The 4 steps as underlined words: done green with a ✓ (soft green line), now ink on a solid green line, later gray. */
+.tm87-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 0;
+}
+.tm87-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 0 9px;
+  border-bottom: 3px solid var(--line);
+  color: var(--ink-2);
+}
+.tm87-step-word {
+  min-width: 0;
+  font-size: 0.86rem;
+  /* Sized to the card (cqw), never to the text setting: "Payments" always fits its quarter, so a word is never broken. */
+  font-size: max(11px, min(0.92rem, 3.3cqw));
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: break-word;
+}
+.tm87-tick {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+}
+/* 320 px: no room for the ✓ beside "Payments"; the green word and line still say done. */
+@container (max-width: 330px) {
+  .tm87-tick {
+    display: none;
+  }
+}
+.tm87-done {
+  color: var(--ok-fg);
+  border-bottom-color: color-mix(in srgb, var(--primary) 40%, var(--surface));
+}
+.tm87-now {
+  color: var(--ink);
+  border-bottom-color: var(--primary);
+}
+.tm87-now .tm87-step-word {
+  font-weight: 800;
+}
+
+/* The date row: the tile, the time bold and the plan line gray, the round gear on the right. */
+.tm86-when.tm87-when {
+  gap: 12px;
+  padding: 12px 0;
+}
+.tm87-tile {
+  flex: 0 0 auto;
+  display: flex;
+  width: 54px;
+}
+/* Picture 1: the time and the plan line fit beside the tile and the gear on one line each at 390 (they wrap between words when narrower). */
+.tm87-when .tm86-when-main {
+  font-size: max(11px, clamp(0.98rem, 5cqw, 1.2rem));
+}
+.tm87-when .tm86-when-sub {
+  margin-top: 2px;
+  font-size: max(11px, clamp(0.8rem, 3.85cqw, 0.96rem));
+}
+.tm87-tile .tile {
+  width: 100%;
+  box-sizing: border-box;
+}
+/* TONIGHT / TOMORROW (like the game cards): a smaller word, so the tile keeps its width at every text size. */
+:root[data-tonight-glow] .tm87-tile .tile .day-tag {
+  font-size: 11px;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.tm87-gear {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tm87-gear svg {
+  width: 22px;
+  height: 22px;
+}
+.tm87-gear:active {
+  background: var(--fill-press);
+}
+.tm87-gear:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.tm87-body .tm86-grid {
+  margin-top: 12px;
+}
+.tm87-body .tm86-ns {
+  margin-top: 10px;
+}
+
+/* The four buttons by state (pictures 3 to 8). The second line is never bold. A little less side room, so "$14 each to winners" keeps one
+   line at 390 (picture 8). */
+.tm87-body .tm86-btn {
+  padding-inline: 12px;
+}
+.tm87 .tm86-btn-sub,
+.tm87 .tm86-btn-sub.tm86-amber {
+  font-weight: 500;
+}
+.tm86-btn.tm87-solid {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.tm86-btn.tm87-solid:active {
+  background: var(--primary-press);
+}
+.tm86-btn.tm87-soft {
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  background: var(--accent-soft);
+}
+.tm86-btn.tm87-amber {
+  border-color: color-mix(in srgb, var(--warn-edge) 60%, transparent);
+  background: color-mix(in srgb, var(--warn-edge) 13%, var(--surface));
+}
+.tm86-btn.tm87-red {
+  border-color: color-mix(in srgb, var(--danger-edge) 60%, transparent);
+  background: color-mix(in srgb, var(--danger-edge) 11%, var(--surface));
+}
+.tm86-btn.tm87-quiet {
+  background: transparent;
+  color: var(--ink-2);
+  cursor: default;
+}
+.tm86-btn.tm87-quiet:active {
+  transform: none;
+  background: transparent;
+}
+.tm87-sub-green {
+  color: var(--ok-fg);
+}
+.tm87-sub-amber {
+  color: var(--warn-fg);
+}
+.tm87-sub-red {
+  color: var(--danger-fg);
+}
+.tm87-sub-gray {
+  color: var(--ink-2);
+}
+.tm86 .tm86-btn .tm87-sub-white {
+  color: var(--primary-ink);
+}
+
+/* ---------- The Change sheet (picture 2): a line under Courts cost, then Plans changed? ---------- */
+.tm86-field.tm86-cost.tm87-cost-line {
+  border-bottom: 1px solid var(--line);
+}
+.tm87-plans {
+  flex-wrap: wrap;
+}
+.tm87-plans-btns {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.tm87-plans .tm86-label {
+  white-space: nowrap;
+}
+.tm87-plans-btns .tm86-box {
+  padding: 0 12px;
+  font-size: 1rem;
+}

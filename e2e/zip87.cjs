@@ -1,0 +1,300 @@
+/* Zip 87 (🎾87.card polish): browser checks on a LOCAL copy (the preview's calm world, fixed clock Thu Nov 19, 10 AM Eastern).
+ *
+ *   node e2e/zip87.cjs                  (ZIP87_ONLY=A,B runs some)
+ *
+ *   A   Each state's card (pictures 3 to 8) at 320/390/420, light and dark: the words and the tone of every button, the status line, the pill,
+ *       the steps (underlined words), the date tile (TONIGHT on game day), the 44 px gear; nothing wider than the screen, no word cut.
+ *   B   Even gaps (picture 1): the steps flush under the head, 12 px above and below the date row, 12 px to the buttons, 12 px to the bottom.
+ *   C   Large text (125% and 150%) and the Christmas skin on: the card still fits at 320 and 390, light and dark.
+ *   D   The Change sheet (picture 2) on an iPhone Air (420 x 912): Plans changed? with Reschedule and Cancel on one line, the whole sheet on one
+ *       screen; each asks "Are you sure?" first (Keep it leaves everything as it was).
+ *   E   Prizes for both styles (picture 9): the money left, Use these fills both boxes, Costs and You keep, Save; the button then reads
+ *       "$14 each to winners" (soft green) and Money "+$14 if all pay"; the server holds both boxes.
+ *   F   Game day: Teams opens the team draft above the card.
+ * Screenshots: .data/zip87-shots (not in git).
+ */
+const path = require('node:path');
+const { mkdirSync } = require('node:fs');
+const { boot, flat, assert, ROOT } = require('./zip74-boot.cjs');
+
+const SHOTS = path.join(ROOT, '.data', 'zip87-shots');
+const ONLY = process.env.ZIP87_ONLY || '';
+let passed = 0;
+let failed = 0;
+async function check(name, fn) {
+  if (ONLY && !ONLY.split(',').some((x) => name.split(' ')[0] === x)) return;
+  const t0 = Date.now();
+  try {
+    await fn();
+    passed++;
+    console.log(`  ok    ${name} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+  } catch (err) {
+    failed++;
+    console.log(`  FAIL  ${name}\n        ${String(err && err.stack ? err.stack : err).split('\n').slice(0, 5).join('\n        ')}`);
+  }
+}
+
+/** Boxes whose text runs past them, and words broken in the middle (letters on two lines). */
+const cutOrBroken = (page, sel) =>
+  page.evaluate((s) => {
+    const out = [];
+    for (const el of document.querySelectorAll(s)) {
+      if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible') out.push(`cut: ${el.className} "${el.textContent.trim().slice(0, 30)}"`);
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const text = n.textContent || '';
+        let at = 0;
+        for (const word of text.split(/(\s+)/)) {
+          if (word.trim().length > 1) {
+            const r = document.createRange();
+            r.setStart(n, at);
+            r.setEnd(n, at + word.length);
+            const rects = [...r.getClientRects()].filter((x) => x.width > 0);
+            if (rects.length > 1 && Math.abs(rects[0].top - rects[rects.length - 1].top) > 2) out.push(`broken: "${word}"`);
+          }
+          at += word.length;
+        }
+      }
+    }
+    return out;
+  }, sel);
+
+/** What each stage must show: the status line, the pill, the step, the tile's tag, and every button as "tone|words". */
+const STATES = {
+  zip87_early: { status: 'Payments · pay by Mon 7 PM', pill: '4 unpaid', step: '1', tile: 'date', buttons: ['soft|Tickets6 of 10 locked in', 'plain|Remind4 haven’t paid', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_payday: { status: 'Payments · pay by today 7 PM', pill: '2 unpaid', step: '1', tile: 'tomorrow', buttons: ['soft|Tickets8 of 10 locked in', 'amber|Remind2 left · due 7 PM', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_past: { status: 'Payments · Pay by passed', pill: '2 unpaid', step: '1', tile: 'date', buttons: ['soft|Tickets8 of 10 locked in', 'red|Remind2 past due', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_paid: { status: 'Payments · all paid', pill: '10 locked in', step: '1', tile: 'date', buttons: ['solid|TicketsAll 10 locked in', 'quiet|RemindEveryone paid', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_gameday: { status: 'Game night · 7:30 PM', pill: '10 locked in', step: '2', tile: 'tonight', buttons: ['solid|TicketsAll 10 locked in', 'amber|TeamsDraft before 7:30', 'amber|PrizesSet before tonight', 'plain|Money+$42 if all pay'] },
+  zip87_allset: { status: 'Game night · 7:30 PM', pill: '10 locked in', step: '2', tile: 'tonight', buttons: ['solid|TicketsAll 10 locked in', 'soft|Teams5 teams set', 'soft|Prizes$14 each to winners', 'plain|MoneyYou keep +$14'] },
+};
+
+async function openCard(page) {
+  await page.locator('[data-tm-home-toggle]').click();
+  await page.waitForTimeout(350);
+}
+const buttonsOf = (page) => page.locator('.tm87-body .tm86-grid > *').evaluateAll((els) => els.map((e) => `${[...e.classList].find((c) => c.startsWith('tm87-')).slice(5)}|${e.textContent.replace(/\s+/g, ' ').trim().replace(/ /g, '').replace(/(\D)(\d)/, '$1$2')}`));
+const norm = (xs) => xs.map((x) => x.replace(/\s+/g, ''));
+
+(async () => {
+  mkdirSync(SHOTS, { recursive: true });
+  const b = await boot({ name: 'zip87', port: Number(process.env.E2E_PORT) || 5487 });
+  try {
+    await check('A each state: words, tones, status line, pill, steps, tile, gear (320/390/420, light and dark)', async () => {
+      for (const [stage, want] of Object.entries(STATES)) {
+        await b.stage(stage);
+        for (const width of [320, 390, 420]) {
+          for (const scheme of ['light', 'dark']) {
+            const { page, ctx, errors } = await b.adminHome({ width, scheme });
+            assert(flat(await page.locator('[data-tm86-status]').textContent()) === want.status, `${stage}: status ${flat(await page.locator('[data-tm86-status]').textContent())}`);
+            assert(flat(await page.locator('[data-tm-stage]').textContent()) === want.pill, `${stage}: pill`);
+            await openCard(page);
+            assert((await page.locator(`[data-tm-steps="${want.step}"]`).count()) === 1, `${stage}: step ${want.step}`);
+            // A ✓ on every done step (at 320 the green word and line alone: no room beside "Payments").
+            const ticks = await page.locator('.tm87-done .tm87-tick').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width > 0).length);
+            assert(ticks === (width >= 390 ? Number(want.step) : 0), `${stage} ${width}: ${ticks} ✓`);
+            assert((await page.locator('[data-tm87-tile]').getAttribute('data-tm87-tile')) === want.tile, `${stage}: tile ${await page.locator('[data-tm87-tile]').getAttribute('data-tm87-tile')}`);
+            const got = norm(await buttonsOf(page));
+            assert(JSON.stringify(got) === JSON.stringify(norm(want.buttons)), `${stage} ${width} ${scheme}: ${JSON.stringify(got)}`);
+            // Status lines (the second line) never bold.
+            for (const w of await page.locator('.tm87-body .tm86-btn-sub').evaluateAll((els) => els.map((e) => Number(getComputedStyle(e).fontWeight)))) assert(w < 600, `${stage}: a bold status line (${w})`);
+            // The gear: round, 44 px, opens Change. No Change button and no "Cancel or reschedule" link on the card.
+            const g = await page.locator('.tm87-gear').evaluate((e) => [e.getBoundingClientRect().width, e.getBoundingClientRect().height, getComputedStyle(e).borderRadius]);
+            assert(g[0] === 44 && g[1] === 44 && g[2] === '50%', `gear ${g}`);
+            assert((await page.locator('.tm87 [data-tm-cancel-or-reschedule], .tm87 .tm86-change').count()) === 0, 'no Change button, no Cancel or reschedule link');
+            // The date row: the time on one line at 390 and wider; the plan line too.
+            if (width >= 390) {
+              for (const sel of ['.tm87-when .tm86-when-main', '.tm87-when .tm86-when-sub']) {
+                const lines = await page.locator(sel).evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+                assert(lines === 1, `${stage} ${width}: ${sel} on ${lines} lines`);
+              }
+            }
+            for (const h of await page.locator('.tm86-btn').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) assert(h >= 44, `a button ${h} px`);
+            const bad = await cutOrBroken(page, '.tm87');
+            assert(bad.length === 0, `${stage} ${width} ${scheme}: ${bad.join('; ')}`);
+            await b.noWider(page, `${stage} ${width} ${scheme}`);
+            if (width === 390) await page.locator('.tm87').screenshot({ path: path.join(SHOTS, `A-${stage}-${scheme}.png`) });
+            assert(errors.length === 0, errors.join('; '));
+            await ctx.close();
+          }
+        }
+      }
+    });
+
+    await check('B even gaps: steps flush under the head, 12 px around the date row, 12 px to the buttons and to the bottom', async () => {
+      await b.stage('zip87_early');
+      for (const width of [320, 390, 420]) {
+        const { page, ctx } = await b.adminHome({ width });
+        await openCard(page);
+        const m = await page.evaluate(() => {
+          const r = (s) => document.querySelector(s).getBoundingClientRect();
+          const when = document.querySelector('.tm87-when');
+          const cs = getComputedStyle(when);
+          return {
+            head: r('.tm87 .tm-hc-head').bottom,
+            body: r('.tm87-body').top,
+            steps: r('.tm87-steps').top,
+            stepsBottom: r('.tm87-steps').bottom,
+            whenTop: r('.tm87-when').top,
+            padTop: parseFloat(cs.paddingTop),
+            padBottom: parseFloat(cs.paddingBottom),
+            line: cs.borderBottomStyle,
+            whenBottom: r('.tm87-when').bottom,
+            grid: r('.tm87-body .tm86-grid').top,
+            gridBottom: r('.tm87-body .tm86-grid').bottom,
+            card: r('.tm87').bottom,
+            gap: getComputedStyle(document.querySelector('.tm87-body')).rowGap,
+          };
+        });
+        assert(Math.abs(m.steps - m.body) <= 1.5, `steps flush (${m.steps - m.body})`);
+        assert(Math.abs(m.whenTop - m.stepsBottom) <= 0.5, `no gap between the steps and the date row (${m.whenTop - m.stepsBottom})`);
+        assert(m.padTop === 12 && m.padBottom === 12 && m.line === 'solid', `date row padding ${m.padTop}/${m.padBottom} ${m.line}`);
+        assert(Math.abs(m.grid - m.whenBottom - 12) <= 0.5, `12 px to the buttons (${m.grid - m.whenBottom})`);
+        assert(Math.abs(m.card - m.gridBottom - 12) <= 1.5, `12 px to the bottom (${m.card - m.gridBottom})`);
+        assert(m.gap === 'normal' || m.gap === '0px', `no flex gap (${m.gap})`);
+        await ctx.close();
+      }
+    });
+
+    await check('C large text (125%, 150%) and the Christmas skin: the card still fits (320 and 390, light and dark)', async () => {
+      await b.stage('zip87_gameday');
+      for (const size of ['125%', '150%']) {
+        for (const [width, scheme] of [
+          [320, 'dark'],
+          [390, 'light'],
+        ]) {
+          const { page, ctx } = await b.adminHome({ width, scheme });
+          await page.addStyleTag({ content: `html { font-size: ${size} !important; }` });
+          await openCard(page);
+          const bad = await cutOrBroken(page, '.tm87');
+          assert(bad.length === 0, `${size} ${width} ${scheme}: ${bad.join('; ')}`);
+          await b.noWider(page, `${size} ${width} ${scheme}`);
+          const tile = await page.locator('.tm87-tile .tile').evaluate((e) => Math.round(e.getBoundingClientRect().width));
+          assert(tile <= 56, `the tile keeps its width at ${size}: ${tile}`);
+          await page.locator('.tm87').screenshot({ path: path.join(SHOTS, `C-text-${size.replace('%', '')}-${width}-${scheme}.png`) });
+          await ctx.close();
+        }
+      }
+      await b.call('PUT', '/api/admin/christmas-skin-switch', { mode: 'all' });
+      try {
+        for (const stage of ['zip87_early', 'zip87_allset']) {
+          await b.stage(stage);
+          for (const [width, scheme] of [
+            [390, 'light'],
+            [320, 'dark'],
+          ]) {
+            const { page, ctx, errors } = await b.adminHome({ width, scheme });
+            await openCard(page);
+            const bad = await cutOrBroken(page, '.tm87');
+            assert(bad.length === 0, `skin ${stage} ${width} ${scheme}: ${bad.join('; ')}`);
+            await b.noWider(page, `skin ${width} ${scheme}`);
+            await page.locator('.tm87').screenshot({ path: path.join(SHOTS, `C-skin-${stage}-${width}-${scheme}.png`) });
+            assert(errors.length === 0, errors.join('; '));
+            await ctx.close();
+          }
+        }
+      } finally {
+        await b.call('PUT', '/api/admin/christmas-skin-switch', { mode: 'off' });
+      }
+    });
+
+    await check('D the Change sheet on an iPhone Air: Plans changed? on one line, one screen; Are you sure? first', async () => {
+      await b.stage('zip87_early');
+      for (const scheme of ['light', 'dark']) {
+        const { page, ctx } = await b.adminHome({ width: 420, height: 912, scheme });
+        await openCard(page);
+        await page.locator('.tm87-gear').click();
+        await page.waitForTimeout(600);
+        const sheet = page.locator('[data-tm86-change-sheet]');
+        const row = sheet.locator('[data-tm87-plans]');
+        assert(flat(await row.textContent()) === 'Plans changed?RescheduleCancel', flat(await row.textContent()));
+        const tops = await row.locator('.tm86-label, button').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)));
+        assert(Math.max(...tops) - Math.min(...tops) <= 3, `one line: ${tops}`);
+        // The plain box style (no red), 44 px.
+        for (const c of await row.locator('button').evaluateAll((els) => els.map((e) => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor, e.getBoundingClientRect().height]))) assert(c[2] >= 44, `button ${c}`);
+        // The whole sheet on one screen (the Save button above the bottom).
+        const save = await sheet.locator('[data-tm86-save]').evaluate((e) => e.getBoundingClientRect().bottom);
+        assert(save <= 912, `Save at ${save}`);
+        const top = await page.locator('.sheet, [role="dialog"]').first().evaluate((e) => e.getBoundingClientRect().top);
+        assert(top >= 0, `sheet top ${top}`);
+        await page.screenshot({ path: path.join(SHOTS, `D-change-air-${scheme}.png`) });
+        // Are you sure? first; Keep it changes nothing.
+        await row.locator('[data-tm-reschedule]').click();
+        await page.waitForTimeout(300);
+        // (The confirm sits inside the Change sheet, so the outer sheet matches too.)
+        assert((await page.locator('.sheet').filter({ hasText: 'Are you sure?' }).filter({ hasText: 'Reschedule: the date comes off' }).count()) >= 1, 'Reschedule asks first');
+        await page.screenshot({ path: path.join(SHOTS, `D-sure-${scheme}.png`) });
+        await page.getByRole('button', { name: 'Keep it' }).click();
+        await page.waitForTimeout(300);
+        await row.locator('[data-tm-cancel-tournament]').click();
+        await page.waitForTimeout(300);
+        const body = await page.locator('.sheet').filter({ hasText: 'Are you sure?' }).filter({ hasText: 'players see it canceled' }).last().textContent();
+        assert(/back as credit/.test(body), `Cancel asks first: ${flat(body)}`);
+        await page.getByRole('button', { name: 'Keep it' }).click();
+        await page.waitForTimeout(300);
+        const t = (await b.call('GET', '/api/admin/dashboard')).tournament;
+        assert(t.status === 'tickets' && t.finalDate, 'nothing changed');
+        await ctx.close();
+      }
+    });
+
+    await check('E Prizes for both styles: Use these, Costs and You keep, Save; the button and Money follow; both boxes saved', async () => {
+      for (const scheme of ['dark', 'light']) {
+        await b.stage('zip87_prizes');
+        const { page, ctx } = await b.adminHome({ width: 390, scheme });
+        await openCard(page);
+        await page.locator('[data-tm86-prizes]').click();
+        await page.waitForTimeout(500);
+        const pz = page.locator('[data-tm86-prize-sheet]');
+        assert(flat(await pz.locator('.pz-left').textContent()) === 'Tickets $162 − courts $120 = $42 left', flat(await pz.locator('.pz-left').textContent()));
+        const titles = await pz.locator('.pz-box-title').allTextContents();
+        assert(JSON.stringify(titles) === JSON.stringify(['Locked doubles', 'If Americano']), `titles ${titles}`);
+        assert(flat(await pz.locator('[data-pz-top] .pz-tag').textContent()) === 'Plan now', 'Plan now tag');
+        assert((await pz.getByText('Medal and banner are automatic', { exact: false }).count()) === 0, 'the old note is gone');
+        await pz.locator('[data-pz-use]').click();
+        await page.waitForTimeout(200);
+        const vals = await pz.locator('[data-pz-money]').evaluateAll((els) => els.map((e) => e.value));
+        assert(JSON.stringify(vals) === JSON.stringify(['14', '0', '14', '7']), `filled ${vals}`);
+        assert((await pz.locator('[data-pz-box="doubles"] .pz-foot').getAttribute('data-pz-cost')) === '2800', 'doubles costs $28');
+        assert((await pz.locator('[data-pz-box="doubles"] .pz-foot').getAttribute('data-pz-keep')) === '1400', 'doubles keep +$14');
+        assert((await pz.locator('[data-pz-box="americano"] .pz-foot').getAttribute('data-pz-cost')) === '2100', 'americano costs $21');
+        assert((await pz.locator('[data-pz-box="americano"] .pz-foot').getAttribute('data-pz-keep')) === '2100', 'americano keep +$21');
+        assert(flat(await pz.locator('[data-pz-box="doubles"] .pz-foot').textContent()) === 'Costs $28You keep +$14', 'doubles foot words');
+        // A 2nd place for the team: the cost follows at once ($14 + $7) x 2 = $42.
+        await pz.locator('[data-pz-money="doubles-second"]').fill('7');
+        assert((await pz.locator('[data-pz-box="doubles"] .pz-foot').getAttribute('data-pz-cost')) === '4200', 'doubles with 2nd costs $42');
+        await pz.locator('[data-pz-money="doubles-second"]').fill('0');
+        const bad = await cutOrBroken(page, '[data-tm86-prize-sheet]');
+        assert(bad.length === 0, `prizes ${scheme}: ${bad.join('; ')}`);
+        const save = await pz.locator('[data-tm86-prizes-save]').evaluate((e) => e.getBoundingClientRect().bottom);
+        assert(save <= 844, `Save on screen (${save})`);
+        await page.screenshot({ path: path.join(SHOTS, `E-prizes-${scheme}.png`) });
+        if (scheme === 'light') {
+          await pz.locator('[data-tm86-prizes-save]').click();
+          await page.waitForFunction(() => /\$14 each to winners/.test(document.querySelector('[data-tm86-prizes]')?.textContent || ''), null, { timeout: 8000 });
+          assert((await page.locator('[data-tm86-prizes]').getAttribute('data-tm86-prizes')) === 'soft', 'soft green once set');
+          assert(flat(await page.locator('[data-tm86-money]').textContent()) === 'Money+$14 if all pay', 'Money after prizes');
+          const t = (await b.call('GET', '/api/admin/dashboard')).tournament;
+          assert(JSON.stringify(t.prizes) === JSON.stringify({ doubles: { first: 1400, second: 0 }, americano: { first: 1400, second: 700 }, saved: true }), JSON.stringify(t.prizes));
+          assert(t.championCreditCents === 1400, 'the planned box in the columns');
+        }
+        await ctx.close();
+      }
+    });
+
+    await check('F game day: Teams opens the team draft above the card', async () => {
+      await b.stage('zip87_gameday');
+      const { page, ctx } = await b.adminHome({ width: 390 });
+      await openCard(page);
+      await page.locator('[data-tm87-teams]').click();
+      await page.waitForTimeout(900);
+      const top = await page.locator('[data-tm-draft-prompt], [data-tm-draft-card]').first().evaluate((e) => e.getBoundingClientRect().top);
+      assert(top >= -2 && top < 300, `the draft is on screen (${top})`);
+      await ctx.close();
+    });
+  } finally {
+    await b.close();
+  }
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})();

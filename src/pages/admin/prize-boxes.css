@@ -1,0 +1,168 @@
+/* ---------- Zip 87 (🎾87.card polish, picture 9): the Prizes sheet for both styles ---------- */
+/* Colors only from the tokens (docs/DESIGN.md). */
+
+.pz {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pz-left {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.35;
+  color: var(--ink-2);
+  overflow-wrap: break-word;
+}
+.pz-left b {
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.pz-suggest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pz-suggest-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.04rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.pz-use {
+  flex: 0 0 auto;
+  min-height: var(--btn-h-sm);
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--btn-r);
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pz-use:disabled {
+  cursor: default;
+  color: var(--ink-2);
+}
+.pz-use:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* One box per style: the planned one on top with a green edge and the "Plan now" tag. */
+.pz-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+.pz-top {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: var(--surface);
+}
+.pz-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
+}
+.pz-box-title {
+  margin: 0;
+  font-size: 1.04rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.pz-tag {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--ok-fg);
+  font-size: max(11px, 0.76rem);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.pz-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+}
+.pz-row-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 1.02rem;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.pz-each {
+  font-size: max(11px, 0.84rem);
+  color: var(--ink-2);
+}
+.pz-money {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 6.6em;
+  min-height: var(--btn-h-sm);
+  padding: 0 12px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 750;
+}
+.pz-money input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.06rem;
+  font-weight: 800;
+  text-align: right;
+}
+.pz-money input:focus {
+  outline: none;
+}
+.pz-money:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+.pz-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+  font-size: 1rem;
+  color: var(--ink-2);
+}
+.pz-keep {
+  color: var(--ok-fg);
+}
+.pz-keep.pz-short {
+  color: var(--danger-fg);
+}

@@ -42,6 +42,7 @@ import { boardRows } from '../shared/results';
 import { diffLabel } from '../shared/scores';
 import { type AdminOwedTicket, courtCentsOf } from '../shared/tournament';
 import { revealHolding } from '../shared/reveal';
+import { prizesOfRow, readPrizes, withPicks, withPrizes } from '../shared/tournamentPrizes';
 import { isOwedClaim, OWED_MARK } from '../shared/tournamentTickets';
 import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
 import { KEPT, keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
@@ -108,10 +109,12 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
   const nameOf = (id: string | null | undefined) => (id ? (names.get(id) ?? 'A player') : 'A player');
   const pick = pickOf(t);
   const weeks = weeksOf(t);
-  const championCents = t.champion_credit_cents;
-  // Zip 83 (Alex, Nov 24): Locked doubles has NO 2nd place credit, ever (Zip 82's runner-up credit is gone). Whatever a doubles row has saved
-  // (a voting tournament keeps Americano's amount in case it switches) is never paid, shown or counted.
-  const secondCents = format === 'americano' ? (t.second_credit_cents ?? 0) : 0;
+  // Zip 87 (picture 9): the box of the style played (shared/tournamentPrizes.ts). Locked doubles may pay a 2nd place team again (Alex, reversing
+  // Zip 83), each player once, never at $0. A row with no saved boxes reads as before: Locked doubles never pays the 2nd place amount saved on it
+  // (a voting tournament keeps Americano's amount in case it switches).
+  const box = prizesOfRow(t)[format];
+  const championCents = box.first;
+  const secondCents = box.second;
   // An I paid still waiting: the organizer answers it first (only confirmed money is real; after the end nothing on the ticket can change).
   // Zip 85: a ticket marked Didn't pay after the night started (OWED_MARK) is a debt, not an I paid waiting: it never holds End up.
   const waiting = tickets.filter((k) => k.claim_cents > 0 && !isOwedClaim(k)).map((k) => k.display_name);
@@ -128,7 +131,13 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       return x ? [x.player_a, x.player_b].filter((id): id is string => !!id).map(nameOf) : [];
     };
     const asPick = (seat: number): AwardPick => ({ key: String(seat), name: team(seat)?.name ?? `Team ${seat}`, players: playersOf(seat) });
-    const firstSeat = pick.first && team(Number(pick.first)) && !o.out.has(Number(pick.first)) ? Number(pick.first) : o.champion;
+    const seatOf = (k: string | undefined): number | null => (k && team(Number(k)) && !o.out.has(Number(k)) ? Number(k) : null);
+    const firstSeat = seatOf(pick.first) ?? o.champion;
+    // Zip 87: a 2nd place team only while its credit is above $0 (Edit awards can change it, like Americano's): the Final's runner-up, or the
+    // next team in the Final's order when 1st was moved, so the Final's winner is never saved below the team it beat (Zip 82's review rule).
+    const pickedSecond = seatOf(pick.second);
+    const secondSeat =
+      secondCents > 0 ? (pickedSecond !== null && pickedSecond !== firstSeat ? pickedSecond : (o.order.find((x) => x !== firstSeat && !o.out.has(x)) ?? null)) : null;
     const champ = asPick(o.champion);
     const done = {
       kicker: 'Final is done',
@@ -136,7 +145,8 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       sub: o.runnerUp !== null ? `${plusList(champ.players!)} beat ${asPick(o.runnerUp).name} (${plusList(playersOf(o.runnerUp))}).` : `${plusList(champ.players!)} won the Final.`,
     };
     const winners = [team(firstSeat)?.player_a, team(firstSeat)?.player_b].filter((id): id is string => !!id);
-    const order = [firstSeat, ...o.order.filter((s) => s !== firstSeat)];
+    const seconds = secondSeat === null ? [] : [team(secondSeat)?.player_a, team(secondSeat)?.player_b].filter((id): id is string => !!id);
+    const order = [firstSeat, ...(secondSeat !== null ? [secondSeat] : []), ...o.order.filter((s) => s !== firstSeat && s !== secondSeat)];
     const results: ResultRow[] = [];
     for (const x of o.teams) {
       const finish = o.out.has(x.seat) ? null : order.indexOf(x.seat) + 1 || null;
@@ -147,10 +157,23 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       ] as [string | null, string | null][]) {
         if (!id) continue;
         const won = x.seat === firstSeat;
-        results.push({ playerId: id, finish, wins: rec.wins, losses: rec.losses, points: null, teamName: x.name, partnerId: partner, medal: won, award: won ? 'champion' : null, creditCents: won ? credit(id, championCents) : 0 });
+        const second = !won && x.seat === secondSeat;
+        results.push({
+          playerId: id,
+          finish,
+          wins: rec.wins,
+          losses: rec.losses,
+          points: null,
+          teamName: x.name,
+          partnerId: partner,
+          medal: won,
+          award: won ? 'champion' : second ? 'second' : null,
+          creditCents: won ? credit(id, championCents) : second ? credit(id, secondCents) : 0,
+        });
       }
     }
     const org = winners.find((id) => id === orgId);
+    const orgSecond = seconds.find((id) => id === orgId);
     // Zip 82: the final order of the teams, exactly the board players see after End (shared/results.ts boardRows over the rows End saves), with
     // each team's point difference.
     const board = boardRows(
@@ -165,15 +188,15 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
         hero: 'Final',
         done,
         first: asPick(firstSeat),
-        second: null,
-        third: o.third !== null && o.third !== firstSeat ? asPick(o.third) : null,
+        second: secondSeat !== null ? asPick(secondSeat) : null,
+        third: o.third !== null && o.third !== firstSeat && o.third !== secondSeat ? asPick(o.third) : null,
         championCents,
         secondCents,
         weeks,
         choices: o.teams.filter((x) => !o.out.has(x.seat)).map((x) => asPick(x.seat)),
-        ...(org && championCents > 0 ? { noCredit: nameOf(org) } : {}),
+        ...(org && championCents > 0 ? { noCredit: nameOf(org) } : orgSecond ? { noCredit: nameOf(orgSecond) } : {}),
         ...(blocked ? { blocked } : {}),
-        seen: JSON.stringify([String(firstSeat), null, championCents, secondCents, weeks]),
+        seen: JSON.stringify([String(firstSeat), secondSeat === null ? null : String(secondSeat), championCents, secondCents, weeks]),
         standings: board.map((r) => {
           const seat = seatByName.get(r.name);
           return {
@@ -301,14 +324,34 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
   if (action === 'save') {
     const keys = view.choices.map((c) => c.key);
     const first = typeof body.first === 'string' && keys.includes(body.first) ? body.first : bad('invalid_pick', 'Pick the winners again.');
-    // Zip 83: Locked doubles has no 2nd place (no pick, no credit; anything sent for it is ignored and the saved amount is left as it is).
-    const second =
-      view.format === 'americano' ? (typeof body.second === 'string' && keys.includes(body.second) && body.second !== first ? body.second : bad('invalid_pick', 'Pick 2nd place again.')) : null;
-    const champion = cents(body.championCents, view.format === 'americano' ? '1st place credit' : 'Credit for each winner');
-    const secondCents = view.format === 'americano' ? cents(body.secondCents, '2nd place credit') : (t.second_credit_cents ?? 0);
+    // Zip 87 (picture 9): Edit awards sends both styles' boxes (the Prizes sheet's); an older screen sends the amounts of the style played.
+    const sent = body.prizes === undefined ? null : readPrizes(body.prizes);
+    if (body.prizes !== undefined && !sent) throw new HttpError(400, 'invalid_cents', 'Type whole dollars for each prize ($0 to skip it).');
+    const had = prizesOfRow(t);
+    const doubles = view.format === 'doubles';
+    const champion = sent ? sent[view.format].first : cents(body.championCents, doubles ? 'Credit for each winner' : '1st place credit');
+    const secondCents = sent
+      ? sent[view.format].second
+      : !doubles
+        ? cents(body.secondCents, '2nd place credit')
+        : body.secondCents !== undefined
+          ? cents(body.secondCents, '2nd place credit for each')
+          : had.doubles.second;
+    const boxes = sent ?? { doubles: had.doubles, americano: had.americano, [view.format]: { first: champion, second: secondCents } };
+    // 2nd place: Americano always picks one; Locked doubles only while its 2nd place credit is above $0 (Zip 87; left out: the saved pick, or the
+    // Final's runner-up).
+    const second = !doubles
+      ? typeof body.second === 'string' && keys.includes(body.second) && body.second !== first
+        ? body.second
+        : bad('invalid_pick', 'Pick 2nd place again.')
+      : secondCents > 0 && typeof body.second === 'string'
+        ? keys.includes(body.second) && body.second !== first
+          ? body.second
+          : bad('invalid_pick', 'Pick 2nd place again.')
+        : null;
     const weeks = Number(body.weeks);
     if (!(BANNER_WEEKS as readonly number[]).includes(weeks)) throw new HttpError(400, 'invalid_weeks', 'Pick 1 to 4 weeks.');
-    const pickJson = JSON.stringify({ first, ...(second ? { second } : {}) });
+    const pickJson = withPrizes(withPicks(t.award_pick, { first, second }), boxes);
     const res = await ctx.db
       .prepare(
         "UPDATE tournaments SET champion_credit_cents = ?, second_credit_cents = ?, banner_weeks = ?, award_pick = ?, updated_at = ? WHERE id = ? AND status = 'tickets' AND end_key IS NULL",
@@ -318,8 +361,8 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
     if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
     const nameOf = (k: string | null) => view.choices.find((c) => c.key === k)?.name ?? '';
     const words = [
-      view.format === 'americano' ? `1st ${nameOf(first)}, 2nd ${nameOf(second)}` : `winners ${nameOf(first)}`,
-      `${formatPrice(champion)}${view.format === 'americano' ? ` and ${formatPrice(secondCents)}` : ' each'}`,
+      !doubles ? `1st ${nameOf(first)}, 2nd ${nameOf(second)}` : `winners ${nameOf(first)}${second ? `, 2nd ${nameOf(second)}` : ''}`,
+      `${formatPrice(champion)}${!doubles ? ` and ${formatPrice(secondCents)}` : secondCents > 0 ? ` and ${formatPrice(secondCents)} each` : ' each'}`,
       `banner ${bannerLabel(weeks)}`,
     ].join(', ');
     await audit(ctx.db, group.id, null, 'tournament_awards', { tournament: t.name, words }, nowIso);
@@ -361,8 +404,8 @@ export async function writeEnd(ctx: Ctx, group: GroupRow, t: EndRow, night: Awai
            AND award_pick IS ?
            AND (SELECT MAX(updated_at) FROM tournament_games WHERE tournament_id = tournaments.id) IS ?`,
       )
-      // Zip 83: the saved 2nd place amount as read (Locked doubles shows and pays $0 for it whatever is saved; nothing changed in between).
-      .bind(nowIso, key, until, nowIso, t.id, view.championCents, t.second_credit_cents ?? 0, DEFAULT_BANNER_WEEKS, weeks, t.award_pick ?? null, lastGameChange(night.day)),
+      // Zip 87: the columns and the award settings exactly as read (the boxes the card paid by live in award_pick; nothing changed in between).
+      .bind(nowIso, key, until, nowIso, t.id, t.champion_credit_cents, t.second_credit_cents ?? 0, DEFAULT_BANNER_WEEKS, weeks, t.award_pick ?? null, lastGameChange(night.day)),
     ...plan.results.map((r) =>
       ctx.db
         .prepare(
@@ -595,7 +638,8 @@ export async function tournamentHistory(ctx: Ctx): Promise<TournamentHistoryView
       format,
       players: mine.length,
       first: champs.length ? (format === 'doubles' ? { name: champs[0].team_name ?? champs.map((c) => c.display_name).join(' + '), players: champs.map((c) => c.display_name) } : { name: champs[0].display_name }) : null,
-      second: second ? { name: second.display_name } : null,
+      // Zip 87: a Locked doubles 2nd place is a team (its name), as 1st place is.
+      second: second ? { name: format === 'doubles' ? (second.team_name ?? second.display_name) : second.display_name } : null,
     };
   });
   const by = new Map<string, { name: string; wins: number; played: number; medals: number }>();

@@ -2,6 +2,7 @@
 // player download reads shared/tournament.ts, so these organizer and server pieces stay out of it (tests/zip48-split.test.ts's size budget).
 import { courtCentsOf, MAX_SPOTS, prizeCentsOf, shortClock, styleAtClose, type TournamentFormat, WINNERS } from './tournament';
 import { formatPrice } from './money';
+import { boxCostCents, type StylePrizes } from './tournamentPrizes';
 
 /** The Plan box's Expect stepper runs 6 to 16. */
 export const EXPECT_MIN = 6;
@@ -146,8 +147,18 @@ export function planMoney(o: {
   ticketCents: number;
   championCents: number;
   secondCents: number;
+  /** Zip 87: both styles' boxes (shared/tournamentPrizes.ts); the style priced pays its own box (Locked doubles may have a 2nd place again). */
+  prizes?: Omit<StylePrizes, 'saved'>;
 }): MoneyLine & { style: TournamentFormat; afterFullCents: number; closed: boolean; baseStyle: TournamentFormat } {
   const style = expectedStyle(o.format, o.expected, o.closed);
-  const line = moneyLine({ expected: o.expected, courts: o.courts, minutes: o.minutes, ticketCents: o.ticketCents, prizeCents: prizeCentsOf(style, o.championCents, o.secondCents) });
+  const prizeCents = o.prizes ? boxCostCents(style, o.prizes[style]) : prizeCentsOf(style, o.championCents, o.secondCents);
+  const line = moneyLine({ expected: o.expected, courts: o.courts, minutes: o.minutes, ticketCents: o.ticketCents, prizeCents });
   return { ...line, style, afterFullCents: afterFullCents(line.ticketsCents, line.courtCents, style), closed: o.closed, baseStyle: o.format };
+}
+
+/** Zip 87 (picture 9): "Suggested for both styles": each style's best tier the money left can pay (Alex's caps; Locked doubles 2nd place $0). */
+export function suggestedBoxes(leftCents: number): Omit<StylePrizes, 'saved'> {
+  const d = tierAmounts(suggestedTier(leftCents, 'doubles'), 'doubles');
+  const a = tierAmounts(suggestedTier(leftCents, 'americano'), 'americano');
+  return { doubles: { first: d.firstCents, second: 0 }, americano: { first: a.firstCents, second: a.secondCents } };
 }
