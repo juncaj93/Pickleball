@@ -8324,3 +8324,33 @@ the Tournaments switch, on live). Deploy windows waived by Alex until Dec 1, nev
    History > Tournaments names the team. End's guard now checks the columns and award_pick as read.
 Stages (THIS_ZIP): zip87_early, zip87_payday, zip87_past (8 of 10, 2 past due: 9 would switch to Americano by the odd-count rule), zip87_paid,
 zip87_gameday, zip87_allset, zip87_prizes (server/tournamentTest.ts zip87Stage on Zip 86's payments card).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) the Edit page kept the saved style's amounts when the style was switched in the form (it showed one box and saved the other): the
+amounts now follow the style picked, and "untouched" is checked against that style's box; (2) Edit awards' Locked doubles 2nd place defaulted to
+the lowest seat, not the Final's runner-up: now the team right below the winners in the standings; (3) the tournament page's prize rows read the
+old columns (after an odd switch the doubles amounts showed under Americano): they read the boxes; (4) "Payments · all paid" with every spot
+taken: now "every spot taken"; (5) a row with no Pay by could send Remind a missing date: dueOf needs a Pay by (Remind says "No pay by set");
+(6) the night's Prizes sheet from the card counted tickets differently from Edit awards: it uses End's money once the End card exists. Checked
+fine: End's guard (seen + columns + award_pick), doubles 2nd place once per player and never at $0, legacy rows unchanged, no new trip. Kept
+as notes: the reminder text after Pay by still says "pay today/tonight"; the Prizes PUT and the awards save are last-save-wins (End's guard
+catches a change); an Auto / vote Edit that changes 1st place sets both styles' 1st place (as the form shows one box).
+Rollback note: older code reads only the columns, which hold the PLANNED box; after an odd switch to Americano older code would pay the Locked
+doubles amounts. Only a concern if rolled back between a saved Prizes sheet and End.
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
+Dashboard 4 trips / 63 statements before and after (none, all_locked, mid, am_round3, zip87_early, zip87_allset; +99 bytes: the prize boxes);
+the 5 second check 2 trips / 16 statements, unchanged. award_pick was already in the row (SELECT *); no new read.
+
+### Tests
+Unit: 237 files, 4,392 passed, 2 skipped, 0 failed (new tests/zip87-card-polish.test.ts, 11: the boxes (pure), Locked doubles 2nd place paid
+once per player and never at $0 with all three integrity files 0, Edit awards moving 2nd place, both boxes saved and an odd count paying the
+Americano box to the cent, "6 of 10", the buttons over time, game day, the look). Updated on purpose: tests/zip82-night-admin.test.ts's Zip 83
+case (Alex reversed "no 2nd place in Locked doubles"). Browser: e2e/zip87.cjs 6 of 6 (A every state at 320/390/420 light and dark, B the 12 px
+gaps, C 125% / 150% text and the Christmas skin, D the Change sheet on an iPhone Air with Are you sure?, E Prizes Use these and Save, F Teams
+opens the draft). Older browser scripts that read the 🎾86 card's Change button, "of 8" or the step dots check screens that changed by design.
+
+### Preview
+`pickleball-preview` (fake): bookmark `000001d8-00000000-0000512d-447de571fd40286de896630b63af5928` before the re-seed; re-seeded;
+https://claude-new-session-9215zh.pickleball-club-9h0.pages.dev (deployment c13d6be0). Calm start: "Card: early payments" (organizer Home:
+the card, its week row "6 of 10 locked in", two slim games).
