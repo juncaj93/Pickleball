@@ -65,7 +65,7 @@ function barStates(groups: { done: boolean; started: boolean }[]): BarState[] {
 /** Pictures 1 to 3: a two-word name as "Christopher V." on the card (first name and the last name's initial), so a box never breaks a word. */
 export const cardName = (name: string): string => {
   const parts = name.trim().split(/\s+/);
-  return parts.length < 2 ? name.trim() : `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  return parts.length < 2 ? name.trim() : `${parts[0]}\u00a0${parts[parts.length - 1][0]}.`;
 };
 const pairOf = (names: readonly string[]) => names.map(cardName).join(' + ');
 
