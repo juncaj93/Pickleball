@@ -21,20 +21,20 @@
 // still owes nothing (the server never asks a seat that is not in to pay).
 
 import type { GroupView, PlayerSessionView } from '../shared/api';
-import { courtStatus, isCourtWaitlist } from '../shared/court';
+import { courtStatus } from '../shared/court';
 import { countText } from '../shared/spots';
 
-/** The court is not booked (and the game is still on): not yet, booking not open, or on the venue's waiting list. */
+/** The court is not booked (and the game is still on): not yet, or booking not open (Zip 86: no court waitlist any more). */
 export function isNoCourt(s: PlayerSessionView): boolean {
   const kind = courtStatus(s).kind;
-  return kind === 'needs' || kind === 'later' || kind === 'waitlist';
+  return kind === 'needs' || kind === 'later';
 }
 
 /** One game, shown the normal way when its court is not booked. Other games are returned as they are. */
 function plainGame(s: PlayerSessionView, maxPlayers: number, payAlways = false, noCap = false): PlayerSessionView {
   if (!isNoCourt(s)) return s;
-  // A court on Waitlist works like Not booked: real seats while there is room. The server no longer makes standby seats
-  // for it, but an old standby seat still left over counts as in as long as there is room; only a full game keeps a waitlist.
+  // Not booked: real seats while there is room (an old standby seat still left over counts as in as long as there is room); only a full
+  // game keeps a waitlist.
   const room = Math.max(0, maxPlayers - s.confirmed.length);
   const lifted = s.waitlist.slice(0, room);
   const stays = s.waitlist.slice(room);
@@ -64,10 +64,7 @@ function plainGame(s: PlayerSessionView, maxPlayers: number, payAlways = false, 
     // Only a game that is really full beyond the max sends people to the waitlist, same as a booked one.
     joinAs: !noCap && confirmed.length >= maxPlayers ? 'waitlist' : 'in',
     openSpots: s.canceled || s.started ? 0 : Math.max(0, maxPlayers - confirmed.length),
-    courtState: s.courtState === 'waitlist' ? null : s.courtState,
-    // Kept for the tile only ("time may shift": dashed border and "~7 PM"); the words stay Court not booked.
-    venueWaitlist: isCourtWaitlist(s),
-    // The old third value must not leave a different look (blue) behind: to players it is plain Not booked.
+    // The old third value must not leave a different look behind: to players it is plain Not booked.
     bookingStatus: s.bookingStatus === 'unavailable' ? 'needs_booking' : s.bookingStatus,
     mine,
   };
@@ -88,7 +85,7 @@ export function courtDisplay(g: GroupView): GroupView {
     owed: payAlways ? g.owed : g.owed.filter((o) => !noCourt.has(o.sessionId)),
     suggestion:
       g.suggestion && suggested
-        ? { ...g.suggestion, joinAs: g.cardCleanup !== true && suggested.confirmed.length >= g.group.maxPlayers ? g.suggestion.joinAs : 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
+        ? { ...g.suggestion, joinAs: g.cardCleanup !== true && suggested.confirmed.length >= g.group.maxPlayers ? g.suggestion.joinAs : 'in', confirmedCount: suggested.confirmed.length, noCourt: true }
         : g.suggestion,
   };
 }

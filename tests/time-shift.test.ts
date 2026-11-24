@@ -72,9 +72,10 @@ describe('the helpers', () => {
     expect(tsTime('7 PM', 'none')).toBe('7 PM');
     expect(tsTime('7 PM', 'booked')).toBe('7 PM');
     expect(tsKind('booked', false)).toBe('booked');
-    expect(tsKind('waitlist', false)).toBe('wait');
-    expect(tsKind('needs', true)).toBe('wait');
-    expect(tsKind('later', true)).toBe('wait');
+    // Zip 86 round 2 (Alex): no court Waitlist; tsKind never returns 'wait' (the tilde stays only for an old 'wait' kind).
+    expect(tsKind('waitlist', false)).toBeNull();
+    expect(tsKind('needs', true)).toBe('none');
+    expect(tsKind('later', true)).toBe('none');
     expect(tsKind('needs', false)).toBe('none');
     expect(tsKind('off', true)).toBeNull();
     for (const l of [tsLines({ startsAt: '2026-11-06T00:30:00.000Z', wasStartsAt: '2026-11-06T00:00:00.000Z' }, TZ).title, stillInText('2026-11-06T00:30:00.000Z', TZ, 'x')]) {

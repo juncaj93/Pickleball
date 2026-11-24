@@ -559,8 +559,9 @@ export function statusInput(session: SessionRow, roster: RosterRow[]): StatusInp
     startsAt: session.starts_at,
     endsAt: session.ends_at,
     status: session.status,
-    bookingStatus: session.booking_status,
-    courtState: session.court_state,
+    // Zip 86: no court Waitlist: an old waitlist row reads as Not booked.
+    bookingStatus: session.booking_status === 'unavailable' ? 'needs_booking' : session.booking_status,
+    courtState: session.court_state === 'waitlist' ? null : session.court_state,
     cancellationDeadlineAt: session.cancellation_deadline_at,
     adminDecision: session.admin_decision,
     // Zip 42: guests count like players (headCount is confirmed.length when no game has a guest).

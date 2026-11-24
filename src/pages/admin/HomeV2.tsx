@@ -19,7 +19,6 @@ const OWN_TAP =
 
 const SWITCH_LABEL: Record<CourtSwitch, string> = {
   booked: 'Booked',
-  waitlist: 'Waitlist',
   not_booked: 'Not booked',
 };
 
@@ -134,7 +133,7 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
   const names = inLine.names;
   const me = ctx.d.me;
   const mine = !!me && s.roster.some((r) => r.playerId === me.id && r.status === 'confirmed');
-  const ts = tsKind(court.kind, false);
+  const ts = tsKind(court.kind);
   const start = tsTime(cardTime(s.startsAt, s.endsAt, tz).start, ts);
   const date = formatShortDate(s.startsAt, tz);
   // The second line is always one line (it is cut off with an ellipsis): who is in, or when booking opens. Never a sentence or a button.

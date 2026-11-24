@@ -73,8 +73,7 @@
   margin-left: -10px;
   border-bottom-left-radius: calc(var(--radius) - 7px);
 }
-.card.scard.scard-r2.court-needs .r2-foot,
-.card.scard.scard-r2.court-waitlist .r2-foot {
+.card.scard.scard-r2.court-needs .r2-foot {
   /* The 2 px border sits outside the padding: pull the footer over it so it still touches the edge. */
   margin-inline: -12px;
   margin-bottom: 0;

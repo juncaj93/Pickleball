@@ -71,7 +71,7 @@ import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
 import { loadMarks, marksRead, recordCourtBooked, resetTasksForNewDay, smartAlertsOffRead } from './tasks';
 import { adminChangeStamp, adminChangeStampAndTour, adminStampTripReads } from './stamp';
-import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
+import { courtSwitchOf, shownCourt } from '../shared/court';
 import { everyoneSettingsOf, flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
 import { cancelChargesRead, hiddenSessionsRead, plannedStartsRead, rostersRead, sessionsRead } from './repo';
 import { monthSessionsRead } from './money';
@@ -614,7 +614,7 @@ async function adminSession(ctx: Ctx): Promise<{ group: GroupRow; session: Sessi
 export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const next = {
-    booking_status: v.oneOf(body.bookingStatus, 'bookingStatus', ['needs_booking', 'booked', 'unavailable'] as const),
+    booking_status: v.oneOf(body.bookingStatus, 'bookingStatus', ['needs_booking', 'booked'] as const), // Zip 86 round 2: no 'unavailable' (the old court Waitlist)
     venue_name: v.optionalText(body.venueName, 'venueName', 80),
     venue_booking_url: v.optionalUrl(body.venueBookingUrl, 'venueBookingUrl'),
     reservation_reference: v.optionalText(body.reservationReference, 'reservationReference', 80),
@@ -1122,14 +1122,12 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   const reference = body.reservationReference === undefined ? session.reservation_reference : v.optionalText(body.reservationReference, 'reservationReference', 80);
   const cost = body.courtCostCents === undefined ? session.court_cost_cents : v.cents(body.courtCostCents, 'courtCostCents');
-  // Standby players move in when a court opens, whichever way the game was on the venue's waitlist.
-  const wasWaiting = isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state });
   const booked = await ctx.db
     .prepare(
       `UPDATE sessions SET booking_status = 'booked', status = 'booked',
          venue_name = COALESCE(venue_name, ?), reservation_reference = ?, court_cost_cents = ?,
          cancellation_deadline_at = COALESCE(cancellation_deadline_at, ?),
-         court_state = CASE WHEN court_state = 'waitlist' THEN 'opened' ELSE court_state END,
+         court_state = CASE WHEN court_state = 'waitlist' THEN NULL ELSE court_state END,
          updated_at = ?
        WHERE id = ? AND status <> 'canceled'`,
     )
@@ -1137,8 +1135,8 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
     .run();
   // A cancel landed in between: a canceled game stays canceled (everyone's money is already credit).
   if (booked.meta.changes !== 1) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
-  // Nobody's seat changes when the court does: people signed up while it was on Waitlist already have real seats.
-  await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { promoted: 0 }, ctx.nowIso);
+  // Nobody's seat changes when the court does. Zip 86: no court Waitlist, so always "court booked" (an old waitlist row is cleared above).
+  await audit(ctx.db, group.id, session.id, 'court_booked', { promoted: 0 }, ctx.nowIso);
   await recordCourtBooked(ctx.db, group.id, session.id, true, ctx.nowIso);
   return { ok: true, promoted: 0 };
 }
@@ -1160,43 +1158,36 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
     .run();
   // A cancel that landed in between: say so, log nothing.
   if (r.meta.changes !== 1) throw new HttpError(409, 'changed', 'This game just changed. Look again.');
-  // Nobody's seat changes when the court does (a court on Waitlist gives normal seats).
+  // Nobody's seat changes when the court does.
   await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
   await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
   return { ok: true };
 }
 
 /**
- * The Not booked | Waitlist | Booked switch: one tap, one write, so a game can
- * never end up half-way between two states. Waitlist keeps the old third
- * booking value ("unavailable", once labeled Not available) AND the venue
- * waitlist flag, so everything that already understands the court waitlist
- * (the "did the court open?" card) keeps working. Waitlist is only a note for the organizer: sign-ups,
- * seats and credit behave exactly as on Not booked. Booked is the same as
- * "I booked it"; Not booked is the same as answering No after a move.
- * Nothing here touches money.
+ * The Booked / Not booked court status: one tap, one write, so a game can never end up half-way between two states. Booked is the same as
+ * "I booked it"; Not booked is the same as answering No after a move. Zip 86 (Alex): no Waitlist any more: it is refused, and a game saved on
+ * the old waitlist reads as Not booked (Not booked clears the old values). Nothing here touches money.
  */
 export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
-  const to = v.oneOf(body.status, 'status', ['not_booked', 'waitlist', 'booked'] as const);
+  const to = v.oneOf(body.status, 'status', ['not_booked', 'booked'] as const);
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
-  const from = courtSwitchOf({ bookingStatus: session.booking_status, courtState: session.court_state });
-  if (from === to) return { ok: true, changed: false, status: to };
+  const from = courtSwitchOf({ bookingStatus: session.booking_status });
+  if (from === to && session.court_state !== 'waitlist' && session.booking_status !== 'unavailable') return { ok: true, changed: false, status: to };
   if (to === 'booked') {
+    // Already booked (only an old waitlist flag left on the row): clear the flag, no second "booked" line or booked time.
+    if (from === 'booked') {
+      await ctx.db.prepare("UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = 'waitlist'").bind(ctx.nowIso, session.id).run();
+      return { ok: true, changed: false, status: to };
+    }
     await markBooked(ctx, {});
     return { ok: true, changed: true, status: to };
   }
   // A cancel that lands between the read and the write leaves the game alone: say so instead of "changed".
   const gone = () => new HttpError(409, 'changed', 'This game just changed. Look again.');
-  if (to === 'waitlist') {
-    const r = await ctx.db
-      .prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
-      .bind(ctx.nowIso, session.id)
-      .run();
-    if (r.meta.changes !== 1) throw gone();
-    await audit(ctx.db, group.id, session.id, 'court_waitlist', {}, ctx.nowIso);
-  } else {
+  {
     const r = await ctx.db
       .prepare(
         `UPDATE sessions SET booking_status = 'needs_booking', status = 'planned',
@@ -1212,41 +1203,6 @@ export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
   return { ok: true, changed: true, status: to };
 }
 
-/** The venue's court waitlist: start waiting, give up ("Didn't open"), or go back to not booked. */
-export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
-  const { group, session } = await adminSession(ctx);
-  const action = v.oneOf(body.action, 'action', ['waitlist', 'not_opened', 'clear'] as const);
-  if (action === 'waitlist') {
-    if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
-    const moved = await ctx.db
-      // Guarded in the database too: a cancel landing between the check above and this write must not bring the game back.
-      .prepare("UPDATE sessions SET court_state = 'waitlist', booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled' AND finalized_at IS NULL")
-      .bind(ctx.nowIso, session.id)
-      .run();
-    if (!moved.meta.changes) {
-      if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
-      throw new HttpError(409, 'session_finalized', 'This session is already finalized.');
-    }
-    await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
-  } else if (action === 'clear') {
-    await ctx.db.prepare('UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = \'waitlist\'').bind(ctx.nowIso, session.id).run();
-  } else {
-    if (!isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state })) throw new HttpError(409, 'not_waiting', 'This session is not on the court waitlist.');
-    await cancelWithMoney(
-      ctx,
-      group,
-      session,
-      ctx.db
-        .prepare(
-          `UPDATE sessions SET court_state = 'not_opened', status = 'canceled', canceled_at = ?, canceled_by = 'court_not_opened', updated_at = ?
-           WHERE id = ? AND status <> 'canceled' AND finalized_at IS NULL`,
-        )
-        .bind(ctx.nowIso, ctx.nowIso, session.id),
-    );
-  }
-  await audit(ctx.db, group.id, session.id, `court_${action}`, {}, ctx.nowIso);
-  return { ok: true };
-}
 
 /** "Show this session" for one that falls before the first session date (or hide it again). */
 export async function showSession(ctx: Ctx, body: Record<string, unknown>) {
@@ -2301,7 +2257,7 @@ export async function exportData(ctx: Ctx): Promise<Response> {
       formatShortDate(s.starts_at, tz),
       formatTimeRange(s.starts_at, s.ends_at, tz),
       s.status,
-      s.booking_status,
+      shownCourt(s.booking_status, s.court_state).bookingStatus,
       s.venue_name,
       s.reservation_reference,
       s.cancellation_deadline_at ? formatDateTime(s.cancellation_deadline_at, tz) : '',

@@ -13,8 +13,8 @@ export interface StatusInput {
   bookingStatus: BookingStatus;
   cancellationDeadlineAt: string | null;
   adminDecision: AdminDecision;
-  /** The venue's court waitlist: 'waitlist', 'opened', 'not_opened', or null. */
-  courtState?: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** 'opened', 'not_opened', or null (Zip 86: an old 'waitlist' value reads as none, see shared/court.ts shownCourt). */
+  courtState?: 'opened' | 'not_opened' | null;
   confirmedCount: number;
   waitlistCount: number;
   unconfirmedAttendanceCount: number; // confirmed players who haven't checked in yet
@@ -22,7 +22,6 @@ export interface StatusInput {
 
 export type StatusLabel =
   | 'court_not_opened'
-  | 'court_waitlist'
   | 'canceled'
   | 'completed'
   | 'in_progress'
@@ -35,14 +34,13 @@ export type StatusLabel =
 
 export const STATUS_TEXT: Record<StatusLabel, string> = {
   court_not_opened: "Court didn’t open",
-  court_waitlist: 'Waiting on the court',
   canceled: 'Canceled',
   completed: 'Played',
   in_progress: 'Playing now',
   deadline_passed: 'Deadline passed',
   short_on_players: 'Short on players',
   needs_booking: 'Needs booking',
-  court_unavailable: 'Waitlist',
+  court_unavailable: 'Not booked',
   needs_players: 'Needs players',
   on_track: 'On track',
 };
@@ -51,7 +49,6 @@ export type Tone = 'ok' | 'warn' | 'danger' | 'info' | 'muted';
 
 export const STATUS_TONE: Record<StatusLabel, Tone> = {
   court_not_opened: 'muted',
-  court_waitlist: 'info',
   canceled: 'muted',
   completed: 'muted',
   in_progress: 'ok',
@@ -120,12 +117,10 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const deadline = s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : null;
   const inCheckIn = live && nowMs >= start - settings.checkInHours * HOUR;
   const deadlinePassed = live && deadline !== null && nowMs >= deadline;
-  // The court's third value (once "Not available", now Waitlist) acts like the venue's court waitlist.
-  const waiting = s.courtState === 'waitlist' || s.bookingStatus === 'unavailable';
-  // A court on Waitlist is only a note for the organizer: sign-ups count like Not booked, so a game short on players says so.
+  // Zip 86: no court Waitlist: a game saved on the old waitlist ('unavailable') needs booking like any game not booked.
   const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep';
 
-  const needsBooking = live && s.bookingStatus === 'needs_booking' && !waiting && bookingWindowOpen;
+  const needsBooking = live && s.bookingStatus !== 'booked' && bookingWindowOpen;
   const flags: SessionFlags = {
     canceled,
     past,
@@ -149,7 +144,6 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   else if (canceled) label = 'canceled';
   else if (past) label = 'completed';
   else if (started) label = 'in_progress';
-  else if (waiting) label = 'court_waitlist';
   else if (shortOnPlayers && deadlinePassed) label = 'deadline_passed';
   else if (shortOnPlayers) label = 'short_on_players';
   else if (flags.needsBooking) label = 'needs_booking';

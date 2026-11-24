@@ -8288,6 +8288,63 @@ others) check screens that are gone by design; the switch itself is unchanged in
 - Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light
   and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN in this session).
 
+## Zip 86 round 2: no court Waitlist, no stripe, the quick court picker (🎾86.clean admin), Tue Nov 24, 2026
+
+Built on main `d12f6bf` (🎾86 live, deployment c206d3f6). Alex tried the preview; taps 1 and 3 kept. No migration, no Worker deploy, no new switch.
+
+### What it does
+1. The court Waitlist is gone everywhere. The status button flips Booked / Not booked, with Undo. A game saved as waitlist (court status or
+   court_state) shows and acts as Not booked (shared/court.ts shownCourt); nothing in the database is rewritten until the organizer taps.
+   Removed from: shared/court.ts (the waitlist kind, isCourtWaitlist), shared/status.ts (the "Court waitlist" label; needsBooking counts it as
+   not booked), shared/api.ts and server/views.ts, server/player.ts, server/repo.ts (old values read as not booked), server/admin.ts (the status
+   call refuses waitlist with 400; Booked clears an old waitlist mark; POST /api/admin/sessions/:id/court deleted from server/app.ts; the booking
+   edit no longer takes 'unavailable'; the CSV export says not_booked), the Telegram booking reminder's waitlist skip (shared/tasks.ts,
+   server/tasks.ts, src/pages/admin/doNow.ts), History words (shared/activity.ts: old "court opened" reads booked, old "court waitlist" reads
+   not booked), the Home status button (CardR2), Edit game's switch (src/CourtSwitch.tsx, now 2 segments), the slim rows' labels (HomeV2), the
+   classic card's toast (Sessions.tsx), player screens (PlayerHome standby words, the ~7 PM time tile and its tilde in src/timeShiftText.ts, the
+   waitlist court icon in src/ui.tsx, src/courtDisplay.ts, src/optimistic.ts, src/lastScreen.ts), the styles and tokens (styles.css, zip7.css,
+   player-cards.css, admin-r2.css, admin-cards.css, admin-card86.css, motion.css, large-text.css: --sw-wait-*, --z7-wait-*, court-waitlist),
+   the fake preview worlds (scripts/preview-world-small.ts, scripts/seed-preview-world.ts) and the tests. The player waitlist (a full game's line
+   of players) is a different thing and stays.
+2. No green stripe on the organizer's game cards, In or Out (src/admin-card86.css; the older .scard.court-booked edge in styles.css too). The
+   floating shadow stays. Player cards unchanged.
+3. Tapping "Court 4" or "Court ?" opens a quick court picker (CardR2 CourtButton): courts 1 to 16 as big buttons, four to a row, and Clear.
+   One tap saves (PUT /api/admin/sessions/:id/court-number) with the Undo toast; a second pick inside the Undo window replaces the first.
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: the picker could say "Nothing was saved" behind a save still in flight; the picker emptied while closing; the booking edit still took
+'unavailable'; the CSV printed 'unavailable'; History lines said court waitlist; the older card's green edge; a second "booked" line when Booked
+was tapped on a row already booked with an old waitlist mark.
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
+Dashboard 4 trips / 63 statements before and after (none 9.1 → 10.5 ms, all_locked 18.7 → 14.2, mid 14.6 → 10.4, am_round3 13.3 → 9.7,
+zip86_payments 11.4 → 10.9); the 5 second check 2 trips / 16 statements, unchanged.
+
+### Tests
+Unit: 236 files, 4,372 passed, 2 skipped, 0 failed (round 1: 4,381). No test deleted: the 41 tests that named Waitlist were rewritten for Not
+booked (41 names out, 41 in); the count drops because loops over the three court states now run over two. New in
+tests/zip86-clean-admin.test.ts: an old waitlist row reads as Not booked, the status call refuses waitlist, the old /court route is gone, Booked
+logs court_booked once, Not booked clears an old mark. Browser: e2e/zip86.cjs 8 of 8 (no stripe, the status flip and Undo, waitlist refused, the
+picker: 16 courts, pick 7 saves, Clear then Undo keeps 7). Older scripts updated for the 2-way button and the picker (names, no-court,
+pay-always, admin-r2, admin-motion, double-tap pass; admin-cleanup, admin-r3, admin-v2, time-shift, run, live: only failures that also fail on
+live). Older scripts whose failing checks also fail on live are left as on live (rule from Alex, round 2): zip7, zip10, zip13, zip22, zip23,
+zip24, zip29, zip32, zip56, zip60, zip63, zip66, zip70, zip78, zip81, zip82, zip85, audit-stage3, circles, credit, held, round2, do-now,
+audit-player-look, audit-player-flows, card-times. Logs in the session scratchpad.
+
+### Preview
+`pickleball-preview` (fake) re-seeded; https://claude-new-session-w5741f.pickleball-club-9h0.pages.dev, calm start "zip86_home" (Booked / In card
+with no stripe, Court 4 opens the picker; Not booked / Out card tomorrow).
+
+### Live (Tue Nov 24, 2026, about 5:18 PM Eastern; before the 7 PM game, deploy finished before 6:30 PM as Alex asked)
+- Restore point first (`npm run backup:before-deploy`): export `export-20261124221715` saved in `pickleball-backups` (checked against the file);
+  Time Travel bookmark `00001f19-00000000-0000512d-204078b70aea652fc382dd4d9c15a7b6`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `6cc0561` to `b1ce659`, pushed; `npm run deploy -- --override-loud-hours`: deployment
+  **25c9ec98-959c-4adb-8865-a094301e9547** (bundle `index-BTuLouRq.js`). No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **c206d3f6-ba2f-4192-b1f0-1faa60ab7300** (🎾86 round 1), Cloudflare Deployments > Rollback. No database undo needed.
+- Read-only live look (GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light and dark: the new bundle, no
+  page errors, nothing wider than the screen.
+
 ## 🎾88.rolling courts (Tue Nov 24, 2026; built, preview up, NOT live yet: ships after 🎾86 round 2 and 🎾87 are live)
 
 ### What changed (the code is the truth; SITE_RULES "Rolling courts and the night card (Zip 88)")

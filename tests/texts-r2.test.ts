@@ -520,21 +520,20 @@ describe('TEXTS_R2: #5 booking heads-up at 6:55 AM, #6 reminder only while not b
     ]);
     expect(day(OFF, nov17()).map((a) => when(a.at))).toEqual(['Tue, 6:45 AM', 'Tue, 7:30 AM']);
   });
-  it('the reminder skips a game that is Booked, Waitlisted or Canceled, and fires while Not booked', () => {
+  it('the reminder skips a game that is Booked or Canceled, and fires while Not booked', () => {
+    // Zip 86 round 2 (Alex): no court Waitlist; the "Waitlisted" skip was removed (an old waitlist game is Not booked and gets the reminder).
     const ids = (s: TaskSession) => day(R2, s).map((a) => a.id);
     expect(ids(nov17())).toEqual(['book', 'book_followup']);
-    expect(ids(nov17({ waitlisted: true }))).toEqual(['book']);
     expect(ids(nov17({ booked: true, bookedAt: '2026-11-03T12:10:00Z' }))).toEqual([]);
     expect(ids(nov17({ canceled: true, canceledAt: '2026-11-01T12:00:00Z' }))).toEqual([]);
-    // The status changing between the two alerts: booked a backup (Waitlist) at 7:10 AM, before the 7:30 AM reminder.
+    // The status changing between the two alerts: booked at 7:10 AM, before the 7:30 AM reminder.
     const sent = new Set<string>();
     const before = dueAlerts(nextTasks(at('2026-11-03T11:55:00Z'), [nov17()], new Set(), R2), at('2026-11-03T11:55:00Z'), sent);
     for (const a of before) sent.add(a.key);
-    const after = dueAlerts(nextTasks(at('2026-11-03T12:30:00Z'), [nov17({ waitlisted: true })], new Set(), R2), at('2026-11-03T12:30:00Z'), sent);
+    const after = dueAlerts(nextTasks(at('2026-11-03T12:30:00Z'), [nov17({ booked: true, bookedAt: '2026-11-03T12:10:00Z' })], new Set(), R2), at('2026-11-03T12:30:00Z'), sent);
     expect(before.map((a) => a.id)).toEqual(['book']);
     expect(after).toEqual([]);
-    // Off: the reminder still fires for a Waitlisted game (the bug this switch fixes), so nothing else about OFF changed.
-    expect(day(OFF, nov17({ waitlisted: true })).map((a) => a.id)).toEqual(['book', 'book_followup']);
+    expect(day(OFF, nov17()).map((a) => a.id)).toEqual(['book', 'book_followup']);
   });
   it('a reminder missed by less than an hour still goes out; at an hour it is dropped', () => {
     const s = nov17();
@@ -563,7 +562,7 @@ describe('TEXTS_R2: #7 "no court yet" 30 minutes before cancel-by, never before 
     expect(due('2026-11-03T11:55:00Z')).toEqual([]); // 6:55 AM, which a plain "30 minutes before" would have used
     expect(due('2026-11-03T12:00:00Z')).toEqual(['nocourt']);
   });
-  it('a daytime game says Today; not with fewer than 4 in; not when booked or canceled; a Waitlisted game still gets it', () => {
+  it('a daytime game says Today; not with fewer than 4 in; not when booked or canceled', () => {
     const five = game('2026-11-03', { booked: false, confirmedCount: 5 }, 17, 0);
     expect(noCourt(five).map((a) => a.text)[0]).toMatch(/^Tonight: 5 in, no court yet/);
     const noon = game('2026-11-03', { booked: false, confirmedCount: 5 }, 14, 0);
@@ -571,7 +570,7 @@ describe('TEXTS_R2: #7 "no court yet" 30 minutes before cancel-by, never before 
     expect(noCourt(game('2026-11-03', { booked: false, confirmedCount: 3 }))).toEqual([]);
     expect(noCourt(game('2026-11-03', { booked: true, confirmedCount: 5 }))).toEqual([]);
     expect(noCourt(game('2026-11-03', { booked: false, confirmedCount: 5, canceled: true, canceledAt: '2026-11-03T05:00:00Z' }))).toEqual([]);
-    expect(noCourt(game('2026-11-03', { booked: false, confirmedCount: 5, waitlisted: true })).length).toBe(1);
+    // Zip 86 round 2 (Alex): no court Waitlist; the "a Waitlisted game still gets it" case was removed (no waitlisted field any more).
   });
   it('the Home "no court yet" card shows at the same time as the alert', () => {
     const s = game('2026-11-03', { booked: false, confirmedCount: 5 });
@@ -601,7 +600,7 @@ describe('TEXTS_R2: the quick check never skips a due alert', () => {
       game('2026-11-10', { booked: false, confirmedCount: 4 }, 6, 30), // cancel-by 6:30 PM the day before
       game('2026-11-12', { booked: false, confirmedCount: 5, cancellationDeadlineAt: '2026-11-12T10:00:00.000Z' }),
       game('2026-11-17', { booked: false, confirmedCount: 0 }),
-      game('2026-11-19', { booked: false, confirmedCount: 0, waitlisted: true }),
+      game('2026-11-19', { booked: false, confirmedCount: 0 }), // Zip 86 round 2 (Alex): no court Waitlist; was a Waitlisted game
       game('2026-11-24', { booked: true, confirmedCount: 5 }),
       game('2026-11-13', { booked: false, confirmedCount: 5, cancellationDeadlineAt: new Date(Date.parse(game('2026-11-13').startsAt) - 24 * HOUR).toISOString() }), // a 24-hour cancel-by
     ];
@@ -770,22 +769,24 @@ describe('TEXTS_R2: the real tick endpoint', () => {
     await late.tick();
     expect(late.sent).toEqual([`Reminder: Booking for Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`]);
   });
-  it('the reminder does not go out once the game was set to Waitlist or Booked (through the real court switch)', async () => {
+  it('the reminder does not go out once the game was set to Booked (through the real court switch); Waitlist is refused', async () => {
     const g = await setup();
     const nov17 = await g.sessionDate('2026-11-17');
     g.app.now = at('2026-11-03T11:55:00Z');
     await g.tick();
     expect(g.sent.length).toBe(1);
-    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${nov17.id}/court-status`, { status: 'waitlist' })).status).toBe(200);
+    // Zip 86 round 2 (Alex): no court Waitlist; setting it is refused with 400.
+    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${nov17.id}/court-status`, { status: 'waitlist' })).status).toBe(400);
+    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${nov17.id}/court-status`, { status: 'booked' })).status).toBe(200);
     g.app.now = at('2026-11-03T12:30:00Z'); // 7:30 AM
     await g.tick();
     expect(g.sent.length).toBe(1);
   });
-  it('Not booked again after a Waitlist: the reminder fires', async () => {
+  it('a game stored on the old court Waitlist (raw SQL) reads as Not booked: the reminder fires', async () => {
+    // Zip 86 round 2 (Alex): no court Waitlist; an old waitlist row now gets the reminder like any game not booked.
     const g = await setup();
     const nov17 = await g.sessionDate('2026-11-17');
-    await g.ctx.organizer.call('POST', `/api/admin/sessions/${nov17.id}/court-status`, { status: 'waitlist' });
-    await g.ctx.organizer.call('POST', `/api/admin/sessions/${nov17.id}/court-status`, { status: 'not_booked' });
+    await g.app.db.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").bind(nov17.id).run();
     g.app.now = at('2026-11-03T12:30:00Z');
     await g.tick();
     expect(g.sent).toEqual([

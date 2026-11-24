@@ -12,7 +12,7 @@ export type Overlay = Record<string, 'join' | 'drop'>;
 /** Can a tap on "I'm in" be shown at once? Only a plain spot: not a waitlist, not standby, not canceled or started. */
 export function canJoinInstantly(s: PlayerSessionView): boolean {
   // `openSpots`: "Card cleanup" (Zip 10) is never full, but at the database's 12 the server says no, so that tap is not drawn ahead (with the switch off a game that is not full always has spots).
-  return !s.canceled && !s.started && s.joinAs === 'in' && !s.full && s.openSpots > 0 && s.courtState !== 'waitlist' && (!s.mine || (s.mine.status !== 'confirmed' && s.mine.status !== 'waitlisted'));
+  return !s.canceled && !s.started && s.joinAs === 'in' && !s.full && s.openSpots > 0 && (!s.mine || (s.mine.status !== 'confirmed' && s.mine.status !== 'waitlisted'));
 }
 
 function joined(s: PlayerSessionView, name: string, max: number): PlayerSessionView {

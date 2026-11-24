@@ -326,7 +326,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
         joinAs: joinOutcome(headCount(confirmedOf(roster)), capOf(settings)),
         holiday: holidayFor(pick.starts_at, tz),
         confirmedCount: headCount(confirmedOf(roster)),
-        courtState: pick.court_state,
+        courtState: pick.court_state === 'waitlist' ? null : pick.court_state,
       };
     }
   }

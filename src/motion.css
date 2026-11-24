@@ -794,8 +794,8 @@ html[data-motion='on'] .court-switch .cs-glide {
   top: 3px;
   bottom: 3px;
   left: 3px;
-  /* Three equal cells with 2 px gaps inside 3 px of padding. */
-  width: calc((100% - 10px) / 3);
+  /* Zip 86: two equal cells with a 2 px gap inside 3 px of padding. */
+  width: calc((100% - 8px) / 2);
   border-radius: 9px;
   background: var(--sw-notbooked-bg);
   box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
@@ -804,9 +804,6 @@ html[data-motion='on'] .court-switch .cs-glide {
     transform 150ms var(--ease-out),
     background-color 150ms var(--ease-out);
   pointer-events: none;
-}
-html[data-motion='on'] .court-switch[data-value='waitlist'] .cs-glide {
-  background: var(--sw-wait-bg);
 }
 html[data-motion='on'] .court-switch[data-value='booked'] .cs-glide {
   background: var(--sw-booked-bg);

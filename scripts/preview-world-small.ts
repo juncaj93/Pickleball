@@ -165,7 +165,7 @@ export async function buildSmallPreview(
   };
   const join = async (name: string, g: any) => (await w.pick(name)).ok('POST', `/api/sessions/${g.id}/join`, {});
   const orgPays = (name: string, g: any) => w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[name], paid: true });
-  const setCourt = (g: any, status: 'booked' | 'waitlist' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
+  const setCourt = (g: any, status: 'booked' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
   const orgIn = (g: any) => w.org.ok('POST', `/api/admin/sessions/${g.id}/me`, { in: true });
   /** A new game at this local time, or the next free half hour after it (another step may already have a game there). */
   const makeAt = async (t: number, minutes = 120, note: string | null = null, extra: Record<string, unknown> = {}) => {
@@ -347,10 +347,9 @@ export async function buildSmallPreview(
   await (await w.pick(SMALL_NO_NUMBER)).ok('POST', `/api/sessions/${u0.id}/decline`, {});
   summary.push('game 1 (Booked): Alex in; Parker paid cash; Vic and Christopher Vanderberg owe $14; Quinn tapped I paid, then dropped (claim on Home); Reese declined (Players sheet: "Reese declined")');
 
-  // 9. The court on the venue's Waitlist (players read "Court not booked"), 3 in.
-  await setCourt(u1, 'waitlist');
+  // 9. Court not booked (Zip 86 round 2: no court Waitlist any more), 3 in.
   for (const n of ['Vic', 'Wren', SMALL_LONG]) await join(n, u1);
-  summary.push('game 2 (court Waitlist): Vic, Wren, Christopher Vanderberg in');
+  summary.push('game 2 (court not booked): Vic, Wren, Christopher Vanderberg in');
 
   // 10. Not booked, 3 of 4 in.
   for (const n of ['Parker', 'Wren', SMALL_LONG]) await join(n, u2);

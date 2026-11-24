@@ -67,8 +67,6 @@ export function taskSessionOf(s: SessionRow, confirmedCount: number, tz: string,
     cancellationDeadlineAt: s.cancellation_deadline_at,
     finalized: !!s.finalized_at,
     holiday: holidayFor(s.starts_at, tz),
-    // The same rule as the Waitlist court switch (shared/court.ts): on the venue's waitlist and not Booked.
-    waitlisted: s.booking_status !== 'booked' && (s.booking_status === 'unavailable' || s.court_state === 'waitlist'),
   };
 }
 

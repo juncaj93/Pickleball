@@ -21,8 +21,6 @@ export function taskSessionOfView(s: AdminSessionView, courtBookedAt: Record<str
     cancellationDeadlineAt: s.cancellationDeadlineAt,
     finalized: !!s.finalized,
     holiday: s.holiday,
-    // Only TEXTS_R2 reads this (same rule as the Waitlist court switch).
-    waitlisted: s.bookingStatus !== 'booked' && (s.bookingStatus === 'unavailable' || s.courtState === 'waitlist'),
   };
 }
 

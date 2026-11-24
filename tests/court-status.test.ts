@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { courtStatus } from '../shared/court';
+import { courtStatus, shownCourt } from '../shared/court';
 import { buildTodo, homeBadgeCount } from '../src/pages/admin/todo';
 import { suggestions } from '../src/pages/admin/suggestions';
 import { bookingOpensMs, formatDateTime, formatShortDate } from '../shared/time';
@@ -13,22 +13,19 @@ describe('court status words', () => {
   it('gives each look its own words, for the organizer and for players', () => {
     expect(courtStatus({ ...base, bookingStatus: 'booked' })).toEqual({ kind: 'booked', text: 'Court booked', playerText: 'Court booked' });
     expect(courtStatus(base)).toEqual({ kind: 'needs', text: 'Court not booked', playerText: 'Court not booked' });
-    expect(courtStatus({ ...base, courtState: 'waitlist' })).toEqual({
-      kind: 'waitlist',
-      text: 'Waitlist',
-      playerText: 'Court not booked', // players never read waiting or standby words (src/courtDisplay.ts)
-    });
+    // Zip 86 round 2 (Alex): no court Waitlist; an old row saved as court_state 'waitlist' reads as Not booked.
+    expect(courtStatus({ ...base, ...shownCourt('needs_booking', 'waitlist') })).toEqual({ kind: 'needs', text: 'Court not booked', playerText: 'Court not booked' });
   });
 
   it('is gray with the reason when canceled', () => {
     expect(courtStatus({ ...base, canceled: true })).toMatchObject({ kind: 'off', text: 'Canceled' });
     expect(courtStatus({ ...base, canceled: true, courtState: 'not_opened' })).toMatchObject({ kind: 'off', text: "Court didn’t open" });
-    // The old third value ("Not available") now reads as Waitlist, and players read it as Not booked.
-    expect(courtStatus({ ...base, bookingStatus: 'unavailable' })).toEqual({ kind: 'waitlist', text: 'Waitlist', playerText: 'Court not booked' });
+    // Zip 86 round 2 (Alex): no court Waitlist; the old third value ('unavailable') reads as Not booked, for the organizer and players.
+    expect(courtStatus({ ...base, bookingStatus: 'unavailable' })).toEqual({ kind: 'needs', text: 'Court not booked', playerText: 'Court not booked' });
     expect(courtStatus({ ...base, bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' })).toMatchObject({ kind: 'later', text: 'Booking opens Tue, Nov 17' });
-    // A booked or waitlisted session keeps its own look even before the window opens.
+    // A booked session keeps its own look even before the window opens; an old waitlist row reads as any game not booked.
     expect(courtStatus({ ...base, bookingStatus: 'booked', bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' }).kind).toBe('booked');
-    expect(courtStatus({ ...base, courtState: 'waitlist', bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' }).kind).toBe('waitlist');
+    expect(courtStatus({ ...base, ...shownCourt('unavailable', 'waitlist'), bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' }).kind).toBe('later');
     expect(courtStatus({ ...base, bookingStatus: 'booked', canceled: true })).toMatchObject({ kind: 'off', text: 'Canceled' });
     expect(courtStatus({ ...base, bookingStatus: 'booked', started: true, past: true })).toMatchObject({ kind: 'off', text: 'Played' });
   });
@@ -94,7 +91,8 @@ describe('organizer Home', () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const [, w] = await upcoming(ctx);
-    await ctx.organizer.call('POST', `/api/admin/sessions/${w.id}/court`, { action: 'waitlist' });
+    // Zip 86 round 2 (Alex): no court Waitlist; an old row stored on the waitlist (raw SQL) instead.
+    await ctx.app.db.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").bind(w.id).run();
     // Short on players inside the day-before window, with the court unbooked.
     await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/join`, {});
     ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
@@ -144,7 +142,8 @@ describe('player wording', () => {
     const ctx = await setupGroup();
     const [a, b] = await upcoming(ctx);
     await ctx.organizer.call('POST', `/api/admin/sessions/${a.id}/booked`, {});
-    await ctx.organizer.call('POST', `/api/admin/sessions/${b.id}/court`, { action: 'waitlist' });
+    // Zip 86 round 2 (Alex): no court Waitlist; an old row stored on the waitlist (raw SQL) reads as Not booked.
+    await ctx.app.db.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").bind(b.id).run();
     const g = (await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data;
     const words = (id: string) => courtStatus(g.sessions.find((x: any) => x.id === id)).playerText;
     expect(words(a.id)).toBe('Court booked');

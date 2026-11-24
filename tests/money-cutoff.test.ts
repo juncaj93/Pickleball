@@ -195,23 +195,7 @@ describe('a money tap cut off halfway and retried ends exactly like a clean one'
     });
   });
 
-  it('Court "Didn\'t open" (the game is canceled, money back)', async () => {
-    await cutEverywhere({
-      name: 'not opened',
-      setup: async () => {
-        const ctx = await group();
-        const old = await on(ctx, '2026-10-29');
-        givePot(ctx, 'Devon', 300, old.id);
-        const g = await on(ctx, '2026-11-05');
-        await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
-        for (const n of ['Blair', 'Devon', 'Emery']) await join(ctx, g.id, n);
-        await markPaid(ctx, g.id, 'Blair');
-        await markPaid(ctx, g.id, 'Devon');
-        await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' });
-        return { ctx, act: () => ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'not_opened' }) };
-      },
-    });
-  });
+  // Zip 86 round 2 (Alex): no court Waitlist; the Court "Didn't open" case was removed (the route is gone; a cancel is covered above).
 
   it('Reopen a canceled game', async () => {
     await cutEverywhere({

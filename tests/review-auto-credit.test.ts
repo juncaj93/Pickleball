@@ -669,7 +669,8 @@ describe('3. cancel returns credit; reopen never double-credits', () => {
     await books(ctx);
   });
 
-  it('court "Didn\'t open": every credit use on the game comes back, including seats taken while the court was on Waitlist', async () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; "Didn't open" was removed (it canceled the game), so this is a plain cancel of an old waitlist row.
+  it('cancel: every credit use on the game comes back, including seats taken while the game was an old waitlist row (Not booked)', async () => {
     const ctx = await group({ noCourt: true });
     await givePot(ctx, 'Casey', 1400);
     await givePot(ctx, 'Devon', 500);
@@ -677,10 +678,11 @@ describe('3. cancel returns credit; reopen never double-credits', () => {
     const g = await on(ctx, '2026-11-05');
     await join(ctx, g.id, 'Casey');
     await join(ctx, g.id, 'Devon');
-    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' });
+    raw(ctx).prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").run(g.id);
     expect(await join(ctx, g.id, 'Emery')).toMatchObject({ result: 'confirmed' });
     expect(await pot(ctx, 'Emery')).toBe(0);
-    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'not_opened' })).status).toBe(200);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'not_opened' })).status).toBe(404);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
     expect(await pot(ctx, 'Casey')).toBe(1400);
     expect(await pot(ctx, 'Devon')).toBe(500);
     expect(await pot(ctx, 'Emery')).toBe(900);

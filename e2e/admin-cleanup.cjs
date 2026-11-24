@@ -91,10 +91,10 @@ async function main() {
   const idOf = (n) => d.players.find((p) => p.name === n).id;
 
   // Eight upcoming games, each moved to a start time of its own.
-  //   0 booked, 3 in, 2 paid, 7:30 PM, far out        4 waitlist, 10:30 AM
+  //   0 booked, 3 in, 2 paid, 7:30 PM, far out        4 not booked, 10:30 AM (Zip 86: was waitlist; no court Waitlist now)
   //   1 not booked, 1 in, 7 PM                         5 cancel-by in about 8 hours (red line), starts in ~20 hours
   //   2 booked, nobody in                              6 starts in ~60 hours: no red line
-  //   3 waitlist, 2 in
+  //   3 not booked, 2 in (Zip 86: was waitlist)
   const games = d.sessions.filter((s) => !s.state.flags.past).slice(0, 8);
   const at = (s, h, m, plusDays) => {
     const base = new Date(Date.parse(s.startsAt));
@@ -141,9 +141,8 @@ async function main() {
   for (const n of ['Alex', 'Ryan']) await post(areq, `/api/admin/sessions/${roles.paid}/payment`, { playerId: idOf(n), paid: true });
   await post(phones.Nathan, `/api/sessions/${roles.notBooked}/join`, {});
   await court(roles.bookedEmpty, 'booked');
-  await court(roles.waitA, 'waitlist');
+  // Zip 86: the court Waitlist was removed: waitA and waitB stay Not booked.
   for (const n of ['Alex', 'Ryan']) await post(phones[n], `/api/sessions/${roles.waitA}/join`, {});
-  await court(roles.waitB, 'waitlist');
   await court(roles.redLine, 'booked');
   // A booked game with long names, so the names line wraps to two or three lines.
   await court(roles.spare, 'booked');
@@ -215,8 +214,8 @@ async function main() {
         const { ctx, page } = await openAdmin(width, scheme);
         const rows = await LAYOUT(page);
         assert(rows.length >= 7, `only ${rows.length} cards`);
-        // A court on Waitlist shows its time as "~10:30 AM" (time may shift, Nov 2026): the tilde is part of the look.
-        const times = rows.map((r) => r.time.replace(/^~/, ''));
+        // Zip 86: no court Waitlist, so no "~10:30 AM" any more.
+        const times = rows.map((r) => r.time);
         for (const t of ['7:30 PM', '7 PM', '10:30 AM', '8 PM']) assert(times.includes(t), `no card shows "${t}": ${times.join(', ')}`);
         rows.forEach((r, i) => {
           const w = `card ${i + 1} ("${r.time}")`;
@@ -235,39 +234,40 @@ async function main() {
   }
 
   // ---------- the switch ----------
-  await check('every live game card has the always-visible Not booked | Waitlist | Booked switch, and no old blue court block', async () => {
+  await check('every live game card has the always-visible Not booked | Booked switch, and no old blue court block', async () => {
     const { ctx, page } = await openAdmin();
     const n = await page.locator(CARDS).count();
     assert((await page.locator(`${CARDS} .court-switch`).count()) === n, 'a card has no switch');
     for (const id of [roles.paid, roles.notBooked, roles.waitA]) {
       const segs = (await card(page, id).locator('.court-switch button').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
-      assert(JSON.stringify(segs) === JSON.stringify(['Not booked', 'Waitlist', 'Booked']), `segments ${segs}`);
+      // Zip 86: two segments (the Waitlist segment was removed).
+      assert(JSON.stringify(segs) === JSON.stringify(['Not booked', 'Booked']), `segments ${segs}`);
     }
     assert((await page.locator('.court-banner').count()) === 0, 'the old court banner is still on a card');
     assert((await page.getByText(/Not available|Court waitlist|Edit booking|Modify court/).count()) === 0, 'old wording is still on screen');
     await ctx.close();
   });
 
-  await check('the right segment is on for booked, not booked and waitlist games (old third value reads as Waitlist)', async () => {
+  await check('the right segment is on for booked and not booked games', async () => {
     const { ctx, page } = await openAdmin();
     const on = async (id) => (await card(page, id).locator('.court-switch button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim();
     assert((await on(roles.paid)) === 'Booked', 'booked');
     assert((await on(roles.notBooked)) === 'Not booked', 'not booked');
-    assert((await on(roles.waitA)) === 'Waitlist', 'waitlist');
+    // Zip 86: the Waitlist segment was removed; the game that used to be on it is just Not booked.
+    assert((await on(roles.waitA)) === 'Not booked', 'not booked (was waitlist)');
     await ctx.close();
   });
 
   await check('one tap changes it, it saves, and it is still there after a reload', async () => {
     const { ctx, page } = await openAdmin();
     const c = card(page, roles.notBooked);
-    await c.getByRole('button', { name: 'Waitlist', exact: true }).click();
-    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Waitlist', roles.notBooked);
+    // Zip 86: no Waitlist segment: Booked is tapped, saved and kept over a reload, then Not booked.
+    await c.getByRole('button', { name: 'Booked', exact: true }).click();
+    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Booked', roles.notBooked);
     await page.reload();
     await page.locator(CARDS).first().waitFor();
-    assert((await card(page, roles.notBooked).locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Waitlist', 'waitlist did not survive a reload');
-    assert((await dash()).sessions.find((s) => s.id === roles.notBooked).bookingStatus === 'unavailable', 'the stored value should be the existing third value');
-    await card(page, roles.notBooked).getByRole('button', { name: 'Booked', exact: true }).click();
-    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent === 'Booked', roles.notBooked);
+    assert((await card(page, roles.notBooked).locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Booked', 'booked did not survive a reload');
+    assert((await dash()).sessions.find((s) => s.id === roles.notBooked).bookingStatus === 'booked', 'the stored value should be booked');
     await card(page, roles.notBooked).getByRole('button', { name: 'Not booked', exact: true }).click();
     await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent === 'Not booked', roles.notBooked);
     await page.reload();
@@ -277,7 +277,7 @@ async function main() {
   });
 
   for (const scheme of ['light', 'dark']) {
-    await check(`(${scheme}) the chosen segment is filled, readable (4.5:1 or better) and told apart by color; Waitlist is blue and Booked is green`, async () => {
+    await check(`(${scheme}) the chosen segment is filled, readable (4.5:1 or better) and told apart by color; Booked is green`, async () => {
       const { ctx, page } = await openAdmin(393, scheme);
       const read = await page.evaluate(
         ([a, b, c]) => {
@@ -293,7 +293,7 @@ async function main() {
             const [x, y] = [lum(parse(fg)), lum(parse(bg))];
             return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
           };
-          return [a, b, c].map((id) => {
+          return [a, b, c].filter(Boolean).map((id) => {
             const on = document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`);
             const off = document.querySelector(`#session-${id} .court-switch button[aria-pressed="false"]`);
             const cs = getComputedStyle(on);
@@ -301,15 +301,16 @@ async function main() {
             return { seg: on.textContent, bg: cs.backgroundColor, ratio: ratio(cs.color, cs.backgroundColor), vsTrack: ratio(cs.backgroundColor, track), offRatio: ratio(getComputedStyle(off).color, track), rgb: parse(cs.backgroundColor) };
           });
         },
-        [roles.notBooked, roles.waitA, roles.paid],
+        [roles.notBooked, roles.paid], // Zip 86: no Waitlist segment to read
       );
       for (const r of read) {
         assert(r.ratio >= 4.5, `${r.seg}: text ${r.ratio.toFixed(2)}:1 on ${r.bg}`);
         assert(r.vsTrack >= 1.5, `${r.seg}: the fill hardly differs from the track (${r.vsTrack.toFixed(2)}:1)`);
         assert(r.offRatio >= 4.5, `${r.seg}: unselected text ${r.offRatio.toFixed(2)}:1`);
       }
-      const [, wait, booked] = read;
-      assert(wait.rgb[2] > wait.rgb[0] && wait.rgb[2] > wait.rgb[1], `Waitlist should be blue, got ${wait.bg}`);
+      // Zip 86: the blue Waitlist segment was removed.
+      assert((await page.locator(`${CARDS} .court-switch button[data-seg="waitlist"]`).count()) === 0, 'a Waitlist segment is still on a card');
+      const [, booked] = read;
       assert(booked.rgb[1] > booked.rgb[0] && booked.rgb[1] >= booked.rgb[2], `Booked should be green, got ${booked.bg}`);
       await page.screenshot({ path: path.join(SHOTS, `admin-switch-${scheme}.png`) });
       await ctx.close();
@@ -558,7 +559,11 @@ async function main() {
     page.evaluate((cardsSel) => {
       const lines = (btn) => {
         const spans = [...btn.querySelectorAll('.seg-line')];
-        return spans.length ? new Set(spans.map((e) => Math.round(e.getBoundingClientRect().top))).size : 1;
+        if (spans.length) return new Set(spans.map((e) => Math.round(e.getBoundingClientRect().top))).size;
+        // Zip 86: no seg-line spans any more: count the text's own lines.
+        const r = document.createRange();
+        r.selectNodeContents(btn);
+        return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size;
       };
       return [...document.querySelectorAll(cardsSel)].map((sw) => {
         const b = [...sw.querySelectorAll('button')];
@@ -567,13 +572,14 @@ async function main() {
     }, sel);
 
   for (const width of [360, 393, 430]) {
-    await check(`${width}px: "Not booked" is always on two lines, and the three segments are the same height on every card and in Edit game`, async () => {
+    await check(`${width}px: the two segments are the same height on every card and in Edit game`, async () => {
       const { ctx, page } = await openAdmin(width, 'light');
       const shapes = await SHAPE(page, `${CARDS} .court-switch`);
       assert(shapes.length >= 8, `${shapes.length} switches`);
       shapes.forEach((r, i) => {
-        assert(r.text === 'Not booked|Waitlist|Booked', `switch ${i + 1}: ${r.text}`);
-        assert(r.notBookedLines === 2, `switch ${i + 1}: "Not booked" is on ${r.notBookedLines} line(s)`);
+        // Zip 86: two segments; "Not booked" no longer has to break onto two lines to fit three segments: it is one line.
+        assert(r.text === 'Not booked|Booked', `switch ${i + 1}: ${r.text}`);
+        assert(r.notBookedLines === 1, `switch ${i + 1}: "Not booked" is on ${r.notBookedLines} line(s)`);
         assert(new Set(r.heights).size === 1, `switch ${i + 1}: segment heights differ ${r.heights}`);
       });
       assert(new Set(shapes.map((r) => r.heights[0])).size === 1, `heights differ between cards: ${[...new Set(shapes.map((r) => r.heights[0]))]}`);
@@ -582,12 +588,12 @@ async function main() {
       const sw = c.locator('.court-switch');
       const before = await sw.boundingBox();
       const cardBefore = await c.boundingBox();
-      for (const v of ['not_booked', 'waitlist', 'booked']) {
-        await c.getByRole('button', { name: /Not\s*booked|Waitlist|Booked/ }).first().evaluate(() => {});
+      for (const v of ['not_booked', 'booked', 'not_booked']) {
+        await c.getByRole('button', { name: /Not\s*booked|Booked/ }).first().evaluate(() => {});
         await c.locator(`.court-switch button[data-seg="${v}"]`).click();
         await page.waitForFunction(([id, vv]) => document.querySelector(`#session-${id} .court-switch button[data-seg="${vv}"]`)?.getAttribute('aria-pressed') === 'true', [roles.spare, v]);
         const after = await sw.boundingBox();
-        // (The card's own border is 1 to 2 px wider for Not booked and Waitlist, so only the height and the equal thirds are exact.)
+        // (The card's own border is 1 to 2 px wider for Not booked, so only the height and the equal halves are exact.)
         assert(Math.abs(after.height - before.height) < 0.5 && Math.abs(after.width - before.width) <= 3, `switch changed size when ${v} was picked: ${JSON.stringify(before)} vs ${JSON.stringify(after)}`);
         const seg = await sw.locator('button').evaluateAll((bs) => bs.map((b) => [Math.round(b.getBoundingClientRect().width), Math.round(b.getBoundingClientRect().height * 10) / 10]));
         assert(new Set(seg.map((x) => x[0])).size === 1 && new Set(seg.map((x) => x[1])).size === 1, `segments are not equal after picking ${v}: ${JSON.stringify(seg)}`);
@@ -596,7 +602,7 @@ async function main() {
       await c.getByRole('button', { name: /^Game menu for/ }).click();
       await page.getByRole('menuitem', { name: 'Edit game' }).click();
       const sheet = await SHAPE(page, 'dialog[open] .court-switch');
-      assert(sheet.length === 1 && sheet[0].notBookedLines === 2 && new Set(sheet[0].heights).size === 1, `Edit game switch: ${JSON.stringify(sheet)}`);
+      assert(sheet.length === 1 && sheet[0].text === 'Not booked|Booked' && sheet[0].notBookedLines === 1 && new Set(sheet[0].heights).size === 1, `Edit game switch: ${JSON.stringify(sheet)}`);
       assert(sheet[0].heights[0] === shapes[0].heights[0], `Edit game segments are ${sheet[0].heights[0]}px, cards ${shapes[0].heights[0]}px: not one shared look`);
       await ctx.close();
     });
@@ -621,7 +627,8 @@ async function main() {
       for (const want of ['booked/1/true', 'not_booked/1/true']) assert([...kinds].some((k) => k === want), `no card of kind ${want}; have ${[...kinds]}`);
       assert(rows.some((r) => r.nameLines >= 2), 'no card with a names line that wraps');
       assert(rows.some((r) => !r.pill && r.countToNames === null), 'no card without a pill');
-      assert(rows.some((r) => r.switch === 'waitlist'), 'no waitlist card');
+      // Zip 86: no waitlist card any more (the court Waitlist was removed).
+      assert(!rows.some((r) => r.switch === 'waitlist'), 'a card is still on the removed court Waitlist');
       assert(rows.some((r) => r.nameLines === 1 && r.pill), 'no one-name card');
       assert(rows.some((r) => r.nameLines === 1 && r.pill && r.countToNames !== null), 'no three-name card');
       if (process.env.SHOW_SPACING) console.log(JSON.stringify(rows));
@@ -683,7 +690,7 @@ async function main() {
     const sheet = page.locator('dialog[open]');
     const title = await sheet.locator('h2').innerText();
     assert(/^Edit game · (Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} \d{1,2}$/.test(title), `title "${title}"`);
-    assert((await sheet.locator('.court-switch button').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join('|') === 'Not booked|Waitlist|Booked', 'switch');
+    assert((await sheet.locator('.court-switch button').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join('|') === 'Not booked|Booked', 'switch');
     const line = (await sheet.locator('[data-cancel-by]').innerText()).trim();
     assert(/^Cancel by (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d{2} (AM|PM), set automatically\.$/.test(line), `cancel-by line "${line}"`);
     assert((await sheet.locator('[data-cancel-by] input, input[type="datetime-local"]').count()) === 0, 'the cancel-by should not be editable');
@@ -703,15 +710,16 @@ async function main() {
     await c.getByRole('button', { name: /^Game menu for/ }).click();
     await page.getByRole('menuitem', { name: 'Edit game' }).click();
     const sheet = page.locator('dialog[open]');
-    await sheet.getByRole('button', { name: 'Waitlist', exact: true }).click();
+    // Zip 86: no Waitlist segment: the switch goes from Booked to Not booked.
+    await sheet.getByRole('button', { name: 'Not booked', exact: true }).click();
     // Picking in the sheet does not save yet.
     assert((await (await dash()).sessions.find((s) => s.id === roles.bookedEmpty).bookingStatus) === 'booked', 'saved before Save');
     await sheet.getByRole('button', { name: 'Save', exact: true }).click();
     await page.locator('dialog[open]').waitFor({ state: 'detached' });
-    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Waitlist', roles.bookedEmpty);
+    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Not booked', roles.bookedEmpty);
     const after = (await dash()).sessions.find((s) => s.id === roles.bookedEmpty);
     assert(after.startsAt === startBefore, 'the time moved');
-    assert(after.bookingStatus === 'unavailable', 'waitlist should store the existing third value');
+    assert(after.bookingStatus === 'needs_booking', `not booked should be stored as needs_booking, got ${after.bookingStatus}`);
     await ctx.close();
   });
 
@@ -774,7 +782,7 @@ async function main() {
   });
 
   // ---------- players never see Waitlist ----------
-  await check('players read a waitlisted game exactly like a game with no court booked', async () => {
+  await check('players read every game with no court booked without a waiting word', async () => {
     const ctx = await browser.newContext(phone(393, 'light'));
     await post(ctx.request, '/api/me', { playerId: idOf('Brandon') });
     const page = await ctx.newPage();
@@ -789,7 +797,7 @@ async function main() {
   });
 
   // ---------- Do this now ----------
-  await check('Do this now: at most one plain "Court still needs to be booked" card per game, for the next 2 games with no court (Waitlist or Not booked); no Court opened / Didn\'t open anywhere', async () => {
+  await check('Do this now: at most one plain "Court still needs to be booked" card per game, for the next 2 games with no court (Not booked); no Court opened / Didn\'t open anywhere', async () => {
     const { ctx, page } = await openAdmin();
     await page.locator('.do-now [data-task="court_book"]').first().waitFor();
     assert((await page.getByRole('button', { name: /^(Court opened|Didn’t open|I booked it)$/ }).count()) === 0, 'Court opened / Didn\'t open / I booked it still shown');
@@ -841,12 +849,12 @@ async function main() {
     const sheet = page.locator('dialog[open]');
     await sheet.getByLabel('Start', { exact: true }).fill('18:15');
     assert((await page.locator('[data-updated]').evaluate((e) => getComputedStyle(e).visibility)) === 'hidden', '"Updated" should hide while a sheet is open');
-    await post(areq, `/api/admin/sessions/${roles.notBooked}/court-status`, { status: 'waitlist' });
+    await post(areq, `/api/admin/sessions/${roles.notBooked}/court-status`, { status: 'not_booked' }); // Zip 86: was 'waitlist'
     await sleep(8000);
     assert((await page.locator('dialog[open]').count()) === 1, 'the sheet closed by itself');
     assert((await sheet.getByLabel('Start', { exact: true }).inputValue()) === '18:15', 'typing was overwritten');
     await sheet.getByRole('button', { name: 'Close' }).click();
-    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Waitlist', roles.notBooked, { timeout: 15000 });
+    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Not booked', roles.notBooked, { timeout: 15000 });
     assert((await page.locator('[data-updated]').evaluate((e) => getComputedStyle(e).visibility)) === 'visible', '"Updated" should come back');
     await ctx.close();
   });
