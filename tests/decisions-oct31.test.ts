@@ -290,17 +290,19 @@ describe('2b. Finalize and an unconfirmed I paid', () => {
   });
 });
 
-describe('4. Remove player on a seat signed up on a Waitlist court (and on a left-over old standby seat)', () => {
-  it('a seat taken while the court is on the venue waitlist, then removed by the organizer (and a left-over old standby seat removed the same way): no credit made, none lost', async () => {
+describe('4. Remove player on a seat signed up on an old waitlist court (and on a left-over old standby seat)', () => {
+  it('a seat taken while the game is an old waitlist row (read as Not booked), then removed by the organizer (and a left-over old standby seat removed the same way): no credit made, none lost', async () => {
     const ctx = await group();
     const old = await on(ctx, '2026-10-29');
     givePot(ctx, 'Blair', 1400, old.id);
     const g = await on(ctx, '2026-11-05');
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
     const blair = await playerPhone(ctx, 'Blair');
-    // Mitchel's path: paid with credit, the game goes on the venue's Waitlist, drop, I'm in again (a normal seat, credit on again).
+    // Mitchel's path: paid with credit, the game goes on the old court waitlist, drop, I'm in again (a normal seat, credit on again).
+    // Zip 86 round 2 (Alex): no court Waitlist: the switch refuses it with 400, so the old waitlist row is stored with raw SQL.
     expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ paidWithCredit: true });
-    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' })).status).toBe(200);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' })).status).toBe(400);
+    raw(ctx).prepare("UPDATE sessions SET booking_status = 'unavailable', status = 'planned', court_state = 'waitlist' WHERE id = ?").run(g.id);
     expect(potOf(ctx, 'Blair')).toBe(0); // moving the switch changed nothing
     await blair.call('POST', `/api/sessions/${g.id}/withdraw`, {});
     expect(potOf(ctx, 'Blair')).toBe(1400);

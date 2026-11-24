@@ -209,9 +209,10 @@ describe('dead code that is gone (Zip 11)', () => {
     expect('gamedayCheck' in taskTimes(game(3), opts(false))).toBe(false);
   });
 
-  it('the standby words are KEPT: a game that already started on a court still on Waitlist reaches the card (fresh review, Zip 11)', () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; the court standby words (kept in Zip 11 for a started game on a Waitlist court) are gone.
+  it('the court standby button words are gone with the court Waitlist', () => {
     const src = readFileSync(new URL('../src/pages/PlayerHome.tsx', import.meta.url), 'utf8');
-    for (const w of ['Join standby', 'Leave standby', 'on standby']) expect(src, w).toContain(w);
+    for (const w of ['Join standby', 'Leave standby']) expect(src, w).not.toContain(w);
   });
 });
 

@@ -68,10 +68,11 @@ describe('fake-data preview seed', () => {
     // a booked, finalized past game, and a past game never booked that still waits for "Did you guys play?"
     expect(past.some((g) => g.finalized && g.bookingStatus === 'booked')).toBe(true);
     expect(past.some((g) => g.needsFinalize && g.bookingStatus === 'needs_booking' && g.roster.length >= 4)).toBe(true);
-    // the three-way court switch
+    // the court switch: Booked and Not booked
+    // Zip 86 round 2 (Alex): no court Waitlist; game 2 is plain Not booked now (3 in), like game 3, and no game reads as on the waitlist.
     expect(next.some((g) => g.bookingStatus === 'booked' && g.status !== 'canceled')).toBe(true);
-    expect(next.some((g) => g.bookingStatus === 'unavailable' && g.courtState === 'waitlist')).toBe(true);
-    expect(next.some((g) => g.bookingStatus === 'needs_booking' && g.confirmedCount === 3)).toBe(true);
+    expect(next.every((g) => g.bookingStatus !== 'unavailable' && g.courtState !== 'waitlist')).toBe(true);
+    expect(next.filter((g) => g.bookingStatus === 'needs_booking' && g.status !== 'canceled' && g.confirmedCount === 3).length).toBeGreaterThanOrEqual(2);
     // Zip 10, Card cleanup on: no waitlist anywhere (the old standby, Gray, moved in as an 11th player), and games with 1, 3, 4, 5, 8 and 12 in.
     expect(next.every((g) => g.waitlistCount === 0)).toBe(true);
     expect(next.some((g) => g.confirmedCount === 11 && g.roster.some((r: any) => r.name === 'Gray' && r.status === 'confirmed'))).toBe(true);
