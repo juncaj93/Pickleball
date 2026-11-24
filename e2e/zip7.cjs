@@ -394,18 +394,10 @@ async function main() {
   }
 
   // =============================================================== B. COLOR CLEANUP
-  // A waitlist game that shows on the organizer Home: tomorrow's game for the length of the color tests (put back to Booked after).
-  await post(areq, `/api/admin/sessions/${game.tomorrow.id}/court-status`, { status: 'waitlist' });
+  // Zip 86: the court Waitlist is gone (Booked / Not booked only), so its gray / blue segment and card border are no longer checked here.
   for (const scheme of ['light', 'dark']) {
-    await check(`B: Waitlist is neutral gray (selected state and card border), Extra game is a gray outline (${scheme})`, async () => {
+    await check(`B: Extra game is a gray outline (${scheme})`, async () => {
       const { ctx, page } = await openAdmin({ scheme, url: '/admin?colorcleanup=on' });
-      const wl = game.tomorrow;
-      const card = page.locator(`#session-${wl.id}`);
-      const seg = card.locator('.court-switch button[data-seg="waitlist"]');
-      const want = scheme === 'light' ? ['rgb(75, 85, 99)', 'rgb(255, 255, 255)'] : ['rgb(154, 163, 176)', 'rgb(20, 24, 28)'];
-      assert((await css(seg, 'background-color')) === want[0] && (await css(seg, 'color')) === want[1], `Waitlist ${await css(seg, 'background-color')} / ${await css(seg, 'color')}`);
-      const border = await css(card, 'border-top-color');
-      assert(!/^rgb\((28|111), (79|163), (148|234)\)$/.test(border), `the Waitlist card border is not blue (${border})`);
       const extra = page.locator('.extra-tag').first();
       assert((await css(extra, 'background-color')) === 'rgba(0, 0, 0, 0)', 'Extra game has no fill');
       const col = (await css(extra, 'color')).match(/\d+/g).map(Number);
@@ -414,15 +406,12 @@ async function main() {
       await ctx.close();
     });
   }
-  await check('B: with the switch OFF, Waitlist is still blue and the Extra game tag is still purple', async () => {
+  await check('B: with the switch OFF, the Extra game tag is still purple', async () => {
     const { ctx, page } = await openAdmin();
-    const wl = game.tomorrow;
-    assert((await css(page.locator(`#session-${wl.id} .court-switch button[data-seg="waitlist"]`), 'background-color')) === 'rgb(28, 79, 148)', 'blue Waitlist');
     const col = (await css(page.locator('.extra-tag').first(), 'color')).match(/\d+/g).map(Number);
     assert(col[2] > col[1] + 30, `purple Extra game (${col})`);
     await ctx.close();
   });
-  await post(areq, `/api/admin/sessions/${game.tomorrow.id}/court-status`, { status: 'booked' });
   for (const scheme of ['light', 'dark']) {
     await check(`B: the Canceled pill is neutral GRAY (it was green), the canceled row and its date tile are dimmed, no red on the row (${scheme}), before and after`, async () => {
       const q = await openPlayer('Jordan', { scheme, query: 'colorcleanup=on&homecollapse=on' });

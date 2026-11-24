@@ -431,7 +431,8 @@ async function main() {
       if (await all.count()) await all.click();
       if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
     }
-    await card.locator('.court-switch [data-seg="booked"]').click();
+    // Zip 86: the 3-way court switch is one status button now; a tap on Not booked flips it to Booked.
+    await card.locator('.r86-status[data-status="not_booked"]').click();
   });
   await undoCase(
     'Finalize (Everyone played)',

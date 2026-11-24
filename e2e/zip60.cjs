@@ -224,10 +224,10 @@ async function main() {
     assert(t.name === 'The Cold Open' && t.formatPending === true && t.formatSource === 'vote', JSON.stringify(t));
     await a.page.locator('.tabbar button', { hasText: 'Home' }).click();
     await a.page.locator('[data-tm-home]').first().waitFor({ timeout: 15000 });
-    // Zip 66: Home loads the card closed; open it: the Style row says Players vote.
+    // Zip 66: Home loads the card closed; open it. Zip 86: no Style row; the When line under the date says Players vote.
     await openTourCard(a.page);
-    const home = flat(await a.page.locator('[data-tm-home]').first().innerText());
-    assert(home.includes('Style Players vote'), home);
+    const home = flat(await a.page.locator('[data-tm-home-plan]').first().innerText());
+    assert(/ · Players vote · /.test(home), home);
     await shot(a.page, 'A-home-vote');
     // Edit shows the vote selected, and a hand-picked format is saved as the organizer's.
     await a.page.locator('[data-tm-open-edit]').click();
@@ -318,9 +318,9 @@ async function main() {
     // The organizer's card: the counts. Players never see them.
     const a = await adminPage();
     await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
-    // Zip 66: the Votes row says Doubles, not Locked; the Style row says Players vote (mock 02).
-    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 2 · Americano 1 · Either 1', await a.page.locator('[data-tm-vote-counts]').innerText());
-    assert(flat(await a.page.locator('[data-tm-home-format]').first().innerText()) === 'Players vote', 'Style row');
+    // Zip 86: the Votes and Style rows are one "Votes: ..." line under When, and the When line says Players vote.
+    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Votes: Locked doubles 2 · Americano 1 · Either 1', await a.page.locator('[data-tm-vote-counts]').innerText());
+    assert(/ · Players vote · /.test(flat(await a.page.locator('[data-tm-home-plan]').first().innerText())), 'When says Players vote');
     await shot(a.page, 'C-admin-card');
     await noDash(a.page, 'organizer Home');
     await a.ctx.close();
@@ -356,10 +356,10 @@ async function main() {
         await noDash(v.page, 'Home');
         await v.ctx.close();
         const a = await adminPage({ width, scheme });
-        await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
-        // Zip 66 (mock 02): the Votes row (Doubles, not Locked) and the Style row; the "Decided by" line is gone from the card.
-        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 1 · Americano 3 · Either 1', 'counts');
-        assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Americano', 'style');
+        // Zip 86: the Votes and Style rows are gone; once the vote has decided, the When line names the style (the counts line shows only
+        // while the style is still open).
+        await a.page.locator('[data-tm-home-plan]').waitFor({ timeout: 10000 });
+        assert(/ · Americano · /.test(flat(await a.page.locator('[data-tm-home-plan]').innerText())), `style: ${await a.page.locator('[data-tm-home-plan]').innerText()}`);
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `D-admin-${width}-${scheme}`);
         await a.ctx.close();
@@ -396,10 +396,9 @@ async function main() {
     await shot(v.page, 'E-tie-alert');
     await v.ctx.close();
     const a = await adminPage();
-    await a.page.locator('[data-tm-vote-counts]').waitFor({ timeout: 10000 });
-    // Zip 66: the Votes row; the tie rule's pick on the Style row (the first tournament: Locked doubles).
-    assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 1 · Americano 1 · Either 2', 'counts');
-    assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Locked doubles', 'style');
+    // Zip 86: no Votes or Style row; the tie rule's pick on the When line (the first tournament: Locked doubles).
+    await a.page.locator('[data-tm-home-plan]').waitFor({ timeout: 10000 });
+    assert(/ · Locked doubles · /.test(flat(await a.page.locator('[data-tm-home-plan]').innerText())), `style: ${await a.page.locator('[data-tm-home-plan]').innerText()}`);
     await shot(a.page, 'E-tie-admin');
     await a.ctx.close();
   });

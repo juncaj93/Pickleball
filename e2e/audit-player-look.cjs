@@ -7,7 +7,7 @@
  *   - tiers THIS WEEK / NEXT WEEK / LATER with 0, 1, 2 and many games; All games / My games; More sessions;
  *     a game tonight (TONIGHT strip), one that started 5 minutes ago, one that finished (and was finalized),
  *     canceled with a reason ("Canceled - Thanksgiving"), with a 40-character reason and with none; extra games
- *     with a note; court booked, not booked and on the venue's Waitlist (players must read "Court not booked")
+ *     with a note; court booked and not booked (players read "Court not booked"; Zip 86: no court Waitlist)
  *   - every payment state: $14 due + Pay (+ I paid after Pay was tapped, or with no Venmo), Paid $14 + Didn't pay?,
  *     Paid with credit + Undo, part credit, "$14 due · $9 credit" + Use credit, Use $9 credit on a no-court game,
  *     waitlist 2nd in line, canceled, finalized (final price), the game-day Pay card, the CREDIT chip and its
@@ -507,9 +507,8 @@ async function main() {
   const lab = (id) => LABEL[id] || id.slice(0, 8);
   const idOf = (n) => d.players.find((p) => p.name === n).id;
 
-  // Courts: booked, not booked (S4, S11) and the venue's Waitlist (S5, S12).
+  // Courts: booked, and not booked (S4, S5, S11, S12). Zip 86: S5 and S12 were on the venue's court Waitlist, which was removed.
   for (const id of [S[1], S[2], S[3], S[6], S[7], S[8], S[9], S[10], E.fin, E.started, E.note, E.sat]) await ok(await post(areq, `/api/admin/sessions/${id}/booked`, {}), `book ${lab(id)}`);
-  for (const id of [S[5], S[12]]) await ok(await post(areq, `/api/admin/sessions/${id}/court-status`, { status: 'waitlist' }), `waitlist ${lab(id)}`);
 
   const who = {};
   for (const n of NAMES) {

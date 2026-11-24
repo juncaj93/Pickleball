@@ -1076,7 +1076,7 @@ async function main() {
       assert((await card.getAttribute('data-switch')) === 'not_booked', 'the card should say not_booked');
       const sw = card.locator('.court-switch');
       assert((await sw.locator('button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim() === 'Not booked', 'the switch should rest on Not booked');
-      assert((await sw.getByRole('button').count()) === 3, 'three segments');
+      assert((await sw.getByRole('button').count()) === 2, 'two segments (Zip 86: no Waitlist)');
       // The old banner and its buttons are gone from the card.
       assert((await card.locator('.court-banner').count()) === 0, 'the old banner is still on the card');
       assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn’t open)$/ }).count()) === 0 && (await card.getByRole('link', { name: /^Book/ }).count()) === 0, 'old banner buttons are still on the card');
@@ -1098,8 +1098,9 @@ async function main() {
       assert((await booked.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Booked', 'the switch should rest on Booked');
       // Cancel-by is automatic and only shows (in red) in the last 24 hours before it; the always-on line is gone.
       assert((await booked.getByText(/^Cancel by .*(AM|PM)$/).count()) === 0, 'the always-on Cancel by line is back');
-      const edge = await booked.evaluate((el) => ({ style: getComputedStyle(el).borderLeftStyle, width: parseFloat(getComputedStyle(el).borderLeftWidth) }));
-      assert(edge.style === 'solid' && edge.width >= 6, `booked card needs a solid left edge: ${JSON.stringify(edge)}`);
+      // Zip 86: no green left stripe on a booked card (this older card too): the left edge is the same as the top.
+      const edge = await booked.evaluate((el) => ({ left: getComputedStyle(el).borderLeftWidth, top: getComputedStyle(el).borderTopWidth }));
+      assert(edge.left === edge.top, `booked card has a stripe on the left: ${JSON.stringify(edge)}`);
       assert((await booked.locator('.court-banner').count()) === 0, 'booked card should have no banner');
     });
 
@@ -1152,7 +1153,7 @@ async function main() {
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
       // Collapsed: only the one-tap court switch (and the paid pill); no main button, the poll lives in Texts.
       const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && !/^(Undo|Hours OK|I’m in|Out)$/.test(x) && !/ of \d+ paid$/.test(x));
-      assert(JSON.stringify(await visible()) === JSON.stringify(['Not booked', 'Waitlist', 'Booked']), `collapsed card buttons were ${await visible()}`);
+      assert(JSON.stringify(await visible()) === JSON.stringify(['Not booked', 'Booked']), `collapsed card buttons were ${await visible()}`);
       await gear.click();
       assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
       const menu = card.page().locator('[role="menu"]');
@@ -2059,19 +2060,21 @@ async function main() {
       assert((await admin.getByText(/Invite substitutes/).count()) === 0, 'Invite substitutes should be gone');
     });
 
-    console.log('Court waitlist');
-    await check('court waitlist: players tap the join button, get real seats and read it as a normal game; the share text is the usual one; Court opened changes no seat and the pay prompts appear', async () => {
+    // Zip 86: the court Waitlist was removed: this is now a game with no court booked (Not booked).
+    console.log('No court yet');
+    await check('no court yet: players tap the join button, get real seats and read it as a normal game; the share text is the usual one; Booked changes no seat and the pay prompts appear', async () => {
       const card = sessionCards(admin).nth(3);
       const day = (await card.locator('h2').innerText()).trim().replace(/, \d{1,2}:\d{2} (AM|PM)$/, ''); // e.g. "Thu, Nov 5"
       const cardId = (await card.getAttribute('id')).replace('session-', '');
-      await card.getByRole('button', { name: 'Waitlist', exact: true }).click();
-      await admin.waitForFunction((id) => document.querySelector(`#session-${id}`)?.getAttribute('data-court') === 'waitlist', `${cardId}`);
-      assert((await card.getAttribute('data-switch')) === 'waitlist', 'the switch should rest on Waitlist');
-      assert((await card.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Waitlist', 'Waitlist is the chosen segment');
-      assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
-      assert((await card.locator('.court-banner').count()) === 0, 'the old waitlist banner is gone from the card');
+      if ((await card.getAttribute('data-switch')) !== 'not_booked') {
+        await card.getByRole('button', { name: 'Not booked', exact: true }).click();
+        await admin.waitForFunction((id) => document.querySelector(`#session-${id}`)?.getAttribute('data-switch') === 'not_booked', `${cardId}`);
+      }
+      assert((await card.locator('.court-switch button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim() === 'Not booked', 'Not booked is the chosen segment');
+      assert((await card.locator('.court-switch button[data-seg="waitlist"]').count()) === 0, 'no Waitlist segment');
+      assert((await card.locator('.court-banner').count()) === 0, 'the old banner is gone from the card');
       assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn’t open)$/ }).count()) === 0, 'the card itself has no court buttons');
-      // A waitlisted game follows the Not booked rule (Alex, Nov 1): the plain "Court still needs to be booked" card
+      // A game with no court follows the Not booked rule (Alex, Nov 1): the plain "Court still needs to be booked" card
       // only for the next 2 games with no court. This is the 4th game, so no card; never a second one.
       const task = admin.locator(`.do-now article[data-session="${cardId}"]`);
       await admin.waitForTimeout(500);
@@ -2082,10 +2085,10 @@ async function main() {
         assert((await plain.getByRole('button').count()) === 0 && (await plain.getByRole('link').count()) === 1, 'only the CourtReserve link on it');
       }
       assert((await admin.getByRole('button', { name: /^(Court opened|Didn’t open)$/ }).count()) === 0, 'the old Court opened / Didn\'t open buttons are gone');
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-no-court.png') });
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
-      assert(/^Pickleball (?:tonight|tomorrow|today|(?:Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In or out here: \S+$/.test(shareBody), `waitlist share text: ${shareBody}`);
+      assert(/^Pickleball (?:tonight|tomorrow|today|(?:Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In or out here: \S+$/.test(shareBody), `share text: ${shareBody}`);
       assert((await texts.locator('.text-row[data-text="poll"]').count()) === 0, 'no Poll');
       await closeOptions(card);
 
@@ -2104,7 +2107,7 @@ async function main() {
 
       await admin.reload();
       const c2 = sessionCards(admin).nth(3);
-      // A court on Waitlist is just Not booked: they are real seats, named on the usual names line, never "Standby".
+      // No court yet: they are real seats, named on the usual names line, never "Standby".
       await c2.locator('.players-line .names-line', { hasText: /Casey.*Devon|Devon.*Casey/ }).waitFor();
       assert((await c2.locator('.players-line .waitlist-line').count()) === 0, 'a standby line on a game that is not full');
       assert((await admin.getByRole('article', { name: /^Waiting on the court/ }).count()) === 0, 'no separate waiting card');
@@ -2411,7 +2414,7 @@ async function main() {
         await admin.locator('.toast', { hasText: 'is showing' }).waitFor();
         const shown = sessionCards(admin).filter({ hasText: 'Tue, Nov 3' }).first();
         const shownId = (await shown.getAttribute('id')).replace('session-', '');
-        await shown.getByRole('button', { name: 'Waitlist', exact: true }).click();
+        // Zip 86: the court Waitlist was removed (the game stays Not booked).
         // The court never opened: no "Didn't open" button any more; the organizer cancels the session as usual.
         await admin.locator(`.do-now article[data-task="court_book"][data-session="${shownId}"]`).waitFor();
         await shown.getByRole('button', { name: /^Game menu/ }).click();
@@ -2877,7 +2880,8 @@ async function main() {
       const d = await (await api('GET', '/api/admin/dashboard')).json();
       const live = d.sessions.filter((x) => !x.state.flags.canceled && !x.state.flags.started);
       const later = live.filter((x) => !x.state.flags.bookingWindowOpen && x.bookingStatus === 'needs_booking');
-      if (!live.some((x) => x.courtState === 'waitlist') && later.length > 1) await api('POST', `/api/admin/sessions/${later[later.length - 1].id}/court`, { action: 'waitlist' });
+      // Zip 86: no court Waitlist card to set up any more (that route was removed).
+      void later;
       const hol = live.find((x) => x.holiday);
       if (hol && !hol.holidayHoursOk) await api('POST', `/api/admin/sessions/${hol.id}/holiday-hours`, { ok: true });
     }
@@ -2890,7 +2894,7 @@ async function main() {
         await sessionCards(p).first().waitFor();
         await showAll(p);
         const kinds = await sessionCards(p).evaluateAll((cs) => [...new Set(cs.map((c) => c.dataset.court))]);
-        for (const k of ['needs', 'later', 'waitlist', 'booked']) assert(kinds.includes(k), `no ${k} card to check (${kinds})`);
+        for (const k of ['needs', 'later', 'booked']) assert(kinds.includes(k), `no ${k} card to check (${kinds})`);
         assert(await p.locator('.holiday-actions .link-btn', { hasText: 'Undo' }).count(), 'no holiday card with Undo to check');
         const home = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
         assert(home.problems.length === 0, `Home: ${home.problems.slice(0, 4).join(' | ')}`);
@@ -3177,9 +3181,9 @@ async function main() {
       assert((await p.request.get(`${BASE}/api/admin/activity`)).status() === 401, 'players can read the activity log');
     });
 
-    // ---------- Court switch: three equal segments on one row, in every width and theme ----------
+    // ---------- Court switch: two equal segments on one row, in every width and theme (Zip 86: no Waitlist) ----------
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
-      await check(`court switch at ${width}px (${scheme}): Not booked | Waitlist | Booked in three equal segments on one row; no gaps, overlaps or cut-off text`, async () => {
+      await check(`court switch at ${width}px (${scheme}): Not booked | Booked in two equal segments on one row; no gaps, overlaps or cut-off text`, async () => {
         const p = await admin.context().newPage();
         await p.setViewportSize({ width, height: 844 });
         await p.emulateMedia({ colorScheme: scheme });
@@ -3187,7 +3191,7 @@ async function main() {
         await sessionCards(p).first().waitFor();
         await showAll(p);
         const kinds = await p.locator('.court-switch').evaluateAll((bs) => bs.map((b) => b.closest('article').dataset.court));
-        assert(kinds.includes('needs') && kinds.includes('waitlist'), `need both a not-booked and a waitlist game, got ${kinds}`);
+        assert(kinds.includes('needs') && kinds.includes('booked'), `need both a not-booked and a booked game, got ${kinds}`);
         const report = await p.evaluate(() =>
           [...document.querySelectorAll('section[aria-labelledby="sessions-title"] article .court-switch')].map((sw) => {
             const art = sw.closest('article');
@@ -3205,8 +3209,8 @@ async function main() {
               on: on.textContent.trim(),
               onOk: art.dataset.switch === on.dataset.seg,
               oneRow: r.every((x) => Math.abs(x.top - r[0].top) < 1),
-              equal: Math.abs(r[0].width - r[1].width) <= 1 && Math.abs(r[1].width - r[2].width) <= 1,
-              ordered: r[0].right <= r[1].left + 0.5 && r[1].right <= r[2].left + 0.5,
+              equal: r.length === 2 && Math.abs(r[0].width - r[1].width) <= 1,
+              ordered: r[0].right <= r[1].left + 0.5,
               inside: box.left >= cardBox.left - 0.5 && box.right <= cardBox.right + 0.5 && r.every((x) => x.left >= box.left - 0.5 && x.right <= box.right + 0.5),
               apartFromGear: box.right <= gear.left + 1 && !(box.left < gear.right && box.right > gear.left && box.top < gear.bottom && box.bottom > gear.top),
               cut: segs.some((x) => x.scrollWidth > x.clientWidth + 1),
@@ -3219,9 +3223,9 @@ async function main() {
         );
         for (const r of report) {
           const where = `${r.kind} switch "${r.on}"`;
-          assert(r.labels === 'Not booked|Waitlist|Booked', `${where}: labels ${r.labels}`);
+          assert(r.labels === 'Not booked|Booked', `${where}: labels ${r.labels}`);
           assert(r.onOk, `${where}: the chosen segment does not match the card`);
-          assert(r.oneRow && r.equal && r.ordered, `${where}: segments should be three equal ones on a row ${JSON.stringify(r)}`);
+          assert(r.oneRow && r.equal && r.ordered, `${where}: segments should be two equal ones on a row ${JSON.stringify(r)}`);
           assert(r.inside && r.apartFromGear && !r.cut && !r.sideways && r.beside, `${where}: overlap or cut off ${JSON.stringify(r)}`);
           assert(r.tall, `${where}: segments under 44px tall`);
         }
@@ -3237,7 +3241,7 @@ async function main() {
         assert(aligned, 'the time should sit centered right under the date tile');
         const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
         assert(rep.problems.length === 0, `Home: ${rep.problems.slice(0, 3).join(' | ')}`);
-        await p.locator('article[data-court="waitlist"]').first().screenshot({ path: path.join(SHOTS, `strip-waitlist-${width}-${scheme}.png`) });
+        await p.locator('article[data-court="booked"]').first().screenshot({ path: path.join(SHOTS, `strip-booked-${width}-${scheme}.png`) });
         await p.locator('article[data-court="needs"]').first().screenshot({ path: path.join(SHOTS, `strip-needs-${width}-${scheme}.png`) });
         await p.close();
       });

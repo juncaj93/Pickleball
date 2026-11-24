@@ -304,11 +304,13 @@ async function main() {
     const { ctx, page } = await openAdmin();
     await openSheetFor(page, B.id);
     const sheet = page.locator('dialog.sheet[open]');
-    await sheet.getByRole('button', { name: /Waitlist/ }).click();
+    // Zip 86: no Waitlist segment: the booked game is set to Not booked.
+    assert((await dash()).sessions.find((x) => x.id === B.id).bookingStatus === 'booked', 'B starts booked');
+    await sheet.getByRole('button', { name: 'Not booked', exact: true }).click();
     await sheet.getByRole('button', { name: 'Save' }).click();
     await page.waitForTimeout(800);
     const s = (await dash()).sessions.find((x) => x.id === B.id);
-    assert(s.court?.switch === 'waitlist' || JSON.stringify(s).includes('waitlist'), 'court status saved as waitlist');
+    assert(s.bookingStatus === 'needs_booking', `court status saved as not booked (${s.bookingStatus})`);
     await post(areq, `/api/admin/sessions/${B.id}/booked`, {});
     await ctx.close();
   });

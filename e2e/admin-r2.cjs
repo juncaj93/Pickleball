@@ -90,14 +90,13 @@ async function main() {
     phones[n] = c.request;
   }
   const join = (n, s) => post(phones[n], `/api/sessions/${s.id}/join`, {});
-  // A booked (4 in + Alex), B booked (2 in + Alex), C and D not booked, E waitlist, F booked then canceled with money back.
+  // A booked (4 in + Alex), B booked (2 in + Alex), C, D and E not booked (Zip 86: E was on the court Waitlist, removed), F booked then canceled with money back.
   const [A, B, C, D, E, F] = ahead;
   for (const s of [A, B, F]) await post(areq, `/api/admin/sessions/${s.id}/booked`, {});
   for (const n of ['Ryan', 'Julian', 'Nathan', 'Mitchel']) await join(n, A);
   for (const n of ['Ryan', 'Brandon']) await join(n, B);
   await join('Ryan', C);
   for (const n of ['Julian', 'Nathan', 'Brandon']) await join(n, D);
-  await post(areq, `/api/admin/sessions/${E.id}/court-status`, { status: 'waitlist' });
   for (const s of [A, B, D]) await post(areq, `/api/admin/sessions/${s.id}/me`, { in: true });
   const payOf = async (s, name) => (await dash()).sessions.find((x) => x.id === s.id).roster.find((r) => r.name === name);
   const markPaid = async (s, name) => {
@@ -158,7 +157,7 @@ async function main() {
   // ---------------------------------------------------------------- the switch
   await check('S off by default: the old screens, exactly (no round 2 parts anywhere)', async () => {
     const { ctx, page } = await openAdmin({ r2: false });
-    assert((await page.locator('.scard-r2, .r2-foot, .r2m-game, .r2-players').count()) === 0, 'no round 2 parts on Home');
+    assert((await page.locator('.scard-r2, .r2-foot, .r86-foot, .r2m-game, .r2-players').count()) === 0, 'no round 2 parts on Home');
     assert((await page.locator('[data-updated]').count()) === 1, '"Updated just now" is still there');
     assert((await page.locator('.topbar h1').innerText()) === 'Pickleball', 'title is the group name');
     assert((await page.locator('.topbar .mode-btn').count()) === 0, 'no light/dark button in the header');
@@ -234,48 +233,52 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- 1. home cards
-  await check('1 Home card: tile+time left, switch with seats and names under it, gear right, 3 equal footer cells', async () => {
+  await check('1 Home card: tile+time left, status and In/Out with seats and names under them, gear right, the footer on one line, 44 px', async () => {
     const { ctx, page } = await openAdmin();
     const card = await reveal(page, A.id);
     const tile = await card.locator('.tile').boundingBox();
-    const sw = await card.locator('.court-switch').boundingBox();
+    // Zip 86: the 3-way court switch is now one status button and one In/Out button (.r86-actions).
+    const sw = await card.locator('.r86-actions').boundingBox();
     const gear = await card.locator('.game-menu .icon-round').boundingBox();
     const names = await card.locator('.names-line').first().boundingBox();
-    assert(tile.x < sw.x && sw.x + sw.width <= gear.x + 1, 'tile | switch | gear, left to right');
-    assert(names.y > sw.y + sw.height - 1 && names.x >= sw.x - 1 && names.x + names.width <= sw.x + sw.width + 1, 'names sit under the switch, inside its width');
+    assert(tile.x < sw.x && sw.x + sw.width <= gear.x + 1, 'tile | status and In/Out | gear, left to right');
+    assert(names.y > sw.y + sw.height - 1 && names.x >= sw.x - 1, 'names sit under the status and In/Out buttons');
     assert((await card.locator('.scard-time').innerText()).length > 0, 'the time is under the tile');
-    const cells = await card.locator('.r2-cell').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
-    assert(cells.length === 3 && Math.max(...cells) - Math.min(...cells) < 1.5, `three equal cells ${cells}`);
-    const lines = await card.locator('.r2-cell').evaluateAll((els) => els.slice(1).map((e) => parseFloat(getComputedStyle(e).borderLeftWidth)));
-    assert(lines.every((w) => w > 0 && w <= 1.5), `thin dividers ${lines}`);
+    // Zip 86: the 3 equal footer cells with thin dividers (.r2-cell) were removed: the footer is the paid pill, the court button (or Book)
+    // and directions, each 44 px to tap, on one line.
+    const foot = await card.locator('.r86-foot > *').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height > 0).map((e) => [Math.round(e.getBoundingClientRect().height), Math.round(e.getBoundingClientRect().top)]));
+    assert(foot.length >= 2 && foot.every(([h]) => h >= 44) && new Set(foot.map(([, t]) => t)).size === 1, `footer ${JSON.stringify(foot)}`);
+    assert((await card.locator('.r2-cell, .r2-courtbtn, .r2-cancel').count()) === 0, 'the old 3-cell footer is gone');
     await shot(page, 'home-390-light', true);
     await ctx.close();
   });
 
-  await check('1 Home footer: words In and Out (no check or X icons), $ circle with "1 of 4", clock with the cancel time', async () => {
+  await check('1 Home: one In / Out button (Zip 86), the $ mark with "N of M paid", no cancel-by line away from its own day', async () => {
     const { ctx, page } = await openAdmin();
     const card = await reveal(page, A.id);
-    assert((await card.locator('.r2-seg button').allInnerTexts()).join('|') === 'In|Out', 'In | Out');
-    assert((await card.locator('.r2-seg svg').count()) === 0, 'no icons in the toggle');
-    assert((await card.locator('.r2-dol').innerText()) === '$', 'green $ circle');
-    assert(/^\d+ of \d+$/.test(await card.locator('.r2-paid-text').innerText()), 'paid count text');
-    assert((await card.locator('[data-cancel-by] svg').count()) === 1, 'clock icon');
-    const seen = await card.locator('[data-cancel-by]').evaluate((e) => [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim());
-    assert(/^(\d{1,2}(:\d{2})? [AP]M|[A-Z][a-z]{2} \d{1,2}(:\d{2})? [AP]M|[A-Z][a-z]{2} \d{1,2} \d{1,2}(:\d{2})? [AP]M)$/.test(seen), `cancel time text "${seen}"`);
-    assert((await card.locator('[data-cancel-by] .sr-only').innerText()).includes('Cancel the court by'), 'screen readers hear what the time is');
+    // Zip 86: the In | Out segmented control (.r2-seg) was removed: one button that says In (Alex is in on A) or Out.
+    assert((await card.locator('.r2-seg').count()) === 0, 'no In | Out segmented control');
+    // (The one In button carries a single check mark; never an X icon.)
+    assert((await card.locator('.r86-inout svg').count()) === 1, 'In has one check mark, no other icon');
+    assert((await card.locator('.r86-inout').innerText()).trim() === 'In' && (await card.locator('.r86-inout').getAttribute('data-inout')) === 'in', 'one In button');
+    assert((await card.locator('.r86-paid-mark').innerText()).trim() === '$', '$ mark while someone owes');
+    assert(/^\d+ of \d+ paid$/.test((await card.locator('.r86-paid-text').innerText()).replace(/\s+/g, ' ').trim()), 'paid count text');
+    // Zip 86: the cancel-by time is a gray line only on its own day (A is later this week).
+    assert((await card.locator('[data-cancel-by]').count()) === 0, 'no cancel-by line before its day');
     await ctx.close();
   });
 
-  await check('1 Home footer: In / Out is the organizer\'s own seat (same rules), and the paid cell opens Players', async () => {
+  await check('1 Home: In / Out is the organizer\'s own seat (same rules), and the paid cell opens Players', async () => {
     const { ctx, page } = await openAdmin();
     const card = await reveal(page, C.id);
-    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'Out is the true one');
-    await card.locator('.r2-seg-in').click();
+    const inout = card.locator('.r86-inout');
+    assert((await inout.getAttribute('data-inout')) === 'out', 'starts Out');
+    await inout.click();
     await page.waitForTimeout(600);
     const dd = await dash();
     assert(dd.sessions.find((s) => s.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'Alex is in on the server');
-    assert((await card.locator('.r2-seg-in').getAttribute('aria-pressed')) === 'true', 'In is the true one now');
-    await card.locator('.r2-seg-out').click();
+    assert((await inout.getAttribute('data-inout')) === 'in', 'In now');
+    await inout.click();
     await page.waitForTimeout(600);
     assert(!(await dash()).sessions.find((s) => s.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'out again');
     await card.locator('[data-paid-cell]').click();
@@ -593,7 +596,9 @@ async function main() {
   // ---------------------------------------------------------------- 4. history
   await check('4 History: activity by anyone other than Alex is highlighted, Alex\'s own is not', async () => {
     await join('Julian', C);
-    await post(areq, `/api/admin/sessions/${C.id}/court-status`, { status: 'waitlist' });
+    // Zip 86: no court Waitlist: Alex books C and sets it back to Not booked (his own entries).
+    await post(areq, `/api/admin/sessions/${C.id}/court-status`, { status: 'booked' });
+    await post(areq, `/api/admin/sessions/${C.id}/court-status`, { status: 'not_booked' });
     const { ctx, page } = await openAdmin();
     await tab(page, 'History');
     await page.locator('.history-head .segmented button', { hasText: 'Activity' }).click();
@@ -619,37 +624,42 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- the four fixes after Alex's test
-  await check('F1 the court switch moves the instant it is tapped, the toast comes when the server answers, nothing is disabled', async () => {
+  await check('F1 the court status button moves the instant it is tapped, the toast comes when the server answers, nothing is disabled', async () => {
     const { ctx, page } = await openAdmin();
     const card = await reveal(page, C.id);
+    // Zip 86: one status button (.r86-status) instead of the 3-way switch; a tap flips Not booked / Booked (no Waitlist).
+    const status = card.locator('.r86-status');
+    assert((await status.getAttribute('data-status')) === 'not_booked', 'starts Not booked');
     await page.route('**/api/admin/sessions/*/court-status', async (route) => {
       await sleep(1500);
       await route.continue();
     });
     const t0 = Date.now();
-    await card.locator('.court-switch [data-seg="waitlist"]').click();
-    assert((await card.locator('.court-switch [data-seg="waitlist"]').getAttribute('aria-pressed')) === 'true', 'filled at once');
+    await status.click();
+    assert((await status.getAttribute('data-status')) === 'booked', 'flipped at once');
     assert(Date.now() - t0 < 400, `took ${Date.now() - t0} ms`);
-    assert((await card.locator('.court-switch button:disabled').count()) === 0, 'no button is disabled while it saves');
-    assert((await card.getAttribute('data-switch')) === 'waitlist', 'the card itself follows at once');
-    assert((await page.locator('.toast, [role="status"]', { hasText: 'On the waitlist' }).count()) === 0, 'no toast before the server answers');
-    // A quick second tap while the first is still saving: the last tap wins.
-    await card.locator('.court-switch [data-seg="not_booked"]').click();
+    assert((await card.locator('.r86-status:disabled').count()) === 0, 'not disabled while it saves');
+    assert((await card.getAttribute('data-switch')) === 'booked', 'the card itself follows at once');
+    assert((await page.locator('.toast, [role="status"]', { hasText: 'Court booked' }).count()) === 0, 'no toast before the server answers');
+    // A second tap while the first is still saving (after the 0.4 s double-tap guard): the last tap wins.
+    await sleep(500);
+    await status.click();
     await page.waitForTimeout(3600);
     assert((await page.getByText('Court not booked').count()) >= 1, 'the toast for the last tap shows when the server answers');
     assert((await dash()).sessions.find((x) => x.id === C.id).bookingStatus !== 'booked', 'saved as the last tap');
-    assert((await card.locator('.court-switch [data-seg="not_booked"]').getAttribute('aria-pressed')) === 'true', 'still on the last tap');
+    assert((await status.getAttribute('data-status')) === 'not_booked', 'still on the last tap');
     await page.unroute('**/api/admin/sessions/*/court-status');
     // The server fails: it snaps back and says so.
     await page.route('**/api/admin/sessions/*/court-status', async (route) => {
       await sleep(900);
       await route.abort();
     });
-    await card.locator('.court-switch [data-seg="booked"]').click();
-    assert((await card.locator('.court-switch [data-seg="booked"]').getAttribute('aria-pressed')) === 'true', 'moves first');
+    await sleep(500);
+    await status.click();
+    assert((await status.getAttribute('data-status')) === 'booked', 'moves first');
     await page.waitForTimeout(2000);
-    assert((await card.locator('.court-switch [data-seg="not_booked"]').getAttribute('aria-pressed')) === 'true', 'snapped back');
-    assert((await page.getByText(/switch went back/).count()) >= 1, 'says it did not save');
+    assert((await status.getAttribute('data-status')) === 'not_booked', 'snapped back');
+    assert((await page.getByText(/went back/).count()) >= 1, 'says it did not save');
     assert((await dash()).sessions.find((x) => x.id === C.id).bookingStatus !== 'booked', 'nothing was saved');
     await ctx.close();
   });
@@ -659,7 +669,10 @@ async function main() {
     await post(areq, `/api/admin/sessions/${C.id}/me`, { in: false });
     const { ctx, page } = await openAdmin();
     const card = await reveal(page, C.id);
-    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'starts Out');
+    // Zip 86: one In/Out button (.r86-inout, data-inout) instead of the In | Out segmented control.
+    const inout = card.locator('.r86-inout');
+    const seat = () => inout.getAttribute('data-inout');
+    assert((await seat()) === 'out', 'starts Out');
     const count0 = (await card.locator('.players-count').innerText()).trim();
     const dots0 = await card.locator('.dots').getAttribute('aria-label');
     assert(!(await card.locator('.names-line').allInnerTexts()).join(' ').includes('Alex'), 'Alex is not in the names');
@@ -668,36 +681,39 @@ async function main() {
       await route.continue();
     });
     const t0 = Date.now();
-    await card.locator('.r2-seg-in').click();
-    assert((await card.locator('.r2-seg-in').getAttribute('aria-pressed')) === 'true', 'In is filled at once');
+    await inout.click();
+    assert((await seat()) === 'in', 'In at once');
     assert(Date.now() - t0 < 400, `took ${Date.now() - t0} ms`);
     assert((await card.locator('.players-count').innerText()).trim() !== count0, 'the seat count changed at once');
     assert((await card.locator('.dots').getAttribute('aria-label')) !== dots0, 'the dots changed at once');
     assert((await card.locator('.names-line').allInnerTexts()).join(' ').includes('Alex'), 'Alex shows in the names at once');
-    assert((await card.locator('.r2-seg button:disabled').count()) === 0, 'nothing disabled while it saves');
+    assert((await card.locator('.r86-inout:disabled').count()) === 0, 'nothing disabled while it saves');
     assert((await page.getByText("You’re in", { exact: true }).count()) === 0, 'no toast before the server answers');
     await page.waitForTimeout(2600);
     assert((await page.getByText("You’re in", { exact: true }).count()) >= 1, 'toast when the server answers');
     assert((await dash()).sessions.find((x) => x.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'saved');
-    // Quick taps: Out then In then Out again: the last one wins.
-    await card.locator('.r2-seg-out').click();
-    await card.locator('.r2-seg-in').click();
-    await card.locator('.r2-seg-out').click();
-    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'shows the last tap at once');
+    // Quick taps: Out then In then Out again: the last one wins. (Each after the 0.4 s double-tap guard, which drops a faster second tap.)
+    await inout.click();
+    await sleep(450);
+    await inout.click();
+    await sleep(450);
+    await inout.click();
+    assert((await seat()) === 'out', 'shows the last tap at once');
     assert((await card.locator('.players-count').innerText()).trim() === count0, 'count is back to without Alex at once');
     await page.waitForTimeout(6000);
     assert(!(await dash()).sessions.find((x) => x.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'the server ended with the last tap (Out)');
-    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'still Out after the answers');
+    assert((await seat()) === 'out', 'still Out after the answers');
     await page.unroute('**/api/admin/sessions/*/me');
     // The server fails: snaps back and says so.
     await page.route('**/api/admin/sessions/*/me', async (route) => {
       await sleep(900);
       await route.abort();
     });
-    await card.locator('.r2-seg-in').click();
-    assert((await card.locator('.r2-seg-in').getAttribute('aria-pressed')) === 'true', 'moves first');
+    await sleep(450);
+    await inout.click();
+    assert((await seat()) === 'in', 'moves first');
     await page.waitForTimeout(2200);
-    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'snapped back');
+    assert((await seat()) === 'out', 'snapped back');
     assert((await card.locator('.players-count').innerText()).trim() === count0, 'the count snapped back');
     assert(!(await card.locator('.names-line').allInnerTexts()).join(' ').includes('Alex'), 'the name snapped back');
     assert((await page.getByText(/It went back/).count()) >= 1, 'says it did not save');
@@ -795,16 +811,19 @@ async function main() {
       assert((await page.locator(`article#session-${id}`).count()) === 0, 'tapping the "3 in" words folds it');
       await page.locator(`div#session-${id}`).click();
       await page.waitForTimeout(350);
-      await page.locator(`article#session-${id} .r2-foot`).click({ position: { x: 3, y: 20 } });
+      // Zip 86: the footer is .r86-foot and its paid pill stretches to the next button, so the empty space is the gap after the paid pill.
+      const fb = await page.locator(`article#session-${id} .r86-foot`).boundingBox();
+      const pb = await page.locator(`article#session-${id} .r86-paid`).boundingBox();
+      await page.locator(`article#session-${id} .r86-foot`).click({ position: { x: pb.x + pb.width - fb.x + 3, y: pb.y + pb.height / 2 - fb.y } });
       await page.waitForTimeout(350);
-      assert((await page.locator(`article#session-${id}`).count()) === 0, 'tapping the footer\'s empty edge folds it');
+      assert((await page.locator(`article#session-${id}`).count()) === 0, 'tapping the footer\'s empty gap folds it');
       await page.locator(`div#session-${id}`).click();
       await page.waitForTimeout(350);
       // Controls do their own job and never fold the card: the gear, In/Out, the court switch.
       const card = page.locator(`article#session-${id}`);
       await card.locator('.game-menu .icon-round').click();
       await page.keyboard.press('Escape');
-      await card.locator('.r2-paid').click();
+      await card.locator('.r86-paid').click();
       await page.getByRole('dialog').waitFor();
       await page.keyboard.press('Escape');
       await page.waitForTimeout(350);
@@ -814,7 +833,7 @@ async function main() {
       const lid = (await later.getAttribute('data-session'));
       await later.click();
       await page.waitForTimeout(350);
-      assert((await page.locator(`article#session-${lid} .r2-foot`).count()) === 1, 'a later-week game opens with its footer');
+      assert((await page.locator(`article#session-${lid} .r86-foot`).count()) === 1, 'a later-week game opens with its footer');
       await ctx.close();
     }
   });
@@ -829,7 +848,7 @@ async function main() {
         const wide = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1 && getComputedStyle(e).position !== 'fixed' && !e.closest('.week-break, .tabbar, .hv2-short')).slice(0, 4).map((e) => `${e.tagName}.${e.className}`));
         assert(wide.length === 0, `Home ${w} ${scheme} big=${big} v2=${v2}: overflow from ${wide}`);
         // Cards: nothing inside runs past its card edge.
-        const out = await page.evaluate(() => [...document.querySelectorAll('.scard-r2')].flatMap((c) => { const cb = c.getBoundingClientRect(); return [...c.querySelectorAll('.r2-cell *, .r2-top *')].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && (b.right > cb.right + 1 || b.left < cb.left - 1) && !e.closest('.menu-pop'); }).slice(0, 2).map((e) => `${e.tagName}.${e.className}`); }));
+        const out = await page.evaluate(() => [...document.querySelectorAll('.scard-r2')].flatMap((c) => { const cb = c.getBoundingClientRect(); return [...c.querySelectorAll('.r86-foot *, .r2-top *')].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && (b.right > cb.right + 1 || b.left < cb.left - 1) && !e.closest('.menu-pop'); }).slice(0, 2).map((e) => `${e.tagName}.${e.className}`); }));
         assert(out.length === 0, `card cut off at ${w} big=${big} v2=${v2}: ${out}`);
         for (const t of ['Money', 'Players', 'History', 'Settings']) {
           await tab(page, t);
@@ -863,8 +882,9 @@ async function main() {
   await check('L reduced motion and screen-reader names: footer buttons are named, the paid cell says what it opens', async () => {
     const { ctx, page } = await openAdmin({ extra: { reducedMotion: 'reduce' } });
     const card = await reveal(page, A.id);
-    assert(/I’m in for/.test((await card.locator('.r2-seg-in').getAttribute('aria-label')) || ''), 'In has a name');
-    assert(/Out of/.test((await card.locator('.r2-seg-out').getAttribute('aria-label')) || ''), 'Out has a name');
+    // Zip 86: one In/Out button and one status button, each named with what a tap does.
+    assert(/You’re in for .*Tap to go out/.test((await card.locator('.r86-inout').getAttribute('aria-label')) || ''), 'In/Out has a name');
+    assert(/^Court status for .*: Booked\. Tap for Not booked\.$/.test((await card.locator('.r86-status').getAttribute('aria-label')) || ''), 'status has a name');
     assert(/of \d+ paid\. Open the players list/.test((await card.locator('[data-paid-cell]').getAttribute('aria-label')) || ''), 'paid cell named');
     await ctx.close();
   });

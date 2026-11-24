@@ -218,7 +218,7 @@ async function main() {
   await stage('zip66_start');
   for (const width of WIDTHS)
     for (const scheme of SCHEMES)
-      await check(`A ${width} ${scheme}: one closed line (ball, name, "8 signed up", chevron); tap opens Style, Votes, Not signed up, Plan, Pick date and Edit; tap closes`, async () => {
+      await check(`A ${width} ${scheme}: one closed line (ball, name, "8 signed up", chevron); tap opens the steps, When with the votes, and the four buttons (Zip 86); tap closes`, async () => {
         const a = await adminPage({ width, scheme });
         const card = a.page.locator('[data-tm-home]');
         await card.waitFor({ timeout: 15000 });
@@ -226,7 +226,8 @@ async function main() {
         assert((await toggle.getAttribute('aria-expanded')) === 'false', 'starts closed');
         assert((await a.page.locator('[data-tm-home-body]').count()) === 0, 'no rows while closed');
         const box = await card.boundingBox();
-        assert(box.height >= 50 && box.height <= 58, `one line about 54 px tall, is ${box.height}`);
+        // Zip 86: the closed head carries a small gray status line under the name, so it is a little taller than one line.
+        assert(box.height >= 50 && box.height <= 72, `the closed head about 54 to 66 px tall, is ${box.height}`);
         assert(flat(await a.page.locator('[data-tm-stage]').innerText()) === '8 signed up', await a.page.locator('[data-tm-stage]').innerText());
         assert((await a.page.locator('.tm-hc-ball svg.ball').count()) === 1, "the site's pickleball icon");
         const cut = await a.page.locator('.tm-hc-name').evaluate((el) => el.scrollWidth > el.clientWidth + 1);
@@ -236,20 +237,21 @@ async function main() {
         if (width === 420 || width === 320) await shot(a.page, `A-closed-${width}-${scheme}`);
         await openCard(a.page);
         assert((await toggle.getAttribute('aria-expanded')) === 'true', 'open');
-        const rows = await a.page.locator('[data-tm-home-body] .tm-rows > .tm-row > span:first-child').allInnerTexts();
-        assert(JSON.stringify(rows.map(flat)) === JSON.stringify(['Style', 'Votes', 'Not signed up', 'Plan']), JSON.stringify(rows));
-        assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Players vote', 'Style');
-        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Locked doubles 3 · Americano 2 · Either 3', await a.page.locator('[data-tm-vote-counts]').innerText());
-        // Zip 70: the Plan's expected players (the 8 signed up), the table's 2 courts and 2 hours for 8.
-        assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()) === '8 players · 2 courts · 2 hrs', await a.page.locator('[data-tm-home-plan]').innerText());
-        assert((await a.page.locator('[data-tm-open-dates]').count()) === 1 && (await a.page.locator('[data-tm-open-edit]').count()) === 1, 'Pick date and Edit');
+        // Zip 86: the Style / Votes / Not signed up / Plan rows are gone: the 4 steps, When (dates offered, courts, style, price, the votes line)
+        // and four buttons (Who's signed up, Remind, Dates, Money or Prizes).
+        assert((await a.page.locator('[data-tm-steps]').getAttribute('data-tm-steps')) === '0', 'step 1 of 4 (Sign up)');
+        assert(/^\d+ dates? offered$/.test(flat(await a.page.locator('[data-tm86-when] [data-tm-row-time]').innerText())), await a.page.locator('[data-tm-row-time]').innerText());
+        assert(/^2 courts · Players vote · \$\d+$/.test(flat(await a.page.locator('[data-tm-home-plan]').innerText())), await a.page.locator('[data-tm-home-plan]').innerText());
+        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === 'Votes: Locked doubles 3 · Americano 2 · Either 3', await a.page.locator('[data-tm-vote-counts]').innerText());
+        assert((await a.page.locator('[data-tm-open-dates]').count()) === 1 && (await a.page.locator('[data-tm-open-edit]').count()) === 1, 'Dates and Who’s signed up');
+        assert(flat(await a.page.locator('[data-tm-open-edit] .tm86-btn-sub').innerText()) === '8 signed up', 'Who’s signed up: 8');
         const text = await card.innerText();
         assert(!/can see it/i.test(text), 'no "Everyone can see it" on the card');
-        assert(!/[›>]/.test(await a.page.locator('[data-tm-votes-toggle]').innerText()), 'no arrow on Votes');
-        // No row wraps (each row is one 38 px line).
-        for (const h of await a.page.locator('[data-tm-home-body] .tm-rows > .tm-row').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height)))
-          assert(h <= 40, `a row wraps (${h} px)`);
-        await oneLine(a.page, '[data-tm-home-body] .tm-rows > .tm-row');
+        for (const b of await a.page.locator('[data-tm-home-body] .tm86-btn').all()) {
+          const r = await b.boundingBox();
+          assert(r.height >= 43.5, `a button under 44 px (${r.height})`);
+        }
+        await oneLine(a.page, '[data-tm-home-body] .tm86-btn-title');
         await fits(a.page, '[data-tm-home]');
         await noDash(a.page, 'the card');
         if (width === 420 || width === 320) await shot(a.page, `A-open-${width}-${scheme}`);
@@ -268,53 +270,36 @@ async function main() {
   // ---------------------------------------------------------------- B  Votes
   for (const width of [420, 320])
     for (const scheme of SCHEMES)
-      await check(`B ${width} ${scheme}: tap Votes: Doubles, Americano, Either with names in a soft box; tap again closes; starts closed`, async () => {
+      await check(`B ${width} ${scheme}: the votes line adds up to who voted what (Zip 86: no Votes box)`, async () => {
+        // Zip 86: the Votes row and its box of names are gone; the one votes line under When must match the sign-ups' votes.
         const a = await adminPage({ width, scheme });
         await openCard(a.page);
-        assert((await a.page.locator('[data-tm-votes-box]').count()) === 0, 'starts closed');
-        await a.page.locator('[data-tm-votes-toggle]').click();
-        const boxEl = a.page.locator('[data-tm-votes-box]');
-        await boxEl.waitFor();
+        assert((await a.page.locator('[data-tm-votes-box], [data-tm-votes-toggle]').count()) === 0, 'no Votes row');
         const t = (await dash()).tournament;
-        const byVote = (v) => t.signups.filter((s) => (s.vote || 'either') === v).map((s) => s.name).join(', ') || 'Nobody';
-        for (const [key, label] of [['locked', 'Doubles'], ['americano', 'Americano'], ['either', 'Either']]) {
-          const row = boxEl.locator(`[data-tm-votes-row="${key}"]`);
-          assert(flat(await row.locator('dt').innerText()) === label, label);
-          assert(flat(await row.locator('dd').innerText()) === byVote(key), `${label}: ${await row.locator('dd').innerText()}`);
-        }
-        const bg = await boxEl.evaluate((el) => [getComputedStyle(el).backgroundColor, getComputedStyle(el).borderRadius]);
-        assert(bg[0] !== 'rgba(0, 0, 0, 0)' && parseFloat(bg[1]) >= 10, `soft gray rounded box ${bg}`);
+        const n = (v) => t.signups.filter((s) => (s.vote || 'either') === v).length;
+        const want = `Votes: Locked doubles ${n('locked')} · Americano ${n('americano')} · Either ${n('either')}`;
+        assert(flat(await a.page.locator('[data-tm-vote-counts]').innerText()) === want, `${await a.page.locator('[data-tm-vote-counts]').innerText()} vs ${want}`);
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `B-votes-${width}-${scheme}`);
-        await tapGap(a.page);
-        await a.page.locator('[data-tm-votes-toggle]').click();
-        await a.page.waitForTimeout(200);
-        assert((await a.page.locator('[data-tm-votes-box]').count()) === 0, 'tap again closes');
         await a.ctx.close();
       });
 
   // ---------------------------------------------------------------- C  Not signed up
   for (const scheme of SCHEMES)
-    await check(`C 390 ${scheme}: Not signed up 2 (Vic, Reese: played lately, not on the list); Copy reminder text copies the exact words; "Copied"`, async () => {
+    await check(`C 390 ${scheme}: Remind "2 not signed up" (Vic, Reese: played lately, not on the list) copies the exact words; "Copied"`, async () => {
+      // Zip 86: the Not signed up row and its box are gone; Remind (amber "2 not signed up") copies the same reminder text.
       const a = await adminPage({ width: 390, scheme });
       await a.ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
       await openCard(a.page);
-      assert(flat(await a.page.locator('[data-tm-missing-count]').innerText()) === '2', 'count');
-      assert((await a.page.locator('[data-tm-missing-box]').count()) === 0, 'starts closed');
-      await a.page.locator('[data-tm-missing-toggle]').click();
-      await a.page.locator('[data-tm-missing-box="recent"]').waitFor();
-      assert(flat(await a.page.locator('[data-tm-missing-names]').innerText()) === 'Vic, Reese', await a.page.locator('[data-tm-missing-names]').innerText());
-      await a.page.locator('[data-tm-missing-copy]').click();
+      const btn = a.page.locator('[data-tm-missing-copy]');
+      assert(flat(await btn.locator('.tm86-btn-sub').innerText()) === '2 not signed up', await btn.innerText());
+      await btn.click();
       await a.page.locator('.toast', { hasText: 'Copied' }).waitFor({ timeout: 5000 });
       const copied = await a.page.evaluate(() => navigator.clipboard.readText());
       // No close is stored before the date: the next Tuesday at 8 PM (Tue Nov 24 from Thu Nov 19).
       assert(copied === 'Vic, Reese: sign-ups for The Cold Open close Tue Nov 24 at 8 PM. localhost:5468', copied);
       await fits(a.page, '[data-tm-home]');
       await shot(a.page, `C-missing-390-${scheme}`);
-      await tapGap(a.page);
-      await a.page.locator('[data-tm-missing-toggle]').click();
-      await a.page.waitForTimeout(200);
-      assert((await a.page.locator('[data-tm-missing-box]').count()) === 0, 'tap again closes');
       await a.ctx.close();
     });
 
@@ -472,11 +457,10 @@ async function main() {
     const a = await adminPage({ width: 390 });
     await a.ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
     await openCard(a.page);
-    assert(flat(await a.page.locator('[data-tm-missing-count]').innerText()) === '1', 'count 1');
-    await a.page.locator('[data-tm-missing-toggle]').click();
-    await a.page.locator('[data-tm-missing-box="missed"]').waitFor();
-    assert(flat(await a.page.locator('[data-tm-missing-names]').innerText()) === 'Sage', 'Sage');
-    await a.page.locator('[data-tm-missing-copy]').click();
+    // Zip 86: no Not signed up row; the copy is Remind (or the quiet "Copy reminder for 1 not signed up" link once tickets are open).
+    const copy = a.page.locator('[data-tm-missing-copy]');
+    assert((await copy.count()) === 1 && /\b1 not signed up$/.test(flat(await copy.innerText())), await copy.innerText());
+    await copy.click();
     await a.page.locator('.toast', { hasText: 'Copied' }).waitFor({ timeout: 5000 });
     const copied = await a.page.evaluate(() => navigator.clipboard.readText());
     assert(/^Sage: sign-ups for The Cold Open close (Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} \d{1,2} at 7 PM\. localhost:5468$/.test(copied), copied);
@@ -489,7 +473,7 @@ async function main() {
     assert(JSON.parse((await answerOf('Sage')).text).tournament.me === null, 'off the list');
     await v.ctx.close();
     await a.page.waitForTimeout(5800); // the organizer's screen refreshes by itself
-    assert((await a.page.locator('[data-tm-missing-toggle]').count()) === 0, 'the row goes (nobody left)');
+    assert((await a.page.locator('[data-tm-missing-copy]').count()) === 0, 'the copy goes (nobody left)');
     await a.ctx.close();
   });
   await check('G no player answer carries the Not signed up list or anyone\'s vote', async () => {
@@ -591,7 +575,7 @@ async function main() {
 
   // ---------------------------------------------------------------- I  66b: the tickets folded into the organizer's card (pictures A3, A4)
   for (const scheme of SCHEMES)
-    await check(`I ${scheme}: no separate tickets card; the pill "3 unpaid" (amber); Not paid yet 3 under Locked in; tap: names, Remind all unpaid, No number for Reese`, async () => {
+    await check(`I ${scheme}: no separate tickets card; the pill "3 unpaid" (amber); Remind "3 haven’t paid" with the numbers; No number for Reese`, async () => {
       await stage('tickets_open');
       const a = await adminPage({ width: 390, scheme });
       await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
@@ -600,35 +584,30 @@ async function main() {
       assert(flat(await pill.innerText()) === '3 unpaid' && (await pill.getAttribute('class')).includes('tm-chip-unpaid'), await pill.innerText());
       await shot(a.page, `I-closed-${scheme}`);
       await openCard(a.page);
-      const labels = (await a.page.locator('[data-tm-home-body] .tm-rows > .tm-row > span:first-child').allInnerTexts()).map(flat);
-      const at = labels.indexOf('Locked in');
-      assert(at >= 0 && labels[at + 1] === 'Not paid yet' && !labels.includes('Paid'), JSON.stringify(labels));
-      assert(flat(await a.page.locator('[data-tm-row-unpaid]').innerText()) === '3', 'count');
-      assert(/pay by/.test(flat(await a.page.locator('[data-tm-row="ticket"]').innerText())), 'Pay by stays in the Ticket row');
-      await a.page.locator('[data-tm-unpaid-toggle]').click();
-      const box = a.page.locator('[data-tm-unpaid-box]');
-      await box.waitFor();
-      assert(flat(await box.locator('[data-tm-unpaid-names]').innerText()) === 'Vic, Zoe, Reese', await box.innerText());
-      assert(flat(await box.locator('[data-tm-remind-missing]').innerText()) === 'No number for Reese', 'missing number');
-      const href = await box.locator('[data-tm-remind-btn]').getAttribute('href');
+      // Zip 86: no Locked in / Not paid yet rows: Tickets "N of M locked in", and Remind "3 haven't paid" opens Messages itself.
+      assert(/^\d+ of \d+ locked in$/.test(flat(await a.page.locator('[data-tm-tickets] .tm86-btn-sub').innerText())), await a.page.locator('[data-tm-tickets]').innerText());
+      const btn = a.page.locator('[data-tm-remind-btn]');
+      assert(flat(await btn.locator('[data-tm-row-unpaid]').innerText()) === '3 haven’t paid', 'count');
+      assert(/Vic, Zoe, Reese haven’t paid/.test(await btn.getAttribute('aria-label')), await btn.getAttribute('aria-label'));
+      assert(/pay by/.test(flat(await a.page.locator('[data-tm86-status]').innerText())), 'Pay by on the status line');
+      const href = await btn.getAttribute('href');
       const digits = href.replace(/\D/g, '');
       assert(/^sms:/.test(href) && digits.includes('3135550101') && digits.includes('3135550103') && decodeURIComponent(href).includes('please pay for Winter Classic'), href);
+      await btn.evaluate((el) => el.addEventListener('click', (e) => e.preventDefault()));
+      await btn.click();
+      await a.page.locator('.toast', { hasText: 'No number for Reese' }).waitFor({ timeout: 5000 });
       await fits(a.page, '[data-tm-home]');
       await shot(a.page, `I-open-${scheme}`);
-      await tapGap(a.page);
-      await a.page.locator('[data-tm-unpaid-toggle]').click();
-      await a.page.waitForTimeout(200);
-      assert((await box.count()) === 0, 'tap again closes');
       await a.ctx.close();
     });
-  await check('I everyone paid: the pill "10 locked in" (green), no Not paid yet row; before tickets: "8 signed up"', async () => {
+  await check('I everyone paid: the pill "10 locked in" (green), Remind is quiet; before tickets: "8 signed up"', async () => {
     await stage('all_locked');
     let a = await adminPage({ width: 390 });
     await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
     let pill = a.page.locator('[data-tm-stage]');
     assert(flat(await pill.innerText()) === '10 locked in' && (await pill.getAttribute('class')).includes('tm-chip-ok'), await pill.innerText());
     await openCard(a.page);
-    assert((await a.page.locator('[data-tm-unpaid-toggle]').count()) === 0, 'hidden at 0');
+    assert((await a.page.locator('[data-tm-remind-btn]').count()) === 0 && (await a.page.locator('[data-tm86-remind]').count()) === 1, 'Remind is quiet at 0');
     await a.ctx.close();
     await stage('zip66_start');
     a = await adminPage({ width: 390 });

@@ -153,7 +153,8 @@ async function main() {
           return { tileW: r.width, left: tr.left - (r.left + bw), right: r.right - bw - tr.right, font: getComputedStyle(tag).fontSize, word: tag.innerText.trim() };
         });
         assert(m.word === 'TONIGHT', `the word: ${m.word}`);
-        assert(m.left >= 3 && m.right >= 3, `room inside the tile: ${JSON.stringify(m)}`);
+        // Zip 86 (picture 8): the TONIGHT word is 11 px so the tile keeps the normal tile width at every text size; that leaves about 2.4 px each side.
+        assert(m.left >= 2 && m.right >= 2, `room inside the tile: ${JSON.stringify(m)}`);
         assert(Math.abs(m.left - m.right) < 1, `centered: ${JSON.stringify(m)}`);
         const others = await page.evaluate(() =>
           [...document.querySelectorAll('.hv2-short .tile')].filter((t) => !t.querySelector('.day-tag.tonight')).map((t) => ({ w: t.getBoundingClientRect().width, tag: t.querySelector('.day-tag') ? getComputedStyle(t.querySelector('.day-tag')).fontSize : null })),
