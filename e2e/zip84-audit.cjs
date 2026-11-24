@@ -246,6 +246,12 @@ async function runWorld(WORLD) {
         A('history', 'history', admin('History')),
         A('skills', 'zip79_skills', admin('History', (a) => clickText(a.page, '[role="group"] button, [role="tablist"] button', 'Skills').catch(() => {}))),
         A('settings', 'venue_winter', admin('Settings')),
+        ...['Group', 'Schedule', 'Money', 'Alerts', 'Feature switches', 'Backup', 'Advanced'].map((sec) =>
+          A(`settings-${sec.toLowerCase().replace(/ /g, '-')}`, 'venue_winter', admin('Settings', async (a) => {
+            await a.page.locator('details summary', { hasText: sec }).first().click();
+            await a.page.waitForTimeout(900);
+          })),
+        ),
         A('test-page', 'none', async (o) => {
           const a = await b.newPage({ ...o, organizer: true });
           await a.page.goto(`${b.BASE}/admin/tournament-test`);
@@ -282,6 +288,7 @@ async function runWorld(WORLD) {
         }
     if (v0(s) && TAPS) await tapPass(b, s, stage, DIR, WORLD);
     if (s.xmas) await b.call('PUT', '/api/admin/christmas-skin-switch', { mode: 'off' }).catch(() => {});
+    writeFileSync(path.join(ROOT, '.data', 'zip84', `report-${WORLD}${process.env.TAG ? '-' + process.env.TAG : ''}.json`), JSON.stringify({ report: report.filter((r) => r.world === WORLD), taps: taps.filter((t) => t.world === WORLD), flows }, null, 1));
   }
   b.full = full;
   if (!ONLY || ONLY.split(',').includes('flows')) await moneyFlows(b).catch((e) => console.log('  flow error', e.message));
@@ -314,6 +321,11 @@ async function tapPass(b, s, stage, DIR, WORLD) {
     if (seen.has(key)) continue;
     seen.add(key);
     const rec = { world: WORLD, screen: s.name, label: item.label, result: '' };
+    if (/^Sign out$/.test(item.label)) {
+      rec.result = 'skipped (would sign the shared organizer cookie out)';
+      taps.push(rec);
+      continue;
+    }
     if (item.disabled) {
       rec.result = 'disabled';
       taps.push(rec);
@@ -475,6 +487,152 @@ async function moneyFlows(b) {
   for (const f of flows) console.log('  flow', JSON.stringify(f));
 }
 
+
+/** SHOTS=1: the 10 worst finds as pictures (docs/audits/84-shots/), each find outlined in red. Fake names only. */
+async function worstShots() {
+  const OUT = path.join(ROOT, 'docs', 'audits', '84-shots');
+  mkdirSync(OUT, { recursive: true });
+  const calm = await boot({ name: 'zip84-shots-calm', port: 5996, calm: true });
+  const mark = (page, sel, text) =>
+    page.evaluate(({ sel, text }) => {
+      let els = [...document.querySelectorAll(sel)].filter((e) => !text || e.textContent.includes(text));
+      // Only the innermost match (not every parent that holds the same words).
+      els = els.filter((e) => !els.some((o) => o !== e && e.contains(o)));
+      for (const e of els) {
+        e.style.outline = '3px solid #e0201b';
+        e.style.outlineOffset = '2px';
+      }
+      return els.length;
+    }, { sel, text });
+  /** Shot of the region around an element (the whole width of the screen). */
+  const around = async (page, sel, text, file, padTop = 110, padBottom = 110) => {
+    const n = await mark(page, sel, text);
+    const box = await page.evaluate(({ sel, text }) => {
+      const all = [...document.querySelectorAll(sel)].filter((x) => !text || x.textContent.includes(text));
+      const e = all.find((x) => !all.some((o) => o !== x && x.contains(o)));
+      if (!e) return null;
+      e.scrollIntoView({ block: 'center' });
+      const r = e.getBoundingClientRect();
+      return { y: r.top + window.scrollY, h: r.height };
+    }, { sel, text });
+    if (!box) throw new Error(`${file}: nothing matches ${sel} ${text || ''}`);
+    await page.waitForTimeout(300);
+    const w = page.viewportSize().width;
+    await page.screenshot({ path: path.join(OUT, file), fullPage: true, clip: { x: 0, y: Math.max(0, box.y - padTop), width: w, height: box.h + padTop + padBottom } });
+    console.log(`  ${file} (${n} outlined)`);
+  };
+  const tab = async (a, name) => {
+    await a.page.locator('nav.tabbar button', { hasText: name }).first().click();
+    await a.page.waitForTimeout(1100);
+  };
+  let full;
+  try {
+    // 01 The short ticket's style line runs past its box at 320 (and 360): "all night)" is cut by the card.
+    let p;
+    if (!process.env.SHOT_FROM || process.env.SHOT_FROM <= '01') {
+    await calm.stage('zip70_late');
+    p = await calm.playerPage('Parker', { width: 320 });
+    await around(p.page, '.tc-format', 'same partner', '01-ticket-style-line-cut-320.png', 90, 120);
+    await p.ctx.close();
+    // 02 Organizer Home at 320: a folded game row breaks words in the middle ("Booki / ng open / s").
+    await calm.stage('none');
+    p = await calm.adminHome({ width: 320 });
+    await around(p.page, '.hv2-short', 'Booking opens', '02-home-row-breaks-words-320.png', 60, 60);
+    await p.ctx.close();
+    }
+    if (process.env.SHOT_FROM !== '09') {
+    // 03 The player's "Didn't pay?" is 26 px tall and takes back their I paid at once (no Undo).
+    await calm.stage('tickets_open');
+    p = await calm.playerPage('Vic', { width: 390 });
+    await p.page.locator('.schedule button', { hasText: 'I’m in' }).first().click();
+    await p.page.waitForTimeout(2500);
+    await p.page.getByRole('button', { name: 'I paid', exact: true }).last().click();
+    await p.page.waitForTimeout(900);
+    const confirm = p.page.locator('dialog[open] button', { hasText: /^I paid/ });
+    if (await confirm.count()) await confirm.first().click();
+    await p.page.waitForTimeout(6500);
+    await around(p.page, 'button.didnt-pay', '', '03-didnt-pay-26px-no-undo.png', 230, 60);
+    await p.ctx.close();
+    // 04 Players see "More sessions" (players say "game").
+    await calm.stage('none');
+    p = await calm.playerPage('Vic', { width: 390 });
+    await around(p.page, 'button', 'More sessions', '04-player-more-sessions.png', 180, 40);
+    await p.ctx.close();
+    // 05 Money > Totals: the tournament row's tap area is 20 px tall.
+    await calm.stage('ended');
+    p = await calm.adminHome({ width: 390 });
+    await tab(p, 'Money');
+    await p.page.locator('[role="group"] button', { hasText: 'Totals' }).first().click();
+    await p.page.waitForTimeout(1200);
+    await around(p.page, '.tr-tour-btn', '', '05-totals-tournament-row-20px.png', 140, 60);
+    await p.ctx.close();
+    // 06 Edit awards on an Americano night: "Suggested: full prizes (1st $14 · 2nd $7 each)": one player per place, no "each".
+    await calm.stage('zip77_allin');
+    p = await calm.adminHome({ width: 390 });
+    await p.page.locator('button', { hasText: /^Edit awards$/ }).first().click();
+    await p.page.waitForTimeout(1000);
+    await around(p.page, 'dialog[open] *', 'Suggested: full prizes', '06-prize-helper-each-americano.png', 120, 60);
+    await p.ctx.close();
+    // 07 History at 320: the tabs still say "Sessions", and the strip opens on a lone "y" (Activity cut at the left).
+    await calm.stage('zip79_skills');
+    p = await calm.adminHome({ width: 320, scheme: 'dark' });
+    await tab(p, 'History');
+    await p.page.locator('[role="group"] button, [role="tablist"] button', { hasText: 'Skills' }).first().click().catch(() => {});
+    await p.page.waitForTimeout(1000);
+    await mark(p.page, '[role="group"] button, [role="tablist"] button', 'Sessions');
+    await p.page.screenshot({ path: path.join(OUT, '07-history-tabs-sessions-320.png'), clip: { x: 0, y: 0, width: 320, height: 330 } });
+    console.log('  07-history-tabs-sessions-320.png');
+    await p.ctx.close();
+    full = await boot({ name: 'zip84-shots-full', port: 5998, calm: false });
+    // 08 The owe banner: "$42" with "$14 each: Nov 12 and Nov 19 (2 games)" reads as two games (it is three: two on Nov 19).
+    p = await full.pickedPage('Vic', { width: 390 });
+    await around(p.page, '[data-pay-card]', '', '08-owe-line-2-games-42.png', 20, 20);
+    // 09 Two "I'm in" buttons on one screen, two looks (15 px / 800 on the Want in card, 16 px / 750 on game cards).
+    await mark(p.page, 'button', 'I’m in');
+    await p.page.screenshot({ path: path.join(OUT, '09-two-im-in-looks.png'), clip: { x: 0, y: 120, width: 390, height: 520 } });
+    console.log('  09-two-im-in-looks.png');
+    await p.ctx.close();
+    // 10 Records three ways: the players' board "5 - 0", the organizer's End card "5-0", scores "11–8".
+    await calm.stage('zip77_revealed');
+    p = await calm.playerPage('Vic', { width: 390 });
+    const nice = p.page.locator('[data-tour-nice]');
+    if (await nice.count()) await nice.click().catch(() => {});
+    await p.page.waitForTimeout(800);
+    await around(p.page, '[data-tc-reveal], .tc-rv-hero, [data-tc-day-hero]', '', '10a-board-record.png', 0, 0).catch(async () => p.page.screenshot({ path: path.join(OUT, '10a-board-record.png') }));
+    await p.ctx.close();
+    await calm.stage('zip77_allin');
+    p = await calm.adminHome({ width: 390 });
+    await around(p.page, '*', 'Only you see this until the reveal.', '10b-endcard-record.png', 10, 330).catch(() => {});
+    await p.ctx.close();
+    }
+    if (!full) full = await boot({ name: 'zip84-shots-full', port: 5998, calm: false });
+    // 09 (full world) The player's own credit history says "Credit adjusted by organizer", not Alex's name.
+    {
+      const sage = (await full.call('GET', '/api/admin/dashboard')).players.find((x) => x.name === 'Sage');
+      const ph = await full.phone('Sage');
+      const seen = (await ph.group()).credit.balanceCents;
+      await ph.ctx.close();
+      await full.call('POST', `/api/admin/players/${sage.id}/credit-adjust`, { direction: 'add', cents: 500, reason: 'Thanks for bringing balls', seen });
+    }
+    p = await full.pickedPage('Sage', { width: 390 });
+    await p.page.locator('button', { hasText: 'CREDIT' }).first().click();
+    await p.page.waitForTimeout(900);
+    await around(p.page, 'dialog[open] *', 'adjusted by organizer', '09-credit-history-by-organizer.png', 120, 120);
+    await p.ctx.close();
+    // 10 Activity: switch names in straight double quotes ("Tournaments"), the site uses curly quotes elsewhere.
+    await calm.stage('history');
+    p = await calm.adminHome({ width: 390 });
+    await tab(p, 'History');
+    await p.page.waitForTimeout(800);
+    await around(p.page, 'main *', 'switched "Tournaments"', '10-activity-straight-quotes.png', 120, 160);
+    await p.ctx.close();
+  } finally {
+    await calm.close();
+    if (full) await full.close();
+  }
+}
+
 (async () => {
+  if (process.env.SHOTS === '1') return worstShots();
   for (const w of WORLDS) await runWorld(w);
 })();
