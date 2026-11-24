@@ -144,7 +144,6 @@ function sanitizeGame(s: PlayerSessionView, nowMs: number): PlayerSessionView {
         }
       : null,
     timeAsk: null,
-    ...(s.venueWaitlist ? { venueWaitlist: true } : {}),
   };
 }
 

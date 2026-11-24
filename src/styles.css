@@ -118,8 +118,6 @@
   /* Zip 78: the court switch's three states, defined once (src/admin-cards.css and the folded Home rows read them). */
   --sw-notbooked-bg: var(--warn-edge);
   --sw-notbooked-fg: var(--ball-ink);
-  --sw-wait-bg: var(--info-fg);
-  --sw-wait-fg: var(--primary-ink);
   --sw-booked-bg: var(--primary);
   --sw-booked-fg: var(--primary-ink);
   --holiday-fg: var(--purple-fg);
@@ -227,8 +225,6 @@
     --purple-fg: #c4afef;
     --purple-bg: #2a2440;
     --purple-edge: #b2a0e6;
-    --sw-wait-bg: var(--info-edge);
-    --sw-wait-fg: var(--bg);
     --ext-bg: #14313d;
     --ext-fg: #9fd3e8;
     --pop-bg: #22312a;
@@ -290,8 +286,6 @@
   --purple-fg: #c4afef;
   --purple-bg: #2a2440;
   --purple-edge: #b2a0e6;
-  --sw-wait-bg: var(--info-edge);
-  --sw-wait-fg: var(--bg);
   --ext-bg: #14313d;
   --ext-fg: #9fd3e8;
   --pop-bg: #22312a;
@@ -2749,9 +2743,6 @@ body:has(.tabbar) .pop {
 .sched-status.court-needs .court-status {
   color: var(--warn-fg);
 }
-.sched-status.court-waitlist .court-status {
-  color: var(--info-fg);
-}
 .sched-status.court-off .court-status,
 .sched-status.court-later .court-status {
   color: var(--muted-fg);
@@ -2790,10 +2781,6 @@ body:has(.tabbar) .pop {
 /* Not booked: amber dashed border and a strip across the top. */
 .scard.court-needs {
   border: 2px dashed var(--warn-edge);
-}
-/* On the court waitlist: blue border and strip. */
-.scard.court-waitlist {
-  border: 2px solid var(--info-edge);
 }
 /* Canceled, no court, or played: gray with the reason. */
 .scard.court-off {
@@ -3069,11 +3056,6 @@ body:has(.tabbar) .pop {
   background: var(--warn-bg);
   color: var(--warn-fg);
   border-bottom: 1.5px dashed var(--warn-edge);
-}
-.court-waitlist .court-banner {
-  background: var(--info-bg);
-  color: var(--info-fg);
-  border-bottom: 1px solid color-mix(in srgb, var(--info-edge) 50%, transparent);
 }
 
 /* Players: "2 of 4 in" with a dot per spot; the organizer's own I'm in at the end. */
@@ -4670,10 +4652,6 @@ dialog.sheet[open]::backdrop {
 .hv2-pill.sw-not_booked {
   background: var(--sw-notbooked-bg);
   color: var(--sw-notbooked-fg);
-}
-.hv2-pill.sw-waitlist {
-  background: var(--sw-wait-bg);
-  color: var(--sw-wait-fg);
 }
 .hv2-pill.sw-booked {
   background: var(--sw-booked-bg);

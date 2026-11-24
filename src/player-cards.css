@@ -436,9 +436,6 @@
 .court-later .court-dot {
   background: var(--pc-amber);
 }
-.court-waitlist .court-dot {
-  background: var(--info-edge);
-}
 .court-off .court-dot {
   background: var(--pc-muted);
 }

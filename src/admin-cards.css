@@ -40,7 +40,8 @@
 /* ---- The court switch ---- */
 .court-switch {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Zip 86: two choices (Not booked | Booked; no Waitlist). */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px;
   padding: 3px;
   border-radius: 12px;
@@ -78,10 +79,6 @@
 .court-switch button[data-seg='not_booked'][aria-pressed='true'] {
   background: var(--sw-notbooked-bg);
   color: var(--sw-notbooked-fg);
-}
-.court-switch button[data-seg='waitlist'][aria-pressed='true'] {
-  background: var(--sw-wait-bg);
-  color: var(--sw-wait-fg);
 }
 .court-switch button[data-seg='booked'][aria-pressed='true'] {
   background: var(--sw-booked-bg);
@@ -318,8 +315,7 @@ body:has(dialog[open]) .updated-line {
 .scard {
   padding-block: 9px;
 }
-.scard.court-needs,
-.scard.court-waitlist {
+.scard.court-needs {
   padding-block: 8px;
 }
 .scard .players-line {

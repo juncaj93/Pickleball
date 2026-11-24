@@ -1,3 +1,4 @@
+import { shownCourt } from '../shared/court';
 import type {
   AdminPlayer,
   AdminRosterEntry,
@@ -180,7 +181,8 @@ export function playerSessionView(
     canceled,
     cancelReason: canceled ? session.cancel_reason : null,
     started,
-    bookingStatus: session.booking_status,
+    // Zip 86: no court Waitlist: an old 'unavailable' / 'waitlist' row reads as Not booked (shared/court.ts shownCourt).
+    bookingStatus: shownCourt(session.booking_status, session.court_state).bookingStatus,
     venueName: session.venue_name,
     confirmed: confirmed.flatMap((r) => [
       { name: r.display_name, attendanceConfirmed: !!r.attendance_confirmed_at },
@@ -194,7 +196,7 @@ export function playerSessionView(
     ...(noWaitlist && heads >= NO_CAP_MAX && !canceled && !started ? { atLimit: true } : {}),
     joinAs: noWaitlist ? 'in' : joinOutcome(heads, settings.maxPlayers),
     holiday: holidayFor(session.starts_at, tz),
-    courtState: session.court_state,
+    courtState: shownCourt(session.booking_status, session.court_state).courtState,
     extra: !!session.is_extra,
     note: session.note,
     bookingOpen: nowMs >= bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz),
@@ -428,7 +430,8 @@ export function adminSessionView(
     startsAt: session.starts_at,
     endsAt: session.ends_at,
     status: session.status,
-    bookingStatus: session.booking_status,
+    // Zip 86: no court Waitlist: an old 'unavailable' / 'waitlist' row reads as Not booked (shared/court.ts shownCourt).
+    bookingStatus: shownCourt(session.booking_status, session.court_state).bookingStatus,
     venueName: session.venue_name,
     venueBookingUrl: session.venue_booking_url,
     reservationReference: session.reservation_reference,
@@ -451,7 +454,7 @@ export function adminSessionView(
       : null,
     courtCostCents: session.court_cost_cents,
     chargedCents,
-    courtState: session.court_state,
+    courtState: shownCourt(session.booking_status, session.court_state).courtState,
     plannedStartsAt: session.planned_starts_at,
     moved: !!session.planned_starts_at && session.planned_starts_at !== session.starts_at,
     extra: !!session.is_extra,

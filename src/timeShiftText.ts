@@ -1,13 +1,13 @@
 // "Time may shift": the words and looks, with no browser parts (so tests can read them too).
 import { formatMonthDay, formatTime, localParts } from '../shared/time';
 
-/** How the court reads on a tile and its time: booked (solid bright), wait (venue waitlist: dashed, "~7 PM"), none (not booked: dim). */
+/** How the court reads on a tile and its time: booked (solid bright), none (not booked: dim). Zip 86: the venue-waitlist look ('wait': dashed,
+ *  "~7 PM") is gone with the court Waitlist; the type keeps the word so an old saved screen still reads. */
 export type TsKind = 'booked' | 'wait' | 'none';
 
 /** From the court status kind. Canceled, played or started games keep their usual look (null). */
-export function tsKind(courtKind: string, venueWaitlist: boolean): TsKind | null {
+export function tsKind(courtKind: string, _venueWaitlist = false): TsKind | null {
   if (courtKind === 'booked') return 'booked';
-  if (courtKind === 'waitlist' || ((courtKind === 'needs' || courtKind === 'later') && venueWaitlist)) return 'wait';
   if (courtKind === 'needs' || courtKind === 'later') return 'none';
   return null;
 }

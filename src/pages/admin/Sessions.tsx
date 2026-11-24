@@ -273,7 +273,7 @@ export function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionVi
       onPick={async (to) => {
         setPicked(to);
         // (Undo on admin toasts lives on the round 2 switch, CardR2.tsx, the one live uses; this older one is unchanged.)
-        await run(() => api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to }), to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked', { key: 'court' });
+        await run(() => api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to }), to === 'booked' ? 'Court booked' : 'Court not booked', { key: 'court' });
         setPicked(null);
       }}
     />

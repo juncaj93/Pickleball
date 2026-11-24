@@ -877,7 +877,7 @@ export const MoonIcon = () => (
 
 // ---------- Court status (same words and icons for organizers and players) ----------
 
-/** Check for booked, warning for not booked, clock for the court waitlist, slashed circle for off. */
+/** Check for booked, warning for not booked, slashed circle for off. */
 /** `played` (Zip 32): a finished game's check in a circle, the same shape as the Booked check but green on its own (Canceled keeps the slash). */
 export function CourtIcon({ kind }: { kind: CourtKind | 'played' }) {
   return (
@@ -892,12 +892,6 @@ export function CourtIcon({ kind }: { kind: CourtKind | 'played' }) {
         <>
           <path d="M12 3.6 21 19.6H3z" />
           <path d="M12 9.6v4.4M12 16.9v.1" />
-        </>
-      )}
-      {kind === 'waitlist' && (
-        <>
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7.2V12l3.2 2" />
         </>
       )}
       {kind === 'later' && (

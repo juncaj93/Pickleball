@@ -6,8 +6,7 @@
 /* The card: floating, every court state the same frame (the status button says it). */
 .card.scard.scard-r2.scard86,
 .card.scard.scard-r2.scard86.court-booked,
-.card.scard.scard-r2.scard86.court-needs,
-.card.scard.scard-r2.scard86.court-waitlist {
+.card.scard.scard-r2.scard86.court-needs {
   border: 1px solid var(--line);
   outline: 0;
   box-shadow: var(--shadow);
@@ -16,11 +15,7 @@
 .card.scard.scard-r2.scard86.court-off {
   box-shadow: none;
 }
-/* The organizer is In: the green stripe on the left side only. */
-.card.scard.scard-r2.scard86[data-me-in='yes'] {
-  border-left: 6px solid var(--ok-edge);
-  padding-left: 8px;
-}
+/* Zip 86 round 2 (Alex): no green stripe on the organizer's game cards, In or Out; the floating frame only. */
 
 .scard86 .r2-mid {
   gap: 8px;
@@ -85,11 +80,6 @@
 .r86-status.r86-not_booked {
   background: var(--warn-bg);
   color: var(--warn-fg);
-}
-/* Waitlist: its own calm blue. */
-.r86-status.r86-waitlist {
-  background: var(--info-bg);
-  color: var(--info-fg);
 }
 /* In: soft green with a check. Out: gray. */
 .r86-inout {
@@ -259,6 +249,42 @@
     padding: 0 12px;
     font-size: 0.94rem;
   }
+}
+
+/* The quick court picker (round 2): the venue's courts 1 to 16 as big buttons, four to a row, and Clear. */
+.r86-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.r86-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.r86-pick {
+  min-height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 800;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.r86-pick:active {
+  background: var(--fill-press);
+}
+.r86-pick:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.r86-pick[aria-pressed='true'] {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
 }
 
 /* The TONIGHT and TOMORROW tile (picture 8): a smaller word, so the tile keeps the normal tile width at every text size. */
