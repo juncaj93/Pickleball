@@ -8409,3 +8409,18 @@ opens the draft). Older browser scripts that read the 🎾86 card's Change butto
 `pickleball-preview` (fake): bookmark `000001d8-00000000-0000512d-447de571fd40286de896630b63af5928` before the re-seed; re-seeded;
 https://claude-new-session-9215zh.pickleball-club-9h0.pages.dev (deployment c13d6be0). Calm start: "Card: early payments" (organizer Home:
 the card, its week row "6 of 10 locked in", two slim games).
+
+### Round 2 (Alex, after the preview), and two adds after 🎾86 round 2 went live
+- Americano on game day: Rounds, soft green "6 rounds ready" (the real count), never amber. Locked doubles keeps Teams.
+- The gear is every setting in one sheet (SettingsSheet; one Save, only what changed, today's calls). Tickets renamed Players; its sheet holds the
+  tickets, Levels with the pencils and Projected teams only (PlayersSheet). Pick the date is its own sheet (DatesSheet). The Edit page and the
+  tournament page are gone with their entry points (the Edit button, the tournament page's Plan, Settings, Pick the date, Cancel or reschedule).
+  Create has no prize boxes (creditCents 0; prizes only in Prizes). The night card's "You make if it fills" row is gone (only in Money). The gear
+  is src/ui.tsx GearIcon in a 44 px --fill circle (centered within 0.5 px, light and dark).
+- Court picker (Alex, after 🎾86 round 2): the Home card's court button opens src/GameDay.tsx CourtMap in picker mode (the venue map with ENTRANCE,
+  a title "Court for Thu, Nov 19", the current court lit green, Clear); a tap saves with 🎾86's save and Undo, unchanged. The 4 x 4 grid and its
+  CSS are gone.
+- Game menu (src/pages/admin/GameMenu.tsx): Text the group, Text the players, Edit game, Cancel game (red, last). No Players, no Add to calendar
+  (the players' Add to calendar and the .ics route are unchanged). The rows that apply only to a canceled game, Hide from list and a holiday's
+  Undo hours confirmed stay where they apply.
+- Merged 🎾86 round 2 (main `ba76d4a`, live deployment 25c9ec98) into the branch; one notes conflict (both kept).
