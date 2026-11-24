@@ -52,7 +52,7 @@ async function americanoNight(n: number) {
 
 /** Locked doubles to the Final: pool games by seat order, every playoff game by the lower seat, until End shows. */
 async function doublesDone(n: number) {
-  const ctx = await world(n);
+  const ctx = await world(n, { secondCents: 700 });
   await draftAndPublish(ctx);
   ctx.app.now = START_MS + 60_000;
   await playPools(ctx, (a, b) => Math.min(a, b));

@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { Sheet } from '../../ui';
 import type { BoardGame } from './scoreboardData';
-import './scoreboard.css';
+import './scoreboard-cards.css';
 
 export type { BoardGame };
 

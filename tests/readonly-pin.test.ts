@@ -109,6 +109,8 @@ describe('read-only organizer PIN (Zip 8)', () => {
       else if (r.path === '/api/admin/tournament/:param/finalize') expect(res.status, url).toBe(403); // Zip 60: Tournaments is switched off here (the next test has it on)
       else if (r.path === '/api/admin/tournament-history' || r.path === '/api/admin/skills') expect(res.status, url).toBe(403); // Zip 58 / Zip 79: Tournaments is switched off here
       else if (r.path === '/api/tournament/pools-look') expect(res.status, url).toBe(404); // Zip 57: preview only (Not found anywhere else)
+      else if (r.path === '/api/tournament/wins') expect(res.status, url).toBe(400); // Zip 82: a tap on a medal sends the name (none here)
+      else if (r.path === '/api/admin/tournament-wins') expect(res.status, url).toBe(403); // Zip 82: Tournaments is switched off here
       else expect(res.status, url).toBe(200);
     }
     await ctx.app.settle();

@@ -22,7 +22,7 @@ export type World = Awaited<ReturnType<typeof setupGroup>> & { tid: string; byNa
 /** n players signed up and locked in (with credit), the date finalized, and the clock moved past Pay by. `organizerPlays`: Blair is the organizer. */
 export async function world(
   n: number,
-  opts: { courts?: 1 | 2; start?: number; minutes?: number; visibility?: 'me' | 'all'; format?: 'doubles' | 'americano'; organizer?: string } = {},
+  opts: { courts?: 1 | 2; start?: number; minutes?: number; visibility?: 'me' | 'all'; format?: 'doubles' | 'americano'; organizer?: string; secondCents?: number } = {},
 ): Promise<World> {
   const base = await setupGroup();
   await base.organizer.call('PUT', '/api/admin/group', { organizerName: opts.organizer ?? 'Alex' });
@@ -36,7 +36,9 @@ export async function world(
     dates: DATES,
     ticketCents: 1600,
     creditCents: 1400,
-    secondCreditCents: 700,
+    // Zip 82: Locked doubles pays 2nd place too now; the tournament page saved $0 for it before Zip 82, so the older Locked doubles nights keep
+    // $0 unless asked. An Americano night (asked, or an odd count, which switches to it) keeps $7.
+    secondCreditCents: opts.secondCents ?? ((opts.format ?? 'doubles') === 'americano' || n % 2 === 1 ? 700 : 0),
     visibility: opts.visibility ?? 'all',
     format: opts.format ?? 'doubles',
   });
