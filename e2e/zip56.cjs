@@ -564,7 +564,8 @@ async function main() {
         // the gear's one settings sheet.
         await openGear(a.page);
         await fits(a.page, 'dialog[open]');
-        await oneLineRows(a.page, 'dialog[open] .tm86-field:has([data-tm-plan-courts], [data-tm-expect], [data-tm86-court-cost])');
+        // The plan's values each on one line (the label "Players you expect" may wrap at 320; the old Plan card's labels were shorter).
+        await oneLineRows(a.page, 'dialog[open] .tm86-courts, dialog[open] .tm86-stepper, dialog[open] [data-tm86-court-cost]');
         await shot(a.page, `I-admin-plan-${width}-${scheme}`);
         await a.page.locator('dialog[open] [data-tm87-plans]').scrollIntoViewIfNeeded();
         await fits(a.page, 'dialog[open]');
