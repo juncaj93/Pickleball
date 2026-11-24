@@ -20,6 +20,9 @@ async function dash(ctx: Ctx) {
   return r.data;
 }
 const setCourt = (ctx: Ctx, id: string, status: string) => ctx.organizer.call('POST', `/api/admin/sessions/${id}/court-status`, { status });
+/** Zip 86 round 2: a game saved on the old court waitlist before it was removed (as the old Waitlist tap wrote it); it acts as Not booked. */
+const oldWaitlist = (ctx: Ctx, id: string) =>
+  void ctx.app.db.raw.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned' WHERE id = ?").run(id);
 const join = async (ctx: Ctx, name: string, id: string) => (await (await playerPhone(ctx, name)).call('POST', `/api/sessions/${id}/join`, {})).data;
 const pay = (ctx: Ctx, id: string, name: string) => ctx.organizer.call('POST', `/api/admin/sessions/${id}/payment`, { playerId: ctx.byName[name], paid: true });
 const cancel = (ctx: Ctx, id: string) => ctx.organizer.call('POST', `/api/admin/sessions/${id}/decision`, { decision: 'cancel', confirm: true });
@@ -42,10 +45,11 @@ function at(ctx: Ctx, iso: string, offsetMs: number) {
 }
 
 describe('16: the court card for a game never marked Booked', () => {
-  it('C1: a Waitlist game before it is over gets "Court still needs to be booked", one card, no court-open buttons', async () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; C1, C1b and C13 now run on a game stored on the old waitlist, which reads as Not booked.
+  it('C1: an old Waitlist game before it is over gets "Court still needs to be booked", one card, no court-open buttons', async () => {
     const ctx = await setupGroup();
     const [g] = await games(ctx);
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     // Exactly one card for this game (the next Not booked game may have its own).
     expect((await cards(ctx)).filter((c) => c.endsWith(g.id))).toEqual([`book:${g.id}`]);
     // No "no court yet" task card for it as well: one court card per game.
@@ -58,10 +62,10 @@ describe('16: the court card for a game never marked Booked', () => {
     expect(await cards(ctx)).not.toContain(`book:${g.id}`);
   });
 
-  it('C1b (Alex, Nov 1): Waitlist games follow the Not booked rule: only the next 2 games open to book get the card', async () => {
+  it('C1b (Alex, Nov 1): old Waitlist games follow the Not booked rule: only the next 2 games open to book get the card', async () => {
     const ctx = await setupGroup();
     const list = await games(ctx);
-    for (const g of list.slice(0, 6)) await setCourt(ctx, g.id, 'waitlist');
+    for (const g of list.slice(0, 6)) oldWaitlist(ctx, g.id);
     const got = courtCards(await dash(ctx), ctx.app.now, ADMIN).filter((c) => c.kind === 'book').map((c) => c.session.id);
     expect(got.length).toBeGreaterThan(0);
     expect(got.length).toBeLessThanOrEqual(2);
@@ -86,7 +90,7 @@ describe('16: the court card for a game never marked Booked', () => {
   it('C13 / C14: a Booked game gets no court card, before or after; switching to Booked clears the card', async () => {
     const ctx = await setupGroup();
     const [g] = await games(ctx);
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     await join(ctx, 'Alex', g.id);
     expect(await cards(ctx)).toContain(`book:${g.id}`);
     await setCourt(ctx, g.id, 'booked');
@@ -167,7 +171,8 @@ describe('16: the court card for a game never marked Booked', () => {
     for (const n of ['Alex', 'Blair', 'Casey']) await join(ctx, n, g.id);
     await pay(ctx, g.id, 'Alex');
     await pay(ctx, g.id, 'Blair');
-    await setCourt(ctx, g.id, 'waitlist');
+    // Zip 86 round 2 (Alex): no court Waitlist; switched back to Not booked instead.
+    await setCourt(ctx, g.id, 'not_booked');
     at(ctx, g.startsAt, 2 * DAY);
     expect(await cards(ctx)).toContain(`played:${g.id}`);
     // Two taps (double tap, a retry): one cancel, money back once.
@@ -201,34 +206,41 @@ describe('16: the court card for a game never marked Booked', () => {
   it('G16b (auditor A): a court switch landing on a game canceled in between says "look again", never "changed"', async () => {
     const ctx = await setupGroup();
     const [g] = await games(ctx);
+    // Zip 86 round 2 (Alex): no court Waitlist; the race now runs on Booked -> Not booked.
+    expect((await setCourt(ctx, g.id, 'booked')).status).toBe(200);
     // The switch read the game before the cancel: simulate by canceling straight in the database between read and write.
     const db = ctx.app.db;
     const orig = db.prepare.bind(db);
     let armed = true;
     (db as any).prepare = (sql: string) => {
-      if (armed && /UPDATE sessions SET booking_status = 'unavailable'/.test(sql)) {
+      if (armed && /UPDATE sessions SET booking_status = 'needs_booking'/.test(sql)) {
         armed = false;
         db.raw.prepare("UPDATE sessions SET status = 'canceled' WHERE id = ?").run(g.id);
       }
       return orig(sql);
     };
-    const r = await setCourt(ctx, g.id, 'waitlist');
+    const r = await setCourt(ctx, g.id, 'not_booked');
     (db as any).prepare = orig;
+    expect(armed).toBe(false);
     expect(r.status).toBe(409);
-    expect((ctx.app.db.raw.prepare('SELECT status, booking_status FROM sessions WHERE id = ?').get(g.id) as any)).toEqual({ status: 'canceled', booking_status: 'needs_booking' });
+    expect((ctx.app.db.raw.prepare('SELECT status, booking_status FROM sessions WHERE id = ?').get(g.id) as any)).toEqual({ status: 'canceled', booking_status: 'booked' });
   });
 
-  it('C18: every one of the 6 switch moves leaves seats, payments and credit as they were', async () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; the switch has 2 moves, plus both moves off an old waitlist row.
+  it('C18: every switch move (and each move off an old Waitlist row) leaves seats, payments and credit as they were', async () => {
     const ctx = await setupGroup();
     const [g] = await games(ctx);
     await setCourt(ctx, g.id, 'booked');
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']) await join(ctx, n, g.id);
     await pay(ctx, g.id, 'Alex');
     const before = { s: seats(ctx), l: ledger(ctx) };
-    for (const [to] of [['waitlist'], ['not_booked'], ['booked'], ['not_booked'], ['waitlist'], ['booked']]) {
+    for (const [to, old] of [['not_booked', false], ['booked', false], ['not_booked', false], ['booked', true], ['not_booked', true]] as const) {
+      if (old) oldWaitlist(ctx, g.id);
       expect((await setCourt(ctx, g.id, to)).status).toBe(200);
       expect({ s: seats(ctx), l: ledger(ctx) }).toEqual(before);
     }
+    expect((await setCourt(ctx, g.id, 'waitlist')).status).toBe(400);
+    expect({ s: seats(ctx), l: ledger(ctx) }).toEqual(before);
   });
 
   it('only the new "played" mark was added; a bad mark is refused', async () => {

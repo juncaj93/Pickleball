@@ -124,6 +124,9 @@ async function phone(w: World, name: string, device = 0): Promise<Client> {
   return c;
 }
 const raw = (w: World) => w.app.db.raw;
+/** Zip 86 round 2: a game saved on the old court waitlist before it was removed (as the old Waitlist tap wrote it); it acts as Not booked. */
+const oldWaitlist = (w: World, sid: string) =>
+  void raw(w).prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned' WHERE id = ?").run(sid);
 const ledger = (w: World) => raw(w).prepare('SELECT * FROM credit_ledger ORDER BY created_at, rowid').all() as any[];
 const eff = (r: any) => potEffect({ kind: r.kind, cents: r.amount_cents, fiveCents: r.five_cents });
 function potOf(w: World, name: string) {
@@ -402,11 +405,11 @@ async function runSeq(seed: number, stats: { steps: number; seqs: number }, mode
   const r = prng(seed);
   const w = await world({ book: false });
   const games = mode === 'finalize' ? [await on(w, '2026-11-03')] : [await on(w, '2026-11-03'), await on(w, '2026-11-05'), await on(w, '2026-11-10')];
-  // Court: booked / not booked / the venue's waitlist, at random per game.
+  // Court: booked / not booked / an old row stored on the court waitlist (Zip 86 round 2: reads as Not booked), at random per game.
   for (const g of games) {
-    const c = mode === 'finalize' ? 'booked' : r.pick(['booked', 'booked', 'none', 'waitlist']);
+    const c = mode === 'finalize' ? 'booked' : r.pick(['booked', 'booked', 'none', 'old_waitlist']);
     if (c === 'booked') await w.org.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
-    if (c === 'waitlist') await w.org.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' });
+    if (c === 'old_waitlist') oldWaitlist(w, g.id);
   }
   const names = mode === 'finalize' ? PLAYERS.slice(0, 10) : PLAYERS.slice(0, r.int(5, 10));
   for (const n of names) if (r.next() < (mode === 'finalize' ? 0.5 : 0.35)) givePot(w, n, r.pick([300, 500, 900, 1000, 1400, 2800]));
@@ -536,7 +539,7 @@ async function runSeq(seed: number, stats: { steps: number; seqs: number }, mode
     const a = r.pick(
       late
         ? ['mark', 'mark', 'unmark', 'claimY', 'claimN', 'claimY', 'claimN', 'final', 'final', 'final', 'reopen', 'reopen', 'unmark']
-        : ['mark', 'mark', 'unmark', 'claimY', 'claimN', 'remove', 'waitlist', 'add', 'cancel', 'uncancel', 'uncancel', 'opened', 'cwait', 'final', 'reopen'],
+        : ['mark', 'mark', 'unmark', 'claimY', 'claimN', 'remove', 'waitlist', 'add', 'cancel', 'uncancel', 'uncancel', 'booked', 'notbooked', 'final', 'reopen'],
     );
     const tagOf = (g: any) => `${dayOf(g.startsAt)}${org === w.org2 ? '@2' : ''}`;
     const withSeen = async (n: string, g: any, paid: boolean) => {
@@ -579,8 +582,9 @@ async function runSeq(seed: number, stats: { steps: number; seqs: number }, mode
     const tag = tagOf(g);
     if (a === 'cancel') return { act: 'cancel', label: `org cancel ${tag}`, kind: 'neutral', run: () => cancel(w, g.id) };
     if (a === 'uncancel') return { act: 'uncancel', label: `org uncancel ${tag}`, kind: 'neutral', run: () => uncancel(w, g.id) };
-    if (a === 'opened') return { act: 'court opened', label: `org court opened ${tag}`, kind: 'neutral', run: () => org.call('POST', `/api/admin/sessions/${g.id}/booked`, {}) };
-    if (a === 'cwait') return { act: 'venue waitlist', label: `org venue waitlist ${tag}`, kind: 'neutral', run: () => org.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' }) };
+    // Zip 86 round 2 (Alex): no court Waitlist ("Court opened" / the venue waitlist tap were removed); the court switch is Booked / Not booked.
+    if (a === 'booked') return { act: 'court booked', label: `org court booked ${tag}`, kind: 'neutral', run: () => org.call('POST', `/api/admin/sessions/${g.id}/booked`, {}) };
+    if (a === 'notbooked') return { act: 'court not booked', label: `org court not booked ${tag}`, kind: 'neutral', run: () => org.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'not_booked' }) };
     if (a === 'final') {
       const keep = r.pick([1, 0.9, 0.75, 0.5]);
       const orgPlays = r.next() < 0.3;
@@ -845,14 +849,17 @@ describe('claims, then the game changes', () => {
       }
   });
 
-  it('waitlist claim: a spot opens and she moves in; on a Waitlist-court game I\'m in is a normal seat with credit on, and Court opened changes nothing', async () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; the second game is an old row stored on the court waitlist (acts as Not booked), "Court opened"
+  // is a plain booking and "Didn't open" (removed) is replaced by the usual cancel.
+  it('waitlist claim: a spot opens and she moves in; on an old Waitlist-court game I\'m in is a normal seat with credit on, and Booked changes nothing', async () => {
     const { w, g } = await claimBy('waitlist', 300);
     expect((await drop(w, 'Casey', g.id)).status).toBe(200); // a spot opens; Blair moves in
     await books(w, 'moved in');
     expect(seatRow(w, g.id, 'Blair')).toMatchObject({ status: 'confirmed', payment_status: 'paid' });
-    // Waitlist court game: I'm in is a normal seat, credit goes on at I'm in; Court opened moves nobody and touches no credit
+    // Old waitlist court game: I'm in is a normal seat, credit goes on at I'm in; Booked moves nobody and touches no credit
     const g2 = await on(w, '2026-11-05');
-    expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'waitlist' })).status).toBe(200);
+    expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'waitlist' })).status).toBe(404);
+    oldWaitlist(w, g2.id);
     givePot(w, 'Devon', 500);
     expect((await join(w, 'Devon', g2.id)).data).toMatchObject({ result: 'confirmed', creditCents: 500 });
     await books(w, 'waitlist-court seat');
@@ -862,14 +869,16 @@ describe('claims, then the game changes', () => {
     expect([seatRow(w, g2.id, 'Devon').status, potOf(w, 'Devon'), usedOn(w, g2.id, 'Devon')]).toEqual(['withdrawn', 500, 0]);
     expect((await join(w, 'Devon', g2.id)).data).toMatchObject({ result: 'confirmed', creditCents: 500 });
     expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/booked`, {})).status).toBe(200);
-    await books(w, 'court opened');
-    // Court opened moved nobody and used nothing more: the credit went on once, at I'm in.
+    await books(w, 'court booked');
+    // Booked moved nobody and used nothing more: the credit went on once, at I'm in.
     expect([seatRow(w, g2.id, 'Devon').status, potOf(w, 'Devon'), usedOn(w, g2.id, 'Devon')]).toEqual(['confirmed', 0, 500]);
+    expect(raw(w).prepare('SELECT court_state AS c FROM sessions WHERE id = ?').get(g2.id)).toEqual({ c: null });
     await iPaid(w, 'Devon', g2.id);
-    expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'waitlist' })).status).toBe(200);
-    await books(w, 'back to venue waitlist with a paid seat');
-    expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'not_opened' })).status).toBe(200);
-    await books(w, "didn’t open: canceled with Devon’s unconfirmed I paid");
+    expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court-status`, { status: 'not_booked' })).status).toBe(200);
+    await books(w, 'back to Not booked with a paid seat');
+    expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'not_opened' })).status).toBe(404);
+    expect((await cancel(w, g2.id)).status).toBe(200);
+    await books(w, "canceled with Devon’s unconfirmed I paid");
     expect((await dash(w)).paymentClaims.some((c: any) => c.playerId === w.ids.Devon)).toBe(true);
     await claim(w, 'Devon', g2.id, false);
     await books(w, 'devon cleared');
@@ -1187,18 +1196,19 @@ describe('claims on seats that left, then Finalize / Reopen around the answer', 
       });
 });
 
-describe('Remove player on a seat signed up while the court is on Waitlist', () => {
-  it('Waitlist-court seat with credit on; a seat carrying a frozen claim; removed, then Court opened and the answers', async () => {
+// Zip 86 round 2 (Alex): no court Waitlist; the game is an old row stored on the court waitlist (acts as Not booked), booked the plain way.
+describe('Remove player on a seat signed up on a game stored on the old court Waitlist', () => {
+  it('old Waitlist-row seat with credit on; a seat carrying a frozen claim; removed, then Booked and the answers', async () => {
     const w = await world();
     const g = await on(w, '2026-11-05');
     givePot(w, 'Casey', 500);
     expect((await join(w, 'Blair', g.id)).status).toBe(200);
     await iPaid(w, 'Blair', g.id); // unconfirmed $14
-    expect((await w.org.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' })).status).toBe(200);
-    await books(w, 'venue waitlist');
+    oldWaitlist(w, g.id);
+    await books(w, 'old venue waitlist row');
     expect((await drop(w, 'Blair', g.id)).status).toBe(200); // claim
     await books(w, 'claim');
-    expect((await join(w, 'Blair', g.id)).data).toMatchObject({ result: 'confirmed' }); // a Waitlist court gives a normal seat, never standby
+    expect((await join(w, 'Blair', g.id)).data).toMatchObject({ result: 'confirmed' }); // an old Waitlist row gives a normal seat, never standby
     expect(seatRow(w, g.id, 'Blair').status).toBe('confirmed');
     await books(w, 'seat carrying the claim');
     expect((await join(w, 'Casey', g.id)).data).toMatchObject({ result: 'confirmed', creditCents: 500 });
@@ -1210,8 +1220,8 @@ describe('Remove player on a seat signed up while the court is on Waitlist', () 
     }
     expect(potOf(w, 'Casey')).toBe(500);
     expect(potOf(w, 'Blair')).toBe(0);
-    expect((await w.org.call('POST', `/api/admin/sessions/${g.id}/booked`, {})).status).toBe(200); // Court opened
-    await books(w, 'court opened');
+    expect((await w.org.call('POST', `/api/admin/sessions/${g.id}/booked`, {})).status).toBe(200);
+    await books(w, 'court booked');
     expect(seatRow(w, g.id, 'Blair').status).toBe('withdrawn');
     for (const n of ['Casey', 'Devon']) expect((await join(w, n, g.id)).status).toBe(200);
     await books(w, 'joined after opened');
@@ -1227,7 +1237,8 @@ describe('Remove player on a seat signed up while the court is on Waitlist', () 
 });
 
 describe("held drop, then I'm in on another game", () => {
-  for (const court of ['booked', 'none', 'waitlist'] as const)
+  // Zip 86 round 2 (Alex): no court Waitlist; the third run is an old row stored on the court waitlist (acts as Not booked).
+  for (const court of ['booked', 'none', 'old_waitlist'] as const)
     for (const money of ['credit', 'confirmed cash', 'unconfirmed cash'] as const)
       it(`drop Nov 3 (${money}) then at once I'm in on Nov 5 (${court}); also after a reload and with no signal`, async () => {
         vi.useFakeTimers();
@@ -1238,7 +1249,7 @@ describe("held drop, then I'm in on another game", () => {
             const b = await on(w, '2026-11-05');
             await w.org.call('POST', `/api/admin/sessions/${a.id}/booked`, {});
             if (court === 'booked') await w.org.call('POST', `/api/admin/sessions/${b.id}/booked`, {});
-            if (court === 'waitlist') await w.org.call('POST', `/api/admin/sessions/${b.id}/court`, { action: 'waitlist' });
+            if (court === 'old_waitlist') oldWaitlist(w, b.id);
             if (money === 'credit') givePot(w, 'Blair', 1400);
             expect((await join(w, 'Blair', a.id)).status).toBe(200);
             if (money !== 'credit') await iPaid(w, 'Blair', a.id);
@@ -1282,8 +1293,8 @@ describe("held drop, then I'm in on another game", () => {
               expect(pot, `${variant}: no credit from an unconfirmed I paid`).toBe(0);
               expect((await dash(w)).paymentClaims).toEqual([expect.objectContaining({ playerId: w.ids.Blair, sessionId: a.id })]);
             } else {
-              // A Waitlist court is a normal seat like Not booked: the drop's credit goes on at I'm in.
-              if (court === 'waitlist') expect(sb.status, `${variant}: a Waitlist court gives a normal seat`).toBe('confirmed');
+              // An old Waitlist row is a normal seat like Not booked: the drop's credit goes on at I'm in.
+              if (court === 'old_waitlist') expect(sb.status, `${variant}: an old Waitlist row gives a normal seat`).toBe('confirmed');
               expect(pot, `${variant}: the drop’s credit went on Nov 5`).toBe(0);
             }
           }

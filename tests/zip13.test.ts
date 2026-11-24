@@ -158,7 +158,7 @@ describe('Swap to Alex: the Go to Admin flag on the player page', () => {
 });
 
 describe('Projected costs (Zip 13, no switch): every game still to come counts until it is canceled', () => {
-  it('a Not booked and a Waitlist game count like a Booked one; a canceled game does not; the three projected lines agree', async () => {
+  it('a Not booked and an old waitlist game count like a Booked one; a canceled game does not; the three projected lines agree', async () => {
     const w = await world();
     const coming = (await dash(w)).sessions.filter((s: any) => Date.parse(s.startsAt) > w.app.now);
     // A month with at least three games still to come (the world starts late in October, so November).
@@ -167,7 +167,9 @@ describe('Projected costs (Zip 13, no switch): every game still to come counts u
     expect(inMonth.length).toBeGreaterThanOrEqual(3);
     const [a, b, c] = inMonth;
     await w.organizer.call('POST', `/api/admin/sessions/${a.id}/court-status`, { status: 'booked' });
-    await w.organizer.call('POST', `/api/admin/sessions/${b.id}/court-status`, { status: 'waitlist' });
+    // Zip 86 round 2 (Alex): no court Waitlist (the switch refuses it); b is an old row stored on the waitlist (raw SQL), read as Not booked.
+    expect((await w.organizer.call('POST', `/api/admin/sessions/${b.id}/court-status`, { status: 'waitlist' })).status).toBe(400);
+    await w.app.db.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist' WHERE id = ?").bind(b.id).run();
     // c stays Not booked.
     const before = (await w.organizer.call('GET', `/api/admin/money?month=${month}`, undefined, rw)).data;
     const upcoming = before.sessions.filter((s: any) => s.state === 'upcoming').length;

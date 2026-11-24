@@ -100,7 +100,8 @@ describe('instant I\'m in and held Drop out', () => {
   });
   it('only a plain open spot is instant', () => {
     expect(canJoinInstantly(session('a', ['B'], null))).toBe(true);
-    expect(canJoinInstantly(session('a', ['B'], null, { courtState: 'waitlist' }))).toBe(false);
+    // Zip 86 round 2 (Alex): no court Waitlist; an old waitlist game reaches the screen as Not booked (courtState null), a plain open spot.
+    expect(canJoinInstantly(session('a', ['B'], null, { courtState: null }))).toBe(true);
     expect(canJoinInstantly(session('a', Array.from({ length: 10 }, (_, i) => `P${i}`), null))).toBe(false);
     expect(canJoinInstantly(session('a', ['B'], null, { canceled: true }))).toBe(false);
     expect(canJoinInstantly(session('a', ['B'], 'confirmed'))).toBe(false);

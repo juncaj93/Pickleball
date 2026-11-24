@@ -200,7 +200,7 @@ describe('five weeks of 5-minute ticks against an independent copy of the alert 
             g.app.now += Math.floor(rand() * 4 + 1) * MIN; // 1 to 4 minutes after the tick
             if (r < 0.45) await (await g.phone(who)).call('POST', `/api/sessions/${s.id}/join`, {});
             else if (r < 0.7) await (await g.phone(who)).call('POST', `/api/sessions/${s.id}/withdraw`, {});
-            else if (r < 0.8) await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: (['booked', 'not_booked', 'waitlist'] as const)[Math.floor(rand() * 3)] });
+            else if (r < 0.8) await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: (['booked', 'not_booked', 'not_booked'] as const)[Math.floor(rand() * 3)] }); // Zip 86 round 2 (Alex): no court Waitlist to switch to
             else if (r < 0.85 && s.start - g.app.now > 30 * HOUR) {
               // Move it: half the time the same day an hour earlier, else to the next day.
               const sameDay = rand() < 0.5;
@@ -383,7 +383,7 @@ describe('the clock at its worst moments (the tick API, Telegram stubbed)', () =
     expect(g.sent.map((m) => m.text)).toEqual([expect.stringMatching(/^Wednesday: 3 players in, need a 4th\. Text the group: /)]);
   });
 
-  it('canceled, finalized or switched to Waitlist between ticks: the alerts for it stop', async () => {
+  it('canceled, finalized or switched to Not booked between ticks: the alerts for it stop', async () => {
     // Canceled after the 10:00 PM warning: no 10:30 PM follow-up, no 7:15 AM check.
     {
       const { g, s } = await tueNov3(3);
@@ -398,13 +398,15 @@ describe('the clock at its worst moments (the tick API, Telegram stubbed)', () =
       }
       expect(g.sent.filter((m) => !/Nov 17/.test(m.text)).length).toBe(1);
     }
-    // Court switched to Waitlist after the last call: no cancel warnings for a court it does not have.
+    // Court switched to Not booked after the last call: no cancel warnings for a court it does not have.
+    // Zip 86 round 2 (Alex): no court Waitlist; this was "switched to Waitlist" (now refused with 400).
     {
       const { g, s } = await tueNov3(3);
       g.app.now = LAST_CALL;
       await g.tick();
       g.app.now += 2 * MIN;
-      expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'waitlist' })).status).toBe(200);
+      expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'waitlist' })).status).toBe(400);
+      expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'not_booked' })).status).toBe(200);
       for (let t = g.app.now + 3 * MIN; t < at('2026-11-04T01:00:00Z'); t += 5 * MIN) {
         g.app.now = t;
         await g.tick();

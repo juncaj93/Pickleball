@@ -3,9 +3,10 @@ import { potEffect } from '../shared/credit';
 import { courtDisplay } from '../src/courtDisplay';
 import { HOUR, playerPhone, setupGroup, TestApp } from './harness';
 
-// A court set to Waitlist behaves exactly like Not booked for sign-ups: normal seats while there is room,
-// credit goes on at I'm in, and a real waitlist exists only when the game is full beyond Max players.
-// Moving the switch (Not booked, Waitlist, Booked, any direction) never changes anybody's seat, payment or credit.
+// Zip 86 round 2 (Alex): no court Waitlist; the switch is Not booked / Booked only. A game saved on the old court waitlist
+// (booking 'unavailable', court_state 'waitlist', written here with raw SQL) behaves exactly like Not booked for sign-ups: normal
+// seats while there is room, credit goes on at I'm in, and a real (player) waitlist exists only when the game is full beyond Max players.
+// Moving the switch (Not booked, Booked, any direction) never changes anybody's seat, payment or credit.
 
 type Ctx = Awaited<ReturnType<typeof group>>;
 const TZ = 'America/Detroit';
@@ -33,6 +34,9 @@ const join = async (ctx: Ctx, sid: string, n: string) => {
 const drop = async (ctx: Ctx, sid: string, n: string) => (await playerPhone(ctx, n)).call('POST', `/api/sessions/${sid}/withdraw`, {});
 const pot = async (ctx: Ctx, n: string) => (await view(ctx, n)).credit.balanceCents;
 const setCourt = (ctx: Ctx, sid: string, status: string) => ctx.organizer.call('POST', `/api/admin/sessions/${sid}/court-status`, { status });
+/** A game saved on the old court waitlist before it was removed (as the old Waitlist tap wrote it). */
+const oldWaitlist = (ctx: Ctx, sid: string) =>
+  void ctx.app.db.raw.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned' WHERE id = ?").run(sid);
 const rows = (ctx: Ctx, sql: string, ...args: string[]) => ctx.app.db.raw.prepare(sql).all(...args) as any[];
 
 async function givePot(ctx: Ctx, name: string, cents: number) {
@@ -78,24 +82,24 @@ async function inv(ctx: Ctx, label = '') {
   }
 }
 
-describe('sign-up on a court set to Waitlist', () => {
+describe('sign-up on a game stored on the old court Waitlist (reads as Not booked)', () => {
   it('I\'m in is a normal seat: counts toward "x of 4 in", and the card shows "Court not booked" with no waiting words', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     for (const n of ['Brandon' in ctx.byName ? 'Brandon' : 'Blair', 'Casey', 'Devon']) expect(await join(ctx, g.id, n)).toEqual({ result: 'confirmed' });
     const shown = courtDisplay(await view(ctx, 'Emery')).sessions.find((s: any) => s.id === g.id)!;
     expect(shown).toMatchObject({ countText: '3 of 4 in', joinAs: 'in', waitlist: [] });
     expect(shown.confirmed).toHaveLength(3);
     expect(JSON.stringify(shown)).not.toMatch(/standby/i);
-    expect((await dash(ctx)).sessions.find((s: any) => s.id === g.id)).toMatchObject({ confirmedCount: 3, waitlistCount: 0, courtState: 'waitlist' });
+    expect((await dash(ctx)).sessions.find((s: any) => s.id === g.id)).toMatchObject({ confirmedCount: 3, waitlistCount: 0, bookingStatus: 'needs_booking', courtState: null });
     await inv(ctx);
   });
 
   it('credit goes on at I\'m in: full cover is "Paid with credit"; part cover leaves the rest; the organizer never uses credit', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     await givePot(ctx, 'Casey', 1400);
     await givePot(ctx, 'Devon', 300);
     await givePot(ctx, 'Alex', 1400);
@@ -119,7 +123,7 @@ describe('sign-up on a court set to Waitlist', () => {
   it('drop and rejoin: the credit goes back, then goes on again once; a held Drop out that is Undone changes nothing', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     await givePot(ctx, 'Casey', 1400);
     await join(ctx, g.id, 'Casey');
     expect(await pot(ctx, 'Casey')).toBe(0);
@@ -146,7 +150,7 @@ describe('sign-up on a court set to Waitlist', () => {
   it('"Undo" under "Paid with credit" gives the credit back and the seat stays; Use credit puts it on again', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     await givePot(ctx, 'Casey', 1400);
     await join(ctx, g.id, 'Casey');
     const phone = await playerPhone(ctx, 'Casey');
@@ -165,7 +169,7 @@ describe('a game that is really full has a real waitlist, whatever the court say
   it('beyond the max a person waits; a drop promotes the first waiter and puts their credit on', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) expect(await join(ctx, g.id, n)).toEqual({ result: 'confirmed' });
     await givePot(ctx, 'Frankie', 1400);
     expect(await join(ctx, g.id, 'Frankie')).toEqual({ result: 'waitlisted', position: 1 });
@@ -182,7 +186,7 @@ describe('a game that is really full has a real waitlist, whatever the court say
   it('the same full game shows the waitlist wording to players (the waiting words are for a full game only)', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await join(ctx, g.id, n);
     await join(ctx, g.id, 'Frankie');
     const frankie = courtDisplay(await view(ctx, 'Frankie')).sessions.find((s: any) => s.id === g.id)!;
@@ -193,7 +197,8 @@ describe('a game that is really full has a real waitlist, whatever the court say
 });
 
 describe('moving the switch never moves a seat, a payment or credit', () => {
-  const states = ['not_booked', 'waitlist', 'booked'] as const;
+  // Zip 86 round 2 (Alex): no court Waitlist; two switch values.
+  const states = ['not_booked', 'booked'] as const;
   it('every direction, repeated, with seats paid by credit, paid in cash, unpaid and really waiting', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
@@ -211,31 +216,38 @@ describe('moving the switch never moves a seat, a payment or credit', () => {
         await inv(ctx, `${from}->${to}`);
       }
     }
-    // The old endpoints too.
-    for (const action of ['waitlist', 'clear'] as const) await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action });
+    // Waitlist is refused, and the old /court route is gone; neither moves anything.
+    expect((await setCourt(ctx, g.id, 'waitlist')).status).toBe(400);
+    for (const action of ['waitlist', 'clear'] as const) expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action })).status).toBe(404);
+    expect(seatsAndMoney(ctx)).toBe(before);
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-answer`, { booked: false });
     expect(seatsAndMoney(ctx)).toBe(before);
   });
 
-  it('"Court opened" and "Didn\'t open" still work: opened books it with seats unchanged; didn\'t open cancels and gives every credit back', async () => {
+  // Zip 86 round 2 (Alex): no court Waitlist; "Court opened" and "Didn't open" were removed. Booking an old waitlist game is a plain booking.
+  it('an old Waitlist game: booking it is "court booked" with seats unchanged; "Didn\'t open" is gone (404) and cancels nothing', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
     const h = await on(ctx, '2026-11-10');
     await givePot(ctx, 'Casey', 1400);
     await givePot(ctx, 'Devon', 500);
     for (const id of [g.id, h.id]) {
-      await setCourt(ctx, id, 'waitlist');
+      oldWaitlist(ctx, id);
       await join(ctx, id, 'Casey');
     }
     await join(ctx, h.id, 'Devon');
     const before = seatsAndMoney(ctx);
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {})).data).toMatchObject({ ok: true, promoted: 0 });
     expect(seatsAndMoney(ctx)).toBe(before);
-    expect((await dash(ctx)).sessions.find((s: any) => s.id === g.id)).toMatchObject({ bookingStatus: 'booked', courtState: 'opened', confirmedCount: 1 });
-    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${h.id}/court`, { action: 'not_opened' })).status).toBe(200);
-    expect(await pot(ctx, 'Devon')).toBe(500);
-    expect((await dash(ctx)).sessions.find((s: any) => s.id === h.id)).toMatchObject({ courtState: 'not_opened', status: 'canceled' });
+    expect((await dash(ctx)).sessions.find((s: any) => s.id === g.id)).toMatchObject({ bookingStatus: 'booked', courtState: null, confirmedCount: 1 });
+    expect(rows(ctx, 'SELECT court_state FROM sessions WHERE id = ?', g.id)).toEqual([{ court_state: null }]);
+    expect(rows(ctx, "SELECT action FROM admin_audit_log WHERE session_id = ? AND action IN ('court_booked', 'court_opened')", g.id).map((r) => r.action)).toEqual(['court_booked']);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${h.id}/court`, { action: 'not_opened' })).status).toBe(404);
+    expect(seatsAndMoney(ctx)).toBe(before);
+    expect(await pot(ctx, 'Devon')).toBe(0);
+    expect((await dash(ctx)).sessions.find((s: any) => s.id === h.id)).toMatchObject({ bookingStatus: 'needs_booking', courtState: null, confirmedCount: 2 });
+    expect((await dash(ctx)).sessions.find((s: any) => s.id === h.id).status).not.toBe('canceled');
     await inv(ctx);
   });
 });
@@ -254,6 +266,8 @@ describe('random sequences with credit', () => {
       await givePot(ctx, 'Casey', 1400);
       await givePot(ctx, 'Devon', 700);
       await givePot(ctx, 'Frankie', 2800);
+      // One of the two games starts on the old court waitlist (reads and acts as Not booked).
+      oldWaitlist(ctx, h.id);
       for (let step = 0; step < 40; step++) {
         const sid = pick([g.id, h.id]);
         const n = pick(names);
@@ -276,13 +290,14 @@ describe('random sequences with credit', () => {
     });
   }
 });
-const states2 = ['not_booked', 'waitlist', 'booked'] as const;
+// Zip 86 round 2 (Alex): no court Waitlist; two switch values.
+const states2 = ['not_booked', 'booked'] as const;
 
 describe('leftover standby seats from before the rule', () => {
   it('the screen draws old standby people as in while there is room, renumbers the rest, and a game that is then full says waitlist', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
-    await setCourt(ctx, g.id, 'waitlist');
+    oldWaitlist(ctx, g.id);
     await join(ctx, g.id, 'Blair');
     await join(ctx, g.id, 'Casey');
     // Three people left on standby by the old rule, with room for two (the data as the server would send it).

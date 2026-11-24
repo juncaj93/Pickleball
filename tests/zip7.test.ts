@@ -150,14 +150,15 @@ describe('color tokens (src/zip7.css)', () => {
   const L = z(light);
   const D = { ...L, ...z(dark) };
   const col = (theme: 'light' | 'dark', name: string) => resolve(`var(--${name})`, theme, theme === 'light' ? L : D);
-  it('uses the site tokens: Text is the neutral secondary, credit is the site blue, Waitlist the gray, light and dark', () => {
+  it('uses the site tokens: Text is the neutral secondary, credit is the site blue, light and dark', () => {
     for (const v of Object.values(L)) if (!/^\d+ \d+ \d+$/.test(v)) expect(v, v).toMatch(/^(var\(--|rgb\(255 255 255 \/|color-mix\()/);
     expect([L['--z7-text-fill'], L['--z7-text-ink']]).toEqual(['var(--fill)', 'var(--ink)']);
     expect([L['--z7-credit-fg'], L['--z7-credit-bg']]).toEqual(['var(--info-fg)', 'var(--info-bg)']);
-    expect([L['--z7-wait-bg'], L['--z7-wait-ink']]).toEqual(['var(--ink-2)', 'var(--primary-ink)']);
+    // Zip 86 round 2 (Alex): no court Waitlist; the --z7-wait-* tokens were removed.
+    expect(Object.keys(L).filter((k) => k.startsWith('--z7-wait-'))).toEqual([]);
   });
   it('the "follow the phone" dark block has the same values as the Dark choice', () => {
-    for (const n of ['z7-text-fill', 'z7-text-ink', 'z7-credit-fg', 'z7-credit-bg', 'z7-wait-bg', 'z7-wait-ink', 'z7-cancel-fg', 'z7-cancel-bg', 'z7-tonight-bg', 'z7-tomorrow-bg']) {
+    for (const n of ['z7-text-fill', 'z7-text-ink', 'z7-credit-fg', 'z7-credit-bg', 'z7-cancel-fg', 'z7-cancel-bg', 'z7-tonight-bg', 'z7-tomorrow-bg']) {
       expect(val(media, n), n).toBe(val(dark, n));
     }
   });
@@ -167,7 +168,7 @@ describe('color tokens (src/zip7.css)', () => {
   });
   it('text on every new fill is readable (4.5:1) in light and dark', () => {
     for (const mode of ['light', 'dark'] as const) {
-      for (const [fg, bg] of [['z7-tonight-ink', 'z7-tonight-bg'], ['z7-tomorrow-ink', 'z7-tomorrow-bg'], ['z7-text-ink', 'z7-text-fill'], ['z7-credit-fg', 'z7-credit-bg'], ['z7-wait-ink', 'z7-wait-bg'], ['z7-cancel-fg', 'z7-cancel-bg']] as const) {
+      for (const [fg, bg] of [['z7-tonight-ink', 'z7-tonight-bg'], ['z7-tomorrow-ink', 'z7-tomorrow-bg'], ['z7-text-ink', 'z7-text-fill'], ['z7-credit-fg', 'z7-credit-bg'], ['z7-cancel-fg', 'z7-cancel-bg']] as const) {
         expect(contrast(col(mode, fg), col(mode, bg)), `${mode} ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
       }
     }
