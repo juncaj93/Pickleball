@@ -346,9 +346,9 @@ describe('zip 87: "6 of 10", the buttons over time, the status line, the pill', 
       prizes: 'soft|green|$14 each to winners',
       money: 'plain|green|You keep +$14',
     });
-    // Americano: Rounds, amber until the courts are set.
-    const am = view(ten, { format: 'americano', rounds: { courtNumbers: null, plan: { rounds: 9 } } as unknown as AdminTournamentView['rounds'] });
-    expect(words(am, at).rounds).toBe('amber|amber|Set courts before 7:30');
+    // Americano: no draft, nothing to do: Rounds, soft green with the real count (Alex, round 2).
+    const am = view(ten, { format: 'americano', rounds: { courtNumbers: null, plan: { rounds: 6 } } as unknown as AdminTournamentView['rounds'] });
+    expect(words(am, at).rounds).toBe('soft|green|6 rounds ready');
     // A saved $0 box is set ("Medals only"), never "Not set yet".
     expect(words(view(ten, { prizes: { doubles: { first: 0, second: 0 }, americano: { first: 0, second: 0 }, saved: true } })).prizes).toBe('soft|green|Medals only');
     // The Money sheet follows the box (a saved $0 box is set).

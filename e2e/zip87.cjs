@@ -10,7 +10,7 @@
  *       screen; each asks "Are you sure?" first (Keep it leaves everything as it was).
  *   E   Prizes for both styles (picture 9): the money left, Use these fills both boxes, Costs and You keep, Save; the button then reads
  *       "$14 each to winners" (soft green) and Money "+$14 if all pay"; the server holds both boxes.
- *   F   Game day: Teams opens the team draft above the card.
+ *   F   Game day: Teams opens the team draft above the card; Americano: Rounds, soft green "6 rounds ready" (no draft, nothing to do).
  * Screenshots: .data/zip87-shots (not in git).
  */
 const path = require('node:path');
@@ -291,6 +291,20 @@ const norm = (xs) => xs.map((x) => x.replace(/\s+/g, ''));
       const top = await page.locator('[data-tm-draft-prompt], [data-tm-draft-card]').first().evaluate((e) => e.getBoundingClientRect().top);
       assert(top >= -2 && top < 300, `the draft is on screen (${top})`);
       await ctx.close();
+      // Americano on game day (Alex, round 2): no draft, so Rounds is soft green with the real count, never amber.
+      const t = (await b.call('GET', '/api/admin/dashboard')).tournament;
+      await b.call('PUT', `/api/admin/tournament/${t.id}`, { name: t.name, dates: t.offeredDates, ticketCents: t.ticketCents, creditCents: t.championCreditCents, visibility: t.visibility, format: 'americano' });
+      const t2 = (await b.call('GET', '/api/admin/dashboard')).tournament;
+      assert(t2.format === 'americano' && t2.rounds, 'switched to Americano with rounds');
+      for (const scheme of ['light', 'dark']) {
+        const am = await b.adminHome({ width: 390, scheme });
+        await openCard(am.page);
+        const r = am.page.locator('[data-tm87-rounds]');
+        assert((await r.getAttribute('data-tm87-rounds')) === 'soft', `Rounds tone ${await r.getAttribute('data-tm87-rounds')}`);
+        assert(flat(await r.textContent()) === `Rounds${t2.rounds.plan.rounds} rounds ready`, flat(await r.textContent()));
+        await am.page.locator('.tm87').screenshot({ path: path.join(SHOTS, `F-americano-${scheme}.png`) });
+        await am.ctx.close();
+      }
     });
   } finally {
     await b.close();

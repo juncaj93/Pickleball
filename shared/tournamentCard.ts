@@ -208,7 +208,8 @@ export interface CardButton {
  * Tickets: soft green "6 of 10 locked in" until everyone who can make it is in, then solid "All 10 locked in".
  * Remind: plain, amber words "4 haven't paid"; on the Pay by day an amber tint "2 left · due 7 PM"; after Pay by with someone unpaid a red tint
  *   "1 past due"; nobody to remind: quiet ("Everyone paid", "Every spot taken", "No pay by set"). On game day the spot is Teams (Locked doubles)
- *   or Rounds (Americano): amber "Draft before 7:30" / "Set courts before 7:30" until done, then soft green "5 teams set" / "9 rounds set".
+ *   or Rounds (Americano: always soft green "6 rounds ready", nothing to do). Locked doubles: amber "Draft before 7:30" until published, then
+ *   soft green "5 teams set".
  * Prizes: plain "Not set yet"; on game day amber "Set before tonight"; once set soft green ("$14 each to winners"), never solid.
  * Money: plain; the line green at 0 or more ("+$42 if all pay"), red below ("−$6 if all pay"); on game day with prizes set "You keep +$14".
  */
@@ -221,9 +222,9 @@ export function cardButtons(t: AdminTournamentView, nowIso: string, tz: string):
   const start = shortClock(t.start).replace(/ [AP]M$/, '');
   if (gameDay) {
     if (t.format === 'americano') {
-      const r = t.rounds;
-      const done = !!r && !!r.courtNumbers && r.courtNumbers.length > 0;
-      out.push(done ? { key: 'rounds', title: 'Rounds', sub: `${r!.plan.rounds} rounds set`, tone: 'soft', subTone: 'green' } : { key: 'rounds', title: 'Rounds', sub: `Set courts before ${start}`, tone: 'amber', subTone: 'amber' });
+      // Alex (round 2): Americano has no draft; the rounds are made by the site, so there is nothing to do: always soft, the real count.
+      const n = t.rounds?.plan.rounds;
+      out.push({ key: 'rounds', title: 'Rounds', sub: n ? `${n} rounds ready` : 'Rounds ready', tone: 'soft', subTone: 'green' });
     } else {
       const d = t.day;
       const done = !!d && d.phase === 'published';

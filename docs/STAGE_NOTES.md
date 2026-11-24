@@ -8305,8 +8305,7 @@ the Tournaments switch, on live). Deploy windows waived by Alex until Dec 1, nev
 3. Buttons over time (shared/tournamentCard.ts cardButtons; the tones in tournament-card87.css from the tokens): Tickets soft green / solid
    "All 10"; Remind plain amber words, amber tint on the Pay by day ("2 left · due 7 PM"), red tint past Pay by ("1 past due", Messages as
    before), quiet "Everyone paid"; on game day Teams (amber "Draft before 7:30" until published, soft green "5 teams set"; scrolls to the draft
-   card) or Rounds (Americano: amber "Set courts before 7:30" until the court numbers are set, then "9 rounds set": the brief named only "Draft
-   before"; Americano has no draft); Prizes plain / amber on game day / soft green once saved; Money plain, the line green or red ("−$6"),
+   card) or Rounds (Americano, Alex round 2: always soft green "6 rounds ready", the real count; no draft, nothing to do); Prizes plain / amber on game day / soft green once saved; Money plain, the line green or red ("−$6"),
    "You keep +$14" on game day once prizes are set (picture 7 keeps "+$42 if all pay" while they are not). Status lines never bold. The status
    line "pay by today 7 PM", "Pay by passed", "all paid", "Game night · 7:30 PM"; the pill counts the unpaid also past Pay by (dueOf).
 4. "6 of 10" (ticketCount): locked in of everyone who can make the date (the organizer too), not on standby: the balls players see. Used by the
