@@ -317,7 +317,7 @@ const RECORDER = () => {
       assert(flat(await current()).includes('Home'), `Back went to ${flat(await current())}`);
       assert(a.page.url().endsWith('/admin'), a.page.url());
       // A sheet on Home (the round's Set sheet): Back closes it and Home stays.
-      const set = a.page.locator('[data-tm-am-game] button').filter({ hasText: /^Set$/ }).first();
+      const set = a.page.locator('[data-nc-score]').first();
       if (await set.count()) {
         await set.click();
         await a.page.locator('dialog[open]').waitFor();
@@ -358,7 +358,7 @@ const RECORDER = () => {
       await q.ctx.close();
       await h.stage('zip77_last');
       const a = await h.adminHome({ reducedMotion: 'reduce' });
-      const btn = a.page.locator('[data-tm-am-game] button').filter({ hasText: /^Set$/ }).first();
+      const btn = a.page.locator('[data-nc-score]').first();
       await btn.waitFor({ timeout: 15000 });
       await btn.click();
       const title = flat(await a.page.locator('dialog[open] h2').first().innerText());
