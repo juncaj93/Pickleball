@@ -8319,3 +8319,28 @@ was tapped on a row already booked with an old waitlist mark.
 ### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
 Dashboard 4 trips / 63 statements before and after (none 9.1 → 10.5 ms, all_locked 18.7 → 14.2, mid 14.6 → 10.4, am_round3 13.3 → 9.7,
 zip86_payments 11.4 → 10.9); the 5 second check 2 trips / 16 statements, unchanged.
+
+### Tests
+Unit: 236 files, 4,372 passed, 2 skipped, 0 failed (round 1: 4,381). No test deleted: the 41 tests that named Waitlist were rewritten for Not
+booked (41 names out, 41 in); the count drops because loops over the three court states now run over two. New in
+tests/zip86-clean-admin.test.ts: an old waitlist row reads as Not booked, the status call refuses waitlist, the old /court route is gone, Booked
+logs court_booked once, Not booked clears an old mark. Browser: e2e/zip86.cjs 8 of 8 (no stripe, the status flip and Undo, waitlist refused, the
+picker: 16 courts, pick 7 saves, Clear then Undo keeps 7). Older scripts updated for the 2-way button and the picker (names, no-court,
+pay-always, admin-r2, admin-motion, double-tap pass; admin-cleanup, admin-r3, admin-v2, time-shift, run, live: only failures that also fail on
+live). Older scripts whose failing checks also fail on live are left as on live (rule from Alex, round 2): zip7, zip10, zip13, zip22, zip23,
+zip24, zip29, zip32, zip56, zip60, zip63, zip66, zip70, zip78, zip81, zip82, zip85, audit-stage3, circles, credit, held, round2, do-now,
+audit-player-look, audit-player-flows, card-times. Logs in the session scratchpad.
+
+### Preview
+`pickleball-preview` (fake) re-seeded; https://claude-new-session-w5741f.pickleball-club-9h0.pages.dev, calm start "zip86_home" (Booked / In card
+with no stripe, Court 4 opens the picker; Not booked / Out card tomorrow).
+
+### Live (Tue Nov 24, 2026, about 5:18 PM Eastern; before the 7 PM game, deploy finished before 6:30 PM as Alex asked)
+- Restore point first (`npm run backup:before-deploy`): export `export-20261124221715` saved in `pickleball-backups` (checked against the file);
+  Time Travel bookmark `00001f19-00000000-0000512d-204078b70aea652fc382dd4d9c15a7b6`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `6cc0561` to `b1ce659`, pushed; `npm run deploy -- --override-loud-hours`: deployment
+  **25c9ec98-959c-4adb-8865-a094301e9547** (bundle `index-BTuLouRq.js`). No migration, no Worker deploy, no live data touched.
+- Rollback: deployment **c206d3f6-ba2f-4192-b1f0-1faa60ab7300** (🎾86 round 1), Cloudflare Deployments > Rollback. No database undo needed.
+- Read-only live look (GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light and dark: the new bundle, no
+  page errors, nothing wider than the screen.
