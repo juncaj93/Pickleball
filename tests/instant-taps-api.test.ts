@@ -85,7 +85,7 @@ describe('INSTANT_TAPS switch', () => {
     expect((await alex.call('GET', '/api/group/version')).data.v).not.toBe(v0);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries;
     expect(act.some((e: { action: string }) => e.action === 'instant_taps_on')).toBe(true);
-    expect(activityText({ ...act.find((e: { action: string }) => e.action === 'instant_taps_on') }, 'America/Detroit', 'Alex')).toMatch(/"Instant taps" on/);
+    expect(activityText({ ...act.find((e: { action: string }) => e.action === 'instant_taps_on') }, 'America/Detroit', 'Alex')).toMatch(/“Instant taps” on/);
     expect((await w.app.client().call('PUT', '/api/admin/instant-taps', { on: true })).status).toBe(401);
     expect((await alex.call('PUT', '/api/admin/instant-taps', { on: false })).status).toBe(401);
     await w.organizer.call('PUT', '/api/admin/instant-taps', { on: false });

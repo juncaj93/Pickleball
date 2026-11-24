@@ -98,7 +98,7 @@ function PointsCard({ day }: { day: PlayerRoundsView }) {
               <b>{r.name}</b>
               {r.tied && <span className="tc-gd-tag">Tied</span>}
             </span>
-            <span className="tc-gd-rec">{r.record.replace('-', ' - ')}</span>
+            <span className="tc-gd-rec">{r.record}</span>
             <span className="tc-gd-chip tc-gd-pts">{r.points} pts</span>
           </li>
         ))}

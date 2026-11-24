@@ -335,9 +335,9 @@ describe('Adjust credit: what the player and the organizer read', () => {
     const two = [entry('kept', 500, 'first', null, '2026-11-01T00:00:00.000Z'), { ...entry('kept', 900, 'second', null, '2026-11-03T00:00:00.000Z'), id: 'e2' }];
     expect(latestAdjustment(two, now)).toMatchObject({ deltaCents: 900, note: 'second' });
   });
-  it('R3 the credit sheet\'s list says it in plain words, with the reason; the organizer\'s line says adjusted by organizer', () => {
+  it('R3 the credit sheet\'s list says it in plain words, with the reason; the organizer\'s line says adjusted by organizer (Zip 85: the player\'s says Alex)', () => {
     const rows = creditChanges([entry('kept', 500)], 'America/Detroit', 'Alex');
-    expect(rows[0].text).toBe(`Nov 4: credit adjusted by organizer: +$5. ${REASON}`);
+    expect(rows[0].text).toBe(`Nov 4: credit adjusted by Alex: +$5. ${REASON}`);
     expect(creditEntryText(entry('kept', 500), 'America/Detroit')).toBe('+$5 adjusted by organizer');
     expect(creditEntryText(entry('used', 500), 'America/Detroit')).toBe('-$5 adjusted by organizer');
   });

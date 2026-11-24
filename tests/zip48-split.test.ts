@@ -28,7 +28,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // Zip 83: 143.6 to 144.6 on purpose. The gold cup on every player Home (its drawing, the round button, the one GET on a tap, and a safe loader
 // that shows "Could not load" instead of a blank page if the wall's own file cannot be fetched): about 1.0 KB gzipped (main 143.2, this zip
 // 144.5). The Champions wall itself is its own file (ChampionsSheet), fetched only on the first tap.
-export const BUDGET = { scriptKB: 144.6, styleKB: 36.5, pageKB: 1.5, totalKB: 179 };
+// Zip 85: 144.6 to 145.6 on purpose: the You owe card for a tournament ticket owed after Didn't pay on the night (Pay sheet, I paid) and
+// the night hold (a phone left on during the tournament night keeps checking).
+export const BUDGET = { scriptKB: 145.6, styleKB: 36.5, pageKB: 1.5, totalKB: 180 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

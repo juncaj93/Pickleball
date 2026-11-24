@@ -186,7 +186,8 @@ describe('the switch on costs no database trip (Fewer database trips on, as live
     // Only the two small reads that exist only while the switch is on, which "Fewer database trips" sends in the shared trip: the dashboard's
     // Hidden tournaments list, and the tournament names on a ticket buyer's credit lines. Zip 83: plus, on the dashboard, the cup's one tiny
     // read (is there a champion players see?), which rides the shared trip when "Fewer database trips" is on (as on live: no trip of its own).
-    noMore(on, tripsOf(await w.screens()), (k) => (k === 'dashboard' ? 2 : 1));
+    // Zip 85: plus, on the dashboard, the owed tournament tickets (Money's Tournament tickets card), which rides the shared trip too.
+    noMore(on, tripsOf(await w.screens()), (k) => (k === 'dashboard' ? 3 : 1));
   });
 });
 
