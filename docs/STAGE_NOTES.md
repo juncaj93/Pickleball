@@ -8276,3 +8276,14 @@ others) check screens that are gone by design; the switch itself is unchanged in
 ### Preview
 `pickleball-preview` (fake) re-seeded; https://claude-new-session-w5741f.pickleball-club-9h0.pages.dev. Calm start: "Tournament card: payments"
 (organizer Home: the card at the top, the slim row on Tue Dec 1, two slim games).
+
+### Live (Tue Nov 24, 2026, about 12:47 PM Eastern; loud hours, the windows waived by Alex until Dec 1; no game running)
+- Restore point first (`npm run backup:before-deploy`, no rate limit): export `export-20261124174533` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00001edf-00000000-0000512d-dbf662a64ef7ddecfe89d0ebd3186c45`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `7eae177` to `d12f6bf`, pushed; `npm run deploy -- --override-loud-hours`: deployment
+  **c206d3f6-ba2f-4192-b1f0-1faa60ab7300** (bundle `index-CcpCVVTI.js`). No migration, no Worker or Error box deploy, no live data touched; The
+  Cold Open unchanged.
+- Rollback: deployment **784248b1-5163-490e-a6c7-cedf114149ee** (🎾85), Cloudflare Deployments > Rollback. No database undo needed.
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light
+  and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN in this session).
