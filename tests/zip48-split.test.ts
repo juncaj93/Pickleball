@@ -30,7 +30,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // 144.5). The Champions wall itself is its own file (ChampionsSheet), fetched only on the first tap.
 // Zip 85: 144.6 to 145.6 on purpose: the You owe card for a tournament ticket owed after Didn't pay on the night (Pay sheet, I paid) and
 // the night hold (a phone left on during the tournament night keeps checking).
-export const BUDGET = { scriptKB: 145.6, styleKB: 36.5, pageKB: 1.5, totalKB: 180 };
+// Zip 86: the tournament's row in the player's week list (src/TourWeekRow.tsx, its placement and Lock in rule in PlayerHome) and the player
+// rhythm: main (Zip 85) 145.50 KB script + 33.13 KB style, this zip 146.34 + 33.54; the first visit about 179.5 -> 180.8.
+export const BUDGET = { scriptKB: 146.5, styleKB: 36.5, pageKB: 1.5, totalKB: 181.2 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

@@ -414,7 +414,8 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
                     {unpaid.length > 0 ? (
                       <RemindButton ctx={ctx} t={t} unpaid={unpaid} />
                     ) : (
-                      <BigButton title="Remind" sub="Everyone paid" disabled data="data-tm86-remind" />
+                      // Review fix: say why there is nobody to remind (the list is empty after Pay by, or with every spot taken, too).
+                      <BigButton title="Remind" sub={remindQuiet(t, ctx.d.now)} disabled data="data-tm86-remind" />
                     )}
                     <BigButton title="Prizes" sub={prize ?? 'Not set yet'} onClick={() => setSheet('prizes')} data="data-tm86-prizes" />
                     {money}
@@ -433,7 +434,13 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
                   </>
                 )}
               </div>
-              {(ticketsStage || t.status === 'rescheduled') && !t.over && <CancelOrReschedule ctx={ctx} t={t} />}
+              {/* Review fix: the "Not signed up" copy text stays reachable while tickets are open (the server still sends the list). */}
+              {step === 1 && ns && (
+                <button type="button" className="tm-quiet-link tm86-ns" onClick={() => void copyMissing()} data-tm-missing-copy>
+                  Copy reminder for {ns.players.length} not signed up
+                </button>
+              )}
+              {ticketsStage && !t.over && <CancelOrReschedule ctx={ctx} t={t} />}
             </>
           ) : (
             <NightBody ctx={ctx} t={t} onTickets={() => setPage('tickets')} />
@@ -448,7 +455,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
         onClose={() => setPage(null)}
       />
       <Sheet calmFocus open={sheet === 'change'} title={`Change ${t.name}`} onClose={() => setSheet((cur) => (cur === 'change' ? null : cur))} className="tm86-sheet">
-        {sheet === 'change' && <ChangeBody key={`${t.start}-${t.minutes}-${t.expected}-${t.courts}`} ctx={ctx} t={t} onDone={() => setSheet(null)} onDates={() => { setSheet(null); setPage('dates'); }} />}
+        {sheet === 'change' && <ChangeBody ctx={ctx} t={t} onDone={() => setSheet(null)} onDates={() => { setSheet(null); setPage('dates'); }} />}
       </Sheet>
       <Sheet calmFocus open={sheet === 'money'} title="Money" onClose={() => setSheet((cur) => (cur === 'money' ? null : cur))} className="tm86-sheet">
         {sheet === 'money' && <MoneyBody t={t} onPrizes={() => setSheet('prizes')} />}
@@ -458,6 +465,14 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
       </Sheet>
     </section>
   );
+}
+
+/** Zip 86 (review fix): Remind's line when nobody is listed to remind: why. */
+function remindQuiet(t: AdminTournamentView, nowIso: string): string {
+  if (!t.payBy) return 'No pay by set';
+  if (payByPassed(t, nowIso)) return 'Pay by passed';
+  if (lockedOf(t).length >= MAX_SPOTS) return 'Every spot taken';
+  return 'Everyone paid';
 }
 
 /**

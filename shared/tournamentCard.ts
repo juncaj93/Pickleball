@@ -42,9 +42,14 @@ export function statusWords(t: AdminTournamentView, nowIso: string, tz: string):
 
 /** "$14 each to the winners" (Locked doubles), "1st $14 · 2nd $7" (Americano, or the vote), or null when no prize is set. */
 export function prizeWords(t: Pick<AdminTournamentView, 'format' | 'formatPending' | 'championCreditCents' | 'secondCreditCents'>): string | null {
-  if (t.format === 'doubles' && !t.formatPending) return t.championCreditCents > 0 ? `${formatPrice(t.championCreditCents)} each to the winners` : null;
-  if (t.championCreditCents <= 0 && t.secondCreditCents <= 0) return null;
-  return t.secondCreditCents > 0 ? `1st ${formatPrice(t.championCreditCents)} · 2nd ${formatPrice(t.secondCreditCents)}` : `1st ${formatPrice(t.championCreditCents)}`;
+  return prizeWordsFor(t.format === 'doubles' && !t.formatPending ? 'doubles' : 'americano', t.championCreditCents, t.secondCreditCents);
+}
+
+/** The prize words for the style the money line prices by (Locked doubles never counts a 2nd place: Zip 83). */
+export function prizeWordsFor(style: 'doubles' | 'americano', championCents: number, secondCents: number): string | null {
+  if (style === 'doubles') return championCents > 0 ? `${formatPrice(championCents)} each to the winners` : null;
+  if (championCents <= 0 && secondCents <= 0) return null;
+  return secondCents > 0 ? `1st ${formatPrice(championCents)} · 2nd ${formatPrice(secondCents)}` : `1st ${formatPrice(championCents)}`;
 }
 
 /** The style words on the When block ("Locked doubles", "Players vote"). */
@@ -82,7 +87,9 @@ export function moneySheet(t: AdminTournamentView): MoneySheet | null {
   if (!m || !c) return null;
   const style = m.style ?? t.format;
   const setCents = m.ticketsCents - m.courtCents - m.youCents;
-  const set = prizeWords(t) !== null && setCents > 0;
+  // Review fix: the words follow the style the money line prices by, so they always name the amount counted.
+  const words = prizeWordsFor(style, t.championCreditCents, t.secondCreditCents);
+  const set = setCents > 0 && words !== null;
   const full = topTier(style);
   const fullCents = tierCostCents(full, style);
   const prizeAllCents = set ? setCents : fullCents;
@@ -96,7 +103,7 @@ export function moneySheet(t: AdminTournamentView): MoneySheet | null {
     ticketsAllCents: m.ticketsCents,
     freeSeat: (t.tickets ?? []).some((k) => k.organizer && !k.out),
     prizeAllCents,
-    prizeAllWords: set ? prizeWords(t)! : suggestionWords(full, style).replace(/^Suggested: /, ''),
+    prizeAllWords: set ? words! : suggestionWords(full, style).replace(/^Suggested: /, ''),
     prizeSuggested: !set,
     keepCents: m.ticketsCents - m.courtCents - prizeAllCents,
     buttonCents: m.youCents,

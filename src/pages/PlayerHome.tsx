@@ -9,7 +9,6 @@ import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFall
 import { creditBackNote } from '../../shared/pricing';
 import { zonedTimeToUtc } from '../../shared/time';
 import { dayParts, planRange } from '../../shared/tournament';
-import { ticketStateOf } from '../../shared/tournamentNudge';
 import { type TourRowAction, TourWeekRow } from '../TourWeekRow';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, dropMoneyLine, joinedCreditText } from '../../shared/credit';
@@ -214,14 +213,26 @@ function tourRowOf(v: GroupView, nowMs: number, tz: string, mineOnly: boolean): 
   const at = new Date(zonedTimeToUtc(p.year, p.month, p.day, Math.floor(t.start / 60), t.start % 60, tz)).toISOString();
   if (weekTier(at, nowMs, tz) === 'this') return null;
   // Two weeks or more: the big card's main button (lime Sign up or Lock in, else the gray Who's in); never Drop out.
-  const state = ticketStateOf(t);
-  const action: TourRowAction | null = !t.me ? (t.openDates.length > 0 && !t.tickets?.closed ? 'signup' : null) : state === 'lock' ? 'lock' : 'who';
+  const action: TourRowAction | null = !t.me ? (t.openDates.length > 0 && !t.tickets?.closed ? 'signup' : null) : canLock(t) ? 'lock' : 'who';
   return { at, day: t.finalDate, name: t.name, sub: planRange(t.start, t.minutes), action };
+}
+/** Zip 86: the big card's Lock in shows (shared/tournamentNudge.ts ticketStateOf is 'lock'; the same rule, kept here so the player download
+ *  does not carry that file): tickets open, not closed, a spot open, and their own ticket neither a spot nor paid nor an I paid. */
+function canLock(t: NonNullable<GroupView['tournament']>): boolean {
+  const k = t.tickets;
+  if (t.status !== 'tickets' || !k || !t.me) return false;
+  const mine = k.mine;
+  if (mine?.place === 'spot') return false;
+  if (mine && mine.place !== 'line' && mine.claimCents > 0 && mine.owedCents === 0) return false;
+  if (k.closed && mine?.place !== 'line') return false;
+  if (k.full) return false;
+  if (mine?.place === 'line') return mine.creditCents + mine.paidCents < k.priceCents && mine.claimCents === 0;
+  return true;
 }
 /** Zip 86: the game rows with the tournament's row put in by time (before the first game that starts after it, else last). */
 function withTourRow<R extends { s: PlayerSessionView; leaving: boolean }>(rows: R[], tour: TourRowItem | null): (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] {
   const out: (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] = rows.map((r, gi) => ({ ...r, tour: null, gi }));
-  if (!tour || rows.length === 0) return out;
+  if (!tour) return out;
   const i = rows.findIndex((r) => Date.parse(r.s.startsAt) > Date.parse(tour.at));
   out.splice(i < 0 ? out.length : i, 0, { tour });
   return out;

@@ -211,7 +211,8 @@
   font-weight: 700;
   color: var(--warn-fg);
 }
-.tm86 .tm-tix-link {
+.tm86 .tm-tix-link,
+.tm86 .tm86-ns {
   align-self: center;
 }
 
@@ -359,7 +360,7 @@
   display: block;
   margin-top: 1px;
   font-style: normal;
-  font-size: 0.86em;
+  font-size: max(11px, 0.86em);
   color: var(--ink-2);
 }
 .tm86-total {

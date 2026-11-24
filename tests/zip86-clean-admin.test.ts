@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { playerPhone, setupGroup, TestApp } from './harness';
 import { potOf, type World } from './zip58-world';
-import { moneySheet, prizeWords, statusWords, stepOf } from '../shared/tournamentCard';
+import { moneySheet, prizeWords, prizeWordsFor, statusWords, stepOf } from '../shared/tournamentCard';
 import { expectedTournament } from '../shared/totalsRefresh';
 import type { AdminTournamentView } from '../shared/tournament';
 
@@ -152,6 +152,27 @@ describe('Zip 86: the steps and the status line', () => {
     expect(prizeWords({ format: 'americano', championCreditCents: 1400, secondCreditCents: 700 })).toBe('1st $14 · 2nd $7');
     expect(prizeWords({ format: 'americano', championCreditCents: 1400, secondCreditCents: 0 })).toBe('1st $14');
     expect(prizeWords({ format: 'doubles', formatPending: true, championCreditCents: 0, secondCreditCents: 0 })).toBeNull();
+    // Review fix: the Money sheet names the prizes by the style the money line prices by (an odd count plays Americano: 1st and 2nd).
+    expect(prizeWordsFor('americano', 1400, 700)).toBe('1st $14 · 2nd $7');
+    expect(prizeWordsFor('doubles', 1400, 700)).toBe('$14 each to the winners');
+  });
+  it('the Money sheet with an odd expected count on Locked doubles: the words and the amount are the Americano prizes the line counts', () => {
+    const t = {
+      format: 'doubles',
+      championCreditCents: 1400,
+      secondCreditCents: 700,
+      ticketCents: 1800,
+      size: 9,
+      expected: 9,
+      tickets: [],
+      money: { style: 'americano', courtCents: 12000, ticketsCents: 14400, youCents: 14400 - 12000 - 2100, afterFullCents: 14400 - 12000 - 2100 },
+      cost: { courtCents: 12000, ifFillsCents: 0, nowCents: 12000 + 2100, paidNow: 0 },
+    } as unknown as AdminTournamentView;
+    const ms = moneySheet(t)!;
+    expect(ms.prizesNowCents).toBe(2100);
+    expect(ms.prizeAllWords).toBe('1st $14 · 2nd $7');
+    expect(ms.soFarCents).toBe(-14100);
+    expect(ms.keepCents).toBe(ms.buttonCents);
   });
 });
 

@@ -205,9 +205,11 @@ const cutOrBroken = (page, sel) =>
       }
       // Next, Waitlist, Booked (the order), saved.
       await first.locator('.r86-status').click();
-      await sleep(200);
+      // The site's double-tap guard drops a second tap on the same button within 0.4 s (on purpose); a real next tap comes later.
+      await sleep(600);
       await first.locator('.r86-status').click();
       assert(flat(await first.locator('.r86-status').textContent()) === 'Waitlist', 'then Waitlist');
+      await sleep(600);
       await first.locator('.r86-status').click();
       assert(flat(await first.locator('.r86-status').textContent()) === 'Booked', 'then Booked');
       await page.waitForTimeout(7000);
@@ -222,6 +224,18 @@ const cutOrBroken = (page, sel) =>
         const s = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
         assert(s.roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'still in on the server');
       }
+      // Review fix: Out then In again inside the Undo window sends nothing (never Out, then back In on the waitlist).
+      if (undo) {
+        await sleep(600);
+        await first.locator('.r86-inout').click();
+        await sleep(600);
+        await first.locator('.r86-inout').click();
+        await page.waitForTimeout(6500);
+        const s2 = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
+        assert(s2.roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'Out then In: still in, nothing saved');
+        assert(flat(await first.locator('.r86-inout').textContent()) === 'In', 'shows In');
+      }
+      await sleep(600);
       await first.locator('.r86-inout').click();
       await page.waitForTimeout(7000);
       const after = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);

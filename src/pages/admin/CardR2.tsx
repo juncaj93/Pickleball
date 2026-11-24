@@ -314,7 +314,15 @@ function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; s
     let said = goingIn ? 'You’re in' : 'You’re out';
     let hold: Hold | null = null;
     if (undoOn) {
-      held.current?.release();
+      // Review fix: a second tap while the first is still held drops the first (nothing saved; never Out then In again, which would free the
+      // seat and put the organizer on the waitlist). Back where the server is: nothing to send at all.
+      const dropped = held.current?.undo() === true;
+      held.current = null;
+      if (dropped && goingIn === !!mine) {
+        onSeat(null);
+        toast('Undone. Nothing was saved.', 'ok', { keep: true });
+        return;
+      }
       const h = startHold();
       hold = held.current = h;
       toast(said, 'ok', {
@@ -450,7 +458,15 @@ function StatusButton({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSess
     const said = to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked';
     let hold: Hold | null = null;
     if (undoOn) {
-      held.current?.release();
+      // Review fix: the next tap while the last is still held drops it, so only the status the organizer stops on is saved (Not booked to
+      // Booked never saves the Waitlist step in between, which the server would log as "court opened"). Back to the saved status: nothing sent.
+      const dropped = held.current?.undo() === true;
+      held.current = null;
+      if (dropped && to === courtSwitchOf(s)) {
+        onPicked(null);
+        toast('Undone. Nothing was saved.', 'ok', { keep: true });
+        return;
+      }
       const h = startHold();
       hold = held.current = h;
       toast(said, 'ok', {
