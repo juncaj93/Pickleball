@@ -8251,3 +8251,28 @@ server change outside the preview-only Tournament test stages. Deploy windows wa
    cards 10 px apart, More games 12 px under.
 Stages (THIS_ZIP): zip86_payments, zip86_home, zip86_next, zip86_signup, zip86_lockin, zip86_whosin (server/tournamentTest.ts; zip86_home uses
 the real organizer actions and never Vic, Wren or Zoe).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) a second In / Out tap inside the Undo window sent the first at once (Out, then In on the waitlist): the next tap now drops the held
+one, and back where the server is nothing is sent; (2) the status button saved the step in between (Not booked → Booked saved Waitlist first,
+logged as "court opened"): same fix; (3) the "Not signed up" copy text was lost during Payments: a quiet link under the buttons; (4) Remind said
+"Everyone paid" after Pay by: now "Pay by passed" / "Every spot taken" / "No pay by set"; (5) the Money sheet's prize words follow the style the
+money line prices by; (6) no Cancel or reschedule on a rescheduled card (Reschedule always failed there, as before Zip 86); (7) the Change sheet
+no longer remounts mid-save; (8) the player row shows with an empty list too. Kept (the brief and picture 7): with no prizes set, You keep
+counts the suggested full tier (+$14) while the Money button and Totals count the prizes as set (+$42); the sheet says "Suggested. Not set yet."
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
+Dashboard 4 trips / 63 statements before and after (all_locked 12.3 → 11.2 ms, mid 11.7 → 10.1 ms, idle); the 5 second check 2 trips / 16
+statements, unchanged. No server change for the screens: everything is drawn from what the dashboard already sends.
+
+### Tests
+Unit: 236 files, 4,381 passed, 2 skipped, 0 failed (new tests/zip86-clean-admin.test.ts, 9: The Cold Open's Money sheet to the cent and = Totals,
+prizes through the Edit save, the Change sheet's calls, the steps, the prize words by style, the look rules). Updated on purpose: zip48-split
+budget 145.6 → 146.5 KB script, 180 → 181.2 total (main 145.50 + 33.13, this zip 146.34 + 33.54). Browser: e2e/zip86.cjs 8 of 8 (320/390/420,
+light and dark, 100/125/150% text, the Christmas skin, Undo on both taps, the player rows' three buttons, the rhythm in pixels). Older browser
+scripts that tap the Home card's 3-way switch, In | Out segments or the tournament card's tap rows (admin-r2, zip66, zip70, zip82, zip85 and
+others) check screens that are gone by design; the switch itself is unchanged in Edit game.
+
+### Preview
+`pickleball-preview` (fake) re-seeded; https://claude-new-session-w5741f.pickleball-club-9h0.pages.dev. Calm start: "Tournament card: payments"
+(organizer Home: the card at the top, the slim row on Tue Dec 1, two slim games).
