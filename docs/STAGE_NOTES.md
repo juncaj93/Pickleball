@@ -8017,3 +8017,66 @@ picked. e2e/zip81.cjs H (Usual game time) and C (the grid: 37 times, dimming, no
 - Read-only live look (pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN. Organizer screens not opened on live
   (no read-only PIN in this session).
 - Preview redeployed with the grid: https://claude-new-session-aenfpb.pickleball-club-9h0.pages.dev (deployment 3f194714).
+## Zip 82: night admin (🎾82.night admin), Mon Nov 23, 2026
+
+Built on main `b9d233b` (Zip 81 live). Branch `claude/new-session-fh0gux`. No migration, no Worker deploy, no new switch (everything rides the
+Tournaments switch, on live). **DEPLOY WINDOWS WAIVED BY ALEX UNTIL DEC 1** (Mon Nov 23, 10:50 PM Eastern: "Don't wait for Tuesday"): this deploy
+went out in loud hours with `npm run deploy -- --override-loud-hours`; from Dec 1 the windows in docs/SITE_RULES.md apply again.
+
+### What it does (pictures 1 to 6)
+1. End tournament card: "Only you see this until the reveal." and the final standings between the header and the prize rows (place, the gold medal
+   on 1st only, name, W-L, "55 pts" / "+4 pts"). The rows are shared/results.ts boardRows over the rows End saves: the board players get after End
+   (Locked doubles) or the reveal (Americano; server/tournament.ts's reveal now calls boardRows too, the same output as before), so they can never
+   differ. Edit awards' 1st and 2nd move to the top, as on the board. src/pages/admin/StandingsList.tsx.
+2. Americano night: "Standings" next to "All rounds" opens the live table (server/americanoDay.ts standingsOf, AdminRoundsView.standings):
+   "After Round 3. Only you see this until the reveal."; the gold only once a score is in. Organizer only; players still get no table.
+3. All games / All rounds are scoreboards (src/pages/admin/Scoreboard.tsx, scoreboardData.ts): "Needs a score · N" | "All", round headers, game
+   cards (Court + chip, Enter score / Fix / nothing for Up next, the two sides, the score big, the winner's green), playoffs and tie games named
+   ("Final · Court 1", "Game A · Court 1"), Sitting lines. Enter score / Fix open the existing score sheets; a card scored while the sheet is open
+   stays on Needs a score with its new score. During a pause the first round with an open game counts (review fix).
+4. Suggested prizes (shared/tournamentMoney.ts): tiers full / 1st only / medals only (Americano $21 / $14, Locked doubles $42 / $28), "Tickets $X −
+   courts $Y = $Z left." (only money that stays after End: spots, kept late drops, standby who took over on a team; review fix), "Suggested: ...",
+   Use these fills the boxes. Locked doubles now has a 2nd place: the Final's runner-up (Change in Edit awards), the 2nd place credit for each, no
+   medal; $0 writes nothing. The tournament page's Prizes card has "2nd place credit for each" for Locked doubles (a new one starts at $7). On live
+   The Cold Open has $0 and $0: nothing changes until Alex sets them.
+5. "After full prizes: +$21" / "$9 short" (red) next to the money line in the Time box, the Plan box and Finalize.
+6. Tap a medal (src/WinsSheet.tsx, server/tournamentEnd.ts winsOf, GET /api/tournament/wins and /api/admin/tournament-wins): "Your wins" /
+   "Vic’s wins", newest first, "Tue Dec 1, 2026 · Locked doubles with Wren". Tappable at the top (not on the organizer's own phone, where the name
+   is the Go to Admin button), on game cards, organizer History (now the real medal count) and the Players sheet's TOURNAMENTS card (a Medals row).
+   Not the ticker. Only public tournaments, not a reveal still playing (shownMedal), the same rule as the counts.
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) the suggestion counted standby holds End gives back; (2) Locked doubles All games had no Enter score during a pause; (3) the top medal sat
+inside the Go to Admin button on the organizer's own phone; (4) moving 1st to a team outside the Final put the Final's winner below the team it beat;
+(5) the night sheet's gold before any score. Kept as notes: a new Locked doubles tournament starts with $7 for 2nd (Alex's new rule; live checked: the
+only open tournament is The Cold Open at $0); a doubles End card open across the deploy gets one "This just changed" on Confirm.
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
+Dashboard 4 trips / 61 statements before and after at none, all_locked, mid, am_round3, am_done, final_done (7.6 to 10.5 ms before, 7.1 to 8.8 ms
+after; +0.5 to +1.3 KB on a tournament night); the 5 second check 2 trips / 16 statements both. The wins load only on a tap.
+
+### Tests
+Unit: 230 files, 4,339 passed, 2 skipped, 0 failed (with tests/zip82-night-admin.test.ts, 22: End card = board for Americano 9/10/11 and Locked
+doubles 8/10/12, no table for players, the tiers, the price check, 2nd place to the cent and at $0, the wins sheet's privacy and reveal hold). Updated
+on purpose: tests/zip58-world.ts (Locked doubles nights keep 2nd place at $0 as the page saved it), zip58-end (the 2nd place row), zip56-tickets
+(prizeCentsOf), readonly-pin (the two new GET routes). Browser: e2e/zip82.cjs 6 of 6 (320/390/420, light and dark); zip72 8, zip77 7, zip78 36,
+zip79 6; zip58 22 of 24 (F fails the same way on main, Zip 79's results row; E and G now expect the 2nd place and Medals rows).
+
+### Preview
+`pickleball-preview` (fake): bookmarks `000001cd-00000000-0000512d-aeffa15c86bdaa3339929330f8d5a915` and `000001ce-00000000-0000512d-861118008fbdec9a1330228fcddc00c6`
+before the two re-seeds; https://claude-new-session-fh0gux.pickleball-club-9h0.pages.dev. Calm start: am_round3 (the Americano night at Round 3).
+Seeded at 10:55 PM Eastern, so the fake night runs past the preview's 10 PM close and Zip 81's amber venue card shows first; Tournament test >
+"Americano: Round 3" puts the night at the viewer's time. New stage: "Tie game on (All games)" (zip82_tie, the real spin).
+
+### Live (Mon Nov 23, 2026, about 10:57 PM Eastern; loud hours, the windows waived by Alex until Dec 1)
+- Restore points first (`npm run backup:before-deploy`, no rate limit): export `export-20261124035437` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00001e2a-00000000-0000512d-06a9888438bee43193c48d47279837cc`.
+- Integrity checks before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `b9d233b` to `feb99b6`, pushed; `npm run deploy -- --override-loud-hours` (the other guard rules passed): deployment
+  **33b8b17c-74c2-43f9-98e2-141357556fe1** (bundle `index-tjEFIRow.js`). No migration, no Worker or Error box deploy, no live data touched; The Cold
+  Open unchanged (Tue Dec 1, $18, 2 courts, 7:30 to 10 PM, champion and 2nd credit $0).
+- Rollback: deployment **44f584bf-0705-4983-88be-61221f4a6987** (🎾81), Cloudflare Deployments > Rollback. No database undo needed.
+- Read-only live look (pages.dev, GET only): /, /admin, /api/status 200; the dashboard and both wins routes 401 without a PIN or group word;
+  Home at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN
+  in this session).
+- Next: 🎾83 (Champions wall) deploys after this, from a main that includes `feb99b6`.
