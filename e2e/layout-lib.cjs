@@ -93,7 +93,7 @@ async function seed({ BASE, token }) {
   regular.forEach((s, i) => (S[i + 1] = s.id));
   const idOf = (n) => d.players.find((p) => p.name === n).id;
   for (const id of [S[1], S[2], S[3], S[6], S[7], S[8], ...burn]) await ok(await post(areq, `/api/admin/sessions/${id}/booked`, {}), 'book');
-  await ok(await post(areq, `/api/admin/sessions/${S[5]}/court-status`, { status: 'waitlist' }), 'waitlist');
+  // Zip 86: the court Waitlist was removed (court-status 'waitlist' is a 400 now): S5 stays Not booked.
 
   const who = {};
   for (const n of NAMES) {
@@ -115,7 +115,7 @@ async function seed({ BASE, token }) {
   // Thu Nov 5 (S2): 10 in, long names; Nathan waits.
   for (const n of ['Ryan', 'Wren', LONG, NOSPACE, EMOJI, ACCENT, 'Fe', 'Ff', 'Fg', 'Fh']) await join(n, S[2], 'confirmed');
   await join('Nathan', S[2], 'waitlisted');
-  // S3: Ryan owes, Wren paid. S4: no court, 3 in. S5: the venue's waitlist, 2 in.
+  // S3: Ryan owes, Wren paid. S4: no court, 3 in. S5: not booked, 2 in.
   for (const n of ['Ryan', 'Wren', ACCENT]) await join(n, S[3], 'confirmed');
   await adminPaid('Wren', S[3]);
   for (const n of ['Ryan', 'Wren', ACCENT]) await join(n, S[4], 'confirmed');
