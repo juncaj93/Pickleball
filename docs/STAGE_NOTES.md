@@ -8307,6 +8307,14 @@ others) check screens that are gone by design; the switch itself is unchanged in
    early; Home gets zip88_rd3), zip88_final (picture 3; the Final and 3rd place rows set to 7 for the look: the real Time check never shortens
    playoffs), zip88_sitting (Vic sits Round 4).
 
+5. Alex's two additions. START NOW: server/tournament.ts START_TASK, `nightStartMs` (the planned start or the tap, whichever is first: every
+   "has the night started" asks it: amFacts, facts, the score gates, the live windows, the Time/Plan lock), `startNowOpen`; the column
+   `started_early` rides SHOWN_SQL, ACTIVE_FOR_PLAYER_SQL and activeTournament (same statements); POST .../games { action: 'start' }
+   (server/tournamentDay.ts startNow, guarded insert, audit 'tournament_started_now'); AdminTournamentView.startNow / startedEarly; the
+   card's Start now button and its "Are you sure?" (src/pages/admin/Tournament.tsx HomeCard, night-card88.css); nightOnAt follows the tap.
+   TEAM NAMES: server/tournamentDay.ts teamHasScore (canRename and playerTeamName); src/tournament/GameDayView.tsx keeps Your team on the night
+   while canRename. Stage zip88_ready "Game day: ready to start now".
+
 ### Finding (told Alex, he left it to my judgment: ship the rule as written)
 On 8 to 10 player nights (both styles) the fair schedule always has someone of every later game still on the other court, so a freed court never
 finds a game it may start: courts wait exactly as before, The Cold Open plays as lockstep did. Early starts happen on 11 to 16 player Americano
