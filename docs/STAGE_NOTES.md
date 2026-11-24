@@ -8287,3 +8287,35 @@ others) check screens that are gone by design; the switch itself is unchanged in
 - Rollback: deployment **784248b1-5163-490e-a6c7-cedf114149ee** (🎾85), Cloudflare Deployments > Rollback. No database undo needed.
 - Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light
   and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN in this session).
+
+## Zip 86 round 2: no court Waitlist, no stripe, the quick court picker (🎾86.clean admin), Tue Nov 24, 2026
+
+Built on main `d12f6bf` (🎾86 live, deployment c206d3f6). Alex tried the preview; taps 1 and 3 kept. No migration, no Worker deploy, no new switch.
+
+### What it does
+1. The court Waitlist is gone everywhere. The status button flips Booked / Not booked, with Undo. A game saved as waitlist (court status or
+   court_state) shows and acts as Not booked (shared/court.ts shownCourt); nothing in the database is rewritten until the organizer taps.
+   Removed from: shared/court.ts (the waitlist kind, isCourtWaitlist), shared/status.ts (the "Court waitlist" label; needsBooking counts it as
+   not booked), shared/api.ts and server/views.ts, server/player.ts, server/repo.ts (old values read as not booked), server/admin.ts (the status
+   call refuses waitlist with 400; Booked clears an old waitlist mark; POST /api/admin/sessions/:id/court deleted from server/app.ts; the booking
+   edit no longer takes 'unavailable'; the CSV export says not_booked), the Telegram booking reminder's waitlist skip (shared/tasks.ts,
+   server/tasks.ts, src/pages/admin/doNow.ts), History words (shared/activity.ts: old "court opened" reads booked, old "court waitlist" reads
+   not booked), the Home status button (CardR2), Edit game's switch (src/CourtSwitch.tsx, now 2 segments), the slim rows' labels (HomeV2), the
+   classic card's toast (Sessions.tsx), player screens (PlayerHome standby words, the ~7 PM time tile and its tilde in src/timeShiftText.ts, the
+   waitlist court icon in src/ui.tsx, src/courtDisplay.ts, src/optimistic.ts, src/lastScreen.ts), the styles and tokens (styles.css, zip7.css,
+   player-cards.css, admin-r2.css, admin-cards.css, admin-card86.css, motion.css, large-text.css: --sw-wait-*, --z7-wait-*, court-waitlist),
+   the fake preview worlds (scripts/preview-world-small.ts, scripts/seed-preview-world.ts) and the tests. The player waitlist (a full game's line
+   of players) is a different thing and stays.
+2. No green stripe on the organizer's game cards, In or Out (src/admin-card86.css; the older .scard.court-booked edge in styles.css too). The
+   floating shadow stays. Player cards unchanged.
+3. Tapping "Court 4" or "Court ?" opens a quick court picker (CardR2 CourtButton): courts 1 to 16 as big buttons, four to a row, and Clear.
+   One tap saves (PUT /api/admin/sessions/:id/court-number) with the Undo toast; a second pick inside the Undo window replaces the first.
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: the picker could say "Nothing was saved" behind a save still in flight; the picker emptied while closing; the booking edit still took
+'unavailable'; the CSV printed 'unavailable'; History lines said court waitlist; the older card's green edge; a second "booked" line when Booked
+was tapped on a row already booked with an old waitlist mark.
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
+Dashboard 4 trips / 63 statements before and after (none 9.1 → 10.5 ms, all_locked 18.7 → 14.2, mid 14.6 → 10.4, am_round3 13.3 → 9.7,
+zip86_payments 11.4 → 10.9); the 5 second check 2 trips / 16 statements, unchanged.
