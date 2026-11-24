@@ -138,20 +138,21 @@ const looks = (el) =>
     });
 
     for (const scheme of ['light', 'dark'])
-      await check(`F one tap height (${scheme}): status button, In / Out, History tabs`, async () => {
-        // Zip 86: the Home card's segmented court switch and In | Out are gone (one status button and one In / Out button); each is still a
-        // 44 px tap, and the History tabs keep their 44 px segmented look.
+      await check(`F one segmented look (${scheme}): court switch, In / Out, History tabs`, async () => {
         await calm.stage('none');
         const a = await calm.adminHome({ scheme });
-        const h44 = (b) => Math.round(b.getBoundingClientRect().height);
-        const sw = await a.page.locator('.r86-status').first().evaluate(h44);
-        const io = await a.page.locator('.r86-inout').first().evaluate(h44);
+        const sw = await a.page.locator('.court-switch button').first().evaluate((b) => [Math.round(b.getBoundingClientRect().height), getComputedStyle(b.parentElement).backgroundColor]);
+        const io = a.page.locator('.r2-seg button').first();
+        const ioLook = (await io.count()) ? await io.evaluate((b) => [Math.round(b.getBoundingClientRect().height), getComputedStyle(b.parentElement).backgroundColor]) : sw;
         await a.page.locator('.tabbar button, .tab-bar button', { hasText: 'History' }).first().click();
         const h = a.page.locator('.history-head .segmented button').first();
         await h.waitFor({ timeout: 10000 });
-        const hl = await h.evaluate(h44);
+        const hLook = await h.evaluate((b) => [Math.round(b.getBoundingClientRect().height), getComputedStyle(b.parentElement).backgroundColor]);
         await a.ctx.close();
-        for (const [n, l] of [['status button', sw], ['In / Out', io], ['History', hl]]) assert(l === 44, `${n} is ${l} px`);
+        for (const [n, l] of [['court switch', sw], ['In / Out', ioLook], ['History', hLook]]) {
+          assert(l[0] === 44, `${n} cell is ${l[0]} px`);
+          assert(l[1] === sw[1], `${n} track ${l[1]} vs ${sw[1]}`);
+        }
       });
   } finally {
     await calm.close();

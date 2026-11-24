@@ -5,10 +5,10 @@
  *
  * The world is the preview's calm profile as of Thu Nov 19 2026, 10:00 AM Eastern, and the Tournament test page's Zip 70 stages: The Cold Open
  * as on live (Locked doubles, $18, credits $0, Tue Dec 1, 7:30 to 10 PM on 2 courts, 6 locked in of 8, Vic and Zoe unpaid).
- *   A  the card (Zip 86): When (Tue Dec 1 · 7:30 to 10 PM), Tickets 6 of 8, Remind 2, Money +$6 if all pay, at 420/390/360/320 light and dark
- *   B  Change (Zip 86, was tap Time): the pickers and Courts cost as they change; Save; the venue card; players see the moved card (picture 6)
- *   C  when it would cost Alex: Money "−$18 if all pay", You keep in red
- *   D  Change (Zip 86, was tap Plan): Players you expect - and +, Courts 1 | 2, Courts cost, Save
+ *   A  the card (picture 1): Date, Time, Plan, You make if it fills +$6 (green), Locked in 6 of 8, at 420/390/360/320 light and dark, no row wraps
+ *   B  tap Time (picture 2): the pickers, the fit line, the money line as they change; Save; the venue card; players see the moved card (picture 6)
+ *   C  when it would cost Alex (picture 3): Your cost if it fills $18 in red, no minus
+ *   D  tap Plan (picture 7): Expect - and +, Courts 1 | 2, fit and money lines, Save
  *   E  Finalize (picture 4): Time, "Americano for 9", the money line updating with Time and Courts
  *   F  the players' ticket (picture 5): 7:30 PM / to 10 PM, never cut at 320
  *   G  the moved-time card (picture 6) at every width; X dismisses it for good on that phone
@@ -229,29 +229,22 @@ async function main() {
   const rowsOf = async (page) => (await page.locator('[data-tm-home-body] .tm-rows > .tm-row').allInnerTexts()).map((x) => flat(x));
 
   // ---------------------------------------------------------------- A  the card (picture 1)
-  // Zip 86: the open card before game night is the 4 steps, When (date, time, courts, style, price) with Change, and four buttons (Tickets,
-  // Remind, Prizes, Money); the Date / Time / Plan / You make if it fills / Locked in / Not paid yet / Ticket rows are gone.
   let info = await stage('zip70_start');
   assert(info.date === '2026-12-01', `The Cold Open on Tue Dec 1, is ${info.date}`);
-  const subOf = async (page, sel) => flat(await page.locator(`${sel} .tm86-btn-sub`).first().innerText());
   for (const width of WIDTHS)
     for (const scheme of SCHEMES)
-      await check(`A ${width} ${scheme}: When Tue Dec 1 · 7:30 to 10 PM, 2 courts · Locked doubles · $18; Tickets 6 of 8, Remind 2, Money +$6 if all pay; 44 px buttons, nothing wraps out`, async () => {
+      await check(`A ${width} ${scheme}: Date Tue Dec 1, Time 7:30 to 10 PM, Plan 8 players, You make if it fills +$6 (green), Locked in 6 of 8; no row wraps`, async () => {
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
         await openCard(a.page);
-        assert((await a.page.locator('[data-tm-steps]').getAttribute('data-tm-steps')) === '1', 'step 2 of 4 (Payments)');
-        const when = flat(await a.page.locator('[data-tm86-when] [data-tm-row-time]').innerText());
-        assert(when === 'Tue Dec 1 · 7:30 to 10 PM', `When: ${when}`);
-        const plan = flat(await a.page.locator('[data-tm86-when] [data-tm-home-plan]').innerText());
-        assert(plan === '2 courts · Locked doubles · $18', `When sub: ${plan}`);
-        assert((await subOf(a.page, '[data-tm-tickets]')) === '6 of 8 locked in', await subOf(a.page, '[data-tm-tickets]'));
-        assert((await subOf(a.page, '[data-tm-remind-btn]')) === '2 haven’t paid', await subOf(a.page, '[data-tm-remind-btn]'));
-        assert((await subOf(a.page, '[data-tm86-money]')) === '+$6 if all pay', await subOf(a.page, '[data-tm86-money]'));
-        for (const b of await a.page.locator('[data-tm-home-body] .tm86-btn, [data-tm86-change]').all()) {
-          const r = await b.boundingBox();
-          assert(r.height >= 43.5, `a button under 44 px (${r.height})`);
-        }
+        const rows = await rowsOf(a.page);
+        const want = ['Style Locked doubles', 'Not signed up 1', 'Date Tue Dec 1', 'Time 7:30 to 10 PM', 'Plan 8 players · 2 courts · 2.5 hrs', 'You make if it fills +$6', 'Locked in 6 of 8', 'Not paid yet 2', 'Ticket $18 · pay by Mon 7:00 PM'];
+        assert(JSON.stringify(rows) === JSON.stringify(want), JSON.stringify(rows));
+        const money = a.page.locator('[data-tm-row-money]');
+        assert((await colorOf(money)) === (await varColor(a.page, '--ok-fg')), 'the +$6 is green (--ok-fg)');
+        for (const h of await a.page.locator('[data-tm-home-body] .tm-rows > .tm-row').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height)))
+          assert(h <= 44, `a row wraps (${h} px)`); // Zip 78: every row is a 44 px tap now; a wrapped row would be taller
+        await oneLine(a.page, '[data-tm-home-body] .tm-rows > .tm-row');
         await fits(a.page, '[data-tm-home]');
         await noDash(a.page, 'the card');
         assert(a.errors.length === 0, a.errors.join(' | '));
@@ -259,42 +252,38 @@ async function main() {
         await a.ctx.close();
       });
 
-  // ---------------------------------------------------------------- B  Change: Time (picture 2), save, the players' card
-  // Zip 86: the Time row's box is now the Change sheet (Date, Time, Courts, Players you expect, Courts cost); its fit line shows only when
-  // tight and the money line moved to the Money sheet.
+  // ---------------------------------------------------------------- B  tap Time (picture 2), save, the players' card
   for (const width of WIDTHS)
     for (const scheme of SCHEMES)
-      await check(`B ${width} ${scheme}: Change: the two time pickers on one line, Courts cost follows the end; Escape closes`, async () => {
+      await check(`B ${width} ${scheme}: tap Time: the two pickers, the fit line and the money line follow the end; tap again closes`, async () => {
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
         await openCard(a.page);
-        await a.page.locator('[data-tm86-change]').click();
-        const box = a.page.locator('[data-tm86-change-sheet]');
+        await a.page.locator('[data-tm-time-toggle]').click();
+        const box = a.page.locator('[data-tm-time-box]');
         await box.waitFor({ timeout: 5000 });
-        assert(flat(await box.locator('[data-tm86-court-cost]').innerText()) === '$120', `2.5 hrs on 2 courts: ${await box.locator('[data-tm86-court-cost]').innerText()}`);
-        assert(await box.locator('[data-tm86-save]').isDisabled(), 'Save is off until something changes');
         await a.page.locator('[data-tm-time-end]').selectOption(String(21 * 60 + 30));
-        assert(flat(await box.locator('[data-tm86-court-cost]').innerText()) === '$96', `2 hrs on 2 courts: ${await box.locator('[data-tm86-court-cost]').innerText()}`);
-        assert((await box.locator('[data-tm-box-fit]').count()) === 0, 'it fits: no tight line');
-        assert(!(await box.locator('[data-tm86-save]').isDisabled()), 'Save is on');
-        await oneLine(a.page, '[data-tm86-change-sheet] .tm86-times');
-        await fits(a.page, '[data-tm86-change-sheet]');
+        assert(flat(await box.locator('[data-tm-box-fit]').innerText()) === 'Locked doubles for 8: games to 11, done about 9:00 PM.', await box.locator('[data-tm-box-fit]').innerText());
+        assert(flat(await box.locator('[data-tm-money-line]').innerText()) === 'Courts $96 · Tickets $126 · You +$30', await box.locator('[data-tm-money-line]').innerText());
+        await oneLine(a.page, '[data-tm-time-box] .tm-hc-times');
+        await fits(a.page, '[data-tm-home]');
         await box.screenshot({ path: path.join(SHOTS, `B-time-${width}-${scheme}.png`) });
-        await a.page.keyboard.press('Escape');
-        await box.waitFor({ state: 'detached', timeout: 5000 });
-        assert(flat(await a.page.locator('[data-tm86-when] [data-tm-row-time]').innerText()) === 'Tue Dec 1 · 7:30 to 10 PM', 'closing without Save keeps the time');
+        await tapGap(a.page);
+        await a.page.locator('[data-tm-time-toggle]').click();
+        await a.page.waitForTimeout(200);
+        assert((await box.count()) === 0, 'tap again closes');
         await a.ctx.close();
       });
   await check('B Save moves the end: the card, History, the venue card with the new times; Vic sees the moved card and "to 9:30 PM"', async () => {
     const a = await adminPage({ width: 390 });
     await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
     await openCard(a.page);
-    await a.page.locator('[data-tm86-change]').click();
+    await a.page.locator('[data-tm-time-toggle]').click();
     await a.page.locator('[data-tm-time-end]').selectOption(String(21 * 60 + 30));
-    await a.page.locator('[data-tm86-save]').click();
-    await a.page.locator('[data-tm86-change-sheet]').waitFor({ state: 'detached', timeout: 10000 });
-    assert(flat(await a.page.locator('[data-tm86-when] [data-tm-row-time]').innerText()) === 'Tue Dec 1 · 7:30 to 9:30 PM', await a.page.locator('[data-tm-row-time]').innerText());
-    assert((await subOf(a.page, '[data-tm86-money]')) === '+$30 if all pay', await subOf(a.page, '[data-tm86-money]'));
+    await a.page.locator('[data-tm-time-save]').click();
+    await a.page.locator('[data-tm-time-box]').waitFor({ state: 'detached', timeout: 10000 });
+    assert(flat(await a.page.locator('[data-tm-row-time]').innerText()) === '7:30 to 9:30 PM', await a.page.locator('[data-tm-row-time]').innerText());
+    assert(flat(await a.page.locator('[data-tm-row-money]').innerText()) === '+$30', await a.page.locator('[data-tm-row-money]').innerText());
     const venue = a.page.locator('[data-tm-venue-alert]');
     await venue.waitFor({ timeout: 5000 });
     assert(/7:30 to 9:30 PM/.test(await venue.innerText()), await venue.innerText());
@@ -313,31 +302,29 @@ async function main() {
   await stage('zip70_loss');
   for (const width of WIDTHS)
     for (const scheme of SCHEMES)
-      await check(`C ${width} ${scheme}: 3 hours: Money says "−$18 if all pay", the Money sheet's You keep is red`, async () => {
+      await check(`C ${width} ${scheme}: 3 hours: "Your cost if it fills" "$18" in red, no minus`, async () => {
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
         await openCard(a.page);
-        assert((await subOf(a.page, '[data-tm86-money]')) === '−$18 if all pay', await subOf(a.page, '[data-tm86-money]'));
-        assert(/7:30 to 10:30 PM$/.test(flat(await a.page.locator('[data-tm86-when] [data-tm-row-time]').innerText())), await a.page.locator('[data-tm-row-time]').innerText());
-        await fits(a.page, '[data-tm-home]');
-        await a.page.locator('[data-tm86-money]').click();
-        const keep = a.page.locator('[data-tm86-money-sheet] [data-tm86-keep] b');
-        await keep.waitFor({ timeout: 5000 });
-        assert((await colorOf(keep)) === (await varColor(a.page, '--danger-fg')), 'You keep is red (--danger-fg)');
-        if (width === 390) await a.page.locator('[data-tm86-money-sheet]').screenshot({ path: path.join(SHOTS, `C-loss-${width}-${scheme}.png`) });
+        const rows = await rowsOf(a.page);
+        assert(rows.includes('Your cost if it fills $18') && rows.includes('Plan 8 players · 2 courts · 3 hrs'), JSON.stringify(rows));
+        const money = a.page.locator('[data-tm-row-money]');
+        assert((await colorOf(money)) === (await varColor(a.page, '--danger-fg')), 'red (--danger-fg)');
+        await oneLine(a.page, '[data-tm-home-body] .tm-rows > .tm-row');
+        if (width === 390) await a.page.locator('[data-tm-home]').screenshot({ path: path.join(SHOTS, `C-loss-${width}-${scheme}.png`) });
         await a.ctx.close();
       });
 
-  // ---------------------------------------------------------------- D  Change: Plan (picture 7)
+  // ---------------------------------------------------------------- D  tap Plan (picture 7)
   await stage('zip70_start');
   for (const width of WIDTHS)
     for (const scheme of SCHEMES)
-      await check(`D ${width} ${scheme}: Change: Players you expect 8 with - and +, Courts 1 | 2; never under the 6 locked in; Courts 1 halves the cost; 44 px`, async () => {
+      await check(`D ${width} ${scheme}: tap Plan: Expect 8 with - and +, Courts 1 | 2; + to 10: fit and money follow; no wrap`, async () => {
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
         await openCard(a.page);
-        await a.page.locator('[data-tm86-change]').click();
-        const box = a.page.locator('[data-tm86-change-sheet]');
+        await a.page.locator('[data-tm-plan-toggle]').click();
+        const box = a.page.locator('[data-tm-plan-box]');
         await box.waitFor({ timeout: 5000 });
         assert(flat(await box.locator('[data-tm-expect]').innerText()) === '8', 'Expect starts on 8');
         // Never fewer than the 6 locked in.
@@ -351,38 +338,30 @@ async function main() {
           await tapGap(a.page);
         }
         assert(flat(await box.locator('[data-tm-expect]').innerText()) === '10', 'up to 10');
-        assert(flat(await box.locator('[data-tm86-court-cost]').innerText()) === '$120', 'Courts cost $120 on 2 courts');
-        await box.locator('[data-tm-plan-courts="1"]').click();
-        assert(flat(await box.locator('[data-tm86-court-cost]').innerText()) === '$60', 'Courts cost $60 on 1 court');
-        await tapGap(a.page);
-        await box.locator('[data-tm-plan-courts="2"]').click();
+        assert(flat(await box.locator('[data-tm-box-fit]').innerText()) === 'Locked doubles for 10: games to 11, done about 9:50 PM.', await box.locator('[data-tm-box-fit]').innerText());
+        assert(flat(await box.locator('[data-tm-money-line]').innerText()) === 'Courts $120 · Tickets $162 · You +$42', await box.locator('[data-tm-money-line]').innerText());
         for (const b of await box.locator('button').all()) {
           const r = await b.boundingBox();
           assert(r.height >= 43.5, `a button under 44 px (${r.height})`);
         }
-        await fits(a.page, '[data-tm86-change-sheet]');
+        await oneLine(a.page, '[data-tm-plan-box] .tm-fin-row');
+        await fits(a.page, '[data-tm-home]');
         await box.screenshot({ path: path.join(SHOTS, `D-plan-${width}-${scheme}.png`) });
         await a.ctx.close();
       });
-  await check('D Save: 10 players, Money +$42 if all pay; a reload keeps it', async () => {
+  await check('D Save: Plan 10 players, You make if it fills +$42; a reload keeps it', async () => {
     const a = await adminPage({ width: 390 });
     await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
     await openCard(a.page);
-    await a.page.locator('[data-tm86-change]').click();
+    await a.page.locator('[data-tm-plan-toggle]').click();
     for (let i = 0; i < 2; i++) {
       await a.page.locator('[data-tm-expect-plus]').click();
       await tapGap(a.page);
     }
-    await a.page.locator('[data-tm86-save]').click();
-    await a.page.locator('[data-tm86-change-sheet]').waitFor({ state: 'detached', timeout: 10000 });
-    assert((await subOf(a.page, '[data-tm86-money]')) === '+$42 if all pay', await subOf(a.page, '[data-tm86-money]'));
-    await a.page.reload();
-    await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
-    await openCard(a.page);
-    assert((await subOf(a.page, '[data-tm86-money]')) === '+$42 if all pay', 'after a reload');
-    assert((await subOf(a.page, '[data-tm-tickets]')) === '6 of 8 locked in', 'still 6 locked in');
-    const d = (await dash()).tournament;
-    assert(d.expected === 10 && d.courts === 2, JSON.stringify([d.expected, d.courts]));
+    await a.page.locator('[data-tm-plan-save]').click();
+    await a.page.locator('[data-tm-plan-box]').waitFor({ state: 'detached', timeout: 10000 });
+    const rows = await rowsOf(a.page);
+    assert(rows.includes('Plan 10 players · 2 courts · 2.5 hrs') && rows.includes('You make if it fills +$42') && rows.includes('Locked in 6 of 8'), JSON.stringify(rows));
     await a.ctx.close();
   });
 

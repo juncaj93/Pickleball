@@ -585,24 +585,24 @@ async function main() {
             const len = c.querySelector('[data-card-length]');
             const time = c.querySelector('[data-card-time]');
             const paid = c.querySelector('[data-paid-cell]');
-            // Zip 86: the paid pill's mark and words (.r86-paid-mark / .r86-paid-text), the court button and the directions button side by side.
-            const dol = c.querySelector('.r86-paid-mark');
-            const txt = c.querySelector('.r86-paid-text');
+            const dol = c.querySelector('.r2-dol');
+            const txt = c.querySelector('.r2-paid-text');
             const cj = c.querySelector('[data-court-joined]');
             const dir = c.querySelector('[data-court-directions]');
             const cancel = c.querySelector('[data-cancel-by]');
             const foot = c.querySelector('[data-r2-foot]');
+            const half = cj && cj.querySelector('[data-court-num]');
             return {
               id,
-              btnLook: cj ? { h: R(cj).h, dirH: R(dir).h, bg: getComputedStyle(cj).backgroundColor, dirBg: getComputedStyle(dir).backgroundColor, color: getComputedStyle(cj).color, arrow: getComputedStyle(dir).color } : null,
+              btnLook: cj ? { border: getComputedStyle(cj).borderTopColor, width: getComputedStyle(cj).borderTopWidth, h: R(cj).h, dividerColor: getComputedStyle(dir).borderLeftColor, dividerWidth: getComputedStyle(dir).borderLeftWidth, color: getComputedStyle(half).color, arrow: getComputedStyle(dir).color } : null,
               stacked: getComputedStyle(c.querySelector('.scard-tilecol')).flexDirection === 'row',
               cardW: R(c).w - 24,
               len: len ? { text: len.textContent, size: parseFloat(rgb(len, 'fontSize')), weight: rgb(len, 'fontWeight'), color: rgb(len, 'color'), r: R(len) } : null,
               time: time ? { size: parseFloat(rgb(time, 'fontSize')), weight: rgb(time, 'fontWeight'), color: rgb(time, 'color') } : null,
               paid: paid
-                ? { state: paid.getAttribute('data-paid-state'), text: txt.textContent, hasCheck: !!dol.querySelector('svg'), dolText: dol.textContent, dolBg: rgb(dol, 'backgroundColor'), dolW: R(dol).w, dolH: R(dol).h, txtColor: rgb(txt, 'color'), txtSize: parseFloat(rgb(txt, 'fontSize')), rem: parseFloat(root.fontSize), ink: rgb(txt, 'color'), h: R(paid).h }
+                ? { state: paid.getAttribute('data-paid-state'), text: txt.textContent, hasCheck: !!dol.querySelector('svg'), dolText: dol.textContent, dolBg: rgb(dol, 'backgroundColor'), dolW: R(dol).w, dolH: R(dol).h, txtColor: rgb(txt, 'color'), txtSize: parseFloat(rgb(txt, 'fontSize')), rem: parseFloat(root.fontSize), ink: rgb(txt, 'color') }
                 : null,
-              court: cj ? { text: cj.textContent.trim(), href: dir.getAttribute('href'), target: dir.getAttribute('target'), r: R(cj), cell: R(foot) } : null,
+              court: cj ? { text: cj.querySelector('[data-court-num]').textContent.trim(), href: dir.getAttribute('href'), target: dir.getAttribute('target'), r: R(cj), cell: R(cj.closest('.r2-cell')) } : null,
               cancelBy: !!cancel,
               foot: foot ? R(foot) : null,
               primary: root.getPropertyValue('--primary').trim(),
@@ -622,16 +622,19 @@ async function main() {
             assert(c.len.r.r - c.len.r.x <= (c.stacked ? c.cardW : 58), `${c.id.slice(0, 8)}: the line is wider than its column (${(c.len.r.r - c.len.r.x).toFixed(1)} px)`);
           }
         });
-        await check(`item 4a (${tag}): Court 13 and the arrow on a game with a court number (the arrow is the player's Directions link); 44 px; no court button where there is none`, async () => {
+        await check(`item 4a (${tag}): Court 13 | arrow on a game with a court number (the arrow is the player's Directions link); the clock cell where there is none`, async () => {
           const tonight = cards.find((c) => c.id === world.tonightId);
           assert(tonight.court && tonight.court.text === 'Court 13', `tonight's button ${JSON.stringify(tonight.court)}`);
           assert(tonight.court.href === playerDirections && tonight.court.target === '_blank', `directions ${tonight.court.href} vs player ${playerDirections}`);
           assert(tonight.court.r.x >= tonight.court.cell.x - 0.5 && tonight.court.r.r <= tonight.court.cell.r + 0.5, `the button runs out of its cell: ${JSON.stringify(tonight.court.r)} cell ${JSON.stringify(tonight.court.cell)}`);
           assert(!tonight.cancelBy, 'a clock next to the court button');
-          // Zip 86: the court and directions are two filled 44 px buttons in the same blue (the Zip 29 outline that matched the player card is gone).
+          // Zip 29 (Alex): the soft periwinkle outline of the player card's buttons (same color and 1 px), the deep blue words, the same 32 px height.
+          const pl = playerBtnLook[scheme];
           const bl = tonight.btnLook;
-          assert(bl.color === bl.arrow && bl.bg === bl.dirBg && bl.bg !== 'rgba(0, 0, 0, 0)', `court ${bl.color} on ${bl.bg}, arrow ${bl.arrow} on ${bl.dirBg}`);
-          assert(bl.h >= 43.5 && bl.dirH >= 43.5, `heights ${bl.h} / ${bl.dirH}`);
+          assert(bl.border === pl.border && bl.width === pl.width, `outline ${bl.border} ${bl.width} vs the player's ${pl.border} ${pl.width}`);
+          assert(bl.dividerColor === pl.border && bl.dividerWidth === pl.width, `divider ${bl.dividerColor} ${bl.dividerWidth}`);
+          assert(bl.color === pl.color && bl.arrow === pl.color, `words ${bl.color}, arrow ${bl.arrow} vs the player's ${pl.color}`);
+          assert(Math.abs(bl.h - 32) <= 0.6, `height ${bl.h}`);
           for (const c of cards) {
             const s = sessions.find((x) => x.id === c.id);
             if (s.courtNum !== undefined) assert(c.court && c.court.text === `Court ${s.courtNum}`, `${c.id.slice(0, 8)}: court ${s.courtNum} but button ${c.court && c.court.text}`);
@@ -639,26 +642,24 @@ async function main() {
           }
           assert(cards.every((c) => !(c.cancelBy && c.court)), 'a clock and a court button in one cell');
         });
-        await check(`item 4a (${tag}): a game with no court number: no court number and no cancel-by clock after the time, Book where a court is needed`, async () => {
+        await check(`item 4a (${tag}): a game with no court number keeps its footer cell exactly as before (empty after the cancel-by time, Book where a court is needed)`, async () => {
           const cell = await page.evaluate(
             ([quiet, needs]) => {
               const one = (id) => {
                 const c = document.getElementById(`session-${id}`);
-                // Zip 86: no end cell; the footer row holds the paid pill, then the court button (or Book), then directions; the cancel-by line sits
-                // above the footer only on its own day.
-                const end = c && c.querySelector('[data-r2-foot]');
-                return end ? { joined: !!end.querySelector('[data-court-joined]'), clock: !!c.querySelector('[data-cancel-by]'), book: !!end.querySelector('[data-court-need]'), text: [...end.children].filter((x) => !x.matches('[data-paid-cell], [data-court-directions]')).map((x) => x.textContent.trim()).join('') } : null;
+                const end = c && c.querySelector('.r2-endcell');
+                return end ? { joined: !!end.querySelector('[data-court-joined]'), clock: !!end.querySelector('[data-cancel-by]'), book: !!end.querySelector('[data-court-need]'), text: end.textContent.trim() } : null;
               };
               return { quiet: one(quiet), needs: one(needs) };
             },
             [world.paidAllId, world.needsCourtId],
           );
           // The 9:30 PM game: its cancel-by time (9:30 AM today) has passed and it has no court number: nothing in the cell, as on main.
-          assert(cell.quiet && !cell.quiet.joined && !cell.quiet.clock && !cell.quiet.book && /^(|Court \?)$/.test(cell.quiet.text), `no-court game cell: ${JSON.stringify(cell.quiet)}`);
+          assert(cell.quiet && !cell.quiet.joined && !cell.quiet.clock && !cell.quiet.book && cell.quiet.text === '', `no-court game cell: ${JSON.stringify(cell.quiet)}`);
           // Thu 12's game still needs its court booked: the Book button stays, no court button.
           assert(cell.needs && !cell.needs.joined && cell.needs.book, `court-needed game cell: ${JSON.stringify(cell.needs)}`);
         });
-        await check(`item 4b (${tag}): money pill: all paid is a green check, anyone owing a gray $, 44 px`, async () => {
+        await check(`item 4b (${tag}): money cell: all paid is a green check with plain text, anyone owing is an amber $ with amber text, same size as before`, async () => {
           const withPaid = cards.filter((c) => c.paid);
           const owed = withPaid.filter((c) => c.paid.state === 'owed');
           const all = withPaid.filter((c) => c.paid.state === 'all');
@@ -676,17 +677,19 @@ async function main() {
             const [a, b] = p.text.split(' of ').map(Number);
             assert(a < b, `owed but ${p.text}`);
           }
-          // Zip 86: the paid pill: all paid is a green check mark, anyone owing a gray "$" (the Zip 29 amber $ and amber words are gone); one
-          // 44 px pill with the words at the body size.
+          // Amber vs green are different hues: red above blue and green clearly above blue for amber; green circle: green well above red.
           const dolOwed = parseRgb(owed[0].paid.dolBg);
           const dolAll = parseRgb(all[0].paid.dolBg);
-          assert(dolAll[1] > dolAll[0] + 30, `all-paid mark is not green: ${all[0].paid.dolBg}`);
-          assert(Math.max(...dolOwed) - Math.min(...dolOwed) < 40, `owed mark is not a quiet gray: ${owed[0].paid.dolBg}`);
+          assert(dolOwed[0] > dolOwed[2] + 60 && dolOwed[1] > dolOwed[2] + 30, `owed circle is not amber: ${owed[0].paid.dolBg}`);
+          assert(dolAll[1] > dolAll[0] + 30, `all-paid circle is not green: ${all[0].paid.dolBg}`);
+          const txtOwed = parseRgb(owed[0].paid.txtColor);
+          assert(contrast(txtOwed, parseRgb('rgb(255,255,255)')) !== 0 && txtOwed[0] > txtOwed[2], `owed text is not amber/brown: ${owed[0].paid.txtColor}`);
+          assert(all[0].paid.txtColor !== owed[0].paid.txtColor, 'all-paid text is amber too');
+          // Same size as before: circle 1.3125rem (21 px at 100%), text 0.86rem.
           const rem = owed[0].paid.rem;
           for (const c of withPaid) {
-            assert(Math.abs(c.paid.dolW - 24) <= 0.6 && Math.abs(c.paid.dolH - 24) <= 0.6, `mark ${c.paid.dolW}x${c.paid.dolH} vs 24`);
-            assert(c.paid.txtSize >= 0.94 * rem - 0.4, `text ${c.paid.txtSize} vs ${rem}`);
-            assert(c.paid.h >= 43.5, `paid pill ${c.paid.h} px`);
+            assert(Math.abs(c.paid.dolW - 1.3125 * rem) <= 0.6 && Math.abs(c.paid.dolH - 1.3125 * rem) <= 0.6, `circle ${c.paid.dolW}x${c.paid.dolH} vs ${1.3125 * rem}`);
+            assert(Math.abs(c.paid.txtSize - 0.86 * rem) <= 0.4, `text ${c.paid.txtSize} vs ${0.86 * rem}`);
           }
         });
         await check(`money cards (${tag}): one card, "Who hasn't paid": Mark paid next to Request or Text on every row, Remind on every game, the second card is gone, nothing cut off`, async () => {

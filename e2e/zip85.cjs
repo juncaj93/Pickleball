@@ -211,21 +211,13 @@ const brokenWords = (page, sel) =>
           if (broken.length) problems.push(`${tag} admin rows break words: ${broken.join(', ')}`);
           await a.page.locator('[data-tm-home-toggle]').first().click();
           await sleep(400);
-          // Zip 86: the card's "After full prizes" row and the Plan box are gone; the Money sheet's "If all pay" block adds up to You keep, to the cent.
-          const moneyBtn = a.page.locator('[data-tm86-money]').first();
-          if (await moneyBtn.count()) {
-            await moneyBtn.click();
-            const sheet = a.page.locator('[data-tm86-money-sheet]');
-            await sheet.waitFor({ timeout: 5000 });
-            const ms = await sheet.evaluate((el) => {
-              const n = (sel, attr) => Number(el.querySelector(sel)?.getAttribute(attr));
-              return { tickets: n('[data-tm86-tickets-all]', 'data-tm86-tickets-all'), courts: n('[data-tm86-courts-all]', 'data-tm86-courts-all'), prizes: n('[data-tm86-prizes-all]', 'data-tm86-prizes-all'), keep: n('[data-tm86-keep]', 'data-tm86-keep'), over: el.scrollWidth - el.clientWidth };
-            });
-            if (!Number.isFinite(ms.keep) || ms.tickets + ms.courts + ms.prizes !== ms.keep) problems.push(`${tag} Money sheet does not add up: ${JSON.stringify(ms)}`);
-            if (ms.over > 1) problems.push(`${tag} Money sheet ${ms.over} px too wide`);
-            await a.page.keyboard.press('Escape');
-            await sheet.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
-          } else if (width === 390 && scheme === 'light') problems.push(`${tag} no Money button on the card`);
+          const card = await a.page.locator('[data-tm-row-after-full]').first().getAttribute('data-tm-row-after-full', { timeout: 3000 }).catch(() => null);
+          const planToggle = a.page.locator('[data-tm-plan-toggle]').first();
+          if (card !== null && (await planToggle.count())) {
+            await planToggle.click();
+            const box = await a.page.locator('[data-tm-plan-box] [data-tm-after-full]').first().getAttribute('data-tm-after-full');
+            if (box !== card) problems.push(`${tag} Plan box after full ${box} vs card ${card}`);
+          } else if (width === 390 && scheme === 'light') problems.push(`${tag} no After full prizes row on the card (${card})`);
           const aw = await a.page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
           if (aw[0] > aw[1]) problems.push(`${tag} admin Home ${aw[0]} wide`);
           await shot(a.page, `C-admin-home-${tag}`);

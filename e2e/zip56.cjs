@@ -237,10 +237,9 @@ async function main() {
     assert((await a.page.locator('[data-tm-open-tickets]').count()) === 0, 'no Open tickets button');
     // Zip 66 (mock 02): the open card's Plan row.
     // Zip 70: the Plan's expected players (the 8 who can make the date), and THE money line: 7 x $16 - $120 - $28 credits = -$36.
-    // Zip 86: the Plan and money rows are gone: When says the courts, and the Money button says the same money line ("−$36 if all pay").
-    assert(/^2 courts · .+ · \$16$/.test(flat(await a.page.locator('[data-tm-home-plan]').innerText())), `the When line: ${await a.page.locator('[data-tm-home-plan]').innerText()}`);
-    assert(/Dec 17\b/.test(flat(await a.page.locator('[data-tm86-when] [data-tm-row-time]').innerText())), 'the date on When');
-    assert(flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()) === '−$36 if all pay', `Money: ${await a.page.locator('[data-tm86-money]').innerText()}`);
+    assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()) === '8 players · 2 courts · 2.5 hrs', 'the plan line');
+    assert(flat(await a.page.locator('[data-tm-money-label]').innerText()) === 'Your cost if it fills', 'the money label');
+    assert(flat(await a.page.locator('[data-tm-row-money]').innerText()) === '$36', 'your cost if it fills');
     assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/10', 'the Home line');
     await shot(a.page, 'A-admin-29');
     assert(a.errors.length === 0, a.errors.join(' | '));
@@ -612,10 +611,10 @@ async function main() {
           await shot(v.page, `K-format-${format}-${width}-${scheme}`);
           await v.ctx.close();
           const a = await adminPage({ width, scheme });
-          // Zip 86: no Style row; the open card's When line names the format: "Americano" or "Locked doubles".
-          const al = a.page.locator('[data-tm-home-plan]');
+          // Zip 66: the organizer's open card names the format on its Style row (mock 02): "Americano" or "Locked doubles".
+          const al = a.page.locator('[data-tm-home-format]');
           await al.waitFor({ timeout: 15000 });
-          assert(flat(await al.innerText()).includes(` · ${want.replace(/ \(.*$/, '')} · `) && (await a.page.locator('.tm-home-rule').count()) === 0, flat(await al.innerText()));
+          assert(flat(await al.innerText()) === want.replace(/ \(.*$/, '') && (await a.page.locator('.tm-home-rule').count()) === 0, flat(await al.innerText()));
           await fits(a.page, '[data-tm-home]');
           await a.ctx.close();
           assert(/rgb/.test(color), color);
@@ -730,10 +729,10 @@ async function main() {
         await shot(p.page, `K-ticket-format-${format}-${width}-${scheme}`);
         await p.ctx.close();
         const a = await adminPage({ width, scheme });
-        // Zip 86: no Style row; the open card's When line names the style, on one line.
-        const al = a.page.locator('[data-tm-home="tickets"] [data-tm-home-plan]');
+        // Zip 66: the open card's Style row names the style (mock 02).
+        const al = a.page.locator('[data-tm-home="tickets"] [data-tm-home-format]');
         await al.waitFor({ timeout: 15000 });
-        assert(flat(await al.innerText()).includes(` · ${want.replace(/ \(.*$/, '')} · `) && (await oneLine(al)) === 1, `organizer card: ${await al.innerText()}`);
+        assert(flat(await al.innerText()) === want.replace(/ \(.*$/, '') && (await oneLine(al)) === 1, 'organizer card');
         await fits(a.page, '[data-tm-home]');
         await a.ctx.close();
       });

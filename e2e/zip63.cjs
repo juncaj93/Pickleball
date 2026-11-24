@@ -580,31 +580,30 @@ async function main() {
   // ---------------------------------------------------------------- G  Remind all unpaid (Zip 66b: folded into the tournament card, picture A4)
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`G Remind all unpaid (Zip 86: the Remind button): the pill 3 unpaid, "3 haven’t paid", Messages with the numbers (${width} ${scheme})`, async () => {
-        // Zip 86: the Not paid yet row and its box are gone; Remind is one of the card's four buttons and opens Messages itself.
+      await check(`G Remind all unpaid (66b): the pill 3 unpaid, Not paid yet 3, the names, Messages with the numbers (${width} ${scheme})`, async () => {
         await stage('tickets_open');
         const a = await adminPage({ width, scheme });
         assert((await a.page.locator('.tm-remind').count()) === 0, 'no separate tickets card');
         assert(flat(await a.page.locator('[data-tm-stage]').innerText()) === '3 unpaid', await a.page.locator('[data-tm-stage]').innerText());
-        const btn = a.page.locator('[data-tm-remind-btn]');
-        assert((await btn.getAttribute('data-tm-remind')) === '3' && flat(await btn.locator('[data-tm-row-unpaid]').innerText()) === '3 haven’t paid', await btn.innerText());
-        assert(/pay by (Mon|Tue|Wed|Thu|Fri|Sat|Sun) 7(:00)?\sPM$/.test(flat(await a.page.locator('[data-tm86-status]').innerText())), `Pay by on the status line: ${await a.page.locator('[data-tm86-status]').innerText()}`);
-        const href = await btn.getAttribute('href');
+        assert(flat(await a.page.locator('[data-tm-row-unpaid]').innerText()) === '3', 'Not paid yet 3');
+        assert(/pay by (Mon|Tue|Wed|Thu|Fri|Sat|Sun) 7:00\sPM$/.test(flat(await a.page.locator('[data-tm-row="ticket"]').innerText())), 'Pay by on the Ticket row');
+        await a.page.locator('[data-tm-unpaid-toggle]').click();
+        const box = a.page.locator('[data-tm-unpaid-box]');
+        await box.waitFor({ timeout: 10000 });
+        const href = await box.locator('[data-tm-remind-btn]').getAttribute('href');
         assert(/^sms:/.test(href), href);
         const body = decodeURIComponent(href.split('body=')[1] || '');
         assert(/^Hey, please pay for Winter Classic by \w+ so the courts are locked in for \w+/.test(body), body);
-        assert((await btn.boundingBox()).height >= 43.5, '44 px Remind');
-        await oneLine(a.page, '[data-tm-remind-btn] .tm86-btn-title');
+        await oneLine(a.page, '[data-tm-home-body] .tm-row, [data-tm-remind-btn]');
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `G-remind-${width}-${scheme}`);
         await a.ctx.close();
       });
-  await check('G everyone paid: Remind is quiet (no Messages link), the pill says locked in', async () => {
+  await check('G everyone paid: no Not paid yet row, the pill says locked in', async () => {
     await stage('all_locked');
     const a = await adminPage({});
     await a.page.locator('[data-tm-home]').first().waitFor({ timeout: 15000 });
-    assert((await a.page.locator('[data-tm-remind-btn]').count()) === 0, 'no Remind link');
-    assert((await a.page.locator('[data-tm86-remind]').count()) === 1, 'a quiet Remind');
+    assert((await a.page.locator('[data-tm-unpaid-toggle]').count()) === 0, 'no Not paid yet row');
     assert(/^\d+ locked in$/.test(flat(await a.page.locator('[data-tm-stage]').innerText())), 'the pill');
     await a.ctx.close();
   });
