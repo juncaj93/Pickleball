@@ -218,7 +218,7 @@ export function cardButtons(t: AdminTournamentView, nowIso: string, tz: string):
   const gameDay = isGameDay(t, nowIso, tz);
   const count = ticketCount(t);
   const all = count.total > 0 && count.locked >= count.total;
-  const out: CardButton[] = [{ key: 'tickets', title: 'Tickets', sub: ticketWords(count), tone: all ? 'solid' : 'soft', subTone: all ? 'white' : 'green' }];
+  const out: CardButton[] = [{ key: 'tickets', title: 'Players', sub: ticketWords(count), tone: all ? 'solid' : 'soft', subTone: all ? 'white' : 'green' }];
   const start = shortClock(t.start).replace(/ [AP]M$/, '');
   if (gameDay) {
     if (t.format === 'americano') {

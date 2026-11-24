@@ -6,8 +6,8 @@
  *       the steps (underlined words), the date tile (TONIGHT on game day), the 44 px gear; nothing wider than the screen, no word cut.
  *   B   Even gaps (picture 1): the steps flush under the head, 12 px above and below the date row, 12 px to the buttons, 12 px to the bottom.
  *   C   Large text (125% and 150%) and the Christmas skin on: the card still fits at 320 and 390, light and dark.
- *   D   The Change sheet (picture 2) on an iPhone Air (420 x 912): Plans changed? with Reschedule and Cancel on one line, the whole sheet on one
- *       screen; each asks "Are you sure?" first (Keep it leaves everything as it was).
+ *   D   The gear's sheet (picture 2, round 2: every setting) on an iPhone Air (420 x 912): the rows in order, no prizes or money, Plans changed?
+ *       with Reschedule and Cancel on one line, then Save; each asks "Are you sure?" first (Keep it leaves everything as it was).
  *   E   Prizes for both styles (picture 9): the money left, Use these fills both boxes, Costs and You keep, Save; the button then reads
  *       "$14 each to winners" (soft green) and Money "+$14 if all pay"; the server holds both boxes.
  *   F   Game day: Teams opens the team draft above the card; Americano: Rounds, soft green "6 rounds ready" (no draft, nothing to do).
@@ -61,12 +61,12 @@ const cutOrBroken = (page, sel) =>
 
 /** What each stage must show: the status line, the pill, the step, the tile's tag, and every button as "tone|words". */
 const STATES = {
-  zip87_early: { status: 'Payments · pay by Mon 7 PM', pill: '4 unpaid', step: '1', tile: 'date', buttons: ['soft|Tickets6 of 10 locked in', 'plain|Remind4 haven’t paid', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
-  zip87_payday: { status: 'Payments · pay by today 7 PM', pill: '2 unpaid', step: '1', tile: 'tomorrow', buttons: ['soft|Tickets8 of 10 locked in', 'amber|Remind2 left · due 7 PM', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
-  zip87_past: { status: 'Payments · Pay by passed', pill: '2 unpaid', step: '1', tile: 'date', buttons: ['soft|Tickets8 of 10 locked in', 'red|Remind2 past due', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
-  zip87_paid: { status: 'Payments · all paid', pill: '10 locked in', step: '1', tile: 'date', buttons: ['solid|TicketsAll 10 locked in', 'quiet|RemindEveryone paid', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
-  zip87_gameday: { status: 'Game night · 7:30 PM', pill: '10 locked in', step: '2', tile: 'tonight', buttons: ['solid|TicketsAll 10 locked in', 'amber|TeamsDraft before 7:30', 'amber|PrizesSet before tonight', 'plain|Money+$42 if all pay'] },
-  zip87_allset: { status: 'Game night · 7:30 PM', pill: '10 locked in', step: '2', tile: 'tonight', buttons: ['solid|TicketsAll 10 locked in', 'soft|Teams5 teams set', 'soft|Prizes$14 each to winners', 'plain|MoneyYou keep +$14'] },
+  zip87_early: { status: 'Payments · pay by Mon 7 PM', pill: '4 unpaid', step: '1', tile: 'date', buttons: ['soft|Players6 of 10 locked in', 'plain|Remind4 haven’t paid', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_payday: { status: 'Payments · pay by today 7 PM', pill: '2 unpaid', step: '1', tile: 'tomorrow', buttons: ['soft|Players8 of 10 locked in', 'amber|Remind2 left · due 7 PM', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_past: { status: 'Payments · Pay by passed', pill: '2 unpaid', step: '1', tile: 'date', buttons: ['soft|Players8 of 10 locked in', 'red|Remind2 past due', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_paid: { status: 'Payments · all paid', pill: '10 locked in', step: '1', tile: 'date', buttons: ['solid|PlayersAll 10 locked in', 'quiet|RemindEveryone paid', 'plain|PrizesNot set yet', 'plain|Money+$42 if all pay'] },
+  zip87_gameday: { status: 'Game night · 7:30 PM', pill: '10 locked in', step: '2', tile: 'tonight', buttons: ['solid|PlayersAll 10 locked in', 'amber|TeamsDraft before 7:30', 'amber|PrizesSet before tonight', 'plain|Money+$42 if all pay'] },
+  zip87_allset: { status: 'Game night · 7:30 PM', pill: '10 locked in', step: '2', tile: 'tonight', buttons: ['solid|PlayersAll 10 locked in', 'soft|Teams5 teams set', 'soft|Prizes$14 each to winners', 'plain|MoneyYou keep +$14'] },
 };
 
 async function openCard(page) {
@@ -198,7 +198,7 @@ const norm = (xs) => xs.map((x) => x.replace(/\s+/g, ''));
       }
     });
 
-    await check('D the Change sheet on an iPhone Air: Plans changed? on one line, one screen; Are you sure? first', async () => {
+    await check('D the gear sheet on an iPhone Air: every setting in order, no prizes or money, Plans changed? on one line, then Save; Are you sure? first', async () => {
       await b.stage('zip87_early');
       for (const scheme of ['light', 'dark']) {
         const { page, ctx } = await b.adminHome({ width: 420, height: 912, scheme });
@@ -212,11 +212,16 @@ const norm = (xs) => xs.map((x) => x.replace(/\s+/g, ''));
         assert(Math.max(...tops) - Math.min(...tops) <= 3, `one line: ${tops}`);
         // The plain box style (no red), 44 px.
         for (const c of await row.locator('button').evaluateAll((els) => els.map((e) => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor, e.getBoundingClientRect().height]))) assert(c[2] >= 44, `button ${c}`);
-        // The whole sheet on one screen (the Save button above the bottom).
+        // Round 2 (Alex): every setting is here now, so the sheet scrolls; Plans changed? is last, then Save.
+        const order = await sheet.locator('.tm86-field .tm86-label').allTextContents();
+        const want = ['Date', 'Time', 'Courts', 'Players you expect', 'Courts cost', 'Style', 'Ticket price (tickets sold)', 'Pay by', 'Who can see it', 'Name', 'Plans changed?'];
+        assert(JSON.stringify(order.map(flat)) === JSON.stringify(want), `rows ${JSON.stringify(order.map(flat))}`);
+        await sheet.locator('[data-tm86-save]').scrollIntoViewIfNeeded();
         const save = await sheet.locator('[data-tm86-save]').evaluate((e) => e.getBoundingClientRect().bottom);
-        assert(save <= 912, `Save at ${save}`);
-        const top = await page.locator('.sheet, [role="dialog"]').first().evaluate((e) => e.getBoundingClientRect().top);
-        assert(top >= 0, `sheet top ${top}`);
+        assert(save <= 912, `Save reachable (${save})`);
+        // No prizes and no money line here (they live in Prizes and Money).
+        const words = flat(await sheet.textContent());
+        assert(!/credit|Champion|You make if it fills|prize/i.test(words), `no prizes or money: ${words}`);
         await page.screenshot({ path: path.join(SHOTS, `D-change-air-${scheme}.png`) });
         // Are you sure? first; Keep it changes nothing.
         await row.locator('[data-tm-reschedule]').click();
@@ -304,6 +309,90 @@ const norm = (xs) => xs.map((x) => x.replace(/\s+/g, ''));
         assert(flat(await r.textContent()) === `Rounds${t2.rounds.plan.rounds} rounds ready`, flat(await r.textContent()));
         await am.page.locator('.tm87').screenshot({ path: path.join(SHOTS, `F-americano-${scheme}.png`) });
         await am.ctx.close();
+      }
+    });
+    await check('G one Save for every setting: name, players you expect and Pay by in one tap; the server holds all three', async () => {
+      await b.stage('zip87_early');
+      const { page, ctx } = await b.adminHome({ width: 390 });
+      await openCard(page);
+      await page.locator('.tm87-gear').click();
+      await page.waitForTimeout(500);
+      const sheet = page.locator('[data-tm86-change-sheet]');
+      await sheet.locator('[data-tm-name]').fill('The Cold Open 2');
+      await sheet.locator('[data-tm-expect-minus]').click();
+      await sheet.locator('[data-tm-pay-time]').selectOption(String(18 * 60));
+      await sheet.locator('[data-tm86-save]').click();
+      await page.waitForFunction(() => !document.querySelector('[data-tm86-change-sheet]'), null, { timeout: 8000 });
+      const t = (await b.call('GET', '/api/admin/dashboard')).tournament;
+      assert(t.name === 'The Cold Open 2', `name ${t.name}`);
+      assert(t.expected === 9, `expected ${t.expected}`);
+      assert(/T23:00:00/.test(t.payBy), `pay by ${t.payBy}`);
+      // The prize boxes and the price are untouched by the settings save.
+      assert(t.ticketCents === 1800 && t.championCreditCents === 0, 'price and prizes as they were');
+      await ctx.close();
+    });
+
+    await check('H the Players sheet: tickets, Levels with pencils, Projected teams; no Plan, Pick the date, Settings, Edit or Cancel; no Edit page anywhere', async () => {
+      await b.stage('zip87_early');
+      for (const scheme of ['light', 'dark']) {
+        const { page, ctx } = await b.adminHome({ width: 390, scheme });
+        await openCard(page);
+        await page.locator('.tm86-grid [data-tm-tickets]').click();
+        await page.waitForTimeout(500);
+        const cards = await page.locator('[data-tm-page="players"] > section').evaluateAll((els) => els.map((e) => e.getAttribute('data-tm-card')));
+        assert(JSON.stringify(cards) === JSON.stringify(['tickets', 'levels', 'projected']), `cards ${cards}`);
+        assert((await page.locator('[data-tm-page="players"] [data-tm-pencil]').count()) === 10, 'a pencil per player');
+        assert((await page.locator('[data-tm-edit-settings], [data-tm-card="plan"], [data-tm-card="settings"], [data-tm-card="dates"], [data-tm-cancel-or-reschedule], [data-tm-cancel]').count()) === 0, 'nothing else');
+        await page.locator('[data-tm-page="players"]').screenshot({ path: path.join(SHOTS, `H-players-${scheme}.png`) });
+        await ctx.close();
+      }
+      // Settings > Schedule: the tournament's row opens the same settings sheet (no Edit page).
+      const { page, ctx } = await b.adminHome({ width: 390 });
+      await page.locator('.tabbar a, .tabbar button').filter({ hasText: 'Settings' }).first().click();
+      await page.waitForTimeout(600);
+      const row = page.locator('[data-tm-open-row]');
+      if (await row.count()) {
+        // (The row sits in a folded Settings section; a click by script opens it the way a tap does.)
+        await row.evaluate((e) => e.click());
+        await page.waitForTimeout(500);
+        assert((await page.locator('[data-tm86-change-sheet]').count()) === 1, 'the settings sheet');
+      }
+      assert((await page.locator('[data-tm-form="edit"]').count()) === 0, 'no Edit page');
+      await ctx.close();
+    });
+
+    await check('I sign-up stage: the gear has the dates offered and the start facts, Cancel only; the gear is the Settings tab gear, crisp and centered', async () => {
+      await b.stage('signup');
+      for (const scheme of ['light', 'dark']) {
+        const { page, ctx } = await b.adminHome({ width: 390, scheme });
+        await openCard(page);
+        const g = await page.locator('.tm87-gear').evaluate((e) => {
+          const r = e.getBoundingClientRect();
+          const i = e.querySelector('svg').getBoundingClientRect();
+          return { w: r.width, h: r.height, icon: e.querySelector('svg').getAttribute('data-icon'), dx: i.left + i.width / 2 - (r.left + r.width / 2), dy: i.top + i.height / 2 - (r.top + r.height / 2), bg: getComputedStyle(e).backgroundColor };
+        });
+        // The same gray as the other round buttons (the sheets' close button): the --fill token.
+        const tab = await page.evaluate(() => {
+          const x = document.createElement('span');
+          x.style.background = 'var(--fill)';
+          document.querySelector('.tm87').appendChild(x);
+          const c = getComputedStyle(x).backgroundColor;
+          x.remove();
+          return c;
+        });
+        assert(g.w === 44 && g.h === 44 && g.icon === 'gear' && Math.abs(g.dx) <= 0.5 && Math.abs(g.dy) <= 0.5, `gear ${JSON.stringify(g)}`);
+        assert(g.bg === tab, `the same gray (${g.bg} vs ${tab})`);
+        await page.locator('.tm87-gear').click();
+        await page.waitForTimeout(500);
+        const sheet = page.locator('[data-tm86-change-sheet]');
+        const words = flat(await sheet.textContent());
+        assert(words.includes('Start time7 to 7:30 PM, by players') && words.includes('Ends10 PM close'), words);
+        assert((await sheet.locator('[data-tm87-offer]').count()) === 1, 'dates offered');
+        assert((await sheet.locator('[data-tm-reschedule]').count()) === 0 && (await sheet.locator('[data-tm-cancel-tournament]').count()) === 1, 'Cancel only');
+        await sheet.locator('[data-tm87-offer-toggle]').click();
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: path.join(SHOTS, `I-signup-settings-${scheme}.png`) });
+        await ctx.close();
       }
     });
   } finally {
