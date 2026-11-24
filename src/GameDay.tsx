@@ -105,6 +105,8 @@ export function CourtMap({
   anchor,
   label,
   onPick,
+  title,
+  clearLabel = 'Not set yet',
 }: {
   open: boolean;
   onClose: () => void;
@@ -112,6 +114,10 @@ export function CourtMap({
   anchor?: React.RefObject<HTMLElement | null>;
   label: string;
   onPick?: (court: number | null) => void;
+  /** Zip 87 (Alex): a visible title over the map (the Home card's quick picker: "Court for Tue, Dec 8"). */
+  title?: string;
+  /** Zip 87: the clear button's words (the Home card's quick picker: "Clear"). */
+  clearLabel?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [top, setTop] = useState<number | null>(null);
@@ -180,6 +186,7 @@ export function CourtMap({
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
             </svg>
           </button>
+          {title && <p className="cm-title">{title}</p>}
           <div className="cm-st" aria-hidden={onPick ? undefined : true}>
             <div className="cm-pl">
               {COURT_ROWS.map((row) => (
@@ -198,7 +205,7 @@ export function CourtMap({
           </div>
           {onPick && (
             <button type="button" className="cm-clear" data-court-clear aria-pressed={lit === null} onClick={() => onPick(null)}>
-              Not set yet
+              {clearLabel}
             </button>
           )}
         </>

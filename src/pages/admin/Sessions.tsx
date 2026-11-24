@@ -103,7 +103,7 @@ function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
           <div className="scard-top">
             {showSwitch ? <CardSwitch ctx={ctx} s={s} value={switchValue} /> : <div className="court-line top-line">{courtLine(court)}</div>}
             <div className="card-icons">
-              {!isPlayed(s) && <GameMenu ctx={ctx} s={s} canCalendar={court.kind === 'booked' && live} />}
+              {!isPlayed(s) && <GameMenu ctx={ctx} s={s} />}
             </div>
           </div>
           {showSwitch && later && <div className="court-sub small muted">{court.text}</div>}

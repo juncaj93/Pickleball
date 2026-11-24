@@ -7,7 +7,7 @@ import { smsHref } from '../../../shared/messages';
 import { formatShortDate } from '../../../shared/time';
 import { holdLive } from '../../busy';
 import { api, ApiError, isIOS } from '../../lib';
-import { CalendarPlusIcon, GearIcon, MessageIcon, useToast } from '../../ui';
+import { GearIcon, MessageIcon, useToast } from '../../ui';
 import { canMove } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { sessionTexts } from './textMenu';
@@ -17,12 +17,12 @@ import { canHide } from './moneyRework';
 
 /**
  * The gear's small pop-up, anchored next to the gear (not a full sheet):
- * Text the group, Edit game, Players, Add to calendar, then Cancel session
- * in red on its own at the bottom. Tap outside or Escape closes it; the
+ * Text the group, Text the players, Edit game, then Cancel game in red on its own at the bottom (Zip 87, Alex: no Players, no Add to
+ * calendar; a canceled game's own rows and Hide from list still show where they apply). Tap outside or Escape closes it; the
  * arrow keys move between rows; focus goes back to the gear on close. While
  * it is open, live refreshes wait so it never closes under a finger.
  */
-export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessionView; canCalendar: boolean }) {
+export function GameMenu({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const [open, setOpen] = useState(false);
   const [texts, setTexts] = useState(false);
@@ -227,16 +227,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               Edit game
             </button>
           )}
-          <button role="menuitem" className="menu-row" onClick={pick(() => ctx.open('roster', s.id))}>
-            <PeopleSmallIcon />
-            Players
-          </button>
-          {canCalendar && (
-            <a role="menuitem" className="menu-row" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${day} to calendar`} onClick={() => close(false)}>
-              <CalendarPlusIcon />
-              Add to calendar
-            </a>
-          )}
+          {/* Zip 87 (Alex): no Players row (the paid pill opens it) and no Add to calendar. */}
           {ctx.d.adminR2 === true && s.holiday && s.holidayHoursOk && (
             <button role="menuitem" className="menu-row" data-holiday-undo onClick={pick(() => void undoHours())}>
               <UndoIcon />
@@ -308,15 +299,6 @@ function EditIcon() {
     <svg {...ICON}>
       <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
       <path d="m13.5 6.5 4 4" />
-    </svg>
-  );
-}
-function PeopleSmallIcon() {
-  return (
-    <svg {...ICON}>
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
-      <path d="M16 5.2a3.1 3.1 0 0 1 0 5.6M18 14.8c2 .7 3.2 2.4 3.2 5.2" />
     </svg>
   );
 }

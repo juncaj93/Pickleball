@@ -9,8 +9,8 @@ import { useRef, useState } from 'react';
 import { api, ApiError, isIOS, useNow } from '../../lib';
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { stillInTextR2 } from '../../../shared/textsR2';
-import { BANNER_TIMING, CourtReserveLink, PlayersLine, Sheet, useToast } from '../../ui';
-import { COURT_MAX, COURT_MIN } from '../../../shared/gameDay';
+import { BANNER_TIMING, CourtReserveLink, PlayersLine, useToast } from '../../ui';
+import { CourtMap } from '../../GameDay';
 import { type Hold, startHold, trackHeld } from '../../undoHold';
 import { actingStamp } from '../../InstantTaps';
 import { ADMIN_UNDO_MS } from '../../../shared/zip13';
@@ -187,7 +187,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
           </div>
           <div className="r2-gear">
             {/* Zip 32 (bug fix): a played (finalized) game has no gear: its menu (Players, Cancel session) was clipped by the sheet, and Reopen is the way to change it. */}
-            {!isPlayed(s) && <GameMenu ctx={ctx} s={s} canCalendar={court.kind === 'booked' && live} />}
+            {!isPlayed(s) && <GameMenu ctx={ctx} s={s} />}
           </div>
         </div>
         {!canceled && (
@@ -259,13 +259,14 @@ function ConfirmLine({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
 /**
  * Zip 86 (round 2, Alex): the court button. "Court 4", or a gray "Court ?" until a court is set; a tap opens the quick court picker right away
- * (the venue's courts 1 to 16 as big buttons, and Clear). One tap saves it (the same PUT .../court-number as Edit game) and the button shows it
+ * (Zip 87: the venue's court map, as in Add / Edit game, and Clear). One tap saves it (the same PUT .../court-number as Edit game) and the button shows it
  * at once; with Undo on the toast has Undo and the save waits 5 seconds (a second pick inside that time replaces the first, nothing sent for
  * it). Only while "Game day card" is on (the server takes court numbers only then).
  */
 function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView; dayLabel: string }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
   // What was just picked (undefined: show the server's court).
   const [picked, setPicked] = useState<number | null | undefined>(undefined);
   const latest = useRef(0);
@@ -351,6 +352,7 @@ function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView;
   return (
     <>
       <button
+        ref={btnRef}
         type="button"
         className={shown === null ? 'r86-court r86-court-none' : 'r86-court'}
         aria-haspopup="dialog"
@@ -361,22 +363,18 @@ function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView;
       >
         {shown === null ? 'Court ?' : `Court ${shown}`}
       </button>
-      <Sheet calmFocus open={open} title={`Court for ${dayLabel}`} onClose={() => setOpen(false)} className="r86-picker-sheet">
-        {(
-          <div className="r86-picker" data-court-picker>
-            <div className="r86-picker-grid" role="group" aria-label="Courts">
-              {Array.from({ length: COURT_MAX - COURT_MIN + 1 }, (_, i) => COURT_MIN + i).map((n) => (
-                <button key={n} type="button" className="r86-pick" aria-pressed={shown === n} onClick={() => pick(n)} data-court-pick={n}>
-                  {n}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="btn block secondary r86-pick-clear" disabled={shown === null} onClick={() => pick(null)} data-court-pick-clear>
-              Clear
-            </button>
-          </div>
-        )}
-      </Sheet>
+      {/* Zip 87 (Alex): the venue's real court map (the 3D map with ENTRANCE that Add / Edit game use), in picker mode: a tap on a court saves it
+          at once with Undo (the same save as before), the current court lit green, Clear. */}
+      <CourtMap
+        open={open}
+        onClose={() => setOpen(false)}
+        lit={shown}
+        anchor={btnRef}
+        label={`Court for ${dayLabel}`}
+        title={`Court for ${dayLabel}`}
+        clearLabel="Clear"
+        onPick={(court) => pick(court)}
+      />
     </>
   );
 }
