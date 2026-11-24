@@ -58,6 +58,7 @@ import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScree
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
 import { isOrganizerPhone, preloadAdminSoon } from '../adminChunk';
 import { Medals, MedalsContext } from '../Medals';
+import { WinsProvider } from '../WinsSheet';
 // Zip 58: the ticker and the congratulations card are their own small file, fetched only when a tournament has winners to show.
 const TourAwards = lazy(() => import('../TourAwards'));
 
@@ -697,6 +698,8 @@ export function PlayerHome({
 
   return (
     <InstantContext.Provider value={instant.store}>
+      {/* Zip 82: tap a medal (the name at the top, names on game cards): the name's wins, loaded only on the tap. */}
+      <WinsProvider path="/api/tournament/wins" me={g?.me?.name ?? null}>
       {/* "View as...": a small bar of its own above the player's real screen. */}
       {viewAs && g?.alertCards === true && (
         <div className="demo-bars">
@@ -743,7 +746,7 @@ export function PlayerHome({
         onTitle={g?.goToAdmin === true && !viewAs && !pickName ? { onClick: () => navigate('/admin'), label: `${g.me?.name ?? 'You'}. Go to Admin` } : undefined}
         title={!g ? (showSaved ? saved!.view.me!.name : SITE_NAME) : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
         // Zip 58: a tournament winner's medals right after their name at the top, like an emoji typed after it.
-        titleBadge={g?.me && !pickName && g.tourAwards?.medals?.[g.me.name] ? <Medals n={g.tourAwards.medals[g.me.name]} size="top" /> : undefined}
+        titleBadge={g?.me && !pickName && g.tourAwards?.medals?.[g.me.name] ? <Medals n={g.tourAwards.medals[g.me.name]} size="top" name={g.me.name} /> : undefined}
         titleExtra={
           g?.me && !pickName ? (
             <>
@@ -1036,6 +1039,7 @@ export function PlayerHome({
         </>
       )}
       {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={firstNameOf(g.group.organizerName)} nowIso={g.now} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
+      </WinsProvider>
     </InstantContext.Provider>
   );
 }

@@ -10,6 +10,9 @@ import { AlertCard } from '../../AlertCard';
 import { Sheet, useToast } from '../../ui';
 import { MAX_SCORE, scoreHint } from '../../../shared/scores';
 import type { AdminCtx } from '../Admin';
+import { ScoreboardSheet } from './Scoreboard';
+import { afterRoundWords, roundGame } from './scoreboardData';
+import { StandingsList } from './StandingsList';
 import './tournament-day.css';
 
 const CourtRow = lazy(() => import('../../GameDay').then((m) => ({ default: m.CourtRow })));
@@ -104,26 +107,31 @@ function RoundsCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: A
   );
 }
 
-/** Every round: its games and who sits (the organizer sees the whole night). */
+/** Zip 82 (picture 4): every round as a scoreboard (src/pages/admin/Scoreboard.tsx), who sits under each round. */
 function AllRoundsSheet({ r, open, onClose, onFix, busy }: { r: AdminRoundsView; open: boolean; onClose: () => void; onFix?: (g: AdminRoundGame) => void; busy?: boolean }) {
-  const rounds = [...new Set(r.games.map((g) => g.round))];
   return (
-    <Sheet calmFocus open={open} title="All rounds" onClose={onClose} className="tm-gd-sheet">
-      <div className="stack" data-tm-am-all-sheet>
-        {rounds.map((n) => (
-          <section key={n} aria-label={`Round ${n}`}>
-            <h4 className="tm-label tm-am-round-label">Round {n}</h4>
-            <ul className="tm-gd-results">
-              {r.games
-                .filter((g) => g.round === n)
-                .map((g) => (
-                  <ScoreRow key={g.num} g={g} busy={!!busy} onFix={onFix ? () => onFix(g) : undefined} />
-                ))}
-            </ul>
-            {(r.sits.find((s) => s.round === n)?.names.length ?? 0) > 0 && <p className="tm-card-note tm-am-sits">Sitting: {r.sits.find((s) => s.round === n)!.names.join(', ')}</p>}
-          </section>
-        ))}
-      </div>
+    <ScoreboardSheet
+      title="All rounds"
+      open={open}
+      onClose={onClose}
+      games={r.games.map(roundGame)}
+      sits={r.sits}
+      busy={!!busy}
+      onScore={(num) => {
+        const g = r.games.find((x) => x.num === num);
+        if (g && onFix) onFix(g);
+      }}
+      data="am"
+    />
+  );
+}
+
+/** Zip 82 (picture 2): the Standings sheet during the night (organizer only): the reveal board's rows as they stand. */
+function StandingsSheet({ r, open, onClose }: { r: AdminRoundsView; open: boolean; onClose: () => void }) {
+  const rows = (r.standings ?? []).map((x, i) => ({ name: x.name, record: x.record, chip: `${x.points} pts`, ...(i === 0 ? { medal: true as const } : {}), ...(x.out ? { out: true as const } : {}) }));
+  return (
+    <Sheet calmFocus open={open} title="Standings" onClose={onClose} className="tm-gd-sheet">
+      {open && <StandingsList rows={rows} note={`${afterRoundWords(r.games)} Only you see this until the reveal.`} data="night" />}
     </Sheet>
   );
 }
@@ -172,6 +180,7 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
   const { busy, save } = useSave(ctx);
   const [fix, setFix] = useState<AdminRoundGame | null>(null);
   const [all, setAll] = useState(false);
+  const [standings, setStandings] = useState(false);
   const [left, setLeft] = useState(false);
   const [skipTc, setSkipTc] = useState<string | null>(null);
   const rounds = Math.max(1, r.plan.rounds);
@@ -235,6 +244,9 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
           <button type="button" className="tm-gd-all" onClick={() => setAll(true)} data-tm-am-all>
             All rounds
           </button>
+          <button type="button" className="tm-gd-all" onClick={() => setStandings(true)} data-tm-am-standings>
+            Standings
+          </button>
         </span>
       </section>
       <div className="tm-gd-pair-btns">
@@ -247,6 +259,7 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
       </div>
       <FixSheet ctx={ctx} t={t} g={fix} onClose={() => setFix(null)} />
       <AllRoundsSheet r={r} open={all} onClose={() => setAll(false)} busy={busy} onFix={(g) => setFix(g)} />
+      <StandingsSheet r={r} open={standings} onClose={() => setStandings(false)} />
       <LeftSheet ctx={ctx} t={t} r={r} open={left} onClose={() => setLeft(false)} round={round} />
     </>
   );

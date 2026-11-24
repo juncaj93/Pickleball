@@ -35,12 +35,16 @@ import {
   type TourAwardsView,
   type TournamentFormat,
   type TournamentHistoryView,
+  type WinsView,
 } from '../shared/tournament';
 import { americanoOutcome } from './americanoDay';
+import { boardRows } from '../shared/results';
+import { diffLabel } from '../shared/scores';
+import { courtCentsOf } from '../shared/tournament';
 import { revealHolding } from '../shared/reveal';
 import { doublesOutcome, type DayRows, loadDay } from './tournamentDay';
 import { keptOff, loadTickets, sqlText, ticketBackStatements, type TicketWithName } from './tournamentMoney';
-import { logPlayer, organizerOn, openById, styleDecided, type SignupRow, todayKey, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
+import { logPlayer, organizerOn, openById, realTimes, styleDecided, type SignupRow, todayKey, type TournamentActor, type TournamentRow, tournamentsFlags } from './tournament';
 import type { SkillsView } from '../shared/skills';
 import { organizerSignedIn } from './zip13';
 import { ADMIN_COOKIE } from './context';
@@ -119,7 +123,13 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       return x ? [x.player_a, x.player_b].filter((id): id is string => !!id).map(nameOf) : [];
     };
     const asPick = (seat: number): AwardPick => ({ key: String(seat), name: team(seat)?.name ?? `Team ${seat}`, players: playersOf(seat) });
-    const firstSeat = pick.first && team(Number(pick.first)) && !o.out.has(Number(pick.first)) ? Number(pick.first) : o.champion;
+    const seatOf = (k: string | undefined): number | null => (k && team(Number(k)) && !o.out.has(Number(k)) ? Number(k) : null);
+    const firstSeat = seatOf(pick.first) ?? o.champion;
+    // Zip 82: 2nd place is the Final's runner-up (Edit awards can change it, like Americano's): each of its players gets the 2nd place credit, no
+    // medal. With the 2nd place credit at $0 (The Cold Open on live) nothing is written for it, exactly as before.
+    const pickedSecond = seatOf(pick.second);
+    const secondSeat =
+      pickedSecond !== null && pickedSecond !== firstSeat ? pickedSecond : ([o.runnerUp, ...o.order].find((x): x is number => x !== null && x !== firstSeat && !o.out.has(x)) ?? null);
     const champ = asPick(o.champion);
     const done = {
       kicker: 'Final is done',
@@ -127,7 +137,8 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       sub: o.runnerUp !== null ? `${plusList(champ.players!)} beat ${asPick(o.runnerUp).name} (${plusList(playersOf(o.runnerUp))}).` : `${plusList(champ.players!)} won the Final.`,
     };
     const winners = [team(firstSeat)?.player_a, team(firstSeat)?.player_b].filter((id): id is string => !!id);
-    const order = [firstSeat, ...o.order.filter((s) => s !== firstSeat)];
+    const seconds = secondSeat === null ? [] : [team(secondSeat)?.player_a, team(secondSeat)?.player_b].filter((id): id is string => !!id);
+    const order = [firstSeat, ...(secondSeat !== null ? [secondSeat] : []), ...o.order.filter((s) => s !== firstSeat && s !== secondSeat)];
     const results: ResultRow[] = [];
     for (const x of o.teams) {
       const finish = o.out.has(x.seat) ? null : order.indexOf(x.seat) + 1 || null;
@@ -138,25 +149,58 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       ] as [string | null, string | null][]) {
         if (!id) continue;
         const won = x.seat === firstSeat;
-        results.push({ playerId: id, finish, wins: rec.wins, losses: rec.losses, points: null, teamName: x.name, partnerId: partner, medal: won, award: won ? 'champion' : null, creditCents: won ? credit(id, championCents) : 0 });
+        const second = !won && x.seat === secondSeat && secondCents > 0;
+        results.push({
+          playerId: id,
+          finish,
+          wins: rec.wins,
+          losses: rec.losses,
+          points: null,
+          teamName: x.name,
+          partnerId: partner,
+          medal: won,
+          award: won ? 'champion' : second ? 'second' : null,
+          creditCents: won ? credit(id, championCents) : second ? credit(id, secondCents) : 0,
+        });
       }
     }
     const org = winners.find((id) => id === orgId);
+    const orgSecond = seconds.find((id) => id === orgId);
+    // Zip 82: the final order of the teams, exactly the board players see after End (shared/results.ts boardRows over the rows End saves), with
+    // each team's point difference.
+    const board = boardRows(
+      'doubles',
+      results.map((r) => ({ player_id: r.playerId, finish: r.finish, wins: r.wins, losses: r.losses, points: null, display_name: nameOf(r.playerId), team_name: r.teamName, partner_id: r.partnerId })),
+      null,
+    );
+    const seatByName = new Map(o.teams.map((x) => [x.name, x.seat]));
     return {
       view: {
         format,
         hero: 'Final',
         done,
         first: asPick(firstSeat),
-        second: null,
-        third: o.third !== null && o.third !== firstSeat ? asPick(o.third) : null,
+        second: secondSeat !== null ? asPick(secondSeat) : null,
+        third: o.third !== null && o.third !== firstSeat && o.third !== secondSeat ? asPick(o.third) : null,
         championCents,
         secondCents,
         weeks,
         choices: o.teams.filter((x) => !o.out.has(x.seat)).map((x) => asPick(x.seat)),
-        ...(org && championCents > 0 ? { noCredit: nameOf(org) } : {}),
+        ...(org && championCents > 0 ? { noCredit: nameOf(org) } : orgSecond && secondCents > 0 ? { noCredit: nameOf(orgSecond) } : {}),
         ...(blocked ? { blocked } : {}),
-        seen: JSON.stringify([String(firstSeat), null, championCents, secondCents, weeks]),
+        seen: JSON.stringify([String(firstSeat), secondSeat === null ? null : String(secondSeat), championCents, secondCents, weeks]),
+        standings: board.map((r) => {
+          const seat = seatByName.get(r.name);
+          return {
+            name: r.name,
+            ...(r.players?.length ? { players: r.players } : {}),
+            record: r.record,
+            chip: diffLabel(seat !== undefined ? (o.diff.get(seat) ?? 0) : 0),
+            ...(r.medal ? { medal: true as const } : {}),
+            ...(r.out ? { out: true as const } : {}),
+          };
+        }),
+        money: nightMoney(t, tickets),
       },
       results,
     };
@@ -198,9 +242,27 @@ export function endPlan(t: EndRow, format: TournamentFormat, signups: readonly S
       ...(org ? { noCredit: nameOf(org) } : {}),
       ...(blocked ? { blocked } : {}),
       seen: JSON.stringify([firstId, secondId, championCents, secondCents, weeks]),
+      // Zip 82: exactly the reveal board (shared/results.ts boardRows over the rows End will save, the board's one function), the gold medal on
+      // 1st only.
+      standings: boardRows(
+        'americano',
+        results.map((r) => ({ player_id: r.playerId, finish: r.finish, wins: r.wins, losses: r.losses, points: r.points, display_name: nameOf(r.playerId) })),
+        null,
+      ).map((r) => ({ name: r.name, record: r.record, chip: `${r.points ?? 0} pts`, ...(r.medal ? { medal: true as const } : {}), ...(r.out ? { out: true as const } : {}) })),
+      money: nightMoney(t, tickets),
     },
     results,
   };
+}
+
+/**
+ * Zip 82: the night's real money, as Money > Totals counts it (server/money.ts monthTournamentsRead and tournamentsOf): tickets in (credit used
+ * and cash confirmed, on tickets with a price) and the courts (the court rate x courts x the final hours). From the rows already read.
+ */
+export function nightMoney(t: TournamentRow, tickets: readonly TicketWithName[]): { ticketsCents: number; courtCents: number } {
+  const ticketsCents = tickets.filter((k) => k.price_cents > 0).reduce((a, k) => a + (Number(k.credit_cents) || 0) + (Number(k.paid_cents) || 0), 0);
+  const courts = Math.max(1, Math.min(4, Number(t.courts) || 1));
+  return { ticketsCents, courtCents: courtCentsOf({ courts, minutes: realTimes(t).minutes }) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -250,9 +312,15 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
   if (action === 'save') {
     const keys = view.choices.map((c) => c.key);
     const first = typeof body.first === 'string' && keys.includes(body.first) ? body.first : bad('invalid_pick', 'Pick the winners again.');
-    const second = view.format === 'americano' ? (typeof body.second === 'string' && keys.includes(body.second) && body.second !== first ? body.second : bad('invalid_pick', 'Pick 2nd place again.')) : null;
+    // Zip 82: Locked doubles has a 2nd place too (the Final's runner-up). A screen from before Zip 82 sends neither: the saved ones stay.
+    const doublesOld = view.format === 'doubles' && body.second === undefined && body.secondCents === undefined;
+    const second = doublesOld
+      ? (pickOf(t).second ?? null)
+      : typeof body.second === 'string' && keys.includes(body.second) && body.second !== first
+        ? body.second
+        : bad('invalid_pick', 'Pick 2nd place again.');
     const champion = cents(body.championCents, view.format === 'americano' ? '1st place credit' : 'Credit for each winner');
-    const secondCents = view.format === 'americano' ? cents(body.secondCents, '2nd place credit') : (t.second_credit_cents ?? 0);
+    const secondCents = doublesOld ? (t.second_credit_cents ?? 0) : cents(body.secondCents, view.format === 'americano' ? '2nd place credit' : '2nd place credit for each');
     const weeks = Number(body.weeks);
     if (!(BANNER_WEEKS as readonly number[]).includes(weeks)) throw new HttpError(400, 'invalid_weeks', 'Pick 1 to 4 weeks.');
     const pickJson = JSON.stringify({ first, ...(second ? { second } : {}) });
@@ -265,8 +333,8 @@ export async function awardsAction(ctx: Ctx, body: Record<string, unknown>) {
     if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
     const nameOf = (k: string | null) => view.choices.find((c) => c.key === k)?.name ?? '';
     const words = [
-      view.format === 'americano' ? `1st ${nameOf(first)}, 2nd ${nameOf(second)}` : `winners ${nameOf(first)}`,
-      `${formatPrice(champion)}${view.format === 'americano' ? ` and ${formatPrice(secondCents)}` : ' each'}`,
+      view.format === 'americano' ? `1st ${nameOf(first)}, 2nd ${nameOf(second)}` : `winners ${nameOf(first)}${second ? `, 2nd ${nameOf(second)}` : ''}`,
+      `${formatPrice(champion)}${view.format === 'americano' ? ` and ${formatPrice(secondCents)}` : secondCents > 0 ? ` and ${formatPrice(secondCents)} each` : ' each'}`,
       `banner ${bannerLabel(weeks)}`,
     ].join(', ');
     await audit(ctx.db, group.id, null, 'tournament_awards', { tournament: t.name, words }, nowIso);
@@ -347,7 +415,7 @@ export async function writeEnd(ctx: Ctx, group: GroupRow, t: EndRow, night: Awai
   const words =
     view.format === 'americano'
       ? `1st ${view.first.name} (medal${awards.find((r) => r.award === 'champion') ? `, ${formatPrice(view.championCents)}` : ''}), 2nd ${view.second?.name ?? ''}${awards.find((r) => r.award === 'second') ? ` (${formatPrice(view.secondCents)})` : ''}`
-      : `${view.first.name} (${(view.first.players ?? []).join(' + ')}), a medal each${awards.length ? `, ${awards.map((r) => `${nameOf(r.playerId)} ${formatPrice(r.creditCents)}`).join(', ')}` : ''}`;
+      : `${view.first.name} (${(view.first.players ?? []).join(' + ')}), a medal each${awards.length ? `, ${awards.map((r) => `${nameOf(r.playerId)} ${formatPrice(r.creditCents)}`).join(', ')}` : ''}${view.second && view.secondCents > 0 ? `; 2nd ${view.second.name}` : ''}`;
   await audit(ctx.db, group.id, null, 'tournament_ended', { tournament: t.name, words: `${words}, banner ${bannerLabel(weeks)}`, creditCents: awards.reduce((s, r) => s + r.creditCents, 0) }, nowIso);
   return { ok: true, granted: awards.map((r) => ({ playerId: r.playerId, cents: r.creditCents })) };
 }
@@ -511,13 +579,24 @@ export async function tournamentHistory(ctx: Ctx): Promise<TournamentHistoryView
     ctx.db.prepare(`SELECT t.id, t.name, t.final_date, t.format, t.ended_at FROM tournaments t WHERE t.group_id = ? AND t.status = 'ended' AND ${NOT_HIDDEN} ORDER BY t.final_date DESC, t.ended_at DESC`).bind(group.id),
     ctx.db
       .prepare(
-        `SELECT r.tournament_id, r.player_id, r.finish, r.medal, r.award, r.team_name, p.display_name FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id JOIN players p ON p.id = r.player_id
+        `SELECT r.tournament_id, r.player_id, r.finish, r.medal, r.award, r.team_name, p.display_name, t.visibility, t.format, t.ended_at FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id JOIN players p ON p.id = r.player_id
          WHERE t.group_id = ? AND t.status = 'ended' AND ${NOT_HIDDEN} ORDER BY r.rowid`,
       )
       .bind(group.id),
   ]);
   const tours = ts.results as { id: string; name: string; final_date: string | null; format: string; ended_at: string }[];
-  const rows = rs.results as { tournament_id: string; player_id: string; finish: number | null; medal: number; award: string | null; team_name: string | null; display_name: string }[];
+  const rows = rs.results as {
+    tournament_id: string;
+    player_id: string;
+    finish: number | null;
+    medal: number;
+    award: string | null;
+    team_name: string | null;
+    display_name: string;
+    visibility: string;
+    format: string;
+    ended_at: string | null;
+  }[];
   const tournaments = tours.map((t) => {
     const mine = rows.filter((r) => r.tournament_id === t.id);
     const champs = mine.filter((r) => r.award === 'champion');
@@ -538,7 +617,8 @@ export async function tournamentHistory(ctx: Ctx): Promise<TournamentHistoryView
     const x = by.get(r.player_id) ?? { name: r.display_name, wins: 0, played: 0, medals: 0 };
     x.played++;
     if (r.finish === 1) x.wins++;
-    if (r.medal) x.medals++;
+    // Zip 82: the medals a player sees next to the name (shownMedal), so the wins sheet a tap opens has exactly this many rows.
+    if (shownMedal(r, ctx.nowMs)) x.medals++;
     by.set(r.player_id, x);
   }
   const wins = [...by.values()].filter((x) => x.wins > 0).sort((a, b) => b.wins - a.wins || b.played - a.played || a.name.localeCompare(b.name));
@@ -548,7 +628,7 @@ export async function tournamentHistory(ctx: Ctx): Promise<TournamentHistoryView
 /** The admin Players sheet's TOURNAMENTS card for one player (null when they have played none, or the switch is off). */
 /** Zip 80: a player's finished tournaments, one read, word for word (the player summary sends it in its prefetch). */
 export const playerTournamentsRead = (groupId: string, playerId: string) => ({
-  sql: `SELECT t.name, t.final_date, t.format, r.finish, p2.display_name AS partner FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
+  sql: `SELECT t.name, t.final_date, t.format, r.finish, p2.display_name AS partner, r.medal, t.visibility, t.ended_at FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
        LEFT JOIN players p2 ON p2.id = r.partner_id
        WHERE r.player_id = ? AND t.group_id = ? AND t.status = 'ended' AND ${NOT_HIDDEN} ORDER BY t.final_date DESC, t.ended_at DESC`,
   values: [playerId, groupId] as unknown[],
@@ -560,7 +640,7 @@ export async function playerTournamentsFor(ctx: Ctx, groupId: string, playerId: 
   const rows = await ctx.db
     .prepare(q.sql)
     .bind(...q.values)
-    .all<{ name: string; final_date: string | null; format: string; finish: number | null; partner: string | null }>()
+    .all<{ name: string; final_date: string | null; format: string; finish: number | null; partner: string | null; medal: number; visibility: string; ended_at: string | null }>()
     .then((r) => r.results)
     .catch(() => []);
   if (!rows.length) return null;
@@ -568,6 +648,8 @@ export async function playerTournamentsFor(ctx: Ctx, groupId: string, playerId: 
     played: rows.length,
     won: rows.filter((r) => r.finish === 1).length,
     runnerUp: rows.filter((r) => r.finish === 2).length,
+    // Zip 82: the medals players see next to the name (tap: the wins sheet with exactly these).
+    medals: rows.filter((r) => shownMedal(r, ctx.nowMs)).length,
     rows: rows.map((r) => ({
       name: r.name,
       date: r.final_date,
@@ -610,4 +692,59 @@ export async function skillsHistory(ctx: Ctx): Promise<SkillsView> {
     by.set(r.player_id, p);
   }
   return { today: todayKey(ctx.nowMs, group.timezone), tournaments, players: [...by.values()] };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 82 (🎾82.night admin): tap a medal, the wins sheet (pictures 5 and 6)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * A medal players see next to a name: a gold medal from an ended tournament everyone could see (Only me and test tournaments never count),
+ * and not an Americano night whose reveal is still playing (the board shows the winner first). The same rule as awardsReads' medal counts and
+ * withoutRevealing, so a sheet's rows always match the medals on screen.
+ */
+export const shownMedal = (r: { medal: number; visibility: string; format: string; ended_at: string | null }, nowMs: number): boolean =>
+  !!r.medal && r.visibility === 'all' && !(r.format === 'americano' && revealHolding(r.ended_at, nowMs));
+
+/** One player's medals, newest first: one small read, only on the tap (nothing on any page load). */
+export async function winsOf(ctx: Ctx, groupId: string, name: string): Promise<WinsView> {
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT t.name, t.final_date, t.format, t.visibility, t.ended_at, r.medal, p2.display_name AS partner
+       FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id JOIN players p ON p.id = r.player_id LEFT JOIN players p2 ON p2.id = r.partner_id
+       WHERE p.group_id = ? AND p.display_name = ? AND t.group_id = ? AND t.status = 'ended' AND t.visibility = 'all' AND r.medal = 1
+       ORDER BY t.final_date DESC, t.ended_at DESC, t.id`,
+    )
+    .bind(groupId, name, groupId)
+    .all<{ name: string; final_date: string | null; format: string; visibility: string; ended_at: string | null; medal: number; partner: string | null }>()
+    .catch(() => ({ results: [] as never[] }));
+  return {
+    name,
+    wins: results
+      .filter((r) => shownMedal(r, ctx.nowMs))
+      .map((r) => {
+        const format: TournamentFormat = r.format === 'americano' ? 'americano' : 'doubles';
+        return { tournament: r.name, date: r.final_date, format, ...(format === 'doubles' && r.partner ? { partner: r.partner } : {}) };
+      }),
+  };
+}
+
+const nameParam = (ctx: Ctx): string => {
+  const name = (ctx.url.searchParams.get('name') ?? '').trim();
+  if (!name || name.length > 80) throw new HttpError(400, 'invalid_name', 'Pick a name.');
+  return name;
+};
+
+/** GET /api/tournament/wins?name=Vic: a player's tap on a medal (only while Tournaments is on for this phone, as the medals). */
+export async function playerWins(ctx: Ctx, who: TournamentActor): Promise<WinsView> {
+  const name = nameParam(ctx);
+  if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
+  if (!(await tournamentsFlags(ctx, who.group.id)).on) return { name, wins: [] };
+  return winsOf(ctx, who.group.id, name);
+}
+
+/** GET /api/admin/tournament-wins?name=Vic: the organizer's tap on a medal (History, Players). The same rows players get. */
+export async function adminWins(ctx: Ctx): Promise<WinsView> {
+  const group = await organizerOn(ctx);
+  return winsOf(ctx, group.id, nameParam(ctx));
 }

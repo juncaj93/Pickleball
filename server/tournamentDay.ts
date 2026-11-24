@@ -1289,6 +1289,8 @@ export interface DoublesOutcome {
   order: number[];
   /** Each team's record over every game of the night (pool, tie, playoff). */
   record: Map<number, { wins: number; losses: number }>;
+  /** Zip 82: each team's point difference over every scored game of the night. */
+  diff: Map<number, number>;
   /** Teams that left during pool play (no finish). */
   out: Set<number>;
   teams: TeamRow[];
@@ -1319,6 +1321,8 @@ export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowM
     p4 = p3 === tr.a ? tr.b : tr.a;
   }
   const record = new Map<number, { wins: number; losses: number }>(rows.teams.map((x) => [x.seat, { wins: 0, losses: 0 }]));
+  // Zip 82: the point difference over every game of the night with a score (the End card's "+4 pts" chip; results from before Zip 72 have none).
+  const diff = new Map<number, number>(rows.teams.map((x) => [x.seat, 0]));
   for (const g of f.games) {
     const r = f.resolved.get(g.num);
     const res = f.results.get(g.num);
@@ -1327,6 +1331,10 @@ export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowM
     const lose = win === r.a ? r.b : r.a;
     record.get(win)!.wins++;
     record.get(lose)!.losses++;
+    if (typeof res.scoreA === 'number' && typeof res.scoreB === 'number') {
+      diff.set(r.a, (diff.get(r.a) ?? 0) + res.scoreA - res.scoreB);
+      diff.set(r.b, (diff.get(r.b) ?? 0) + res.scoreB - res.scoreA);
+    }
   }
   // The rest in table order: with pools, 3rd of each pool, then 4th, ... (Zip 72: better record first, then point difference, then points
   // scored, the tie rule's steps that work across pools); a semifinal loser with no 3rd place game is 3rd.
@@ -1357,6 +1365,7 @@ export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowM
     fourth: p4 ?? semiLosers[1] ?? null,
     order,
     record,
+    diff,
     out: f.out,
     teams: rows.teams,
   };

@@ -4,7 +4,7 @@ import { newId } from './crypto';
 import { requireAdmin } from './auth';
 import * as v from './validate';
 import { hiddenTask, lockDate, setTournamentsForAll, type SignupRow, todayKey, type TournamentRow } from './tournament';
-import { gamesFor, type GameRow, playerDayView, type TeamRow, writeTeamsAndGames } from './tournamentDay';
+import { adminDayView, gamesFor, type GameRow, playerDayView, spinTie, type TeamRow, writeTeamsAndGames } from './tournamentDay';
 import { americanoNight, pairSlot } from '../shared/americanoSchedule';
 import { previewSiteFor } from './secondChance';
 import { type GroupRow, organizerIdOf } from './repo';
@@ -163,7 +163,9 @@ export const AM_STAGES = ['am_round3', 'am_before', 'am_round1', 'am_break', 'am
 //   ended       final_done, then Confirm winners and end, the real code: the ticker, medals and credit (Vic and Wren get $14 each; pictures 38, 40).
 //   history     ended, plus two older finished Americano nights (Summer Slam: Vic 1st, Parker 2nd; Spring Fling: Parker 1st, Vic 2nd): History >
 //               Tournaments, the Players sheet's TOURNAMENTS card (pictures 46, 47), Vic with two medals.
-export const ZIP58_STAGES = ['tie3', 'final_on', 'final_done', 'ended', 'history'] as const;
+//   zip82_tie   Zip 82: tie3, then the wheel spun by the real code (the organizer's spin): the tie's Game A is on, Game B up next. All games
+//               shows them as "Game A · Court 1" cards.
+export const ZIP58_STAGES = ['tie3', 'final_on', 'final_done', 'ended', 'history', 'zip82_tie'] as const;
 type Zip58Stage = (typeof ZIP58_STAGES)[number];
 const isZip58Stage = (s: string): s is Zip58Stage => (ZIP58_STAGES as readonly string[]).includes(s);
 type AmStage = (typeof AM_STAGES)[number];
@@ -957,9 +959,19 @@ const ORDER = [1, 2, 3, 4];
 const BY_ORDER = (a: number, b: number) => (ORDER.indexOf(a) < ORDER.indexOf(b) ? a : b);
 
 async function zip58Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip58Stage) {
-  const made = await dayStage(ctx, group, 'pools_done', stage === 'tie3' ? TIE3 : BY_ORDER, stage === 'tie3' ? EVEN_SCORE : USUAL_SCORE);
+  const tie = stage === 'tie3' || stage === 'zip82_tie';
+  const made = await dayStage(ctx, group, 'pools_done', tie ? TIE3 : BY_ORDER, tie ? EVEN_SCORE : USUAL_SCORE);
   const id = made.id!;
   if (stage === 'tie3' || stage === 'final_on') return { ...made, stage };
+  if (stage === 'zip82_tie') {
+    // The organizer's spin, the real code (the wheel's answer is random): Game A and Game B are written.
+    const t = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<EndRow>())!;
+    const night = await readNight(ctx, t);
+    const key = adminDayView(t, 'doubles', night.signups, night.tickets, night.day, group.timezone, ctx.nowMs).ties?.[0]?.key;
+    if (!key) throw new HttpError(500, 'stage_failed', 'No tie to spin.');
+    await spinTie(ctx, group, t, night.day, key, 'organizer');
+    return { ...made, stage };
+  }
   // The Final (Net Ninjas beat Third Shot Gang 11 to 6) and 3rd place (Dill With It beat Kitchen Crew 11 to 8), as a first score writes them.
   const iso = (minsAgo: number) => new Date(ctx.nowMs - minsAgo * 60_000).toISOString();
   const day = (await ctx.db.prepare("SELECT num, stage FROM tournament_games WHERE tournament_id = ? AND stage IN ('final', 'third')").bind(id).all<{ num: number; stage: string }>()).results;

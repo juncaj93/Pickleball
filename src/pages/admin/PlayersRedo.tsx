@@ -7,6 +7,8 @@ import { spentText } from '../../../shared/spentTotals';
 import { formatWeekdayShort, weekTier } from '../../../shared/time';
 import { api, useLoad } from '../../lib';
 import { Sheet } from '../../ui';
+import { Medals } from '../../Medals';
+import { WinsProvider } from '../../WinsSheet';
 import type { AdminCtx } from '../Admin';
 import { balanceOf, heldCents } from './todo';
 
@@ -197,6 +199,17 @@ function DetailsBody({ ctx, player, children }: { ctx: AdminCtx; player: AdminPl
           <h4>TOURNAMENTS</h4>
           <Kv label="Played" value={String(sum.tournaments.played)} data="tour-played" />
           <Kv label="Won" value={String(sum.tournaments.won)} data="tour-won" />
+          {/* Zip 82: the medals players see next to the name; a tap opens the wins (the same rows the players get). */}
+          {(sum.tournaments.medals ?? 0) > 0 && (
+            <WinsProvider path="/api/admin/tournament-wins">
+              <div className="pr-kv" data-pr-kv="tour-medals">
+                <span>Medals</span>
+                <b>
+                  <Medals n={sum.tournaments.medals!} name={player.name} />
+                </b>
+              </div>
+            </WinsProvider>
+          )}
           <Kv label="Runner-up" value={String(sum.tournaments.runnerUp)} data="tour-runner" />
           {sum.tournaments.rows.map((r, i) => (
             <Kv key={`${r.name}-${i}`} label={`${r.name}${r.date ? `, ${shortDate(r.date)}` : ''}`} value={r.finish} data={`tour-row-${i}`} />

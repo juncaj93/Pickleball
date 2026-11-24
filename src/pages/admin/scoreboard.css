@@ -1,0 +1,162 @@
+/* Zip 82 (🎾82.night admin), pictures 3 and 4: All games / All rounds as scoreboards. Tokens only; light and dark follow them. */
+.sb {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sb-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.sb-switch button {
+  min-height: 44px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.sb-empty {
+  margin: 8px 0;
+  text-align: center;
+  color: var(--ink-2);
+}
+.sb-round {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sb-round-label {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.sb-game {
+  padding: 10px 14px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--card-r);
+  background: var(--surface);
+}
+.sb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+}
+.sb-where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.sb-where b {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.sb-chip {
+  padding: var(--chip-pad);
+  border-radius: 999px;
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
+  background: var(--fill);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.sb-chip-playing {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.sb-btn {
+  flex: none;
+  min-height: var(--btn-h-sm);
+  padding: 6px 18px;
+  border: 0;
+  border-radius: var(--btn-r);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sb-enter {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.sb-enter:active:not(:disabled) {
+  background: var(--primary-press);
+}
+.sb-fix {
+  background: var(--fill);
+  color: var(--ink);
+}
+.sb-fix:active:not(:disabled) {
+  background: var(--fill-press);
+}
+.sb-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.sb-side {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 0;
+}
+.sb-side + .sb-side {
+  border-top: 1px dashed var(--line);
+}
+.sb-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sb-names b {
+  font-size: 1.05rem;
+  font-weight: 750;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.sb-names span {
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.sb-score {
+  flex: none;
+  min-width: 2ch;
+  text-align: right;
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.sb-score.sb-win {
+  color: var(--ok-fg);
+}
+.sb-note {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.sb-sits {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+@media (max-width: 339px) {
+  .sb-game {
+    padding: 8px 10px 4px;
+  }
+  .sb-btn {
+    padding: 6px 12px;
+  }
+  .sb-switch button {
+    font-size: 0.9rem;
+  }
+}

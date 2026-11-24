@@ -86,6 +86,8 @@ route('POST', '/api/tournament/team-name', player.tournamentTeamName);
 // Zip 58 (server/tournamentDay.ts): Tournaments, piece 4. The team with the best record outside a three-way tie spins the wheel.
 route('POST', '/api/tournament/spin', player.tournamentSpin);
 route('POST', '/api/tournament/award-seen', player.tournamentAwardSeen);
+// Zip 82 (server/tournamentEnd.ts): tap a medal, the wins sheet (one small read, only on the tap).
+route('GET', '/api/tournament/wins', (ctx) => player.tournamentWins(ctx));
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
@@ -246,6 +248,7 @@ route('POST', '/api/admin/tournament/:id/games', tournamentDay.gamesAction);
 // Zip 58 (server/tournamentEnd.ts): Tournaments, piece 4. Edit awards and Confirm winners and end; History > Tournaments.
 route('POST', '/api/admin/tournament/:id/awards', tournamentEnd.awardsAction);
 route('GET', '/api/admin/tournament-history', tournamentEnd.tournamentHistory);
+route('GET', '/api/admin/tournament-wins', tournamentEnd.adminWins);
 // Zip 79: History > Skills (every finalized level per ended tournament; its own request, only when the tab opens).
 route('GET', '/api/admin/skills', tournamentEnd.skillsHistory);
 // Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever PREVIEW_CALM is not on (live),

@@ -245,6 +245,23 @@ export function americanoOutcome(t: TournamentRow, signups: readonly SignupRow[]
   return { ready: f.stored && f.games.length > 0 && f.games.every(decided), table, names: f.names, gone: f.gone, rounds: f.rounds };
 }
 
+/**
+ * THE live standings rows: the points table (wins, or win % when game counts differ, then points; ties keep name order), as the organizer's own
+ * phone sees them during the night and (Zip 82) the organizer's Standings sheet. The order End saves (and the reveal board shows) is this table
+ * with Edit awards' 1st and 2nd on top.
+ */
+export function standingsOf(f: AmFacts, playerId: string | null, table = tableOf(f)): PlayerRoundsView['standings'] {
+  return table.map((r) => ({
+    rank: r.rank,
+    name: nameOf(f, r.id),
+    record: winLoss(r),
+    points: r.points,
+    ...(playerId && r.id === playerId ? { me: true as const } : {}),
+    ...(r.tied ? { tied: true as const } : {}),
+    ...(f.gone.has(r.id) ? { out: true as const } : {}),
+  }));
+}
+
 const nameOf = (f: AmFacts, id: string) => f.names.get(id) ?? 'A player';
 const pairNames = (f: AmFacts, p: readonly string[]) => p.map((id) => nameOf(f, id));
 const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
@@ -329,16 +346,7 @@ export function playerRoundsView(
         .map((g) => ({ round: g.round, court: courtNo(t, g.court), a: pairNames(f, g.a), b: pairNames(f, g.b) }))
     : [];
   // Zip 77: before the reveal a player's answer carries no table at all (names, records, points and ranks stay on the server).
-  const table = mode === 'hidden' ? [] : tableOf(f);
-  const standings = table.map((r) => ({
-    rank: r.rank,
-    name: nameOf(f, r.id),
-    record: winLoss(r),
-    points: r.points,
-    ...(r.id === playerId ? { me: true as const } : {}),
-    ...(r.tied ? { tied: true as const } : {}),
-    ...(f.gone.has(r.id) ? { out: true as const } : {}),
-  }));
+  const standings = mode === 'hidden' ? [] : standingsOf(f, playerId);
   // Someone left and this player's game with them is off: one plain note (per player who left).
   const offs = f.games.filter((g) => g.skipped && g.leftBy && g.leftBy !== playerId && sideOf(g, playerId));
   const leaver = offs[0]?.leftBy ?? null;
@@ -429,6 +437,9 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
     ...(note ? { timeNote: note } : {}),
     ...(tied.length ? { tied } : {}),
     byPercent: gamesDiffer(table),
+    // Zip 82 (picture 2): the organizer's Standings sheet during the night, the reveal board's rows as they stand (organizer only: a player's
+    // answer still carries no table before the reveal).
+    standings: standingsOf(f, null, table),
   };
 }
 

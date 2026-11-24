@@ -1,4 +1,4 @@
-import { awardSeen, playerAwardsFor } from './tournamentEnd';
+import { awardSeen, playerAwardsFor, playerWins } from './tournamentEnd';
 import type { CreditEntryView, GroupView, PlayerSessionView } from '../shared/api';
 import { DROP_CHANGED, DROP_CHANGED_MESSAGE, dropQuote, quoteOfBody } from '../shared/dropQuote';
 import { claimShares, extendedTimeFor, extRowsOf, followSeat, hasViaShares, myExtShares, playerExtensionPaid, playerExtensionSeen, seatIdOf, undoClaimAt } from './extension';
@@ -513,6 +513,11 @@ export async function tournamentGame(ctx: Ctx, body: Record<string, unknown>) {
 /** Zip 58: POST /api/tournament/award-seen { tournamentId }: Nice on the congratulations card. */
 export async function tournamentAwardSeen(ctx: Ctx, body: Record<string, unknown>) {
   return awardSeen(ctx, await viewer(ctx), body);
+}
+
+/** Zip 82: GET /api/tournament/wins?name=Vic: a tap on a medal (the wins sheet). */
+export async function tournamentWins(ctx: Ctx) {
+  return playerWins(ctx, await viewer(ctx));
 }
 
 /** Zip 58: POST /api/tournament/spin { tournamentId, key }: a player of the team with the best record outside a three-way tie spins the wheel. */

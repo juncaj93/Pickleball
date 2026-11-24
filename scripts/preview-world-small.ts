@@ -743,11 +743,15 @@ export async function buildSmallPreview(
       // Zip 80 (🎾80.leftovers): the calm start is The Cold Open with tickets open on Tue Dec 1 (zip70_start), which has a regular Tuesday game
       // too: organizer Home shows "Tue Dec 1 has a regular game and The Cold Open." (Cancel game opens the usual cancel sheet; X hides it on
       // this phone). Americano for 9 (am_switched) and Zip 79's night are one tap away (Tournament test).
-      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'zip70_start' });
+      // Zip 82 (🎾82.night admin): the calm start is the Americano night at Round 3 (am_round3): organizer Home: Round 3 · Scores with All rounds
+      // (the scoreboard, "Needs a score · 2") and Standings ("After Round 2. Only you see this until the reveal."). Last round in (the End card's
+      // standings, Edit awards' suggestion), Final done (Locked doubles), the tie game and History (Vic's 2 medals) are one tap away.
+      await w.org.ok('POST', '/api/admin/tournament-test', { stage: 'am_round3' });
     } finally {
       delete w.env.PREVIEW_CALM;
     }
-    summary.push('Zip 80 (on, the calm start, zip70_start): "The Cold Open", tickets open, Tue Dec 1, and the regular Tue Dec 1 game. Organizer Home: "Tue Dec 1 has a regular game and The Cold Open." with Cancel game (the cancel sheet) and X. Tournament test > Americano: switched from Locked doubles (9 locked in): View as Vic, Your rounds (nobody sits 2 rounds in a row). /setup says Already set up');
+    summary.push('Zip 82 (on, the calm start, am_round3): "The Cold Open", Americano, tonight at Round 3. Organizer Home: All rounds (the scoreboard, Needs a score · 2 | All, Enter score / Fix) and Standings (only you see it). Tournament test: Americano: last round in (the End card standings, Edit awards: Suggested and Use these), Final done (Locked doubles), Tie game on (All games), History (View as Parker, tap a medal)');
+    summary.push('Zip 80 (one tap away, zip70_start): "The Cold Open", tickets open, Tue Dec 1, and the regular Tue Dec 1 game. Organizer Home: "Tue Dec 1 has a regular game and The Cold Open." with Cancel game (the cancel sheet) and X. Tournament test > Americano: switched from Locked doubles (9 locked in): View as Vic, Your rounds (nobody sits 2 rounds in a row). /setup says Already set up');
     summary.push('Zip 79 (one tap away, zip79_night): "The Cold Open", Americano, tonight, revealed 30 minutes ago. View as Vic: the final board once (X), then the one row (The Cold Open, Standings) with Your rounds; tap Standings. Tournament test: the day after, two days after, both styles, Skills history (History > Skills) and Sign-up with a previous rating (View as Vic, Sign up, pick 3.4, Next: the level up)');
     summary.push('Zip 78 (one tap away, zip70_start): "The Cold Open", tickets open, 6 locked in of 8 (Vic and Zoe unpaid). View as Vic: the ticket (Lock in is green), the game cards in the one body font. Organizer Home: the tournament card opens on a tap (no chevron), every row 44 px. The 12 players groups (Dink group, Drive group) are one tap away (Tournament test > Pools look)');
     summary.push('Zip 77 (one tap away, zip77_allin): "The Cold Open", Americano, tonight, every game in (Vic first). View as Vic: no kicker, a thin divider, "Final standings coming soon" with three bouncing balls, no Standings card. Organizer Home: Edit awards and Reveal standings (the board plays on every phone). One tap away: the last round (standings hidden), the reveal running, revealed');

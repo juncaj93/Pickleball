@@ -10,6 +10,9 @@ import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
 
 const STAGES = [
+  // Zip 82 (🎾82.night admin): standings before the reveal, the scoreboards, suggested prizes, tap a medal. Also: Americano: Round 3 (start
+  // here), Americano: last round in, Final done: End tournament, History with tournaments (below).
+  { stage: 'zip82_tie', label: 'Tie game on (All games)', line: 'Three teams level, the wheel already spun: Game A is on, Game B up next. Home: All games shows Needs a score and the Game A card.' },
   // Zip 81 (🎾81.venue hours): special venue hours (no tournament).
   { stage: 'venue_winter', label: 'Venue hours: winter set and holidays (start here)', line: 'The flyers’ hours: Winter hours Nov 23 to Jan 31, Thanksgiving 8 AM to noon, Christmas Eve, Christmas Closed, New Year’s Eve and Day. A game on Thu Nov 26 at 8 PM: Home shows “Thu Nov 26: the venue closes at noon.” with Cancel game. Settings > Schedule > Special venue hours > Change.' },
   { stage: 'venue_none', label: 'Venue hours: none', line: 'Normal hours only: no special entries, no amber card. Settings > Schedule > Special venue hours says None; Add special hours from there.' },

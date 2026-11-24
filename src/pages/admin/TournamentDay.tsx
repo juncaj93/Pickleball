@@ -16,6 +16,8 @@ import './tournament-day.css';
 import { AmericanoCards, Stepper } from './AmericanoDay';
 import { scoreHint } from '../../../shared/scores';
 import { AdminTieCards, EndCards } from './TournamentEnd';
+import { ScoreboardSheet } from './Scoreboard';
+import { boardGame } from './scoreboardData';
 
 // The court picker (the site's court map) is loaded when the published card draws it, not with this file: a static import here would pull
 // src/GameDay.tsx (and its styles) in ahead of the other organizer screens in the one-file build, changing the style order (tests/zip48-split).
@@ -487,13 +489,19 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
         </button>
       </div>
       <FixSheet ctx={ctx} t={t} g={fix} onClose={() => setFix(null)} />
-      <Sheet calmFocus open={all} title="All games" onClose={() => setAll(false)} className="tm-gd-sheet">
-        <ul className="tm-gd-results" data-tm-all-sheet>
-          {d.games.map((g) => (
-            <ResultRow key={g.num} g={g} busy={busy} label onFix={() => setFix(g)} />
-          ))}
-        </ul>
-      </Sheet>
+      {/* Zip 82 (picture 3): every game as a scoreboard; Enter score and Fix open the same score sheet. */}
+      <ScoreboardSheet
+        title="All games"
+        open={all}
+        onClose={() => setAll(false)}
+        games={d.games.map((g) => boardGame(g, d))}
+        busy={busy}
+        onScore={(num) => {
+          const g = d.games.find((x) => x.num === num);
+          if (g) setFix(g);
+        }}
+        data="ld"
+      />
       <PlayerLeftSheet ctx={ctx} t={t} d={d} open={left} onClose={() => setLeft(false)} round={round} />
       <Sheet calmFocus open={teamsOpen} title="Teams" onClose={() => setTeamsOpen(false)} className="tm-gd-sheet">
         {teamsOpen && <TeamList ctx={ctx} t={t} d={d} />}

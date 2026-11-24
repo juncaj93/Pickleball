@@ -1,0 +1,89 @@
+/* Zip 82 (🎾82.night admin), pictures 1 and 2: the organizer's compact standings (End card and the Standings sheet). Tokens only. */
+.sl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sl-note {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+.sl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sl-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 44px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.sl-row:last-child {
+  border-bottom: 0;
+}
+.sl-rank {
+  justify-self: center;
+  font-weight: 750;
+  font-size: 1.05rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.sl-medal {
+  display: inline-flex;
+}
+.sl-medal-ico {
+  display: block;
+  width: 20px;
+  height: 26px;
+}
+.sl-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sl-name b {
+  font-weight: 750;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.sl-players {
+  font-size: 0.88rem;
+  color: var(--ink-2);
+}
+.sl-rec {
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sl-chip {
+  justify-self: end;
+  padding: var(--chip-pad);
+  min-height: var(--chip-h);
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: var(--chip-font);
+  font-weight: var(--chip-weight);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 339px) {
+  .sl-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto auto;
+    column-gap: 7px;
+  }
+  .sl-name b,
+  .sl-rec {
+    font-size: 0.98rem;
+  }
+}

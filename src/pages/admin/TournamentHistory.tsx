@@ -6,6 +6,7 @@ import type { TournamentHistoryView } from '../../../shared/tournament';
 import { formatName } from '../../../shared/tournament';
 import { api } from '../../lib';
 import { Medals } from '../../Medals';
+import { WinsProvider } from '../../WinsSheet';
 import type { AdminCtx } from '../Admin';
 import './tournament-history.css';
 
@@ -30,6 +31,7 @@ export function TournamentHistory({ ctx }: { ctx: AdminCtx }) {
   if (error) return <p className="muted">Could not load the tournaments. Pull down to try again.</p>;
   if (!view) return <div className="card skel th-skel" aria-hidden="true" />;
   return (
+    <WinsProvider path="/api/admin/tournament-wins">
     <div className="stack th" data-th>
       <section className="tm-card th-card" aria-label="Tournament history" data-th-list>
         <div className="tm-card-head tm-head-line">
@@ -68,7 +70,8 @@ export function TournamentHistory({ ctx }: { ctx: AdminCtx }) {
                 <span className="th-rank">{i + 1}</span>
                 <span className="th-name">
                   {w.name}
-                  <Medals n={1} />
+                  {/* Zip 82: the medals players see next to the name (none for a win only in an Only me tournament); a tap opens the wins. */}
+                  <Medals n={w.medals} name={w.name} />
                 </span>
                 <b className="th-wins">
                   {w.wins} {w.wins === 1 ? 'win' : 'wins'}
@@ -80,5 +83,6 @@ export function TournamentHistory({ ctx }: { ctx: AdminCtx }) {
         </section>
       )}
     </div>
+    </WinsProvider>
   );
 }

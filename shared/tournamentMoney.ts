@@ -1,6 +1,7 @@
 // Zip 70 (🎾70.time): the organizer's money line, the Plan's expected players and the players' time card words. Its own file on purpose: the
 // player download reads shared/tournament.ts, so these organizer and server pieces stay out of it (tests/zip48-split.test.ts's size budget).
-import { courtCentsOf, MAX_SPOTS, shortClock } from './tournament';
+import { courtCentsOf, MAX_SPOTS, shortClock, type TournamentFormat, WINNERS } from './tournament';
+import { formatPrice } from './money';
 
 /** The Plan box's Expect stepper runs 6 to 16. */
 export const EXPECT_MIN = 6;
@@ -54,3 +55,56 @@ export function timeMoveWords(name: string, from: { start: number; minutes: numb
   return what ? { title: `${name} now ${what}.`, sub: 'Based on the number of players locked in.' } : null;
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 82 (🎾82.night admin): suggested prizes and the price check (Alex's rules). ONE place for the tiers: Edit awards' suggestion, the
+// Finalize box and the tournament card's money lines all read these.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The caps, never more: 1st place a free game ($14 credit per player), 2nd place half off ($7 per player). No early bird prize. */
+export const PRIZE_FIRST_CENTS = 1400;
+export const PRIZE_SECOND_CENTS = 700;
+
+/** The three tiers, best first. Amounts only go down a whole tier at a time, never to an odd amount. */
+export type PrizeTier = 'full' | 'first' | 'medals';
+export const PRIZE_TIERS: readonly PrizeTier[] = ['full', 'first', 'medals'];
+
+/** Players per place: Locked doubles pays each of the team's 2 players, Americano one player. */
+const perPlace = (format: TournamentFormat): number => (format === 'doubles' ? WINNERS : 1);
+
+/** What a tier gives each player: 1st and 2nd place credit per player. */
+export function tierAmounts(tier: PrizeTier): { firstCents: number; secondCents: number } {
+  if (tier === 'full') return { firstCents: PRIZE_FIRST_CENTS, secondCents: PRIZE_SECOND_CENTS };
+  if (tier === 'first') return { firstCents: PRIZE_FIRST_CENTS, secondCents: 0 };
+  return { firstCents: 0, secondCents: 0 };
+}
+
+/** What a tier costs the organizer: Americano full $21, 1st only $14; Locked doubles full $42, 1st only $28 (two players a team). */
+export function tierCostCents(tier: PrizeTier, format: TournamentFormat): number {
+  const a = tierAmounts(tier);
+  return perPlace(format) * (a.firstCents + a.secondCents);
+}
+
+/** The highest tier what is left (tickets minus courts) can pay; medals only when it cannot pay 1st only. */
+export function suggestedTier(leftCents: number, format: TournamentFormat): PrizeTier {
+  return PRIZE_TIERS.find((x) => tierCostCents(x, format) <= leftCents) ?? 'medals';
+}
+
+/** "Suggested: full prizes (1st $14 · 2nd $7 each)" / "Suggested: 1st only ($14 each)" / "Suggested: medals only". */
+export function suggestionWords(tier: PrizeTier): string {
+  if (tier === 'full') return `Suggested: full prizes (1st ${formatPrice(PRIZE_FIRST_CENTS)} · 2nd ${formatPrice(PRIZE_SECOND_CENTS)} each)`;
+  if (tier === 'first') return `Suggested: 1st only (${formatPrice(PRIZE_FIRST_CENTS)} each)`;
+  return 'Suggested: medals only';
+}
+
+/** "Tickets $162 − courts $120 = $42 left." (short: "= $8 short."). */
+export function leftWords(ticketsCents: number, courtCents: number): string {
+  const left = ticketsCents - courtCents;
+  return `Tickets ${formatPrice(ticketsCents)} − courts ${formatPrice(courtCents)} = ${formatPrice(Math.abs(left))} ${left >= 0 ? 'left' : 'short'}.`;
+}
+
+/** The price check: what is left after the FULL tier (tickets minus courts minus full prizes). Below 0: that much short. */
+export const afterFullCents = (ticketsCents: number, courtCents: number, format: TournamentFormat): number => ticketsCents - courtCents - tierCostCents('full', format);
+
+/** "After full prizes: +$21" (0 or more) or "After full prizes: $9 short" (red, no plus sign). */
+export const afterFullWords = (cents: number): string => (cents >= 0 ? `After full prizes: +${formatPrice(cents)}` : `After full prizes: ${formatPrice(-cents)} short`);

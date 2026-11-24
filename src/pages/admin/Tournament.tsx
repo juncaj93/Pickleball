@@ -41,7 +41,7 @@ import {
   type TournamentSignupView,
   prizeCentsOf,
 } from '../../../shared/tournament';
-import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, type MoneyLine, moneyLine, moneyRowLabel } from '../../../shared/tournamentMoney';
+import { afterFullCents, afterFullWords, EXPECT_MAX, EXPECT_MIN, expectedPlayers, type MoneyLine, moneyLine, moneyRowLabel } from '../../../shared/tournamentMoney';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { evensWarning, payByAt, payByDays, payByLabel, payByParts, salesCutoffMs, startMsOf, tournamentRemindText } from '../../../shared/tournamentTickets';
 import { siteAddress, smsHref } from '../../../shared/messages';
@@ -209,7 +209,9 @@ function MoneyValue({ cents, data }: { cents: number; data?: string }) {
 }
 
 /** Zip 70 (pictures 2, 4 and 7): "Courts $96 · Tickets $126 · You +$30" (or "Your cost $30" in red), from THE money line. */
-function MoneyLineText({ m }: { m: MoneyLine }) {
+function MoneyLineText({ m, format }: { m: MoneyLine; format: TournamentFormat }) {
+  // Zip 82 (the price check): what is left after the FULL prizes (shared/tournamentMoney.ts, the same tiers as Edit awards' suggestion).
+  const after = afterFullCents(m.ticketsCents, m.courtCents, format);
   return (
     <p className="tm-money-line" data-tm-money-line={`${m.courtCents}/${m.ticketsCents}/${m.youCents}`}>
       {/* Each word stays with its amount on a narrow phone. */}
@@ -221,6 +223,9 @@ function MoneyLineText({ m }: { m: MoneyLine }) {
       </span>{' '}
       · <span className="tm-ml-pair">
         {m.youCents >= 0 ? 'You' : 'Your cost'} <MoneyValue cents={m.youCents} />
+      </span>{' '}
+      · <span className={after >= 0 ? 'tm-ml-pair tm-ml-after' : 'tm-ml-pair tm-ml-after tm-ml-short'} data-tm-after-full={after}>
+        {afterFullWords(after)}
       </span>
     </p>
   );
@@ -292,7 +297,7 @@ function TimeBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
         </select>
       </span>
       <FitLine n={n} courts={t.courts} minutes={end - start} start={start} format={t.format} />
-      <MoneyLineText m={m} />
+      <MoneyLineText m={m} format={t.format} />
       {outside && (
         <p className="field-error" role="alert" data-tm-hours>
           {outside}
@@ -354,7 +359,7 @@ function PlanBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; on
         </span>
       </div>
       <FitLine n={n} courts={courts} minutes={t.minutes} start={t.start} format={t.format} />
-      <MoneyLineText m={m} />
+      <MoneyLineText m={m} format={t.format} />
       <button
         type="button"
         className="btn block tm-hc-save"
@@ -1125,7 +1130,8 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
   const canVote = !editing || !editing.finalDate || editing.formatPending === true || editing.formatSource === 'vote' || editing.formatSource === 'tie';
   const autoLabel = !!editing?.finalDate && editing.formatPending !== true;
   // Americano's 2nd place: what an Americano tournament has, else the $7 start (a Doubles one switched to Americano starts there too).
-  const [second, setSecond] = useState<number | null>(editing && (editing.format === 'americano' || editing.formatPending) ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
+  // Zip 82: Locked doubles has a 2nd place credit too (the Final's runner-up, each player), so a saved tournament keeps its own amount.
+  const [second, setSecond] = useState<number | null>(editing ? editing.secondCreditCents : DEFAULT_SECOND_CREDIT_CENTS);
   const formatLocked = editing?.formatLocked === true;
   // Zip 56: once tickets have been open, the price, the spots and Only me stay as they are (players hold tickets; the server refuses too).
   const sold = editing?.settingsLocked === true;
@@ -1155,13 +1161,13 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
               ? 'Type a ticket price.'
               : credit === null
                 ? 'Type a credit amount ($0 to skip it).'
-                : (americano || voting) && second === null
+                : second === null
                   ? 'Type a 2nd place credit ($0 to skip it).'
                   : null;
     setError(problem);
     if (problem) return;
     // Alex: no players expected and no court plan (the smart plan follows the players locked in, on the tournament page).
-    const body = { name: n, dates, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: americano || voting ? second : 0 };
+    const body = { name: n, dates, ticketCents: ticket, creditCents: credit, visibility, format, secondCreditCents: second };
     const ok = editing
       ? await save(() => api('PUT', `/api/admin/tournament/${editing.id}`, body), 'Saved')
       : await save(() => api('POST', '/api/admin/tournament', body), visibility === 'me' ? 'Sign-up is open. Only you can see it.' : 'Sign-up is open for everyone');
@@ -1245,18 +1251,18 @@ function CreateForm({ ctx, editing, onDone }: { ctx: AdminCtx; editing?: AdminTo
               <span>Game credit for each winner</span>
               <MoneyBox id="tm-credit" cents={credit} onChange={setCredit} label="Game credit for each winner" />
             </label>
-            <div className="tm-row">
-              <span>Winners</span>
-              <b>{WINNERS} players</b>
-            </div>
+            <label className="tm-row" htmlFor="tm-credit2">
+              <span>2nd place credit for each</span>
+              <MoneyBox id="tm-credit2" cents={second} onChange={setSecond} label="2nd place credit for each" />
+            </label>
             <div className="tm-row">
               <span>Total credit</span>
-              <b data-tm-total>{credit === null ? '$?' : formatPrice(credit * WINNERS)}</b>
+              <b data-tm-total>{credit === null || second === null ? '$?' : formatPrice((credit + second) * WINNERS)}</b>
             </div>
           </div>
         )}
         <p className="tm-card-note">
-          {americano || voting ? '1st place also gets a medal. Set either credit to $0 to skip it.' : 'Medal and banner are automatic. Set the credit to $0 to skip it.'}
+          {americano || voting ? '1st place also gets a medal. Set either credit to $0 to skip it.' : 'Each of the 2 winners gets a medal and the credit; each 2nd place player the 2nd credit. Set a credit to $0 to skip it.'}
         </p>
       </Card>
 
@@ -1520,10 +1526,16 @@ function PageBody({ ctx, t, focus, onClosed }: { ctx: AdminCtx; t: AdminTourname
               </div>
             </>
           ) : (
-            <div className="tm-row">
-              <span>Champion credit</span>
-              <b>{formatPrice(t.championCreditCents)}</b>
-            </div>
+            <>
+              <div className="tm-row">
+                <span>Champion credit</span>
+                <b>{formatPrice(t.championCreditCents)}</b>
+              </div>
+              <div className="tm-row">
+                <span>2nd place credit</span>
+                <b>{formatPrice(t.secondCreditCents)}</b>
+              </div>
+            </>
           )}
           {t.status === 'tickets' && t.payBy && (
             <div className="tm-row">
@@ -1921,7 +1933,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
           {fit.text}
         </p>
       )}
-      <MoneyLineText m={money} />
+      <MoneyLineText m={money} format={plan.style} />
       {outside && (
         <p className="field-error" role="alert" data-tm-fin-hours>
           {outside}

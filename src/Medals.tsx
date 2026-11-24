@@ -18,11 +18,40 @@ export const MedalIcon = ({ className = 'md-ico' }: { className?: string }) => (
   </svg>
 );
 
-/** `n` medals: 1 to 3 stacked, 4 and more one medal and "×n". Nothing for 0. `size`: 'top' next to the name at the top, else the game cards. */
-export function Medals({ n, size = 'card' }: { n: number; size?: 'top' | 'card' }) {
+/**
+ * Zip 82: inside a WinsProvider (src/WinsSheet.tsx) the medals next to a name are a button that opens that name's wins. Null (no provider:
+ * the winners ticker, anywhere else): they stay a plain picture.
+ */
+export const WinsContext = createContext<{ open: (name: string) => void; me: string | null } | null>(null);
+
+/** `n` medals: 1 to 3 stacked, 4 and more one medal and "×n". Nothing for 0. `size`: 'top' next to the name at the top, else the game cards.
+ *  Zip 82: with `name` and a WinsProvider around them, a tap opens the name's wins ("Vic’s wins, 2 medals"). */
+export function Medals({ n, size = 'card', name }: { n: number; size?: 'top' | 'card'; name?: string }) {
+  const wins = useContext(WinsContext);
   if (!n || n < 1) return null;
+  const pic = <MedalsPicture n={n} size={size} hidden={!!(wins && name)} />;
+  if (!wins || !name) return pic;
+  const whose = wins.me && wins.me === name ? 'Your wins' : `${name}’s wins`;
   return (
-    <span className={`md md-${size}`} role="img" aria-label={`${n} medal${n > 1 ? 's' : ''}`} data-medals={n}>
+    <button
+      type="button"
+      className={`md-btn md-btn-${size}`}
+      aria-label={`${whose}, ${n} medal${n > 1 ? 's' : ''}`}
+      onClick={(e) => {
+        // A medal on a tappable card or row opens the wins, not the card.
+        e.stopPropagation();
+        wins.open(name);
+      }}
+      data-medals-btn={name}
+    >
+      {pic}
+    </button>
+  );
+}
+
+function MedalsPicture({ n, size, hidden }: { n: number; size: 'top' | 'card'; hidden: boolean }) {
+  return (
+    <span className={`md md-${size}`} {...(hidden ? { 'aria-hidden': true } : { role: 'img', 'aria-label': `${n} medal${n > 1 ? 's' : ''}` })} data-medals={n}>
       {n <= 3 ? (
         Array.from({ length: n }, (_, i) => <MedalIcon key={i} />)
       ) : (
@@ -43,5 +72,5 @@ export function useMedalsOf(name: string): number {
 /** A name on a game card with its medals after it (nothing extra when it has none). */
 export function NameMedals({ name }: { name: string }) {
   const n = useMedalsOf(name);
-  return n ? <Medals n={n} /> : null;
+  return n ? <Medals n={n} name={name} /> : null;
 }

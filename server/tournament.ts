@@ -1080,14 +1080,15 @@ async function endedViewFor(ctx: Ctx, group: GroupRow, t: ActiveRow, playerId: s
     const tickets = pre ? pre.tickets : await loadTickets(ctx.db, t.id);
     const day = playerRoundsView(t, signups, tickets, dayRows.games, playerId, group.timezone, ctx.nowMs, 'final');
     if (!day) return base;
-    // The reveal's board (Zip 77) reads the same order as the row's board.
-    const standings = [...results].sort((a, b) => (a.finish ?? Infinity) - (b.finish ?? Infinity)).map((r, i) => ({
-      rank: r.finish ?? i + 1,
-      name: r.display_name,
-      record: `${r.wins}-${r.losses}`,
+    // The reveal's board (Zip 77) reads the same order as the row's board. Zip 82: the same one function (shared/results.ts boardRows), which
+    // the organizer's End card reads too, so the order and places can never differ.
+    const standings = boardRows('americano', results, playerId).map((r) => ({
+      rank: r.rank,
+      name: r.name,
+      record: r.record,
       points: r.points ?? 0,
-      ...(r.player_id === playerId ? { me: true as const } : {}),
-      ...(r.finish === null ? { out: true as const } : {}),
+      ...(r.me ? { me: true as const } : {}),
+      ...(r.out ? { out: true as const } : {}),
     }));
     return { ...base, day: { ...day, standings }, reveal: { tapMs: Date.parse(t.ended_at), players: standings.length } };
   }

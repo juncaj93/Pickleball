@@ -1362,6 +1362,14 @@ a.tm-hc-copy {
 .tm-money-line b.tm-money-down {
   color: var(--danger-fg);
 }
+/* Zip 82 (the price check): "After full prizes: +$21" in the line's gray; short ("$9 short") in red, no plus sign. */
+.tm-money-line .tm-ml-after {
+  font-weight: 650;
+  color: var(--ink);
+}
+.tm-money-line .tm-ml-short {
+  color: var(--danger-fg);
+}
 /* The box under Time or Plan: the pickers (or Expect and Courts), the fit line, the money line, Save. */
 .tm-hc-box.tm-hc-edit {
   display: flex;

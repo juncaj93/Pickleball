@@ -325,3 +325,57 @@
     letter-spacing: 0.06em;
   }
 }
+
+/* Zip 82 (picture 1): the final standings between the header and the prize rows; a thin line under them, then the prize rows. */
+.tm-end-standings {
+  padding: 2px 0 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+/* Zip 82: Edit awards' suggestion, above the prize boxes: the gray money line, then the suggestion with its quiet Use these button. */
+.tm-awards-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.tm-awards-left {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.tm-awards-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tm-awards-suggest-words {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-weight: 750;
+  color: var(--ink);
+}
+.tm-awards-use {
+  flex: none;
+  min-height: var(--btn-h-sm);
+  padding: 6px 16px;
+  border: 0;
+  border-radius: var(--btn-r);
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.tm-awards-use:active:not(:disabled) {
+  background: var(--fill-press);
+}
+.tm-awards-use:disabled {
+  color: var(--ink-2);
+  cursor: default;
+}

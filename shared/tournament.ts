@@ -382,9 +382,9 @@ export function smartPlan(locked: number): SmartPlan {
 /** The court bill for a plan: courts x hours x $24. */
 export const courtCentsOf = (p: Pick<SmartPlan, 'courts' | 'minutes'>): number => Math.round((p.courts * p.minutes * COURT_CENTS_PER_HOUR) / 60);
 
-/** The winners' credits: Locked doubles, the champion credit for each of the 2 winners; Americano, 1st place plus 2nd place. */
+/** The winners' credits: Locked doubles, the champion and (Zip 82) 2nd place credit for each of a team's 2 players; Americano, 1st place plus 2nd place. */
 export const prizeCentsOf = (format: TournamentFormat, championCents: number, secondCents: number): number =>
-  format === 'americano' ? championCents + secondCents : WINNERS * championCents;
+  format === 'americano' ? championCents + secondCents : WINNERS * (championCents + secondCents);
 
 /**
  * The organizer's cost for the plan: the court bill, minus the tickets, plus the winners' credits (the organizer plays and pays no ticket).
@@ -1025,6 +1025,8 @@ export interface AdminRoundsView {
   tied?: string[];
   /** Players have played different numbers of games (a sit-out, someone left): the table ranks by win percentage, then total points. */
   byPercent: boolean;
+  /** Zip 82: the standings as they stand (the reveal board's rows, server/americanoDay.ts standingsOf). Organizer only. */
+  standings: PlayerRoundsView['standings'];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1052,7 +1054,7 @@ export interface AdminEndView {
   done: { kicker: string; title: string; sub: string };
   /** Locked doubles: the winning team (each gets a medal and the credit). Americano: 1st place (medal and credit). */
   first: AwardPick;
-  /** Americano: 2nd place (credit, no medal). */
+  /** 2nd place (credit, no medal). Americano: a player; Locked doubles (Zip 82): the Final's runner-up team, the credit for each. */
   second: AwardPick | null;
   /** Locked doubles: the 3rd place team (shown only: no medal, no credit, no banner). */
   third: AwardPick | null;
@@ -1067,6 +1069,28 @@ export interface AdminEndView {
   blocked?: string;
   /** What the card showed, sent back with Confirm (a change in between is caught). */
   seen: string;
+  /**
+   * Zip 82 (picture 1): the final standings, only for the organizer until the reveal. Americano: the reveal board's rows (standingsOf);
+   * Locked doubles: the teams in End's saved order (shared/results.ts boardRows), with the point difference.
+   */
+  standings: EndStanding[];
+  /** Zip 82: the night's real money for the prize suggestion: tickets in (as Totals counts them) and the courts (final time and courts). */
+  money: { ticketsCents: number; courtCents: number };
+}
+
+/** Zip 82: one row of the End card's standings. */
+export interface EndStanding {
+  name: string;
+  /** Locked doubles: the team's two players. */
+  players?: string[];
+  /** "5-0". */
+  record: string;
+  /** "55 pts" (Americano points) or "+4 pts" (Locked doubles point difference). */
+  chip: string;
+  /** The gold medal (1st place only). */
+  medal?: true;
+  /** Left the night. */
+  out?: true;
 }
 
 /** Zip 58: the slim winners ticker at the top of a player's Home, for the banner length after End tournament (pictures 38 to 40). */
@@ -1101,7 +1125,15 @@ export interface PlayerTournamentsView {
   played: number;
   won: number;
   runnerUp: number;
+  /** Zip 82: the gold medals players see next to the name (a tap opens the wins sheet). */
+  medals?: number;
   rows: { name: string; date: string | null; finish: string }[];
+}
+
+/** Zip 82 (pictures 5 and 6): a tap on a medal: the name's wins, newest first (GET /api/tournament/wins, /api/admin/tournament-wins). No money. */
+export interface WinsView {
+  name: string;
+  wins: { tournament: string; date: string | null; format: TournamentFormat; partner?: string }[];
 }
 
 /** "1st", "2nd", "3rd", "4th". */
