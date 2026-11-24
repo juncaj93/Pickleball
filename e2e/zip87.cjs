@@ -395,6 +395,44 @@ const norm = (xs) => xs.map((x) => x.replace(/\s+/g, ''));
         await ctx.close();
       }
     });
+    await check('J the court picker is the venue map (tap saves with Undo, current lit, Clear); the game menu: Text the group, Edit game, Cancel game', async () => {
+      await b.stage('zip86_home');
+      for (const scheme of ['light', 'dark']) {
+        const { page, ctx, errors } = await b.adminHome({ width: 390, scheme });
+        const first = page.locator('.scard86').first();
+        await first.locator('.r86-court').click();
+        await page.waitForTimeout(500);
+        const map = page.locator('[data-court-map="pick"]');
+        assert((await map.count()) === 1, 'the court map opens');
+        assert((await map.locator('[data-court-cell]').count()) === 16 && (await map.textContent()).includes('ENTRANCE'), 'the venue map');
+        // The current court is lit (Court 4 from the stage; the dark pass sees the 9 the light pass saved).
+        const now = flat(await first.locator('.r86-court').textContent()).replace('Court ', '');
+        const lit = await map.locator('[data-court-cell]').evaluateAll((els) => els.filter((e) => e.getAttribute('aria-pressed') === 'true' && e.classList.contains('me')).map((e) => e.dataset.courtCell));
+        assert(JSON.stringify(lit) === JSON.stringify([now]) && (scheme === 'dark' || now === '4'), `current court lit (${lit}, Court ${now})`);
+        assert(flat(await map.locator('[data-court-clear]').textContent()) === 'Clear', 'Clear');
+        assert((await page.locator('.r86-picker, .r86-pick').count()) === 0, 'the plain grid is gone');
+        await page.screenshot({ path: path.join(SHOTS, `J-map-${scheme}.png`) });
+        if (scheme === 'light') {
+          // One tap saves (after the Undo window when Undo is on), and the button shows it at once.
+          await map.locator('[data-court-cell="9"]').click();
+          assert(flat(await first.locator('.r86-court').textContent()) === 'Court 9', 'Court 9 at once');
+          await page.waitForTimeout(7000);
+          const id = (await first.getAttribute('id')).replace('session-', '');
+          const sv = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
+          assert(sv.courtNum === 9, `court 9 saved (${sv.courtNum})`);
+        } else await page.keyboard.press('Escape');
+        await page.waitForTimeout(400);
+        // The game menu: no Players, no Add to calendar (a booked game).
+        await first.locator('.game-menu .icon-round').click();
+        await page.waitForTimeout(300);
+        const rows = (await page.locator('[role="menu"]').getByRole('menuitem').allInnerTexts()).map((x) => flat(x));
+        const want = rows.includes('Text the players') ? ['Text the group', 'Text the players', 'Edit game', 'Cancel game'] : ['Text the group', 'Edit game', 'Cancel game'];
+        assert(JSON.stringify(rows) === JSON.stringify(want), `menu ${JSON.stringify(rows)}`);
+        await page.screenshot({ path: path.join(SHOTS, `J-menu-${scheme}.png`) });
+        assert(errors.length === 0, errors.join('; '));
+        await ctx.close();
+      }
+    });
   } finally {
     await b.close();
   }
