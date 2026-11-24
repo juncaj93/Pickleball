@@ -12,6 +12,8 @@ import { MAX_SCORE, scoreHint } from '../../../shared/scores';
 import type { AdminCtx } from '../Admin';
 import { ScoreboardSheet } from './Scoreboard';
 import { afterRoundWords, roundGame } from './scoreboardData';
+import { NightCard as NightCardView } from './NightCard';
+import { americanoNightModel } from './nightCardData';
 import { StandingsList } from './StandingsList';
 import './tournament-day.css';
 
@@ -47,7 +49,6 @@ function useSave(ctx: AdminCtx) {
 const gamesCall = (t: AdminTournamentView, body: Record<string, unknown>) => api('POST', `/api/admin/tournament/${t.id}/games`, body);
 const pair = (names: string[]) => names.join(' + ');
 const where = (g: AdminRoundGame) => `Court ${g.courtNumber ?? g.court}`;
-const STATUS: Record<AdminRoundGame['status'], string> = { done: 'Done', playing: 'Playing', later: 'Later', skipped: 'Off' };
 
 /** The night is on (or about to be): from 30 minutes before the real start. */
 function nightOn(ctx: AdminCtx, t: AdminTournamentView): boolean {
@@ -108,11 +109,12 @@ function RoundsCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: A
 }
 
 /** Zip 82 (picture 4): every round as a scoreboard (src/pages/admin/Scoreboard.tsx), who sits under each round. */
-function AllRoundsSheet({ r, open, onClose, onFix, busy }: { r: AdminRoundsView; open: boolean; onClose: () => void; onFix?: (g: AdminRoundGame) => void; busy?: boolean }) {
+function AllRoundsSheet({ r, open, onClose, onFix, busy, focusRound }: { r: AdminRoundsView; open: boolean; onClose: () => void; onFix?: (g: AdminRoundGame) => void; busy?: boolean; focusRound?: number }) {
   return (
     <ScoreboardSheet
       title="All rounds"
       open={open}
+      focusRound={focusRound}
       onClose={onClose}
       games={r.games.map(roundGame)}
       sits={r.sits}
@@ -138,73 +140,22 @@ function StandingsSheet({ r, open, onClose }: { r: AdminRoundsView; open: boolea
   );
 }
 
-/** One game: where and how it stands, the two pairs (the winners first once there is a score), the score, the button it needs. */
-function ScoreRow({ g, busy, onFix, round }: { g: AdminRoundGame; busy: boolean; onFix?: () => void; round?: number }) {
-  const scored = g.scoreA !== null && g.scoreB !== null;
-  const aFirst = !scored || g.scoreA! > g.scoreB!;
-  const [first, second] = aFirst ? [g.a, g.b] : [g.b, g.a];
-  const [s1, s2] = aFirst ? [g.scoreA, g.scoreB] : [g.scoreB, g.scoreA];
-  const button = g.status === 'done' ? 'Fix' : g.status === 'playing' || g.status === 'later' ? 'Set' : null;
-  const status = STATUS[g.status];
-  return (
-    <li className={`tm-gd-result tm-gd-${g.status}`} data-tm-am-game={g.num} data-status={g.status}>
-      <span className="tm-gd-court">
-        <b>{round !== undefined && g.round !== round ? `Round ${g.round} · ${where(g)}` : where(g)}</b>
-        {/* Late says how long instead of the plain status ("8 min over"). */}
-        <span className={g.late ? 'tm-am-late' : undefined}>{g.late ?? status}</span>
-      </span>
-      <span className="tm-gd-result-text">
-        <span className="tm-gd-side">
-          <b>{pair(first.names)}</b>
-        </span>
-        <span className="tm-gd-word" data-tm-am-score>
-          {g.status === 'skipped'
-            ? `${g.by ?? 'A player'} left`
-            : scored
-              ? `${s1} to ${s2}`
-              : `vs · to ${g.playTo}`}
-        </span>
-        <span className="tm-gd-side">
-          <b>{pair(second.names)}</b>
-        </span>
-      </span>
-      {button && onFix ? (
-        <button type="button" className="tm-gd-swap" disabled={busy} onClick={onFix} data-tm-am-fix={g.num}>
-          {button}
-        </button>
-      ) : null}
-    </li>
-  );
-}
-
-/** Game night: the hero with the round, Pause, the Time check, the round's scores, Player left, All rounds. */
+/**
+ * Game night. Zip 88 (pictures 1 and 2): ONE card (src/pages/admin/NightCard.tsx): the name, the round bars, one box per court (rolling courts:
+ * the game on each court now), who sits now, All rounds and Standings, Pause and Player left. Above it, as before: Paused and the Time check.
+ */
 function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: AdminRoundsView }) {
   const { busy, save } = useSave(ctx);
   const [fix, setFix] = useState<AdminRoundGame | null>(null);
-  const [all, setAll] = useState(false);
+  const [all, setAll] = useState<number | null>(null);
   const [standings, setStandings] = useState(false);
   const [left, setLeft] = useState(false);
   const [skipTc, setSkipTc] = useState<string | null>(null);
-  const rounds = Math.max(1, r.plan.rounds);
-  const round = r.round ?? (r.games.length && r.games.every((g) => g.status === 'done' || g.status === 'skipped') ? rounds : 1);
-  const inRound = r.games.filter((g) => g.round === round);
-  const doneIn = inRound.filter((g) => g.status === 'done' || g.status === 'skipped').length;
-  const sits = r.sits.find((s) => s.round === round)?.names ?? [];
+  const m = americanoNightModel(r);
+  const round = r.round ?? (m.allIn ? Math.max(1, r.plan.rounds) : 1);
   const tc = r.timeCheck && r.timeCheck.key !== skipTc ? r.timeCheck : null;
-  const allDone = r.games.length > 0 && r.games.every((g) => g.status === 'done' || g.status === 'skipped');
   return (
     <>
-      <section className="tm-gd-hero" aria-label={`${t.name}, round ${round} of ${rounds}`} data-tm-night data-tm-am-night>
-        <div className="tm-gd-hero-top">
-          <h2 className="tm-gd-hero-name">{t.name}</h2>
-          <span className="tm-gd-hero-kicker" data-tm-night-round>
-            {allDone ? 'Done' : `Round ${round} of ${rounds}`}
-          </span>
-        </div>
-        <span className="tm-gd-bar" aria-hidden="true">
-          <span style={{ width: `${Math.round(((allDone ? rounds : round - 1 + (inRound.length ? doneIn / inRound.length : 0)) / rounds) * 100)}%` }} />
-        </span>
-      </section>
       {r.paused && <AlertCard as="section" tone="blue" icon="clock" label="Paused" title="Paused. Players see it." data={{ 'data-tm-paused': true }} />}
       {tc && (
         <section className="tm-gd-tc" role="status" data-tm-time-check={`${tc.fromRound}:${tc.to}`}>
@@ -225,42 +176,20 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
           <b>Time check.</b> {r.timeNote}
         </p>
       )}
-      <section className="tm-card tm-gd-card" aria-label={`Round ${round} scores`} data-tm-round={round}>
-        <div className="tm-card-head tm-head-line tm-gd-head">
-          <h3 className="tm-label">Round {round} · Scores</h3>
-          <span className="tm-chip tm-chip-ok" data-tm-round-in>
-            {doneIn} of {inRound.length} in
-          </span>
-        </div>
-        <ul className="tm-gd-results">
-          {inRound.map((g) => (
-            <ScoreRow key={g.num} g={g} busy={busy} round={round} onFix={() => setFix(g)} />
-          ))}
-        </ul>
-        {sits.length > 0 && (
-          <p className="tm-card-note tm-am-sits" data-tm-am-sits>
-            Sitting: {sits.join(', ')}
-          </p>
-        )}
-        <span className="tm-gd-links">
-          <button type="button" className="tm-gd-all" onClick={() => setAll(true)} data-tm-am-all>
-            All rounds
-          </button>
-          <button type="button" className="tm-gd-all" onClick={() => setStandings(true)} data-tm-am-standings>
-            Standings
-          </button>
-        </span>
-      </section>
-      <div className="tm-gd-pair-btns">
-        <button type="button" className="btn big secondary" disabled={busy} onClick={() => void save(() => gamesCall(t, { action: r.paused ? 'resume' : 'pause' }), r.paused ? 'Back on' : 'Paused')} data-tm-pause>
-          {r.paused ? 'Resume' : 'Pause'}
-        </button>
-        <button type="button" className="btn big secondary" disabled={busy} onClick={() => setLeft(true)} data-tm-player-left>
-          Player left
-        </button>
-      </div>
+      <NightCardView
+        name={t.name}
+        m={m}
+        busy={busy}
+        paused={r.paused}
+        onScore={(num) => setFix(r.games.find((g) => g.num === num) ?? null)}
+        onBar={(n) => setAll(n)}
+        onAll={() => setAll(0)}
+        onStandings={() => setStandings(true)}
+        onPause={() => void save(() => gamesCall(t, { action: r.paused ? 'resume' : 'pause' }), r.paused ? 'Back on' : 'Paused')}
+        onLeft={() => setLeft(true)}
+      />
       <FixSheet ctx={ctx} t={t} g={fix} onClose={() => setFix(null)} />
-      <AllRoundsSheet r={r} open={all} onClose={() => setAll(false)} busy={busy} onFix={(g) => setFix(g)} />
+      <AllRoundsSheet r={r} open={all !== null} focusRound={all || undefined} onClose={() => setAll(null)} busy={busy} onFix={(g) => setFix(g)} />
       <StandingsSheet r={r} open={standings} onClose={() => setStandings(false)} />
       <LeftSheet ctx={ctx} t={t} r={r} open={left} onClose={() => setLeft(false)} round={round} />
     </>

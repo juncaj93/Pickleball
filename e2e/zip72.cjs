@@ -302,7 +302,8 @@ async function main() {
       await stage('zip72_scores');
       const a = await adminHome({ scheme });
       assert((await a.page.locator('[data-tm-confirm], [data-tm-am-confirm]').count()) === 0, 'no Confirm');
-      await a.page.locator('[data-tm-fix-game="1"]').click();
+      // Zip 88: Game 1's Score on the night card.
+      await a.page.locator('[data-nc-score="1"]').click();
       const sheet = a.page.locator('[data-tm-fix-sheet="1"]');
       await sheet.waitFor({ timeout: 5000 });
       const dialog = a.page.locator('dialog[open]').filter({ has: sheet });
@@ -317,8 +318,8 @@ async function main() {
       await a.page.waitForTimeout(1500);
       const g = await game1();
       assert(g.winner === 'a' && g.scoreA === 11 && g.scoreB === 7 && g.resultBy === 'organizer', JSON.stringify(g));
-      const row = flat(await a.page.locator('[data-tm-result="1"]').innerText());
-      assert(row.includes('Net Ninjas') && row.includes('11 to 7') && row.includes('Fix'), `the row: ${row}`);
+      // Zip 88: while Game 1's court waits, its box shows the score (tap to fix); once the next game rolls onto it, All rounds has it.
+      if (await a.page.locator('[data-nc-fix="1"]').count()) assert(flat(await a.page.locator('[data-nc-fix="1"]').innerText()) === '11 – 7', 'the score box');
       await a.page.screenshot({ path: path.join(SHOTS, `D-after-${scheme}.png`) });
       assert(a.errors.length === 0, a.errors.join('; '));
       await a.ctx.close();

@@ -520,11 +520,12 @@ async function main() {
       await SH(a.page, `D-night-390-${scheme}`);
       for (const w of SIZES) {
         await a.page.setViewportSize({ width: w, height: 844 });
-        await fits(a.page, '[data-tm-night], [data-tm-round], [data-tm-time-check]');
+        await fits(a.page, '[data-tm-night], [data-nc], [data-tm-time-check]');
         await SH(a.page, `D-night-${w}-${scheme}`);
       }
       await a.page.setViewportSize({ width: 390, height: 844 });
-      await a.page.locator('[data-tm-fix-game]').first().click();
+      // Zip 88: Game 1's score box on the night card (its court waits: tap the score to fix it).
+      await a.page.locator('[data-nc-fix]').first().click();
       await a.page.locator('[data-tm-fix-sheet]').waitFor();
       await SH(a.page, `D-fix-${scheme}`);
       // Zip 72: the Fix sheet has two numbers (the team names with − and +). Game 1 holds 11 to 7: two less and four more make it 9 to 11.
@@ -535,12 +536,14 @@ async function main() {
       await a.page.locator('[data-tm-time-apply]').click();
       await a.page.waitForTimeout(700);
       await a.page.locator('[data-tm-player-left]').click();
+      await a.page.locator('[data-nc-yes]').click();
       await a.page.locator('[data-tm-left-who]').first().click();
       await a.page.locator('[data-tm-left-sheet]').waitFor();
       await SH(a.page, `D-left-${scheme}`);
       await a.page.locator('[data-tm-left-confirm]').click();
       await a.page.waitForTimeout(700);
       await a.page.locator('[data-tm-pause]').click();
+      await a.page.locator('[data-nc-yes]').click();
       await a.page.waitForTimeout(700);
       await SH(a.page, `D-after-${scheme}`);
       assert(a.errors.length === 0, a.errors.join(' | '));

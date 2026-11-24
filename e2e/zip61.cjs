@@ -454,17 +454,18 @@ async function main() {
       await stage('am_standings');
       const a = await adminPage({ scheme });
       await a.page.locator('[data-tm-am-night]').waitFor({ timeout: 15000 });
-      assert(flat(await a.page.locator('[data-tm-night-round]').innerText()).toUpperCase() === 'ROUND 6 OF 6', 'Round 6 of 6');
-      assert((await a.page.locator('[data-tm-round="6"] [data-tm-am-game]').count()) === 2, 'two games in Round 6');
+      // Zip 88: the one night card: RD6 is the round in play, both courts on Round 6.
+      assert((await a.page.locator('[data-nc-bar="r6"][data-state="now"]').count()) === 1, 'RD6 in play');
+      assert((await a.page.locator('[data-nc-pill="RD6"]').count()) === 2, 'two games in Round 6');
       for (const w of SIZES) {
         await a.page.setViewportSize({ width: w, height: 844 });
-        await fits(a.page, '[data-tm-round], [data-tm-am-night]');
+        await fits(a.page, '[data-nc]');
         await SH(a.page, `G-night-${w}-${scheme}`);
       }
       await a.page.setViewportSize({ width: 390, height: 844 });
       // Set a score with the two numbers.
-      const first = a.page.locator('[data-tm-round="6"] [data-tm-am-fix]').first();
-      const num = await first.getAttribute('data-tm-am-fix');
+      const first = a.page.locator('[data-nc-score]').first();
+      const num = await first.getAttribute('data-nc-score');
       await first.click();
       await a.page.locator('[data-tm-am-fix-sheet]').waitFor();
       for (let i = 0; i < 6; i++) await a.page.locator('[data-tm-am-plus="b"]').click();
@@ -477,14 +478,16 @@ async function main() {
       assert(g.status === 'done' && g.scoreA === 11 && g.scoreB === 6, JSON.stringify(g));
       // Player left: the sheet lists the players; picking one shows Remove.
       await a.page.locator('[data-tm-player-left]').click();
+      await a.page.locator('[data-nc-yes]').click();
       await a.page.locator('[data-tm-left-pick]').waitFor();
       await a.page.locator('[data-tm-left-who]').first().click();
       await a.page.locator('[data-tm-left-sheet]').waitFor();
       await SH(a.page, `G-left-${scheme}`);
       await a.page.keyboard.press('Escape');
       await a.page.waitForTimeout(300);
-      // Pause shows on the card.
+      // Pause shows on the card (Zip 88: after "Are you sure?").
       await a.page.locator('[data-tm-pause]').click();
+      await a.page.locator('[data-nc-yes]').click();
       await a.page.locator('[data-tm-paused]').waitFor({ timeout: 5000 });
       await a.page.locator('[data-tm-pause]').click();
       await a.page.waitForTimeout(600);

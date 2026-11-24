@@ -524,12 +524,13 @@ describe('zip 61: the independent review, each finding', () => {
     expect((await dash(ctx)).rounds.games[0]).toMatchObject({ scoreA: 11, scoreB: 8, by: a });
   });
 
-  it('a later round\'s score waits until its round comes; the key is required', async () => {
+  // Zip 88 (rolling courts): the refusal is "not on a court yet" (it was "Finish Round 1 first").
+  it('a later round\'s score waits until its game is on a court; the key is required', async () => {
     const ctx = await world(10);
     ctx.app.now = START_MS + 60_000;
     const later = (await dash(ctx)).rounds.games.find((g: any) => g.round === 5);
     const r = await play(ctx, later.a.names[0], { num: later.num, action: 'score', mine: 11, theirs: 3 });
-    expect([r.status, r.data.message]).toEqual([409, 'Round 5 has not started. Finish Round 1 first.']);
+    expect([r.status, r.data.message]).toEqual([409, 'That game is not on a court yet.']);
     const phone = await playerPhone(ctx, later.a.names[0]);
     expect((await phone.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num: later.num, action: 'score', mine: 11, theirs: 3 })).status).toBe(409);
     expect(rowCount(ctx)).toBe(0);

@@ -149,7 +149,7 @@ const SIZES = [320, 390, 420].flatMap((width) => ['light', 'dark'].map((scheme) 
     await h.stage('zip82_tie');
     for (const { width, scheme } of SIZES) {
       const a = await h.adminHome({ width, scheme });
-      await a.page.locator('[data-tm-all-games]').first().click();
+      await a.page.locator('[data-nc-all]').first().click();
       const sb = a.page.locator('[data-sb="ld"]');
       await sb.waitFor({ timeout: 5000 });
       assert((await sb.getAttribute('data-sb-mode')) === 'needs', 'opens on Needs');

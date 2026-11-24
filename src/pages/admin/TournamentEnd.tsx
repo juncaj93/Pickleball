@@ -14,6 +14,7 @@ import { leftWords, suggestedTier, suggestionWords, tierAmounts } from '../../..
 import { StandingsList } from './StandingsList';
 import type { AdminCtx } from '../Admin';
 import './tournament-end.css';
+import { prizeWords } from '../../../shared/tournamentCard';
 
 const WAYS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
 const tieTitle = (n: number) => `${WAYS[n] ?? n}-way tie`;
@@ -220,6 +221,12 @@ export function EndCards({ ctx, t, end }: { ctx: AdminCtx; t: AdminTournamentVie
           <p className="tm-end-blocked" role="status" data-tm-end-blocked>
             {end.blocked}
           </p>
+        )}
+        {/* Zip 88: no prize set yet: one red line right above the big button (a tap opens Edit awards; medals only still works). */}
+        {!end.blocked && prizeWords(t) === null && (
+          <button type="button" className="tm-end-noprize" onClick={() => setEditing(true)} data-tm-end-noprize>
+            Set prizes first
+          </button>
         )}
         <button
           type="button"

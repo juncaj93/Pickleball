@@ -718,7 +718,8 @@ export interface PlayerDayGame {
   label: string;
   stage: DayStage;
   round: number;
-  /** The venue's court number (or 1 and 2 until the organizer sets them). Null: not known yet (a playoff not decided). */
+  /** The venue's court number (or 1 and 2 until the organizer sets them). Null: not known yet (a playoff not decided; Zip 88: a game not on
+   *  a court yet, its court is known when it starts). */
   court: number | null;
   /** The other team's name and players, or null while a playoff is not decided ("If you finish in the top 2"). */
   opponent: { name: string; players: string[] } | null;
@@ -840,6 +841,13 @@ export interface AdminDayTeam {
 }
 
 /** Zip 57: one game on the organizer's screens. */
+/** Zip 88 (rolling courts): each court of the night now: the game on it (null: it waits), and the last game it finished (shown Done while it waits). */
+export interface CourtNow {
+  court: number;
+  num: number | null;
+  last: number | null;
+}
+
 export interface AdminDayGame {
   num: number;
   round: number;
@@ -864,6 +872,8 @@ export interface AdminDayGame {
   by?: string;
   /** Zip 58: a tie playoff game: 'Game A' or 'Game B'. */
   tieLabel?: string;
+  /** Zip 88: on a court (now, or it was: a score that was cleared): it can be scored. Its `court` is then the court it is really on. */
+  started?: boolean;
 }
 
 /** Zip 58: a tie the organizer sees (the first card on game night until it is settled). */
@@ -917,6 +927,11 @@ export interface AdminDayView {
   spares: { id: string; name: string; standby: boolean }[];
   /** Zip 58: ties for a playoff place still being settled. */
   ties?: AdminTieView[];
+  /** Zip 88: each court now (rolling courts) and who is not on a court now (names), once the games exist. */
+  courtsNow?: CourtNow[];
+  sittingNow?: string[];
+  /** Zip 88: the night card's Standings sheet (organizer): each group's table as players see it (THE TIE RULE), the point difference chip. */
+  standings?: { pool: 'A' | 'B' | null; rows: EndStanding[] }[];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -930,7 +945,8 @@ export interface PlayerRound {
   /** The game (null: a break). `key` is what the screen sends back with a score, so a schedule that changed in between is caught. */
   num: number | null;
   key?: string;
-  /** The venue's court number (or 1 and 2 until the organizer sets them); null on a break. */
+  /** The venue's court number (or 1 and 2 until the organizer sets them); null on a break, and (Zip 88, rolling courts) on a game not on a
+   *  court yet: its court is known only when it starts. */
   court: number | null;
   partner: string | null;
   opponents: [string, string] | null;
@@ -1027,6 +1043,9 @@ export interface AdminRoundsView {
   byPercent: boolean;
   /** Zip 82: the standings as they stand (the reveal board's rows, server/americanoDay.ts standingsOf). Organizer only. */
   standings: PlayerRoundsView['standings'];
+  /** Zip 88: each court now (rolling courts) and who is not on a court now (names). */
+  courtsNow: CourtNow[];
+  sittingNow: string[];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

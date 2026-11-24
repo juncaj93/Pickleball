@@ -5,7 +5,7 @@
 //   big on the right (the winner's in the site green, the other gray; "–" with none). Americano: "Sitting: ..." under each round.
 // Enter score and Fix open the existing score sheets (src/pages/admin/AmericanoDay.tsx and TournamentDay.tsx FixSheet). The sheet stays open and
 // where it was underneath; a game scored while it is open stays on Needs a score (now with its score) until the sheet closes.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sheet } from '../../ui';
 import type { BoardGame } from './scoreboardData';
 import './scoreboard-cards.css';
@@ -23,6 +23,7 @@ export function ScoreboardSheet({
   busy,
   onScore,
   data,
+  focusRound,
 }: {
   title: string;
   open: boolean;
@@ -34,18 +35,26 @@ export function ScoreboardSheet({
   /** Enter score or Fix: open the score sheet for this game. */
   onScore: (key: number) => void;
   data: string;
+  /** Zip 88: opened from a round bar on the night card: All, scrolled to that round. */
+  focusRound?: number;
 }) {
   return (
     <Sheet calmFocus open={open} title={title} onClose={onClose} className="tm-gd-sheet sb-sheet">
-      {open && <Board games={games} sits={sits} busy={busy} onScore={onScore} data={data} />}
+      {open && <Board games={games} sits={sits} busy={busy} onScore={onScore} data={data} focusRound={focusRound} />}
     </Sheet>
   );
 }
 
-function Board({ games, sits, busy, onScore, data }: { games: BoardGame[]; sits?: { round: number; names: string[] }[]; busy: boolean; onScore: (key: number) => void; data: string }) {
+function Board({ games, sits, busy, onScore, data, focusRound }: { games: BoardGame[]; sits?: { round: number; names: string[] }[]; busy: boolean; onScore: (key: number) => void; data: string; focusRound?: number }) {
   const needs = games.filter((g) => g.needs).length;
-  // Drawn fresh on each opening (the sheet mounts this only while open): Needs a score when there is one, else All.
-  const [mode, setMode] = useState<'needs' | 'all'>(needs > 0 ? 'needs' : 'all');
+  // Drawn fresh on each opening (the sheet mounts this only while open): Needs a score when there is one, else All. Zip 88: a round bar's
+  // tap opens All at that round.
+  const [mode, setMode] = useState<'needs' | 'all'>(focusRound ? 'all' : needs > 0 ? 'needs' : 'all');
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!focusRound) return;
+    box.current?.querySelector(`[data-sb-round="${focusRound}"]`)?.scrollIntoView({ block: 'start' });
+  }, [focusRound]);
   // Games scored from this opening stay on Needs a score (with their new score) so the list does not jump under the finger.
   const [kept, setKept] = useState<ReadonlySet<number>>(() => new Set());
   const shown = mode === 'all' ? games : games.filter((g) => g.needs || kept.has(g.key));
@@ -55,7 +64,7 @@ function Board({ games, sits, busy, onScore, data }: { games: BoardGame[]; sits?
     onScore(key);
   };
   return (
-    <div className="sb" data-sb={data} data-sb-mode={mode}>
+    <div ref={box} className="sb" data-sb={data} data-sb-mode={mode} data-sb-focus={focusRound}>
       <div className="segmented sb-switch" role="group" aria-label="Show">
         <button type="button" aria-pressed={mode === 'needs'} onClick={() => setMode('needs')} data-sb-needs={needs}>
           Needs a score · {needs}

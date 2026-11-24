@@ -48,6 +48,7 @@ import { evensWarning, payByAt, payByDays, payByLabel, payByParts, salesCutoffMs
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
 import { clockShort, moneySheet, prizeWords, STEPS, statusWords, stepOf, styleShort } from '../../../shared/tournamentCard';
+import { nightOnAt } from './nightCardData';
 import { AlertCard } from '../../AlertCard';
 import { localParts } from '../../../shared/time';
 import { clashingGames, clashWords, gameDayKey } from '../../../shared/tournamentClash';
@@ -189,10 +190,17 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
         <TicketClaimCard key={k.playerId} ctx={ctx} t={t} k={k} />
       ))}
       {/* Zip 66b: the tickets card (Paid, Not paid yet, Remind all unpaid) and the count card are folded into the card below. */}
-      {/* Zip 66: one card for every stage, starting closed (mocks 01 and 02). */}
-      <HomeCard ctx={ctx} t={t} />
+      {/* Zip 66: one card for every stage, starting closed (mocks 01 and 02). Zip 88: not on game night while the night card (or the End
+          card) is up: that one card is enough. */}
+      {!nightCardUp(ctx, t) && <HomeCard ctx={ctx} t={t} />}
     </>
   );
+}
+
+/** Zip 88: game night's one card (or the End card after the last game) is on Home: the night has its games and it is on. */
+function nightCardUp(ctx: AdminCtx, t: AdminTournamentView): boolean {
+  if (t.status !== 'tickets' || !nightOnAt(t, ctx.d.now, ctx.d.group.timezone)) return false;
+  return !!t.end || (t.format === 'americano' ? !!t.rounds : t.day?.phase === 'published');
 }
 
 /** Zip 66: "6 players · 1 court · 2.5 hrs" (the card's Plan row). */

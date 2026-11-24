@@ -131,7 +131,9 @@ function LiveCard({ day }: { day: PlayerRoundsView }) {
 /** The big green card (picture 32): "Round 3 · Court 1", "You + Parker" VS "Quinn + Reese", Enter score while the round is on. */
 function RoundCard({ r, day, busy, lit, onEnter }: { r: PlayerRound; day: PlayerRoundsView; busy: boolean; lit: 'mine' | 'theirs' | null; onEnter: () => void }) {
   const first = r.round === 1 && !day.started;
-  const kicker = first ? `Round 1 · Begins at ${glue(day.beginsAt)}` : r.onNow || lit ? `Round ${r.round} · Court ${r.court}` : `Up next · Round ${r.round} · Court ${r.court}`;
+  // Zip 88 (rolling courts): a game's court is known once it is on one; until then "Up next · Round 5".
+  const at = r.court !== null ? ` · Court ${r.court}` : '';
+  const kicker = first ? `Round 1 · Begins at ${glue(day.beginsAt)}` : r.onNow || lit ? `Round ${r.round}${at}` : `Up next · Round ${r.round}${at}`;
   return (
     <section className="tc-gd-next" aria-label={kicker} data-tc-day-next={r.num ?? undefined} data-tc-round-card={r.round}>
       <p className="tc-gd-next-kicker">{kicker}</p>

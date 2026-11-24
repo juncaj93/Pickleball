@@ -49,7 +49,8 @@ export function boardGame(g: AdminDayGame, d: Pick<AdminDayView, 'round' | 'star
     return { ...base, status: 'done', scores: scored ? [g.scoreA, g.scoreB] : [null, null], winner: g.winner === 'a' ? 0 : 1, needs: false, fixable: true };
   }
   // Review: during a pause (or once the night's time is up) the server sends no round: then the first round with a game still open counts.
-  const due = !!g.a && !!g.b && d.started && (d.over || g.round <= (d.round ?? openRound ?? 0));
+  // Zip 88 (rolling courts): playing once it is on a court (the server says so); an older answer without it: by its round, as before.
+  const due = !!g.a && !!g.b && d.started && (d.over || (g.started !== undefined ? g.started : g.round <= (d.round ?? openRound ?? 0)));
   return { ...base, status: due ? 'playing' : 'next', scores: [null, null], winner: null, needs: due, fixable: false };
 }
 

@@ -10,6 +10,7 @@ import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, 
 import { gameDayKey } from '../../shared/tournamentClash';
 import { dayParts, planRange } from '../../shared/tournament';
 import { TourWeekRow } from '../TourWeekRow';
+import { nightOnAt } from './admin/nightCardData';
 import { api, ApiError, demoOn, navigate, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
 import { markFirstTab, onTabBack, pushTab } from '../backStack';
 import { fadeChanges, LAST_ADMIN_HOLD_MS, markMoney, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../lastAdmin';
@@ -773,9 +774,11 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   // Zip 86 (picture 9): the tournament's night in the week list (a slim dark row, no button: the big card is at the top), and the regular game
   // canceled for it that day is not listed. Only while its date is final (tickets open) and the night is not over.
   const tz0 = ctx.d.group.timezone;
-  const tour = ctx.d.tournaments === true && ctx.d.tournament?.status === 'tickets' && ctx.d.tournament.finalDate && !ctx.d.tournament.over ? ctx.d.tournament : null;
+  const tour0 = ctx.d.tournaments === true && ctx.d.tournament?.status === 'tickets' && ctx.d.tournament.finalDate && !ctx.d.tournament.over ? ctx.d.tournament : null;
+  // Zip 88: on the night itself the row hides (the night card at the top is enough); the canceled regular game stays out of the list.
+  const tour = tour0 && !nightOnAt(tour0, ctx.d.now, ctx.d.group.timezone) ? tour0 : null;
   const list = ctx.d.sessions.filter(
-    (s) => Date.parse(s.endsAt) > nowMs && s.hiddenFromList !== true && !(tour && s.state.flags.canceled && gameDayKey(s.startsAt, tz0) === tour.finalDate),
+    (s) => Date.parse(s.endsAt) > nowMs && s.hiddenFromList !== true && !(tour0 && s.state.flags.canceled && gameDayKey(s.startsAt, tz0) === tour0.finalDate),
   );
   // Round 2: only THIS WEEK's games start open and every later week starts folded (a tap flips one). With nothing left this week, the first
   // game opens so the screen is never all folded. (Without round 2: the top 2, as the new layout always did.)

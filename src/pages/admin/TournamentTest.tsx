@@ -8,14 +8,41 @@ import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { dayLong } from '../../../shared/tournament';
 import './tournament-admin.css';
+import { NightCard } from './NightCard';
+import type { NightModel } from './nightCardData';
+
+const noop = () => undefined;
 
 /**
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip86_payments', 'zip86_home', 'zip86_next', 'zip86_signup', 'zip86_lockin', 'zip86_whosin'];
+const THIS_ZIP: readonly string[] = ['zip88_rd3', 'zip88_early', 'zip88_final', 'zip88_sitting'];
+
+/**
+ * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
+ * Rolling courts start a round early only when a later game's 4 players are all free, which the fair 10-player schedule never allows (it happens
+ * on 11 to 16 player nights, and on Locked doubles groups nights); the preview has 10 names, so the card is drawn here with the real component.
+ */
+const EARLY_LOOK: NightModel = {
+  kind: 'americano',
+  style: 'Americano · 12 players',
+  bars: [1, 2, 3, 4, 5, 6].map((n) => ({ key: `r${n}`, label: `RD${n}`, state: n < 3 ? 'done' : n === 3 ? 'now' : n === 4 ? 'early' : 'later', rounds: [n] })),
+  boxes: [
+    { num: 7, court: 1, where: 'Court 1', playTo: 11, pill: { text: 'RD4', tone: 'purple' }, status: 'playing', a: 'Parker + Zoe', b: 'Quinn + Reese', scoreA: null, scoreB: null, winner: null },
+    { num: 6, court: 2, where: 'Court 2', playTo: 9, pill: { text: 'RD3', tone: 'green' }, status: 'playing', a: 'Sage + Vic', b: 'Alex + Rowan', scoreA: null, scoreB: null, winner: null },
+  ],
+  inCount: 0,
+  sitting: ['Wren', 'Christopher V.'],
+  allIn: false,
+};
 
 const STAGES = [
+  // Zip 88 (🎾88.rolling courts): the night card (pictures 1 to 3) and a sitting player's phone.
+  { stage: 'zip88_rd3', label: 'Night: Americano, both courts in RD3 (start here)', line: 'Picture 1. Tonight, Rounds 1 and 2 in; Court 1’s Round 3 game is in (11 to 7), Court 2 still playing. Home: the one night card: RD3 outlined, Court 1 Done (tap 11 – 7 to fix), Court 2 Playing with Score, Sitting with a ball each, All rounds, Standings, Pause and Player left (each asks first).' },
+  { stage: 'zip88_early', label: 'Night: Americano, court 1 started RD4 early', line: 'Picture 2, drawn as a look below (10 players never start a round early: the fair schedule always has someone of the next game still on the other court). Home gets the picture 1 night.' },
+  { stage: 'zip88_final', label: 'Night: Locked doubles at the Final', line: 'Picture 3. The Final and 3rd place on both courts at Play to 7 (yellow): FINAL outlined, Final and 3rd place pills, Score on each. Standings lists the teams with W-L and points.' },
+  { stage: 'zip88_sitting', label: 'Night: player view while sitting', line: 'Rounds 1 to 3 in, Round 4 on, Vic sits. View as Vic: the break card and Currently playing with both courts. Enter Court 1’s score on Home: when Vic’s Round 5 game reaches a court, his phone shows it within one check (5 s).' },
   // Zip 86 (🎾86.clean admin): the cleaner tournament card and game cards, the tournament row in the week lists.
   { stage: 'zip86_payments', label: 'Tournament card: payments (start here)', line: 'The Cold Open’s numbers: 6 of 8 locked in, 4 haven’t paid, 10 expected. Home: tap the card open: the 4 steps, Tue Dec 1 · 7:30 to 10 PM, Change, then Tickets, Remind, Prizes and Money. Money: 5 paid $90, courts $120, so far −$30; if all 10 pay +$14 after the suggested $28.' },
   { stage: 'zip86_home', label: 'Admin Home: booked tonight + not booked', line: 'A game tonight (tomorrow after 7 PM): Booked, you In, Parker, Sage and Christopher Vanderberg, 3 of 3 paid, Court 4. The next day: Not booked, Rowan only, Book (the court still needs booking). Tap Booked (it moves to Not booked, Undo in the toast) and In (it goes Out, Undo).' },
@@ -175,11 +202,14 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   const [format, setFormat] = useState<'doubles' | 'americano'>(t?.format ?? 'doubles');
   // Zip 83: older stages and look tools behind the "All tests" link (closed each time the page opens).
   const [allTests, setAllTests] = useState(false);
+  // Zip 88: picture 2's look shows under its stage once tapped.
+  const [look, setLook] = useState(false);
   const now = t
     ? `${t.formatPending ? 'Players vote' : t.format === 'americano' ? 'Americano' : 'Locked doubles'} · ${nowWords[t.status] ?? 'Sign-up open'}${t.finalDate && (t.status === 'date_picked' || t.status === 'tickets') ? `: ${dayLong(t.finalDate)}` : ''}`
     : 'No tournament';
   async function go(stage: string, label: string) {
     if (busy) return;
+    if (stage === 'zip88_early') setLook(true);
     setBusy(stage);
     try {
       await api('POST', '/api/admin/tournament-test', { stage, format });
@@ -207,6 +237,14 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   const names = ctx.d.players.filter((p) => p.isActive).map((p) => p.name);
   const stageRow = (s: (typeof STAGES)[number]) => (
     <div key={s.stage} className="tm-test-stage">
+      {s.stage === 'zip88_early' && look && (
+        <div className="stack" data-tm88-look>
+          <p className="tm-card-note">
+            <b>Look only.</b> A 12-player night’s moment; nothing here saves.
+          </p>
+          <NightCard name="The Cold Open" m={EARLY_LOOK} busy={false} paused={false} onScore={noop} onBar={noop} onAll={noop} onStandings={noop} onPause={noop} onLeft={noop} />
+        </div>
+      )}
       <button type="button" className={`btn block${s.stage === 'none' ? ' secondary' : ''}`} disabled={!!busy} onClick={() => void go(s.stage, s.label)} data-tm-stage={s.stage}>
         {busy === s.stage ? 'Working…' : s.label}
       </button>

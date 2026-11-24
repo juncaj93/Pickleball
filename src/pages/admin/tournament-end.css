@@ -379,3 +379,23 @@
   color: var(--ink-2);
   cursor: default;
 }
+
+/* Zip 88: "Set prizes first", the one red line right above Reveal standings / Confirm winners and end (a tap opens Edit awards). */
+.tm-end-noprize {
+  align-self: stretch;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger-fg);
+  font: inherit;
+  font-weight: 750;
+  text-align: center;
+  cursor: pointer;
+}
+.tm-end-noprize:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 8px;
+}

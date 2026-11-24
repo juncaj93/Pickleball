@@ -318,8 +318,10 @@ async function main() {
       await a.page.locator('[data-tm-tie-spin]').click();
       await a.page.locator('[data-tm-tie-picked]').waitFor({ timeout: 15000 });
       assert(/get the bye/.test(await a.page.locator('[data-tm-tie-picked]').innerText()), 'picked');
-      const rows = (await a.page.locator('[data-tm-result]').allInnerTexts()).map(flat).join(' | ');
-      assert(/To 5|to 5|vs/.test(rows), rows);
+      // Zip 88: the tie's Game A is on a court of the night card (to 5: the yellow "Play to 5").
+      await a.page.waitForTimeout(800);
+      const rows = (await a.page.locator('[data-nc-court]').allInnerTexts()).map(flat).join(' | ');
+      assert(/Game A/.test(rows) && /Play to 5/.test(rows), rows);
       await SH(a.page, `C-admin-picked-${scheme}`);
       assert(a.errors.length === 0, a.errors.join(' | '));
       await a.ctx.close();

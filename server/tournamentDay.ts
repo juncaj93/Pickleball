@@ -65,8 +65,11 @@ import {
   TIE_TO,
 } from '../shared/tournamentSchedule';
 import { startMsOf, ticketOwed } from '../shared/tournamentTickets';
+import { rollCourts, type RollResult } from '../shared/rollingCourts';
+import { diffLabel } from '../shared/scores';
+import type { CourtNow } from '../shared/tournament';
 import type { TicketWithName } from './tournamentMoney';
-import { americanoGameAction, americanoGamesAction, readPair } from './americanoDay';
+import { americanoGameAction, americanoGamesAction, NOT_ON_COURT, readPair } from './americanoDay';
 import {
   firstName,
   logPlayer,
@@ -322,6 +325,11 @@ interface DayFacts {
   tiesEnd: Map<number, number>;
   start: number;
   end: number;
+  /** Zip 88 (rolling courts): the replay (which game is on which court, since when). `games` carry the court each really got. */
+  roll: RollResult;
+  /** Games that reached a court (on one now, or played), and the ones on a court right now. */
+  startedNums: Set<number>;
+  liveNums: Set<number>;
 }
 
 function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, nowMs: number, tieRows: readonly TieRow[] = []): DayFacts {
@@ -348,9 +356,33 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     new Map(resolveGames(teams.length, list.map(asPlanned), new Map(list.map((g) => [g.num, resultOf(g)])), out, frozen, gone, records).map((r) => [r.num, r]));
   // A playoff game one side of which can never be filled is not played (counted as skipped): the team there goes on (a walkover).
   const first = resolve(stored);
-  const games = stored.map((g) => (first.get(g.num)?.never && !g.winner && !g.skipped ? { ...g, skipped: 1, claim: null, result_by: 'skipped' } : g));
-  const results = new Map(games.map((g) => [g.num, resultOf(g)]));
-  const resolved = resolve(games);
+  const planned = stored.map((g) => (first.get(g.num)?.never && !g.winner && !g.skipped ? { ...g, skipped: 1, claim: null, result_by: 'skipped' } : g));
+  const results = new Map(planned.map((g) => [g.num, resultOf(g)]));
+  const resolved = resolve(planned);
+  // Zip 88: ROLLING COURTS (shared/rollingCourts.ts), replayed from the moments games finished (result_at, kept when a score is fixed or
+  // cleared; a team leaving: its skip time). Pool games roll; a tie's games exist from the wheel's spin; the playoffs start only when every game
+  // of the stage before is in and their teams are known (the Final and 3rd place side by side). A game called off by a rule with no time (a
+  // walkover) is not part of the replay.
+  const roll = rollCourts(
+    planned.map((g) => {
+      const r = resolved.get(g.num);
+      const at = g.result_at ?? g.claim_at;
+      const finished = decided(g) || !!g.result_at;
+      return {
+        num: g.num,
+        round: g.round,
+        rank: STAGE_ORDER[g.stage] ?? 2,
+        players: r?.a && r?.b ? [`T${r.a}`, `T${r.b}`] : [],
+        doneAt: finished ? (at ? Date.parse(at) : -1e15) : null,
+        ...(g.skipped && !at ? { gone: true } : {}),
+        ...(g.stage === 'tie' ? { from: Date.parse(g.created_at) } : {}),
+      };
+    }),
+    courtsOf(t),
+  );
+  const games = planned.map((g) => (roll.court.has(g.num) ? { ...g, court: roll.court.get(g.num)! } : g));
+  const startedNums = new Set(roll.court.keys());
+  const liveNums = new Set(roll.onCourt.filter((x): x is number => x !== null));
   const blocks = tieBlocks(teams.length, games.map(asPlanned), results, out, records, gone);
   const real = realTimes(t);
   const plan = nightPlan(teams.length * 2, courtsOf(t), real.minutes, 'doubles');
@@ -393,7 +425,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
   // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
   const tiesEnd = new Map(states.filter((r) => r.tiesEnd !== undefined).map((r) => [r.round, r.tiesEnd!]));
-  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes };
+  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes, roll, startedNums, liveNums };
 }
 
 /** "1st of the Dink group", "2nd", "Winner of game 9". */
@@ -534,6 +566,7 @@ export function adminDayView(
       resultBy: g.result_by,
       ...(g.claim_by && g.result_by === 'players' ? { by: names.get(g.claim_by) ?? 'A player' } : {}),
       ...(f.tieLabel.get(g.num) ? { tieLabel: f.tieLabel.get(g.num) } : {}),
+      started: f.startedNums.has(g.num),
     };
   });
   // Zip 58: the ties still being settled (the wheel not spun, its games still being played, or the organizer's picks).
@@ -599,7 +632,40 @@ export function adminDayView(
     fix,
     spares,
     ...(ties.length ? { ties } : {}),
+    ...(phase === 'published' && f.games.length ? { courtsNow: courtsNowOf(f), sittingNow: sittingNowOf(f, names), standings: standingsNowOf(f, names) } : {}),
   };
+}
+
+/** Zip 88: the organizer's Standings sheet on the night card: each group's table (THE TIE RULE, as players see it). */
+function standingsNowOf(f: DayFacts, names: ReadonlyMap<string, string>): NonNullable<AdminDayView['standings']> {
+  const planned = f.games.map(asPlanned);
+  return groupsOf(f.teams.length).map((grp) => ({
+    pool: grp.pool,
+    rows: groupTable(f.teams.length, planned, f.results, f.out, f.records, (grp.pool ?? 'P') as GroupKey, f.gone).rows.map((r) => {
+      const x = f.bySeat.get(r.seat);
+      return {
+        name: x?.name ?? `Team ${r.seat}`,
+        players: x ? [x.player_a, x.player_b].filter((id): id is string => !!id).map((id) => names.get(id) ?? 'A player') : [],
+        record: recordLabel(r),
+        chip: diffLabel(r.diff),
+        ...(x?.out_at ? { out: true as const } : {}),
+      };
+    }),
+  }));
+}
+
+/** Zip 88: each court now (the game on it, the last game it finished). */
+const courtsNowOf = (f: DayFacts): CourtNow[] => f.roll.onCourt.map((num, i) => ({ court: i + 1, num, last: f.roll.lastOn[i] }));
+
+/** Zip 88: the players of the teams that sit now (teams still in the night, seat order): not on a court, not in a waiting court's Done box. */
+function sittingNowOf(f: DayFacts, names: ReadonlyMap<string, string>): string[] {
+  const shown = new Set(f.roll.onCourt.map((num, i) => num ?? f.roll.lastOn[i]).filter((x): x is number => x !== null));
+  const on = new Set(f.games.filter((g) => f.liveNums.has(g.num) || shown.has(g.num)).flatMap((g) => [f.resolved.get(g.num)?.a, f.resolved.get(g.num)?.b]));
+  return f.teams
+    .filter((x) => !on.has(x.seat) && !x.out_at)
+    .flatMap((x) => [x.player_a, x.player_b])
+    .filter((id): id is string => !!id)
+    .map((id) => names.get(id) ?? 'A player');
 }
 
 const list = (names: string[]) => (names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
@@ -654,7 +720,8 @@ export function playerDayView(
       label: g.stage === 'pool' ? `Game ${++poolNo}` : g.stage === 'tie' ? (f.tieLabel.get(g.num) ?? 'Playoff') : stageLabel(g.stage),
       stage: g.stage as PlayerDayGame['stage'],
       round: g.round,
-      court: courtNo(t, g.court),
+      // Zip 88: a game's court is known once it is on one (rolling courts).
+      court: f.startedNums.has(g.num) ? courtNo(t, g.court) : null,
       opponent: opp ? { name: opp.name, players: playersOf(opp) } : null,
       ...(opp ? {} : { pending: r.tied ? 'Decided by the tie' : 'Not decided yet' }),
       state: done ? 'done' : firstOpen ? 'next' : 'later',
@@ -667,7 +734,8 @@ export function playerDayView(
       ...(g.skipped ? { skipped: true as const } : {}),
       // Zip 58: a tie game is played as soon as both its teams are known (a pool can be done while the other still plays).
       // Zip 71: an old disputed game (from before no confirming) is the organizer's to settle: no buttons on it.
-      ...(!done && opp && f.started && !g.disputed_at && (g.round <= roundNow || g.stage === 'tie') ? { onNow: true as const } : {}),
+      // Zip 88: Enter score as soon as the game is on a court (rolling courts).
+      ...(!done && opp && f.started && !g.disputed_at && f.startedNums.has(g.num) ? { onNow: true as const } : {}),
     };
     if (!done) firstOpen = false;
     games.push(entry);
@@ -713,7 +781,7 @@ export function playerDayView(
   else label = seat === null ? 'Teams' : 'Done';
   // Games being played now that are not theirs.
   const live = f.games
-    .filter((g) => f.started && !decided(g) && Number.isFinite(roundNow) && g.round === roundNow && !sideOf(g))
+    .filter((g) => f.started && f.liveNums.has(g.num) && !sideOf(g))
     .map((g) => {
       const r = f.resolved.get(g.num)!;
       const team = (seat: number) => ({ name: f.bySeat.get(seat)!.name, players: playersOf(f.bySeat.get(seat)!) });
@@ -1161,6 +1229,8 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
     const r = f.resolved.get(num);
     if (winner && (!r?.a || !r?.b)) bad('not_ready', 'Both teams of that game are not known yet.');
+    // Zip 88: a score for a game still waiting for a court is refused (a Fix of a game that has one is always fine).
+    if (winner && !f.startedNums.has(num) && !decided(g!)) bad('not_yet', NOT_ON_COURT);
     // What the organizer saw (the screen sends the result it showed: who won and the score): a tap on a game that changed since does nothing.
     const seen = body.seen && typeof body.seen === 'object' ? (body.seen as { winner?: unknown; scoreA?: unknown; scoreB?: unknown }) : null;
     const sideOk = (x: unknown) => x === null || x === 'a' || x === 'b';
@@ -1168,7 +1238,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     if (seen && (!sideOk(seen.winner ?? null) || !numOk(seen.scoreA) || !numOk(seen.scoreB))) throw new HttpError(400, 'invalid_seen', 'Look again.');
     const res = await ctx.db
       .prepare(
-        `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, skipped = 0, result_at = ?, result_by = ?,
+        `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, skipped = 0, result_at = COALESCE(result_at, ?), result_by = ?,
            seat_a = ?, seat_b = ?, updated_at = ?
          WHERE id = ? AND updated_at = ? ${seen ? "AND (CASE WHEN skipped = 1 THEN NULL WHEN winner IS NOT NULL THEN winner WHEN disputed_at IS NULL THEN claim END) IS ? AND score_a IS ? AND score_b IS ?" : ''}
            AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
@@ -1264,7 +1334,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     ...skip.map((g) =>
       ctx.db
         .prepare(
-          `UPDATE tournament_games SET skipped = 1, winner = NULL, claim = NULL, disputed_at = NULL, score_a = NULL, score_b = NULL, result_by = 'skipped', result_at = ?, seat_a = ?, seat_b = ?, updated_at = ? WHERE id = ? AND winner IS NULL`,
+          `UPDATE tournament_games SET skipped = 1, winner = NULL, claim = NULL, disputed_at = NULL, score_a = NULL, score_b = NULL, result_by = 'skipped', result_at = COALESCE(result_at, ?), seat_a = ?, seat_b = ?, updated_at = ? WHERE id = ? AND winner IS NULL`,
         )
         .bind(nowIso, f.resolved.get(g.num)?.a ?? null, f.resolved.get(g.num)?.b ?? null, nowIso, g.id),
     ),
@@ -1521,6 +1591,8 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
     if (decidedNow(g!)) bad('decided', await standing(g!));
     bad('no_confirm', action === 'undo' ? 'Nothing to take back.' : action === 'won' || action === 'lost' ? 'Enter the score. Pull down to refresh.' : 'Nothing to confirm. Enter the score.');
   }
+  // Zip 88 (rolling courts): a game can be scored as soon as it is on a court; one still waiting for a court cannot.
+  if (!decidedNow(g!) && !f.startedNums.has(g!.num)) bad('not_yet', NOT_ON_COURT);
   // A bad score is refused before anything is written ("mine" is this player's team).
   const sent = readPair(body, 'mine', 'theirs');
   const [x, y] = side === 'a' ? sent : [sent[1], sent[0]];
@@ -1536,7 +1608,7 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
   // Every result keeps the two teams it was given for (seat_a, seat_b), so a later change to an earlier game never moves it to other teams.
   const res = await ctx.db
     .prepare(
-      `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ?
+      `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ?
        WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND claim IS NULL
          AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
     )

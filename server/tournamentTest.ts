@@ -217,10 +217,22 @@ export const ZIP85_STAGES = ['zip85_idle', 'zip85_owed'] as const;
  *   zip86_signup / zip86_lockin / zip86_whosin  "Tournament in 2 weeks": the week after next: View as Quinn (not on the list: Sign up), Vic (on the
  *                   list, not paid: Lock in), Parker (locked in: Who's in).
  */
+/**
+ * Zip 88 (🎾88.rolling courts): the night card (pictures 1 to 3) on real nights, rolling courts deciding what is on each court.
+ *   zip88_early    the picture 2 moment (Court 1 started RD4 early, Court 2 at Play to 9). 10 players never get there (the fair schedule always
+ *                  has someone of the next game still on the other court), so the test page draws it as a LOOK, and Home gets zip88_rd3.
+ *   zip88_rd3      Americano tonight (Zip 61's night, 10 names): Rounds 1 and 2 in, Court 1's Round 3 game in (11 to 7), Court 2 still
+ *                  playing: Court 1 waits (Done), "1 of 2 in", RD3 outlined.
+ *   zip88_final    Locked doubles at the Final (final_on), the Final and 3rd place at Play to 7 (rows set to 7 for the look of picture 3).
+ *   zip88_sitting  Americano: Rounds 1 to 3 in, Round 4 on, Vic sits it (view as Vic).
+ */
+export const ZIP88_STAGES = ['zip88_early', 'zip88_rd3', 'zip88_final', 'zip88_sitting'] as const;
+type Zip88Stage = (typeof ZIP88_STAGES)[number];
+const isZip88Stage = (s: string): s is Zip88Stage => (ZIP88_STAGES as readonly string[]).includes(s);
 export const ZIP86_STAGES = ['zip86_payments', 'zip86_home', 'zip86_next', 'zip86_signup', 'zip86_lockin', 'zip86_whosin'] as const;
 type Zip86Stage = (typeof ZIP86_STAGES)[number];
 const isZip86Stage = (s: string): s is Zip86Stage => (ZIP86_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP88_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -375,6 +387,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip88Stage(stage)) return zip88Stage(ctx, group, stage);
   if (isZip86Stage(stage)) return zip86Stage(ctx, group, stage);
   if (stage === 'zip83_none') return { ...(await zip70Stage(ctx, group, 'zip70_start')), stage };
   if (stage === 'zip85_idle') return { ...(await americanoStage(ctx, group, 'am_standings')), stage };
@@ -988,6 +1001,33 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
     });
   await ctx.db.batch([...rows, ...scores]);
   return { ok: true, stage, id, date, signedUp: n };
+}
+
+/** Zip 88: the night card's stages (ZIP88_STAGES above), on the existing nights. */
+async function zip88Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip88Stage) {
+  if (stage === 'zip88_final') {
+    const made = await zip58Stage(ctx, group, 'final_on');
+    await ctx.db
+      .prepare("UPDATE tournament_games SET play_to = 7, updated_at = ? WHERE tournament_id = ? AND stage IN ('final', 'third') AND winner IS NULL AND skipped = 0")
+      .bind(ctx.nowIso, made.id)
+      .run();
+    return { ...made, stage };
+  }
+  if (stage === 'zip88_sitting') return { ...(await americanoStage(ctx, group, 'am_break')), stage };
+  const made = await americanoStage(ctx, group, 'am_round3');
+  // Court 1's Round 3 game in 3 minutes ago (as a player's Enter score writes it): rolling courts find no game Court 1 may start, so it waits.
+  const g = await ctx.db
+    .prepare("SELECT num, slot_a FROM tournament_games WHERE tournament_id = ? AND round = 3 ORDER BY court, num LIMIT 1")
+    .bind(made.id)
+    .first<{ num: number; slot_a: string }>();
+  if (g) {
+    const when = new Date(ctx.nowMs - 3 * 60_000).toISOString();
+    await ctx.db
+      .prepare("UPDATE tournament_games SET claim = NULL, claim_by = ?, claim_at = ?, score_a = 11, score_b = 7, winner = 'a', result_at = ?, result_by = 'players', updated_at = ? WHERE tournament_id = ? AND num = ?")
+      .bind(g.slot_a.split('+')[0], when, when, when, made.id, g.num)
+      .run();
+  }
+  return { ...made, stage };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

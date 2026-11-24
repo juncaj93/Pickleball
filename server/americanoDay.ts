@@ -17,7 +17,8 @@ import { HttpError } from './http';
 import { newId } from './crypto';
 import * as v from './validate';
 import { audit } from './repo';
-import { type AdminRoundGame, type AdminRoundsView, type PlayerRound, type PlayerRoundsView, shortAlertOf } from '../shared/tournament';
+import { type AdminRoundGame, type AdminRoundsView, type CourtNow, type PlayerRound, type PlayerRoundsView, shortAlertOf } from '../shared/tournament';
+import { rollCourts } from '../shared/rollingCourts';
 import { firstAnswer, saidScore } from '../shared/partnerTaps';
 import { MAX_SCORE } from '../shared/scores';
 import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
@@ -27,6 +28,9 @@ import { startMsOf } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
 import { courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds } from './tournamentDay';
 import { firstName, logPlayer, nightOver, organizerOn, openById, realTimes, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
+
+/** Zip 88: the answer to a score for a game still waiting for a court (it was "Finish Round N first" before rolling courts). */
+export const NOT_ON_COURT = 'That game is not on a court yet.';
 
 /** A game still playing this many minutes past its round's time is late on the organizer's card ("8 min over"). */
 export const LATE_WAIT_MIN = 5;
@@ -52,6 +56,12 @@ export interface AmGame {
   /** Skipped because this player left (or is no longer locked in). */
   leftBy: string | null;
   row: GameRow | null;
+  /** Zip 88 (rolling courts): it reached a court (it is on one now, or it was). `court` is then the court it really got; else the plan's. */
+  started: boolean;
+  /** On a court right now (playing, no score yet). */
+  live: boolean;
+  /** When it went on its court (ms; -Infinity: the night opened with it). */
+  startMs: number | null;
 }
 
 /** The Americano rows of a tournament (a Locked doubles row, "T3", is never one). */
@@ -106,6 +116,9 @@ function fromRow(r: GameRow): AmGame {
     skipped: !!r.skipped,
     leftBy: r.skipped ? (x.claim_by ?? null) : null,
     row: r,
+    started: false,
+    live: false,
+    startMs: null,
   };
 }
 
@@ -139,6 +152,8 @@ export interface AmFacts {
   end: number;
   /** When each round really started (minutes after midnight): the planned time, or the end of the round before when that was later. */
   roundStart: Map<number, number>;
+  /** Zip 88: each court now (the game on it, the last it finished). */
+  courtsNow: CourtNow[];
 }
 
 export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets: readonly TicketWithName[], rows: readonly GameRow[], tz: string, nowMs: number): AmFacts {
@@ -169,6 +184,9 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
       skipped: false,
       leftBy: null,
       row: null,
+      started: false,
+      live: false,
+      startMs: null,
     }));
   }
   const inGames = [...new Set(games.flatMap((g) => [...g.a, ...g.b]))];
@@ -181,6 +199,27 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
     const who = [...g.a, ...g.b].find((id) => gone.has(id));
     return who ? { ...g, skipped: true, leftBy: who } : g;
   });
+  // Zip 88: ROLLING COURTS (shared/rollingCourts.ts). Which game is on which court, replayed from the moments games finished: a result's
+  // result_at (kept as it was when a score is fixed or cleared, so a cleared game still counts as played on its court), a Player left's skip
+  // time. A game called off by a rule with no time (no longer locked in) is simply not part of the replay.
+  const roll = rollCourts(
+    games.map((g) => {
+      const at = g.resultAt ?? g.claimAt;
+      const finished = decided(g) || !!g.resultAt;
+      return {
+        num: g.num,
+        round: g.round,
+        rank: 0,
+        players: [...g.a, ...g.b],
+        doneAt: finished ? (at ? Date.parse(at) : -1e15) : null,
+        ...(g.skipped && !at ? { gone: true } : {}),
+      };
+    }),
+    courtsOf(t),
+  );
+  const liveNow = new Set(roll.onCourt.filter((x): x is number => x !== null));
+  games = games.map((g) => (roll.court.has(g.num) ? { ...g, court: roll.court.get(g.num)!, started: true, live: liveNow.has(g.num), startMs: roll.startAt.get(g.num)! } : g));
+  const courtsNow: CourtNow[] = roll.onCourt.map((num, i) => ({ court: i + 1, num, last: roll.lastOn[i] }));
   const byName = (x: string, y: string) => (names.get(x) ?? '').localeCompare(names.get(y) ?? '') || x.localeCompare(y);
   const roster = (stored.length ? inGames : locked).sort(byName);
   const rounds = Math.max(0, ...games.map((g) => g.round));
@@ -223,7 +262,7 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
     roundStart.set(s.round, begin);
     at = begin + ROUND_MINUTES[s.playTo];
   }
-  return { stored: stored.length > 0, games, rounds, roster, names, gone, sits, plan, started, over, roundNow, anyResult, check, shorter, start: real.start, end: real.start + real.minutes, roundStart };
+  return { stored: stored.length > 0, games, rounds, roster, names, gone, sits, plan, started, over, roundNow, anyResult, check, shorter, start: real.start, end: real.start + real.minutes, roundStart, courtsNow };
 }
 
 /** The points table rows (names in name order; ties keep that order). */
@@ -304,8 +343,8 @@ export function playerRoundsView(
     const g = f.games.find((x) => x.round === r && sideOf(x, playerId));
     if (!g || (g.skipped && f.gone.has(playerId) && g.leftBy === playerId)) {
       if (f.gone.has(playerId) && (!g || g.leftBy === playerId)) continue;
-      // A break: over once the night has moved past this round.
-      const done = r < f.roundNow;
+      // A break: over once the night has moved past this round, or (Zip 88, rolling courts) once this player's next game is on a court.
+      const done = r < f.roundNow || f.games.some((x) => x.round > r && sideOf(x, playerId) && (x.started || decided(x)));
       rounds.push({ round: r, num: null, court: null, partner: null, opponents: null, state: done ? 'done' : first ? 'next' : 'later', playTo: f.plan.gameTo, alsoOff: (f.sits.get(r) ?? []).filter((id) => id !== playerId).map((id) => nameOf(f, id)) });
       if (!done) first = false;
       continue;
@@ -321,14 +360,16 @@ export function playerRoundsView(
       round: r,
       num: g.num,
       key: gameKey(g),
-      court: courtNo(t, g.court),
+      // Zip 88: a game's court is known once it is on one (rolling courts can move a game to the court that frees up first).
+      court: g.started ? courtNo(t, g.court) : null,
       partner: nameOf(f, partner),
       opponents: [nameOf(f, opp[0]), nameOf(f, opp[1])],
       state: done ? 'done' : first ? 'next' : 'later',
       ...(scored ? { won: mine! > theirs!, score: { mine: mine!, theirs: theirs! } } : {}),
       playTo: g.playTo,
       ...(g.skipped ? { skipped: true as const } : {}),
-      ...(!done && f.started && r <= f.roundNow ? { onNow: true as const } : {}),
+      // Zip 88: Enter score as soon as the game is on a court (a score cleared by the organizer can be entered again).
+      ...(!done && f.started && g.started ? { onNow: true as const } : {}),
     });
     if (!done) first = false;
   }
@@ -342,7 +383,7 @@ export function playerRoundsView(
   // Games being played now that are not theirs (every court while they sit).
   const live = f.started
     ? f.games
-        .filter((g) => !decided(g) && g.round === f.roundNow && !sideOf(g, playerId))
+        .filter((g) => g.live && !sideOf(g, playerId))
         .map((g) => ({ round: g.round, court: courtNo(t, g.court), a: pairNames(f, g.a), b: pairNames(f, g.b) }))
     : [];
   // Zip 77: before the reveal a player's answer carries no table at all (names, records, points and ranks stay on the server).
@@ -393,10 +434,12 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
   const nowMin = t.final_date ? minuteOf(t, tz, nowMs) : 0;
   const games: AdminRoundGame[] = f.games.map((g) => {
     // Zip 71/72: no score waits. A score saved before Zip 71 that was never answered is the result (done), like any first score.
-    const status: AdminRoundGame['status'] = g.skipped ? 'skipped' : g.winner || g.claim ? 'done' : f.started && g.round <= f.roundNow ? 'playing' : 'later';
+    // Zip 88 (rolling courts): playing once it is on a court (a cleared score on a game already played reads as playing too: it needs one).
+    const status: AdminRoundGame['status'] = g.skipped ? 'skipped' : g.winner || g.claim ? 'done' : f.started && g.started ? 'playing' : 'later';
     let late: string | undefined;
-    if (status === 'playing') {
-      const over = Math.floor(nowMin - ((f.roundStart.get(g.round) ?? f.start) + ROUND_MINUTES[g.playTo as GameTo]));
+    if (status === 'playing' && g.live) {
+      const began = g.startMs !== null && Number.isFinite(g.startMs) && t.final_date ? Math.max(f.start, minuteOf(t, tz, g.startMs)) : f.start;
+      const over = Math.floor(nowMin - (began + ROUND_MINUTES[g.playTo as GameTo]));
       if (over >= LATE_WAIT_MIN) late = `${over} min over`;
     }
     return {
@@ -440,7 +483,16 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
     // Zip 82 (picture 2): the organizer's Standings sheet during the night, the reveal board's rows as they stand (organizer only: a player's
     // answer still carries no table before the reveal).
     standings: standingsOf(f, null, table),
+    courtsNow: f.courtsNow,
+    sittingNow: sittingNow(f),
   };
+}
+
+/** Zip 88: who sits now (still in the night, in name order): not on a court, and not in the last game of a court that waits (its Done box). */
+function sittingNow(f: AmFacts): string[] {
+  const shown = new Set(f.courtsNow.map((c) => c.num ?? c.last).filter((x): x is number => x !== null));
+  const on = new Set(f.games.filter((g) => g.live || shown.has(g.num)).flatMap((g) => [...g.a, ...g.b]));
+  return f.roster.filter((id) => !on.has(id) && !f.gone.has(id)).map((id) => nameOf(f, id));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -549,8 +601,8 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
     if (done(seen!)) bad('decided', standing(seen!));
     bad('no_confirm', 'Nothing to confirm. Enter the score.');
   }
-  // Only the round being played (or one before it): a later round's score waits until its round comes.
-  if (seen!.round > before.roundNow) bad('not_yet', `Round ${seen!.round} has not started. Finish Round ${before.roundNow} first.`);
+  // Zip 88 (rolling courts): a game can be scored as soon as it is on a court; one still waiting for a court cannot.
+  if (!seen!.started && !done(seen!)) bad('not_yet', NOT_ON_COURT);
   // A bad score is refused before anything is written.
   const sent = readPair(body, 'mine', 'theirs');
   const rows = await ensureRows(ctx, t, night, ctx.nowIso);
@@ -569,7 +621,7 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   }
   const res = await ctx.db
     .prepare(
-      `UPDATE tournament_games SET score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'players', updated_at = ?
+      `UPDATE tournament_games SET score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'players', updated_at = ?
        WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND claim IS NULL
          AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
     )
@@ -653,7 +705,7 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
         ctx.db
           .prepare(
             `UPDATE tournament_games SET skipped = 1, winner = NULL, claim = NULL, claim_at = NULL, score_a = NULL, score_b = NULL, disputed_at = NULL,
-               claim_by = ?, result_by = 'skipped', result_at = ?, updated_at = ? WHERE id = ? AND updated_at = ? AND winner IS NULL AND claim IS NULL AND skipped = 0`,
+               claim_by = ?, result_by = 'skipped', result_at = COALESCE(result_at, ?), updated_at = ? WHERE id = ? AND updated_at = ? AND winner IS NULL AND claim IS NULL AND skipped = 0`,
           )
           .bind(playerId, nowIso, nowIso, g.row!.id, g.row!.updated_at),
       ),
@@ -672,6 +724,8 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   const stillSame = !!showed && seen === stampOf(showed);
   if (!stillSame) bad('tournament_changed', 'This just changed. Look again.');
   if (g!.skipped) bad('tournament_changed', 'That game is off (someone left).');
+  // Zip 88: a score for a game still waiting for a court is refused (a Fix of a game that has one is always fine).
+  if (action === 'score' && !showed!.started && !showed!.winner && !showed!.claim) bad('not_yet', NOT_ON_COURT);
   const stamp = g!.row!.updated_at;
   const run = (sql: string, ...values: unknown[]) =>
     ctx.db.prepare(`UPDATE tournament_games SET ${sql}, updated_at = ? WHERE id = ? AND updated_at = ? AND skipped = 0 AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`).bind(...values, nowIso, g!.row!.id, stamp).run();
@@ -679,10 +733,12 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   let details: Record<string, unknown>;
   if (action === 'score') {
     const [x, y] = pair!;
-    res = await run("score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_at = ?, result_by = 'organizer'", x, y, x > y ? 'a' : 'b', nowIso);
+    // Zip 88: a Fix keeps the moment the game first finished (result_at): rolling courts replay the night from those moments.
+    res = await run("score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'organizer'", x, y, x > y ? 'a' : 'b', nowIso);
     details = { score: `${Math.max(x, y)} to ${Math.min(x, y)}`, winnerPlayers: pairNames(before, x > y ? g!.a : g!.b).join(' + ') };
   } else {
-    res = await run('score_a = NULL, score_b = NULL, winner = NULL, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_at = NULL, result_by = NULL');
+    // Zip 88: Clear keeps result_at: the game was played on its court (the courts stay as they were); it needs a score again.
+    res = await run('score_a = NULL, score_b = NULL, winner = NULL, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_by = NULL');
     details = { cleared: true };
   }
   if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
