@@ -154,7 +154,7 @@ async function main() {
     await ctx.close();
   });
 
-  await check('OFF: the money cell AND the gear menu open the old sheet, exactly as before (Confirmed chips, Remove buttons, Add someone with Give spot)', async () => {
+  await check('OFF: the money cell opens the old sheet, exactly as before (Confirmed chips, Remove buttons, Add someone with Give spot); Zip 87: no Players in the gear menu', async () => {
     assert((await setSwitch(false)).ok, 'switch off');
     const { ctx, page } = await openAdmin();
     await openByMoneyCell(page, g1.id);
@@ -166,11 +166,9 @@ async function main() {
     assert((await dlg.getByRole('button', { name: 'Give spot' }).count()) >= 3, 'old Give spot buttons');
     assert(!/Remind/.test(await dlg.innerText()), 'no Remind on the old sheet');
     await closeSheets(page);
+    // Zip 87 (Alex): the gear menu has no Players row any more (the money cell / paid pill is the way in, checked above).
     await cardOf(page, g1.id).getByRole('button', { name: /^Game menu for/ }).click();
-    await page.getByRole('menuitem', { name: 'Players', exact: true }).click();
-    await page.locator('dialog.sheet[open]').waitFor();
-    assert((await sheet(page).locator('[data-players-sheet]').count()) === 0, 'gear Players: new sheet with the switch off');
-    assert((await sheet(page).getByRole('heading', { name: 'Add someone' }).count()) === 1, 'gear Players: old sheet');
+    assert((await page.getByRole('menuitem', { name: 'Players', exact: true }).count()) === 0, 'no Players row in the gear menu');
     await ctx.close();
   });
 
@@ -472,17 +470,19 @@ async function main() {
     }
   });
 
-  await check('the gear menu\'s Players opens the NEW sheet too (both places that open it)', async () => {
+  await check('the money cell opens the NEW sheet (Zip 87: the gear menu\'s Players row is gone; a canceled game keeps it, as its card has no pill)', async () => {
     const { ctx, page } = await openAdmin();
     await cardOf(page, g1.id).getByRole('button', { name: /^Game menu for/ }).click();
-    await page.getByRole('menuitem', { name: 'Players', exact: true }).click();
+    assert((await page.getByRole('menuitem', { name: 'Players', exact: true }).count()) === 0, 'no Players row in the gear menu');
+    await page.keyboard.press('Escape');
+    await openByMoneyCell(page, g1.id);
     await page.locator('dialog.sheet[open] [data-players-sheet]').waitFor();
     assert(/^Players · Thu, Nov 12$/.test((await sheet(page).locator('h2').first().innerText()).trim()), 'title');
     await ctx.close();
     // Nothing else opens a roster sheet.
     const src = readFileSync(path.join(ROOT, 'src/pages/admin/GameMenu.tsx'), 'utf8') + readFileSync(path.join(ROOT, 'src/pages/admin/CardR2.tsx'), 'utf8') + readFileSync(path.join(ROOT, 'src/pages/admin/Sessions.tsx'), 'utf8');
     const openers = (src.match(/open\('roster'/g) || []).length;
-    assert(openers === 3, `places that open the roster sheet: ${openers} (the classic card, the round-2 card, the gear)`);
+    assert(openers === 3, `places that open the roster sheet: ${openers} (the classic card, the round-2 card, the gear on a canceled game)`);
   });
 
   // ================================================================ Part A
