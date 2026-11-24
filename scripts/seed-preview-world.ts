@@ -290,7 +290,7 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
 
   const join = async (name: string, g: any) => (await w.pick(name)).ok('POST', `/api/sessions/${g.id}/join`, {});
   const orgPays = (name: string, g: any) => w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[name], paid: true });
-  const setCourt = (g: any, status: 'booked' | 'waitlist' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
+  const setCourt = (g: any, status: 'booked' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
 
   // 0b. Zip 17 (Unpaid nudge): three made-up players who never paid, with 1, 2 and 3 unpaid PAST games (Vic, Wren, Zoe). Three
   //     morning games (7:00 AM or the next free half hour, never a regular game's time) on the day of the booked game below and the two days after it, so three
@@ -443,10 +443,9 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
   await (await w.pick('Kai')).ok('POST', `/api/sessions/${u0.id}/withdraw`, {});
   summary.push('Kai tapped "I paid" for game 1 and then dropped out: an unanswered claim waits on the organizer Home screen');
 
-  // 6. u1: court on the venue's Waitlist (players read "Court not booked"), 3 in, each used $3 credit.
-  await setCourt(u1, 'waitlist');
+  // 6. u1: court not booked (Zip 86 round 2: no court Waitlist any more), 3 in, each used $3 credit.
   for (const n of ['Blake', 'Drew', 'Emery']) await join(n, u1);
-  summary.push('game 2 (court Waitlist, 3 in): Blake, Drew, Emery used $3 credit each and owe $11');
+  summary.push('game 2 (court not booked, 3 in): Blake, Drew, Emery used $3 credit each and owe $11');
 
   // 7. u2: Not booked, 3 of 4 in.
   for (const n of ['Gray', 'Emery', 'Lane']) await join(n, u2);
