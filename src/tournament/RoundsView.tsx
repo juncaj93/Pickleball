@@ -12,7 +12,7 @@ import type { PlayerRound, PlayerRoundsView, PlayerTournamentView } from '../../
 import { resultTag } from '../../shared/scores';
 import { Court, DayHero, glue, type HeldScore, Matchup, PlayToPill, ScoreSheet, Slide, useHeldResult, useSeen } from './GameDayView';
 import './gameday-tour.css';
-import { DoneHero, RevealNight, StandingsLater, WaitingCard } from './Reveal';
+import { DoneHero, RevealNight, StandingsLater, StartsSoonCard, WaitingCard } from './Reveal';
 import { ResultsRow } from './Results';
 
 const pair = (a: string, b: string) => `${a} + ${b}`;
@@ -194,6 +194,8 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
   if (!shown.today) {
     return (
       <div className="tc-gd stack" data-tc-day="before" data-tc-americano>
+        {/* Zip 88: game day, before the night: "Games start soon" (the countdown in the last half hour). */}
+        {shown.startsSoon && <StartsSoonCard startsAt={shown.startsSoon.startsAt} />}
         <RoundsCard day={shown} />
       </div>
     );
@@ -202,6 +204,7 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
     <div className="tc-gd stack" data-tc-day="night" data-tc-americano>
       {/* Zip 77: every game in, not revealed yet: no kicker, a thin divider, then the waiting card where Up next was. */}
       {shown.waiting ? <DoneHero name={t.name} /> : <DayHero t={t} day={shown} />}
+      {shown.startsSoon && <StartsSoonCard startsAt={shown.startsSoon.startsAt} />}
       {shown.leftNote && !noteSeen && (
         <section className="tc-gd-note" role="status" data-tc-day-left>
           <span>{shown.leftNote.text}</span>

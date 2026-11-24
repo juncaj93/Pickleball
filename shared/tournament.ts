@@ -776,6 +776,8 @@ export interface PlayoffRow {
 }
 
 export interface PlayerDayView {
+  /** Zip 88: game day, before the night starts: the "Games start soon" card (the countdown in the last 30 minutes before `startsAt`). */
+  startsSoon?: { startsAt: string };
   /** Zip 61: never set on a Locked doubles night (the Americano night says 'americano'). */
   kind?: undefined;
   /** Their own team (null: not on a team, e.g. not locked in). `canRename`: either partner can type a name or roll the dice (until Game 1). */
@@ -967,6 +969,8 @@ export interface PlayerRound {
 
 export interface PlayerRoundsView {
   kind: 'americano';
+  /** Zip 88: game day, before the night starts: the "Games start soon" card (the countdown in the last 30 minutes before `startsAt`). */
+  startsSoon?: { startsAt: string };
   /** This player's own name (the cards say "You + Parker"). */
   me: string;
   rounds: PlayerRound[];

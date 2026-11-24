@@ -88,3 +88,12 @@ export function revealPhase(tapMs: number, players: number, nowMs: number): { ph
   if (t < 0) return { phase: 'before', t };
   return { phase: t >= revealPlan(players).end ? 'done' : 'playing', t };
 }
+
+/** Zip 88: the players' "Games start soon" countdown starts this long before the start. */
+export const COUNTDOWN_MS = 30 * 60_000;
+
+/** Zip 88: "24:10" (minutes and seconds; the countdown starts at 30:00). */
+export function countdownText(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}

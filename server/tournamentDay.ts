@@ -78,6 +78,7 @@ import {
   openById,
   START_TASK,
   startNowOpen,
+  todayKey,
   organizerOn,
   playerTarget,
   realTimes,
@@ -924,6 +925,8 @@ export function playerDayView(
     started: f.started,
     today,
     beginsAt: clockLabel(real.start),
+    // Zip 88: game day, the night not started (planned or Start now): "Games start soon", with its countdown in the last 30 minutes.
+    ...(t.final_date && t.final_date === todayKey(nowMs, tz) && !f.started && !f.over && seat !== null ? { startsSoon: { startsAt: new Date(startMs).toISOString() } } : {}),
     courtsSet: !!courtNumbersOf(t),
     progress: { label, done, total },
     live,

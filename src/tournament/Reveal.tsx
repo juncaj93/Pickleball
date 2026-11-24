@@ -10,7 +10,7 @@
 // The timeline's numbers are shared/reveal.ts (the server holds the ticker, the congratulations and the medals until the board is done).
 import { type CSSProperties, type ReactNode, type Ref, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PlayerRoundsView, PlayerTournamentView } from '../../shared/tournament';
-import { REVEAL_COUNT_S, REVEAL_FLY_S, REVEAL_LEAD_MS, REVEAL_SLOTS_S, type RevealPlan, revealPlan } from '../../shared/reveal';
+import { COUNTDOWN_MS, countdownText, REVEAL_COUNT_S, REVEAL_FLY_S, REVEAL_LEAD_MS, REVEAL_SLOTS_S, type RevealPlan, revealPlan } from '../../shared/reveal';
 import { storageGet, storageSet } from '../lib';
 import { Pickleball } from '../ui';
 import { MedalIcon } from '../Medals';
@@ -61,11 +61,14 @@ function XButton({ onClose, shown, refEl }: { onClose: () => void; shown: boolea
   );
 }
 
-/** Every game is in (picture 2): one white line and three of the site's pickleballs bouncing in turn. */
-export function WaitingCard() {
+/** Every game is in (picture 2): one white line and three of the site's pickleballs bouncing in turn. Zip 88: also "Games start soon". */
+export function WaitingCard({ title = 'Final standings coming soon', sub, data = 'standings' }: { title?: string; sub?: ReactNode; data?: string }) {
   return (
-    <section className="tc-gd-next tc-rv-wait" role="status" aria-label="Final standings coming soon" data-tc-waiting>
-      <h3 className="tc-rv-wait-title">Final standings coming soon</h3>
+    <section className={sub ? 'tc-gd-next tc-rv-wait tc-rv-wait-sub' : 'tc-gd-next tc-rv-wait'} role="status" aria-label={title} data-tc-waiting={data}>
+      <span className="tc-rv-wait-words">
+        <h3 className="tc-rv-wait-title">{title}</h3>
+        {sub}
+      </span>
       <span className="tc-rv-balls" aria-hidden="true">
         <Pickleball />
         <Pickleball />
@@ -73,6 +76,34 @@ export function WaitingCard() {
       </span>
     </section>
   );
+}
+
+
+/**
+ * Zip 88 (Alex): game day, before the night starts: "Games start soon" with the bouncing pickleballs; in the last 30 minutes before the start a
+ * countdown under it ("Starts in 24:10"), ticking each second on this phone (the server's clock as the reveal uses it; no extra call). At zero:
+ * "Starting now" until the next check brings the games. Start now on the organizer's phone: the next check brings the games (no countdown).
+ */
+export function StartsSoonCard({ startsAt }: { startsAt: string }) {
+  const at = Date.parse(startsAt);
+  const [now, setNow] = useState(() => serverNow());
+  const left = at - now;
+  const ticking = left <= COUNTDOWN_MS;
+  useEffect(() => {
+    // Once a second in the last half hour; once a minute before it (only to notice the half hour coming).
+    const id = window.setInterval(() => setNow(serverNow()), ticking ? 1000 : 60_000);
+    return () => window.clearInterval(id);
+  }, [ticking]);
+  const sub = !ticking ? undefined : left > 0 ? (
+    <span className="tc-rv-wait-sub-line" data-tc-countdown={Math.ceil(left / 1000)}>
+      Starts in <b>{countdownText(left)}</b>
+    </span>
+  ) : (
+    <span className="tc-rv-wait-sub-line" data-tc-countdown={0}>
+      Starting now
+    </span>
+  );
+  return <WaitingCard title="Games start soon" sub={sub} data="start" />;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

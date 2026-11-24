@@ -27,7 +27,7 @@ import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournament
 import { startMsOf } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
 import { courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds } from './tournamentDay';
-import { firstName, logPlayer, nightOver, nightStartMs, organizerOn, openById, realTimes, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
+import { firstName, logPlayer, nightOver, nightStartMs, organizerOn, openById, realTimes, todayKey, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
 
 /** Zip 88: the answer to a score for a game still waiting for a court (it was "Finish Round N first" before rolling courts). */
 export const NOT_ON_COURT = 'That game is not on a court yet.';
@@ -407,6 +407,8 @@ export function playerRoundsView(
     started: f.started,
     today,
     beginsAt: clockLabel(real.start),
+    // Zip 88: game day, the night not started (planned or Start now): "Games start soon", with its countdown in the last 30 minutes.
+    ...(t.final_date && t.final_date === todayKey(nowMs, tz) && !f.started && !f.over && mode !== 'final' ? { startsSoon: { startsAt: new Date(startMs).toISOString() } } : {}),
     courtsSet: !!courtNumbersOf(t),
     progress: { label, done: doneCount, total: Math.max(1, f.rounds) },
     live,

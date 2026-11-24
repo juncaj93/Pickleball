@@ -141,3 +141,38 @@ describe('zip 88: team names until the first score', () => {
     expect((await card(ctx, a)).day.team.name).toBe('Late Bloomers');
   });
 });
+
+describe('zip 88: Games start soon on the players phones', () => {
+  it('game day before the start: startsSoon with the planned start; not the day before; gone at the start or at Start now', async () => {
+    for (const format of ['americano', 'doubles'] as const) {
+      const ctx = await world(10, { format });
+      if (format === 'doubles') await draftAndPublish(ctx);
+      const who = format === 'doubles' ? (await adminTour(ctx)).day.teams[0].players[0].name : 'Blair';
+      expect((await card(ctx, who)).day.startsSoon).toBeUndefined();
+      ctx.app.now = START_MS - 20 * 60_000;
+      expect((await card(ctx, who)).day.startsSoon).toEqual({ startsAt: new Date(START_MS).toISOString() });
+      ctx.app.now = GAME_DAY_MORNING;
+      expect((await card(ctx, who)).day.startsSoon).toEqual({ startsAt: new Date(START_MS).toISOString() });
+      expect((await teams(ctx, { action: 'courts', numbers: [1, 2] })).status).toBe(200);
+      expect((await start(ctx)).status).toBe(200);
+      const after = (await card(ctx, who)).day;
+      expect(after.startsSoon).toBeUndefined();
+      expect(after.started).toBe(true);
+      // No Start now: gone at the start time.
+      const ctx2 = await world(8, { format });
+      if (format === 'doubles') await draftAndPublish(ctx2);
+      const who2 = format === 'doubles' ? (await adminTour(ctx2)).day.teams[0].players[0].name : 'Blair';
+      ctx2.app.now = START_MS + 1;
+      expect((await card(ctx2, who2)).day.startsSoon).toBeUndefined();
+    }
+  });
+
+  it('the countdown words', async () => {
+    const { countdownText } = await import('../shared/reveal');
+    expect(countdownText(24 * 60_000 + 10_000)).toBe('24:10');
+    expect(countdownText(30 * 60_000)).toBe('30:00');
+    expect(countdownText(59_001)).toBe('1:00');
+    expect(countdownText(500)).toBe('0:01');
+    expect(countdownText(-5)).toBe('0:00');
+  });
+});

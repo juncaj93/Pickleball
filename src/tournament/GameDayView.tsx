@@ -14,6 +14,7 @@ import { Sheet, useToast } from '../ui';
 import { diffLabel, groupName, MAX_SCORE, resultTag, scoreHint } from '../../shared/scores';
 import { AlsoNowCard, PlayoffCard, TieCard, WheelPickedCard } from './TieCards';
 import './gameday-tour.css';
+import { StartsSoonCard } from './Reveal';
 
 /** How long a score waits on the phone before it is sent (the card's Undo). */
 export const UNDO_MS = 5000;
@@ -609,6 +610,8 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
   if (!day.today) {
     return (
       <div className="tc-gd stack" data-tc-day="before">
+        {/* Zip 88: game day, before the night: "Games start soon" (the countdown in the last half hour). */}
+        {day.startsSoon && <StartsSoonCard startsAt={day.startsSoon.startsAt} />}
         <YourTeamCard t={t} day={day} onChanged={onChanged} />
         <GamesCard day={day} />
         {pools ? <PoolsCards day={day} /> : <TeamsCard day={day} />}
@@ -619,6 +622,7 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
   return (
     <div className="tc-gd stack" data-tc-day="night">
       <DayHero t={t} day={day} />
+      {day.startsSoon && <StartsSoonCard startsAt={day.startsSoon.startsAt} />}
       {day.partnerNote && !noteSeen && (
         <section className="tc-gd-note" role="status" data-tc-day-partner>
           <span>{day.partnerNote.text}</span>

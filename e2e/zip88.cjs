@@ -14,6 +14,8 @@
  *   F   A bar opens All rounds at that round.
  *   G   Start now (zip88_ready) at 320/390, light and dark: the pill is a solid green 44 px Start now; "Are you sure?" with two equal buttons;
  *       Not yet changes nothing; Yes: the night card with "0 of 2 in", and a player's phone shows Enter score within one check.
+ *   I   Games start soon (zip88_soon) at 320/390/420, light and dark: the card, "Starts in 20:00" ticking each second with no extra server
+ *       call, then Start now: the phone shows its game with Enter score within one check.
  *   H   Team names: Vic keeps Edit name on the night until Net Ninjas' first game has a score, then it is gone.
  * Screenshots: .data/zip88-shots (not in git).
  */
@@ -267,6 +269,48 @@ const cutOrBroken = (page, sel) =>
       assert(r.ok, `score ${r.status} ${JSON.stringify(r.body)}`);
       await p.page.waitForTimeout(6500);
       assert((await p.page.locator('button', { hasText: 'Edit name' }).count()) === 0, 'Edit name gone after the first score');
+      await p.ctx.close();
+    });
+    await check('I Games start soon: the countdown ticks on the phone, Start now brings the games', async () => {
+      for (const [width, scheme] of [[320, 'light'], [390, 'light'], [390, 'dark'], [420, 'dark']]) {
+        await b.stage('zip88_soon');
+        const p = await b.playerPage('Vic', { width, scheme });
+        const card = p.page.locator('[data-tc-waiting="start"]');
+        await card.waitFor({ timeout: 15000 });
+        assert(flat(await card.locator('.tc-rv-wait-title').textContent()) === 'Games start soon', 'the title');
+        const first = Number(await card.locator('[data-tc-countdown]').getAttribute('data-tc-countdown'));
+        assert(first > 18 * 60 && first <= 20 * 60 + 1, `about 20 minutes: ${first}`);
+        assert(/^Starts in (19|20):\d\d$/.test(flat(await card.locator('[data-tc-countdown]').textContent())), flat(await card.locator('[data-tc-countdown]').textContent()));
+        // Ticks each second with no extra server call (the usual 5 second check aside).
+        let calls = 0;
+        const count = (r) => { if (r.url().includes('/api/') && !r.url().includes('/version')) calls++; };
+        p.page.on('request', count);
+        await p.page.waitForTimeout(2200);
+        p.page.off('request', count);
+        const later = Number(await card.locator('[data-tc-countdown]').getAttribute('data-tc-countdown'));
+        assert(later <= first - 2 && later >= first - 3, `ticked: ${first} -> ${later}`);
+        assert(calls === 0, `${calls} extra calls`);
+        await b.noWider(p.page, `starts soon ${width}`);
+        const bad = await cutOrBroken(p.page, '[data-tc-waiting]');
+        assert(!bad.length, bad.join(', '));
+        await card.screenshot({ path: path.join(SHOTS, `I-soon-${width}-${scheme}.png`) });
+        if (width === 390 && scheme === 'light') {
+          await p.page.screenshot({ path: path.join(SHOTS, 'I-soon-home-390.png') });
+          // Start now (the organizer): the phone switches to its game within one check.
+          await b.call('POST', '/api/admin/tournament-test', { stage: 'none' }).catch(() => undefined);
+        }
+        await p.ctx.close();
+      }
+      // Start now from the stage's night (Americano: courts set, game day, before the start).
+      await b.stage('zip88_soon');
+      const p = await b.playerPage('Vic', { width: 390 });
+      await p.page.locator('[data-tc-waiting="start"]').waitFor({ timeout: 15000 });
+      const t = (await dash()).tournament;
+      assert(t.startNow === true, 'Start now offered');
+      await b.call('POST', `/api/admin/tournament/${t.id}/games`, { action: 'start' });
+      await p.page.locator('[data-tc-waiting="start"]').waitFor({ state: 'detached', timeout: 7000 });
+      const sits = (await dash()).tournament.rounds.sittingNow.includes('Vic');
+      if (!sits) await p.page.locator('[data-tc-enter-score]').waitFor({ timeout: 2000 });
       await p.ctx.close();
     });
   } finally {

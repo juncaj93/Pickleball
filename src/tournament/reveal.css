@@ -381,3 +381,20 @@
     left: 40px;
   }
 }
+
+/* Zip 88: "Games start soon" with the countdown under its line ("Starts in 24:10"); numbers that do not jump as they tick. */
+.tc-rv-wait-words {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tc-rv-wait-sub-line {
+  color: var(--tour-ink);
+  font-size: max(11px, 0.95rem);
+  font-weight: 600;
+}
+.tc-rv-wait-sub-line b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
