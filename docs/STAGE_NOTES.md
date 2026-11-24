@@ -8315,6 +8315,15 @@ others) check screens that are gone by design; the switch itself is unchanged in
    TEAM NAMES: server/tournamentDay.ts teamHasScore (canRename and playerTeamName); src/tournament/GameDayView.tsx keeps Your team on the night
    while canRename. Stage zip88_ready "Game day: ready to start now".
 
+6. Alex's preview round. SAVED COURTS: shared/rollingCourts.ts `pin` (a saved game goes on its court at its moment; a game the rule had put
+   there steps back off), PIN_PREFIX / pinOf / pinText / claimTime; saveAmericanoCourts (server/americanoDay.ts) and saveDoublesCourts
+   (server/tournamentDay.ts) write court + claim_at 'on:<ISO>' for every started, unsaved game, before and after every write of the night
+   (scores, Fix, Clear, Player left, the wheel, Start now; Tickets' Take off), updated_at untouched; every score write keeps claim_at; the Time
+   check reads claimTime (never a saved court). salesClosed counts Start now (Take off and Drop out close then too). GAMES START SOON:
+   PlayerRoundsView / PlayerDayView `startsSoon` (game day, not started), src/tournament/Reveal.tsx WaitingCard (title, sub) and
+   StartsSoonCard (serverNow, 1 s ticks in the last 30 minutes), shared/reveal.ts countdownText; stage zip88_soon "Player: 20 minutes before
+   start".
+
 ### Finding (told Alex, he left it to my judgment: ship the rule as written)
 On 8 to 10 player nights (both styles) the fair schedule always has someone of every later game still on the other court, so a freed court never
 finds a game it may start: courts wait exactly as before, The Cold Open plays as lockstep did. Early starts happen on 11 to 16 player Americano
@@ -8326,7 +8335,7 @@ Fixed: (1) a semifinal whose teams were known lost its court when a tie's wheel 
 (2) a game skipped by a team leaving, then cleared, could never be scored again; (3) a cleared score on a waiting court's last game read "Off,
 Done" and counted as in; (4) a bar went purple from a skipped game; (5) duplicate keys on the sitting balls; an unused prop. Kept and noted:
 the replay works from today's state, so a player taken off the list mid-night (no longer locked in) or a cleared pool score during the semis
-moves the courts as if it had always been so; the "8 min over" late words show in All rounds only (not on the card).
+moved the courts as if it had always been so: FIXED in Alex's round (saved courts); the "8 min over" late words show in All rounds only.
 
 ### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
 Dashboard 4 trips / 63 statements before and after at all_locked, mid, am_round3, final_on (and zip88_rd3, zip88_final after); 9.3 to 10.3 ms
