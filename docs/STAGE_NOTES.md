@@ -8112,3 +8112,36 @@ Fixed: (1) the "Fewer database trips off" speed test (an allowance of one more r
 (2) the lazy sheet could blank the page if its file failed (now loaded by hand with a Could not load sheet); (3) the organizer header went to two
 lines at 390 with the cup (now one line from 390 up); (4) the organizer's cup missed a first Americano (the hold now applies to players only);
 (5) the saved copy's cup could open a sheet that vanished (now held); (6) a failed read looked like "No champions yet" (now an error with Try again).
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world, "Fewer database trips" on as live)
+Dashboard 4 trips before and after (61 to 62 statements: the cup's tiny read rides the shared trip) at none, all_locked, mid and history: 8.7 /
+14.3 / 13.6 / 8.6 ms before, 8.9 / 14.5 / 13.2 / 9.0 ms after (noise); +17 bytes when there is a champion. The 5 second check: 2 trips / 16
+statements, unchanged. The wall loads only on the tap.
+
+### Tests
+Unit: 231 files, 4,345 passed, 2 skipped, 0 failed (new tests/zip83-champions.test.ts, 9: no champ no cup, End brings it, newest first, Only me
+never, the wall = the medals = the wins sheet, the Americano JSON mid-reveal, no name refused, Tournaments off). Updated on purpose:
+zip82-night-admin (doubles tiers $28 / medals, the price check +$14 for The Cold Open at 9, "no 2nd place in Locked doubles, to the cent" with $7
+saved), zip56-tickets and zip58-end back to before 🎾82 (no doubles 2nd place), readonly-pin (the two new GETs), zip62-speed (fewer-off
+allowance on the dashboard), zip48-split (budget 144.6). Browser: e2e/zip83.cjs 10 of 10 (320/390/420, light and dark, Christmas skin, the test
+page, the wall's file blocked); zip82 6 of 6; zip55 91 of 91; zip58 21 or 22 of 24: F light and dark fail as on main (Zip 79's results row), B
+depends on the wheel's random pick (passed 1 of 3 runs alone; no wheel code changed).
+
+### Preview
+`pickleball-preview` (fake): bookmark `000001d0-00000028-0000512d-efb04862202c1a2aa1f14fa2a5e7a30b` before the re-seed;
+https://claude-new-session-gz0d1h.pickleball-club-9h0.pages.dev. Calm start: History with tournaments (organizer Home: the Tournament test row
+and the two regular games, the cup in the header; View as Parker: the cup, the results row, Your games).
+
+### Live (Mon Nov 23, 2026, about 11:50 PM Eastern; loud hours, the windows waived by Alex until Dec 1)
+- Restore point first (`npm run backup:before-deploy`, no rate limit): export `export-20261124044621` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00001e35-00000000-0000512d-358db70860315fd6d69165777657c591`.
+- Integrity checks (scripts/integrity-checks.sql) before and after: 22 columns, every one 0. The extension and tournament check files were not
+  run this time (the session's tool guard refused a second live query); run them by hand if wanted (read-only, DEPLOY.md step 5).
+- Main fast-forwarded `e89c5c0` to `c7ea39f`, pushed; `npm run deploy -- --override-loud-hours` (the other guard rules passed): deployment
+  **08de95fc-0047-4dba-8691-b983e41e1eed** (bundle `index-C33R9mLO.js`). No migration, no Worker or Error box deploy, no live data touched; The Cold
+  Open unchanged.
+- Rollback: deployment **33b8b17c-74c2-43f9-98e2-141357556fe1** (🎾82), Cloudflare Deployments > Rollback. No database undo needed. (A rollback
+  would bring back 🎾82's Locked doubles 2nd place screens; The Cold Open's 2nd place credit is $0, so no money would move.)
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only; the custom domain is not reachable from this session's network): /, /admin,
+  /api/status 200; both Champions GETs 401 without a name or PIN; Home at 390 light and dark: the new bundle, no page errors, nothing wider than
+  the screen, no cup (nobody has won on live yet). Organizer screens not opened on live (no read-only PIN in this session).
