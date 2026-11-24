@@ -8176,3 +8176,47 @@ Quick items: Votes wraps between counts at 320 (was 14 px over); History tabs Ac
 space under 400 px); records "5-0" on both boards; "Credit adjusted by Alex"; "Pickleball cash out" Venmo note, "cash out" without a hyphen;
 curly quotes on the 96 switch lines in Activity; Finalize "Locked doubles".
 Stages (Tournament test, THIS_ZIP): "Americano: idle phone at the reveal" (zip85_idle) and "Didn’t pay after the night" (zip85_owed).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) MUST: Cancel or Reschedule after a Didn't pay on the night left the debt stuck (and blocked a new tournament): both now clear an
+owed ticket in their own batch (proof test); (2) Didn't pay said "Cleared" when the player now owes: the toast says "Kai owes $18"; (3) a phone
+laid down before the night started never woke: the night hold now runs from the tournament's date for a player in the night, until an hour after
+the planned end (an Americano reveal: 3 minutes after its hold, for a phone clock a little fast); (4) a fallback batch could hide the owe card:
+owed tickets come from the stamp only when its reads came back; (5) the Mark paid audit flag; (6) an I paid sent on an owed ticket keeps where it
+came from (claim_at 'owed:<time>'), so Paid gives it the spot it played in, while every other I paid after the night is as before (a hold that
+never got a spot still comes back as credit). Kept as notes: the Money card is on the Money rework screen (on live since Nov 5); a sheet open
+when the reveal board opens: Back folds the board first; Tournaments switched off hides owed tickets on both sides (they come back with it).
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world, "Fewer database trips" on as live)
+Dashboard 4 trips before and after at none, all_locked, mid, am_round3, am_done, final_done (62 to 63 statements: the owed tickets read rides
+the shared trip; +0 to 77 bytes); the 5 second check 2 trips / 16 statements, unchanged. Player Home (scripts/zip84-player-speed.ts, am_done):
+9 trips and 4 on the check before and after (43 to 44 and 25 to 26 statements: the owed read rides the tournament batch).
+
+### Tests
+Unit: 235 files, 4,373 passed, 2 skipped, 0 failed (new tests/zip85-final-fixes.test.ts, 12: Didn't pay after the last game (owed, still in the
+night, End, Totals $162 then $180 after Mark paid, to the cent, credit pots unchanged, all three integrity files 0), I paid then Paid, before the
+night as before, a canceled night clears the debt, one prize number (+$3 at 9 expected), the words, the idle poller; plus the 🎾84 proof tests
+zip84-americano / doubles / venue). Updated on purpose: the switch lines' curly quotes (19 files), the owe line, Americano prize words, the
+credit sheet's "Alex", zip48-split budget 144.6 to 145.6 KB (180 total), zip62-speed's Fewer-off allowance (+1 on the dashboard).
+Browser: e2e/zip85.cjs 4 of 4: A the idle phone (15 minutes untouched, screen on: 54 checks after minute 10.5, the waiting card 4.3 s after the
+last score, the board 3.3 s after the tap, in step within 2 ms of a fresh phone, the ticker and the cup at 37 s, no touch, no reload); B Back
+on both boards, iPhone-size and Android-size; C 320/360/390/420 light and dark (ticket line, organizer rows, History tabs, page width, Plan box =
+card "After full prizes", the owe card, its Pay sheet and Back, Money's card, 44 px Mark paid).
+
+### Preview
+`pickleball-preview` (fake): bookmark `000001d2-00000000-0000512d-c99cc354dd448048c4cf4a1f5d8b3cd2` before the re-seed;
+https://claude-new-session-cxc54x.pickleball-club-9h0.pages.dev. Calm start: "Didn't pay after the night" (Parker owes $16: View as Parker's
+Home, Money > Games). The other stage: "Americano: idle phone at the reveal".
+
+### Live (Tue Nov 24, 2026, about 10:20 AM Eastern; loud hours, the windows waived by Alex until Dec 1; no game running)
+- Restore point first (`npm run backup:before-deploy`, no rate limit): export `export-20261124151358` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00001ebc-00000000-0000512d-0fa5ed0288a5a90d71ba6dbac0fd436a`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `79eda2d` to `5fbe942`, pushed; `npm run deploy -- --override-loud-hours`: deployment
+  **784248b1-5163-490e-a6c7-cedf114149ee** (bundle `index-CgRimy_7.js`). No migration, no Worker or Error box deploy, no live data touched;
+  The Cold Open unchanged (Tue Dec 1, $18, 2 courts, 7:30 to 10 PM, tickets open).
+- Rollback: deployment **08de95fc-0047-4dba-8691-b983e41e1eed** (🎾83), Cloudflare Deployments > Rollback. No database undo needed (an owed
+  ticket, if any existed, reads to old code as an I paid waiting).
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; POST /api/tournament/owed-paid 401 without a name;
+  Home at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only
+  PIN in this session).
