@@ -204,9 +204,8 @@ async function main() {
         assert(words === 'FORMAT LET PLAYERS VOTE LOCKED DOUBLES SAME PARTNER ALL NIGHT AMERICANO NEW PARTNER EVERY ROUND', words);
         await oneLine(a.page, '[data-tm-card="format"] .tm-format-name');
         await fits(a.page, 'dialog[open]');
-        await a.page.locator('[data-tm-card="prize"]').scrollIntoViewIfNeeded();
-        const prize = flat(await a.page.locator('[data-tm-card="prize"]').innerText());
-        assert(prize.includes('Winner or 1st place') && prize.includes('2nd place'), prize);
+        // Zip 87: Create has no prize boxes any more (prizes live only in Prizes); none on the form.
+        assert((await a.page.locator('[data-tm-card="prize"]').count()) === 0, 'Create shows no prize card');
         await a.page.locator('[data-tm-card="format"]').scrollIntoViewIfNeeded();
         await shot(a.page, `A-create-${width}-${scheme}`);
         await noDash(a.page, 'Create');

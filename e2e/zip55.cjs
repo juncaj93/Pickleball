@@ -411,28 +411,35 @@ async function main() {
     finalDay = d.tournament.finalDate;
     assert(d.tournament.status === 'tickets' && finalDay === best && !!d.tournament.payBy, JSON.stringify([d.tournament.status, finalDay, best]));
   });
-  await check('G after the date is picked the admin card is picture 29 (Zip 56): Tickets opens the whole tournament page at the top (Zip 66: the name opens and closes the card) and it stays where you scroll', async () => {
+  await check('G after the date is picked the admin card is picture 29 (Zip 56): Tickets opens the whole tournament page at the top (Zip 66: the name opens and closes the card) and it stays where you scroll (Zip 87: Players opens the Players sheet; settings on the gear)', async () => {
     const a = await adminPage();
     // Zip 56 (picture 29, Alex): tickets are open: the button is Tickets (no Open tickets, no Edit); Zip 66: Tickets opens its page.
-    assert((await a.page.locator('[data-tm-tickets]').count()) === 1 && (await a.page.locator('[data-tm-open-tickets], [data-tm-open-edit]').count()) === 0, 'Tickets, no Open tickets, no Edit');
+    // Zip 87 round 2: the button is called Players (still data-tm-tickets) and opens the Players sheet (no tournament page any more).
+    assert((await a.page.locator('[data-tm-tickets]').count()) === 1 && (await a.page.locator('[data-tm-open-tickets], [data-tm-open-edit]').count()) === 0, 'Players, no Open tickets, no Edit');
+    assert(flat(await a.page.locator('[data-tm-tickets]').innerText()).startsWith('Players'), await a.page.locator('[data-tm-tickets]').innerText());
     await a.page.locator('[data-tm-tickets]').click(); // Zip 66: the name opens and closes the card; Tickets opens the page
-    await a.page.locator('[data-tm-page]').waitFor();
+    await a.page.locator('[data-tm-page="players"]').waitFor();
     await a.page.waitForTimeout(600);
     const top = await a.page.evaluate(() => document.querySelector('dialog[open] .sheet-body')?.scrollTop ?? document.querySelector('dialog[open]').scrollTop);
     assert(top === 0, `opened scrolled to ${top}`);
-    // Scroll down and it stays put.
-    await a.page.evaluate(() => {
+    // Scroll down and it stays put (Zip 87: the Players sheet is shorter than the old page: as far down as it goes, up to 400).
+    const want = await a.page.evaluate(() => {
       const b = document.querySelector('dialog[open] .sheet-body');
       const el = b && b.scrollHeight > b.clientHeight ? b : document.querySelector('dialog[open]');
       el.scrollTop = 400;
+      return el.scrollTop;
     });
     await a.page.waitForTimeout(1500);
     const after = await a.page.evaluate(() => {
       const b = document.querySelector('dialog[open] .sheet-body');
       return Math.max(b ? b.scrollTop : 0, document.querySelector('dialog[open]').scrollTop);
     });
-    assert(after >= 300, `snapped back to ${after}`);
-    assert((await a.page.locator('dialog[open] [data-tm-edit-settings]').count()) === 1, 'Edit settings is there');
+    assert(after >= Math.min(300, want), `snapped back to ${after} (scrolled to ${want})`);
+    assert((await a.page.locator('dialog[open] [data-tm-card="tickets"]').count()) === 1 && (await a.page.locator('dialog[open] [data-tm-card="levels"]').count()) === 1, 'the tickets and Levels');
+    // Zip 87 round 2: no Edit settings on the page any more; every setting is on the card's gear.
+    await a.page.keyboard.press('Escape');
+    await a.page.locator('[data-tm-page="players"]').waitFor({ state: 'detached', timeout: 10000 });
+    assert((await a.page.locator('[data-tm86-change]').count()) === 1, 'the gear is there');
     await a.ctx.close();
   });
   for (const scheme of SCHEMES)
@@ -504,11 +511,14 @@ async function main() {
         await shot(a.page, `I-create-top-${width}-${scheme}`);
         // Zip 56 (Alex): no players expected and no court plan on Create.
         assert((await a.page.locator('dialog[open] [data-tm-card="size"], dialog[open] .tm-plans').count()) === 0, 'no size or plan rows');
-        await a.page.locator('[data-tm-card="prize"]').scrollIntoViewIfNeeded();
+        // Zip 87 round 2: no prize boxes on Create (prizes live only in the card's Prizes); the last card is Who can see it.
+        assert((await a.page.locator('dialog[open] [data-tm-card="prize"], dialog[open] #tm-credit').count()) === 0, 'no prize boxes on Create');
+        await a.page.locator('dialog[open] [data-tm-card="who"]').scrollIntoViewIfNeeded();
+        await fits(a.page, 'dialog[open]');
         await shot(a.page, `I-create-prize-${width}-${scheme}`);
         await a.ctx.close();
       });
-  await check('I Create: a 32-letter name, three dates, $0 credit, Only me; then the card on Alex\'s phone', async () => {
+  await check('I Create: a 32-letter name, three dates, $0 credit, Only me; then the card on Alex\'s phone (Zip 87: no credit box, prizes start Not set)', async () => {
     const a = await adminPage();
     await a.page.locator('.tabbar button', { hasText: 'Settings' }).click();
     const sched = a.page.locator('[data-section="schedule"]');
@@ -529,9 +539,9 @@ async function main() {
     assert(big.every((h) => h >= 56 && h < 90), `heights ${big}`);
     const lines = await a.page.locator('.tm-format-name').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
     assert(lines.every((h) => h < 30), `a name wraps: ${lines}`);
-    await a.page.locator('#tm-credit').fill('0');
+    // Zip 87 round 2: no credit box or prize total on Create (a new tournament starts with $0 credit: prizes "Not set yet").
+    assert((await a.page.locator('#tm-credit, [data-tm-total], [data-tm-card="prize"]').count()) === 0, 'no prize boxes on Create');
     assert((await a.page.locator('.tm-says, [data-tm-card="players-see"]').count()) === 0, 'no "What players see" card (Alex took the prize line off the sign-up)');
-    assert(flat(await a.page.locator('[data-tm-total]').innerText()) === '$0', 'total $0');
     assert(flat(await a.page.locator('[data-tm-open-signup]').innerText()) === 'Open sign-up (only me)', 'the button');
     await a.page.locator('[data-tm-open-signup]').click();
     await a.page.locator('[data-tm-form]').waitFor({ state: 'detached', timeout: 10000 });
@@ -632,36 +642,56 @@ async function main() {
           await a.ctx.close();
         });
   }
-  await check('N Edit an Americano: Format shows Americano (can change), two prize rows 1st and 2nd; switch to Locked doubles and back in the form', async () => {
+  await check('N Edit an Americano: Format shows Americano (can change), two prize rows 1st and 2nd; switch to Locked doubles and back in the form (Zip 87: the gear\'s Style; the rows in Prizes)', async () => {
     // Zip 56 (Alex): picking the date opens tickets and locks the format, so this Edit is during sign-up.
     await call('POST', '/api/admin/tournament-test', { stage: 'signup', format: 'americano' });
     const a = await adminPage();
-    // Edit opens the tournament page; its Settings card's Edit opens the form (a pause first: the site drops a tap right after the last one).
-    await a.page.locator('[data-tm-open-edit]').click();
-    await a.page.locator('dialog[open] [data-tm-edit-settings]').waitFor({ timeout: 15000 });
+    // Zip 87 round 2: no Edit page: the card's gear opens the one settings sheet, its Style row is the format (a pause first: the site drops
+    // a tap right after the last one).
     await a.page.waitForTimeout(600);
-    await a.page.locator('dialog[open] [data-tm-edit-settings]').click();
-    await a.page.locator('[data-tm-form="edit"]').waitFor();
-    assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
-    assert(!(await a.page.locator('[data-format="doubles"]').isDisabled()), 'not locked before tickets open');
-    assert((await a.page.locator('#tm-credit2').inputValue()) === '7', 'the 2nd place credit');
-    const prize = flat(await a.page.locator('[data-tm-card="prize"]').innerText());
-    assert(prize.includes('1st place credit') && prize.includes('2nd place credit') && !prize.includes('Winners'), prize);
-    await a.page.locator('[data-format="doubles"]').click();
-    assert((await a.page.locator('#tm-credit2').count()) === 0 && flat(await a.page.locator('[data-tm-card="prize"]').innerText()).includes('Game credit for each winner'), 'Doubles rows');
-    await a.page.locator('[data-format="americano"]').click();
+    await a.page.locator('[data-tm86-change]').click();
+    const sheet = a.page.locator('dialog[open] [data-tm86-change-sheet]');
+    await sheet.waitFor({ timeout: 15000 });
+    assert((await sheet.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
+    assert(!(await sheet.locator('[data-format="doubles"]').isDisabled()), 'not locked before tickets open');
+    await a.page.waitForTimeout(500);
+    await sheet.locator('[data-format="doubles"]').click();
+    assert((await sheet.locator('[data-format="doubles"]').getAttribute('aria-pressed')) === 'true' && (await sheet.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'false', 'switched to Locked doubles');
+    await a.page.waitForTimeout(500);
+    await sheet.locator('[data-format="americano"]').click();
+    assert((await sheet.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'back to Americano');
     await shot(a.page, 'N-edit-americano');
+    await a.page.keyboard.press('Escape');
+    await sheet.waitFor({ state: 'detached', timeout: 10000 });
+    assert(((await dash()).tournament.format) === 'americano', 'nothing saved without Save');
+    // Zip 87: the prize rows live only in Prizes: the Americano box (planned, on top) has 1st place and 2nd place ($7, the 2nd place credit).
+    await a.page.waitForTimeout(600);
+    if (await a.page.locator('[data-tm86-prizes]').count()) await a.page.locator('[data-tm86-prizes]').first().click();
+    else {
+      await a.page.locator('[data-tm86-money]').first().click();
+      await a.page.locator('dialog[open] [data-tm86-set-prizes]').waitFor({ timeout: 10000 });
+      await a.page.waitForTimeout(600);
+      await a.page.locator('dialog[open] [data-tm86-set-prizes]').click();
+    }
+    const top = a.page.locator('dialog[open] [data-pz-box="americano"]');
+    await top.waitFor({ timeout: 10000 });
+    assert((await top.getAttribute('data-pz-top')) === 'true', 'the Americano box is on top (the planned style)');
+    const prize = flat(await top.innerText());
+    assert(prize.includes('1st place') && prize.includes('2nd place') && !prize.includes('team'), prize);
+    assert((await a.page.locator('dialog[open] [data-pz-money="americano-second"]').inputValue()) === '7', 'the 2nd place credit');
     await a.ctx.close();
   });
-  await check('N the date is picked (tickets open): the page says Americano and Edit can still change the style (Zip 64: until the night starts)', async () => {
+  await check('N the date is picked (tickets open): the page says Americano and Edit can still change the style (Zip 64: until the night starts) (Zip 87: the card and the gear)', async () => {
     await call('POST', '/api/admin/tournament-test', { stage: 'date_picked', format: 'americano' });
     const a = await adminPage();
-    await a.page.locator('[data-tm-tickets]').click(); // Zip 66: the name opens and closes the card; Tickets opens the page
-    assert(flat(await a.page.locator('[data-tm-format-row]').innerText()) === 'Americano', 'the Settings row');
-    await a.page.locator('[data-tm-edit-settings]').click();
-    await a.page.locator('[data-tm-form="edit"]').waitFor();
-    assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
-    assert(!(await a.page.locator('[data-format="doubles"]').isDisabled()), 'still free once tickets are open (Zip 64)');
+    // Zip 87 round 2: no tournament page (its Settings row is gone): the card's plan line names the style; the gear's Style can change it.
+    assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()).includes('Americano'), flat(await a.page.locator('[data-tm-home-plan]').innerText()));
+    await a.page.waitForTimeout(600);
+    await a.page.locator('[data-tm86-change]').click();
+    const sheet = a.page.locator('dialog[open] [data-tm86-change-sheet]');
+    await sheet.waitFor({ timeout: 15000 });
+    assert((await sheet.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
+    assert(!(await sheet.locator('[data-format="doubles"]').isDisabled()), 'still free once tickets are open (Zip 64)');
     await a.ctx.close();
   });
 
@@ -733,16 +763,23 @@ async function main() {
         await shot(a.page, `K-admin-home-passed-${width}-${scheme}`);
         await a.ctx.close();
       });
-  await check('K the organizer\'s Pick the date card says every date has passed and points to Edit', async () => {
+  await check('K the organizer\'s Pick the date card says every date has passed and points to Edit (Zip 87: to the gear\'s Dates offered)', async () => {
     const a = await adminPage();
     await a.page.locator('[data-tm-open-dates]').click();
+    // Zip 87 round 2: no Edit page; the note points to the gear's Dates offered.
     const note = flat(await a.page.locator('[data-tm-dates-note]').innerText());
-    assert(note === 'Every date you offered has passed. Tap Edit below to offer new ones.', note);
+    assert(note === 'Every date you offered has passed. Offer new ones with the gear: Dates offered.', note);
     assert((await a.page.locator('[data-tm-card="dates"] .tm-day.tm-open').count()) === 0, 'an offered date still looks open');
     assert((await a.page.locator('[data-tm-card="dates"] button.tm-day.tm-past').count()) === 0, 'a past date can be tapped');
     assert((await a.page.locator('[data-tm-card="dates"] .tm-day.tm-past').count()) > 0, 'the past dates are shown');
     await fits(a.page, 'dialog[open]');
     await shot(a.page, 'K-admin-dates-passed');
+    // Zip 87: where the note points: the gear has Dates offered.
+    await a.page.keyboard.press('Escape');
+    await a.page.locator('[data-tm-page="dates"]').waitFor({ state: 'detached', timeout: 10000 });
+    await a.page.waitForTimeout(600);
+    await a.page.locator('[data-tm86-change]').click();
+    await a.page.locator('dialog[open] [data-tm87-offer]').waitFor({ timeout: 10000 });
     await a.ctx.close();
   });
 
