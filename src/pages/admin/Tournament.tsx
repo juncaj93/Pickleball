@@ -73,13 +73,14 @@ function errText(err: unknown): string {
 function useSave(ctx: AdminCtx) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  async function save(fn: () => Promise<unknown>, done: string): Promise<boolean> {
+  // Zip 85: `done` may read the server's answer (Didn't pay after the night says who now owes, never "Cleared").
+  async function save(fn: () => Promise<unknown>, done: string | ((answer: unknown) => string)): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
     try {
-      await fn();
+      const answer = await fn();
       await ctx.reload();
-      toast(done);
+      toast(typeof done === 'function' ? done(answer) : done);
       return true;
     } catch (err) {
       toast(errText(err), 'error');
@@ -775,7 +776,7 @@ function TicketClaimCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView;
   const answer = (action: 'confirm' | 'reject') =>
     save(
       () => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId: k.playerId, action, cents: k.claimCents }),
-      action === 'reject' ? 'Cleared' : t.status === 'canceled' || k.out ? `${k.name}’s ${formatPrice(k.claimCents)} is credit now` : `${k.name}’s ${formatPrice(k.claimCents)} is in`,
+      action === 'reject' ? (r: unknown) => ((r as { owedCents?: number } | null)?.owedCents ? `${k.name} owes ${formatPrice((r as { owedCents: number }).owedCents)}` : 'Cleared') : t.status === 'canceled' || k.out ? `${k.name}’s ${formatPrice(k.claimCents)} is credit now` : `${k.name}’s ${formatPrice(k.claimCents)} is in`,
     );
   return (
     <AlertCard
@@ -1020,7 +1021,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
   const name = k?.name ?? s?.name ?? '';
   const owed = k ? Math.max(0, k.priceCents - k.creditCents - k.paidCents - k.claimCents) : t.ticketCents;
   const backCents = k ? k.creditCents + k.paidCents : 0;
-  const act = async (action: 'confirm' | 'reject' | 'mark_paid' | 'take_off', cents: number | undefined, done: string) => {
+  const act = async (action: 'confirm' | 'reject' | 'mark_paid' | 'take_off', cents: number | undefined, done: string | ((answer: unknown) => string)) => {
     const ok = await save(() => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId, action, ...(cents === undefined ? {} : { cents }) }), done);
     if (ok) onClose();
   };
@@ -1054,7 +1055,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
               <button type="button" className="btn confirm-safe" disabled={busy} onClick={() => void act('confirm', k.claimCents, `${name}’s ${formatPrice(k.claimCents)} is in`)} data-tm-ticket-paid>
                 Paid
               </button>
-              <button type="button" className="btn danger confirm-out" disabled={busy} onClick={() => void act('reject', k.claimCents, 'Cleared')} data-tm-ticket-not-paid>
+              <button type="button" className="btn danger confirm-out" disabled={busy} onClick={() => void act('reject', k.claimCents, (r: unknown) => ((r as { owedCents?: number } | null)?.owedCents ? `${name} owes ${formatPrice((r as { owedCents: number }).owedCents)}` : 'Cleared'))} data-tm-ticket-not-paid>
                 Didn’t pay
               </button>
             </div>

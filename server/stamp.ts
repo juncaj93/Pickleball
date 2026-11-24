@@ -197,7 +197,8 @@ export async function changeStampAndTour(
     stamp: (await sha256(raw)).slice(0, 16),
     ...(tourView !== undefined ? { tour: tourView } : {}),
     ...(awardsView !== undefined ? { awards: awardsView } : {}),
-    ...(tour ? { owed: owedView } : {}),
+    // Review: only when the tournament reads really came back in this trip (a fallback batch has none: the screen reads them itself).
+    ...(tour && pre ? { owed: owedView } : {}),
   };
 }
 

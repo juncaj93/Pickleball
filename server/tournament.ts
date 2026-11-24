@@ -2104,6 +2104,11 @@ export async function cancelTournament(ctx: Ctx) {
   const before = ticketsEverOpened(t) ? await loadTickets(ctx.db, t.id) : [];
   const [res] = await ctx.db.batch([
     ctx.db.prepare(`UPDATE tournaments SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ? ${OPEN_GUARD}`).bind(ctx.nowIso, ctx.nowIso, t.id),
+    // Zip 85 (review): a ticket owed after a Didn't pay on the night (claim_at 'owed') is no debt once the night is canceled: it goes, before the
+    // money-back statements (an I paid the player sent on it, 'owed:<time>', stays an I paid waiting, as every one on a canceled tournament).
+    ctx.db
+      .prepare(`UPDATE tournament_tickets SET claim_cents = 0, claim_at = NULL, updated_at = ?1 WHERE tournament_id = ?2 AND claim_at = 'owed' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?2 AND status = 'canceled')`)
+      .bind(ctx.nowIso, t.id),
     ...ticketBackStatements(ctx.db, { groupId: group.id, tournamentId: t.id, playerId: null, why: 'cancel', endedReason: 'canceled', nowIso: ctx.nowIso, when: tournamentCanceled }),
     // Zip 80: a kept late drop is off the list like any drop; its money came back just above, so it is no longer 'kept' (it was left 'kept'
     // forever, though nothing was held any more). Only once the tournament really is canceled (this batch).

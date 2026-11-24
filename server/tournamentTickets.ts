@@ -324,7 +324,7 @@ export async function setPayBy(ctx: Ctx, body: Record<string, unknown>) {
  *   take_off   off the list for them: everything on the ticket comes back as credit, the spot opens, the first PAID person in line takes it.
  * Works on a canceled tournament too (an I paid there still needs its answer). Every statement is guarded by the ticket as it was read.
  */
-export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
+export async function adminTicket(ctx: Ctx, body: Record<string, unknown>, markedPaid = false) {
   const group = await organizerOn(ctx);
   const id = v.id(ctx.params.id, 'tournament');
   const t = await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ? AND group_id = ?').bind(id, group.id).first<TournamentRow>();
@@ -355,7 +355,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
   const owedBefore = !!k && isOwedClaim(k);
   // An owed ticket, or an I paid sent on one since: Paid gives it the spot it played in.
   const fromOwed = !!k && k.claim_cents > 0 && fromOwedClaim(k.claim_at);
-  if (action === 'mark_paid' && fromOwed) return adminTicket(ctx, { ...body, action: 'confirm' });
+  if (action === 'mark_paid' && fromOwed) return adminTicket(ctx, { ...body, action: 'confirm' }, true);
   if (action === 'confirm' || action === 'reject') {
     if (!k || k.claim_cents === 0) throw new HttpError(409, 'nothing_waiting', `${name} has no I paid waiting. Look again.`);
     if (shown !== null && shown !== k.claim_cents) throw new HttpError(409, 'amount_changed', `${name}’s I paid changed. Look again.`);
@@ -399,7 +399,7 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
       group.id,
       null,
       action === 'confirm' ? 'tournament_ticket_confirmed' : owes ? 'tournament_ticket_owed' : 'tournament_ticket_rejected',
-      { tournament: t.name, player: name, playerId, amountCents: k.claim_cents, ...(credited ? { creditCents: credited } : {}), ...(body.action === 'mark_paid' ? { marked: true } : {}) },
+      { tournament: t.name, player: name, playerId, amountCents: k.claim_cents, ...(credited ? { creditCents: credited } : {}), ...(markedPaid ? { marked: true } : {}) },
       ctx.nowIso,
     );
     return { ok: true, ...answerOf(after), creditCents: credited, ...(owes ? { owedCents: k.claim_cents } : {}) };
@@ -482,6 +482,10 @@ export async function rescheduleTournament(ctx: Ctx) {
   const res = await ctx.db.batch([
     ctx.db
       .prepare("UPDATE tournaments SET status = 'rescheduled', final_date = NULL, date_picked_at = NULL, updated_at = ?1 WHERE id = ?2 AND status IN ('date_picked', 'tickets')")
+      .bind(ctx.nowIso, t.id),
+    // Zip 85 (review): a ticket owed after a Didn't pay on the night is no debt for a night that moved: it goes.
+    ctx.db
+      .prepare(`UPDATE tournament_tickets SET claim_cents = 0, claim_at = NULL, updated_at = ?1 WHERE tournament_id = ?2 AND claim_at = 'owed' AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?2 AND status = 'rescheduled')`)
       .bind(ctx.nowIso, t.id),
     ctx.db
       .prepare(

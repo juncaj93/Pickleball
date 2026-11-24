@@ -274,6 +274,22 @@ describe("zip 85 item 9: Didn't pay after the night started", () => {
     allBooks(ctx);
   });
 
+  it('a night canceled after the Didn\'t pay: the debt goes, nothing comes back for it, a new tournament is not held up', async () => {
+    const ctx = await coldOpen(11, { waiting: 'Kai' });
+    ctx.app.now = PAY_BY_MS + 60_000;
+    expect((await adminTour(ctx)).lockedIn).toBe(11);
+    ctx.app.now = START_MS + 60_000;
+    expect((await ticket(ctx, 'reject')).status).toBe(200);
+    const pot = potOf(ctx, 'Kai');
+    const c = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/cancel`, {});
+    expect(c.status, c.text).toBe(200);
+    expect(kaiTicket(ctx)).toMatchObject({ claim_cents: 0, claim_at: null, paid_cents: 0 });
+    expect(potOf(ctx, 'Kai')).toBe(pot);
+    expect(await owedOf(ctx, 'Kai')).toEqual([]);
+    expect(await adminOwed(ctx)).toEqual([]);
+    allBooks(ctx);
+  });
+
   it("before the night (after Pay by), Didn't pay is as before: no owed card, Kai is not locked in", async () => {
     const ctx = await coldOpen(11, { waiting: 'Kai' });
     ctx.app.now = PAY_BY_MS + 60_000;

@@ -243,7 +243,7 @@ route('POST', '/api/admin/tournament/:id/hide', tournament.hideTournament);
 // Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Pay by, the answers on one ticket, Reschedule. (Tickets open when the date is
 // picked: PUT .../date above. Alex: no Open tickets button.)
 route('PUT', '/api/admin/tournament/:id/pay-by', tickets.setPayBy);
-route('POST', '/api/admin/tournament/:id/ticket', tickets.adminTicket);
+route('POST', '/api/admin/tournament/:id/ticket', (ctx, body) => tickets.adminTicket(ctx, body));
 route('POST', '/api/admin/tournament/:id/reschedule', (ctx) => tickets.rescheduleTournament(ctx));
 // Zip 57 (server/tournamentDay.ts): Tournaments, piece 3. Draft, swap, name and publish teams, the courts' numbers; results, Time check, Pause,
 // Player left.

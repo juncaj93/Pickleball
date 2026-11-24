@@ -7,6 +7,7 @@ import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
+import { zonedTimeToUtc } from '../../shared/time';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, dropMoneyLine, joinedCreditText } from '../../shared/credit';
 import { adjustedPlayerLine, latestAdjustment, signedPrice } from '../../shared/adjustCredit';
@@ -476,8 +477,21 @@ export function PlayerHome({
   // reveal plays and holds the winner back, plus a minute), Home keeps its 5 second check instead of stopping after 10 quiet minutes, so the
   // reveal starts on time and the cup and the ticker arrive after. A hidden tab or a dark screen still checks nothing. The 2 second check stays
   // only on the waiting card. Locked doubles: until End tournament (the results row then brings the cup and the ticker at once).
-  const nightDay = g?.tournament?.day;
-  const nightUntil = !nightDay || !nightDay.started ? null : g?.tournament?.reveal ? g.tournament.reveal.tapMs + REVEAL_HOLD_MS + 60_000 : g?.tournament?.results ? null : Infinity;
+  // Review: from the start of the tournament's DATE (a phone laid down before the night starts never sees "started" otherwise), for a player
+  // in the night (the night's view, or a spot), until an hour after the night's planned end; an Americano reveal holds it until 3 minutes
+  // after its hold (a phone clock a little fast still sees the cup and the ticker); ended (Locked doubles): the usual rhythm.
+  const tourNow = g?.tournament;
+  const nightUntil = useMemo(() => {
+    if (!tourNow || !g) return null;
+    if (tourNow.reveal) return tourNow.reveal.tapMs + REVEAL_HOLD_MS + 3 * 60_000;
+    if (tourNow.results || tourNow.status === 'canceled' || tourNow.status === 'ended' || !tourNow.finalDate) return null;
+    if (!tourNow.day && tourNow.tickets?.mine?.place !== 'spot') return null;
+    const [y, m, d] = tourNow.finalDate.split('-').map(Number);
+    const dayStart = zonedTimeToUtc(y, m, d, 0, 0, g.group.timezone || DEFAULT_TIMEZONE);
+    const until = dayStart + (tourNow.start + tourNow.minutes + 60) * 60_000;
+    const now = Date.parse(g.now);
+    return now >= dayStart && now < until ? until : null;
+  }, [tourNow, g]);
   useLiveUpdates({
     enabled: !!g && !!g.me && !switching && !viewAs && !pretend && !holdRefresh,
     version: g?.version ?? null,
