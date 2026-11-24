@@ -41,7 +41,9 @@ import {
   tournamentsFlags,
   type TournamentActor,
   type TournamentRow,
+  TOURNAMENT_COLS,
 } from './tournament';
+import { saveAmericanoCourts } from './americanoDay';
 import {
   fillSpotsStatements,
   keptOff,
@@ -327,7 +329,7 @@ export async function setPayBy(ctx: Ctx, body: Record<string, unknown>) {
 export async function adminTicket(ctx: Ctx, body: Record<string, unknown>, markedPaid = false) {
   const group = await organizerOn(ctx);
   const id = v.id(ctx.params.id, 'tournament');
-  const t = await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ? AND group_id = ?').bind(id, group.id).first<TournamentRow>();
+  const t = await ctx.db.prepare(`SELECT ${TOURNAMENT_COLS} FROM tournaments WHERE id = ? AND group_id = ?`).bind(id, group.id).first<TournamentRow>();
   if (!t) throw new HttpError(404, 'not_found', 'That tournament is gone. Look again.');
   const playerId = v.id(body.playerId, 'playerId');
   const action = v.oneOf(body.action, 'action', ['confirm', 'reject', 'mark_paid', 'take_off'] as const);
@@ -337,6 +339,8 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>, marke
   const name = player.display_name;
   const k = await ticketOf(ctx.db, t.id, playerId);
   const signup = await mySignup(ctx.db, t.id, playerId);
+  // Zip 88: taking a player off an Americano night that has its games: the courts as they are, saved first (a started game never moves).
+  if (action === 'take_off' && t.format === 'americano' && t.status === 'tickets') await saveAmericanoCourts(ctx, t, group.timezone);
   const night = nightOf(t, group.timezone);
   const endIso = night ? new Date(night.end).toISOString() : null;
   // When the money on a ticket comes back as credit at once: its player is off the list, the tournament is canceled, or the night is over and

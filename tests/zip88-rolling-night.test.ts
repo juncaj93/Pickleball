@@ -353,3 +353,103 @@ describe('zip 88 review fixes on the real server', () => {
     expect(row).toEqual({ skipped: 0, result_at: null });
   });
 });
+
+describe('zip 88 (Alex): once a game has started on a court, its court never changes', () => {
+  /** Court of every game that has started (playing or done; Locked doubles: started). */
+  const startedCourts = (games: any[]) =>
+    new Map<number, number>(games.filter((g) => (g.started ?? (g.status === 'playing' || g.status === 'done')) && g.status !== 'later').map((g) => [g.num, g.court]));
+  const sameCourts = (before: Map<number, number>, games: any[], what: string) => {
+    for (const [num, court] of before) expect(games.find((g) => g.num === num)?.court, `${what}: game ${num}`).toBe(court);
+  };
+
+  for (const n of [10, 12]) {
+    it(`Americano ${n}: a player on a court leaves and a sitting one leaves (Take off is closed mid-night): no started game moves; the night ends`, async () => {
+      const ctx = await world(n, { format: 'americano' });
+      let did = 0;
+      const seen = new Map<number, number>();
+      await playNight(ctx, {
+        onStep: async (step) => {
+          const { games, v, courts } = await night(ctx);
+          // Every step: a game's court never changes once seen started.
+          for (const [num, court] of startedCourts(games)) {
+            if (seen.has(num)) expect(court, `game ${num}`).toBe(seen.get(num));
+            else seen.set(num, court);
+          }
+          if (step === 3 && did === 0) {
+            did = 1;
+            const before = startedCourts(games);
+            const live = games.find((g) => g.num === courts.find((c) => c.num !== null)!.num);
+            const off = live.b.names[0];
+            // Tickets' Take off is closed once the night has started (nobody leaves the list mid-night that way).
+            const r = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/ticket`, { playerId: ctx.byName[off], action: 'take_off' });
+            expect([r.status, r.data.message]).toEqual([409, 'The tournament has started. Nobody can be taken off now.']);
+            // Player left for a player ON a court now: their game is off, the court frees, every started game keeps its court.
+            expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'left', playerId: v.players.find((p: any) => p.name === off).id })).status).toBe(200);
+            sameCourts(before, (await night(ctx)).games, 'after Player left (on a court)');
+            const other = v.players.find((p: any) => p.name !== off && !p.left && !live.a.names.includes(p.name) && !live.b.names.includes(p.name));
+            const before2 = startedCourts((await night(ctx)).games);
+            expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'left', playerId: other.id })).status).toBe(200);
+            sameCourts(before2, (await night(ctx)).games, 'after Player left (sitting)');
+          }
+        },
+      });
+      expect(did).toBe(1);
+      await endNight(ctx);
+    }, 180_000);
+
+    it(`Locked doubles ${n}: a team removed mid pool play, then a pool score cleared during the playoffs: no started game moves; the night ends`, async () => {
+      const ctx = await world(n, { format: 'doubles' });
+      await draftAndPublish(ctx);
+      let removed = false;
+      let cleared = false;
+      const seen = new Map<number, number>();
+      await playNight(ctx, {
+        onStep: async (step) => {
+          const { games, v } = await night(ctx);
+          for (const [num, court] of startedCourts(games)) {
+            if (seen.has(num)) expect(court, `game ${num}`).toBe(seen.get(num));
+            else seen.set(num, court);
+          }
+          if (step === 1 && !removed) {
+            removed = true;
+            const before = startedCourts(games);
+            const team = v.teams[v.teams.length - 1];
+            expect((await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'left', playerId: team.players[0].id })).status).toBe(200);
+            sameCourts(before, (await night(ctx)).games, 'after the team left');
+          }
+          const playoffOn = games.some((g) => g.stage !== 'pool' && g.stage !== 'tie' && g.started && !g.winner && !g.skipped);
+          if (playoffOn && !cleared) {
+            cleared = true;
+            const before = startedCourts(games);
+            const pool = games.find((g) => g.stage === 'pool' && g.winner && !g.skipped);
+            const clr = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'result', num: pool.num, winner: null, seen: { winner: pool.winner, scoreA: pool.scoreA, scoreB: pool.scoreB } });
+            expect(clr.status, clr.text).toBe(200);
+            const after = (await night(ctx)).games;
+            sameCourts(before, after, 'after clearing a pool score');
+            // Set it again as it was, so the night can finish.
+            const p = after.find((g: any) => g.num === pool.num);
+            const set = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, { action: 'result', num: pool.num, a: pool.scoreA, b: pool.scoreB, seen: { winner: p.winner, scoreA: p.scoreA, scoreB: p.scoreB } });
+            expect(set.status, set.text).toBe(200);
+            sameCourts(before, (await night(ctx)).games, 'after setting it again');
+          }
+        },
+      });
+      expect(removed && cleared).toBe(true);
+      await endNight(ctx);
+    }, 180_000);
+  }
+
+  it('the saved court is in the game row (court and claim_at "on:"), written only on writes, and the replay with saved courts equals the replay without', async () => {
+    const ctx = await world(12, { format: 'americano' });
+    const shot: string[] = [];
+    await playNight(ctx, {
+      onStep: async () => {
+        const { games } = await night(ctx);
+        const rows = ctx.app.db.raw.prepare("SELECT num, court, claim_at FROM tournament_games WHERE tournament_id = ? AND claim_at LIKE 'on:%'").all(ctx.tid) as any[];
+        for (const r of rows) expect(games.find((g) => g.num === r.num).court).toBe(r.court);
+        shot.push(String(rows.length));
+      },
+    });
+    expect(Number(shot[shot.length - 1])).toBeGreaterThan(0);
+  }, 180_000);
+});

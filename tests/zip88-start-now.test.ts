@@ -15,7 +15,8 @@ async function money(ctx: World) {
   return JSON.stringify([
     ctx.app.db.raw.prepare('SELECT * FROM credit_ledger ORDER BY rowid').all(),
     ctx.app.db.raw.prepare('SELECT * FROM tournament_tickets ORDER BY rowid').all(),
-    t.money,
+    // The amounts (the money line's `closed` flag does flip: tickets close when the night starts).
+    { ...t.money, closed: undefined },
     t.cost,
     t.start,
     t.minutes,

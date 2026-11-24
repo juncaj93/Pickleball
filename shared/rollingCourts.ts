@@ -29,6 +29,11 @@ export interface RollGame {
   gone?: boolean;
   /** It exists only from this moment (a tie game made when the wheel spun): ms. */
   from?: number;
+  /**
+   * Zip 88 (Alex): its court is SAVED (it went on this court at `at`, ms; 0 for the games the night opened with). A saved game stays on that court
+   * whatever changes later (a player taken off, a score cleared): the rule only places games that are not saved yet, around the saved ones.
+   */
+  pin?: { court: number; at: number };
 }
 
 export interface RollResult {
@@ -76,6 +81,7 @@ export function rollCourts(games: readonly RollGame[], courts: number): RollResu
       const on = busy();
       const i = list.findIndex(
         (g, k) =>
+          !g.pin &&
           !done.has(g.num) &&
           !started.has(g.num) &&
           (g.from ?? -Infinity) <= t &&
@@ -91,8 +97,35 @@ export function rollCourts(games: readonly RollGame[], courts: number): RollResu
       startAt.set(g.num, t);
     }
   };
-  // The moments something happens: each finish, and each tie game appearing.
-  const moments = [...new Set([...list.filter((g) => g.doneAt !== null).map((g) => g.doneAt!), ...list.filter((g) => g.from !== undefined).map((g) => g.from!)])].sort((a, b) => a - b);
+  // A saved game goes on its saved court at its saved moment. A game the rule had put there (not saved) steps back off and waits again; a saved
+  // game that already finished only keeps its court (it occupies nothing now).
+  const placePins = (t: number) => {
+    for (const g of list) {
+      if (!g.pin || g.pin.at !== t || started.has(g.num)) continue;
+      const c = Math.max(0, Math.min(n - 1, g.pin.court - 1));
+      started.add(g.num);
+      court.set(g.num, c + 1);
+      startAt.set(g.num, t);
+      if (done.has(g.num)) continue;
+      const there = onCourt[c];
+      if (there !== null) {
+        const other = list[index.get(there)!];
+        if (other.pin) continue;
+        started.delete(there);
+        court.delete(there);
+        startAt.delete(there);
+      }
+      onCourt[c] = g.num;
+    }
+  };
+  // The moments something happens: each finish, each tie game appearing, each saved start.
+  const moments = [
+    ...new Set([
+      ...list.filter((g) => g.doneAt !== null).map((g) => g.doneAt!),
+      ...list.filter((g) => g.from !== undefined).map((g) => g.from!),
+      ...list.filter((g) => g.pin).map((g) => g.pin!.at),
+    ]),
+  ].sort((a, b) => a - b);
   fill(-Infinity);
   for (const t of moments) {
     for (const g of list) {
@@ -105,6 +138,7 @@ export function rollCourts(games: readonly RollGame[], courts: number): RollResu
         freeSince[c] = t;
       }
     }
+    placePins(t);
     fill(t);
   }
   return { court, startAt, onCourt, lastOn, freeSince };
@@ -127,3 +161,19 @@ export function startable(games: readonly RollGame[], r: RollResult): number[] {
     })
     .map((g) => g.num);
 }
+
+/**
+ * Zip 88 (Alex): how a game's saved court is kept, with no migration: the game row's own `court` column holds the court, and its `claim_at`
+ * (unused for games since Zip 71: nothing waits for a Yes) holds "on:" and the moment it went on (the epoch for the games the night opened
+ * with). Anything else in claim_at (an old claim's time) is not a saved court.
+ */
+export const PIN_PREFIX = 'on:';
+export const isPinText = (v: string | null | undefined): boolean => typeof v === 'string' && v.startsWith(PIN_PREFIX);
+export function pinOf(claimAt: string | null | undefined, court: number): { court: number; at: number } | undefined {
+  if (!isPinText(claimAt)) return undefined;
+  const at = Date.parse(claimAt!.slice(PIN_PREFIX.length));
+  return Number.isFinite(at) ? { court, at } : undefined;
+}
+export const pinText = (at: number): string => PIN_PREFIX + new Date(Number.isFinite(at) && at > 0 ? at : 0).toISOString();
+/** A claim_at that is a real time (an old claim), or null (a saved court is not a time a game finished). */
+export const claimTime = (v: string | null | undefined): string | null => (v && !isPinText(v) ? v : null);

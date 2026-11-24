@@ -18,7 +18,7 @@ import { newId } from './crypto';
 import * as v from './validate';
 import { audit } from './repo';
 import { type AdminRoundGame, type AdminRoundsView, type CourtNow, type PlayerRound, type PlayerRoundsView, shortAlertOf } from '../shared/tournament';
-import { rollCourts } from '../shared/rollingCourts';
+import { claimTime, isPinText, pinOf, pinText, rollCourts } from '../shared/rollingCourts';
 import { firstAnswer, saidScore } from '../shared/partnerTaps';
 import { MAX_SCORE } from '../shared/scores';
 import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
@@ -204,15 +204,19 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
   // time. A game called off by a rule with no time (no longer locked in) is simply not part of the replay.
   const roll = rollCourts(
     games.map((g) => {
-      const at = g.resultAt ?? g.claimAt;
+      const at = g.resultAt ?? claimTime(g.claimAt);
       const finished = decided(g) || !!g.resultAt;
+      // Zip 88 (Alex): a game whose court is saved keeps it (the row's court and claim_at, saved after every write).
+      const pin = g.row ? pinOf(g.row.claim_at, g.row.court) : undefined;
       return {
         num: g.num,
         round: g.round,
         rank: 0,
         players: [...g.a, ...g.b],
-        doneAt: finished ? (at ? Date.parse(at) : -1e15) : null,
-        ...(g.skipped && !at ? { gone: true } : {}),
+        // A game off with no time (a player no longer locked in): gone, unless it is saved on a court: then it leaves that court now.
+        doneAt: finished ? (at ? Date.parse(at) : -1e15) : g.skipped && pin ? nowMs : null,
+        ...(g.skipped && !at && !pin ? { gone: true } : {}),
+        ...(pin ? { pin } : {}),
       };
     }),
     courtsOf(t),
@@ -239,7 +243,7 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
   const states: RoundState[] = [];
   for (let r = 1; r <= rounds; r++) {
     const list = games.filter((g) => g.round === r);
-    const times = list.map((g) => g.resultAt ?? g.claimAt).filter((x): x is string => !!x);
+    const times = list.map((g) => g.resultAt ?? claimTime(g.claimAt)).filter((x): x is string => !!x);
     const done = list.every(decided);
     states.push({
       round: r,
@@ -552,6 +556,27 @@ async function ensureRows(ctx: Ctx, t: TournamentRow, n: Awaited<ReturnType<type
   return day.games;
 }
 
+/**
+ * Zip 88 (Alex): SAVE THE COURTS. Every game that is on a court now, or was, gets its court written into its own row (court, and claim_at
+ * "on:<when>"), once: from then on it never moves, whatever changes later (a player taken off, a score cleared). Run after every write of the
+ * night (and before one that could change who plays). Only rows not saved yet are written; updated_at is not touched, so nobody's screen is
+ * told "this just changed". Reads never write: between two writes the rule works the same way from the rows.
+ */
+export async function saveAmericanoCourts(ctx: Ctx, t: TournamentRow, tz: string): Promise<void> {
+  const night = await readNight(ctx.db, t).catch(() => null);
+  if (!night || !americanoRows(night.games).length) return;
+  const f = amFacts(t, night.signups, night.tickets, night.games, tz, ctx.nowMs);
+  const writes = f.games.filter((g) => g.started && g.row && !isPinText(g.row.claim_at));
+  if (!writes.length) return;
+  await ctx.db.batch(
+    writes.map((g) =>
+      ctx.db
+        .prepare("UPDATE tournament_games SET court = ?, claim_at = ? WHERE id = ? AND (claim_at IS NULL OR claim_at NOT LIKE 'on:%')")
+        .bind(g.court, pinText(g.startMs ?? 0), g.row!.id),
+    ),
+  );
+}
+
 /** A score from the screen: two whole numbers 0 to 30, not equal (a game has a winner). Zip 72: Locked doubles uses the same check. */
 function readScore(raw: unknown, label: string): number {
   // Zip 72 (review): a real number only; null, "", [] or true never read as 0 or 1.
@@ -606,6 +631,9 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   // A bad score is refused before anything is written.
   const sent = readPair(body, 'mine', 'theirs');
   const rows = await ensureRows(ctx, t, night, ctx.nowIso);
+  // Zip 88: the courts as they are, saved before this score moves anything.
+  await saveAmericanoCourts(ctx, t, tz);
+  // (Saving a court never touches updated_at, so the row as read still guards the write.)
   const row = americanoRows(rows).find((r) => r.num === num);
   if (!row) bad('tournament_changed', 'This just changed. Look again.');
   const g = fromRow(row!);
@@ -621,7 +649,7 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   }
   const res = await ctx.db
     .prepare(
-      `UPDATE tournament_games SET score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'players', updated_at = ?
+      `UPDATE tournament_games SET score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = ?, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'players', updated_at = ?
        WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND claim IS NULL
          AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
     )
@@ -637,6 +665,8 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   }
   const words = `${pairNames(before, x > y ? g.a : g.b).join(' + ')} won ${Math.max(x, y)} to ${Math.min(x, y)}`;
   await logPlayer(ctx, who.group, playerId, 'tournament_result', { tournament: t.name, game: num, round: g.round, result: words, by: 'player' });
+  // Zip 88: the next games this score put on the courts, saved.
+  await saveAmericanoCourts(ctx, t, tz);
   return { ok: true, result: 'score' };
 }
 
@@ -674,6 +704,8 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   }
   if (action === 'left' && !before.roster.includes(v.id(body.playerId, 'playerId'))) bad('tournament_changed', 'They are not in the night.');
   const rows = await ensureRows(ctx, t, night, nowIso);
+  // Zip 88: the courts as they are, saved before this tap changes anything (Player left, a cleared score never moves a started game).
+  await saveAmericanoCourts(ctx, t, group.timezone);
   const am = americanoRows(rows).map(fromRow);
 
   if (action === 'apply') {
@@ -704,7 +736,7 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
       skip.map((g) =>
         ctx.db
           .prepare(
-            `UPDATE tournament_games SET skipped = 1, winner = NULL, claim = NULL, claim_at = NULL, score_a = NULL, score_b = NULL, disputed_at = NULL,
+            `UPDATE tournament_games SET skipped = 1, winner = NULL, claim = NULL, score_a = NULL, score_b = NULL, disputed_at = NULL,
                claim_by = ?, result_by = 'skipped', result_at = COALESCE(result_at, ?), updated_at = ? WHERE id = ? AND updated_at = ? AND winner IS NULL AND claim IS NULL AND skipped = 0`,
           )
           .bind(playerId, nowIso, nowIso, g.row!.id, g.row!.updated_at),
@@ -712,6 +744,7 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
     );
     if (res.every((r) => (r.meta?.changes ?? 0) === 0)) bad('tournament_changed', 'This just changed. Look again.');
     await audit(ctx.db, group.id, null, 'tournament_player_left', { tournament: t.name, player: nameOf(before, playerId), skipped: skip.length, rounds: skip.map((g) => g.round).join(', ') }, nowIso);
+    await saveAmericanoCourts(ctx, t, group.timezone);
     return { ok: true, skipped: skip.length };
   }
 
@@ -734,15 +767,16 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   if (action === 'score') {
     const [x, y] = pair!;
     // Zip 88: a Fix keeps the moment the game first finished (result_at): rolling courts replay the night from those moments.
-    res = await run("score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'organizer'", x, y, x > y ? 'a' : 'b', nowIso);
+    res = await run("score_a = ?, score_b = ?, winner = ?, claim = NULL, claim_by = NULL, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'organizer'", x, y, x > y ? 'a' : 'b', nowIso);
     details = { score: `${Math.max(x, y)} to ${Math.min(x, y)}`, winnerPlayers: pairNames(before, x > y ? g!.a : g!.b).join(' + ') };
   } else {
     // Zip 88: Clear keeps result_at: the game was played on its court (the courts stay as they were); it needs a score again.
-    res = await run('score_a = NULL, score_b = NULL, winner = NULL, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, result_by = NULL');
+    res = await run('score_a = NULL, score_b = NULL, winner = NULL, claim = NULL, claim_by = NULL, disputed_at = NULL, result_by = NULL');
     details = { cleared: true };
   }
   if ((res.meta?.changes ?? 0) === 0) bad('tournament_changed', 'This just changed. Look again.');
   await audit(ctx.db, group.id, null, 'tournament_result', { tournament: t.name, game: num, round: g!.round, ...details, by: 'organizer' }, nowIso);
+  await saveAmericanoCourts(ctx, t, group.timezone);
   return { ok: true };
 }
 

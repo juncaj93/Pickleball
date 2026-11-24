@@ -227,6 +227,8 @@ export const START_TASK = 'tournament_start:';
 const START_COL = (idRef: string) => `${markDetailSql(START_TASK, idRef)} AS started_early`;
 const markDetailSql = (prefix: string, idRef: string) =>
   `(SELECT h.detail FROM task_log h WHERE h.session_id IS NULL AND h.task = '${prefix}' || ${idRef} AND h.kind IN ('mark', 'sent') AND h.kind = 'mark' LIMIT 1)`;
+/** Zip 88: every column of a tournament row and Start now's time, for a write's own read (`SELECT ${TOURNAMENT_COLS} FROM tournaments ...`). */
+export const TOURNAMENT_COLS = `*, ${START_COL('tournaments.id')}`;
 
 /** The stages a tournament is open in: piece 1's two, then piece 2's (Zip 56) tickets and rescheduled. Later pieces add theirs here. */
 const OPEN = "('signup', 'date_picked', 'tickets', 'rescheduled')";
@@ -789,7 +791,8 @@ export const heldSpotSincePayBy = (t: TournamentRow, k: { place: string; place_a
 /** Ticket sales are closed: the tournament night has started. */
 export const salesClosed = (t: TournamentRow, tz: string, nowMs: number) => {
   const n = nightOf(t, tz);
-  return !!n && nowMs >= n.start;
+  // Zip 88: Start now closes them too (the night has started).
+  return !!n && nowMs >= Math.min(n.start, nightStartMs(t, tz));
 };
 
 /** The tournament night is over (10:00 PM on the date): it has been played, so nothing gives its tickets back any more. */

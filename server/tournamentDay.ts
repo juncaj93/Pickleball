@@ -65,11 +65,11 @@ import {
   TIE_TO,
 } from '../shared/tournamentSchedule';
 import { startMsOf, ticketOwed } from '../shared/tournamentTickets';
-import { rollCourts, type RollResult } from '../shared/rollingCourts';
+import { claimTime, isPinText, pinOf, pinText, rollCourts, type RollResult } from '../shared/rollingCourts';
 import { diffLabel } from '../shared/scores';
 import type { CourtNow } from '../shared/tournament';
 import type { TicketWithName } from './tournamentMoney';
-import { americanoGameAction, americanoGamesAction, NOT_ON_COURT, readPair } from './americanoDay';
+import { americanoGameAction, americanoGamesAction, NOT_ON_COURT, readPair, saveAmericanoCourts } from './americanoDay';
 import {
   firstName,
   logPlayer,
@@ -369,16 +369,19 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const roll = rollCourts(
     planned.map((g) => {
       const r = resolved.get(g.num);
-      const at = g.result_at ?? g.claim_at;
+      const at = g.result_at ?? claimTime(g.claim_at);
       const finished = decided(g) || !!g.result_at;
+      // Zip 88 (Alex): a game whose court is saved keeps it (its row's court and claim_at, saved after every write).
+      const pin = pinOf(g.claim_at, g.court);
       return {
         num: g.num,
         round: g.round,
         rank: STAGE_ORDER[g.stage] ?? 2,
         players: r?.a && r?.b ? [`T${r.a}`, `T${r.b}`] : [],
-        doneAt: finished ? (at ? Date.parse(at) : -1e15) : null,
-        ...(g.skipped && !at ? { gone: true } : {}),
+        doneAt: finished ? (at ? Date.parse(at) : -1e15) : g.skipped && pin ? nowMs : null,
+        ...(g.skipped && !at && !pin ? { gone: true } : {}),
         ...(g.stage === 'tie' ? { from: Date.parse(g.created_at) } : {}),
+        ...(pin ? { pin } : {}),
       };
     }),
     courtsOf(t),
@@ -402,8 +405,8 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     // spins: the round's own games wait for them (tiesEnd), and they never count as that round's playoff minutes.
     const tieList = all.filter((g) => g.stage === 'tie');
     const list = tieList.length && tieList.length < all.length ? all.filter((g) => g.stage !== 'tie') : all;
-    const times = all.map((g) => g.result_at ?? g.claim_at).filter((x): x is string => !!x);
-    const tieTimes = tieList.map((g) => g.result_at ?? g.claim_at).filter((x): x is string => !!x);
+    const times = all.map((g) => g.result_at ?? claimTime(g.claim_at)).filter((x): x is string => !!x);
+    const tieTimes = tieList.map((g) => g.result_at ?? claimTime(g.claim_at)).filter((x): x is string => !!x);
     const tiesEnd =
       list === all
         ? undefined
@@ -661,6 +664,27 @@ function standingsNowOf(f: DayFacts, names: ReadonlyMap<string, string>): NonNul
       };
     }),
   }));
+}
+
+/**
+ * Zip 88 (Alex): SAVE THE COURTS (Locked doubles; see saveAmericanoCourts): every game on a court now, or played, gets its court written into
+ * its row once (court, claim_at "on:<when>"), so it never moves later (a team removed, a pool score cleared during the semis). After every
+ * write of the night, and before one that could change who plays. updated_at is not touched.
+ */
+export async function saveDoublesCourts(ctx: Ctx, t: TournamentRow, tz: string): Promise<void> {
+  if (!t.teams_at) return;
+  const day = await loadDay(ctx.db, t.id);
+  if (!day.games.length) return;
+  const f = facts(t, day.teams, day.games, tz, ctx.nowMs, day.ties ?? []);
+  const writes = f.games.filter((g) => f.startedNums.has(g.num) && !isPinText(g.claim_at));
+  if (!writes.length) return;
+  await ctx.db.batch(
+    writes.map((g) =>
+      ctx.db
+        .prepare("UPDATE tournament_games SET court = ?, claim_at = ? WHERE id = ? AND (claim_at IS NULL OR claim_at NOT LIKE 'on:%')")
+        .bind(g.court, pinText(f.roll.startAt.get(g.num) ?? 0), g.id),
+    ),
+  );
 }
 
 /** Zip 88: each court now (the game on it, the last game it finished). */
@@ -1198,11 +1222,32 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
   // Zip 88: Start now (both styles): the night starts at this moment instead of the planned start. One task_log row, written once.
-  if (body.action === 'start') return startNow(ctx, group, t);
+  if (body.action === 'start') {
+    const out = await startNow(ctx, group, t);
+    // The night's first games are on their courts now: saved (Americano's rows are written by the night's first save).
+    if (t.format === 'americano') await saveAmericanoCourts(ctx, t, group.timezone);
+    else await saveDoublesCourts(ctx, t, group.timezone);
+    return out;
+  }
   // Zip 61: an Americano night has its own controls (scores, not who won), server/americanoDay.ts.
   if (t.format === 'americano') return americanoGamesAction(ctx, body);
   if (!t.teams_at) bad('tournament_changed', 'The teams are not published.');
   const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left', 'spin', 'pick'] as const);
+  if (action === 'pause' || action === 'resume' || action === 'apply') return doublesGamesAction(ctx, body, group, t, action);
+  // Zip 88: the courts as they are, saved before this tap changes anything, and again after it (a result, a team leaving, the wheel's games).
+  await saveDoublesCourts(ctx, t, group.timezone);
+  const out = await doublesGamesAction(ctx, body, group, t, action);
+  await saveDoublesCourts(ctx, t, group.timezone);
+  return out;
+}
+
+async function doublesGamesAction(
+  ctx: Ctx,
+  body: Record<string, unknown>,
+  group: Awaited<ReturnType<typeof organizerOn>>,
+  t: TournamentRow,
+  action: 'result' | 'apply' | 'pause' | 'resume' | 'left' | 'spin' | 'pick',
+) {
   const nowIso = ctx.nowIso;
   const day = await loadDay(ctx.db, t.id);
 
@@ -1250,7 +1295,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
     if (seen && (!sideOk(seen.winner ?? null) || !numOk(seen.scoreA) || !numOk(seen.scoreB))) throw new HttpError(400, 'invalid_seen', 'Look again.');
     const res = await ctx.db
       .prepare(
-        `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = NULL, claim_at = NULL, disputed_at = NULL, skipped = 0,
+        `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = NULL, disputed_at = NULL, skipped = 0,
            result_at = CASE WHEN skipped = 1 THEN ? ELSE COALESCE(result_at, ?) END, result_by = ?,
            seat_a = ?, seat_b = ?, updated_at = ?
          WHERE id = ? AND updated_at = ? ${seen ? "AND (CASE WHEN skipped = 1 THEN NULL WHEN winner IS NOT NULL THEN winner WHEN disputed_at IS NULL THEN claim END) IS ? AND score_a IS ? AND score_b IS ?" : ''}
@@ -1573,8 +1618,10 @@ export async function playerSpin(ctx: Ctx, who: TournamentActor, body: Record<st
   const { t, playerId } = await playerTarget(ctx, who, body);
   if (!t.teams_at || t.format === 'americano') bad('tournament_changed', 'This just changed. Look again.');
   const day = await loadDay(ctx.db, t.id);
+  await saveDoublesCourts(ctx, t, who.group.timezone);
   const r = await spinTie(ctx, who.group, t, day, v.text(body.key, 'key', { max: 80 }), 'team', playerId);
   if (!r.already) await logPlayer(ctx, who.group, playerId, 'tournament_wheel_spun', { tournament: t.name });
+  await saveDoublesCourts(ctx, t, who.group.timezone);
   return r;
 }
 
@@ -1630,6 +1677,8 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
   }
   // Zip 88 (rolling courts): a game can be scored as soon as it is on a court; one still waiting for a court cannot.
   if (!decidedNow(g!) && !f.startedNums.has(g!.num)) bad('not_yet', NOT_ON_COURT);
+  // Zip 88: the courts as they are, saved before this score moves anything (updated_at untouched, so the guard below still holds).
+  await saveDoublesCourts(ctx, t, tz);
   // A bad score is refused before anything is written ("mine" is this player's team).
   const sent = readPair(body, 'mine', 'theirs');
   const [x, y] = side === 'a' ? sent : [sent[1], sent[0]];
@@ -1645,7 +1694,7 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
   // Every result keeps the two teams it was given for (seat_a, seat_b), so a later change to an earlier game never moves it to other teams.
   const res = await ctx.db
     .prepare(
-      `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = ?, claim_at = NULL, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ?
+      `UPDATE tournament_games SET winner = ?, score_a = ?, score_b = ?, claim = NULL, claim_by = ?, disputed_at = NULL, result_at = COALESCE(result_at, ?), result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ?
        WHERE id = ? AND updated_at = ? AND skipped = 0 AND winner IS NULL AND claim IS NULL
          AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = tournament_games.tournament_id AND tt.status = 'tickets')`,
     )
@@ -1659,6 +1708,8 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
     bad('tournament_changed', 'This just changed. Look again.');
   }
   await logPlayer(ctx, who.group, playerId, 'tournament_result', { tournament: t.name, game: num, result: `${nameOfSide(answer)} won ${Math.max(x, y)} to ${Math.min(x, y)}`, by: 'player' });
+  // Zip 88: the games this score put on the courts, saved.
+  await saveDoublesCourts(ctx, t, tz);
   return { ok: true, result: 'score' };
 }
 
