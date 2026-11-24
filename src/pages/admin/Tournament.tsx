@@ -375,7 +375,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   function openDay() {
     const el = document.querySelector<HTMLElement>('[data-tm-draft-prompt], [data-tm-draft-card], [data-tm-fix], [data-tm-published], [data-tm-am-rounds]');
     if (!el) {
-      toast(t.format === 'americano' ? 'The rounds show once tickets close.' : 'The draft opens once tickets close.');
+      toast(t.format === 'americano' ? 'The site makes the rounds. They show here once the style is set.' : 'The draft opens once tickets close.');
       return;
     }
     el.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -738,16 +738,35 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
       ...(format !== startFormat ? { format } : {}),
       ...(boxes.saved ? { prizes: { doubles: boxes.doubles, americano: boxes.americano } } : {}),
     };
+    // Review fixes: a Pay by moved earlier goes before a time change (the server checks each against the one saved now); each call is told
+    // apart, so a failure says what was already saved, the screen reads the server again, and the venue card still follows a saved time.
+    const payIso = payChanged ? payByAt(payDay, payMin, tz) : null;
+    const payFirst = !!payIso && !!t.payBy && Date.parse(payIso) < Date.parse(t.payBy);
+    const steps: { what: string; run: () => Promise<unknown> }[] = [];
+    if (settingsChanged) steps.push({ what: 'settings', run: () => api('PUT', `/api/admin/tournament/${t.id}`, body) });
+    if (payIso && payFirst) steps.push({ what: 'Pay by', run: () => api('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: payIso }) });
+    if (timeChanged) steps.push({ what: 'time', run: () => api('PUT', `/api/admin/tournament/${t.id}/time`, { start, minutes: end - start }) });
+    if (planChanged) steps.push({ what: 'courts and players', run: () => api('PUT', `/api/admin/tournament/${t.id}/plan`, { expected: n, courts }) });
+    if (payIso && !payFirst) steps.push({ what: 'Pay by', run: () => api('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: payIso }) });
+    const done: string[] = [];
     const ok = await save(async () => {
-      if (settingsChanged) await api('PUT', `/api/admin/tournament/${t.id}`, body);
-      if (timeChanged) await api('PUT', `/api/admin/tournament/${t.id}/time`, { start, minutes: end - start });
-      if (planChanged) await api('PUT', `/api/admin/tournament/${t.id}/plan`, { expected: n, courts });
-      if (payChanged) await api('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: payByAt(payDay, payMin, tz) });
+      for (const step of steps) {
+        try {
+          await step.run();
+          done.push(step.what);
+        } catch (err) {
+          if (!done.length) throw err;
+          void ctx.reload().catch(() => {});
+          const why = err instanceof ApiError ? err.message : 'That did not save.';
+          throw new ApiError(err instanceof ApiError ? err.status : 400, 'partly_saved', `Saved the ${done.join(' and ')}. The ${step.what} did not save: ${why}`);
+        }
+      }
     }, 'Saved');
-    if (!ok) return;
-    // The venue card follows a new time or a new number of courts (once the date is finalized).
-    if (t.finalDate && t.startSet && (timeChanged || (planChanged && courts !== t.courts))) venueAsk(t.id, t.finalDate, timeOn ? start : t.start, minutes);
-    onDone();
+    // The venue card follows a new time or a new number of courts (once the date is finalized), when that part saved.
+    const timeSaved = done.includes('time');
+    const courtsSaved = done.includes('courts and players') && courts !== t.courts;
+    if (t.finalDate && t.startSet && (timeSaved || courtsSaved)) venueAsk(t.id, t.finalDate, timeSaved ? start : t.start, timeSaved ? end - start : t.minutes);
+    if (ok) onDone();
   }
   const dateWords = t.finalDate ? dateOnly(t) : 'Pick the date';
   return (
@@ -969,7 +988,8 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
           {problem}
         </p>
       )}
-      <button type="button" className="btn block big tm86-save" disabled={busy || !!outside || !changed || !!problem} onClick={() => void go()} data-tm86-save>
+      {/* Review fix: a time outside the venue hours blocks only a time change, never the other settings. */}
+      <button type="button" className="btn block big tm86-save" disabled={busy || (timeChanged && !!outside) || !changed || !!problem} onClick={() => void go()} data-tm86-save>
         {busy ? 'Saving…' : 'Save'}
       </button>
       <ConfirmDialog

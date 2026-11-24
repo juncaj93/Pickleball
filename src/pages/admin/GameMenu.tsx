@@ -18,7 +18,7 @@ import { canHide } from './moneyRework';
 /**
  * The gear's small pop-up, anchored next to the gear (not a full sheet):
  * Text the group, Text the players, Edit game, then Cancel game in red on its own at the bottom (Zip 87, Alex: no Players, no Add to
- * calendar; a canceled game's own rows and Hide from list still show where they apply). Tap outside or Escape closes it; the
+ * calendar; a canceled game's own rows, its Players (no paid pill on a canceled card) and Hide from list still show where they apply). Tap outside or Escape closes it; the
  * arrow keys move between rows; focus goes back to the gear on close. While
  * it is open, live refreshes wait so it never closes under a finger.
  */
@@ -227,7 +227,14 @@ export function GameMenu({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
               Edit game
             </button>
           )}
-          {/* Zip 87 (Alex): no Players row (the paid pill opens it) and no Add to calendar. */}
+          {/* Zip 87 (Alex): no Players row (the paid pill opens it) and no Add to calendar. Review fix: a canceled game has no paid pill, so
+              its Players list (view only, late fees) stays reachable here. */}
+          {canceled && (
+            <button role="menuitem" className="menu-row" data-menu-players onClick={pick(() => ctx.open('roster', s.id))}>
+              <PeopleSmallIcon />
+              Players
+            </button>
+          )}
           {ctx.d.adminR2 === true && s.holiday && s.holidayHoursOk && (
             <button role="menuitem" className="menu-row" data-holiday-undo onClick={pick(() => void undoHours())}>
               <UndoIcon />
@@ -299,6 +306,15 @@ function EditIcon() {
     <svg {...ICON}>
       <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
       <path d="m13.5 6.5 4 4" />
+    </svg>
+  );
+}
+function PeopleSmallIcon() {
+  return (
+    <svg {...ICON}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+      <path d="M16 5.2a3.1 3.1 0 0 1 0 5.6M18 14.8c2 .7 3.2 2.4 3.2 5.2" />
     </svg>
   );
 }

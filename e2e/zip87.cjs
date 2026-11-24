@@ -332,6 +332,28 @@ const norm = (xs) => xs.map((x) => x.replace(/\s+/g, ''));
       await ctx.close();
     });
 
+    await check('G2 one Save moves the start and Pay by earlier together (Pay by goes first, as the server needs)', async () => {
+      await b.stage('zip87_payday');
+      let t = (await b.call('GET', '/api/admin/dashboard')).tournament;
+      // Pay by 4 PM on the night's day (3.5 hours before the 7:30 start), set the way the old Pay by sheet did.
+      const [y, m, d] = t.finalDate.split('-').map(Number);
+      const at4 = new Date(Date.UTC(y, m - 1, d, 21, 0)).toISOString(); // 4 PM Eastern (EST)
+      await b.call('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: at4 });
+      const { page, ctx } = await b.adminHome({ width: 390 });
+      await openCard(page);
+      await page.locator('.tm87-gear').click();
+      await page.waitForTimeout(500);
+      const sheet = page.locator('[data-tm86-change-sheet]');
+      await sheet.locator('[data-tm-time-start]').selectOption(String(18 * 60 + 30));
+      await sheet.locator('[data-tm-pay-time]').selectOption(String(14 * 60));
+      await sheet.locator('[data-tm86-save]').click();
+      await page.waitForFunction(() => !document.querySelector('[data-tm86-change-sheet]'), null, { timeout: 8000 });
+      t = (await b.call('GET', '/api/admin/dashboard')).tournament;
+      assert(t.start === 18 * 60 + 30, `start ${t.start}`);
+      assert(t.payBy === new Date(Date.UTC(y, m - 1, d, 19, 0)).toISOString(), `pay by ${t.payBy}`);
+      await ctx.close();
+    });
+
     await check('H the Players sheet: tickets, Levels with pencils, Projected teams; no Plan, Pick the date, Settings, Edit or Cancel; no Edit page anywhere', async () => {
       await b.stage('zip87_early');
       for (const scheme of ['light', 'dark']) {
