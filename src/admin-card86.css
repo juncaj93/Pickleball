@@ -1,7 +1,6 @@
 /* ---------- Zip 86 (🎾86.clean admin, picture 10): the organizer's game card, calmer ---------- */
 /* One status button and In / Out side by side, the balls and the names on one line, then the paid pill, the court and directions, each 44 px.
-   A floating card (a 1 px line and a soft shadow); the green stripe on the left only while the organizer is In. No outline ring, no dashed
-   outline. Colors only from the tokens (docs/DESIGN.md). */
+   A floating card (a 1 px line and a soft shadow); no stripe (round 2, Alex), no outline ring, no dashed outline. Colors only from the tokens (docs/DESIGN.md). */
 
 /* The card: floating, every court state the same frame (the status button says it). */
 .card.scard.scard-r2.scard86,

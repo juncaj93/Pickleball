@@ -82,10 +82,11 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} undid paying ${player} back${forDay}`;
     case 'court_booked':
       return `${who} booked${day ? ` ${day}` : ' a court'}`;
+    // Zip 86 round 2 (Alex): no court Waitlist. Old History lines read as what the game is now: booked, or not booked.
     case 'court_opened':
-      return `${who} marked the court opened${forDay}`;
+      return `${who} booked${day ? ` ${day}` : ' a court'}`;
     case 'court_waitlist':
-      return `${who} went on the court waitlist${forDay}`;
+      return `${who} marked the court not booked${forDay}`;
     case 'court_not_opened':
       return `${who} marked the court didn’t open${forDay}`;
     case 'court_not_booked':

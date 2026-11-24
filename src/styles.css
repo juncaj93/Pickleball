@@ -2775,8 +2775,7 @@ body:has(.tabbar) .pop {
 
 /* Booked: a solid green left edge, and "Court booked" with a check. */
 .scard.court-booked {
-  border-left: 6px solid var(--ok-edge);
-  padding-left: 10px;
+  /* Zip 86 round 2 (Alex): no green stripe on the organizer's game cards, ever (this older card too). */
 }
 /* Not booked: amber dashed border and a strip across the top. */
 .scard.court-needs {

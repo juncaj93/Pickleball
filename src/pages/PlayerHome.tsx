@@ -3179,7 +3179,7 @@ export function ScheduleRow({
       </a>
     ));
   // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
-  const showCount = !s.canceled && true;
+  const showCount = !s.canceled;
   // Zip 42 "Guest spot": the host's own guest. "Remove guest" sits right before Drop out while the switch is on for this screen.
   const myGuest = mine?.guest ?? null;
   const removeGuestLink = !held && isIn && open && !!myGuest && g.guestSpot === true && (

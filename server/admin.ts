@@ -71,7 +71,7 @@ import { adminPlayerView, adminSessionView } from './views';
 import * as v from './validate';
 import { loadMarks, marksRead, recordCourtBooked, resetTasksForNewDay, smartAlertsOffRead } from './tasks';
 import { adminChangeStamp, adminChangeStampAndTour, adminStampTripReads } from './stamp';
-import { courtSwitchOf } from '../shared/court';
+import { courtSwitchOf, shownCourt } from '../shared/court';
 import { everyoneSettingsOf, flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
 import { cancelChargesRead, hiddenSessionsRead, plannedStartsRead, rostersRead, sessionsRead } from './repo';
 import { monthSessionsRead } from './money';
@@ -614,7 +614,7 @@ async function adminSession(ctx: Ctx): Promise<{ group: GroupRow; session: Sessi
 export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const next = {
-    booking_status: v.oneOf(body.bookingStatus, 'bookingStatus', ['needs_booking', 'booked', 'unavailable'] as const),
+    booking_status: v.oneOf(body.bookingStatus, 'bookingStatus', ['needs_booking', 'booked'] as const), // Zip 86 round 2: no 'unavailable' (the old court Waitlist)
     venue_name: v.optionalText(body.venueName, 'venueName', 80),
     venue_booking_url: v.optionalUrl(body.venueBookingUrl, 'venueBookingUrl'),
     reservation_reference: v.optionalText(body.reservationReference, 'reservationReference', 80),
@@ -1177,6 +1177,11 @@ export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
   const from = courtSwitchOf({ bookingStatus: session.booking_status });
   if (from === to && session.court_state !== 'waitlist' && session.booking_status !== 'unavailable') return { ok: true, changed: false, status: to };
   if (to === 'booked') {
+    // Already booked (only an old waitlist flag left on the row): clear the flag, no second "booked" line or booked time.
+    if (from === 'booked') {
+      await ctx.db.prepare("UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = 'waitlist'").bind(ctx.nowIso, session.id).run();
+      return { ok: true, changed: false, status: to };
+    }
     await markBooked(ctx, {});
     return { ok: true, changed: true, status: to };
   }
@@ -2252,7 +2257,7 @@ export async function exportData(ctx: Ctx): Promise<Response> {
       formatShortDate(s.starts_at, tz),
       formatTimeRange(s.starts_at, s.ends_at, tz),
       s.status,
-      s.booking_status,
+      shownCourt(s.booking_status, s.court_state).bookingStatus,
       s.venue_name,
       s.reservation_reference,
       s.cancellation_deadline_at ? formatDateTime(s.cancellation_deadline_at, tz) : '',

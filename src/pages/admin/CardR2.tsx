@@ -271,6 +271,8 @@ function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView;
   const latest = useRef(0);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const held = useRef<Hold | null>(null);
+  // Review fix: saves sent and not yet read back (until then `saved` may be stale, so a pick is never skipped as "already saved").
+  const inflight = useRef(0);
   const undoOn = ctx.d.adminUndo === true;
   const saved = s.courtNum ?? null;
   const shown = picked !== undefined ? picked : saved;
@@ -285,14 +287,14 @@ function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView;
     if (undoOn) {
       const dropped = held.current?.undo() === true;
       held.current = null;
-      if (dropped && court === saved) {
+      if (dropped && court === saved && inflight.current === 0) {
         setPicked(undefined);
         toast('Undone. Nothing was saved.', 'ok', { keep: true });
         return;
       }
-      if (dropped) pending = false;
+      if (dropped && inflight.current === 0) pending = false;
     }
-    if (court === saved && !pending) {
+    if (court === saved && !pending && inflight.current === 0) {
       setPicked(undefined);
       return;
     }
@@ -318,7 +320,12 @@ function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView;
       if (hold && !(await hold.decided)) return;
       try {
         if (hold && actingStamp() !== as) throw new ApiError(409, 'screen_changed', 'Nothing was sent: the screen changed before it could save.');
-        await api('PUT', `/api/admin/sessions/${s.id}/court-number`, { court });
+        inflight.current++;
+        try {
+          await api('PUT', `/api/admin/sessions/${s.id}/court-number`, { court });
+        } finally {
+          inflight.current--;
+        }
         if (mine === latest.current && !hold) toast(said);
       } catch (err) {
         toast(err instanceof ApiError ? `${err.message} It went back.` : 'That did not save, so it went back. Check your connection and try again.', 'error');
@@ -328,11 +335,14 @@ function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView;
         }
         return;
       }
-      if (mine !== latest.current) return;
+      // Read back after every save (not only the newest), so `saved` is never stale when the next pick is judged.
+      inflight.current++;
       try {
         await ctx.reload();
       } catch {
         /* the next refresh brings it */
+      } finally {
+        inflight.current--;
       }
       if (mine === latest.current) setPicked(undefined);
     });
@@ -352,7 +362,7 @@ function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView;
         {shown === null ? 'Court ?' : `Court ${shown}`}
       </button>
       <Sheet calmFocus open={open} title={`Court for ${dayLabel}`} onClose={() => setOpen(false)} className="r86-picker-sheet">
-        {open && (
+        {(
           <div className="r86-picker" data-court-picker>
             <div className="r86-picker-grid" role="group" aria-label="Courts">
               {Array.from({ length: COURT_MAX - COURT_MIN + 1 }, (_, i) => COURT_MIN + i).map((n) => (

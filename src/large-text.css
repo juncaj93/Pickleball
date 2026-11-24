@@ -236,7 +236,7 @@ section[aria-labelledby='sessions-title'],
   /* Not booked | Booked: one under the other, each as wide as the card. */
   .court-switch {
     grid-template-columns: minmax(0, 1fr);
-    /* Zip 18 round 2: three rows of one height (the tallest, "Not booked" on two lines), so the sliding highlight covers the chosen one. */
+    /* Zip 18 round 2: rows of one height, so the sliding highlight covers the chosen one (two rows since Zip 86). */
     grid-auto-rows: 1fr;
   }
   /* Zip 18 round 2: with the choices stacked, the motion's sliding highlight (motion.css, built for three side-by-side cells) slides DOWN
