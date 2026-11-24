@@ -361,6 +361,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} paused ${theTour(d)}`;
     case 'tournament_resumed':
       return `${who} resumed ${theTour(d)}`;
+    // Zip 88: Start now on game day.
+    case 'tournament_started_now':
+      return `${who} started ${theTour(d)} early`;
     case 'tournament_player_left':
       return typeof d.swapIn === 'string'
         ? `${who}: ${typeof d.player === 'string' ? d.player : 'a player'} left ${theTour(d)}, ${d.swapIn} took over on ${typeof d.team === 'string' ? d.team : 'the team'}${d.holdToSpot === true ? ' (their standby hold is their spot now)' : d.holdToSpot === false ? ' (every spot is taken: their hold stays on standby)' : ''}`

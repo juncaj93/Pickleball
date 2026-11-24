@@ -17,7 +17,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip88_rd3', 'zip88_early', 'zip88_final', 'zip88_sitting'];
+const THIS_ZIP: readonly string[] = ['zip88_rd3', 'zip88_early', 'zip88_final', 'zip88_sitting', 'zip88_ready'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -42,6 +42,7 @@ const STAGES = [
   { stage: 'zip88_rd3', label: 'Night: Americano, both courts in RD3 (start here)', line: 'Picture 1. Tonight, Rounds 1 and 2 in; Court 1’s Round 3 game is in (11 to 7), Court 2 still playing. Home: the one night card: RD3 outlined, Court 1 Done (tap 11 – 7 to fix), Court 2 Playing with Score, Sitting with a ball each, All rounds, Standings, Pause and Player left (each asks first).' },
   { stage: 'zip88_early', label: 'Night: Americano, court 1 started RD4 early', line: 'Picture 2, drawn as a look below (10 players never start a round early: the fair schedule always has someone of the next game still on the other court). Home gets the picture 1 night.' },
   { stage: 'zip88_final', label: 'Night: Locked doubles at the Final', line: 'Picture 3. The Final and 3rd place on both courts at Play to 7 (yellow): FINAL outlined, Final and 3rd place pills, Score on each. Standings lists the teams with W-L and points.' },
+  { stage: 'zip88_ready', label: 'Game day: ready to start now', line: 'Locked doubles tonight, starting about 2 hours from now, teams published, courts set. Home: the card’s pill is a green Start now. Tap it, Are you sure?, Yes: the night card takes over with 0 of 2 in. View as Vic first: Edit name is there until Net Ninjas’ first game has a score.' },
   { stage: 'zip88_sitting', label: 'Night: player view while sitting', line: 'Rounds 1 to 3 in, Round 4 on, Vic sits. View as Vic: the break card and Currently playing with both courts. Enter Court 1’s score on Home: when Vic’s Round 5 game reaches a court, his phone shows it within one check (5 s).' },
   // Zip 86 (🎾86.clean admin): the cleaner tournament card and game cards, the tournament row in the week lists.
   { stage: 'zip86_payments', label: 'Tournament card: payments (start here)', line: 'The Cold Open’s numbers: 6 of 8 locked in, 4 haven’t paid, 10 expected. Home: tap the card open: the 4 steps, Tue Dec 1 · 7:30 to 10 PM, Change, then Tickets, Remind, Prizes and Money. Money: 5 paid $90, courts $120, so far −$30; if all 10 pay +$14 after the suggested $28.' },

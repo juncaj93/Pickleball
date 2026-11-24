@@ -7,7 +7,6 @@ import { lazy, Suspense, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDayGame, AdminDayTeam, AdminDayView, AdminTournamentView } from '../../../shared/tournament';
 import { levelShort } from '../../../shared/tournament';
 import { groupName, totalLabel } from '../../../shared/tournamentSchedule';
-import { startMsOf } from '../../../shared/tournamentTickets';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { AlertCard } from '../../AlertCard';
 import { Sheet, useToast } from '../../ui';
@@ -19,7 +18,7 @@ import { AdminTieCards, EndCards } from './TournamentEnd';
 import { ScoreboardSheet } from './Scoreboard';
 import { boardGame, firstOpenRound } from './scoreboardData';
 import { NightCard as NightCardView } from './NightCard';
-import { doublesNightModel } from './nightCardData';
+import { doublesNightModel, nightOnAt } from './nightCardData';
 import { StandingsList } from './StandingsList';
 
 // The court picker (the site's court map) is loaded when the published card draws it, not with this file: a static import here would pull
@@ -58,8 +57,8 @@ const gamesCall = (t: AdminTournamentView, body: Record<string, unknown>) => api
 
 /** The night is on (or about to be): from 30 minutes before the real start. */
 function nightOn(ctx: AdminCtx, t: AdminTournamentView): boolean {
-  if (!t.finalDate || !t.startSet) return false;
-  return Date.parse(ctx.d.now) >= startMsOf(t.finalDate, t.start, ctx.d.group.timezone) - 30 * 60_000;
+  // Zip 88: also from Start now's tap (nightOnAt).
+  return nightOnAt(t, ctx.d.now, ctx.d.group.timezone);
 }
 
 /** Everything piece 3 adds to the organizer's Home, first on it (the cards of this zip). */
@@ -131,7 +130,6 @@ function DraftPrompt({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d: 
     />
   );
 }
-
 
 /**
  * Draft teams (Alex's add-on, pictures 01 to 03): each team's two players are buttons (name left, level right) with the team total on the right.

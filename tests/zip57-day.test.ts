@@ -432,8 +432,11 @@ describe("zip 57: Alex's PM notes (team names by the players, the live window, n
     const outsider = d.teams[1].players[0].name;
     expect((await name({ name: 'Mine Now' }, outsider)).status).toBe(200);
     expect((await dash(ctx)).day.teams[0].name).toBe(rolled);
-    // From Game 1 on: no pencil or dice, and the server refuses; the organizer still renames.
+    // Zip 88: from the team's first score on (no longer the start): no pencil or dice, and the server refuses; the organizer still renames.
     ctx.app.now = START_MS + 60_000;
+    expect((await card(ctx, a)).day.team.canRename).toBe(true);
+    const g1 = (await card(ctx, a)).day.games.find((g: any) => g.onNow);
+    expect((await playerPhone(ctx, a).then((c) => c.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num: g1.num, action: 'score', mine: 11, theirs: 5 }))).status).toBe(200);
     expect((await card(ctx, a)).day.team.canRename).toBeUndefined();
     expect((await name({ name: 'Too Late' })).status).toBe(409);
     expect((await teams(ctx, { action: 'rename', teamId: d.teams[0].id, name: 'Late Bloomers' })).status).toBe(200);

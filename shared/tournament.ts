@@ -1194,6 +1194,10 @@ export interface TournamentSignupView {
 export interface AdminTournamentView {
   id: string;
   name: string;
+  /** Zip 88: game day, before the start, teams set (Locked doubles) and the courts' numbers set: the card's pill is "Start now". */
+  startNow?: true;
+  /** Zip 88: the organizer tapped Start now at this time (the night started then; the planned start and end stay). */
+  startedEarly?: string;
   format: TournamentFormat;
   /** Tickets are open (piece 2 on): the format cannot change any more. Always false in piece 1. */
   formatLocked: boolean;

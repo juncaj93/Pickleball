@@ -272,9 +272,14 @@ describe('zip 74: the team name sheet', () => {
     const ok = await p.call('POST', '/api/tournament/team-name', { tournamentId: ctx.tid, name: 'Kitchen Sinkers' });
     expect(ok.status, ok.text).toBe(200);
     expect((await card(ctx, t1.players[1].name)).day.team.name).toBe('Kitchen Sinkers');
-    // After Game 1 starts: no Edit name (canRename gone), and the server refuses.
+    // Zip 88: after the start the name can still change, until their team's first game has a score; then no Edit name and the server refuses.
     ctx.app.now = START_MS + 60_000;
+    expect((await card(ctx, t1.players[0].name)).day.team.canRename).toBe(true);
+    expect((await p.call('POST', '/api/tournament/team-name', { tournamentId: ctx.tid, name: 'Big Dills' })).status).toBe(200);
+    const first = (await card(ctx, t1.players[0].name)).day.games.find((g: any) => g.onNow);
+    expect((await p.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num: first.num, action: 'score', mine: 11, theirs: 7 })).status).toBe(200);
     expect((await card(ctx, t1.players[0].name)).day.team.canRename).toBeUndefined();
-    expect((await p.call('POST', '/api/tournament/team-name', { tournamentId: ctx.tid, name: 'Big Dills' })).status).toBe(409);
+    const late = await p.call('POST', '/api/tournament/team-name', { tournamentId: ctx.tid, name: 'Bigger Dills' });
+    expect([late.status, late.data.message]).toEqual([409, 'Your first game has a score. The name stays.']);
   });
 });

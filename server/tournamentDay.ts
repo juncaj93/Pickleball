@@ -74,7 +74,10 @@ import {
   firstName,
   logPlayer,
   nightOver,
+  nightStartMs,
   openById,
+  START_TASK,
+  startNowOpen,
   organizerOn,
   playerTarget,
   realTimes,
@@ -386,8 +389,8 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const blocks = tieBlocks(teams.length, games.map(asPlanned), results, out, records, gone);
   const real = realTimes(t);
   const plan = nightPlan(teams.length * 2, courtsOf(t), real.minutes, 'doubles');
-  const startMs = t.final_date ? startMsOf(t.final_date, real.start, tz) : Infinity;
-  const started = nowMs >= startMs;
+  // Zip 88: the planned start, or Start now's tap when earlier.
+  const started = nowMs >= nightStartMs(t, tz);
   const over = nightOver(t, tz, nowMs);
   const anyResult = stored.some((g) => !!g.winner || !!g.claim || !!g.skipped);
   // The Time check, from the rounds as they are.
@@ -426,6 +429,12 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
   const tiesEnd = new Map(states.filter((r) => r.tiesEnd !== undefined).map((r) => [r.round, r.tiesEnd!]));
   return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes, roll, startedNums, liveNums };
+}
+
+/** Zip 88: a game of this team (seat) has a score (its pool games by slot; a playoff by the seats frozen with its result). */
+export function teamHasScore(games: readonly GameRow[], seat: number): boolean {
+  const t = `T${seat}`;
+  return games.some((g) => !g.skipped && (!!g.winner || !!g.claim) && (g.slot_a === t || g.slot_b === t || g.seat_a === seat || g.seat_b === seat));
 }
 
 /** "1st of the Dink group", "2nd", "Winner of game 9". */
@@ -695,7 +704,7 @@ export function playerDayView(
   // The live window (Alex's PM): from 30 minutes before the start until the tournament is over (piece 4's End tournament; until then, 6 hours
   // after the night's end, so the morning after Home is back to normal).
   const startMs = t.final_date ? startMsOf(t.final_date, real.start, tz) : Infinity;
-  const today = nowMs >= startMs - LIVE_BEFORE_MS && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS;
+  const today = nowMs >= Math.min(startMs - LIVE_BEFORE_MS, nightStartMs(t, tz)) && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS;
   // My games: the ones I am in (decided or not), then the playoff game I may still reach.
   const games: PlayerDayGame[] = [];
   let poolNo = 0;
@@ -882,8 +891,9 @@ export function playerDayView(
     label = tie.state === 'playoff' ? 'Playoff' : tie.target === 'semi' ? 'Tied for the semifinals' : tie.target === 'third' ? 'Tied for 3rd place' : 'Tied for the final';
   }
   return {
-    // Either partner can rename their team until Game 1 starts (then the pencil and the dice disappear).
-    team: mine ? { name: mine.name, players: playersOf(mine), seat: mine.seat, ...(!f.started && !mine.out_at ? { canRename: true as const } : {}) } : null,
+    // Either partner can rename their team until their team's first game has a score (then the pencil and the dice disappear).
+    // Zip 88: until their team's first game has a score (no longer the start time).
+    team: mine ? { name: mine.name, players: playersOf(mine), seat: mine.seat, ...(!teamHasScore(rows.games, mine.seat) && !mine.out_at ? { canRename: true as const } : {}) } : null,
     teams: rows.teams.map((x) => ({ name: x.name, players: playersOf(x), ...(x.seat === seat ? { me: true as const } : {}), ...(x.out_at ? { out: true as const } : {}) })),
     pools,
     games,
@@ -1187,6 +1197,8 @@ export async function teamsAction(ctx: Ctx, body: Record<string, unknown>) {
 export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
+  // Zip 88: Start now (both styles): the night starts at this moment instead of the planned start. One task_log row, written once.
+  if (body.action === 'start') return startNow(ctx, group, t);
   // Zip 61: an Americano night has its own controls (scores, not who won), server/americanoDay.ts.
   if (t.format === 'americano') return americanoGamesAction(ctx, body);
   if (!t.teams_at) bad('tournament_changed', 'The teams are not published.');
@@ -1344,6 +1356,28 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   ]);
   await audit(ctx.db, group.id, null, 'tournament_player_left', { tournament: t.name, player: names.get(playerId) ?? 'A player', team: team!.name, skipped: skip.length }, nowIso);
   return { ok: true, skipped: skip.length };
+}
+
+/**
+ * Zip 88: Start now. Allowed only when the card offers it (startNowOpen: game day, before the start, the style decided, the teams published on
+ * Locked doubles, the courts' numbers set). Writes one task_log row (START_TASK) with this moment; a second tap (two phones) changes nothing.
+ * Money never moves: the planned start and end, the court cost, the tickets and the prizes stay as they are.
+ */
+async function startNow(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow) {
+  const tz = group.timezone;
+  if (t.started_early && Date.parse(t.started_early) <= ctx.nowMs) return { ok: true, started: t.started_early, already: true };
+  if (!startNowOpen(t, t.format === 'americano' ? 'americano' : 'doubles', tz, ctx.nowMs)) bad('cannot_start', 'The night cannot start yet. Set the teams and the courts first.');
+  const res = await ctx.db
+    .prepare(
+      `INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) SELECT ?, ?, NULL, ?, 'mark', ?, ?
+         WHERE NOT EXISTS (SELECT 1 FROM task_log WHERE session_id IS NULL AND task = ? AND kind = 'mark')
+           AND EXISTS (SELECT 1 FROM tournaments WHERE id = ? AND status = 'tickets')`,
+    )
+    .bind(newId(), group.id, START_TASK + t.id, ctx.nowIso, ctx.nowIso, START_TASK + t.id, t.id)
+    .run();
+  if ((res.meta?.changes ?? 0) === 0) return { ok: true, already: true };
+  await audit(ctx.db, group.id, null, 'tournament_started_now', { tournament: t.name }, ctx.nowIso);
+  return { ok: true, started: ctx.nowIso };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1575,7 +1609,7 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
   if (!g || !side || !r?.a || !r?.b) bad('not_your_game', 'That is not your game. Look again.');
   // Results open 15 minutes before the start (a team warming up early) and stay open through the night.
   const real = realTimes(t);
-  if (ctx.nowMs < startMsOf(t.final_date!, real.start, tz) - 15 * 60_000) bad('not_started', `Games begin at ${clockLabel(real.start)}.`);
+  if (ctx.nowMs < nightStartMs(t, tz) - 15 * 60_000) bad('not_started', `Games begin at ${clockLabel(real.start)}.`);
   if (t.format === 'americano') bad('tournament_changed', 'The style is Americano now. Look again.');
   const org = firstName(who.group);
   const nameOfSide = (x: string | null) => (x === 'a' || x === 'b' ? (f.bySeat.get(x === 'a' ? r!.a! : r!.b!)?.name ?? 'A team') : 'A team');
@@ -1635,11 +1669,11 @@ export async function playerGameAction(ctx: Ctx, who: TournamentActor, body: Rec
 export async function playerTeamName(ctx: Ctx, who: TournamentActor, body: Record<string, unknown>) {
   const { t, playerId } = await playerTarget(ctx, who, body);
   if (!t.teams_at || !t.final_date) bad('tournament_changed', 'This just changed. Look again.');
-  const { teams } = await loadDay(ctx.db, t.id);
+  const { teams, games } = await loadDay(ctx.db, t.id);
   const team = teams.find((x) => (x.player_a === playerId || x.player_b === playerId) && !x.out_at);
   if (!team) bad('not_your_team', 'You are on no team. Look again.');
-  const real = realTimes(t);
-  if (ctx.nowMs >= startMsOf(t.final_date!, real.start, who.group.timezone)) bad('started', 'Game 1 has started. The name stays.');
+  // Zip 88: the name is theirs to change until their team's first game has a score (the organizer can rename any team any time).
+  if (teamHasScore(games, team!.seat)) bad('started', 'Your first game has a score. The name stays.');
   // Zip 74 (picture pair-2): "Need help? Randomize a name" only fills the sheet's box (`suggest`: a name nobody else has, never the one in the
   // box); nothing is saved until Save. A typed name is checked for a clash when it is saved, as before.
   if (body.suggest === true) {

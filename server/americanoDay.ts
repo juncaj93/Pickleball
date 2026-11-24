@@ -27,7 +27,7 @@ import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournament
 import { startMsOf } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
 import { courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds } from './tournamentDay';
-import { firstName, logPlayer, nightOver, organizerOn, openById, realTimes, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
+import { firstName, logPlayer, nightOver, nightStartMs, organizerOn, openById, realTimes, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
 
 /** Zip 88: the answer to a score for a game still waiting for a court (it was "Finish Round N first" before rolling courts). */
 export const NOT_ON_COURT = 'That game is not on a court yet.';
@@ -229,8 +229,8 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
     sits.set(r, roster.filter((id) => !on.has(id) && !gone.has(id)));
   }
   const plan = americanoPlan(Math.max(4, roster.length), courtsOf(t), real.minutes);
-  const startMs = t.final_date ? startMsOf(t.final_date, real.start, tz) : Infinity;
-  const started = nowMs >= startMs;
+  // Zip 88: the night starts at the planned start, or when the organizer tapped Start now (nightStartMs).
+  const started = nowMs >= nightStartMs(t, tz);
   const over = nightOver(t, tz, nowMs);
   const anyResult = games.some((g) => !!g.winner || !!g.claim || (g.skipped && !!g.row?.skipped));
   const open = games.filter((g) => !decided(g));
@@ -334,8 +334,8 @@ export function playerRoundsView(
   const real = realTimes(t);
   const startMs = t.final_date ? startMsOf(t.final_date, real.start, tz) : Infinity;
   // Zip 77 (review): `today` keeps its own window after the reveal too (Home folds the week's games only on the night); the revealed card
-  // shows whatever the clock says (src/tournament/RoundsView.tsx checks the reveal first).
-  const today = nowMs >= startMs - LIVE_BEFORE_MS && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS;
+  // shows whatever the clock says (src/tournament/RoundsView.tsx checks the reveal first). Zip 88: from Start now's tap too, when earlier.
+  const today = nowMs >= Math.min(startMs - LIVE_BEFORE_MS, nightStartMs(t, tz)) && nowMs < startMs + real.minutes * 60_000 + LIVE_AFTER_MS;
   const me = nameOf(f, playerId);
   const rounds: PlayerRound[] = [];
   let first = true;
@@ -581,7 +581,7 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
   if (!t.final_date || t.status !== 'tickets') bad('tournament_changed', 'This just changed. Look again.');
   const real = realTimes(t);
   // Results open 15 minutes before the start (zip 57's rule) and stay open through the night.
-  if (ctx.nowMs < startMsOf(t.final_date!, real.start, tz) - 15 * 60_000) bad('not_started', `Round 1 begins at ${clockLabel(real.start)}.`);
+  if (ctx.nowMs < nightStartMs(t, tz) - 15 * 60_000) bad('not_started', `Round 1 begins at ${clockLabel(real.start)}.`);
   const night = await readNight(ctx.db, t);
   // The game as the screen showed it: same number, same four players (else the schedule changed: look again).
   const before = amFacts(t, night.signups, night.tickets, night.games, tz, ctx.nowMs);
@@ -662,7 +662,7 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   // Scores, Fix, the Time check and Player left are for the night (from 15 minutes before the start, like the players' scores): an earlier
   // tap would write the night's rows before the list of players is final.
   const real = realTimes(t);
-  if (!t.final_date || ctx.nowMs < startMsOf(t.final_date, real.start, group.timezone) - 15 * 60_000) bad('not_started', `Round 1 begins at ${clockLabel(real.start)}.`);
+  if (!t.final_date || ctx.nowMs < nightStartMs(t, group.timezone) - 15 * 60_000) bad('not_started', `Round 1 begins at ${clockLabel(real.start)}.`);
   const night = await readNight(ctx.db, t);
   const before = amFacts(t, night.signups, night.tickets, night.games, group.timezone, ctx.nowMs);
   // Bad input is refused before the night's rows are written.

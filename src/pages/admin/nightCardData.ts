@@ -51,8 +51,10 @@ export interface NightModel {
 }
 
 /** The night is on (or about to be): from 30 minutes before the real start (the organizer's night screens, the week row hides). */
-export function nightOnAt(t: { finalDate: string | null; startSet?: boolean; start: number }, nowIso: string, tz: string): boolean {
+export function nightOnAt(t: { finalDate: string | null; startSet?: boolean; start: number; startedEarly?: string }, nowIso: string, tz: string): boolean {
   if (!t.finalDate || !t.startSet) return false;
+  // Zip 88: Start now was tapped: the night is on from that moment.
+  if (t.startedEarly && Date.parse(nowIso) >= Date.parse(t.startedEarly)) return true;
   return Date.parse(nowIso) >= startMsOf(t.finalDate, t.start, tz) - 30 * 60_000;
 }
 

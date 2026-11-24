@@ -12,6 +12,9 @@
  *   D   Pause and Player left ask "Are you sure?" first; No changes nothing; Yes pauses (Resume puts it back); Player left opens Who left?.
  *   E   Picture 2 (zip88_early): the look on the Tournament test page: RD4 purple, the RD4 pill purple, Court 2's yellow Play to 9.
  *   F   A bar opens All rounds at that round.
+ *   G   Start now (zip88_ready) at 320/390, light and dark: the pill is a solid green 44 px Start now; "Are you sure?" with two equal buttons;
+ *       Not yet changes nothing; Yes: the night card with "0 of 2 in", and a player's phone shows Enter score within one check.
+ *   H   Team names: Vic keeps Edit name on the night until Net Ninjas' first game has a score, then it is gone.
  * Screenshots: .data/zip88-shots (not in git).
  */
 const path = require('node:path');
@@ -209,6 +212,62 @@ const cutOrBroken = (page, sel) =>
       assert((await page.locator('[data-sb-mode="all"]').count()) === 1, 'All');
       assert(!errors.length, errors.join('; '));
       await ctx.close();
+    });
+    await check('G Start now: the pill, Are you sure?, the night starts, a phone follows', async () => {
+      for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [320, 'light']]) {
+        await b.stage('zip88_ready');
+        const { page, ctx, errors } = await b.adminHome({ width, scheme });
+        const btn = page.locator('[data-tm88-start]');
+        await btn.waitFor({ timeout: 15000 });
+        assert((await page.locator('[data-tm-stage]').count()) === 0, 'no pill beside Start now');
+        const look = await btn.evaluate((x) => { const r = x.getBoundingClientRect(); const s = getComputedStyle(x); return { h: r.height, bg: s.backgroundColor, primary: getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() }; });
+        assert(look.h >= 44, `Start now ${look.h} px tall`);
+        await btn.click();
+        const yes = page.locator('[data-tm88-yes]');
+        const no = page.locator('[data-tm88-no]');
+        const [ry, rn] = [await yes.boundingBox(), await no.boundingBox()];
+        assert(Math.abs(ry.width - rn.width) < 1 && Math.abs(ry.height - rn.height) < 1, 'two equal buttons');
+        assert(flat(await page.locator('[data-tm88-ask]').textContent()).includes('Are you sure?'), 'asks');
+        await b.noWider(page, `ask ${width}`);
+        await page.locator('[data-tm88-ask]').screenshot({ path: path.join(SHOTS, `G-ask-${width}-${scheme}.png`) });
+        await page.locator('[data-tm-home]').first().screenshot({ path: path.join(SHOTS, `G-card-${width}-${scheme}.png`) });
+        await no.click();
+        assert((await page.locator('[data-tm88-ask]').count()) === 0, 'Not yet closes it');
+        assert(!(await dash()).tournament.startedEarly, 'Not yet: not started');
+        if (width === 390 && scheme === 'light') {
+          await btn.click();
+          await yes.click();
+          await page.locator('[data-nc]').waitFor({ timeout: 10000 });
+          assert(flat(await page.locator('[data-nc-in]').textContent()) === '0 of 2 in', '0 of 2 in');
+          assert((await page.locator('[data-tm88-start]').count()) === 0, 'Start now gone');
+          await page.locator('[data-nc]').screenshot({ path: path.join(SHOTS, 'G-started-390.png') });
+          const d = (await dash()).tournament.day;
+          const who = d.games.find((g) => g.num === d.courtsNow[0].num).a.players[0];
+          const p = await b.playerPage(who, { width: 390 });
+          await p.page.locator('[data-tc-enter-score]').waitFor({ timeout: 6000 });
+          await p.ctx.close();
+        }
+        assert(!errors.length, errors.join('; '));
+        await ctx.close();
+      }
+    });
+
+    await check('H team names: Edit name on the night until the first score', async () => {
+      await b.stage('zip88_ready');
+      await b.call('POST', `/api/admin/tournament/${(await dash()).tournament.id}/games`, { action: 'start' });
+      const p = await b.playerPage('Vic', { width: 390 });
+      await p.page.locator('[data-tc-day="night"]').waitFor({ timeout: 15000 });
+      const edit = p.page.locator('button', { hasText: 'Edit name' });
+      assert((await edit.count()) === 1, 'Edit name on the night');
+      await p.page.screenshot({ path: path.join(SHOTS, 'H-vic-night-390.png') });
+      const d = (await dash()).tournament.day;
+      const g = d.games.find((x) => x.a?.players.includes('Vic') || x.b?.players.includes('Vic'));
+      const vic = await b.phone('Vic');
+      const r = await vic.post('/api/tournament/game', { tournamentId: (await dash()).tournament.id, num: g.num, action: 'score', mine: 11, theirs: 6 });
+      assert(r.ok, `score ${r.status} ${JSON.stringify(r.body)}`);
+      await p.page.waitForTimeout(6500);
+      assert((await p.page.locator('button', { hasText: 'Edit name' }).count()) === 0, 'Edit name gone after the first score');
+      await p.ctx.close();
     });
   } finally {
     await b.close();

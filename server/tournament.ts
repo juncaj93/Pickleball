@@ -153,6 +153,29 @@ export interface TournamentRow {
   expect_saved?: string | null;
   /** Zip 70: the last time move players are told about (task_log detail, JSON), when the screen's read carried it. */
   time_moved?: string | null;
+  /** Zip 88: when the organizer tapped Start now (task_log detail, an ISO time), when the read carried it. */
+  started_early?: string | null;
+}
+
+/**
+ * Zip 88: Start now can be tapped: game day (Eastern), tickets closed on the style played, before the night has started (planned or tapped),
+ * the teams published (Locked doubles; Americano needs no teams) and the venue's court numbers set.
+ */
+export function startNowOpen(t: TournamentRow, format: TournamentFormat, tz: string, nowMs: number): boolean {
+  if (statusOf(t) !== 'tickets' || !t.final_date || t.final_date !== todayKey(nowMs, tz) || nowMs >= nightStartMs(t, tz) || nightOver(t, tz, nowMs)) return false;
+  if (!styleDecided(t, nowMs) || !courtNumbersOf(t)) return false;
+  return format === 'americano' || !!t.teams_at;
+}
+
+/**
+ * Zip 88: when the night starts (ms): the planned start, or Start now's tap when that came first. Every "has the night started" question asks
+ * this; the planned start and end (realTimes) never move.
+ */
+export function nightStartMs(t: Pick<TournamentRow, 'final_date' | 'start_minutes' | 'minutes' | 'started_early'>, tz: string): number {
+  if (!t.final_date) return Infinity;
+  const planned = startMsOf(t.final_date, realTimes(t).start, tz);
+  const early = t.started_early ? Date.parse(t.started_early) : NaN;
+  return Number.isFinite(early) && early < planned ? early : planned;
 }
 
 export interface SignupRow {
@@ -195,6 +218,13 @@ const tiesJsonSql = (alias: string): string =>
  */
 export const EXPECT_TASK = 'tournament_expect:';
 export const TIME_TASK = 'tournament_time:';
+/**
+ * Zip 88: "Start now" on game day: one task_log row (kind 'mark', no game) holding the tap's time in `detail`, read as a column of the
+ * tournament row's own statement like the two above (no extra trip, no migration). The night then starts at that moment instead of the planned
+ * start; the planned start and end, the court cost, the tickets and the prizes stay exactly as they are.
+ */
+export const START_TASK = 'tournament_start:';
+const START_COL = (idRef: string) => `${markDetailSql(START_TASK, idRef)} AS started_early`;
 const markDetailSql = (prefix: string, idRef: string) =>
   `(SELECT h.detail FROM task_log h WHERE h.session_id IS NULL AND h.task = '${prefix}' || ${idRef} AND h.kind IN ('mark', 'sent') AND h.kind = 'mark' LIMIT 1)`;
 
@@ -226,7 +256,7 @@ const notHiddenSql = (idRef: string) =>
 /** The group's open tournament, or null. Null too while the tables do not exist yet. (Create's "one at a time" and every organizer save.) */
 export async function activeTournament(db: D1Database, groupId: string): Promise<TournamentRow | null> {
   return db
-    .prepare(`SELECT * FROM tournaments WHERE group_id = ? AND status IN ${OPEN} ORDER BY created_at DESC LIMIT 1`)
+    .prepare(`SELECT *, ${START_COL('tournaments.id')} FROM tournaments WHERE group_id = ? AND status IN ${OPEN} ORDER BY created_at DESC LIMIT 1`)
     .bind(groupId)
     .first<TournamentRow>()
     .catch(() => null);
@@ -253,7 +283,7 @@ const WAITING = 'EXISTS (SELECT 1 FROM tournament_tickets k WHERE k.tournament_i
 /** The organizer's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one canceled lately, else one with an I paid waiting. */
 const SHOWN_WHERE = `group_id = ?1 AND (status IN ${OPEN} OR ${shownCanceled()} OR (status = 'canceled' AND ${WAITING}))
        ORDER BY CASE WHEN status = 'canceled' THEN 1 ELSE 0 END, created_at DESC, id LIMIT 1`;
-const SHOWN_SQL = `SELECT *, (status = 'canceled' AND ${WAITING}) AS claims_waiting, ${tiesJsonSql('tournaments')}, ${markDetailSql(EXPECT_TASK, 'tournaments.id')} AS expect_saved FROM tournaments
+const SHOWN_SQL = `SELECT *, (status = 'canceled' AND ${WAITING}) AS claims_waiting, ${tiesJsonSql('tournaments')}, ${markDetailSql(EXPECT_TASK, 'tournaments.id')} AS expect_saved, ${START_COL('tournaments.id')} FROM tournaments
        WHERE ${SHOWN_WHERE}`;
 type ShownRow = TournamentRow & { claims_waiting: number; ties_json?: string };
 
@@ -305,7 +335,7 @@ const shownEnded = (t = '') => `(${t}status = 'ended' AND ${t}ended_at IS NOT NU
 /** A player's pick (?1 the group, ?2 the canceled cutoff): the open tournament, else one ended in the last two days, else one canceled lately. */
 const ACTIVE_WHERE = `t.group_id = ?1 AND (t.status IN ${OPEN} OR ${shownEnded('t.')} OR ${shownCanceled('t.')})
        ORDER BY CASE WHEN t.status = 'canceled' THEN 2 WHEN t.status = 'ended' THEN 1 ELSE 0 END, t.created_at DESC, t.id LIMIT 1`;
-const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')}, ${markDetailSql(TIME_TASK, 't.id')} AS time_moved,
+const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')}, ${markDetailSql(TIME_TASK, 't.id')} AS time_moved, ${START_COL('t.id')},
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT id FROM players WHERE id = ?3 AND group_id = t.group_id) END AS org_saved,
          CASE WHEN t.visibility = 'all' THEN NULL ELSE (SELECT display_name FROM players WHERE id = ?4 AND group_id = t.group_id) END AS viewer_name,
          CASE WHEN t.status = 'canceled' THEN (SELECT status FROM tournament_signups WHERE tournament_id = t.id AND player_id = ?4) ELSE NULL END AS my_signup
@@ -1288,7 +1318,10 @@ export async function adminTournamentFor(
   const prize = money.ticketsCents - money.courtCents - money.youCents;
   // Zip 70: Time and Plan can change until the night starts: the teams are published, or the night window opens (30 minutes before the start).
   const changeOpen =
-    statusOf(t) !== 'canceled' && !nightOver(t, tz, ctx.nowMs) && !t.teams_at && !(real && t.final_date && ctx.nowMs >= startMsOf(t.final_date, real.start, tz) - LIVE_BEFORE_MS);
+    statusOf(t) !== 'canceled' &&
+    !nightOver(t, tz, ctx.nowMs) &&
+    !t.teams_at &&
+    !(real && t.final_date && ctx.nowMs >= Math.min(startMsOf(t.final_date, real.start, tz) - LIVE_BEFORE_MS, nightStartMs(t, tz)));
   const shownFormat: TournamentFormat = decided && !salesClosed(t, tz, ctx.nowMs) ? styleAtClose(formatOf(ts), nIn) : formatOf(ts);
   // Zip 57: the check when tickets close, with the players really locked in (amber): under 6, too tight, or a court no longer needed.
   let closeCheck: AdminTournamentView['closeCheck'] = null;
@@ -1360,6 +1393,8 @@ export async function adminTournamentFor(
     cost: { courtCents: money.courtCents, ifFillsCents: -money.youCents, nowCents: money.courtCents - paidNow * t.ticket_cents + prize, paidNow },
     ...(real ? { chosenCourts: courts } : {}),
     closeCheck,
+    ...(startNowOpen(ts, shownFormat, tz, ctx.nowMs) ? { startNow: true as const } : {}),
+    ...(ts.started_early && nightStartMs(ts, tz) < (ts.final_date ? startMsOf(ts.final_date, realTimes(ts).start, tz) : Infinity) ? { startedEarly: ts.started_early } : {}),
     ...(dayRows ? { day: adminDayView(ts, shownFormat, rows, tickets, dayRows, tz, ctx.nowMs) } : {}),
     // Zip 61: the Americano night (once tickets close on Americano): the rounds, the scores, the Time check, Player left.
     ...(dayRows && decided && shownFormat === 'americano' ? { rounds: adminRoundsView(ts, rows, tickets, dayRows.games, tz, ctx.nowMs) } : {}),
@@ -1761,7 +1796,8 @@ export function readTimeMove(detail: string | null | undefined): TimeMove | null
 function changeClosed(t: TournamentRow, tz: string, nowMs: number): string | null {
   if (t.teams_at) return 'The teams are published. The time and the plan stay.';
   if (nightOver(t, tz, nowMs)) return 'The tournament night is over.';
-  if (t.final_date && startSetOf(t) && nowMs >= startMsOf(t.final_date, realTimes(t).start, tz) - LIVE_BEFORE_MS) return 'The night has started. The time and the plan stay.';
+  if (t.final_date && startSetOf(t) && nowMs >= Math.min(startMsOf(t.final_date, realTimes(t).start, tz) - LIVE_BEFORE_MS, nightStartMs(t, tz)))
+    return 'The night has started. The time and the plan stay.';
   return null;
 }
 /** SQL: no game of the night has been written (Locked doubles publishes them; Americano writes them at the night's first save). */

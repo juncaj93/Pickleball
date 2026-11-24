@@ -226,7 +226,10 @@ export const ZIP85_STAGES = ['zip85_idle', 'zip85_owed'] as const;
  *   zip88_final    Locked doubles at the Final (final_on), the Final and 3rd place at Play to 7 (rows set to 7 for the look of picture 3).
  *   zip88_sitting  Americano: Rounds 1 to 3 in, Round 4 on, Vic sits it (view as Vic).
  */
-export const ZIP88_STAGES = ['zip88_early', 'zip88_rd3', 'zip88_final', 'zip88_sitting'] as const;
+//   zip88_ready    Game day: ready to start now. Locked doubles tonight, the start later today (about 2 hours from now), teams published,
+//                  courts 1 and 2: the card's pill is "Start now"; tap it, "Are you sure?", Yes: the night card with "0 of 2 in", Game 1 and 2
+//                  on the courts. Players can rename their team until their first game has a score.
+export const ZIP88_STAGES = ['zip88_ready', 'zip88_early', 'zip88_rd3', 'zip88_final', 'zip88_sitting'] as const;
 type Zip88Stage = (typeof ZIP88_STAGES)[number];
 const isZip88Stage = (s: string): s is Zip88Stage => (ZIP88_STAGES as readonly string[]).includes(s);
 export const ZIP86_STAGES = ['zip86_payments', 'zip86_home', 'zip86_next', 'zip86_signup', 'zip86_lockin', 'zip86_whosin'] as const;
@@ -1005,6 +1008,19 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
 
 /** Zip 88: the night card's stages (ZIP88_STAGES above), on the existing nights. */
 async function zip88Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip88Stage) {
+  if (stage === 'zip88_ready') {
+    // Teams published (the real Publish rows), then the night moved to later today: today's date, the start about 2 hours from now.
+    const made = await dayStage(ctx, group, 'teams_published');
+    const tz = group.timezone;
+    const now = localParts(ctx.nowMs, tz);
+    const start = Math.min(23 * 60 + 55, Math.ceil((now.hour * 60 + now.minute + 120) / 5) * 5);
+    const today = todayKey(ctx.nowMs, tz);
+    await ctx.db.batch([
+      ctx.db.prepare('UPDATE tournaments SET final_date = ?, offered_dates = ?, start_minutes = ?, updated_at = ? WHERE id = ?').bind(today, JSON.stringify([today]), start, ctx.nowIso, made.id),
+      ctx.db.prepare('UPDATE tournament_signups SET dates = ? WHERE tournament_id = ?').bind(JSON.stringify([today]), made.id),
+    ]);
+    return { ...made, stage, date: today };
+  }
   if (stage === 'zip88_final') {
     const made = await zip58Stage(ctx, group, 'final_on');
     await ctx.db

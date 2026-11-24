@@ -4,7 +4,6 @@
 // Only drawn while the switch is on and the tournament is Americano with tickets closed.
 import { lazy, Suspense, useState } from 'react';
 import type { AdminRoundGame, AdminRoundsView, AdminTournamentView } from '../../../shared/tournament';
-import { startMsOf } from '../../../shared/tournamentTickets';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { AlertCard } from '../../AlertCard';
 import { Sheet, useToast } from '../../ui';
@@ -13,7 +12,7 @@ import type { AdminCtx } from '../Admin';
 import { ScoreboardSheet } from './Scoreboard';
 import { afterRoundWords, roundGame } from './scoreboardData';
 import { NightCard as NightCardView } from './NightCard';
-import { americanoNightModel } from './nightCardData';
+import { americanoNightModel, nightOnAt } from './nightCardData';
 import { StandingsList } from './StandingsList';
 import './tournament-day.css';
 
@@ -52,8 +51,8 @@ const where = (g: AdminRoundGame) => `Court ${g.courtNumber ?? g.court}`;
 
 /** The night is on (or about to be): from 30 minutes before the real start. */
 function nightOn(ctx: AdminCtx, t: AdminTournamentView): boolean {
-  if (!t.finalDate || !t.startSet) return false;
-  return Date.parse(ctx.d.now) >= startMsOf(t.finalDate, t.start, ctx.d.group.timezone) - 30 * 60_000;
+  // Zip 88: also from Start now's tap (nightOnAt).
+  return nightOnAt(t, ctx.d.now, ctx.d.group.timezone);
 }
 
 /** Everything zip 61 adds to the organizer's Home (first on it), for an Americano night. */

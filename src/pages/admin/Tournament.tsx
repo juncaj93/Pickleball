@@ -62,6 +62,7 @@ import { type ProjectedTeam, projectedTeams } from '../../../shared/projectedTea
 import { totalLabel } from '../../../shared/tournamentSchedule';
 import './tournament-admin.css';
 import './tournament-card86.css';
+import './night-card88.css';
 
 const todayKeyOf = (nowIso: string, tz: string) => {
   const p = localParts(Date.parse(nowIso), tz);
@@ -316,6 +317,9 @@ const votesLine = (v: NonNullable<AdminTournamentView['votes']>) => (
 function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState<null | 'change' | 'money' | 'prizes'>(null);
+  // Zip 88: Start now's "Are you sure?" and its call in flight.
+  const [askStart, setAskStart] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [page, setPage] = useState<null | 'dates' | 'edit' | 'tickets'>(null);
   const toast = useToast();
   // Zip 81: the Home card "the venue closes at noon" asks to open Time (Change time): the card opens with the Change sheet showing.
@@ -362,7 +366,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const money = m ? <BigButton title="Money" sub={`${signed(m.youCents)} if all pay`} onClick={() => setSheet('money')} data="data-tm86-money" /> : null;
   return (
     <section ref={cardRef} className={open ? 'tm-hc tm86 tm-hc-open' : 'tm-hc tm86'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={ticketsStage ? t.status : true} data-tm-open={open}>
-      <h2 className="tm-hc-head">
+      <h2 className={t.startNow ? 'tm-hc-head tm88-head' : 'tm-hc-head'}>
         <button type="button" className="tm-hc-top" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((o) => !o)} data-tm-home-toggle>
           <span className="tm-hc-ball" aria-hidden="true">
             <Pickleball />
@@ -373,11 +377,53 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
               {statusWords(t, ctx.d.now, tz)}
             </span>
           </span>
-          <span className={pill.cls} data-tm-stage data-tickets-card={t.status === 'tickets' ? `${locked}/${t.size}` : undefined}>
-            {pill.words}
-          </span>
+          {!t.startNow && (
+            <span className={pill.cls} data-tm-stage data-tickets-card={t.status === 'tickets' ? `${locked}/${t.size}` : undefined}>
+              {pill.words}
+            </span>
+          )}
         </button>
+        {/* Zip 88: game day, teams and courts set: the pill is a solid green Start now (44 px). Its own button, outside the fold toggle. */}
+        {t.startNow && (
+          <button type="button" className="tm88-start" onClick={() => setAskStart(true)} aria-expanded={askStart} data-tm88-start>
+            Start now
+          </button>
+        )}
       </h2>
+      {t.startNow && askStart && (
+        <div className="tm88-ask" role="group" aria-label="Start the night now?" data-tm88-ask>
+          <p className="tm88-ask-q">
+            <b>Start the night now?</b> Are you sure? Games go on the courts and players can enter scores. The end time and the money stay.
+          </p>
+          <div className="tm88-ask-btns">
+            <button
+              type="button"
+              className="tm88-ask-btn"
+              disabled={starting}
+              onClick={async () => {
+                setStarting(true);
+                try {
+                  await api('POST', `/api/admin/tournament/${t.id}/games`, { action: 'start' });
+                  await ctx.reload();
+                  toast(`${t.name} started`);
+                  setAskStart(false);
+                } catch (err) {
+                  toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+                  void ctx.reload();
+                } finally {
+                  setStarting(false);
+                }
+              }}
+              data-tm88-yes
+            >
+              Start now
+            </button>
+            <button type="button" className="tm88-ask-btn" disabled={starting} onClick={() => setAskStart(false)} data-tm88-no>
+              Not yet
+            </button>
+          </div>
+        </div>
+      )}
       {/* Review: the card's warnings show on the closed line too (they used to be on the always-open card). */}
       {(datesPassed || evens) && (
         <div className="tm-hc-notes">

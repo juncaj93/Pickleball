@@ -304,7 +304,7 @@ const DICE = (
 
 /**
  * Your team (Alex's PM, under the ticket before the night): the name big, the two players under it. Zip 74 (pictures pair-1 and pair-2): while
- * the name can still change (until Game 1 starts: the server's `canRename`), one small secondary "Edit name" button on the right. It opens the
+ * the name can still change (Zip 88: until their team's first game has a score, the server's `canRename`; also on the night), one small secondary "Edit name" button on the right. It opens the
  * "Team name" sheet: a box with the name, "Need help? Randomize a name" (rolls a suggestion nobody else has into the box; nothing is saved),
  * and Save. Either partner; the last save wins; a name another team has is refused.
  */
@@ -651,6 +651,8 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
           />
         </Slide>
       )}
+      {/* Zip 88: the name can change until their team's first game has a score, so Your team (Edit name) stays on the night until then. */}
+      {day.team?.canRename && <YourTeamCard t={t} day={day} onChanged={onChanged} />}
       {/* Zip 58 (picture 22): the 3rd place game beside this player's Final. */}
       {tiePhase === null && day.alsoNow && next?.stage === 'final' && <AlsoNowCard a={day.alsoNow} />}
       {tiePhase === 'playoff' && day.playoff && <PlayoffCard rows={day.playoff} day={day} />}
