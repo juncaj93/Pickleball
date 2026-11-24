@@ -73,6 +73,9 @@ export function HomeGame({
       first.current = false;
       return;
     }
+    // Zip 86: only after a real tap on this game (fx): a game that opens by itself (the data arriving, a new week) never takes the focus, which
+    // drew the green (light) or lime (dark) focus ring around it on Home (picture 8).
+    if (!fx) return;
     const a = document.activeElement;
     if (!a || a === document.body) document.getElementById(`session-${s.id}`)?.focus({ preventScroll: true });
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -1,0 +1,113 @@
+/* Zip 86 (🎾86.clean admin, pictures 1, 2, 3 and 9): the slim dark tournament row in a week list. The tournament ticket's own tokens, so it
+   looks the same in light and dark. Lime means "tournament" (docs/DESIGN.md): the weekday, the month, the kicker and the main button. */
+.tw-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 14px 14px 12px;
+  border-radius: var(--card-r);
+  background:
+    radial-gradient(120% 90% at 18% 0%, var(--tour-bg-top) 0%, rgb(0 0 0 / 0%) 60%),
+    linear-gradient(180deg, var(--tour-bg) 0%, var(--tour-bg-deep) 100%);
+  box-shadow: inset 0 0 0 1px var(--tour-line);
+  color: var(--tour-ink);
+}
+.tw-stub {
+  flex: 0 0 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.tw-wd,
+.tw-mon {
+  font-size: max(11px, 0.72rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  color: var(--ball);
+}
+.tw-day {
+  margin: 4px 0 3px;
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--tour-ink);
+}
+.tw-main {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tw-kicker {
+  font-size: max(11px, 0.72rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--ball);
+}
+.tw-name {
+  font-size: 1.14rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.tw-sub {
+  font-size: 0.98rem;
+  line-height: 1.3;
+  color: var(--tour-sub);
+  overflow-wrap: break-word;
+}
+.tw-act {
+  flex: none;
+  min-height: var(--btn-h);
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--btn-r);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--fast) var(--ease), filter var(--fast);
+}
+.tw-act:active {
+  transform: scale(0.97);
+  filter: brightness(0.94);
+}
+.tw-act:focus-visible {
+  outline: 3px solid var(--ball);
+  outline-offset: 2px;
+}
+/* The main button: lime, like the big card's (Sign up, Lock in). */
+.tw-row-lime {
+  background: var(--ball);
+  color: var(--ball-ink);
+}
+.tw-act-gray {
+  background: rgb(255 255 255 / 12%);
+  color: var(--tour-ink);
+}
+/* Narrow phones and big text: the button goes under the words, full width. */
+@container pbwide (max-width: 19rem) {
+  .tw-row {
+    flex-wrap: wrap;
+  }
+  .tw-act {
+    flex: 1 1 100%;
+  }
+}
+@media (max-width: 339px) {
+  .tw-row {
+    gap: 10px;
+  }
+  .tw-act {
+    padding: 0 12px;
+  }
+}

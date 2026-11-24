@@ -206,7 +206,21 @@ export const ZIP83_STAGES = ['zip83_none'] as const;
  * Tournament tickets card with Mark paid. End is not held up.
  */
 export const ZIP85_STAGES = ['zip85_idle', 'zip85_owed'] as const;
-export const TEST_STAGES = [...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+/**
+ * Zip 86 (🎾86.clean admin):
+ *   zip86_payments  "Tournament card: payments": The Cold Open's numbers (pictures 5 to 7): 6 of 8 locked in (Alex free, 5 paid), 4 haven't paid
+ *                   (Vic, Zoe, Quinn, Reese), 10 expected, 2 courts, 7:30 to 10 PM, $18, prizes not set: Money says 5 paid $90, courts $120, so
+ *                   far -$30; if all 10 pay $162 - $120 - $28 suggested = +$14; the Money button +$42.
+ *   zip86_home      "Admin Home: booked tonight + not booked" (picture 10): The Cold Open as above, a game tonight (tomorrow after 7 PM) booked,
+ *                   court 4, Alex In with Parker, Sage and Christopher Vanderberg, all paid; the next day's game not booked, Rowan only, no court.
+ *   zip86_next      "Tournament next week (row, no button)": The Cold Open on next week's Tuesday: the row under NEXT WEEK, no button.
+ *   zip86_signup / zip86_lockin / zip86_whosin  "Tournament in 2 weeks": the week after next: View as Quinn (not on the list: Sign up), Vic (on the
+ *                   list, not paid: Lock in), Parker (locked in: Who's in).
+ */
+export const ZIP86_STAGES = ['zip86_payments', 'zip86_home', 'zip86_next', 'zip86_signup', 'zip86_lockin', 'zip86_whosin'] as const;
+type Zip86Stage = (typeof ZIP86_STAGES)[number];
+const isZip86Stage = (s: string): s is Zip86Stage => (ZIP86_STAGES as readonly string[]).includes(s);
+export const TEST_STAGES = [...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -361,6 +375,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip86Stage(stage)) return zip86Stage(ctx, group, stage);
   if (stage === 'zip83_none') return { ...(await zip70Stage(ctx, group, 'zip70_start')), stage };
   if (stage === 'zip85_idle') return { ...(await americanoStage(ctx, group, 'am_standings')), stage };
   if (stage === 'zip85_owed') {
@@ -1325,4 +1340,121 @@ async function venueStage(ctx: Ctx, group: GroupRow, stage: VenueStage) {
   // On the organizer's list (the calm preview hides empty games with the site's own "Hide from list" mark).
   await ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id = ? AND task = 'admin_hidden_game'").bind(group.id, id).run();
   return { ok: true, stage, id };
+}
+
+/** Zip 86: the Tuesday of the week `weeks` ahead (weeks start on Sunday, as the player's THIS WEEK / NEXT WEEK / LATER). */
+function tuesdayOfWeek(nowMs: number, tz: string, weeks: number): string {
+  const t = dayParts(todayKey(nowMs, tz));
+  const d = new Date(Date.UTC(t.year, t.month - 1, t.day - t.weekday + 7 * weeks + 2));
+  return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+/** Zip 86's stages (see ZIP86_STAGES), on Zip 70's The Cold Open (the real rows the screens read). */
+async function zip86Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip86Stage) {
+  const tz = group.timezone;
+  const made = await zip70Stage(ctx, group, 'zip70_start');
+  const id = (made as { id: string }).id;
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const t = await ctx.db.prepare('SELECT final_date FROM tournaments WHERE id = ?').bind(id).first<{ final_date: string }>();
+  const was = t!.final_date;
+  const at = (n: number) => new Date(ctx.nowMs - 86_400_000 + n * 60_000).toISOString();
+  const statements: ReturnType<Ctx['db']['prepare']>[] = [];
+  if (stage === 'zip86_payments' || stage === 'zip86_home') {
+    // 4 haven't paid: Vic and Zoe (zip70_start), plus Quinn on the list and Reese able to make the date. 10 expected (the Plan's saved number).
+    const quinn = idOf.get('Quinn');
+    if (quinn) {
+      statements.push(
+        ctx.db
+          .prepare("INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at) VALUES (?, ?, ?, 'in', 330, NULL, ?, ?, ?, ?)")
+          .bind(newId(), id, quinn, JSON.stringify([was]), at(1), at(1), at(1)),
+      );
+    }
+    statements.push(
+      ctx.db.prepare("UPDATE tournament_signups SET dates = ? WHERE tournament_id = ? AND player_id = (SELECT id FROM players WHERE group_id = ? AND display_name = 'Reese')").bind(JSON.stringify([was]), id, group.id),
+      ctx.db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, NULL, ?, 'mark', '10', ?)").bind(newId(), group.id, `tournament_expect:${id}`, ctx.nowIso),
+    );
+  } else {
+    // The night moves to next week's Tuesday (zip86_next) or the week after next (the three 2-week stages); everyone on the list can make it.
+    const day = tuesdayOfWeek(ctx.nowMs, tz, stage === 'zip86_next' ? 1 : 2);
+    const offered = [day];
+    statements.push(
+      ctx.db.prepare('UPDATE tournaments SET final_date = ?, offered_dates = ?, pay_by = ? WHERE id = ?').bind(day, JSON.stringify(offered), defaultPayBy(day, 19 * 60 + 30, tz, ctx.nowMs), id),
+      ctx.db.prepare('UPDATE tournament_signups SET dates = ? WHERE tournament_id = ?').bind(JSON.stringify(offered), id),
+    );
+  }
+  if (statements.length) await ctx.db.batch(statements);
+  if (stage === 'zip86_home') await zip86Games(ctx, group, idOf);
+  return { ok: true, stage, id };
+}
+
+/**
+ * Zip 86 (picture 10): two games this week on the organizer's Home, made with the real organizer actions (the same calls the screens send):
+ * tonight at 8 PM (tomorrow when it is 7 PM or later) booked, court 4, Alex In with Parker, Sage and Christopher Vanderberg, all paid; the next day
+ * at 8 PM not booked, Rowan only, no court. Each is shown on the list (the calm preview hides games with the site's own "Hide from list" mark).
+ */
+async function zip86Games(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, idOf: Map<string, string>) {
+  const admin = await import('./admin');
+  const tz = group.timezone;
+  const now = localParts(ctx.nowMs, tz);
+  const first = new Date(Date.UTC(now.year, now.month - 1, now.day + (now.hour >= 19 ? 1 : 0)));
+  const ids: string[] = [];
+  for (const add of [0, 1]) {
+    const d = new Date(first.getTime() + add * 86_400_000);
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + 1;
+    const dd = d.getUTCDate();
+    const startsAt = new Date(zonedTimeToUtc(y, m, dd, 20, 0, tz)).toISOString();
+    const endsAt = new Date(zonedTimeToUtc(y, m, dd, 22, 0, tz)).toISOString();
+    const dayFrom = new Date(zonedTimeToUtc(y, m, dd, 0, 0, tz)).toISOString();
+    const dayTo = new Date(zonedTimeToUtc(y, m, dd, 23, 59, tz)).toISOString();
+    const games = (await ctx.db.prepare('SELECT id, starts_at, status FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at').bind(group.id, dayFrom, dayTo).all<{ id: string; starts_at: string; status: string }>()).results;
+    // The day's other games (and any canceled one) leave the list, so the day shows just this one.
+    for (const g of games) {
+      await ctx.db.prepare("INSERT OR IGNORE INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, ?, 'admin_hidden_game', 'mark', NULL, ?)").bind(newId(), group.id, g.id, ctx.nowIso).run().catch(() => {});
+    }
+    const live = games.find((g) => g.status !== 'canceled');
+    let id = live?.id ?? null;
+    if (id) {
+      // A fresh start: nobody on it, no court number.
+      await ctx.db.batch([
+        ctx.db.prepare('DELETE FROM session_players WHERE session_id = ?').bind(id),
+        ctx.db.prepare("UPDATE sessions SET starts_at = ?, ends_at = ?, planned_starts_at = ?, status = 'planned', booking_status = 'needs_booking', updated_at = ? WHERE id = ?").bind(startsAt, endsAt, startsAt, ctx.nowIso, id),
+      ]);
+    } else {
+      id = newId();
+      await ctx.db
+        .prepare(
+          `INSERT INTO sessions (id, group_id, starts_at, ends_at, planned_starts_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, NULL, 0, ?, ?)`,
+        )
+        .bind(id, group.id, startsAt, endsAt, startsAt, new Date(Date.parse(startsAt) - 12 * 3_600_000).toISOString(), ctx.nowIso, ctx.nowIso)
+        .run();
+    }
+    await ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id = ? AND task = 'admin_hidden_game'").bind(group.id, id).run();
+    ids.push(id);
+  }
+  const on = (sid: string) => ({ ...ctx, params: { id: sid } }) as Ctx;
+  const [tonight, next] = ids;
+  // Each call is the real organizer action; one that the fake world refuses (a switch off, a rule) is skipped, so the stage still loads.
+  const tryIt = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch {
+      /* skipped */
+    }
+  };
+  await tryIt(() => admin.setCourtStatus(on(tonight), { status: 'booked' }));
+  await tryIt(() => admin.setCourtNumber(on(tonight), { court: 4 }));
+  await tryIt(() => admin.organizerInOut(on(tonight), { in: true }));
+  for (const name of ['Parker', 'Sage', 'Christopher Vanderberg']) {
+    const pid = idOf.get(name);
+    if (!pid) continue;
+    await tryIt(() => admin.editRoster(on(tonight), { playerId: pid, action: 'confirm' }));
+    await tryIt(() => admin.setPayment(on(tonight), { playerId: pid, paid: true }));
+  }
+  // Never Vic, Wren or Zoe on a game that ends before the next re-seed (docs/PREVIEW_FAKE_DB.md: their unpaid counts stay 1, 2 and 3).
+  const rowan = idOf.get('Rowan');
+  if (rowan) await tryIt(() => admin.editRoster(on(next), { playerId: rowan, action: 'confirm' }));
+  await tryIt(() => admin.setCourtStatus(on(next), { status: 'not_booked' }));
 }

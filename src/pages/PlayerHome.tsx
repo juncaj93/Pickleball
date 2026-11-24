@@ -8,6 +8,9 @@ import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
 import { zonedTimeToUtc } from '../../shared/time';
+import { dayParts, planRange } from '../../shared/tournament';
+import { ticketStateOf } from '../../shared/tournamentNudge';
+import { type TourRowAction, TourWeekRow } from '../TourWeekRow';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, dropMoneyLine, joinedCreditText } from '../../shared/credit';
 import { adjustedPlayerLine, latestAdjustment, signedPrice } from '../../shared/adjustCredit';
@@ -41,6 +44,7 @@ import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 import '../credit-player.css';
 import '../player-cards.css';
+import '../player-rhythm86.css';
 import '../motion.css';
 import { BLOCKED_CODE, blockSheet, NUDGE_TOAST_MS, nudgeState, nudgeToast, oweLine, oweTitle, type NudgeState } from '../../shared/unpaidNudge';
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
@@ -201,6 +205,27 @@ function useFadeOut(items: PlayerSessionView[]): { s: PlayerSessionView; leaving
   return out;
 }
 
+/** Zip 86: the tournament's row in the week list (pictures 1, 2, 3): only once its date is final, next week or later, never canceled or over. */
+type TourRowItem = { at: string; day: string; name: string; sub: string; action: TourRowAction | null };
+function tourRowOf(v: GroupView, nowMs: number, tz: string, mineOnly: boolean): TourRowItem | null {
+  const t = v.tournament;
+  if (!t || !t.finalDate || (t.status !== 'tickets' && t.status !== 'date_picked') || t.results || (mineOnly && !t.me)) return null;
+  const p = dayParts(t.finalDate);
+  const at = new Date(zonedTimeToUtc(p.year, p.month, p.day, Math.floor(t.start / 60), t.start % 60, tz)).toISOString();
+  if (weekTier(at, nowMs, tz) === 'this') return null;
+  // Two weeks or more: the big card's main button (lime Sign up or Lock in, else the gray Who's in); never Drop out.
+  const state = ticketStateOf(t);
+  const action: TourRowAction | null = !t.me ? (t.openDates.length > 0 && !t.tickets?.closed ? 'signup' : null) : state === 'lock' ? 'lock' : 'who';
+  return { at, day: t.finalDate, name: t.name, sub: planRange(t.start, t.minutes), action };
+}
+/** Zip 86: the game rows with the tournament's row put in by time (before the first game that starts after it, else last). */
+function withTourRow<R extends { s: PlayerSessionView; leaving: boolean }>(rows: R[], tour: TourRowItem | null): (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] {
+  const out: (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] = rows.map((r, gi) => ({ ...r, tour: null, gi }));
+  if (!tour || rows.length === 0) return out;
+  const i = rows.findIndex((r) => Date.parse(r.s.startsAt) > Date.parse(tour.at));
+  out.splice(i < 0 ? out.length : i, 0, { tour });
+  return out;
+}
 const TIER_LABEL: Record<WeekTier, string> = { this: 'This week', next: 'Next week', later: 'Later' };
 
 type JoinResponse = {
@@ -988,11 +1013,29 @@ export function PlayerHome({
                   </button>
                 </div>
               )}
-              {rows.map(({ s, leaving }, i) => {
-                const tier = weekTier(s.startsAt, Date.parse(g.now), tz);
-                const prev = i > 0 ? weekTier(rows[i - 1].s.startsAt, Date.parse(g.now), tz) : null;
+              {withTourRow(rows, tourRowOf(view!, Date.parse(g.now), tz, mineOnly)).map((it, i, all) => {
+                const at = it.tour ? it.tour.at : it.s.startsAt;
+                const tier = weekTier(at, Date.parse(g.now), tz);
+                const prevIt = i > 0 ? all[i - 1] : null;
+                const prev = prevIt ? weekTier(prevIt.tour ? prevIt.tour.at : prevIt.s.startsAt, Date.parse(g.now), tz) : null;
                 // One header per tier: THIS WEEK, NEXT WEEK, LATER (every week after next shares one).
                 const header = prev !== tier ? TIER_LABEL[tier] : null;
+                if (it.tour) {
+                  // Zip 86 (pictures 1, 2, 3): the tournament's slim dark row on its day, next week or later only.
+                  return (
+                    <Fragment key="tour-row">
+                      {header && (
+                        <div className={`week-break tier-${tier}`}>
+                          <h3>{header}</h3>
+                          {i === 0 && <GameFilterToggle filter={filter} onChange={setFilter} />}
+                        </div>
+                      )}
+                      <TourWeekRow day={it.tour.day} name={it.tour.name} sub={it.tour.sub} action={tier === 'later' ? it.tour.action : null} data={tier === 'later' ? (it.tour.action ?? 'none') : 'next'} />
+                    </Fragment>
+                  );
+                }
+                const { s, leaving } = it;
+                const gi = it.gi;
                 return (
                   <Fragment key={s.id}>
                     {header && (
@@ -1013,7 +1056,7 @@ export function PlayerHome({
                       celebrating={celebrating.has(s.id)}
                       prev={swapFrom ? (swapFrom.get(s.id) ?? null) : undefined}
                       leaving={leaving}
-                      top={i === 0}
+                      top={gi === 0}
                     />
                   </Fragment>
                 );

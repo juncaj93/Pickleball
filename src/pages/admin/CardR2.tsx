@@ -6,7 +6,9 @@ import { rosterLine } from '../../../shared/guestSpot';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, localParts, ordinal, weekFade } from '../../../shared/time';
 import { useRef, useState } from 'react';
-import { api, ApiError, useNow } from '../../lib';
+import { api, ApiError, isIOS, useNow } from '../../lib';
+import { siteAddress, smsHref } from '../../../shared/messages';
+import { stillInTextR2 } from '../../../shared/textsR2';
 import { BANNER_TIMING, CourtReserveLink, PlayersLine, useToast } from '../../ui';
 import { type Hold, startHold, trackHeld } from '../../undoHold';
 import { actingStamp } from '../../InstantTaps';
@@ -17,15 +19,15 @@ import { COURT_NAME, directionsUrl } from '../../../shared/zip9';
 import { CourtMap } from '../../GameDay';
 import { DirectionsArrowIcon } from '../../CardButtons';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
-import { tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
+import { stillInText, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { DateTile } from '../PlayerHome';
 import { adminTileDay } from '../../zip7';
 import type { AdminCtx } from '../Admin';
-import { courtLine, ShortPanel, TimeCheck, useAction } from './Sessions';
-import { CourtSwitch } from './CourtSwitch';
+import { courtLine, ShortPanel, useAction } from './Sessions';
 import { GameMenu } from './GameMenu';
 import { isPlayed, lateDropsAll } from './todo';
 import '../../admin-r2.css';
+import '../../admin-card86.css';
 import { ShortGameTilePill } from './ShortGame';
 
 /**
@@ -101,14 +103,20 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   const todayOrComing = dayNum(Date.parse(s.startsAt)) >= dayNum(now);
   // Zip 29: everyone who is in has paid (a green check), or somebody still owes (amber $). Nobody in yet: the plain green $ as before.
   const paidState = inCount > 0 ? (s.paidCount >= inCount ? 'all' : 'owed') : 'none';
+  // Zip 86: the green stripe on the left only when the organizer is In (the tap shows at once).
+  const meIn = seat !== null ? seat : mineRow?.status === 'confirmed';
+  // Zip 86: the court-cancel deadline, one small gray line under the names, only on the day it falls (and before it passes).
+  const cancelBy = live ? cancelByFoot(s.startsAt, now, tz) : null;
+  const cancelToday = !!cancelBy && dayNum(Date.parse(cancelByIso(s.startsAt))) === dayNum(now);
   return (
     <div className="r2-wrap">
       <article
         id={`session-${s.id}`}
         tabIndex={-1}
-        className={`card scard scard-r2 court-${court.kind}${blink ? ' m-blink' : ''}`}
+        className={`card scard scard-r2 scard86 court-${court.kind}${blink ? ' m-blink' : ''}`}
         data-court={court.kind}
         data-switch={switchValue}
+        data-me-in={meIn ? 'yes' : undefined}
         data-fade={weekFade(s.startsAt, now, tz) || undefined}
         data-remind={s.state.flags.bookingPromptDue || undefined}
         data-r2-card
@@ -132,7 +140,15 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
             <h2 id={`as-${s.id}`} className="sr-only">
               {formatShortDate(s.startsAt, tz)}, {formatTime(s.startsAt, tz)}
             </h2>
-            {showSwitch ? <CardSwitchR2 ctx={ctx} s={s} value={switchValue} onPicked={setPicked} /> : <div className="court-line top-line">{courtLine(court)}</div>}
+            {/* Zip 86 (picture 10): the court status as ONE button (a tap moves it on, with Undo) and the organizer's In / Out beside it. */}
+            {showSwitch ? (
+              <div className="r86-actions" data-r86-actions>
+                <StatusButton ctx={ctx} s={s} value={switchValue} onPicked={setPicked} />
+                {live && <InOut ctx={ctx} s={s} seat={seat} onSeat={setSeat} />}
+              </div>
+            ) : (
+              <div className="court-line top-line">{courtLine(court)}</div>
+            )}
             {showSwitch && later && <div className="court-sub small muted">{court.text}</div>}
             {s.hiddenFromPlayers && canceled && ctx.d.adminV2 === true && (
               <div className="small muted hidden-tag" data-hidden-tag>
@@ -162,7 +178,12 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
                 cleanup={ctx.d.cardCleanup === true}
               />
             )}
-            {s.timeCheck && ctx.d.timeShift !== false && <TimeCheck ctx={ctx} s={s} />}
+            {cancelToday && (
+              <p className="r86-cancel-by" data-cancel-by>
+                Cancel the court by {cancelBy!.text}
+              </p>
+            )}
+            {s.timeCheck && ctx.d.timeShift !== false && <ConfirmLine ctx={ctx} s={s} />}
           </div>
           <div className="r2-gear">
             {/* Zip 32 (bug fix): a played (finalized) game has no gear: its menu (Players, Cancel session) was clipped by the sheet, and Reopen is the way to change it. */}
@@ -170,47 +191,40 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
           </div>
         </div>
         {!canceled && (
-          <div className="r2-foot" data-r2-foot>
-            <div className="r2-cell r2-inout">{live && <InOut ctx={ctx} s={s} seat={seat} onSeat={setSeat} />}</div>
-            <div className="r2-cell r2-paidcell">
-              <button
-                type="button"
-                className={`r2-paid${paidFlash ? ' m-flash' : ''}`}
-                data-paid-cell
-                data-paid-state={paidState}
-                data-all-paid={inCount > 0 && s.paidCount === inCount ? 'yes' : undefined}
-                aria-label={`${s.paidCount} of ${inCount} paid. Open the players list.`}
-                onClick={() => ctx.open('roster', s.id)}
-              >
-                <span className="r2-dol" aria-hidden="true">
-                  {paidState === 'all' ? (
-                    <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="m3.6 8.4 2.8 2.8 6-6.4" />
-                    </svg>
-                  ) : (
-                    '$'
-                  )}
-                </span>
-                <span className="r2-paid-text">
-                  <RollText text={`${s.paidCount} of ${inCount}`} />
-                </span>
-              </button>
-            </div>
-            <div className="r2-cell r2-endcell">
-              {needsBook ? (
-                <span className="r2-book" data-court-need>
-                  <span className="sr-only">Court still needs to be booked. </span>
-                  <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-                    Book
-                  </CourtReserveLink>
-                </span>
-              ) : s.courtNum !== undefined && todayOrComing ? (
-                // Zip 29: the game has a court number: "Court 13 | arrow" (the arrow opens directions, the same address and link as the player card).
-                <CourtJoined court={s.courtNum} dayLabel={formatShortDate(s.startsAt, tz)} />
-              ) : (
-                live && <CancelBy startsAt={s.startsAt} now={now} tz={tz} />
-              )}
-            </div>
+          <div className="r86-foot" data-r2-foot>
+            <button
+              type="button"
+              className={`r86-paid${paidFlash ? ' m-flash' : ''}`}
+              data-paid-cell
+              data-paid-state={paidState}
+              data-all-paid={inCount > 0 && s.paidCount === inCount ? 'yes' : undefined}
+              aria-label={`${s.paidCount} of ${inCount} paid. Open the players list.`}
+              onClick={() => ctx.open('roster', s.id)}
+            >
+              <span className="r86-paid-mark" aria-hidden="true">
+                {paidState === 'all' ? (
+                  <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m3.6 8.4 2.8 2.8 6-6.4" />
+                  </svg>
+                ) : (
+                  '$'
+                )}
+              </span>
+              <span className="r86-paid-text">
+                <RollText text={`${s.paidCount} of ${inCount} paid`} />
+              </span>
+            </button>
+            {needsBook ? (
+              <span className="r2-book r86-book" data-court-need>
+                <span className="sr-only">Court still needs to be booked. </span>
+                <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+                  Book
+                </CourtReserveLink>
+              </span>
+            ) : (
+              todayOrComing && <CourtButton ctx={ctx} s={s} dayLabel={formatShortDate(s.startsAt, tz)} />
+            )}
+            {todayOrComing && <DirectionsButton dayLabel={formatShortDate(s.startsAt, tz)} />}
           </div>
         )}
         {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
@@ -221,10 +235,67 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
 }
 
 /**
- * The organizer's own seat: two plain words, In | Out. The one that is true is filled, the moment it is tapped: the seat count, the
- * dots and the names on the card follow at once. The save goes out in the background and the toast shows when the server answers
- * (not after the whole screen reloads). If the server refuses or cannot be reached, everything snaps back and says so. Quick taps
- * are sent in order and the last one wins. Nothing is disabled while it saves. Same request and same rules as the old I'm in.
+ * Zip 86: the Time check, short: one amber line ("2 of 4 confirmed") only while someone still has to confirm, with today's Text buttons for
+ * who is still waiting (the same text and links as the box it replaces). Everyone confirmed: nothing.
+ */
+function ConfirmLine({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const c = s.timeCheck!;
+  if (c.confirmedCount >= c.inCount) return null;
+  const tz = ctx.d.group.timezone;
+  const body = ctx.d.textsR2 === true ? stillInTextR2(s.startsAt, tz, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink)) : stillInText(s.startsAt, tz, siteAddress(ctx.d.group.playerLink));
+  return (
+    <div className="r86-confirm" data-time-check>
+      <span className="r86-confirm-words">
+        {c.confirmedCount} of {c.inCount} confirmed
+      </span>
+      {c.waiting.map((w) => (
+        <a key={w.playerId} className="r86-text" href={smsHref(w.phone, body, isIOS)} aria-label={`Text ${w.name}: ${body}`}>
+          Text {w.name}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Zip 86: the court button: "Court 4" opens the court map (as before); "Court ?" (gray) until a court is set opens today's court entry (Edit
+ * game, where the court number is picked).
+ */
+function CourtButton({ ctx, s, dayLabel }: { ctx: AdminCtx; s: AdminSessionView; dayLabel: string }) {
+  const [mapOpen, setMapOpen] = useState(false);
+  const courtRef = useRef<HTMLButtonElement>(null);
+  if (s.courtNum === undefined) {
+    return (
+      <button type="button" className="r86-court r86-court-none" aria-label={`No court set for ${dayLabel}. Set the court.`} onClick={() => ctx.open('edit', s.id)} data-court-num="none">
+        Court ?
+      </button>
+    );
+  }
+  return (
+    <>
+      <button ref={courtRef} type="button" className="r86-court" data-court-joined data-court-num={s.courtNum} aria-haspopup="dialog" aria-label={`Court ${s.courtNum}, show it on the court map`} onClick={() => setMapOpen(true)}>
+        Court {s.courtNum}
+      </button>
+      <CourtMap open={mapOpen} onClose={() => setMapOpen(false)} lit={s.courtNum} anchor={courtRef} label={`Court map. This game is on Court ${s.courtNum}.`} />
+    </>
+  );
+}
+
+/** Zip 86: directions as its own button (the same address and link as the player card's Directions button). */
+function DirectionsButton({ dayLabel }: { dayLabel: string }) {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  return (
+    <a className="r86-dir" href={directionsUrl(COURT_NAME, ua)} target="_blank" rel="noopener noreferrer" data-court-directions aria-label={`Directions to the courts for ${dayLabel}`}>
+      <DirectionsArrowIcon />
+    </a>
+  );
+}
+
+/**
+ * The organizer's own seat. Zip 86 (picture 10): ONE button, soft green "✓ In" or gray "Out"; a tap flips it. It answers the tap at once: the
+ * seat count, the dots and the names on the card follow. With Undo on (ADMIN_UNDO) the toast has Undo and the save waits 5 seconds, like the
+ * court status; off, the save goes out at once and the toast shows when the server answers. If the server refuses or cannot be reached,
+ * everything snaps back and says so. Quick taps are sent in order and the last one wins. Same request and same rules as before.
  */
 function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; seat: boolean | null; onSeat: (v: boolean | null) => void }) {
   const toast = useToast();
@@ -233,16 +304,42 @@ function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; s
   const day = formatShortDate(s.startsAt, ctx.d.group.timezone);
   const latest = useRef(0);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const held = useRef<Hold | null>(null);
+  const undoOn = ctx.d.adminUndo === true;
   const isIn = seat ?? !!mine;
+  const waiting = mine?.status === 'waitlisted' && seat === null;
   const send = (goingIn: boolean) => {
     const me_ = ++latest.current;
     onSeat(goingIn);
+    let said = goingIn ? 'You’re in' : 'You’re out';
+    let hold: Hold | null = null;
+    if (undoOn) {
+      held.current?.release();
+      const h = startHold();
+      hold = held.current = h;
+      toast(said, 'ok', {
+        keep: true,
+        stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            if (!h.undo()) return void toast('Already saved. Change it back by hand.', 'ok');
+            if (me_ === latest.current) onSeat(null);
+            toast('Undone. Nothing was saved.', 'ok', { keep: true });
+            void ctx.reload().catch(() => {});
+          },
+        },
+      });
+    }
+    const as = hold ? actingStamp() : '';
     chain.current = chain.current.then(async () => {
-      let said = goingIn ? "You’re in" : "You’re out";
+      if (hold && !(await hold.decided)) return;
       try {
+        if (hold && actingStamp() !== as) throw new ApiError(409, 'screen_changed', 'Nothing was sent: the screen changed before it could save.');
         const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
-        if (goingIn && (res.result === 'waitlisted' || res.result === 'standby')) said = `You’re ${ordinal(res.position ?? 1)} on the waitlist`;
-        if (me_ === latest.current) toast(said);
+        const wait = goingIn && (res.result === 'waitlisted' || res.result === 'standby');
+        if (wait) said = `You’re ${ordinal(res.position ?? 1)} on the waitlist`;
+        if (me_ === latest.current && (!hold || wait)) toast(said);
       } catch (err) {
         toast(err instanceof ApiError ? `${err.message} It went back.` : 'That did not save, so it went back. Check your connection and try again.', 'error');
         if (me_ === latest.current) {
@@ -260,37 +357,24 @@ function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; s
       }
       if (me_ === latest.current) onSeat(null);
     });
+    if (hold) trackHeld(chain.current);
   };
   return (
-    <div className="r2-seg" role="group" aria-label={`You, ${day}`} data-inout={isIn ? 'in' : 'out'}>
-      <button type="button" className="r2-seg-in" aria-pressed={isIn} aria-label={`I’m in for ${day}${mine?.status === 'waitlisted' && seat === null ? ' (you are on the waitlist)' : ''}`} onClick={() => !isIn && send(true)}>
-        In
-      </button>
-      <button type="button" className="r2-seg-out" aria-pressed={!isIn} aria-label={`Out of ${day}`} onClick={() => isIn && send(false)}>
-        Out
-      </button>
-    </div>
-  );
-}
-
-/**
- * Zip 29: the footer's right cell when the game has a court number: one outlined button in two halves, "Court 13" (opens the court map, like the
- * player card's Court button) and an arrow (opens directions: the same address and the same link the player card's Directions button uses).
- */
-function CourtJoined({ court, dayLabel }: { court: number; dayLabel: string }) {
-  const [mapOpen, setMapOpen] = useState(false);
-  const courtRef = useRef<HTMLButtonElement>(null);
-  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
-  return (
-    <span className="r2-courtbtn" role="group" aria-label={`${dayLabel}: court and directions`} data-court-joined>
-      <button ref={courtRef} type="button" className="r2-courtbtn-half r2-courtbtn-num" data-court-num={court} aria-haspopup="dialog" aria-label={`Court ${court}, show it on the court map`} onClick={() => setMapOpen(true)}>
-        Court {court}
-      </button>
-      <a className="r2-courtbtn-half r2-courtbtn-dir" href={directionsUrl(COURT_NAME, ua)} target="_blank" rel="noopener noreferrer" data-court-directions aria-label={`Directions to the courts for ${dayLabel}`}>
-        <DirectionsArrowIcon />
-      </a>
-      <CourtMap open={mapOpen} onClose={() => setMapOpen(false)} lit={court} anchor={courtRef} label={`Court map. This game is on Court ${court}.`} />
-    </span>
+    <button
+      type="button"
+      className={isIn ? 'r86-inout r86-in' : 'r86-inout'}
+      aria-pressed={isIn}
+      aria-label={isIn ? `You’re in for ${day}${waiting ? ' (on the waitlist)' : ''}. Tap to go out.` : `You’re out of ${day}. Tap to go in.`}
+      onClick={() => send(!isIn)}
+      data-inout={isIn ? 'in' : 'out'}
+    >
+      {isIn && (
+        <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m3.4 8.4 2.9 2.9 6.3-6.6" />
+        </svg>
+      )}
+      {isIn ? (waiting ? 'Waitlist' : 'In') : 'Out'}
+    </button>
   );
 }
 
@@ -311,21 +395,6 @@ export function cancelByFoot(startsAtIso: string, nowMs: number, tz: string): { 
   const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(new Date(at));
   const text = ahead <= 0 ? clock : ahead < 7 ? `${weekday} ${clock}` : `${formatMonthDay(atIso, tz)} ${clock}`;
   return { text, soon: at - nowMs <= 24 * 3_600_000 };
-}
-
-function CancelBy({ startsAt, now, tz }: { startsAt: string; now: number; tz: string }) {
-  const c = cancelByFoot(startsAt, now, tz);
-  if (!c) return null;
-  return (
-    <span className={`r2-cancel${c.soon ? ' soon' : ''}`} data-cancel-by>
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3 2" />
-      </svg>
-      <span className="sr-only">Cancel the court by </span>
-      {c.text}
-    </span>
-  );
 }
 
 /**
@@ -357,76 +426,86 @@ function HolidayTab({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   );
 }
 
+/** Zip 86: the court status order on the one button: a tap moves to the next one. */
+const NEXT_STATUS: Record<CourtSwitchValue, CourtSwitchValue> = { not_booked: 'waitlist', waitlist: 'booked', booked: 'not_booked' };
+const STATUS_WORDS: Record<CourtSwitchValue, string> = { not_booked: 'Not booked', waitlist: 'Waitlist', booked: 'Booked' };
+
 /**
- * The court switch on a card, instant: the tapped segment is filled the moment it is tapped (and the card's own marks follow), the save
- * goes out in the background, and the confirmation toast shows as soon as the server answers (not after the whole screen reloads).
- * If the server refuses or cannot be reached, the switch snaps back and says so. Quick second taps are sent in order, the last one wins.
- * Nothing is disabled while it saves. Same request, same rules as the old switch: only the waiting got shorter.
+ * Zip 86 (picture 10): the court status as ONE button: solid green "Booked" with a small ball-yellow dot, amber "Not booked", Waitlist in its
+ * own calm blue. A tap moves it on (Not booked, Waitlist, Booked, Not booked) and answers at once: the button and the card's marks follow, the
+ * save goes out in the background (with Undo on: the toast has Undo and the save waits 5 seconds). If the server refuses or cannot be reached,
+ * it snaps back and says so. Quick taps are sent in order, the last one wins. Same request, same rules as the old 3-way switch.
  */
-function CardSwitchR2({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue; onPicked: (v: CourtSwitchValue | null) => void }) {
+function StatusButton({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue; onPicked: (v: CourtSwitchValue | null) => void }) {
   const toast = useToast();
   const latest = useRef(0);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
-  // Undo on admin toasts (ADMIN_UNDO, Zip 13): the switch moves at once, the save waits 5 seconds (src/undoHold.ts). A newer tap on this
-  // switch lets the older one save first, so the server always ends on the last tap. Off: exactly as before.
+  // Undo on admin toasts (ADMIN_UNDO, Zip 13): the button moves at once, the save waits 5 seconds (src/undoHold.ts). A newer tap lets the older
+  // one save first, so the server always ends on the last tap. Off: saved at once.
   const held = useRef<Hold | null>(null);
   const undoOn = ctx.d.adminUndo === true;
-  return (
-    <CourtSwitch
-      value={value}
-      label={`Court status for ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}
-      onPick={(to) => {
-        const mine = ++latest.current;
-        onPicked(to);
-        const said = to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked';
-        let hold: Hold | null = null;
-        if (undoOn) {
-          held.current?.release();
-          const h = startHold();
-          hold = held.current = h;
-          toast(said, 'ok', {
-            keep: true,
-            stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn,
-            action: {
-              label: 'Undo',
-              onClick: () => {
-                if (!h.undo()) return void toast('Already saved. Change it back by hand.', 'ok');
-                if (mine === latest.current) onPicked(null);
-                toast('Undone. Nothing was saved.', 'ok', { keep: true });
-                // An older tap on this switch may have saved meanwhile: show what the server has now.
-                void ctx.reload().catch(() => {});
-              },
-            },
-          });
-        }
-        const as = hold ? actingStamp() : '';
-        chain.current = chain.current.then(async () => {
-          if (hold && !(await hold.decided)) return;
-          try {
-            // Held: sent only as whoever the screen acted as when it was tapped (never into View as or Pretend's demo copy).
-            if (hold && actingStamp() !== as) throw new ApiError(409, 'screen_changed', 'Nothing was sent: the screen changed before it could save.');
-            await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to });
-            if (mine === latest.current && !hold) toast(said);
-          } catch (err) {
-            // Only the newest tap decides what the switch shows: a failure of an older one is reported but does not move it.
-            toast(err instanceof ApiError ? `${err.message} The switch went back.` : "That did not save, so the switch went back. Check your connection and try again.", 'error');
-            if (mine === latest.current) {
-              // Show what the server really has (an earlier quick tap may have saved), then let go of the tap.
-              await ctx.reload().catch(() => {});
-              if (mine === latest.current) onPicked(null);
-            }
-            return;
-          }
-          if (mine !== latest.current) return;
-          try {
-            await ctx.reload();
-          } catch {
-            /* the next refresh brings it */
-          }
+  const pick = (to: CourtSwitchValue) => {
+    const mine = ++latest.current;
+    onPicked(to);
+    const said = to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked';
+    let hold: Hold | null = null;
+    if (undoOn) {
+      held.current?.release();
+      const h = startHold();
+      hold = held.current = h;
+      toast(said, 'ok', {
+        keep: true,
+        stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            if (!h.undo()) return void toast('Already saved. Change it back by hand.', 'ok');
+            if (mine === latest.current) onPicked(null);
+            toast('Undone. Nothing was saved.', 'ok', { keep: true });
+            // An older tap may have saved meanwhile: show what the server has now.
+            void ctx.reload().catch(() => {});
+          },
+        },
+      });
+    }
+    const as = hold ? actingStamp() : '';
+    chain.current = chain.current.then(async () => {
+      if (hold && !(await hold.decided)) return;
+      try {
+        // Held: sent only as whoever the screen acted as when it was tapped (never into View as or Pretend's demo copy).
+        if (hold && actingStamp() !== as) throw new ApiError(409, 'screen_changed', 'Nothing was sent: the screen changed before it could save.');
+        await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to });
+        if (mine === latest.current && !hold) toast(said);
+      } catch (err) {
+        // Only the newest tap decides what the button shows: a failure of an older one is reported but does not move it.
+        toast(err instanceof ApiError ? `${err.message} It went back.` : 'That did not save, so it went back. Check your connection and try again.', 'error');
+        if (mine === latest.current) {
+          await ctx.reload().catch(() => {});
           if (mine === latest.current) onPicked(null);
-        });
-        if (hold) trackHeld(chain.current);
-      }}
-    />
+        }
+        return;
+      }
+      if (mine !== latest.current) return;
+      try {
+        await ctx.reload();
+      } catch {
+        /* the next refresh brings it */
+      }
+      if (mine === latest.current) onPicked(null);
+    });
+    if (hold) trackHeld(chain.current);
+  };
+  const day = formatShortDate(s.startsAt, ctx.d.group.timezone);
+  return (
+    <button
+      type="button"
+      className={`r86-status r86-${value}`}
+      aria-label={`Court status for ${day}: ${STATUS_WORDS[value]}. Tap for ${STATUS_WORDS[NEXT_STATUS[value]]}.`}
+      onClick={() => pick(NEXT_STATUS[value])}
+      data-status={value}
+    >
+      <span className="r86-status-dot" aria-hidden="true" />
+      {STATUS_WORDS[value]}
+    </button>
   );
 }

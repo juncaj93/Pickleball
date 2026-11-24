@@ -1,0 +1,292 @@
+/* ---------- Zip 86 (🎾86.clean admin, picture 10): the organizer's game card, calmer ---------- */
+/* One status button and In / Out side by side, the balls and the names on one line, then the paid pill, the court and directions, each 44 px.
+   A floating card (a 1 px line and a soft shadow); the green stripe on the left only while the organizer is In. No outline ring, no dashed
+   outline. Colors only from the tokens (docs/DESIGN.md). */
+
+/* The card: floating, every court state the same frame (the status button says it). */
+.card.scard.scard-r2.scard86,
+.card.scard.scard-r2.scard86.court-booked,
+.card.scard.scard-r2.scard86.court-needs,
+.card.scard.scard-r2.scard86.court-waitlist {
+  border: 1px solid var(--line);
+  outline: 0;
+  box-shadow: var(--shadow);
+  padding: 12px 12px 12px 12px;
+}
+.card.scard.scard-r2.scard86.court-off {
+  box-shadow: none;
+}
+/* The organizer is In: the green stripe on the left side only. */
+.card.scard.scard-r2.scard86[data-me-in='yes'] {
+  border-left: 6px solid var(--ok-edge);
+  padding-left: 8px;
+}
+
+.scard86 .r2-mid {
+  gap: 8px;
+  padding-bottom: 0;
+}
+
+/* Top row: the status button and In / Out, side by side. */
+.r86-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.r86-status,
+.r86-inout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--fast) var(--ease), background-color var(--mid) var(--ease), color var(--mid) var(--ease);
+}
+.r86-status:active,
+.r86-inout:active {
+  transform: scale(0.97);
+}
+.r86-status:focus-visible,
+.r86-inout:focus-visible,
+.r86-paid:focus-visible,
+.r86-court:focus-visible,
+.r86-dir:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.r86-status-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* Booked: solid green with a small ball-yellow dot. */
+.r86-status.r86-booked {
+  background: var(--sw-booked-bg);
+  color: var(--sw-booked-fg);
+}
+.r86-booked .r86-status-dot {
+  background: var(--ball);
+}
+/* Not booked: amber (soft fill, amber words and dot). */
+.r86-status.r86-not_booked {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+/* Waitlist: its own calm blue. */
+.r86-status.r86-waitlist {
+  background: var(--info-bg);
+  color: var(--info-fg);
+}
+/* In: soft green with a check. Out: gray. */
+.r86-inout {
+  min-width: 64px;
+  gap: 5px;
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.r86-inout.r86-in {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+
+/* The balls and the names on ONE line; they wrap only when they truly do not fit (never cut). The balls take their own width (no container
+   here, so the row is as wide as the balls), the names the rest; no people icon (the balls say it). */
+.scard86 .players-line.cl-players {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+.scard86 .players-line.cl-players .players-top {
+  flex: none;
+  min-height: 0;
+}
+.scard86 .players-line.cl-players .cl-balls {
+  container-type: normal;
+  flex: none;
+}
+.scard86 .players-line.cl-players .names-line {
+  flex: 1 1 10ch;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+}
+.scard86 .players-line.cl-players .names-line .people-icon {
+  display: none;
+}
+
+/* The court-cancel deadline, one small gray line (only on the day it falls). */
+.r86-cancel-by {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+
+/* Someone still has to confirm: one short amber line, with today's Text links. */
+.r86-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.r86-confirm-words {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--warn-fg);
+}
+.r86-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Bottom row: the paid pill, the court button, directions: all 44 px. Under the names on a wide card (picture 10, 420 px); across the whole card
+   when the card is narrower, so nothing is cut; it wraps only when even that is too narrow. */
+.r86-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0 66px;
+  min-width: 0;
+}
+@container scard (max-width: 340px) {
+  .r86-foot {
+    margin-left: 0;
+  }
+}
+
+.r86-paid,
+.r86-court,
+.r86-dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.r86-paid {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 1rem;
+}
+.r86-paid-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.r86-paid[data-paid-state='all'] .r86-paid-mark {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.r86-paid-text {
+  white-space: nowrap;
+}
+.r86-court {
+  flex: none;
+  padding: 0 14px;
+  border: 0;
+  background: var(--info-bg);
+  color: var(--info-fg);
+  font-size: 1rem;
+}
+.r86-court.r86-court-none {
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.r86-dir {
+  flex: none;
+  width: 48px;
+  background: var(--info-bg);
+  color: var(--info-fg);
+  text-decoration: none;
+}
+.r86-dir svg {
+  width: 20px;
+  height: 20px;
+}
+.r86-book {
+  flex: none;
+}
+.r86-book .btn.external {
+  min-height: 44px;
+}
+
+/* Narrow phones: the two top buttons a little tighter. */
+@media (max-width: 359px) {
+  .r86-status,
+  .r86-inout {
+    padding: 0 12px;
+    font-size: 0.94rem;
+  }
+}
+
+/* The TONIGHT and TOMORROW tile (picture 8): a smaller word, so the tile keeps the normal tile width at every text size. */
+:root[data-tonight-glow] .scard86 .tile .day-tag {
+  font-size: 11px;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.scard86 .scard-tilecol .tile {
+  min-width: 0;
+  max-width: 56px;
+}
+
+/* 320 px: a little tighter so the three still share one line. */
+@container scard (max-width: 280px) {
+  .r86-foot {
+    gap: 6px;
+  }
+  .r86-paid,
+  .r86-court {
+    padding: 0 10px;
+    font-size: 0.94rem;
+  }
+  .r86-paid {
+    gap: 6px;
+  }
+  .r86-dir {
+    width: 44px;
+  }
+}

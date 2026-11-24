@@ -6,7 +6,10 @@ import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { SuggestionCards } from './admin/SuggestionCards';
 import { courtCards } from './admin/doNow';
 import { formatPrice } from '../../shared/money';
-import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
+import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart, zonedTimeToUtc } from '../../shared/time';
+import { gameDayKey } from '../../shared/tournamentClash';
+import { dayParts, planRange } from '../../shared/tournament';
+import { TourWeekRow } from '../TourWeekRow';
 import { api, ApiError, demoOn, navigate, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
 import { markFirstTab, onTabBack, pushTab } from '../backStack';
 import { fadeChanges, LAST_ADMIN_HOLD_MS, markMoney, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../lastAdmin';
@@ -739,6 +742,12 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
+/** Zip 86: when a tournament night starts ("2026-12-01" at 7:30 PM Eastern), as an ISO time. */
+function tourStartIso(day: string, start: number, tz: string): string {
+  const p = dayParts(day);
+  return new Date(zonedTimeToUtc(p.year, p.month, p.day, Math.floor(start / 60), start % 60, tz)).toISOString();
+}
+
 function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
   // The new layout (ADMIN_V2): the top 2 games open as full cards, the rest as short rows (tap to open or fold).
@@ -761,15 +770,41 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   );
   // Home is upcoming only; played sessions live under History.
   // (Money page rework: a game the organizer hid from the list is not here. `hiddenFromList` only exists while that switch is on.)
-  const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs && s.hiddenFromList !== true);
+  // Zip 86 (picture 9): the tournament's night in the week list (a slim dark row, no button: the big card is at the top), and the regular game
+  // canceled for it that day is not listed. Only while its date is final (tickets open) and the night is not over.
+  const tz0 = ctx.d.group.timezone;
+  const tour = ctx.d.tournaments === true && ctx.d.tournament?.status === 'tickets' && ctx.d.tournament.finalDate && !ctx.d.tournament.over ? ctx.d.tournament : null;
+  const list = ctx.d.sessions.filter(
+    (s) => Date.parse(s.endsAt) > nowMs && s.hiddenFromList !== true && !(tour && s.state.flags.canceled && gameDayKey(s.startsAt, tz0) === tour.finalDate),
+  );
   // Round 2: only THIS WEEK's games start open and every later week starts folded (a tap flips one). With nothing left this week, the first
   // game opens so the screen is never all folded. (Without round 2: the top 2, as the new layout always did.)
+  // Zip 86: this week's games are full cards, next week and later slim rows, always (no more "the first game opens" when this week is empty).
   const thisWeek = new Set(list.filter((s) => weekLabel(s.startsAt, nowMs, ctx.d.group.timezone) === 'This week').map((s) => s.id));
-  if (thisWeek.size === 0 && list[0]) thisWeek.add(list[0].id);
   const games = useOpenGames(r2 ? (id) => thisWeek.has(id) : undefined);
   // (New layout: a game that needs its court booked is always listed, so its alert is never lost behind "Show all".)
   const shown = all ? list : list.filter((s, i) => i < 6 || courtNeeded?.has(s.id));
   const tz = ctx.d.group.timezone;
+  // Zip 86: where the tournament row goes: before the first listed game after its start (or last, when no later game is listed).
+  const tourAt = tour ? tourStartIso(tour.finalDate!, tour.start, tz) : null;
+  const tourIndex = tourAt ? (() => {
+    const i = shown.findIndex((s) => Date.parse(s.startsAt) > Date.parse(tourAt));
+    return i < 0 ? (shown.length === list.length ? shown.length : -1) : i;
+  })() : -1;
+  const tourRow =
+    tour && tourAt ? (
+      <TourWeekRow
+        day={tour.finalDate!}
+        name={tour.name}
+        sub={`${planRange(tour.start, tour.minutes)} · ${tour.lockedIn ?? 0} of ${tour.spots ?? tour.size} locked in`}
+        data="admin"
+      />
+    ) : null;
+  // Zip 86: one list of the games and the tournament's row, in time order (the week lines follow it).
+  type Item = { kind: 'game'; s: (typeof shown)[number]; i: number } | { kind: 'tour'; at: string };
+  const items: Item[] = shown.map((s, i) => ({ kind: 'game' as const, s, i }));
+  if (tourAt && tourIndex >= 0) items.splice(tourIndex, 0, { kind: 'tour', at: tourAt });
+  const atOf = (it: Item) => (it.kind === 'tour' ? it.at : it.s.startsAt);
 
   return (
     <section className="stack" aria-labelledby="sessions-title">
@@ -783,19 +818,21 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
         </div>
       )}
       {list.length === 0 && <Empty>No upcoming sessions.</Empty>}
-      {shown.map((s, i) => (
-        <Fragment key={s.id}>
-          {(i === 0 || weekStart(s.startsAt, tz) !== weekStart(shown[i - 1].startsAt, tz)) && (
+      {items.map((it, i) => (
+        <Fragment key={it.kind === 'tour' ? 'tour' : it.s.id}>
+          {(i === 0 || weekStart(atOf(it), tz) !== weekStart(atOf(items[i - 1]), tz)) && (
             <div className="week-break">
-              <h3>{weekLabel(s.startsAt, nowMs, tz)}</h3>
+              <h3>{weekLabel(atOf(it), nowMs, tz)}</h3>
               {/* "+ Add game" and "Book a court" (round 2: "Book") ride on the first divider line, adding no height. */}
               {i === 0 && pills}
             </div>
           )}
-          {v2 || r2 ? (
-            <HomeGame ctx={ctx} s={s} open={games.isOpen(s.id, i)} fx={games.justToggled === s.id} needsCourt={courtNeeded!.has(s.id)} onToggle={() => games.toggle(s.id, i)} />
+          {it.kind === 'tour' ? (
+            tourRow
+          ) : v2 || r2 ? (
+            <HomeGame ctx={ctx} s={it.s} open={games.isOpen(it.s.id, it.i)} fx={games.justToggled === it.s.id} needsCourt={courtNeeded!.has(it.s.id)} onToggle={() => games.toggle(it.s.id, it.i)} />
           ) : (
-            <SessionCard ctx={ctx} s={s} courtNeed={r2 ? courtNeeded!.has(s.id) : undefined} />
+            <SessionCard ctx={ctx} s={it.s} courtNeed={undefined} />
           )}
         </Fragment>
       ))}

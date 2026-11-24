@@ -8220,3 +8220,34 @@ Home, Money > Games). The other stage: "Americano: idle phone at the reveal".
 - Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; POST /api/tournament/owed-paid 401 without a name;
   Home at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only
   PIN in this session).
+
+## Zip 86: cleaner admin Home and tournament card, the tournament row in the week lists, player spacing (🎾86.clean admin), Tue Nov 24, 2026
+
+Built on main `7eae177` (🎾85 live, deployment 784248b1). Branch `claude/new-session-w5741f`. No migration, no Worker deploy, no new switch, no
+server change outside the preview-only Tournament test stages. Deploy windows waived by Alex until Dec 1, never during a game.
+
+### What it does (pictures 1 to 10)
+1. The organizer's tournament card (src/pages/admin/Tournament.tsx HomeCard; the pure parts in shared/tournamentCard.ts): folded, the name, a
+   gray status line ("Payments · pay by Mon 7 PM"; "Sign up · ends Tue", "Game night", "Done") and the pill. Open before game night: the 4 steps,
+   the When block with Change, four big buttons (Payments: Tickets, Remind, Prizes, Money; Sign up: Who's signed up, Remind (copies the not signed
+   up text), Dates, Money) and Cancel or reschedule. The tap rows (Votes, Not signed up, Time, Plan, Not paid yet) are gone; Votes is one gray
+   line while the vote decides. Game night and after: the 🎾82 night cards and the card's facts (NightBody), as before.
+   Change: Date (a finalized date changes through the Reschedule confirm), Time (the Time box's rules), Courts, Players you expect, Courts cost;
+   Save sends PUT .../time and PUT .../plan, each only when changed. Prizes: the 🎾82 suggestion and Use these, saved with the Edit save (PUT
+   /api/admin/tournament/:id with everything else as it is; Locked doubles sends no 2nd place). Money: moneySheet, only the server's money
+   line and cost: The Cold Open's numbers $90 / −$120 / Not set / −$30, then 9 tickets $162 / −$120 / −$28 (suggested, not set yet) / +$14;
+   the button "+$42 if all pay" is the money line Totals' Projected card counts (prizes as set).
+2. The Home game card (src/pages/admin/CardR2.tsx, src/admin-card86.css): one status button (Not booked → Waitlist → Booked → Not booked) and
+   one In / Out button, both with the Undo toast (ADMIN_UNDO) and the same calls; the balls and names on one line; the cancel-by time as one gray
+   line only on its day; an amber "2 of 4 confirmed" line with the Text links (the big Confirmed box is gone); the bottom row paid pill, court
+   ("Court ?" opens Edit game; Book while the court needs booking), directions, 44 px. A floating card, the green stripe only while In. This
+   week full cards, later weeks slim rows always. The green / lime ring of picture 8 was the keyboard focus ring: HomeV2 moved the focus to a
+   card whenever it opened by itself; now only after its own fold tap. TONIGHT / TOMORROW: 11 px, no letter spacing, the tile held to 56 px.
+3. The admin mini row (src/TourWeekRow.tsx in src/pages/Admin.tsx SessionsSection): on the tournament's day, no button; the regular game
+   canceled that day is not listed.
+4. The player row (src/pages/PlayerHome.tsx tourRowOf): next week no button; two weeks or more lime Sign up / Lock in or gray Who's in. The
+   button sends a window event (TOUR_ROW_ACTION); the big card (TournamentHome, its own download) opens the same sheet or runs the same Lock in.
+5. Player rhythm (src/player-rhythm86.css): card 6 px higher, THIS WEEK 14 px under it, headings 10 px above their first card, NEXT WEEK 20 px,
+   cards 10 px apart, More games 12 px under.
+Stages (THIS_ZIP): zip86_payments, zip86_home, zip86_next, zip86_signup, zip86_lockin, zip86_whosin (server/tournamentTest.ts; zip86_home uses
+the real organizer actions and never Vic, Wren or Zoe).

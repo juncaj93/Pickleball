@@ -1,0 +1,28 @@
+/* Zip 86 (🎾86.clean admin, picture 4): one spacing rhythm on every player screen (Home, View as, the saved copy).
+     the tournament card 6 px higher (14 px under the header instead of 20 at the page's top padding of 8: 2 px);
+     THIS WEEK 8 px higher (14 px under the card above it instead of 22);
+     each week heading 10 px above its first card (was 12);
+     the gap above NEXT WEEK and later headings stays 20 px;
+     cards 10 px apart (were 14);
+     "More games" 12 px under the last card (was 20). */
+main.page > .tc-wrap:first-child {
+  margin-top: -6px;
+}
+.schedule {
+  gap: 10px;
+}
+.schedule > .week-break {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+.schedule > .week-break.tier-this,
+.schedule > .week-break.filter-only {
+  margin-top: 2px;
+}
+/* The list's first heading right under a card (the tournament, an alert): 14 px under it (the page's 20 px gap, less 6). */
+main.page > * + .schedule > .week-break:first-child {
+  margin-top: -6px;
+}
+main.page > .schedule + .btn.ghost.block {
+  margin-top: -8px;
+}

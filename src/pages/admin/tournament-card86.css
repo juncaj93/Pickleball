@@ -1,0 +1,383 @@
+/* ---------- Zip 86 (🎾86.clean admin, pictures 5, 6 and 7): the organizer's tournament card, cleaner ---------- */
+/* Colors only from the tokens (docs/DESIGN.md); shadows may use see-through black. */
+
+/* The folded head: the name, the gray status line under it, the pill on the right. */
+.tm86-head-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tm86 .tm86-head-words .tm-hc-name {
+  flex: none;
+}
+.tm86-status {
+  font-size: 0.92rem;
+  font-size: max(11px, clamp(0.8rem, 3.7cqw, 0.94rem));
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink-2);
+  overflow-wrap: break-word;
+}
+
+.tm86-body {
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+
+/* The 4 steps: done filled green, the current one ringed, the rest gray, joined by a line. */
+.tm86-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 2px 0 0;
+  padding: 0 0 14px;
+  list-style: none;
+  border-bottom: 1px solid var(--line);
+}
+.tm86-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+/* The line from this step's dot to the next one. */
+.tm86-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: calc(50% + 8px);
+  right: calc(-50% + 8px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-strong);
+}
+.tm86-step.tm86-done::after {
+  background: var(--primary);
+}
+.tm86-dot {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+}
+.tm86-done .tm86-dot {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+.tm86-now .tm86-dot {
+  border: 2.5px solid var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.tm86-step-word {
+  font-size: 0.86rem;
+  font-size: max(11px, clamp(0.72rem, 3.3cqw, 0.9rem));
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--ink-2);
+}
+.tm86-now .tm86-step-word {
+  font-weight: 750;
+  color: var(--ink);
+}
+
+/* The When block: bold date and time, the plan line under it, Change on the right. */
+.tm86-when {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.tm86-when-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tm86-when-main {
+  margin: 0;
+  font-size: 1.12rem;
+  font-size: max(11px, clamp(0.98rem, 4.8cqw, 1.18rem));
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.tm86-when-sub {
+  margin: 3px 0 0;
+  font-size: 0.98rem;
+  font-size: max(11px, clamp(0.86rem, 4cqw, 1rem));
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+.tm86-votes {
+  margin: 5px 0 0;
+  font-size: 0.86rem;
+  font-size: max(11px, clamp(0.76rem, 3.5cqw, 0.88rem));
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+.tm86-change {
+  flex: 0 0 auto;
+  min-height: var(--btn-h-sm);
+  padding: 0 16px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--btn-r);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tm86-change:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The four big buttons, 2 x 2: the name, and a short second line saying what is behind it. */
+.tm86-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tm86-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--fast) var(--ease), background-color var(--fast) var(--ease);
+}
+.tm86-btn:active {
+  transform: scale(0.98);
+  background: var(--fill-press);
+}
+.tm86-btn:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.tm86-btn.tm86-green {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.tm86-btn.tm86-green:active {
+  background: var(--primary-press);
+}
+.tm86-btn.tm86-quiet {
+  cursor: default;
+}
+.tm86-btn.tm86-quiet:active {
+  transform: none;
+  background: var(--surface-2);
+}
+.tm86-btn-title {
+  font-size: 1.08rem;
+  font-size: max(11px, clamp(0.96rem, 4.6cqw, 1.12rem));
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.tm86-btn-sub {
+  max-width: 100%;
+  font-size: 0.94rem;
+  font-size: max(11px, clamp(0.8rem, 3.8cqw, 0.96rem));
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink-2);
+  overflow-wrap: break-word;
+}
+.tm86-green .tm86-btn-sub {
+  color: var(--primary-ink);
+}
+.tm86-btn-sub.tm86-amber {
+  font-weight: 700;
+  color: var(--warn-fg);
+}
+.tm86 .tm-tix-link {
+  align-self: center;
+}
+
+/* ---------- The Change, Money and Prizes sheets (pictures 6 and 7) ---------- */
+.tm86-change-body {
+  display: flex;
+  flex-direction: column;
+}
+.tm86-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tm86-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 1.02rem;
+  color: var(--ink-2);
+}
+.tm86-box {
+  min-height: var(--btn-h-sm);
+  min-width: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--btn-r);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tm86-box:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.tm86-box:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.tm86-times {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tm86-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 0;
+  padding: 0 8px;
+  text-align: center;
+  text-align-last: center;
+}
+.tm86-to {
+  color: var(--ink-2);
+}
+.tm86-fixed {
+  font-weight: 700;
+  color: var(--ink);
+}
+.tm86-courts {
+  flex: none;
+  width: 120px;
+}
+/* Picture 6: the picked number is filled green. */
+.tm86-sheet .tm86-change-body .segmented.tm86-courts button[aria-pressed='true'] {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.tm86-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.tm86-sq {
+  width: 48px;
+  padding: 0;
+  font-size: 1.3rem;
+}
+.tm86-n {
+  min-width: 2ch;
+  font-size: 1.3rem;
+  font-weight: 800;
+  text-align: center;
+}
+.tm86-cost {
+  border-bottom: 0;
+}
+.tm86-cost b {
+  font-size: 1.12rem;
+  font-weight: 800;
+}
+.tm86-change-body .tm-fin-fit,
+.tm86-change-body .field-error {
+  margin: 4px 0 0;
+}
+.tm86-save {
+  margin-top: 12px;
+}
+
+/* Money: two blocks, each ending in a soft green total line. */
+.tm86-money {
+  display: flex;
+  flex-direction: column;
+}
+.tm86-mhead {
+  margin: 6px 0 4px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.tm86-total + .tm86-mhead {
+  margin-top: 22px;
+}
+.tm86-mrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 1.02rem;
+  color: var(--ink-2);
+}
+.tm86-mrow > span {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.tm86-mrow b {
+  flex: none;
+  font-weight: 800;
+  color: var(--ink);
+}
+.tm86-mrow b.tm-money-down {
+  color: var(--danger-fg);
+}
+.tm86-suggest {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font-size: 0.86em;
+  color: var(--ink-2);
+}
+.tm86-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.tm86-total b {
+  font-weight: 800;
+}
+.tm86-setprizes {
+  margin-top: 20px;
+}

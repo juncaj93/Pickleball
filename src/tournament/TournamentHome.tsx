@@ -16,6 +16,7 @@ import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, useNow, VIEW_ONLY_MESSAGE } from '../lib';
 import { AlertCard } from '../AlertCard';
 import { missedDate, ticketStateOf } from '../../shared/tournamentNudge';
+import { TOUR_ROW_ACTION, type TourRowAction } from '../TourWeekRow';
 import { ConfirmDialog, Pickleball, Sheet, useToast } from '../ui';
 import { PaySheet } from '../PaySheet';
 import type { TournamentPayInfo } from '../TournamentSlot';
@@ -127,6 +128,20 @@ export default function TournamentHome({ t: real, onChanged, pay, notice }: { t:
     // The date went on but the lock failed: show what is true now (the alert is gone; Lock my spot is on the card).
     if (!res && added) void onChanged();
   }
+
+  // Zip 86: the week list's tournament row (src/TourWeekRow.tsx, two weeks or more ahead) asks for this card's own main button: Sign up opens the
+  // Sign up sheet, Lock in runs Lock my spot, Who's in opens the Who's in sheet, exactly as the buttons on this card do.
+  const rowAction = useRef<(a: TourRowAction) => void>(() => {});
+  rowAction.current = (a) => {
+    if (a === 'signup') setSheet('signup');
+    else if (a === 'lock') void lock('lock');
+    else setSheet(t.status === 'tickets' ? 'overlay' : 'who');
+  };
+  useEffect(() => {
+    const on = (e: Event) => rowAction.current((e as CustomEvent<TourRowAction>).detail);
+    window.addEventListener(TOUR_ROW_ACTION, on);
+    return () => window.removeEventListener(TOUR_ROW_ACTION, on);
+  }, []);
 
   /** Zip 66: I'm in on the in-or-out alert: the picked date goes on their sign-up, then the same flow as Lock my spot (credit first, then Pay). */
   function imIn() {

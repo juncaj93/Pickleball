@@ -13,9 +13,16 @@ import './tournament-admin.css';
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip85_idle', 'zip85_owed'];
+const THIS_ZIP: readonly string[] = ['zip86_payments', 'zip86_home', 'zip86_next', 'zip86_signup', 'zip86_lockin', 'zip86_whosin'];
 
 const STAGES = [
+  // Zip 86 (🎾86.clean admin): the cleaner tournament card and game cards, the tournament row in the week lists.
+  { stage: 'zip86_payments', label: 'Tournament card: payments (start here)', line: 'The Cold Open’s numbers: 6 of 8 locked in, 4 haven’t paid, 10 expected. Home: tap the card open: the 4 steps, Tue Dec 1 · 7:30 to 10 PM, Change, then Tickets, Remind, Prizes and Money. Money: 5 paid $90, courts $120, so far −$30; if all 10 pay +$14 after the suggested $28.' },
+  { stage: 'zip86_home', label: 'Admin Home: booked tonight + not booked', line: 'A game tonight (tomorrow after 7 PM): Booked, you In, Parker, Sage and Christopher Vanderberg, 3 of 3 paid, Court 4. The next day: Not booked, Rowan only, Book (the court still needs booking). Tap Booked (it moves to Not booked, Undo in the toast) and In (it goes Out, Undo).' },
+  { stage: 'zip86_next', label: 'Tournament next week (row, no button)', line: 'The Cold Open on next week’s Tuesday. View as Parker: the big card at the top and, under NEXT WEEK, the slim dark row with no button.' },
+  { stage: 'zip86_signup', label: 'Tournament in 2 weeks: Sign up', line: 'The Cold Open the week after next. View as Quinn (not on the list): the row under LATER has a lime Sign up; it opens the same Sign up sheet as the big card.' },
+  { stage: 'zip86_lockin', label: 'Tournament in 2 weeks: Lock in', line: 'The same night. View as Vic (on the list, not paid): the row has a lime Lock in; it runs the big card’s Lock in (credit first, then the Pay sheet).' },
+  { stage: 'zip86_whosin', label: 'Tournament in 2 weeks: Who’s in', line: 'The same night. View as Parker (locked in): the row has a gray Who’s in; it opens the Who’s in sheet. Never Drop out on the row.' },
   // Zip 85 (🎾85.final fixes): the idle phone on the night, and Didn't pay after the night.
   { stage: 'zip85_idle', label: 'Americano: idle phone at the reveal', line: 'The last round is playing. Open a player’s Home on a phone (or View as Vic) and leave it untouched for 10 minutes or more, screen on. Then enter the last scores and tap Reveal standings: the board starts on time on that phone, then the cup and the winners ticker.' },
   { stage: 'zip85_owed', label: 'Didn’t pay after the night', line: 'Every round is in; Alex said Didn’t pay for Parker after the start. Parker stays in the night and owes $16: View as Parker shows the You owe card (Pay, I paid); Money > Games shows Tournament tickets with Mark paid. End tournament still works.' },

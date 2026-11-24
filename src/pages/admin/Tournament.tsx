@@ -39,13 +39,15 @@ import {
   DEFAULT_SECOND_CREDIT_CENTS,
   MAX_SPOTS,
   type TournamentSignupView,
+  courtCentsOf,
 } from '../../../shared/tournament';
-import { afterFullWords, EXPECT_MAX, EXPECT_MIN, expectedPlayers, type MoneyLine, moneyRowLabel, planMoney } from '../../../shared/tournamentMoney';
+import { afterFullWords, EXPECT_MAX, EXPECT_MIN, expectedPlayers, leftWords, type MoneyLine, moneyRowLabel, planMoney, suggestedTier, suggestionWords, tierAmounts } from '../../../shared/tournamentMoney';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { isOwedClaim } from '../../../shared/tournamentTickets';
 import { evensWarning, payByAt, payByDays, payByLabel, payByParts, salesCutoffMs, startMsOf, tournamentRemindText } from '../../../shared/tournamentTickets';
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
+import { clockShort, moneySheet, prizeWords, STEPS, statusWords, stepOf, styleShort } from '../../../shared/tournamentCard';
 import { AlertCard } from '../../AlertCard';
 import { localParts } from '../../../shared/time';
 import { clashingGames, clashWords, gameDayKey } from '../../../shared/tournamentClash';
@@ -58,6 +60,7 @@ import { fitWords, nightPlan } from '../../../shared/tournamentPlan';
 import { type ProjectedTeam, projectedTeams } from '../../../shared/projectedTeams';
 import { totalLabel } from '../../../shared/tournamentSchedule';
 import './tournament-admin.css';
+import './tournament-card86.css';
 
 const todayKeyOf = (nowIso: string, tz: string) => {
   const p = localParts(Date.parse(nowIso), tz);
@@ -192,31 +195,9 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-/** Zip 66: "Doubles 2 · Americano 0 · Either 6" (the card's Votes row; Doubles, not Locked). */
-/** Zip 85: "Locked doubles 2 · Americano 0 · Either 6", each count kept with its style, so a narrow card wraps between them (never cut,
- *  never past the card). */
-const votesValue = (v: NonNullable<AdminTournamentView['votes']>) => (
-  <span className="tm-hc-wrap">
-    <span className="tm-ml-pair">Locked doubles {v.locked}</span> · <span className="tm-ml-pair">Americano {v.americano}</span> · <span className="tm-ml-pair">Either {v.either}</span>
-  </span>
-);
 /** Zip 66: "6 players · 1 court · 2.5 hrs" (the card's Plan row). */
 // Zip 70: the Plan's expected players (the saved Expect number, else the site's suggestion), not the plan size.
 const planShort = (t: AdminTournamentView) => `${t.expected ?? t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
-
-/**
- * Zip 85: the money line for a count, courts and hours, from the ONE shared function the server's card line uses (shared/tournamentMoney.ts
- * planMoney): the prizes and "After full prizes" by the style the count really plays, so the boxes, Finalize and the card always agree.
- */
-const boxMoney = (t: AdminTournamentView, o: { expected: number; courts: number; minutes: number }) =>
-  planMoney({
-    format: t.money?.baseStyle ?? t.format,
-    closed: !!t.money?.closed,
-    ...o,
-    ticketCents: t.ticketCents,
-    championCents: t.championCreditCents,
-    secondCents: t.secondCreditCents,
-  });
 
 /** Zip 70 (pictures 1 and 3): "+$6" in green when the organizer makes money, "$30" in red (no minus) when it costs them. */
 function MoneyValue({ cents, data }: { cents: number; data?: string }) {
@@ -251,16 +232,6 @@ function MoneyLineText({ m }: { m: MoneyLine & { afterFullCents: number } }) {
   );
 }
 
-/** Zip 70: the fit line for a count, courts and hours, naming the style really played (an odd count is Americano). */
-function FitLine({ n, courts, minutes, start, format }: { n: number; courts: number; minutes: number; start: number; format: TournamentFormat }) {
-  const fit = fitWords(nightPlan(n, courts, minutes, format), start);
-  return (
-    <p className={fit.fits ? 'tm-fin-fit' : 'tm-fin-fit tm-fin-tight'} role="status" data-tm-box-fit={fit.fits ? 'fits' : 'tight'}>
-      {fit.text}
-    </p>
-  );
-}
-
 /**
  * Zip 81: with Booking hours on, a tournament's night must sit inside the venue hours of its date (special hours too), like a game. The words
  * the server would refuse with, or null when it fits (or the hours are not known). The server checks it too.
@@ -272,251 +243,79 @@ function venueHoursProblem(ctx: AdminCtx, date: string | null, start: number, en
   return r.ok ? null : r.message;
 }
 
-/**
- * Zip 70 (picture 2): tap Time: the start and the end (the Finalize pickers' steps), the fit line and the money line as they change, Save.
- * Everything that depends on the time follows on the server; the "Call the venue" card shows again with the new times.
- */
-function TimeBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; onDone: () => void }) {
-  const { busy, save } = useSave(ctx);
-  const [start, setStart] = useState(t.start);
-  const [end, setEnd] = useState(t.start + t.minutes);
-  const starts = PLAY_STARTS.includes(start) ? PLAY_STARTS : [...PLAY_STARTS, start].sort((a, b) => a - b);
-  const ends = playEnds(start, end);
-  const n = t.expected ?? t.size;
-  const m = boxMoney(t, { expected: n, courts: t.courts, minutes: end - start });
-  const outside = venueHoursProblem(ctx, t.finalDate, start, end);
-  return (
-    <div className="tm-hc-box tm-hc-edit" data-tm-time-box>
-      <span className="tm-fin-boxes tm-hc-times" role="group" aria-label="Time">
-        <select
-          className="tm-select tm-fin-box"
-          aria-label="Start"
-          value={start}
-          disabled={busy}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            // Keep the length when the start moves (never past midnight), as on Finalize.
-            setEnd(Math.min(next + (end - start), 24 * 60, next + 360));
-            setStart(next);
-          }}
-          data-tm-time-start
-        >
-          {starts.map((x) => (
-            <option key={x} value={x}>
-              {timeWords(x)}
-            </option>
-          ))}
-        </select>
-        <span className="tm-fin-to">to</span>
-        <select className="tm-select tm-fin-box" aria-label="End" value={end} disabled={busy} onChange={(e) => setEnd(Number(e.target.value))} data-tm-time-end>
-          {ends.map((x) => (
-            <option key={x} value={x}>
-              {timeWords(x % (24 * 60))}
-            </option>
-          ))}
-        </select>
-      </span>
-      <FitLine n={n} courts={t.courts} minutes={end - start} start={start} format={t.format} />
-      <MoneyLineText m={m} />
-      {outside && (
-        <p className="field-error" role="alert" data-tm-hours>
-          {outside}
-        </p>
-      )}
-      <button
-        type="button"
-        className="btn block tm-hc-save"
-        disabled={busy || !!outside}
-        onClick={async () => {
-          const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/time`, { start, minutes: end - start }), 'Time saved');
-          if (ok) {
-            if (t.finalDate) venueAsk(t.id, t.finalDate, start, end - start);
-            onDone();
-          }
-        }}
-        data-tm-time-save
-      >
-        {busy ? 'Saving…' : 'Save'}
-      </button>
-    </div>
-  );
-}
 
-/**
- * Zip 70 (picture 7): tap Plan: Expect with - and + (6 to 16, never fewer than locked in) and Courts 1 | 2, the fit line and the money line,
- * Save. The site keeps suggesting the number until one is saved; the saved courts are the night's real courts.
- */
-function PlanBox({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; onDone: () => void }) {
-  const { busy, save } = useSave(ctx);
-  const low = Math.max(EXPECT_MIN, t.lockedIn ?? 0);
-  const [n, setN] = useState(Math.min(EXPECT_MAX, Math.max(low, t.expected ?? t.size)));
-  const [courts, setCourts] = useState<1 | 2>(t.courts === 1 ? 1 : 2);
-  const m = boxMoney(t, { expected: n, courts, minutes: t.minutes });
-  return (
-    <div className="tm-hc-box tm-hc-edit" data-tm-plan-box>
-      <div className="tm-fin-row tm-hc-plan-row" role="group" aria-label="Expect">
-        <span className="tm-fin-row-label">Expect</span>
-        <span className="tm-step">
-          <button type="button" className="tm-step-btn" aria-label="One fewer" disabled={busy || n <= low} onClick={() => setN((x) => Math.max(low, x - 1))} data-tm-expect-minus>
-            −
-          </button>
-          <b className="tm-step-n" aria-live="polite" data-tm-expect>
-            {n}
-          </b>
-          <button type="button" className="tm-step-btn" aria-label="One more" disabled={busy || n >= EXPECT_MAX} onClick={() => setN((x) => Math.min(EXPECT_MAX, x + 1))} data-tm-expect-plus>
-            +
-          </button>
-        </span>
-      </div>
-      <div className="tm-fin-row tm-hc-plan-row" role="group" aria-label="Courts">
-        <span className="tm-fin-row-label">Courts</span>
-        <span className="segmented tm-fin-courts">
-          {([1, 2] as const).map((c) => (
-            <button key={c} type="button" aria-pressed={courts === c} disabled={busy} onClick={() => setCourts(c)} data-tm-plan-courts={c}>
-              {c}
-            </button>
-          ))}
-        </span>
-      </div>
-      <FitLine n={n} courts={courts} minutes={t.minutes} start={t.start} format={t.format} />
-      <MoneyLineText m={m} />
-      <button
-        type="button"
-        className="btn block tm-hc-save"
-        disabled={busy}
-        onClick={async () => {
-          const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/plan`, { expected: n, courts }), 'Plan saved');
-          if (ok) {
-            // The venue card follows the courts (once the date is finalized).
-            if (t.finalDate && t.startSet && courts !== t.courts) venueAsk(t.id, t.finalDate, t.start, t.minutes);
-            onDone();
-          }
-        }}
-        data-tm-plan-save
-      >
-        {busy ? 'Saving…' : 'Save'}
-      </button>
-    </div>
-  );
-}
 /** Zip 66: the Style row ("Players vote" while the vote is open). */
 const styleWords = (t: AdminTournamentView) => (t.formatPending ? 'Players vote' : formatName(t.format));
-/** Zip 66: the players whose votes the counts are: everyone on the list before a date, then those who can make the picked date. */
-const votersOf = (t: AdminTournamentView) => t.signups.filter((s) => !t.finalDate || s.dates.includes(t.finalDate));
 
-/** Zip 66 (mock 07): who voted what, inside the card under the Votes row. Organizer only. */
-function VotesBox({ t }: { t: AdminTournamentView }) {
-  const voters = votersOf(t);
-  const rows: { key: 'locked' | 'americano' | 'either'; label: string }[] = [
-    { key: 'locked', label: 'Doubles' },
-    { key: 'americano', label: 'Americano' },
-    { key: 'either', label: 'Either' },
-  ];
+
+
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 86 (🎾86.clean admin, pictures 5, 6 and 7): the tournament card on the organizer's Home, cleaner. The folded head (the name, a gray
+// status line, the pill), then open: the 4 steps, the When block with Change, four big buttons that each say what is behind them, and Cancel or
+// reschedule. Nothing hides behind a row tap any more: Votes, Not signed up, Time, Plan and Not paid yet live in the buttons and the sheets.
+// Game night and after keep the 🎾82 screens (the night cards above the card) and the card's facts.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** "+$42" / "−$30" (a real minus sign). */
+const signed = (cents: number) => (cents >= 0 ? `+${formatPrice(cents)}` : `−${formatPrice(-cents)}`);
+
+/** Zip 86 (picture 5): the 4 steps: done steps filled green, the current one ringed, the rest gray. */
+function Steps({ step }: { step: 0 | 1 | 2 | 3 }) {
   return (
-    <dl className="tm-hc-box tm-hc-votes" data-tm-votes-box>
-      {rows.map((r) => {
-        const names = voters.filter((s) => (s.vote ?? 'either') === r.key).map((s) => s.name);
-        return (
-          <div key={r.key} className="tm-hc-vrow" data-tm-votes-row={r.key}>
-            <dt>{r.label}</dt>
-            <dd className={names.length ? undefined : 'tm-hc-nobody'}>{names.length ? names.join(', ') : 'Nobody'}</dd>
-          </div>
-        );
-      })}
-    </dl>
+    <ol className="tm86-steps" aria-label={`Step ${step + 1} of 4: ${STEPS[step]}`} data-tm-steps={step}>
+      {STEPS.map((s, i) => (
+        <li key={s} className={i < step ? 'tm86-step tm86-done' : i === step ? 'tm86-step tm86-now' : 'tm86-step'} aria-current={i === step ? 'step' : undefined}>
+          <span className="tm86-dot" aria-hidden="true" />
+          <span className="tm86-step-word">{s}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
-/** Zip 66 (mock 09): the names not signed up, and Copy reminder text. Organizer only. */
-function MissingBox({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
-  const toast = useToast();
-  const ns = t.notSignedUp!;
-  const tz = ctx.d.group.timezone;
-  async function copy() {
-    const close = ns.closeAt ?? signupCloseDefault(Date.parse(ctx.d.now), tz);
-    const text = signupReminderText(
-      ns.players.map((p) => p.name),
-      t.name,
-      close,
-      tz,
-      siteAddress(ctx.d.group.playerLink),
+/** Zip 86: one of the four big buttons: the name, and a short second line saying what is behind it. */
+function BigButton({ title, sub, tone, onClick, href, data, disabled }: { title: string; sub: string; tone?: 'green' | 'amber'; onClick?: () => void; href?: string; data: string; disabled?: boolean }) {
+  const cls = `tm86-btn${tone === 'green' ? ' tm86-green' : ''}${disabled ? ' tm86-quiet' : ''}`;
+  const inner = (
+    <>
+      <span className="tm86-btn-title">{title}</span>
+      <span className={tone === 'amber' ? 'tm86-btn-sub tm86-amber' : 'tm86-btn-sub'}>{sub}</span>
+    </>
+  );
+  if (href && !disabled) {
+    return (
+      <a className={cls} href={href} {...{ [data]: true }}>
+        {inner}
+      </a>
     );
-    const ok = await copyText(text);
-    toast(ok ? 'Copied' : 'Could not copy. Try again.', ok ? undefined : 'error');
   }
   return (
-    <div className="tm-hc-box tm-hc-missing" data-tm-missing-box={ns.mode}>
-      <p className="tm-hc-names" data-tm-missing-names>
-        {ns.players.map((p) => p.name).join(', ')}
-      </p>
-      <button type="button" className="tm-hc-copy" onClick={() => void copy()} data-tm-missing-copy>
-        Copy reminder text
-      </button>
-    </div>
-  );
-}
-
-/**
- * Zip 66b (picture A4): who still has to pay, in the soft box under the Not paid yet row, and Remind all unpaid, which works exactly like the old
- * tickets card's (Zip 63, mock 14): it opens Messages with every unpaid person's number and a ready text; the organizer taps Send. The site never
- * sends a text. "No number for <name>" when a number is missing.
- */
-function UnpaidBox({ ctx, t, unpaid }: { ctx: AdminCtx; t: AdminTournamentView; unpaid: TournamentSignupView[] }) {
-  const now = useNow(60_000);
-  const tz = ctx.d.group.timezone;
-  const phoneOf = new Map(ctx.d.players.map((p) => [p.id, p.phone]));
-  const phones = unpaid.map((s) => phoneOf.get(s.playerId)).filter((p): p is string => !!p);
-  const missing = unpaid.filter((s) => !phoneOf.get(s.playerId)).map((s) => s.name);
-  const body = tournamentRemindText(t.name, t.payBy!, t.finalDate!, now, tz, siteAddress(ctx.d.group.playerLink));
-  return (
-    <div className="tm-hc-box tm-hc-missing" data-tm-unpaid-box data-tm-remind={unpaid.length}>
-      <p className="tm-hc-names" data-tm-unpaid-names>
-        {unpaid.map((p) => p.name).join(', ')}
-      </p>
-      {missing.length > 0 && (
-        <p className="tm-hc-nonum" data-tm-remind-missing>
-          No number for {missing.join(', ')}
-        </p>
-      )}
-      <a className="tm-hc-copy" href={smsHref(phones.length ? phones : null, body, isIOS)} data-tm-remind-btn>
-        Remind all unpaid
-      </a>
-    </div>
-  );
-}
-
-/** Zip 66: a row that opens a soft box under it (Votes, Not signed up). No arrow; tap again to close. */
-function TapRow({ label, value, open, onTap, data, valueData, fit }: { label: string; value: ReactNode; open: boolean; onTap: () => void; data: string; valueData?: string; fit?: boolean }) {
-  return (
-    <button type="button" className="tm-row tm-hc-tap" aria-expanded={open} onClick={onTap} {...{ [data]: true }}>
-      <span>{label}</span>
-      <b className={fit ? 'tm-hc-val tm-hc-fit' : 'tm-hc-val'} {...(valueData ? { [valueData]: true } : {})}>
-        {value}
-      </b>
+    <button type="button" className={cls} onClick={disabled ? undefined : onClick} aria-disabled={disabled || undefined} {...{ [data]: true }}>
+      {inner}
     </button>
   );
 }
 
-/**
- * Zip 66 (mocks 01, 02, 06 to 09): the tournament on the organizer's Home. One line to start (the pickleball, the name, "8 signed up", a chevron);
- * tap anywhere on it to open, tap again to close. It starts closed every time Home loads (nothing is remembered). Open: Style, Votes (tap: who
- * voted what), Not signed up (tap: the names and Copy reminder text), Plan, then the stage's buttons as before: Pick date and Edit (sign-up),
- * the ticket rows with Tickets and Cancel or reschedule (once the date is picked), or the Canceled note with Hide.
- */
+/** Zip 86: "Votes: Locked doubles 3 · Americano 0 · Either 7" (one small gray line while the style is decided by vote). */
+const votesLine = (v: NonNullable<AdminTournamentView['votes']>) => (
+  <p className="tm86-votes" data-tm-vote-counts>
+    Votes: <span className="tm-ml-pair">Locked doubles {v.locked}</span> · <span className="tm-ml-pair">Americano {v.americano}</span> · <span className="tm-ml-pair">Either {v.either}</span>
+  </p>
+);
+
 function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const [open, setOpen] = useState(false);
-  const [showVotes, setShowVotes] = useState(false);
-  const [showMissing, setShowMissing] = useState(false);
-  const [showUnpaid, setShowUnpaid] = useState(false);
-  // Zip 70: the Time and Plan boxes (one open at a time; tap the row again to close).
-  const [edit, setEdit] = useState<null | 'time' | 'plan'>(null);
+  const [sheet, setSheet] = useState<null | 'change' | 'money' | 'prizes'>(null);
   const [page, setPage] = useState<null | 'dates' | 'edit' | 'tickets'>(null);
-  // Zip 81: the Home card "the venue closes at noon" asks to open the Time row (Change time): the card opens with the Time box showing.
+  const toast = useToast();
+  // Zip 81: the Home card "the venue closes at noon" asks to open Time (Change time): the card opens with the Change sheet showing.
   const cardRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const openTime = () => {
       setOpen(true);
-      setEdit('time');
+      setSheet('change');
       requestAnimationFrame(() => cardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
     };
     window.addEventListener(OPEN_TOURNAMENT_TIME, openTime);
@@ -524,6 +323,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   }, []);
   const tz = ctx.d.group.timezone;
   const canceled = t.status === 'canceled';
+  const step = stepOf(t);
   const ticketsStage = t.status === 'date_picked' || t.status === 'tickets' || canceled;
   const today = todayKeyOf(ctx.d.now, tz);
   // Every offered date has passed and none is picked: players do not see the card any more (server/tournament.ts), so say it here.
@@ -531,10 +331,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const ns = t.notSignedUp && t.notSignedUp.players.length > 0 ? t.notSignedUp : null;
   const evens = evensOf(t, ctx.d.now);
   const locked = lockedNum(t);
-  const line = lineOf(t);
   const bodyId = `tm-hc-body-${t.id}`;
-  // Zip 70: the Time row, once the date is finalized with real times (tickets open).
-  const timeRow = t.status === 'tickets' && !!t.startSet && !!t.finalDate;
   // Zip 66b: who can make the date and has not paid (only while a spot can still be bought: tickets open, before Pay by, spots left).
   const unpaid = unpaidOf(t, ctx.d.now);
   // The pill (picture A3): "8 signed up" before tickets; once they are open "3 unpaid" (amber) while anyone has not paid, else "7 locked in".
@@ -545,14 +342,29 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
         ? { words: `${unpaid.length} unpaid`, cls: 'tm-chip tm-chip-unpaid tm-hc-pill' }
         : { words: `${locked} locked in`, cls: 'tm-chip tm-chip-ok tm-hc-pill' }
       : { words: `${t.signups.length} signed up`, cls: 'tm-chip tm-chip-ok tm-hc-pill' };
+  const before = step === 0 || step === 1;
+  const prize = prizeWords(t);
+  const m = t.money;
+  async function copyMissing() {
+    if (!ns) return;
+    const close = ns.closeAt ?? signupCloseDefault(Date.parse(ctx.d.now), tz);
+    const ok = await copyText(signupReminderText(ns.players.map((p) => p.name), t.name, close, tz, siteAddress(ctx.d.group.playerLink)));
+    toast(ok ? `Copied. Paste it to ${ns.players.length === 1 ? ns.players[0].name : `the ${ns.players.length}`}.` : 'Could not copy. Try again.', ok ? undefined : 'error');
+  }
+  const money = m ? <BigButton title="Money" sub={`${signed(m.youCents)} if all pay`} onClick={() => setSheet('money')} data="data-tm86-money" /> : null;
   return (
-    <section ref={cardRef} className={open ? 'tm-hc tm-hc-open' : 'tm-hc'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={ticketsStage ? t.status : true} data-tm-open={open}>
+    <section ref={cardRef} className={open ? 'tm-hc tm86 tm-hc-open' : 'tm-hc tm86'} aria-label={`${t.name}, ${formatName(t.format)} tournament`} data-tm-home={ticketsStage ? t.status : true} data-tm-open={open}>
       <h2 className="tm-hc-head">
         <button type="button" className="tm-hc-top" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((o) => !o)} data-tm-home-toggle>
           <span className="tm-hc-ball" aria-hidden="true">
             <Pickleball />
           </span>
-          <span className="tm-hc-name">{t.name}</span>
+          <span className="tm86-head-words">
+            <span className="tm-hc-name">{t.name}</span>
+            <span className="tm86-status" data-tm86-status>
+              {statusWords(t, ctx.d.now, tz)}
+            </span>
+          </span>
           <span className={pill.cls} data-tm-stage data-tickets-card={t.status === 'tickets' ? `${locked}/${t.size}` : undefined}>
             {pill.words}
           </span>
@@ -574,161 +386,57 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
         </div>
       )}
       {open && (
-        <div className="tm-hc-body" id={bodyId} data-tm-home-body>
-          <div className="tm-rows tm-hc-rows">
-            {!canceled && (
-              <div className="tm-row">
-                <span>Style</span>
-                <b className="tm-hc-val" data-tm-home-format={t.formatPending ? 'vote' : t.format}>
-                  {styleWords(t)}
-                </b>
-              </div>
-            )}
-            {!canceled && t.votes && (
-              <>
-                <TapRow label="Votes" value={votesValue(t.votes)} open={showVotes} onTap={() => setShowVotes((v) => !v)} data="data-tm-votes-toggle" valueData="data-tm-vote-counts" fit />
-                {showVotes && <VotesBox t={t} />}
-              </>
-            )}
-            {!canceled && ns && (
-              <>
-                <TapRow label="Not signed up" value={ns.players.length} open={showMissing} onTap={() => setShowMissing((v) => !v)} data="data-tm-missing-toggle" valueData="data-tm-missing-count" />
-                {showMissing && <MissingBox ctx={ctx} t={t} />}
-              </>
-            )}
-            {ticketsStage && (
-              <div className="tm-row">
-                <span>Date</span>
-                <b className="tm-hc-val tm-hc-fit" data-tm-row="date">
-                  {timeRow ? dateOnly(t) : dateRow(t)}
-                </b>
-              </div>
-            )}
-            {/* Zip 70 (pictures 1 and 2): Time, its own row once the date is finalized; tap it to move the start or the end (until the night). */}
-            {timeRow &&
-              (t.timeOpen ? (
-                <>
-                  <TapRow label="Time" value={planRange(t.start, t.minutes)} open={edit === 'time'} onTap={() => setEdit((e) => (e === 'time' ? null : 'time'))} data="data-tm-time-toggle" valueData="data-tm-row-time" fit />
-                  {edit === 'time' && <TimeBox key={`${t.start}-${t.minutes}`} ctx={ctx} t={t} onDone={() => setEdit(null)} />}
-                </>
-              ) : (
-                <div className="tm-row">
-                  <span>Time</span>
-                  <b className="tm-hc-val tm-hc-fit" data-tm-row-time>
-                    {planRange(t.start, t.minutes)}
-                  </b>
+        <div className="tm-hc-body tm86-body" id={bodyId} data-tm-home-body>
+          {step !== null && <Steps step={step} />}
+          {before ? (
+            <>
+              {/* The When block: the date and time bold, the courts, the style and the price under it, Change on the right. */}
+              <div className="tm86-when" data-tm86-when>
+                <div className="tm86-when-words">
+                  <p className="tm86-when-main" data-tm-row-time>
+                    {t.finalDate ? (t.startSet ? `${dateOnly(t)} · ${planRange(t.start, t.minutes)}` : dateRow(t)) : `${t.offeredDates.length} ${t.offeredDates.length === 1 ? 'date' : 'dates'} offered`}
+                  </p>
+                  <p className="tm86-when-sub" data-tm-home-plan>
+                    {t.courts} {t.courts === 1 ? 'court' : 'courts'} · {styleShort(t)} · {formatPrice(t.ticketCents)}
+                  </p>
+                  {t.votes && (t.formatPending || step === 0) && votesLine(t.votes)}
                 </div>
-              ))}
-            {!canceled && (!ticketsStage || t.status === 'tickets') &&
-              (t.planOpen ? (
-                <>
-                  {/* Zip 70 (picture 7): tap Plan: Expect and Courts. */}
-                  <TapRow label="Plan" value={planShort(t)} open={edit === 'plan'} onTap={() => setEdit((e) => (e === 'plan' ? null : 'plan'))} data="data-tm-plan-toggle" valueData="data-tm-home-plan" fit />
-                  {edit === 'plan' && <PlanBox key={`${t.expected}-${t.courts}`} ctx={ctx} t={t} onDone={() => setEdit(null)} />}
-                </>
-              ) : (
-                <div className="tm-row">
-                  <span>Plan</span>
-                  <b className="tm-hc-val tm-hc-fit" data-tm-row="plan" data-tm-home-plan>
-                    {planShort(t)}
-                  </b>
-                </div>
-              ))}
-            {t.status === 'tickets' && (
-              <>
-                {/* Zip 70 (pictures 1 and 3, dry run fix 5): THE money line for the Plan's expected players. */}
-                {t.money && (
-                  <div className="tm-row">
-                    <span data-tm-money-label>{moneyRowLabel(t.money.youCents)}</span>
-                    <MoneyValue cents={t.money.youCents} data="data-tm-row-money" />
-                  </div>
+                {(t.planOpen || t.timeOpen) && (
+                  <button type="button" className="tm86-change" onClick={() => setSheet('change')} data-tm86-change>
+                    Change
+                  </button>
                 )}
-                {/* Zip 85: the price check on the card too, the same number the Time and Plan boxes and Finalize show (planMoney). */}
-                {t.money && typeof t.money.afterFullCents === 'number' && (
-                  <div className="tm-row">
-                    <span>After full prizes</span>
-                    <b className={t.money.afterFullCents >= 0 ? 'tm-money-up' : 'tm-money-down'} data-tm-row-after-full={t.money.afterFullCents}>
-                      {t.money.afterFullCents >= 0 ? `+${formatPrice(t.money.afterFullCents)}` : `${formatPrice(-t.money.afterFullCents)} short`}
-                    </b>
-                  </div>
-                )}
-                <div className="tm-row">
-                  <span>Locked in</span>
-                  <b data-tm-row="locked">
-                    {locked} of {t.spots ?? t.size}
-                  </b>
-                </div>
-                {/* Zip 66b (picture A4): Not paid yet, hidden at 0; tap: the names and Remind all unpaid. */}
-                {unpaid.length > 0 && (
+              </div>
+              <div className="tm86-grid">
+                {step === 1 ? (
                   <>
-                    <TapRow label="Not paid yet" value={unpaid.length} open={showUnpaid} onTap={() => setShowUnpaid((v) => !v)} data="data-tm-unpaid-toggle" valueData="data-tm-row-unpaid" />
-                    {showUnpaid && <UnpaidBox ctx={ctx} t={t} unpaid={unpaid} />}
+                    <BigButton title="Tickets" sub={`${locked} of ${t.spots ?? t.size} locked in`} tone="green" onClick={() => setPage('tickets')} data="data-tm-tickets" />
+                    {unpaid.length > 0 ? (
+                      <RemindButton ctx={ctx} t={t} unpaid={unpaid} />
+                    ) : (
+                      <BigButton title="Remind" sub="Everyone paid" disabled data="data-tm86-remind" />
+                    )}
+                    <BigButton title="Prizes" sub={prize ?? 'Not set yet'} onClick={() => setSheet('prizes')} data="data-tm86-prizes" />
+                    {money}
+                  </>
+                ) : (
+                  <>
+                    {/* Sign up: today's actions in the same frame (Who's signed up, Remind not signed up, Dates), then Money. */}
+                    <BigButton title="Who’s signed up" sub={`${t.signups.length} signed up`} tone="green" onClick={() => setPage('edit')} data="data-tm-open-edit" />
+                    {ns ? (
+                      <BigButton title="Remind" sub={`${ns.players.length} not signed up`} tone="amber" onClick={() => void copyMissing()} data="data-tm-missing-copy" />
+                    ) : (
+                      <BigButton title="Remind" sub="Everyone signed up" disabled data="data-tm86-remind" />
+                    )}
+                    <BigButton title="Dates" sub={t.finalDate ? dateOnly(t) : 'Pick the date'} onClick={() => setPage('dates')} data="data-tm-open-dates" />
+                    {money ?? <BigButton title="Prizes" sub={prize ?? 'Not set yet'} onClick={() => setSheet('prizes')} data="data-tm86-prizes" />}
                   </>
                 )}
-                {line.length > 0 && (
-                  <div className="tm-row">
-                    <span>Standby</span>
-                    <b data-tm-row="line">
-                      {line.length} ({line.filter(ticketIsPaid).length} paid)
-                    </b>
-                  </div>
-                )}
-              </>
-            )}
-            {t.status === 'date_picked' && (
-              <div className="tm-row">
-                <span>Signed up</span>
-                <b data-tm-row="signed">{t.signups.length}</b>
               </div>
-            )}
-            {ticketsStage && !canceled && (
-              <div className="tm-row">
-                <span>Ticket</span>
-                <b className="tm-hc-val tm-hc-fit" data-tm-row="ticket">
-                  {formatPrice(t.ticketCents)}
-                  {t.payBy ? ` · pay by ${payByLabel(t.payBy, tz, t.finalDate)}` : ''}
-                </b>
-              </div>
-            )}
-          </div>
-          {canceled ? (
-            <>
-              <p className="tm-card-note" data-tm-canceled-note>
-                Every paid ticket came back as credit.
-              </p>
-              {/* The name used to open the page; it opens and closes the card now, so Tickets opens the page (the list on top). */}
-              <button type="button" className="btn block secondary tm-tix-go" onClick={() => setPage('tickets')} data-tm-tickets>
-                Tickets
-              </button>
-              <HideCanceled ctx={ctx} t={t} />
-            </>
-          ) : ticketsStage ? (
-            <>
-              {/* Alex: no Open tickets button. Picking the date opened them. Tickets opens the tournament page (the list on top). */}
-              {t.status === 'tickets' ? (
-                <button type="button" className="btn block big tm-tix-go" onClick={() => setPage('tickets')} data-tm-tickets>
-                  Tickets
-                </button>
-              ) : (
-                <div className="tm-home-actions">
-                  <button type="button" className="btn" onClick={() => setPage('edit')} data-tm-open-edit>
-                    Edit
-                  </button>
-                </div>
-              )}
-              {/* A night that has been played is never refunded or moved (the server refuses both), so the taps are not offered. */}
-              {!t.over && <CancelOrReschedule ctx={ctx} t={t} />}
+              {(ticketsStage || t.status === 'rescheduled') && !t.over && <CancelOrReschedule ctx={ctx} t={t} />}
             </>
           ) : (
-            // Pick date and Edit, exactly as before (Levels live inside Edit). Edit opens the whole tournament page at the top.
-            <div className="tm-home-actions">
-              <button type="button" className="btn" onClick={() => setPage('dates')} data-tm-open-dates>
-                Pick date
-              </button>
-              <button type="button" className="btn secondary" onClick={() => setPage('edit')} data-tm-open-edit>
-                Edit
-              </button>
-            </div>
+            <NightBody ctx={ctx} t={t} onTickets={() => setPage('tickets')} />
           )}
         </div>
       )}
@@ -739,7 +447,423 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
         focus={page === 'dates' ? 'dates' : page === 'tickets' ? 'tickets' : undefined}
         onClose={() => setPage(null)}
       />
+      <Sheet calmFocus open={sheet === 'change'} title={`Change ${t.name}`} onClose={() => setSheet((cur) => (cur === 'change' ? null : cur))} className="tm86-sheet">
+        {sheet === 'change' && <ChangeBody key={`${t.start}-${t.minutes}-${t.expected}-${t.courts}`} ctx={ctx} t={t} onDone={() => setSheet(null)} onDates={() => { setSheet(null); setPage('dates'); }} />}
+      </Sheet>
+      <Sheet calmFocus open={sheet === 'money'} title="Money" onClose={() => setSheet((cur) => (cur === 'money' ? null : cur))} className="tm86-sheet">
+        {sheet === 'money' && <MoneyBody t={t} onPrizes={() => setSheet('prizes')} />}
+      </Sheet>
+      <Sheet calmFocus open={sheet === 'prizes'} title="Prizes" onClose={() => setSheet((cur) => (cur === 'prizes' ? null : cur))} className="tm86-sheet">
+        {sheet === 'prizes' && <PrizesBody ctx={ctx} t={t} onDone={() => setSheet(null)} />}
+      </Sheet>
     </section>
+  );
+}
+
+/**
+ * Zip 86: Remind ("4 haven't paid", amber words) is today's "Remind all unpaid" (Zip 63, mock 14): it opens Messages with every unpaid person's
+ * number and a ready text; the organizer taps Send. The site never sends a text. A missing number is said in a toast after the tap.
+ */
+function RemindButton({ ctx, t, unpaid }: { ctx: AdminCtx; t: AdminTournamentView; unpaid: TournamentSignupView[] }) {
+  const now = useNow(60_000);
+  const toast = useToast();
+  const tz = ctx.d.group.timezone;
+  const phoneOf = new Map(ctx.d.players.map((p) => [p.id, p.phone]));
+  const phones = unpaid.map((s) => phoneOf.get(s.playerId)).filter((p): p is string => !!p);
+  const missing = unpaid.filter((s) => !phoneOf.get(s.playerId)).map((s) => s.name);
+  const body = tournamentRemindText(t.name, t.payBy!, t.finalDate!, now, tz, siteAddress(ctx.d.group.playerLink));
+  return (
+    <a
+      className="tm86-btn"
+      href={smsHref(phones.length ? phones : null, body, isIOS)}
+      onClick={() => {
+        if (missing.length) toast(`No number for ${missing.join(', ')}`);
+      }}
+      aria-label={`Remind: ${unpaid.map((p) => p.name).join(', ')} ${unpaid.length === 1 ? 'hasn’t' : 'haven’t'} paid. Opens Messages.`}
+      data-tm-remind-btn
+      data-tm-remind={unpaid.length}
+    >
+      <span className="tm86-btn-title">Remind</span>
+      <span className="tm86-btn-sub tm86-amber" data-tm-row-unpaid>
+        {unpaid.length} {unpaid.length === 1 ? 'hasn’t' : 'haven’t'} paid
+      </span>
+    </a>
+  );
+}
+
+/** Zip 86: game night and after: the card's facts as before (no tap rows), Tickets, and Cancel or reschedule until the night is over. */
+function NightBody({ ctx, t, onTickets }: { ctx: AdminCtx; t: AdminTournamentView; onTickets: () => void }) {
+  const tz = ctx.d.group.timezone;
+  const canceled = t.status === 'canceled';
+  const line = lineOf(t);
+  return (
+    <>
+      <div className="tm-rows tm-hc-rows">
+        {!canceled && (
+          <div className="tm-row">
+            <span>Style</span>
+            <b className="tm-hc-val" data-tm-home-format={t.formatPending ? 'vote' : t.format}>
+              {styleWords(t)}
+            </b>
+          </div>
+        )}
+        <div className="tm-row">
+          <span>Date</span>
+          <b className="tm-hc-val tm-hc-fit" data-tm-row="date">
+            {t.startSet && t.finalDate ? dateOnly(t) : dateRow(t)}
+          </b>
+        </div>
+        {t.startSet && t.finalDate && (
+          <div className="tm-row">
+            <span>Time</span>
+            <b className="tm-hc-val tm-hc-fit" data-tm-row-time>
+              {planRange(t.start, t.minutes)}
+            </b>
+          </div>
+        )}
+        {!canceled && (
+          <div className="tm-row">
+            <span>Plan</span>
+            <b className="tm-hc-val tm-hc-fit" data-tm-row="plan" data-tm-home-plan>
+              {planShort(t)}
+            </b>
+          </div>
+        )}
+        {t.status === 'tickets' && (
+          <>
+            {t.money && (
+              <div className="tm-row">
+                <span data-tm-money-label>{moneyRowLabel(t.money.youCents)}</span>
+                <MoneyValue cents={t.money.youCents} data="data-tm-row-money" />
+              </div>
+            )}
+            <div className="tm-row">
+              <span>Locked in</span>
+              <b data-tm-row="locked">
+                {lockedNum(t)} of {t.spots ?? t.size}
+              </b>
+            </div>
+            {line.length > 0 && (
+              <div className="tm-row">
+                <span>Standby</span>
+                <b data-tm-row="line">
+                  {line.length} ({line.filter(ticketIsPaid).length} paid)
+                </b>
+              </div>
+            )}
+          </>
+        )}
+        {!canceled && (
+          <div className="tm-row">
+            <span>Ticket</span>
+            <b className="tm-hc-val tm-hc-fit" data-tm-row="ticket">
+              {formatPrice(t.ticketCents)}
+              {t.payBy ? ` · pay by ${payByLabel(t.payBy, tz, t.finalDate)}` : ''}
+            </b>
+          </div>
+        )}
+      </div>
+      {canceled ? (
+        <>
+          <p className="tm-card-note" data-tm-canceled-note>
+            Every paid ticket came back as credit.
+          </p>
+          <button type="button" className="btn block secondary tm-tix-go" onClick={onTickets} data-tm-tickets>
+            Tickets
+          </button>
+          <HideCanceled ctx={ctx} t={t} />
+        </>
+      ) : (
+        <>
+          {t.status === 'tickets' && (
+            <button type="button" className="btn block big tm-tix-go" onClick={onTickets} data-tm-tickets>
+              Tickets
+            </button>
+          )}
+          {/* A night that has been played is never refunded or moved (the server refuses both), so the taps are not offered. */}
+          {!t.over && t.status === 'tickets' && <CancelOrReschedule ctx={ctx} t={t} />}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Zip 86 (picture 6): Change: one sheet with the Date (shown; changing it is the existing Reschedule), the Time (today's rules: the Time box's
+ * start and end, while it can move), Courts 1 | 2, "Players you expect" − n +, and "Courts cost $120". Save sends today's calls: the Time box's
+ * PUT .../time and the Plan box's PUT .../plan, each only when it changed, with their own toasts and the venue card as before.
+ */
+function ChangeBody({ ctx, t, onDone, onDates }: { ctx: AdminCtx; t: AdminTournamentView; onDone: () => void; onDates: () => void }) {
+  const { busy, save } = useSave(ctx);
+  const [ask, setAsk] = useState(false);
+  const timeOn = !!t.timeOpen && !!t.startSet && !!t.finalDate;
+  const planOn = !!t.planOpen;
+  const [start, setStart] = useState(t.start);
+  const [end, setEnd] = useState(t.start + t.minutes);
+  const low = Math.max(EXPECT_MIN, t.lockedIn ?? 0);
+  const [n, setN] = useState(Math.min(EXPECT_MAX, Math.max(low, t.expected ?? t.size)));
+  const [courts, setCourts] = useState<1 | 2>(t.courts === 1 ? 1 : 2);
+  const starts = PLAY_STARTS.includes(start) ? PLAY_STARTS : [...PLAY_STARTS, start].sort((a, b) => a - b);
+  const ends = playEnds(start, end);
+  const minutes = timeOn ? end - start : t.minutes;
+  const outside = timeOn ? venueHoursProblem(ctx, t.finalDate, start, end) : null;
+  const fit = fitWords(nightPlan(n, courts, minutes, t.format), timeOn ? start : t.start);
+  const timeChanged = timeOn && (start !== t.start || end !== t.start + t.minutes);
+  const planChanged = planOn && (n !== (t.expected ?? t.size) || courts !== t.courts);
+  async function go() {
+    let ok = true;
+    if (timeChanged) {
+      ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/time`, { start, minutes: end - start }), 'Time saved');
+      if (ok && t.finalDate) venueAsk(t.id, t.finalDate, start, end - start);
+    }
+    if (ok && planChanged) {
+      ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}/plan`, { expected: n, courts }), 'Plan saved');
+      // The venue card follows the courts (once the date is finalized).
+      if (ok && t.finalDate && t.startSet && courts !== t.courts) venueAsk(t.id, t.finalDate, timeOn ? start : t.start, minutes);
+    }
+    if (ok) onDone();
+  }
+  const dateWords = t.finalDate ? dateOnly(t) : 'Pick the date';
+  return (
+    <div className="tm86-change-body" data-tm86-change-sheet>
+      <div className="tm86-field">
+        <span className="tm86-label">Date</span>
+        <button
+          type="button"
+          className="tm86-box"
+          disabled={busy}
+          onClick={() => (t.finalDate && t.status === 'tickets' && !t.over ? setAsk(true) : onDates())}
+          data-tm86-date
+        >
+          {dateWords}
+        </button>
+      </div>
+      {t.startSet && t.finalDate && (
+        <div className="tm86-field">
+          <span className="tm86-label">Time</span>
+          {timeOn ? (
+            <span className="tm86-times" role="group" aria-label="Time">
+              <select
+                className="tm86-box tm86-select"
+                aria-label="Start"
+                value={start}
+                disabled={busy}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  // Keep the length when the start moves (never past midnight), as on Finalize.
+                  setEnd(Math.min(next + (end - start), 24 * 60, next + 360));
+                  setStart(next);
+                }}
+                data-tm-time-start
+              >
+                {starts.map((x) => (
+                  <option key={x} value={x}>
+                    {clockShort(timeWords(x))}
+                  </option>
+                ))}
+              </select>
+              <span className="tm86-to">to</span>
+              <select className="tm86-box tm86-select" aria-label="End" value={end} disabled={busy} onChange={(e) => setEnd(Number(e.target.value))} data-tm-time-end>
+                {ends.map((x) => (
+                  <option key={x} value={x}>
+                    {clockShort(timeWords(x % (24 * 60)))}
+                  </option>
+                ))}
+              </select>
+            </span>
+          ) : (
+            <b className="tm86-fixed" data-tm-row-time>
+              {planRange(t.start, t.minutes)}
+            </b>
+          )}
+        </div>
+      )}
+      <div className="tm86-field">
+        <span className="tm86-label">Courts</span>
+        <span className="segmented tm86-courts" role="group" aria-label="Courts">
+          {([1, 2] as const).map((c) => (
+            <button key={c} type="button" aria-pressed={courts === c} disabled={busy || !planOn} onClick={() => setCourts(c)} data-tm-plan-courts={c}>
+              {c}
+            </button>
+          ))}
+        </span>
+      </div>
+      <div className="tm86-field">
+        <span className="tm86-label">Players you expect</span>
+        <span className="tm86-stepper">
+          <button type="button" className="tm86-box tm86-sq" aria-label="One fewer" disabled={busy || !planOn || n <= low} onClick={() => setN((x) => Math.max(low, x - 1))} data-tm-expect-minus>
+            −
+          </button>
+          <b className="tm86-n" aria-live="polite" data-tm-expect>
+            {n}
+          </b>
+          <button type="button" className="tm86-box tm86-sq" aria-label="One more" disabled={busy || !planOn || n >= EXPECT_MAX} onClick={() => setN((x) => Math.min(EXPECT_MAX, x + 1))} data-tm-expect-plus>
+            +
+          </button>
+        </span>
+      </div>
+      <div className="tm86-field tm86-cost">
+        <span className="tm86-label">Courts cost</span>
+        <b data-tm86-court-cost={courtCentsOf({ courts, minutes })}>{formatPrice(courtCentsOf({ courts, minutes }))}</b>
+      </div>
+      {!fit.fits && (
+        <p className="tm-fin-fit tm-fin-tight" role="status" data-tm-box-fit="tight">
+          {fit.text}
+        </p>
+      )}
+      {outside && (
+        <p className="field-error" role="alert" data-tm-hours>
+          {outside}
+        </p>
+      )}
+      <button type="button" className="btn block big tm86-save" disabled={busy || !!outside || (!timeChanged && !planChanged)} onClick={() => void go()} data-tm86-save>
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+      <ConfirmDialog
+        open={ask}
+        title="Change the date?"
+        body={<p>Changing the date is a Reschedule: the date comes off and everyone picks their dates again. Paid tickets stay held.</p>}
+        confirmLabel="Reschedule"
+        busy={busy}
+        onCancel={() => setAsk(false)}
+        onConfirm={async () => {
+          const ok = await save(() => api('POST', `/api/admin/tournament/${t.id}/reschedule`, {}), 'Rescheduled. Pick new dates.');
+          setAsk(false);
+          if (ok) onDone();
+        }}
+      />
+    </div>
+  );
+}
+
+/** Zip 86: one line of the Money sheet. */
+function MoneyRow({ label, cents, words, data }: { label: ReactNode; cents?: number; words?: string; data: string }) {
+  return (
+    <div className="tm86-mrow" {...{ [data]: cents ?? words ?? '' }}>
+      <span>{label}</span>
+      {words !== undefined ? <b>{words}</b> : <b className={cents! < 0 ? 'tm-money-down' : undefined}>{cents! < 0 ? `−${formatPrice(-cents!)}` : formatPrice(cents!)}</b>}
+    </div>
+  );
+}
+
+/**
+ * Zip 86 (picture 7): Money. RIGHT NOW: the tickets paid, the courts, the prizes set (or "Not set"), So far. IF ALL N PAY: the tickets
+ * expected ("you play free" when the organizer has a free seat), the courts, the prizes as set (or the suggested full tier when none is set),
+ * You keep. Every number is the server's money line (shared/tournamentMoney.ts planMoney) and cost: the card, Time, Plan, Finalize and Totals
+ * read the same ones, to the cent.
+ */
+function MoneyBody({ t, onPrizes }: { t: AdminTournamentView; onPrizes: () => void }) {
+  const ms = moneySheet(t);
+  if (!ms) return <p className="tm-card-note">The money shows once the plan is set.</p>;
+  return (
+    <div className="tm86-money" data-tm86-money-sheet>
+      <h3 className="tm86-mhead">Right now</h3>
+      <MoneyRow label={`${ms.paidCount} ${ms.paidCount === 1 ? 'ticket' : 'tickets'} paid`} cents={ms.paidCents} data="data-tm86-paid" />
+      <MoneyRow label={`Courts (${t.courts} · ${hoursWords(t.minutes)})`} cents={-ms.courtCents} data="data-tm86-courts-now" />
+      {ms.prizesNowCents !== null ? <MoneyRow label="Prizes" cents={-ms.prizesNowCents} data="data-tm86-prizes-now" /> : <MoneyRow label="Prizes" words="Not set" data="data-tm86-prizes-now" />}
+      <div className="tm86-total" data-tm86-so-far={ms.soFarCents}>
+        <span>So far</span>
+        <b className={ms.soFarCents >= 0 ? 'tm-money-up' : 'tm-money-down'}>{signed(ms.soFarCents)}</b>
+      </div>
+      <h3 className="tm86-mhead">If all {ms.expected} pay</h3>
+      <MoneyRow label={`${Math.max(0, ms.expected - 1)} tickets${ms.freeSeat ? ' (you play free)' : ''}`} cents={ms.ticketsAllCents} data="data-tm86-tickets-all" />
+      <MoneyRow label="Courts" cents={-ms.courtCents} data="data-tm86-courts-all" />
+      <MoneyRow
+        label={
+          <>
+            Prizes: {ms.prizeAllWords}
+            {ms.prizeSuggested && <em className="tm86-suggest">Suggested. Not set yet.</em>}
+          </>
+        }
+        cents={-ms.prizeAllCents}
+        data="data-tm86-prizes-all"
+      />
+      <div className="tm86-total" data-tm86-keep={ms.keepCents}>
+        <span>You keep</span>
+        <b className={ms.keepCents >= 0 ? 'tm-money-up' : 'tm-money-down'}>{signed(ms.keepCents)}</b>
+      </div>
+      <button type="button" className="btn block secondary tm86-setprizes" onClick={onPrizes} data-tm86-set-prizes>
+        Set prizes
+      </button>
+    </div>
+  );
+}
+
+/** "2.5 hrs", "2 hrs", "1 hr". */
+const hoursWords = (minutes: number) => `${minutes / 60} ${minutes === 60 ? 'hr' : 'hrs'}`;
+
+/**
+ * Zip 86: Prizes before the night: the 🎾82 suggestion ("Tickets $162 − courts $120 = $42 left.", "Suggested: $14 each to the winners", Use
+ * these) over the prize boxes, Save. Saves through the tournament's own Edit save (PUT /api/admin/tournament/:id) with everything else as it is,
+ * exactly what the Edit page's Prizes card sends.
+ */
+function PrizesBody({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView; onDone: () => void }) {
+  const { busy, save } = useSave(ctx);
+  const doubles = t.format === 'doubles' && !t.formatPending;
+  const voting = !!t.formatPending;
+  const [champion, setChampion] = useState<number | null>(t.championCreditCents);
+  const [second, setSecond] = useState<number | null>(t.secondCreditCents);
+  const [filled, setFilled] = useState(0);
+  const m = t.money;
+  const style = doubles ? 'doubles' : (m?.style ?? t.format);
+  const tier = m ? suggestedTier(m.ticketsCents - m.courtCents, style) : null;
+  const amounts = tier ? tierAmounts(tier, style) : null;
+  const same = !!amounts && champion === amounts.firstCents && (doubles || second === amounts.secondCents);
+  async function go() {
+    if (champion === null || (!doubles && second === null)) return;
+    const body = {
+      name: t.name,
+      dates: t.offeredDates,
+      ticketCents: t.ticketCents,
+      creditCents: champion,
+      visibility: t.visibility,
+      ...(doubles ? {} : { secondCreditCents: second }),
+    };
+    const ok = await save(() => api('PUT', `/api/admin/tournament/${t.id}`, body), 'Prizes saved');
+    if (ok) onDone();
+  }
+  return (
+    <div className="stack tm-awards tm86-prizes" data-tm86-prize-sheet>
+      {m && tier && amounts && (
+        <div className="tm-awards-suggest" data-tm-suggest={tier}>
+          <p className="tm-awards-left" data-tm-suggest-left>
+            {leftWords(m.ticketsCents, m.courtCents)}
+          </p>
+          <div className="tm-awards-suggest-row">
+            <p className="tm-awards-suggest-words" data-tm-suggest-words>
+              {suggestionWords(tier, style)}
+            </p>
+            <button
+              type="button"
+              className="tm-awards-use"
+              disabled={same}
+              onClick={() => {
+                setChampion(amounts.firstCents);
+                if (!doubles) setSecond(amounts.secondCents);
+                setFilled((x) => x + 1);
+              }}
+              data-tm-suggest-use
+            >
+              {same ? 'Using these' : 'Use these'}
+            </button>
+          </div>
+        </div>
+      )}
+      <label className="tm-row tm-awards-row" htmlFor="tm86-credit">
+        <span>{doubles ? 'Credit for each winner' : voting ? 'Winner or 1st place' : '1st place credit'}</span>
+        <MoneyBox key={`c${filled}`} id="tm86-credit" cents={champion} onChange={setChampion} label={doubles ? 'Credit for each winner' : '1st place credit'} />
+      </label>
+      {!doubles && (
+        <label className="tm-row tm-awards-row" htmlFor="tm86-credit2">
+          <span>{voting ? '2nd place' : '2nd place credit'}</span>
+          <MoneyBox key={`s${filled}`} id="tm86-credit2" cents={second} onChange={setSecond} label="2nd place credit" />
+        </label>
+      )}
+      <p className="tm-card-note">{doubles ? 'Medal and banner are automatic. Set the credit to $0 to skip it.' : '1st place also gets a medal. Set either credit to $0 to skip it.'}</p>
+      <button type="button" className="btn block big" disabled={busy || champion === null || (!doubles && second === null)} onClick={() => void go()} data-tm86-prizes-save>
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+    </div>
   );
 }
 
