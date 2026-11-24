@@ -80,7 +80,7 @@ describe('the switch: a Settings row, a private link, a kill switch', () => {
     expect(d.venueAlerts).toEqual([]);
     expect(d.venueDays).toEqual({ membershipDay: 26, courtDay: 0 });
     const act = ((await w.organizer.call('GET', '/api/admin/activity')).data.entries as any[]).find((e) => e.action === 'venue_alert_on');
-    expect(activityText(act, TZ, 'Alex')).toContain('switched "Venue charge alert" on');
+    expect(activityText(act, TZ, 'Alex')).toContain('switched “Venue charge alert” on');
     (w.app.env as unknown as Record<string, unknown>).VENUE_ALERT = 'off';
     d = await dash(w);
     expect(d.venueAlert).toBeUndefined();

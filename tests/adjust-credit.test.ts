@@ -111,7 +111,7 @@ describe('Adjust credit: the switch', () => {
     expect((await adjust(w, 'Blair', body('add', 500, 0), {})).status).toBe(200);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries;
     const sw = act.find((e: { action: string }) => e.action === 'adjust_credit_on');
-    expect(activityText({ ...sw }, 'America/Detroit', 'Alex')).toBe('Alex switched "Adjust credit" on');
+    expect(activityText({ ...sw }, 'America/Detroit', 'Alex')).toBe('Alex switched “Adjust credit” on');
     expect((await w.app.client().call('PUT', '/api/admin/adjust-credit-switch', { on: true })).status).toBe(401);
     await w.organizer.call('PUT', '/api/admin/adjust-credit-switch', { on: false });
     expect((await dash(w, {})).adjustCredit).toBeUndefined();

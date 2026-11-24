@@ -563,9 +563,9 @@ describe('Part C: the 3-way switch (CHRISTMAS_SKIN: Off, Just me, Everyone; ship
   });
   it('History words and the Settings row: a 3-way control on top of both Feature switches lists (no deploy needed)', () => {
     const line = (action: string) => activityText({ id: 'x', action, details: {}, actorLabel: 'organizer', at: '2026-11-12T20:00:00.000Z', sessionId: null, playerId: null } as never, 'America/Detroit', 'Alex');
-    expect(line('christmas_skin_everyone')).toBe('Alex switched "Christmas skin" to Everyone');
-    expect(line('christmas_skin_me')).toBe('Alex switched "Christmas skin" to Just me');
-    expect(line('christmas_skin_off')).toBe('Alex switched "Christmas skin" off');
+    expect(line('christmas_skin_everyone')).toBe('Alex switched “Christmas skin” to Everyone');
+    expect(line('christmas_skin_me')).toBe('Alex switched “Christmas skin” to Just me');
+    expect(line('christmas_skin_off')).toBe('Alex switched “Christmas skin” off');
     const src = readFileSync(new URL('../src/pages/admin/SettingsTab.tsx', import.meta.url), 'utf8');
     expect(src.match(/<ChristmasSkinRow /g)?.length).toBe(2);
     expect(src).toContain('/api/admin/christmas-skin-switch');

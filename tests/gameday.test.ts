@@ -85,7 +85,7 @@ describe('GAME_DAY_CARD ships off: every answer exactly as before', () => {
     expect((await group(w)).gameDayCard).toBe(true);
     expect((await blair.call('GET', '/api/group/version')).data.v).not.toBe(v0);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: any) => e.action === 'game_day_card_on');
-    expect(activityText(act, 'America/Detroit', 'Alex')).toBe('Alex switched "Game day card" on');
+    expect(activityText(act, 'America/Detroit', 'Alex')).toBe('Alex switched “Game day card” on');
     expect((await blair.call('PUT', '/api/admin/game-day-card-switch', { on: false })).status).toBe(401);
     await w.organizer.call('PUT', '/api/admin/game-day-card-switch', { on: false });
     expect((await group(w)).gameDayCard).toBeUndefined();

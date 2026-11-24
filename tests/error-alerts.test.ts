@@ -658,7 +658,7 @@ describe('Settings > Feature switches > "Error alerts", and the TEST button', ()
     expect((w.box.store.get('state') as BoxState).on).toBe(false);
     expect((await w.g.organizer.call('GET', '/api/admin/dashboard')).data.errorAlertsForAll).toBeUndefined();
     const entries = (await w.g.organizer.call('GET', '/api/admin/activity')).data.entries.filter((e: any) => String(e.action).startsWith('error_alerts'));
-    expect(entries.map((e: any) => activityText(e, 'America/Detroit', 'Alex')).sort()).toEqual(['Alex switched "Error alerts" off', 'Alex switched "Error alerts" on']);
+    expect(entries.map((e: any) => activityText(e, 'America/Detroit', 'Alex')).sort()).toEqual(['Alex switched “Error alerts” off', 'Alex switched “Error alerts” on']);
   });
   it('switching off while the box cannot be reached still saves; the next tick tells the box, so nothing is sent', async () => {
     const w = await world({ on: true });

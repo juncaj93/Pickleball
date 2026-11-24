@@ -249,8 +249,8 @@ describe('zip 82: suggested prizes and the price check (Alex’s rules)', () => 
       expect(suggestedTier(left, 'americano'), `${left} americano`).toBe(am);
       expect(suggestedTier(left, 'doubles'), `${left} doubles`).toBe(ld);
     }
-    expect(suggestionWords('full')).toBe('Suggested: full prizes (1st $14 · 2nd $7 each)');
-    expect(suggestionWords('first')).toBe('Suggested: 1st only ($14 each)');
+    expect(suggestionWords('full')).toBe('Suggested: full prizes (1st $14 · 2nd $7)');
+    expect(suggestionWords('first')).toBe('Suggested: 1st only ($14)');
     expect(suggestionWords('medals')).toBe('Suggested: medals only');
     expect(suggestionWords('first', 'doubles')).toBe('Suggested: $14 each to the winners');
     expect(suggestionWords('medals', 'doubles')).toBe('Suggested: medals only');

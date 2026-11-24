@@ -154,12 +154,19 @@ const brokenWords = (page, sel) =>
         await p.page.locator('[data-tc-results="board"]').waitFor({ timeout: 5000 });
         await p.page.goBack();
         await p.page.locator('[data-tc-results="row"]').waitFor({ timeout: 5000 });
+        await sleep(600);
         assert(new URL(p.page.url()).host === new URL(h.BASE).host, `left the site: ${p.page.url()}`);
         assert((await p.page.locator('[data-tc-results="board"]').count()) === 0, 'the board is still open');
         // Open, close with the X, then Back: no dead Back (the X gave its entry back).
         await p.page.locator('[data-tc-results-open]').first().click();
-        await p.page.locator('[data-tc-results-x]').click();
-        await sleep(400);
+        await p.page.locator('[data-tc-results-x]').click({ timeout: 8000 });
+        await sleep(600);
+        const depth = await p.page.evaluate(() => history.length);
+        await p.page.locator('[data-tc-results-open]').first().click();
+        await p.page.locator('[data-tc-results="board"]').waitFor({ timeout: 5000 });
+        await p.page.goBack();
+        await p.page.locator('[data-tc-results="row"]').waitFor({ timeout: 5000 });
+        assert(new URL(p.page.url()).host === new URL(h.BASE).host, `left the site after X then Back: ${p.page.url()} (history ${depth})`);
         await p.ctx.close();
         await h.stage('am_done');
         const v = await open('Vic');
@@ -202,7 +209,9 @@ const brokenWords = (page, sel) =>
           const a = await h.adminHome({ width, scheme });
           const broken = await brokenWords(a.page, '.hv2-names, .hv2-count');
           if (broken.length) problems.push(`${tag} admin rows break words: ${broken.join(', ')}`);
-          const card = await a.page.locator('[data-tm-row-after-full]').first().getAttribute('data-tm-row-after-full').catch(() => null);
+          await a.page.locator('[data-tm-home-toggle]').first().click();
+          await sleep(400);
+          const card = await a.page.locator('[data-tm-row-after-full]').first().getAttribute('data-tm-row-after-full', { timeout: 3000 }).catch(() => null);
           const planToggle = a.page.locator('[data-tm-plan-toggle]').first();
           if (card !== null && (await planToggle.count())) {
             await planToggle.click();

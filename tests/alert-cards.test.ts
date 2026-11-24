@@ -66,7 +66,7 @@ describe('the switch', () => {
     expect((await dash(w)).alertCardsForAll).toBe(true);
     expect((await blair.call('GET', '/api/group/version')).data.v).not.toBe(v0);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: { action: string }) => e.action === 'alert_cards_on');
-    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe('Alex switched "Alert cards" on');
+    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe('Alex switched “Alert cards” on');
     expect((await w.app.client().call('PUT', PATH, { on: true })).status).toBe(401);
     expect((await blair.call('PUT', PATH, { on: false })).status).toBe(401);
     await w.organizer.call('PUT', PATH, { on: false });
@@ -74,7 +74,7 @@ describe('the switch', () => {
     // Off again: the change stamp is exactly what it was before (no leftover piece).
     expect((await blair.call('GET', '/api/group/version')).data.v).toBe(v0);
     const off = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: { action: string }) => e.action === 'alert_cards_off');
-    expect(activityText({ ...off }, 'America/Detroit', 'Alex')).toBe('Alex switched "Alert cards" off');
+    expect(activityText({ ...off }, 'America/Detroit', 'Alex')).toBe('Alex switched “Alert cards” off');
   });
 
   it('the kill switch beats both the header and Settings', async () => {
@@ -240,7 +240,7 @@ describe('Seat dots (SEAT_DOTS)', () => {
     expect((await group(w)).seatDots).toBe(true);
     expect((await blair.call('GET', '/api/group/version')).data.v).not.toBe(v0);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: { action: string }) => e.action === 'seat_dots_on');
-    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe('Alex switched "Seat dots" on');
+    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe('Alex switched “Seat dots” on');
     expect((await blair.call('PUT', SD.path, { on: false })).status).toBe(401);
     await w.organizer.call('PUT', SD.path, { on: false });
     expect('seatDots' in (await group(w))).toBe(false);

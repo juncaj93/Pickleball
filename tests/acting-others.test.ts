@@ -129,7 +129,7 @@ describe('the rule: when is a tap "for someone else"?', () => {
     expect(activityText(e, 'America/Detroit', 'Alex')).toBe("Brandon said I’m in for Tue, Nov 10");
     expect(activityText({ ...e, from: "from Mitchel’s phone" }, 'America/Detroit', 'Alex')).toBe("Brandon said I’m in for Tue, Nov 10 (from Mitchel’s phone)");
     expect(activityText({ ...e, from: 'from a new phone' }, 'America/Detroit', 'Alex')).toBe("Brandon said I’m in for Tue, Nov 10 (from a new phone)");
-    expect(activityText({ ...e, action: 'acting_others_on', actorLabel: 'organizer', details: {} }, 'America/Detroit', 'Alex')).toBe('Alex switched "Acting for others" on');
+    expect(activityText({ ...e, action: 'acting_others_on', actorLabel: 'organizer', details: {} }, 'America/Detroit', 'Alex')).toBe('Alex switched “Acting for others” on');
   });
 });
 

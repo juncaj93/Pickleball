@@ -62,8 +62,8 @@ describe('Players sheet redo: the switch (PLAYERS_SHEET_REDO, ships OFF)', () =>
 
   it('History says it in words; the preview has the row on (PREVIEW SWITCHES RULE); the row is not listed twice', async () => {
     const e = { id: 'x', at: '2026-11-12T20:00:00.000Z', sessionId: null, playerId: null, details: {}, actorLabel: 'organizer' } as never;
-    expect(activityText({ ...(e as object), action: 'players_sheet_redo_on' } as never, 'America/Detroit', 'Alex')).toBe('Alex switched "Players sheet redo" on');
-    expect(activityText({ ...(e as object), action: 'players_sheet_redo_off' } as never, 'America/Detroit', 'Alex')).toBe('Alex switched "Players sheet redo" off');
+    expect(activityText({ ...(e as object), action: 'players_sheet_redo_on' } as never, 'America/Detroit', 'Alex')).toBe('Alex switched “Players sheet redo” on');
+    expect(activityText({ ...(e as object), action: 'players_sheet_redo_off' } as never, 'America/Detroit', 'Alex')).toBe('Alex switched “Players sheet redo” off');
     expect([...BUILDING_ON]).toContain(PLAYERS_SHEET_REDO.task);
     const rows = smallSwitchRows(Date.parse('2026-11-12T23:00:00.000Z')).trim().split('\n');
     expect(rows.filter((r) => r.includes(`'${PLAYERS_SHEET_REDO.task}'`))).toHaveLength(1);

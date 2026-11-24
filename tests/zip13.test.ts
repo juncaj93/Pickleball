@@ -51,7 +51,7 @@ describe('the three switches: off by default, a Settings row, a private link, a 
       expect(d[`${which}ForAll`]).toBe(true);
       const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: any) => e.action === `${ZIP13[which].task.replace(/_on$/, '')}_on`);
       expect(act).toBeDefined();
-      expect(activityText(act, 'America/Detroit', 'Alex')).toContain(`switched "${ZIP13[which].name}" on`);
+      expect(activityText(act, 'America/Detroit', 'Alex')).toContain(`switched “${ZIP13[which].name}” on`);
       (w.app.env as unknown as Record<string, unknown>)[ZIP13[which].env] = 'off';
       d = await dash(w);
       expect(d[which]).toBeUndefined();

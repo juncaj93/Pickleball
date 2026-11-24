@@ -296,7 +296,7 @@ describe('the server (server/unpaidNudge.ts)', () => {
     await switchOn(w, false);
     expect((await w.organizer.call('GET', '/api/admin/dashboard')).data.unpaidNudgeForAll).toBeUndefined();
     const entries = (await w.organizer.call('GET', '/api/admin/activity')).data.entries as ActivityEntry[];
-    expect(entries.map((e) => activityText(e, TZ, 'Alex')).sort()).toEqual(['Alex switched "Unpaid nudge" off', 'Alex switched "Unpaid nudge" on']);
+    expect(entries.map((e) => activityText(e, TZ, 'Alex')).sort()).toEqual(['Alex switched “Unpaid nudge” off', 'Alex switched “Unpaid nudge” on']);
     // A player cannot flip it.
     const blair = await playerPhone(w, 'Blair');
     expect((await blair.call('PUT', '/api/admin/unpaid-nudge-switch', { on: true })).status).toBe(401);

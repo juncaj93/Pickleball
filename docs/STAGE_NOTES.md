@@ -8145,3 +8145,34 @@ and the two regular games, the cup in the header; View as Parker: the cup, the r
 - Read-only live look (pickleball-club-9h0.pages.dev, GET only; the custom domain is not reachable from this session's network): /, /admin,
   /api/status 200; both Champions GETs 401 without a name or PIN; Home at 390 light and dark: the new bundle, no page errors, nothing wider than
   the screen, no cup (nobody has won on live yet). Organizer screens not opened on live (no read-only PIN in this session).
+
+## Zip 85: final fixes before The Cold Open (🎾85.final fixes), Tue Nov 24, 2026
+
+Built on main `79eda2d` (🎾83 live, deployment 08de95fc), from the 🎾84 dry run (branch `claude/new-session-xj2sqp`: its proof tests,
+browser checks and docs/audits/84-shots are copied in here). Branch `claude/new-session-cxc54x`. No migration, no Worker deploy, no new switch
+(rides the Tournaments switch, on live). Deploy windows waived by Alex until Dec 1, never during a game.
+
+### What it does
+1. One prize number: shared/tournamentMoney.ts `planMoney` (the money line, the prizes and "After full prizes" by the style the expected count
+   plays until tickets close: an odd count is Americano). The server's card line, the Time box, the Plan box and Finalize all call it; the
+   organizer's Home card has an "After full prizes" row. 9 expected on Locked doubles: every place says "+$3" (was "$4 short" vs "+$3").
+2. Back on the open Standings board (src/tournament/Results.tsx) and the reveal board (src/tournament/Reveal.tsx) closes it via openLayer,
+   like every sheet (the reveal board folds as with its X; the layer is given up when the fold starts).
+3. src/livecore.ts `setNight`: on a tournament night a visible phone keeps its 5 s check (no slow-down, no stop after 10 quiet minutes) while
+   the night runs, and on an Americano night until a minute after the reveal's hold (PlayerHome `nightUntil`); a hidden tab still checks
+   nothing; 5 hours untouched stops it. The 2 s check stays only on the waiting card. Organizer screens unchanged.
+4. The short ticket's style line wraps (tournament.css). 5. Americano prize words without "each". 6. "More games". 7. The owe line leads
+   with the total ("$14 each, 3 games: Nov 12 (2) and Nov 19"). 8. The organizer's folded game rows stack their right side at 360 and under
+   (styles.css container query), so names wrap between words (main column 35 px to 99 px at 320).
+9. Didn't pay after the night started (Alex approved): shared/tournamentTickets.ts `OWED_MARK`. The ticket keeps its I paid amount as the
+   debt with claim_at 'owed' (no column change; the 'spot must be paid' CHECK is untouched), so the player stays locked in and in the night.
+   Player: `ticketsOwed` (one read riding the tournament batch; View as reads the viewed player's own) and an amber You owe card (Pay: the same
+   Pay sheet with the ticket's Venmo note; I paid: POST /api/tournament/owed-paid, claim_at 'owed:<time>'). Organizer: the dashboard's
+   `ticketsOwed` (one read riding the shared trip), Money > Games "Tournament tickets" card (Mark paid; after an I paid Paid / Didn't pay),
+   the tournament's Players list "Owes $18" and its ticket sheet's Mark paid. Paid / Mark paid: the money on the ticket, the spot taken
+   (Totals count it to the cent); Didn't pay again: owed again. End is never held up by an owed ticket. Activity: "Alex said Kai didn’t pay for
+   The Cold Open: Kai owes $18". Before the night starts Didn't pay is as before.
+Quick items: Votes wraps between counts at 320 (was 14 px over); History tabs Activity, Games, Tournaments, Skills fit at 320 (smaller side
+space under 400 px); records "5-0" on both boards; "Credit adjusted by Alex"; "Pickleball cash out" Venmo note, "cash out" without a hyphen;
+curly quotes on the 96 switch lines in Activity; Finalize "Locked doubles".
+Stages (Tournament test, THIS_ZIP): "Americano: idle phone at the reveal" (zip85_idle) and "Didn’t pay after the night" (zip85_owed).

@@ -192,7 +192,13 @@ export function TournamentHomeCard({ ctx }: { ctx: AdminCtx }) {
 }
 
 /** Zip 66: "Doubles 2 · Americano 0 · Either 6" (the card's Votes row; Doubles, not Locked). */
-const votesWords = (v: NonNullable<AdminTournamentView['votes']>) => `Locked doubles ${v.locked} · Americano ${v.americano} · Either ${v.either}`;
+/** Zip 85: "Locked doubles 2 · Americano 0 · Either 6", each count kept with its style, so a narrow card wraps between them (never cut,
+ *  never past the card). */
+const votesValue = (v: NonNullable<AdminTournamentView['votes']>) => (
+  <span className="tm-hc-wrap">
+    <span className="tm-ml-pair">Locked doubles {v.locked}</span> · <span className="tm-ml-pair">Americano {v.americano}</span> · <span className="tm-ml-pair">Either {v.either}</span>
+  </span>
+);
 /** Zip 66: "6 players · 1 court · 2.5 hrs" (the card's Plan row). */
 // Zip 70: the Plan's expected players (the saved Expect number, else the site's suggestion), not the plan size.
 const planShort = (t: AdminTournamentView) => `${t.expected ?? t.size} players · ${t.courts} ${t.courts === 1 ? 'court' : 'courts'} · ${t.minutes / 60} ${t.minutes === 60 ? 'hr' : 'hrs'}`;
@@ -579,7 +585,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
             )}
             {!canceled && t.votes && (
               <>
-                <TapRow label="Votes" value={votesWords(t.votes)} open={showVotes} onTap={() => setShowVotes((v) => !v)} data="data-tm-votes-toggle" valueData="data-tm-vote-counts" fit />
+                <TapRow label="Votes" value={votesValue(t.votes)} open={showVotes} onTap={() => setShowVotes((v) => !v)} data="data-tm-votes-toggle" valueData="data-tm-vote-counts" fit />
                 {showVotes && <VotesBox t={t} />}
               </>
             )}

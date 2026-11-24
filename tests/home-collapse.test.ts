@@ -54,7 +54,7 @@ describe('HOME_COLLAPSE switch', () => {
     expect((await dash(w)).homeCollapseForAll).toBe(true);
     expect((await blair.call('GET', '/api/group/version')).data.v).not.toBe(v0);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: { action: string }) => e.action === 'home_collapse_on');
-    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe('Alex switched "Home collapse" on');
+    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe('Alex switched “Home collapse” on');
     expect((await w.app.client().call('PUT', '/api/admin/home-collapse-switch', { on: true })).status).toBe(401);
     expect((await blair.call('PUT', '/api/admin/home-collapse-switch', { on: false })).status).toBe(401);
     await w.organizer.call('PUT', '/api/admin/home-collapse-switch', { on: false });

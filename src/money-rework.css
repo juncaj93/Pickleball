@@ -866,3 +866,12 @@
   position: absolute;
   inset: -4px 0;
 }
+
+/* Zip 85: Money > Games, the Tournament tickets card (owed after a Didn't pay on the night): a plain header with the same side space as the rows. */
+.mrw-tickets-owed .mrw-head {
+  min-height: 48px;
+  padding: 10px 12px 8px 14px;
+}
+.mrw-tickets-owed .mrw-title {
+  overflow-wrap: normal;
+}

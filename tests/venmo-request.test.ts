@@ -120,7 +120,7 @@ describe('Venmo request switch', () => {
     expect(d.venmoRequest).toBe(true);
     expect(d.venmoRequestForAll).toBe(true);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: { action: string }) => e.action === 'venmo_request_on');
-    expect(activityText({ ...act }, TZ, 'Alex')).toBe('Alex switched "Venmo request" on');
+    expect(activityText({ ...act }, TZ, 'Alex')).toBe('Alex switched “Venmo request” on');
     const alex = await playerPhone(w, 'Alex');
     expect((await w.app.client().call('PUT', '/api/admin/venmo-request-switch', { on: true })).status).toBe(401);
     expect((await alex.call('PUT', '/api/admin/venmo-request-switch', { on: false })).status).toBe(401);

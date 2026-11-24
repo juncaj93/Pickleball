@@ -229,7 +229,7 @@ describe("zip 85 item 9: Didn't pay after the night started", () => {
     const p = await kai.call('POST', '/api/tournament/owed-paid', { tournamentId: ctx.tid, cents: 1800 });
     expect(p.status, p.text).toBe(200);
     expect((await kai.call('POST', '/api/tournament/owed-paid', { tournamentId: ctx.tid, cents: 1800 })).status).toBe(200);
-    expect(kaiTicket(ctx).claim_at).not.toBe('owed');
+    expect(kaiTicket(ctx).claim_at).toMatch(/^owed:2026-/);
     expect(await owedOf(ctx, 'Kai')).toEqual([]);
     expect(await adminOwed(ctx)).toEqual([expect.objectContaining({ playerName: 'Kai', cents: 1800, waiting: true })]);
     // Alex: Didn't pay again: owed again (the card is back).

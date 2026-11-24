@@ -805,7 +805,7 @@ export async function championsAny(ctx: Ctx, groupId: string): Promise<boolean> 
 export const ticketsOwedRead = (groupId: string): ReadSpec => ({
   sql: `SELECT k.tournament_id AS id, t.name, t.final_date, k.player_id, p.display_name, k.claim_cents, k.claim_at FROM tournament_tickets k
         JOIN tournaments t ON t.id = k.tournament_id JOIN players p ON p.id = k.player_id
-        WHERE t.group_id = ? AND k.claim_cents > 0 AND (k.claim_at = 'owed' OR t.status = 'ended') ORDER BY t.final_date DESC, p.display_name, p.id`,
+        WHERE t.group_id = ? AND k.claim_cents > 0 AND (k.claim_at LIKE 'owed%' OR t.status = 'ended') ORDER BY t.final_date DESC, p.display_name, p.id`,
   values: [groupId],
 });
 

@@ -1027,6 +1027,14 @@ dialog.sheet.tm-page {
   font-size: 0.95rem;
   font-size: max(11px, clamp(0.7rem, 4cqw, 1rem));
 }
+/* Zip 85: the Votes value wraps between its counts when even the smallest size does not fit (320 px), never past the card. */
+.tm-hc-rows .tm-row b:has(> .tm-hc-wrap) {
+  flex: 0 1 auto;
+  white-space: normal;
+}
+.tm-ml-pair {
+  white-space: nowrap;
+}
 /* A row that opens a soft box under it (Votes, Not signed up): the whole row is the tap, no arrow. */
 .tm-row.tm-hc-tap {
   width: 100%;

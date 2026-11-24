@@ -343,3 +343,11 @@
   padding-left: 3px;
   letter-spacing: -0.01em;
 }
+/* Zip 85: on a narrow phone the four tabs (Activity, Games, Tournaments, Skills) fit without sliding: less side space and a touch smaller
+   words, still 44 px tall; a tab is never shown cut at the edge. */
+@media (max-width: 400px) {
+  .segmented.tm-hist-seg button {
+    padding: 6px 5px;
+    font-size: max(11px, 0.84rem);
+  }
+}

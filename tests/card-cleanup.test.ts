@@ -96,8 +96,8 @@ describe('the pieces (shared)', () => {
 
   it('Activity lines for the Settings row', () => {
     const e = (action: string) => ({ action, actor: 'organizer', at: '2026-11-06T15:00:00.000Z', details: {}, sessionStartsAt: null }) as any;
-    expect(activityText(e('card_cleanup_on'), 'America/Detroit', 'Alex')).toMatch(/switched "Card cleanup" on/);
-    expect(activityText(e('card_cleanup_off'), 'America/Detroit', 'Alex')).toMatch(/switched "Card cleanup" off/);
+    expect(activityText(e('card_cleanup_on'), 'America/Detroit', 'Alex')).toMatch(/switched “Card cleanup” on/);
+    expect(activityText(e('card_cleanup_off'), 'America/Detroit', 'Alex')).toMatch(/switched “Card cleanup” off/);
   });
 
   it('every rule in src/zip10.css is under <html data-card-cleanup> (dormant with the switch off)', () => {

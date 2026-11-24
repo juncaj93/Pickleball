@@ -19,7 +19,7 @@ import * as v from './validate';
 import { audit, type GroupRow, organizerIdOf } from './repo';
 import { formatPrice } from '../shared/money';
 import { dayLong, MAX_SPOTS } from '../shared/tournament';
-import { isOwedClaim, OWED_MARK, payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
+import { fromOwedClaim, isOwedClaim, OWED_MARK, payByLabel, ticketOwed, ticketPaid, type TicketMoney } from '../shared/tournamentTickets';
 import {
   changedOrLookAgain,
   logPlayer,
@@ -218,8 +218,8 @@ export async function playerOwedPaid(ctx: Ctx, who: TournamentActor, body: Recor
   if (!isOwedClaim(k)) return { ok: true, result: 'waiting' as const, claimCents: k.claim_cents };
   if (cents !== k.claim_cents) throw new HttpError(409, 'amount_changed', `The amount changed to ${formatPrice(k.claim_cents)}. Look again.`);
   const res = await ctx.db
-    .prepare(`UPDATE tournament_tickets SET claim_at = ?1, updated_at = ?1 WHERE id = ?2 AND claim_at = '${OWED_MARK}' AND claim_cents = ?3`)
-    .bind(ctx.nowIso, k.id, cents)
+    .prepare(`UPDATE tournament_tickets SET claim_at = ?1, updated_at = ?4 WHERE id = ?2 AND claim_at = '${OWED_MARK}' AND claim_cents = ?3`)
+    .bind(`${OWED_MARK}:${ctx.nowIso}`, k.id, cents, ctx.nowIso)
     .run();
   if ((res.meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   await logPlayer(ctx, who.group, who.playerId, 'tournament_i_paid', { tournament: k.tournament_name, amountCents: cents });
@@ -353,7 +353,9 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
 
   // Zip 85: a debt from "Didn't pay" after the night started (shared/tournamentTickets.ts OWED_MARK). Mark paid on it is Paid.
   const owedBefore = !!k && isOwedClaim(k);
-  if (action === 'mark_paid' && owedBefore) return adminTicket(ctx, { ...body, action: 'confirm' });
+  // An owed ticket, or an I paid sent on one since: Paid gives it the spot it played in.
+  const fromOwed = !!k && k.claim_cents > 0 && fromOwedClaim(k.claim_at);
+  if (action === 'mark_paid' && fromOwed) return adminTicket(ctx, { ...body, action: 'confirm' });
   if (action === 'confirm' || action === 'reject') {
     if (!k || k.claim_cents === 0) throw new HttpError(409, 'nothing_waiting', `${name} has no I paid waiting. Look again.`);
     if (shown !== null && shown !== k.claim_cents) throw new HttpError(409, 'amount_changed', `${name}’s I paid changed. Look again.`);
@@ -364,9 +366,11 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
     const started = statusOf(t) !== 'canceled' && salesClosed(t, group.timezone, ctx.nowMs);
     const owes =
       action === 'reject' && started && k.place !== 'line' && k.credit_cents + k.paid_cents + k.claim_cents >= k.price_cents && signup?.status === 'in';
-    // A ticket paid in full after the night started takes its spot at once (they played), never a place in line that the night's end would
-    // hand back as credit.
-    const lineOrSpot = started ? "'spot'" : "'line'";
+    // An owed ticket paid in full (they played) takes its spot at once, never a place in line that the night's end would hand back as credit.
+    // Every other I paid is as before (a hold that never got a spot still comes back as credit once the night is over).
+    const lineOrSpot = fromOwed ? "'spot'" : "'line'";
+    // Lands only on the ticket exactly as read, its I paid time (or mark) included.
+    const claimAtAsRead = k.claim_at === null ? 'claim_at IS NULL' : `claim_at = ${sqlText(k.claim_at)}`;
     const answer = owes
       ? ctx.db
           .prepare(`UPDATE tournament_tickets SET claim_at = '${OWED_MARK}', updated_at = ?1 WHERE id = ?2 AND ${ticketAsRead(k)} AND claim_at IS NOT '${OWED_MARK}'`)
@@ -378,9 +382,9 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>) {
               `UPDATE tournament_tickets SET paid_cents = paid_cents + claim_cents, claim_cents = 0, claim_at = NULL,
                  paid_at = CASE WHEN credit_cents + paid_cents + claim_cents >= price_cents THEN ?1 ELSE paid_at END,
                  place = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN ${lineOrSpot} ELSE place END,
-                 place_at = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN (CASE WHEN claim_at IS NULL OR claim_at = '${OWED_MARK}' THEN ?1 ELSE claim_at END) ELSE place_at END,
+                 place_at = CASE WHEN place = 'none' AND credit_cents + paid_cents + claim_cents >= price_cents AND ${onList('tournament_tickets')} THEN (CASE WHEN claim_at IS NULL OR claim_at LIKE '${OWED_MARK}%' THEN ?1 ELSE claim_at END) ELSE place_at END,
                  updated_at = ?1
-               WHERE id = ?2 AND ${ticketAsRead(k)} AND claim_at IS ${owedBefore ? `'${OWED_MARK}'` : `NOT '${OWED_MARK}'`}`,
+               WHERE id = ?2 AND ${ticketAsRead(k)} AND ${claimAtAsRead}`,
             )
             .bind(ctx.nowIso, k.id)
         : ctx.db.prepare(`UPDATE tournament_tickets SET claim_cents = 0, claim_at = NULL, updated_at = ?1 WHERE id = ?2 AND ${ticketAsRead(k)}`).bind(ctx.nowIso, k.id);

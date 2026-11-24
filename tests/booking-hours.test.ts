@@ -290,7 +290,7 @@ describe('the switch: off by default, a Settings row, a private link, a kill swi
     expect(d.bookingHoursForAll).toBe(true);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: any) => e.action === 'booking_hours_on');
     expect(act).toBeDefined();
-    expect(activityText(act, TZ, 'Alex')).toContain('switched "Booking hours" on');
+    expect(activityText(act, TZ, 'Alex')).toContain('switched “Booking hours” on');
     (w.app.env as unknown as Record<string, unknown>).BOOKING_HOURS = 'off';
     d = await dash(w);
     expect(d.bookingHours).toBeUndefined();

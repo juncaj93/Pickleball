@@ -114,7 +114,7 @@ describe.each(SWITCHES)('$name switch', (sw) => {
     expect((await dash(w))[sw.all]).toBe(true);
     expect((await blair.call('GET', '/api/group/version')).data.v).not.toBe(v0);
     const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: { action: string }) => e.action === sw.task);
-    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe(`Alex switched "${sw.log}" on`);
+    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe(`Alex switched “${sw.log}” on`);
     expect((await w.app.client().call('PUT', sw.path, { on: true })).status).toBe(401);
     expect((await blair.call('PUT', sw.path, { on: false })).status).toBe(401);
     await w.organizer.call('PUT', sw.path, { on: false });

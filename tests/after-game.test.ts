@@ -80,7 +80,7 @@ describe('AFTER_GAME_CARD ships off: every answer exactly as before', () => {
     expect((await blair.call('GET', '/api/group/version')).data.v).not.toBe(v0);
     const acts = (await w.organizer.call('GET', '/api/admin/activity')).data.entries as any[];
     const act = acts.find((a) => a.action === 'after_game_card_on');
-    expect(activityText(act, 'America/Detroit', 'Alex')).toBe('Alex switched "After-game cards" on');
+    expect(activityText(act, 'America/Detroit', 'Alex')).toBe('Alex switched “After-game cards” on');
     w.app.env.AFTER_GAME_CARD = 'off';
     expect((await group(w, 'Blair')).afterGameCard).toBeUndefined();
     expect((await group(w, 'Blair', ON)).afterGameCard).toBeUndefined();
