@@ -358,7 +358,7 @@ async function main() {
       const done = flat(await a.page.locator('[data-tm-end-done]').innerText());
       assert(/^FINAL IS DONE Net Ninjas won Vic \+ Wren beat Third Shot Gang \(Parker \+ Quinn\)\.$/i.test(done), done);
       const rows = (await a.page.locator('[data-tm-end-row]').allInnerTexts()).map(flat);
-      assert(rows.join(' | ') === 'Winners Net Ninjas Vic + Wren | Medal for each Yes | Game credit for each $14 | Winners banner 1 week | 3rd place Dill With It Sage + Christopher Vanderberg', rows.join(' | '));
+      assert(rows.join(' | ') === 'Winners Net Ninjas Vic + Wren | Medal for each Yes | Game credit for each $14 | 2nd place Third Shot Gang Parker + Quinn | 2nd place credit for each None | Winners banner 1 week | 3rd place Dill With It Sage + Christopher Vanderberg', rows.join(' | '));
       assert((await a.page.locator('[data-tm-round]').count()) === 0 && (await a.page.locator('[data-tm-pause]').count()) === 0, 'no round results, no Pause');
       for (const w of SIZES) {
         await a.page.setViewportSize({ width: w, height: 844 });
@@ -468,7 +468,7 @@ async function main() {
       const t = a.page.locator('[data-pr-card="tournaments"]');
       await t.waitFor({ timeout: 15000 });
       const tt = flat(await t.innerText());
-      assert(/^TOURNAMENTS Played 3 Won 2 Runner-up 1 The Cold Open, \w{3} \d+ 1st with Wren Summer Slam, \w{3} \d+ 1st Spring Fling, \w{3} \d+ 2nd$/.test(tt), tt);
+      assert(/^TOURNAMENTS Played 3 Won 2 Medals Runner-up 1 The Cold Open, \w{3} \d+ 1st with Wren Summer Slam, \w{3} \d+ 1st Spring Fling, \w{3} \d+ 2nd$/.test(tt), tt);
       await t.scrollIntoViewIfNeeded();
       await SH(a.page, `G-players-${scheme}`);
       assert(a.errors.length === 0, a.errors.join(' | '));

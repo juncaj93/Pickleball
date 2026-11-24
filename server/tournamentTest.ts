@@ -687,7 +687,7 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
       .prepare(
         `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
            status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, pay_by, format_source, teams_at, court_numbers)
-         VALUES (?, ?, 'The Cold Open', ${STORED_PLAN.size}, 2, ?, ?, 1600, 1400, ?, ?, 'tickets', 'all', ?, ?, ?, ?, 'doubles', 700, ?, NULL, ?, '[1,2]')`,
+         VALUES (?, ?, 'The Cold Open', ${STORED_PLAN.size}, 2, ?, ?, 1600, 1400, ?, ?, 'tickets', 'all', ?, ?, ?, ?, 'doubles', 0, ?, NULL, ?, '[1,2]')`,
       )
       .bind(id, group.id, minutes, start, JSON.stringify([date]), date, at(0), ctx.nowIso, at(5), at(1), payBy, published ? at(400) : null),
   ];
@@ -960,6 +960,8 @@ const BY_ORDER = (a: number, b: number) => (ORDER.indexOf(a) < ORDER.indexOf(b) 
 
 async function zip58Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip58Stage) {
   const tie = stage === 'tie3' || stage === 'zip82_tie';
+  // Zip 82: the night's 2nd place credit is $0 (as the tournament page saved it for Locked doubles before Zip 82, and as on live): Edit awards'
+  // Suggested and Use these set it.
   const made = await dayStage(ctx, group, 'pools_done', tie ? TIE3 : BY_ORDER, tie ? EVEN_SCORE : USUAL_SCORE);
   const id = made.id!;
   if (stage === 'tie3' || stage === 'final_on') return { ...made, stage };
