@@ -14,6 +14,8 @@
  *   F  The Americano reveal: mid-reveal the wall's JSON has no trace of the night and there is no cup; after the board, it is the reigning one.
  *   G  Only me: the tournament leaves the wall (and the cup) for players and the organizer.
  *   H  The Christmas skin on: the cup and the wall at 390 light and 320 dark.
+ *   I  The Tournament test page: only this zip's two stages; every older stage and look tool behind the small "All tests" link.
+ *   J  The wall's own file cannot be fetched (a page open across a deploy): "Could not load the champions.", never a blank page.
  * Screenshots: .data/zip83-shots (not in git).
  */
 const path = require('node:path');
@@ -279,6 +281,41 @@ const DATE_RE = /^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2}, \d{4}$/;
       await h.call('PUT', '/api/admin/christmas-skin-switch', { mode: 'off' });
       await h.setClock(NOW);
     }
+  });
+
+  await check('I The Tournament test page: only this zip, older ones behind All tests', async () => {
+    const a = await h.adminHome({ width: 390 });
+    await a.page.locator('[data-tm-test-row="home"]').click();
+    await a.page.locator('[data-tm-test-current]').waitFor({ timeout: 10000 });
+    const now = await a.page.locator('[data-tm-test-current] [data-tm-stage]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tm-stage')));
+    assert(now.join() === 'history,zip83_none', `this zip: ${now}`);
+    assert((await a.page.locator('[data-tm-stage]').count()) === 2, 'no older stage before the link');
+    assert((await a.page.locator('[data-tm-test-balls], [data-tm-test-pools]').count()) === 0, 'older look tools hidden');
+    const link = a.page.locator('[data-tm-test-all-link]');
+    assert((await link.innerText()).trim() === 'All tests', 'the link');
+    const box = await link.boundingBox();
+    assert(box.height >= 44, `link ${box.height} px`);
+    await shot(a.page, 'I-test-page', true);
+    await link.click();
+    assert((await a.page.locator('[data-tm-test-all] [data-tm-stage]').count()) > 50, 'every older stage');
+    assert((await a.page.locator('[data-tm-test-all] [data-tm-stage="signup"]').count()) === 1, 'signup among them');
+    assert((await a.page.locator('[data-tm-test-balls]').count()) === 1, 'Ball look back');
+    assert(!a.errors.length, a.errors.join('; '));
+    await a.ctx.close();
+  });
+
+  await check('J The wall’s file cannot be fetched: Could not load, never a blank page', async () => {
+    await h.stage('history');
+    const p = await h.playerPage('Parker', { width: 390 });
+    await p.page.route(/\/ChampionsSheet[-.]/, (r) => r.abort());
+    await p.page.locator('[data-cup]').click();
+    const msg = p.page.locator('dialog[open] .cw-file-failed');
+    await msg.waitFor({ timeout: 8000 });
+    assert(flat(await msg.locator('p').innerText()) === 'Could not load the champions.', 'words');
+    assert((await titleOf(p.page)) === 'Champions', 'title');
+    assert((await p.page.locator('.topbar h1').count()) === 1, 'the page is still there');
+    await shot(p.page, 'J-file-failed');
+    await p.ctx.close();
   });
 
   await h.close();

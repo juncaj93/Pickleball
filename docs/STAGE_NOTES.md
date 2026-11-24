@@ -8080,3 +8080,35 @@ Seeded at 10:55 PM Eastern, so the fake night runs past the preview's 10 PM clos
   Home at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN
   in this session).
 - Next: 🎾83 (Champions wall) deploys after this, from a main that includes `feb99b6`.
+
+## Zip 83: Champions wall (🎾83.champions), Mon Nov 23 to Tue Nov 24, 2026
+
+Built on 🎾82's branch, then merged with main `e89c5c0` (🎾82 live, deployment 33b8b17c). Branch `claude/new-session-gz0d1h`. No migration, no Worker
+deploy, no new switch (rides the Tournaments switch, on live). Deploy windows waived by Alex until Dec 1.
+
+### What it does (pictures 1 to 3)
+1. The cup (src/Champions.tsx): a round button LEFT of light/dark, the very same `.mode-btn` (44 x 44, ring, fill, shadow in both themes), the
+   approved 26 px gold cup (cup.svg's shapes, the medal tokens), aria-label "Champions". Player Home (from the medal counts it already loads:
+   `hasChampions(tourAwards.medals)`), the saved copy while Home loads (held, like its other buttons), and the organizer's round 2 header (the
+   dashboard's `champions`, one tiny read riding the shared trip). No champion: no cup, nothing moves. At 320 px "not you?" tucks under the name
+   (as with the CREDIT chip) so the buttons stay on the name's row; the organizer header keeps one line at 390 and wider (View as… a little
+   narrower), two lines at 360 and under (320 already had two before).
+2. The wall (src/ChampionsSheet.tsx, its own file fetched on the first tap; loaded by hand so a failed fetch says "Could not load the champions."
+   with Try again, never a blank page): Reigning champs on the dark tournament card, Past champions rows, no money, names wrap, rows not buttons.
+   GET /api/tournament/champions (players: Everyone tournaments only, an Americano night only after its reveal hold, as the medals and the wins
+   sheet) and GET /api/admin/champions (the same rows; an Americano night at once: Alex tapped Reveal). server/tournamentEnd.ts championsOf.
+3. Alex's two additions (Tue Nov 24, after 🎾82 went live):
+   - NO 2nd place in Locked doubles, ever (Alex misspoke in 🎾82): endPlan pays only the winning team (a doubles row's saved 2nd amount is never
+     shown, paid or counted; End's guard compares the saved amount, so a doubles night with $7 saved still ends); no 2nd place field on Create /
+     Edit or the Prizes card, no 2nd place pick or box in Edit awards, no 2nd place End rows, no runner-up credit or card; prizeCentsOf back to
+     2 x champion. Tiers by style (shared/tournamentMoney.ts tiersOf): Americano full $21 / 1st only $14 / medals; Locked doubles 1st $28 /
+     medals ("Suggested: $14 each to the winners"). The price check counts $28 for doubles: The Cold Open at 9 paid "+$14".
+   - The Tournament test page shows only this zip's stages (`THIS_ZIP` = History with tournaments, Champions: none); every older stage and the
+     Ball look / Pools look tools sit behind one small "All tests" link at the bottom. Both rules are in docs/SITE_RULES.md for every channel.
+4. Stages: "Champions: three past winners (start here)" (= history) and "Champions: none" (zip83_none: The Cold Open as live, no cup).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) the "Fewer database trips off" speed test (an allowance of one more read on the dashboard, off mode only; on, as live, no new trip);
+(2) the lazy sheet could blank the page if its file failed (now loaded by hand with a Could not load sheet); (3) the organizer header went to two
+lines at 390 with the cup (now one line from 390 up); (4) the organizer's cup missed a first Americano (the hold now applies to players only);
+(5) the saved copy's cup could open a sheet that vanished (now held); (6) a failed read looked like "No champions yet" (now an error with Try again).
