@@ -8287,3 +8287,51 @@ others) check screens that are gone by design; the switch itself is unchanged in
 - Rollback: deployment **784248b1-5163-490e-a6c7-cedf114149ee** (🎾85), Cloudflare Deployments > Rollback. No database undo needed.
 - Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light
   and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN in this session).
+
+## 🎾88.rolling courts (Tue Nov 24, 2026; built, preview up, NOT live yet: ships after 🎾86 round 2 and 🎾87 are live)
+
+### What changed (the code is the truth; SITE_RULES "Rolling courts and the night card (Zip 88)")
+1. THE RULE (shared/rollingCourts.ts `rollCourts`, pure): when a court frees up, the earliest game still to play whose players are all free and
+   at their own next game starts there; a semifinal waits for every pool game, the Final and 3rd place for every semifinal too; a tie's game
+   from the wheel's spin (its row's created_at). Replayed every read from the schedule order and `result_at` (nothing stored, no migration).
+   Fix and Clear keep `result_at` (COALESCE); a skipped game that is cleared gets none (it is to play). Player left skips keep an earlier one.
+2. Americano (server/americanoDay.ts amFacts) and Locked doubles (server/tournamentDay.ts facts) read the replay: a game's court once it is
+   on one (null on the phones before), `onNow` = on a court, Currently playing = the courts now, the break card ends when the next game starts,
+   the late flag from the game's own start. Both views send `courtsNow` and `sittingNow`; Locked doubles also `standings` (each group's table).
+   Players' and the organizer's scores for a game not on a court: 409 "That game is not on a court yet." (was "Finish Round N first").
+3. The night card (src/pages/admin/NightCard.tsx, nightCardData.ts, night-card88.css): pictures 1 to 3. Replaces the green banner, the scores
+   box and (Tournament.tsx `nightCardUp`) the folded tournament card on the night; the admin week row hides on the night (Admin.tsx). Pause and
+   Player left ask "Are you sure?" (inline Yes / No; Resume asks nothing). All rounds opens at a tapped bar (Scoreboard `focusRound`). End card:
+   "Set prizes first" (red) above the button while no prize is set.
+4. Stages (THIS_ZIP): zip88_rd3 (start here, picture 1), zip88_early (picture 2 as a LOOK on the test page: 10 names can never start a round
+   early; Home gets zip88_rd3), zip88_final (picture 3; the Final and 3rd place rows set to 7 for the look: the real Time check never shortens
+   playoffs), zip88_sitting (Vic sits Round 4).
+
+### Finding (told Alex, he left it to my judgment: ship the rule as written)
+On 8 to 10 player nights (both styles) the fair schedule always has someone of every later game still on the other court, so a freed court never
+finds a game it may start: courts wait exactly as before, The Cold Open plays as lockstep did. Early starts happen on 11 to 16 player Americano
+and Locked doubles groups nights (12 to 16). Night lengths with Court 1 always faster (pure simulation, minutes): 8: 104 vs lockstep 104; 9: 104/104;
+10: 104/104; 11: 102/104; 12: 105/104 (a game moved to the slower court can cost a minute).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) a semifinal whose teams were known lost its court when a tie's wheel was spun later (the playoffs waited for the tie games too);
+(2) a game skipped by a team leaving, then cleared, could never be scored again; (3) a cleared score on a waiting court's last game read "Off,
+Done" and counted as in; (4) a bar went purple from a skipped game; (5) duplicate keys on the sitting balls; an unused prop. Kept and noted:
+the replay works from today's state, so a player taken off the list mid-night (no longer locked in) or a cleared pool score during the semis
+moves the courts as if it had always been so; the "8 min over" late words show in All rounds only (not on the card).
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
+Dashboard 4 trips / 63 statements before and after at all_locked, mid, am_round3, final_on (and zip88_rd3, zip88_final after); 9.3 to 10.3 ms
+before, 9.2 to 11.7 ms after (other test runs on the machine; noise); the 5 second check 2 trips / 16 statements both.
+
+### Tests
+Unit: 238 files, 4,422 passed, 2 skipped, 0 failed. New: tests/zip88-rolling-sim.test.ts (the pure rule: Americano 8 to 12 and Locked doubles 8,
+10, 12 with uneven courts, every game once, no double-booking, no idle court, own order, the tie and review regressions) and
+tests/zip88-rolling-night.test.ts (whole nights on the real server: Americano 8 to 16, Locked doubles 8 to 16, 1 court, Fix, Clear, Player left
+both styles, Pause, the night card model; reveal / End credit once; all three integrity files 0). Changed on purpose: zip61-day (the refusal's
+words). Browser: e2e/zip88.cjs 6 of 6 (320/390/420, light and dark). zip57, zip58, zip61, zip82, zip85 fail the same checks on main (screens gone
+since 🎾86, older flakes); zip61/zip57/zip58/zip72/zip77/zip82 updated to the card's selectors.
+
+### Preview
+`pickleball-preview` (fake) re-seeded; https://claude-new-session-57sajy.pickleball-club-9h0.pages.dev, calm start zip88_rd3 (Home: the night card
+first, one amber clash card under it).
