@@ -8067,3 +8067,16 @@ zip79 6; zip58 22 of 24 (F fails the same way on main, Zip 79's results row; E a
 before the two re-seeds; https://claude-new-session-fh0gux.pickleball-club-9h0.pages.dev. Calm start: am_round3 (the Americano night at Round 3).
 Seeded at 10:55 PM Eastern, so the fake night runs past the preview's 10 PM close and Zip 81's amber venue card shows first; Tournament test >
 "Americano: Round 3" puts the night at the viewer's time. New stage: "Tie game on (All games)" (zip82_tie, the real spin).
+
+### Live (Mon Nov 23, 2026, about 10:57 PM Eastern; loud hours, the windows waived by Alex until Dec 1)
+- Restore points first (`npm run backup:before-deploy`, no rate limit): export `export-20261124035437` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00001e2a-00000000-0000512d-06a9888438bee43193c48d47279837cc`.
+- Integrity checks before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `b9d233b` to `feb99b6`, pushed; `npm run deploy -- --override-loud-hours` (the other guard rules passed): deployment
+  **33b8b17c-74c2-43f9-98e2-141357556fe1** (bundle `index-tjEFIRow.js`). No migration, no Worker or Error box deploy, no live data touched; The Cold
+  Open unchanged (Tue Dec 1, $18, 2 courts, 7:30 to 10 PM, champion and 2nd credit $0).
+- Rollback: deployment **44f584bf-0705-4983-88be-61221f4a6987** (🎾81), Cloudflare Deployments > Rollback. No database undo needed.
+- Read-only live look (pages.dev, GET only): /, /admin, /api/status 200; the dashboard and both wins routes 401 without a PIN or group word;
+  Home at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN
+  in this session).
+- Next: 🎾83 (Champions wall) deploys after this, from a main that includes `feb99b6`.
