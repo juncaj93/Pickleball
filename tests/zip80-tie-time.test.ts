@@ -68,7 +68,9 @@ describe('zip 80: tie games in the Time check', () => {
       { round: 3, pool: false, playTo: 11, done: false },
       { round: 4, pool: false, playTo: 11, done: false },
     ];
-    expect(timeCheck(r, 1140, 1240, 1200).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 20 });
+    // Zip 92: it ends at 1240, the booked end itself: 20 past the aim but not past the end, so nothing "still runs over".
+    expect(timeCheck(r, 1140, 1240, 1200).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 0 });
+    expect(timeCheck(r, 1140, 1230, 1200).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 10 });
   });
 });
 

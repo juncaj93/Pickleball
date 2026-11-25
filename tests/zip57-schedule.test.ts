@@ -298,9 +298,12 @@ describe('zip 57: the Time check', () => {
     expect(timeCheckWords(tc.behind, 2, 9, '10:00 PM')).toBe('Running about 35 minutes behind. From Round 2 on, play to 9 so we finish on time.');
     // Done at 8:30 PM (40 late): finish 9:50. To 9 from round 2: 9:42, no; to 7 from round 3 saves 7: 9:43, no; from round 2 saves 14: 9:36.
     expect(timeCheck(rounds(1, [20 * 60 + 30]), S, E, 20 * 60 + 31).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 0 });
-    // Done at 8:40 PM (50 late): finish 10:00; the most it can save is 14 minutes: 9:46, still 6 minutes over the 9:40 limit.
-    expect(timeCheck(rounds(1, [20 * 60 + 40]), S, E, 20 * 60 + 41).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 6 });
-    expect(timeCheckWords(50, 2, 7, '10:00 PM', 6)).toBe('Running about 50 minutes behind. From Round 2 on, play to 7. That still runs about 6 minutes over.');
+    // Done at 8:40 PM (50 late): finish 10:00; the most it can save is 14 minutes: 9:46, 6 minutes over the 9:40 aim but inside 10 PM: Zip 92
+    // says "past 10 PM" only past the booked end, so nothing is over.
+    expect(timeCheck(rounds(1, [20 * 60 + 40]), S, E, 20 * 60 + 41).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 0 });
+    // Done at 9:05 PM: even to 7 it runs past 10 PM: counted from 10 PM.
+    expect(timeCheck(rounds(1, [21 * 60 + 5]), S, E, 21 * 60 + 6).suggest?.stillOver).toBeGreaterThan(0);
+    expect(timeCheckWords(50, 2, 7, '10:00 PM', 6)).toBe('Running about 50 minutes behind. From Round 2 on, play to 7. That still runs about 6 minutes past 10:00 PM.');
   });
   it('the current round counts as late while it runs past its planned end', () => {
     // Round 1 on time; round 2 planned to end 8:10 PM; still playing at 8:40 PM: it ends no earlier than now (3 rounds of 20 after it: 9:40).
