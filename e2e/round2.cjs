@@ -428,16 +428,21 @@ async function main() {
   await check('one banner for every pop-up: bottom center, 16 to 24 px above the bottom edge, a check icon, stays about 1.5 s then goes, tap closes it early, a new message replaces the old one', async () => {
     const { ctx, page } = await open('Brandon', 390, 'light');
     const card = page.locator('.schedule article').nth(4);
-    await page.evaluate(() => { window.__pops = []; const t0 = performance.now(); const has = (n) => n.nodeType === 1 && (n.matches('.pop') || n.querySelector('.pop')); new MutationObserver((ms) => { for (const m of ms) { for (const n of m.addedNodes) if (has(n)) window.__pops.push('+' + Math.round(performance.now() - t0) + ' ' + n.tagName + '.' + n.className + ' in ' + m.target.tagName + '.' + m.target.className + '#' + m.target.id); for (const n of m.removedNodes) if (has(n)) window.__pops.push('-' + Math.round(performance.now() - t0) + ' ' + n.tagName + '.' + n.className + ' from ' + m.target.tagName + '.' + m.target.className); } }).observe(document.documentElement, { childList: true, subtree: true }); });
     await card.getByRole('button', { name: "I’m in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
     // (The 4th real seat says "Game on!": a court on Waitlist gives real seats, so Brandon's tap is the 4th.)
     assert(/^(You’re in|Game on! 4 in)$/.test(squash(await pop.innerText())), `banner said "${await pop.innerText()}"`);
-    const info = await pop.evaluate(async (el) => {
-      await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))); // it slides up the last 8px while fading in
+    const info = await page.evaluate(async () => {
+      // It slides up the last 8px while fading in. Under load the banner can be drawn again (same words) while it fades in: measure the one on screen.
+      let el = document.querySelector('.pop');
+      for (let i = 0; i < 3 && el; i++) {
+        await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
+        if (el.isConnected) break;
+        el = document.querySelector('.pop');
+      }
       const r = el.getBoundingClientRect();
-      return { l: r.left, r: r.right, b: r.bottom, w: r.width, vw: innerWidth, vh: innerHeight, pos: getComputedStyle(el).position, open: el.matches(':popover-open'), icon: !!el.querySelector('.toast-icon svg'), conn: el.isConnected, log: window.__pops, pops: [...document.querySelectorAll('.pop')].map((p) => p.className + '|' + p.innerText) };
+      return { l: r.left, r: r.right, b: r.bottom, w: r.width, vw: innerWidth, vh: innerHeight, pos: getComputedStyle(el).position, open: el.matches(':popover-open'), icon: !!el.querySelector('.toast-icon svg') };
     });
     assert(info.pos === 'fixed' && info.open && info.icon, JSON.stringify(info));
     assert(Math.abs((info.l + info.r) / 2 - info.vw / 2) < 3 && info.w <= 342, `banner is not centered or too wide: ${JSON.stringify(info)}`);
@@ -485,13 +490,11 @@ async function main() {
   await check('banner timings live in one place at the top of the code, and reduce motion fades only', async () => {
     const { ctx, page } = await open('Nathan', 390, 'light', { reducedMotion: 'reduce' });
     const card = page.locator('.schedule article').nth(5);
-    await page.evaluate(() => { window.__pops = []; const t0 = performance.now(); const has = (n) => n.nodeType === 1 && (n.matches('.pop') || n.querySelector('.pop')); new MutationObserver((ms) => { for (const m of ms) { for (const n of m.addedNodes) if (has(n)) window.__pops.push('+' + Math.round(performance.now() - t0) + ' ' + n.tagName + '.' + n.className + ' in ' + m.target.tagName + '.' + m.target.className + '#' + m.target.id); for (const n of m.removedNodes) if (has(n)) window.__pops.push('-' + Math.round(performance.now() - t0) + ' ' + n.tagName + '.' + n.className + ' from ' + m.target.tagName + '.' + m.target.className); } }).observe(document.documentElement, { childList: true, subtree: true }); });
     await card.getByRole('button', { name: "I’m in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
-    const a = await pop.evaluate((el) => getComputedStyle(el).animationName);
-    await page.waitForTimeout(1500);
-    assert(a === 'banner-fade-in', `reduce-motion animation: ${a} ${JSON.stringify(await page.evaluate(() => window.__pops))}`);
+    const a = await page.waitForFunction(() => document.querySelector('.pop')?.isConnected && getComputedStyle(document.querySelector('.pop')).animationName).then((h) => h.jsonValue());
+    assert(a === 'banner-fade-in', `reduce-motion animation: ${a}`);
     await ctx.close();
     const src = require('node:fs').readFileSync(path.join(ROOT, 'src', 'ui.tsx'), 'utf8');
     assert(/export const BANNER_TIMING = \{[\s\S]*fadeIn[\s\S]*stay[\s\S]*out[\s\S]*\}/.test(src), 'BANNER_TIMING missing');

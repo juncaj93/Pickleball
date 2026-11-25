@@ -18,8 +18,8 @@ import { winDate, winLine, winsTitle } from '../shared/wins';
 import { REVEAL_HOLD_MS } from '../shared/reveal';
 
 // Zip 82 (🎾82.night admin), on the real server code:
-//   1. the End card's standings (both styles) are the board players get after End / the reveal, row for row (9, 10, 11 Americano; 8, 10, 12
-//      Locked doubles), and players still get no table before the reveal;
+//   1. the End card's standings (both styles) are the board players get after End / the reveal, row for row (9, 10, 11 Americano; 8, 10, 16
+//      Locked doubles; Zip 92: 16, not 12, which plays Americano now), and players still get no table before the reveal;
 //   2. the organizer's Standings sheet during an Americano night is the live table (organizer only);
 //   3. the scoreboards' Needs a score / status rules;
 //   4. Alex's prize tiers and the price check (one set of functions), and Locked doubles' 2nd place credit (the Final's runner-up), to the cent;
@@ -115,7 +115,8 @@ describe('zip 82: the End card standings are the board', () => {
     expect((await card(ctx, end.first.name)).day.standings.map((r: any) => r.name)).toEqual(end2.standings.map((r: any) => r.name));
   });
 
-  for (const n of [8, 10, 12]) {
+  // Zip 92: 12 players play Americano now (shared/tournament.ts playsAmericano), so the pools night here is 16 (two pools of 4).
+  for (const n of [8, 10, 16]) {
     it(`Locked doubles for ${n}: the End card lists the teams in the order the results board shows after End, gold on the Final winners`, async () => {
       const ctx = await doublesDone(n);
       const end = (await adminTour(ctx)).end;

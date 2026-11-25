@@ -232,11 +232,14 @@ describe('zip 72: the tie rule on the real server', () => {
     expect([fin.a.seat, fin.b.seat]).toEqual([1, 3]);
   });
 
-  it('12 players (two pools of 3): the same rule in each pool fills the semifinals; End tournament orders the rest by it across the pools', async () => {
-    const { ctx } = await night(12);
+  // Zip 92: 12 players play Americano now (shared/tournament.ts playsAmericano: two pools of 3 gave those teams 2 regular games), so the pools
+  // night is 16 players, two pools of 4.
+  it('16 players (two pools of 4): the same rule in each pool fills the semifinals; End tournament orders the rest by it across the pools', async () => {
+    const { ctx } = await night(16);
     const d0 = (await adminTour(ctx)).day;
     const poolOf = new Map((d0.teams as any[]).map((x) => [x.seat, x.pool]));
-    // Each pool: its first seat beats both; the other two: the lower seat wins. Pool B's 3rd loses by a lot, Pool A's 3rd by little.
+    // Each pool: the lower seat wins every game (Zip 92, pools of 4: 1st 3-0, 2nd 2-1, 3rd 1-2, 4th 0-3). Pool B's games are won by a lot, Pool A's
+    // by little.
     const pools = (await adminTour(ctx)).day.games.filter((x: any) => x.stage === 'pool');
     for (const g of pools) {
       const low = Math.min(g.a.seat, g.b.seat);
@@ -259,14 +262,13 @@ describe('zip 72: the tie rule on the real server', () => {
     }
     const end = (await adminTour(ctx)).end;
     expect(end).toBeTruthy();
-    // The order End tournament saves: 5th and 6th are the two pools' 3rd places, both 0-2: Pool A's (lost 9-11 twice, -4) above Pool B's (-20).
+    // The order End tournament saves: 5th and 6th are the two pools' 3rd places, both 1-2: Pool A's (-2) above Pool B's (-10); Zip 92: 7th and 8th
+    // the 4th places, both 0-3: Pool A's (lost 9-11 three times, -6) above Pool B's (-30).
     const { doublesOutcome } = await import('../server/tournamentDay');
     const { loadDay } = await import('../server/tournamentDay');
     const t = ctx.app.db.raw.prepare('SELECT * FROM tournaments WHERE id = ?').get(ctx.tid) as any;
     const out = doublesOutcome(t, await loadDay(ctx.app.env.DB, ctx.tid), 'America/Detroit', ctx.app.now);
-    const fifth = out.order[4];
-    const sixth = out.order[5];
-    expect([poolOf.get(fifth), poolOf.get(sixth)]).toEqual(['A', 'B']);
+    expect(out.order.slice(4).map((seat: number) => poolOf.get(seat))).toEqual(['A', 'B', 'A', 'B']);
     books(ctx);
   });
 

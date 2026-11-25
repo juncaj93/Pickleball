@@ -12,7 +12,7 @@ import { groupName } from '../shared/scores';
 //   Night 2: 10 players (Alex plays free): Draft, swap two, Publish, Edit name / Randomize, first of 4 counts, Play to 9 from Round 2 (alert,
 //            pills, Final stays 11 with its alert), a three-way tie (the wheel), Final + 3rd place, End, the board with teams.
 //   Night 3: 8 players: the end pulled to 9:30 PM after Finalize; one late drop below 8 (kept, no credit); the spot retaken (credit once).
-//   Night 4: 12 players: Dink group and Drive group, points chips, semis, the Final.
+//   Night 4: 16 players: Dink group and Drive group, points chips, semis, the Final (Zip 92: 16, not 12; 12 plays Americano now).
 //   The prize helper and the price check for 8, 9, 10 and 12 at $18, 2 courts, 7:30 to 10 PM.
 // Money to the cent on every night (tickets, credit used, prizes, Money > Totals, Running total) and all three integrity files 0.
 
@@ -281,10 +281,13 @@ describe('zip 84 Night 2: 10 players, Locked doubles, Play to 9, a three-way tie
       ctx,
       (a, b, g) => (g.stage === 'pool' ? win(a, b) : g.stage === 'tie' ? [5, 3] : g.stage === 'final' ? [11, 8] : [11, 5]),
       async (round) => {
-        if (round === 2 && !applied) {
+        // Zip 92: a round with a game already on a court is never shortened (Apply leaves it as it is), and Round 2's games go on the courts
+        // as Round 1's scores come in; so Alex plays Round 2 to 9 while Round 1 is still being played (Game 1 is in, Game 2 is on).
+        if (round === 1 && !applied) {
           applied = true;
           const ap = await games(ctx, { action: 'apply', fromRound: 2, to: 9 });
           expect(ap.status, ap.text).toBe(200);
+          expect(ap.data.games).toBe(8); // every pool game of Rounds 2 to 5
           for (const n of ALL.slice(0, 10)) {
             const c = (await card(ctx, n)).day;
             expect(c.shortAlert, n).toEqual({ key: `short:${ctx.tid}:2:9`, title: 'Starting Round 2, all games go to 9 points.', sub: 'We’re running behind, so games are shorter.' });
@@ -411,9 +414,11 @@ describe('zip 84 Night 3: 8 players, the end pulled to 9:30 PM, a late drop belo
   });
 });
 
-describe('zip 84 Night 4: 12 players, the Dink group and the Drive group, semis, the Final', () => {
+// Zip 92: 12 players play Americano now (shared/tournament.ts playsAmericano: two groups of 3 gave those teams 2 regular games), so the groups
+// night is 16: two groups of 4, 6 pool games each.
+describe('zip 84 Night 4: 16 players, the Dink group and the Drive group, semis, the Final', () => {
   it('groups, points chips, semis, Final, End; $7 saved for 2nd pays nobody; money to the cent', async () => {
-    const ctx = await world84(12, { secondCents: 700 });
+    const ctx = await world84(16, { secondCents: 700 });
     ctx.app.now = PAY_BY_MS + 60_000;
     expect((await adminTour(ctx)).format).toBe('doubles');
     expect((await teams(ctx, { action: 'draft' })).status).toBe(200);
@@ -440,7 +445,7 @@ describe('zip 84 Night 4: 12 players, the Dink group and the Drive group, semis,
     );
     expect(chips, 'points chips once a score is in').toBe(true);
     const rows = raw(ctx).prepare('SELECT stage, COUNT(*) AS c FROM tournament_games WHERE tournament_id = ? GROUP BY stage ORDER BY stage').all(ctx.tid) as any[];
-    expect(Object.fromEntries(rows.map((r) => [r.stage, r.c]))).toMatchObject({ pool: 6, semi: 2, final: 1, third: 1 });
+    expect(Object.fromEntries(rows.map((r) => [r.stage, r.c]))).toMatchObject({ pool: 12, semi: 2, final: 1, third: 1 });
     const end = await endNight(ctx);
     expect(end.second).toBeNull();
     expect(end.secondCents).toBe(0);
@@ -448,9 +453,9 @@ describe('zip 84 Night 4: 12 players, the Dink group and the Drive group, semis,
     for (const [n, p] of Object.entries(pots(ctx))) expect(p, n).toBe(pot0[n] + (winners.includes(n) && n !== ctx.org ? 1400 : 0));
     expect(moneyPrint(ctx)).toBe(print0);
     const res = (await card(ctx, 'Casey')).results;
-    expect(res.rows).toHaveLength(6);
+    expect(res.rows).toHaveLength(8);
     expect(res.rows.filter((r: any) => r.medal)).toHaveLength(1);
-    const m = await moneyChecks(ctx, { paid: 11, minutes: 150, winners });
+    const m = await moneyChecks(ctx, { paid: 15, minutes: 150, winners });
     log(`night 4: games ${rows.map((r) => `${r.stage} ${r.c}`).join(', ')}; tickets $${m.tickets / 100} - courts $${m.courts / 100} - prizes $${m.prizes / 100} = ${m.result >= 0 ? '+' : '-'}$${Math.abs(m.result) / 100}; board ${res.rows.map((r: any) => `${r.name} ${r.record}`).join(', ')}`);
     books(ctx);
   });

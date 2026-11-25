@@ -187,10 +187,12 @@ describe('zip 74: Play to 9 and the Final to 11', () => {
     await draftAndPublish(ctx);
     ctx.app.now = START_MS + 5 * 60_000;
     const d = (await adminTour(ctx)).day;
-    // Round 1 played by Alex's Fix.
-    for (const g of d.games.filter((x: any) => x.round === 1)) expect((await games(ctx, { action: 'result', num: g.num, winner: 'a' })).status).toBe(200);
+    // Zip 92: a round with a game already on a court is never shortened, and with 4 teams on 2 courts Round 2 is on both courts the moment
+    // Round 1's last score is in (nobody sits). So Alex shortens Round 2 while Round 1 is being played, then Round 1 is played by Alex's Fix.
     const ap = await games(ctx, { action: 'apply', fromRound: 2, to: 9 });
     expect(ap.status, ap.text).toBe(200);
+    expect(ap.data.games).toBe(4); // Rounds 2 and 3, two games each (Round 1 is on the courts)
+    for (const g of d.games.filter((x: any) => x.round === 1)) expect((await games(ctx, { action: 'result', num: g.num, winner: 'a' })).status).toBe(200);
     const names = ALL.slice(0, 8);
     for (const n of names) {
       const c = (await card(ctx, n)).day;

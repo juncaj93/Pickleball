@@ -1613,6 +1613,8 @@ async function main() {
       assert(/\/g\/[A-Za-z0-9_-]{20,}$/.test(privateLink), `private link was ${privateLink}`);
       await admin.getByLabel('Anyone with the site address can use it').uncheck();
       await savedIn(admin.getByLabel('Anyone with the site address can use it'));
+      // The link on the card follows the saved setting once the screen has fetched it again (a moment after the save mark).
+      await admin.getByRole('region', { name: 'Quick settings' }).locator('.set-link', { hasText: '/g/' }).waitFor({ timeout: 10000 }).catch(() => {});
       assert((await admin.getByRole('region', { name: 'Quick settings' }).locator('.set-link').textContent()).includes('/g/'), 'link-only should show the long link');
       const p = await newPage();
       await p.goto(BASE);

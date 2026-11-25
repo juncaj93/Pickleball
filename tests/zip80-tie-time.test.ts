@@ -74,13 +74,16 @@ describe('zip 80: tie games in the Time check', () => {
   });
 });
 
-describe('zip 80: a 12 player night on the real server: a three-way tie in a group moves the semifinal time', () => {
+// Zip 92: 12 players play Americano now (shared/tournament.ts playsAmericano, the fairness rule), so the groups night on the real server is 16
+// players: two groups of 4 (Dink: seats 1 to 4, Drive: seats 5 to 8), 6 pool rounds to 7 on 2.5 hours (13 minutes each).
+describe('zip 80: a 16 player night on the real server: a three-way tie in a group moves the semifinal time', () => {
   it('Game A and Game B: the players\' night times say the semis begin after them', async () => {
-    const ctx = await world(12);
+    const ctx = await world(16);
     await draftAndPublish(ctx);
-    ctx.app.now = START_MS + 75 * 60_000; // 8:45 PM, the pools are in (Zip 89: after the 10 minute warm-up, 3 rounds of 20 minutes end 8:40 PM)
+    ctx.app.now = START_MS + 90 * 60_000; // 9:00 PM, the pools are in (after the 10 minute warm-up, 6 rounds of 13 minutes end 8:58 PM)
     const d = (await adminTour(ctx)).day;
-    // Dink group (seats 1 to 3): a circle (1 beats 2, 2 beats 3, 3 beats 1, all 11 to 7); Drive group: the lower seat wins.
+    // Dink group (seats 1 to 4): a circle among seats 1 to 3 (1 beats 2, 2 beats 3, 3 beats 1, all 11 to 7), and all three beat seat 4; Drive
+    // group: the lower seat wins.
     for (const g of d.games.filter((x: any) => x.stage === 'pool')) {
       const [a, b] = [g.a.seat, g.b.seat];
       const circle = (x: number, y: number) => (x === 1 && y === 2) || (x === 2 && y === 3) || (x === 3 && y === 1);
@@ -89,15 +92,15 @@ describe('zip 80: a 12 player night on the real server: a three-way tie in a gro
     }
     const name = await playerOfSeat(ctx, 4);
     const before = (await card(ctx, name)).day.night as { label: string; time: string }[];
-    expect(before.map((x) => x.label)).toEqual(['Group play · 3 rounds', 'Semifinals', 'Final and 3rd place']);
-    expect(before[1].time).toBe('8:40 PM');
+    expect(before.map((x) => x.label)).toEqual(['Group play · 6 rounds', 'Semifinals', 'Final and 3rd place']);
+    expect(before[1].time).toBe('9:00 PM');
     const tie = (await adminTour(ctx)).day.ties[0];
     expect(tie).toMatchObject({ mode: 'wheel' });
     expect((await games(ctx, { action: 'spin', key: tie.key })).status).toBe(200);
     const tieGames = (await adminTour(ctx)).day.games.filter((g: any) => g.stage === 'tie');
     const after = (await card(ctx, name)).day.night as { label: string; time: string }[];
-    // Spun at 8:45 PM: the tie games end 8:45 + 10 x (games on one court); the semis wait for them, then the Final 20 minutes later.
-    const end = 20 * 60 + 45 + tieGames.length * TIE_MINUTES;
+    // Spun at 9:00 PM: the tie games end 9:00 + 10 x (games on one court); the semis wait for them, then the Final 20 minutes later.
+    const end = 21 * 60 + tieGames.length * TIE_MINUTES;
     const label = (m: number) => `${Math.floor(Math.round(m / 5) * 5 / 60) - 12}:${String(Math.round(m / 5) * 5 % 60).padStart(2, '0')} PM`;
     expect(after[1].time).toBe(label(end));
     expect(after[2].time).toBe(label(end + 20));
