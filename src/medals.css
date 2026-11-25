@@ -42,3 +42,8 @@
 .nm-pair:has(.md) {
   white-space: nowrap;
 }
+/* Zip 90 (Alex): on the game cards' names the "×4" count is regular weight, not bold (the count by the name at the top of the player screen
+   stays bold). */
+.names-text .md-count {
+  font-weight: 400;
+}

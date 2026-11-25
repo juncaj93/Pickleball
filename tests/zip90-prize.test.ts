@@ -179,6 +179,12 @@ describe('zip 90: the prize reveal', () => {
     }
   });
 
+  it('the "×4" count is regular weight on the game cards, bold by the name at the top (Alex)', () => {
+    const m = css('src/medals.css');
+    expect(m).toMatch(/\.names-text \.md-count \{\s*font-weight: 400;/);
+    expect(m).toMatch(/\.md-count \{[^}]*font-weight: 800;/);
+  });
+
   it('look rules: colors only from tokens; the header rules only for the player header (.ph-head)', () => {
     const card = css('src/tour-awards.css');
     const rvl = card.slice(card.indexOf('.rvl {'));
