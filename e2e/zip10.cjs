@@ -308,10 +308,11 @@ async function main() {
       assert((await page.locator('[data-r2-card] .cl-players').count()) > 0, 'cl-players');
       assert((await page.locator('[data-r2-card] .names-line.with-icon .people-icon').count()) > 0, 'people icon');
       const first = cards.first();
-      for (const sel of ['.court-switch, .court-line', '.r2-inout', '.r2-paidcell', '.r2-gear']) assert((await first.locator(sel).count()) > 0, `${sel} on the card`);
+      // Zip 86: the court switch on the card is one status button (the 2-way switch is in Edit game), and In | Out and the paid pill are the card's 44 px buttons.
+      for (const sel of ['.court-switch, .court-line, .r86-status', '.r2-inout, .r86-inout', '.r2-paidcell, [data-paid-cell]', '.r2-gear']) assert((await first.locator(sel).count()) > 0, `${sel} on the card`);
       const cardText = await cards.evaluateAll((els) => els.map((e) => e.innerText).join('\n'));
       assert(!/\b\d+ of 4 in\b|\b\d+ in\b(?!\s*·)|\b\d+ in, full\b/.test(cardText.replace(/You’re in|I’m in/g, '')), 'no count text on the organizer cards');
-      // Tighter Home cards (Alex, after the preview): about 10 px from the note line to the circles, about 6 px from the circles to the names.
+      // Tighter Home cards (Alex, after the preview; Zip 86 cards): the circles 12 px under the note, the names beside them.
       const gaps = await page.evaluate(() =>
         [...document.querySelectorAll('[data-r2-card]')]
           .map((c) => {
@@ -321,14 +322,16 @@ async function main() {
             const ball = c.querySelector('.cl-players .dots > *');
             const text = c.querySelector('.cl-players .names-text');
             if (!note || !ball || !text) return null;
-            const range = document.createRange();
-            range.selectNodeContents(text);
-            return { note: ball.getBoundingClientRect().top - note.getBoundingClientRect().bottom, names: range.getClientRects()[0].top - ball.getBoundingClientRect().bottom };
+            const b = c.querySelector('.cl-players .dots').getBoundingClientRect();
+            const t = text.getBoundingClientRect();
+            return { note: c.querySelector('.cl-players').getBoundingClientRect().top - note.getBoundingClientRect().bottom, names: t.top - b.bottom, sameLine: t.top < b.bottom && t.bottom > b.top && t.left >= b.right };
           })
           .filter(Boolean),
       );
       assert(gaps.length > 2, 'cards with a note');
-      for (const g of gaps) assert(Math.abs(g.note - 10) <= 1.5 && Math.abs(g.names - 6) <= 1.5, `card gaps ${JSON.stringify(g)}`);
+      // Zip 86 cards: the circles' line starts 12 px under the note, and the names sit on that line to the right of the circles (several lines
+      // of names stay beside them); only when they cannot fit there do they start the line under them, about 6 px down.
+      for (const g of gaps) assert(Math.abs(g.note - 12) <= 1.5 && (g.sameLine || Math.abs(g.names - 6) <= 1.5), `card gaps ${JSON.stringify(g)}`);
       const rows = page.locator('.hv2-short');
       assert((await rows.count()) > 3, 'folded rows');
       for (const t of await page.locator('.hv2-count.cl-row > strong').allInnerTexts()) assert(/^(~?\d{1,2}(:\d\d)? (AM|PM)|Canceled)$/.test(t.trim()), `row first line is the time: «${t}»`);
@@ -373,14 +376,18 @@ async function main() {
     assert(errors.length === 0, errors.join(' | '));
     await ctx.close();
   });
-  await check('ON: a 13th tap on the 12-in game gets the plain refusal (no waitlist, nobody added)', async () => {
+  await check('ON: the 12-in game says Full, and a 13th join gets the plain refusal (no waitlist, nobody added)', async () => {
     const { ctx, page, errors } = await openPlayer('Casey');
     const c = card(page, g12.id);
     await c.scrollIntoViewIfNeeded();
-    await c.locator('[data-join]').click();
-    await page.waitForTimeout(1500);
-    const toast = await page.locator('.toast, [role="status"], [role="alert"]').allInnerTexts();
-    assert(toast.some((t) => t.includes(LIMIT)), `refusal toast: ${JSON.stringify(toast)}`);
+    // Zip 76: a game at the most it can hold says Full (a disabled button) instead of an I'm in that would always be refused.
+    assert((await c.locator('[data-join]').count()) === 0, 'no I’m in on the 12-in game');
+    const full = c.locator('[data-full]');
+    assert((await full.count()) === 1 && (await full.isDisabled()) && (await full.innerText()).trim() === 'Full', 'a disabled Full button');
+    // A 13th join that still reaches the server (an older screen) gets the plain refusal.
+    const r = await post(ctx.request, `/api/sessions/${g12.id}/join`, {});
+    const body = await r.json().catch(() => ({}));
+    assert(!r.ok() && String(body.message || '').includes(LIMIT), `refusal: ${r.status()} ${JSON.stringify(body)}`);
     const s = (await dash()).sessions.find((x) => x.id === g12.id);
     assert(s.confirmedCount === 12 && s.waitlistCount === 0, `server: ${s.confirmedCount} in, ${s.waitlistCount} waiting`);
     assert((await c.getAttribute('data-mine')) !== 'in', 'not in');

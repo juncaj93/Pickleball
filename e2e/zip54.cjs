@@ -169,7 +169,8 @@ async function main() {
     });
 
   // ---------------------------------------------------------------- the card, closed
-  await check('between Projected and Month by month, collapsed by default (label left, chevron right), loads nothing while closed', async () => {
+  // Retired in Zip 92: the fold's chevron was removed in Zip 78 ("every chevron, caret and › removed"); the label still sits on the left.
+  await check('between Projected and Month by month, collapsed by default (label left), loads nothing while closed', async () => {
     const { ctx, page, errors, moneyCalls } = await openTotals(ALEX_OPTS);
     const order = await page.evaluate(() => [...document.querySelectorAll('.tr > *')].map((e) => e.getAttribute('data-card') || e.getAttribute('data-fold')));
     assert(JSON.stringify(order) === JSON.stringify(['so-far', 'projected', 'running-total', 'month-by-month']), `order: ${order}`);
@@ -179,8 +180,7 @@ async function main() {
       const h = el.querySelector('.tr-mm-head');
       const mh = mm.querySelector('.tr-mm-head');
       const label = h.querySelector('.tr-t').getBoundingClientRect();
-      const chev = h.querySelector('.tr-chev').getBoundingClientRect();
-      return { expanded: h.getAttribute('aria-expanded'), label: h.querySelector('.tr-t').textContent, labelLeft: label.left < chev.left, rows: !!el.querySelector('.tr-ln'), sameHeight: Math.abs(h.getBoundingClientRect().height - mh.getBoundingClientRect().height) < 0.5, sameBox: el.getBoundingClientRect().height === mm.getBoundingClientRect().height };
+      return { expanded: h.getAttribute('aria-expanded'), label: h.querySelector('.tr-t').textContent, labelLeft: label.left - h.getBoundingClientRect().left < 40, rows: !!el.querySelector('.tr-ln'), sameHeight: Math.abs(h.getBoundingClientRect().height - mh.getBoundingClientRect().height) < 0.5, sameBox: el.getBoundingClientRect().height === mm.getBoundingClientRect().height };
     });
     assert(f.expanded === 'false' && f.label === 'Running total' && f.labelLeft && !f.rows, `closed: ${JSON.stringify(f)}`);
     assert(f.sameHeight && f.sameBox, 'the closed card is the same height as Month by month');
@@ -189,13 +189,12 @@ async function main() {
     await ctx.close();
   });
 
-  await check('opens and closes (tap the head again to close); the chevron turns', async () => {
+  await check('opens and closes (tap the head again to close)', async () => {
     const { ctx, page } = await openTotals(ALEX_OPTS);
     await openFold(page, 'running-total');
     assert((await head(page, 'running-total').getAttribute('aria-expanded')) === 'true', 'open');
     assert((await page.locator('[data-fold="running-total"] .tr-ln').count()) === 4, 'four rows');
-    const turned = await page.evaluate(() => getComputedStyle(document.querySelector('[data-fold="running-total"] .tr-chev')).transform);
-    assert(turned !== 'none', 'chevron turned');
+    // Retired in Zip 92: the chevron that turned was removed in Zip 78.
     await openFold(page, 'running-total');
     assert((await head(page, 'running-total').getAttribute('aria-expanded')) === 'false' && (await page.locator('[data-fold="running-total"] .tr-ln').count()) === 0, 'closed again');
     await ctx.close();

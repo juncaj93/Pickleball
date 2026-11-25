@@ -213,14 +213,15 @@ async function main() {
     assert(a.membership === fp(so.membership) && a.court === fp(so.court) && a.owed === fp(so.owed) && a.players === minus(so.players), `so far rows ${JSON.stringify(a)} vs ${JSON.stringify(so)}`);
     assert(a.courtNote === plural(so.games), `court note ${a.courtNote}`);
     assert(a.total === fp(so.net), `so far total ${a.total} vs ${fp(so.net)}`);
-    assert(so.net === rw.yourCostCents, `the total is "Your cost so far": ${so.net} vs ${rw.yourCostCents}`);
+    // Zip 76: the server's older "Your cost so far" (the Money rework footer) is owed minus players only; the hand-credit row is on this card alone.
+    assert(so.net - hand === rw.yourCostCents, `the total is "Your cost so far" plus the hand credit: ${so.net} - ${hand} vs ${rw.yourCostCents}`);
     assert(a.perCourt === `$${per(so.net, so.games)}/court`, `so far per court ${a.perCourt}`);
     assert(a.playersLabel === 'Players paid' && b.playersLabel === 'Players pay', `labels ${a.playersLabel} / ${b.playersLabel}`);
     assert(JSON.stringify(a.rows) === JSON.stringify(['Membership monthly', `Court costs ${plural(so.games)}`, 'Owed to venue', 'Players paid', ...(hand ? ['Credit you added by hand'] : [])]), `rows ${a.rows}`);
     if (hand) assert((await page.locator('[data-card="so-far"] [data-row="hand-credit"] dd').getAttribute('data-hand-credit')) === String(hand), 'hand credit row amount');
     assert(b.membership === fp(pj.membership) && b.court === fp(pj.court) && b.owed === fp(pj.owed) && b.players === minus(pj.players), `projected rows ${JSON.stringify(b)} vs ${JSON.stringify(pj)}`);
     assert(b.courtNote === plural(pj.games), `projected court note ${b.courtNote}`);
-    assert(b.total === fp(pj.net) && pj.net === rw.projected.yourCostCents, `projected total ${b.total}`);
+    assert(b.total === fp(pj.net) && pj.net - hand === rw.projected.yourCostCents, `projected total ${b.total} (${pj.net} - ${hand} vs ${rw.projected.yourCostCents})`);
     assert(b.perCourt === `$${per(pj.net, pj.games)}/court`, `projected per court ${b.perCourt}`);
     assert(a.title === 'So far' && b.title === 'Projected', `titles ${a.title} / ${b.title}`);
     assert(errors.length === 0, `page errors: ${errors}`);
@@ -419,7 +420,7 @@ async function main() {
           labelSpacing: px(cs(label, 'letterSpacing')),
           labelColor: rgb(cs(label, 'color')),
           muted: rgb(getComputedStyle(document.documentElement).getPropertyValue('--ink-2').trim()),
-          chev: [chev.getBoundingClientRect().width, chev.getBoundingClientRect().height, rgb(cs(chev, 'stroke')), cs(chev, 'strokeWidth')],
+          chev: chev ? [chev.getBoundingClientRect().width, chev.getBoundingClientRect().height, rgb(cs(chev, 'stroke')), cs(chev, 'strokeWidth')] : null,
           expanded: head.getAttribute('aria-expanded'),
           rows: document.querySelectorAll('[data-month-rows], .tr-mrow').length,
           top: mm.getBoundingClientRect().top,
@@ -430,6 +431,7 @@ async function main() {
         out.order = [...document.querySelector('.tr').children].map((c) => c.getAttribute('data-card') || c.getAttribute('data-fold'));
         return out;
       });
+      if (process.env.ZIP23_DUMP) require('node:fs').writeFileSync(`${process.env.ZIP23_DUMP}-${scheme}.json`, JSON.stringify(m, null, 1));
       const eqc = (a, b, tol = 2) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
       const acc = scheme === 'light' ? { sf: [0x8a, 0x6a, 0x00], pj: [0x4a, 0x5f, 0x8f] } : { sf: [0xf0, 0xcf, 0x55], pj: [0x9d, 0xb3, 0xe6] };
       const mix = (a, b, pct) => a.map((v, i) => Math.round((v * pct + b[i] * (100 - pct)) / 100));
@@ -466,7 +468,8 @@ async function main() {
       assert(m.mm.radius === '18px' && eqc(m.mm.border, m.mm.line, 1), `Month by month card: radius ${m.mm.radius}, plain border ${m.mm.border}`);
       assert(m.mm.label === 'Month by month' && m.mm.labelTransform === 'uppercase' && m.mm.labelSize === '11px' && Math.abs(m.mm.labelSpacing - 1.54) < 0.02 && eqc(m.mm.labelColor, m.mm.muted, 1), `Month by month label: ${JSON.stringify(m.mm)}`);
       assert(m.mm.h >= 42 && m.mm.h <= 44, `Month by month row height 42 (the mock): ${m.mm.h}`);
-      assert(m.mm.chev[0] === 14 && m.mm.chev[1] === 9 && m.mm.chev[3] === '2.2px', `chevron ${m.mm.chev}`);
+      // Retired in Zip 92: the Month by month chevron was removed in Zip 78 (every chevron, caret and › gone).
+      assert(m.mm.chev === null, `no chevron (Zip 78): ${m.mm.chev}`);
       assert(m.mm.expanded === 'false' && m.mm.rows === 0, 'Month by month starts collapsed');
       assert(errors.length === 0, `page errors: ${errors}`);
       await ctx.close();

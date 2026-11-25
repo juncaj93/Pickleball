@@ -242,7 +242,12 @@ async function main() {
       await noSideScroll(page, 'the hold-refresh page');
       await page.screenshot({ path: path.join(SHOTS, `D3-${scheme}.png`) });
       await page.locator('dialog.sheet[open] .btn-row button', { hasText: 'Go back' }).click();
-      await page.goto(`${BASE}/?holdrefresh=off`);
+      // The page may be starting its own reload right then (the change check): a goto that it interrupts is tried once more.
+      await page.goto(`${BASE}/?holdrefresh=off`).catch(async (e) => {
+        if (!/ERR_ABORTED/.test(String(e))) throw e;
+        await page.waitForTimeout(1000);
+        await page.goto(`${BASE}/?holdrefresh=off`);
+      });
       await page.locator('.schedule article.sched').first().waitFor({ timeout: 15000 });
       await page.waitForTimeout(800);
       assert((await page.locator('[data-hold-refresh]').count()) === 0, '?holdrefresh=off ends it');

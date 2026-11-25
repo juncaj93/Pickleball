@@ -233,7 +233,8 @@ async function main() {
         const word = tag.getBoundingClientRect().top + parseFloat(getComputedStyle(tag).paddingTop) - (r.top + parseFloat(getComputedStyle(el).borderTopWidth));
         return { word, h: r.height };
       }));
-      for (const x of spots) assert(Math.abs(x.word - 5) < 0.05 && Math.abs(x.h - Number(process.env.ZIP9_TILE_H || 60.34375)) < 0.5, `word and height as before: ${JSON.stringify(spots)}`);
+      // Since the Zip 86 cards the TONIGHT/TOM tile is 62.64 px tall at 390 (it was 60.34).
+      for (const x of spots) assert(Math.abs(x.word - 5) < 0.05 && Math.abs(x.h - Number(process.env.ZIP9_TILE_H || 62.640625)) < 0.5, `word and height as before: ${JSON.stringify(spots)}`);
       // The normal games carry none.
       for (const s of d0.sessions.filter((x) => x.id !== shortGame.id).slice(0, 6)) {
         const t = await page.locator(`#session-${s.id}`).innerText().catch(() => '');

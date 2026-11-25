@@ -129,8 +129,8 @@ async function main() {
   for (const width of [390, 375, 360, 320]) {
     for (const scheme of ['light', 'dark']) {
       // Zip 29 replaced the 6.75 px word with a real band height and a 7.5 px word (the tile stays 48 px), so the room each side is about 4 px, not 7;
-      // e2e/zip29.cjs measures the glyph box in WebKit at device scale 3. Here: still centered, at least 3 px clear, TOM and plain tiles unchanged.
-      await check(`folded TONIGHT tile at ${width} ${scheme}: at least 3 px clear on both sides of the word, centered, TOM and plain tiles unchanged`, async () => {
+      // e2e/zip29.cjs measures the glyph box in WebKit at device scale 3. Here: still centered, at least 2 px clear (Zip 78: 11 px text in the 58 px tile), TOM and plain tiles unchanged.
+      await check(`folded TONIGHT tile at ${width} ${scheme}: at least 2 px clear on both sides of the word (11 px floor), centered, TOM and plain tiles unchanged`, async () => {
         const { ctx, page, errors } = await openAdmin({ width, scheme });
         await page.locator('.day-tag.tonight').first().waitFor({ timeout: 15000 });
         // Fold tonight's card (a tap on the card, as on the phone) when it starts open.

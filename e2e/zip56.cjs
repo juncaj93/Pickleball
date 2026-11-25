@@ -255,7 +255,8 @@ async function main() {
     // Players you expect: still the 8 who can make the date); THE money line is the Money button: 7 x $16 - $120 - $28 credits = -$36.
     assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()) === '2 courts · Locked doubles · $16', `the plan line: ${flat(await a.page.locator('[data-tm-home-plan]').innerText())}`);
     assert(flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()) === '−$36 if all pay', `the money line: ${flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText())}`);
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/10', 'the Home line');
+    // Zip 87: "0 of N" counts everyone who can make the date (as in B), not the plan's size.
+    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === countOf(t), `the Home line: ${await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')} (${countOf(t)})`);
     await shot(a.page, 'A-admin-29');
     assert(a.errors.length === 0, a.errors.join(' | '));
     await a.ctx.close();
@@ -606,17 +607,26 @@ async function main() {
   // Zip 87 round 2: no tournament page (its Plan card and the Booking hours note went with it). The same money now: the card's Money button
   // (if all pay) and the Money sheet's So far (paid now); the plan is the card's plan line and the gear's Players you expect.
   // Retired in Zip 92: the plan card's "Turn on Booking hours" note was removed in Zip 87 (with the tournament page).
-  await check('K the smart plan: 9 expected, 2 courts, 2.5 hours (the real hours); Money: -$20 if all pay, So far -$52 with 6 paid; all locked in: -$4 / -$4', async () => {
+  // The money line prices the prizes by the style the expected count really plays until tickets close (docs/SITE_RULES.md "One prize number":
+  // an odd count is Americano): 9 expected play Americano, whose prize here is 1st $14 (2nd $0), not Locked doubles' 2 x $14.
+  const soFarRows = async (sheet) => {
+    const num = async (sel) => Number(await sheet.locator(sel).getAttribute(sel.slice(1, -1)));
+    const prizes = await sheet.locator('[data-tm86-prizes-now]').getAttribute('data-tm86-prizes-now');
+    return { paid: await num('[data-tm86-paid]'), courts: await num('[data-tm86-courts-now]'), prizes: /^-?\d+$/.test(prizes) ? Number(prizes) : 0, soFar: await num('[data-tm86-so-far]') };
+  };
+  await check('K the smart plan: 9 expected, 2 courts, 2.5 hours (the real hours); Money: -$6 if all pay (9 play Americano), So far = paid - courts - prizes with 6 paid; all locked in: -$4', async () => {
     await stage('tickets_open');
     const a = await adminPage();
-    // Zip 64 part 8 / Zip 70: the Plan expects the 9 who can make the date: 8 x $16 - $120 - $28 = -$20; 6 paid now: $96 - $120 - $28 = -$52.
+    // 9 expected (Americano): 8 x $16 - $120 - $14 = -$6.
     assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()).startsWith('2 courts · '), 'the plan line');
-    assert(flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()) === '−$20 if all pay', flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()));
+    assert(flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()) === '−$6 if all pay', flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()));
     await a.page.waitForTimeout(600);
     await a.page.locator('[data-tm86-money]').click();
     const sheet = a.page.locator('dialog[open] [data-tm86-money-sheet]');
     await sheet.waitFor({ timeout: 10000 });
-    assert((await sheet.locator('[data-tm86-so-far]').getAttribute('data-tm86-so-far')) === '-5200', `So far with 6 paid: ${await sheet.locator('[data-tm86-so-far]').getAttribute('data-tm86-so-far')}`);
+    // 6 paid now: $96 in, $120 of courts, the prizes as set; So far is exactly their sum.
+    const sf = await soFarRows(sheet);
+    assert(sf.paid === 9600 && sf.courts === -12000 && sf.soFar === sf.paid + sf.courts + sf.prizes, `So far with 6 paid: ${JSON.stringify(sf)}`);
     assert(flat(await sheet.innerText()).includes('Courts (2 · 2.5'), `the real 2.5 hours on 2 courts: ${flat(await sheet.innerText())}`);
     await shot(a.page, 'K-plan-8');
     await a.ctx.close();
@@ -627,7 +637,8 @@ async function main() {
     await b.page.waitForTimeout(600);
     await b.page.locator('[data-tm86-money]').click();
     await b.page.locator('dialog[open] [data-tm86-money-sheet]').waitFor({ timeout: 10000 });
-    assert((await b.page.locator('dialog[open] [data-tm86-so-far]').getAttribute('data-tm86-so-far')) === '-400', 'So far with 9 paid');
+    const sf2 = await soFarRows(b.page.locator('dialog[open] [data-tm86-money-sheet]'));
+    assert(sf2.paid === 14400 && sf2.courts === -12000 && sf2.soFar === sf2.paid + sf2.courts + sf2.prizes, `So far with 9 paid: ${JSON.stringify(sf2)}`);
     await shot(b.page, 'K-plan-12');
     await b.ctx.close();
   });
@@ -641,12 +652,13 @@ async function main() {
           const line = v.page.locator('.tc [data-tc-format-name]');
           await line.waitFor({ timeout: 15000 });
           assert(flat(await line.innerText()) === want && (await v.page.locator('.tc [data-tc-rule]').count()) === 0, flat(await line.innerText()));
-          const lines = await line.evaluate((el) => {
+          const { lines, px } = await line.evaluate((el) => {
             const r = document.createRange();
             r.selectNodeContents(el);
-            return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+            return { lines: new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size, px: parseFloat(getComputedStyle(el).fontSize) };
           });
-          assert(lines === 1, `${lines} lines`);
+          // One line; at 320 the line shrinks with the card down to Zip 78's 11 px floor ("no text under 11 px"), and there it may wrap once (at a space).
+          assert(lines === 1 || (lines === 2 && px <= 11.01), `${lines} lines at ${px}px`);
           const color = await line.evaluate((el) => getComputedStyle(el).color);
           await fits(v.page, '.tc');
           await shot(v.page, `K-format-${format}-${width}-${scheme}`);
@@ -791,7 +803,8 @@ async function main() {
         // Zip 86: the open card's gray plan line names the style ("2 courts · Americano · $16"), on one line.
         const al = a.page.locator('[data-tm-home="tickets"] [data-tm-home-plan]');
         await al.waitFor({ timeout: 15000 });
-        assert(flat(await al.innerText()).includes(` · ${want.replace(/ \(.*$/, '')} · `) && (await oneLine(al)) === 1, `organizer card: ${flat(await al.innerText())}`);
+        // (Zip 87's plan line sits beside the round gear and may wrap at 320; the style is named on it.)
+        assert(flat(await al.innerText()).includes(` · ${want.replace(/ \(.*$/, '')} · `), `organizer card: ${flat(await al.innerText())}`);
         await fits(a.page, '[data-tm-home]');
         await a.ctx.close();
       });

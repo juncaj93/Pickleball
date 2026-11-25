@@ -134,13 +134,22 @@ async function main() {
     });
 
   const SIZES = [390, 360, 320];
-  const LIGHT_BG = 'rgb(249, 249, 246)';
-  const DARK_BG = 'rgb(27, 38, 32)';
+  // Retired in Zip 92: the exact pixel colors (rgb(249, 249, 246) light, rgb(27, 38, 32) dark) were removed in Zip 78 (the one-look color
+  // tokens): every Later card must take the Later tint token (--cl-later-bg), and every word on it still reads at 4.5:1 or better.
+  const laterTint = (page) =>
+    page.evaluate(() => {
+      const e = document.createElement('i');
+      e.style.cssText = 'background: var(--cl-later-bg); position: absolute';
+      document.querySelector('.schedule').appendChild(e);
+      const c = getComputedStyle(e).backgroundColor;
+      e.remove();
+      return c;
+    });
   const summary = [];
   for (const scheme of ['light', 'dark']) {
     for (const width of SIZES) {
       for (const look of ['normal', 'christmas']) {
-        await check(`${look} ${scheme} ${width}px: Later cards ${scheme === 'light' ? LIGHT_BG : DARK_BG}, every word on them 4.5:1 or better, nothing sideways`, async () => {
+        await check(`${look} ${scheme} ${width}px: Later cards in the Later tint (--cl-later-bg), every word on them 4.5:1 or better, nothing sideways`, async () => {
           const { ctx, page } = await phone(width, scheme);
           await home(page, look === 'christmas' ? 'xmasdate=2026-12-05&xmasmode=me' : '');
           if (look === 'christmas') {
@@ -154,8 +163,9 @@ async function main() {
           }
           const rows = await readLater(page);
           assert(rows.length >= 2, `Later cards: ${rows.length}`);
+          const tint = await laterTint(page);
           for (const r of rows) {
-            assert(r.bg === (scheme === 'light' ? LIGHT_BG : DARK_BG), `${r.id}${r.off ? ' (canceled)' : ''}: background ${r.bg}`);
+            assert(r.bg === tint, `${r.id}${r.off ? ' (canceled)' : ''}: background ${r.bg} (the tint is ${tint})`);
             assert(r.worst.r >= 4.5, `${r.id}${r.off ? ' (canceled)' : ''}: "${r.worst.text}" ${r.worst.r.toFixed(2)}:1`);
           }
           const sideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

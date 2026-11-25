@@ -127,7 +127,8 @@ async function main() {
       return {
         title: card.querySelector('.ac-title, h2')?.textContent.trim(),
         line: line?.textContent.trim(),
-        oneLine: !!line && line.getBoundingClientRect().height <= lh * 1.5,
+        // Zip 78: the line wraps between words (no "…" cut) and Zip 85 made it longer ("$14 each, 2 games: ..."): at most two lines.
+        oneLine: !!line && line.getBoundingClientRect().height <= lh * 2.5,
         cut: !!line && line.scrollWidth > line.clientWidth + 1,
         pay: !!card.querySelector('[data-pay]'),
         x: !!card.querySelector('.ac-x, [data-x]'),
@@ -142,14 +143,14 @@ async function main() {
   const expected = { Vic: ['You owe $14', 'For Tue, Nov 3'], Wren: ['You owe $28', '$14 each, 2 games: Nov 3 and Nov 4'], Zoe: ['You owe $42', '$14 each, 3 games: Nov 3, 4 and 5'] }; // Zip 85: "N games" added
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])
-      await check(`owe card, ${width} px, ${scheme}: Vic, Wren and Zoe in the approved words, one line, Pay, no X, nothing sideways`, async () => {
+      await check(`owe card, ${width} px, ${scheme}: Vic, Wren and Zoe in the approved words, at most two lines (Zip 78: wraps, never cut), Pay, no X, nothing sideways`, async () => {
         for (const [name, [title, line]] of Object.entries(expected)) {
           const { ctx, page } = await openPlayer(name, width, scheme);
           const c = await oweCard(page);
           assert(c, `${name}: no owe card`);
           assert(c.title === title, `${name}: title «${c.title}»`);
           assert(c.line === line, `${name}: line «${c.line}»`);
-          assert(c.oneLine && !c.cut, `${name}: the line wraps or is cut at ${width}`);
+          assert(c.oneLine && !c.cut, `${name}: the line runs past two lines or is cut at ${width}`);
           assert(c.pay && !c.x, `${name}: Pay ${c.pay}, X ${c.x}`);
           assert(!(await sideways(page)), `${name}: the page scrolls sideways`);
           assert(!/pay to keep it clear/i.test(await page.locator('main').innerText()), 'the old line is used');
@@ -213,6 +214,10 @@ async function main() {
     const title = await page.locator('dialog.sheet[open] h2').first().innerText();
     assert(/\$28$/.test(title), `Pay sheet «${title}»`);
     await page.keyboard.press('Escape');
+    // (Closing the sheet steps the page's history back: let that finish before the reload, or the reload is cut off.)
+    await page.locator('dialog.sheet[open]').waitFor({ state: 'detached' }).catch(() => {});
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     await post(ctx.request, `/api/sessions/${target.id}/withdraw`, {});
     // Tap to dismiss.
     const again = before.sessions.filter(open)[1];

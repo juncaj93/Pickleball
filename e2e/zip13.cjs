@@ -266,7 +266,11 @@ async function main() {
     const sum = await (await real.get(`${BASE}/api/admin/players/${d.me.id}/summary`)).json();
     // Money > Totals' "So far" card total (shared/totalsRefresh.ts soFarCard): owed to the venue minus what players paid, PLUS the credit added
     // by hand that month (Zip 76: Totals has a hand-credit row), minus ended tournaments. The bare rework.yourCostCents leaves the hand credit out.
-    const soFar = (r) => r.owedToVenueCents - r.collectedCents + (r.handCreditCents ?? 0) - (r.tournaments ?? []).reduce((a, t) => a + t.resultCents, 0);
+    // With "Spent matches Totals" (Zip 27) off, Spent stops at $0 in a month where the players paid more than the venue was owed.
+    const soFar = (r) => {
+      const net = r.owedToVenueCents - r.collectedCents + (r.handCreditCents ?? 0) - (r.tournaments ?? []).reduce((a, t) => a + t.resultCents, 0);
+      return d.spentTotals === true ? net : Math.max(0, net);
+    };
     const nov = await (await real.get(`${BASE}/api/admin/money?month=2026-11`)).json();
     assert(sum.organizer === true && sum.month.spentCents === soFar(nov.rework), `month ${sum.month.spentCents} vs Money ${soFar(nov.rework)} (yourCostCents ${nov.rework.yourCostCents}, hand credit ${nov.rework.handCreditCents ?? 0})`);
     let all = 0;

@@ -211,7 +211,8 @@ async function main() {
       return { gw: g.width, tw: t.width, boxTop: box.top, segTop: r('.mrw-seg').top, boxH: box.height, segH: r('.mrw-seg').height };
     });
     assert(Math.abs(m.gw - m.tw) <= 1, `equal widths ${m.gw} / ${m.tw}`);
-    assert(Math.abs(m.boxTop - m.segTop) <= 2, 'one row');
+    // Zip 78: the toggle is the site's one segmented control (50 px track) next to the 42 px box: one row, centered on each other.
+    assert(Math.abs(m.boxTop + m.boxH / 2 - (m.segTop + m.segH / 2)) <= 2, `one row: box ${m.boxTop}+${m.boxH}, toggle ${m.segTop}+${m.segH}`);
     assert((await page.locator('.mrw-controls button[aria-label*="month" i]').count()) === 1, 'only the month box is a month button (no previous or next arrows)');
     const txt = await page.locator('.mrw-controls').innerText();
     assert(!/[‹›⌄▾▼]/.test(txt), 'no arrows or carets in the top row');
@@ -575,7 +576,7 @@ async function main() {
         labelSize: parseFloat(getComputedStyle(document.querySelector('.mrw-col dt')).fontSize),
         bigColor: getComputedStyle(document.querySelector('[data-owed-total]')).color,
         // One line: each of these is as tall as one line and none is cut off.
-        lines: [...document.querySelectorAll('.mrw-card-title, .mrw-col dt, .mrw-col dd, .mrw-col small, .mrw-yours, .mrw-yours > *')].map((e) => ({ c: e.className || e.tagName, h: Math.round(e.getBoundingClientRect().height), fs: parseFloat(getComputedStyle(e).fontSize), over: e.scrollWidth > e.clientWidth + 1 })),
+        lines: [...document.querySelectorAll('.mrw-card-title, .mrw-col dt, .mrw-col dd, .mrw-col small, .mrw-yours, .mrw-yours > *')].map((e) => ({ c: e.className || e.tagName, h: Math.round(e.getBoundingClientRect().height), fs: parseFloat(getComputedStyle(e).fontSize), over: e.scrollWidth > e.clientWidth + 1, sw: e.scrollWidth, cw: e.clientWidth, text: e.innerText, row: e.closest('.mrw-yours')?.innerText.replace(/\n/g, ' / '), rowW: e.closest('.mrw-yours')?.clientWidth })),
       }));
       assert(dom.sofar === f(api.owedToVenueCents), `owed ${dom.sofar} vs ${f(api.owedToVenueCents)}`);
       assert(dom.proj === f(api.projected.totalCents), `projected ${dom.proj}`);
@@ -585,7 +586,7 @@ async function main() {
       assert(dom.titleSize > dom.labelSize, `card titles (${dom.titleSize}px) are larger than column labels (${dom.labelSize}px)`);
       const [r, g, b] = dom.bigColor.match(/\d+/g).map(Number);
       assert(r > b && g > b, `big total is amber: ${dom.bigColor}`);
-      for (const l of dom.lines) assert(l.h <= Math.ceil(l.fs * 1.9) + 14 && !l.over, `${l.c} wraps or is cut off at ${width}: ${l.h}px tall`);
+      for (const l of dom.lines) assert(l.h <= Math.ceil(l.fs * 1.9) + 14 && !l.over, `${l.c} wraps or is cut off at ${width}: ${l.h}px tall (${l.sw} in ${l.cw}: "${l.text}" in the ${l.rowW} px row "${l.row}")`);
       await noOverflow(page, `totals ${width}`);
       await shot(page, `totals-${width}`);
       await ctx.close();
@@ -973,9 +974,10 @@ async function main() {
         const line = (await probe(page, 'border-color: var(--line)')).border;
         assert(m.bc === line && m.bg === 'rgb(255, 255, 255)', `--line outline on white: ${m.bc} ${m.bg} (--line ${line})`);
       }
-      assert(Math.abs(m.h - 42) <= 0.6 && Math.abs(m.th - 42) <= 0.6, `box and toggle track are both 42 px: ${m.h} / ${m.th} (${tag})`);
+      // Zip 78: the toggle is the site's one segmented control: 44 px cells in a 3 px track (50 px); the month box stays 42 px.
+      assert(Math.abs(m.h - 42) <= 0.6 && Math.abs(m.th - 50) <= 0.6, `box 42 px and toggle track 50 px: ${m.h} / ${m.th} (${tag})`);
       assert(m.radius === '14px', `box corners 14 px: ${m.radius} (${tag})`);
-      assert(m.pill === 36 && m.pad === '3px', `the white pill is 36 px inside a 3 px track: ${m.pill} ${m.pad} (${tag})`);
+      assert(m.pill === 44 && m.pad === '3px', `the white pill is 44 px inside a 3 px track (Zip 78): ${m.pill} ${m.pad} (${tag})`);
       assert(m.lines && m.extra === 0, `one line, no arrow or caret (${tag})`);
       await noOverflow(page, `month box ${tag}`);
       if (width === 360) await shot(page, `month-box-${scheme}`);
@@ -1083,7 +1085,7 @@ async function main() {
       const addr = ((/addresses=([^&]*)/.exec(m.allHref) ?? /^sms:([^?&]*)/.exec(m.allHref))[1] || '').split(',').filter(Boolean).sort();
       assert(addr.join() === want.join(), `addressed to exactly Kai and Gray: ${addr} vs ${want}`);
       const body = decodeURIComponent(/body=(.*)$/.exec(m.allHref)[1]);
-      assert(/^Hey everyone, quick reminder for (today|tonight|tomorrow|yesterday|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)'s pickleball\.\nIf you haven’t paid your \$14 yet, please do it here:\n\n[^\n]+$/.test(body), `group message: ${JSON.stringify(body)}`);
+      assert(/^Hey everyone, quick reminder for (today|tonight|tomorrow|yesterday|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)[’']s pickleball\.\nIf you haven’t paid your \$14 yet, please do it here:\n\n[^\n]+$/.test(body), `group message: ${JSON.stringify(body)}`);
       // One person: same wording as before, name and amount.
       const one = decodeURIComponent(m.oneHref.replace(/^sms:[^&?]*[&?]body=/, ''));
       assert(/^Hey (Kai|Gray), you owe \$\d+ for pickleball/.test(one), `one-person text: ${JSON.stringify(one.slice(0, 50))}`);

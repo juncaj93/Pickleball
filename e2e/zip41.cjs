@@ -53,10 +53,6 @@ function liveVars() {
 }
 
 // The colors Alex approved (mocks/ in the zip).
-const INK = 'rgb(24, 36, 29)';
-const MINT = 'rgb(139, 217, 163)';
-const CHAR_L = 'rgb(91, 98, 90)';
-const CHAR_D = 'rgb(142, 152, 143)';
 const RED_L = 'rgb(200, 49, 47)';
 const RED_D = 'rgb(217, 58, 53)';
 const CREAM = 'rgb(251, 246, 234)';
@@ -156,11 +152,23 @@ async function main() {
       }),
     );
   const noSideways = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 0.5);
+  // Zip 78 (one look): the outline colors come from the site's tokens (--pc-ol-this: ink, mint in dark; --pc-ol-quiet: charcoal), read from
+  // the page; the exact pixel colors of Zip 41 (INK, MINT, CHAR_L, CHAR_D) are retired (Zip 92).
+  const olColors = (page) =>
+    page.evaluate(() => {
+      const probe = (v) => {
+        const e = document.createElement('i');
+        e.style.cssText = `border:1px solid var(${v});position:absolute`;
+        document.querySelector('.schedule').appendChild(e);
+        const c = getComputedStyle(e).borderTopColor;
+        e.remove();
+        return c;
+      };
+      return { ink: probe('--pc-ol-this'), quiet: probe('--pc-ol-quiet'), text: probe('--ink') };
+    });
   const sameFill = (list, m) => assert(new Set(list.map((t) => t.fill)).size === 1, `${m}: every tile has one fill: ${[...new Set(list.map((t) => t.fill))]}`);
 
   for (const scheme of ['light', 'dark']) {
-    const ink = scheme === 'light' ? INK : MINT;
-    const quiet = scheme === 'light' ? CHAR_L : CHAR_D;
 
     await check(`A+B normal theme, ${scheme}: same fill, one solid outline, color and thickness by row only`, async () => {
       const { ctx, page } = await phone({ scheme });
@@ -182,6 +190,8 @@ async function main() {
         assert(r.length > 0, `${row} row has games`);
         assert(new Set(r.map((t) => `${t.style} ${t.width} ${t.color} ${t.sides}`)).size === 1, `${row}: identical outline whatever the status: ${[...new Set(r.map((t) => `${t.status}/${t.extra} ${t.width} ${t.color}`))]}`);
       }
+      const { ink, quiet } = await olColors(page);
+      assert(ink !== quiet, `the two outline colors differ: ${ink} ${quiet}`);
       const thisRow = live.filter((t) => t.row === 'this');
       assert(thisRow[0].width === '2px' && thisRow[0].color === ink, `this week 2px ${ink}: ${thisRow[0].width} ${thisRow[0].color}`);
       assert(thisRow.some((t) => t.day === 'tonight') && thisRow.some((t) => t.day === 'tomorrow'), 'tonight and tomorrow tiles are in THIS WEEK, with the same outline');
@@ -195,7 +205,7 @@ async function main() {
       // Canceled: its old look (2 px ink / light line), not the row color.
       const canceled = list.filter((t) => t.off);
       assert(canceled.length > 0, 'a canceled game exists');
-      const oldCanceled = scheme === 'light' ? INK : 'rgb(241, 243, 236)';
+      const oldCanceled = (await olColors(page)).text; // the ink color (was rgb(24, 36, 29) / rgb(241, 243, 236) before Zip 78)
       assert(canceled.every((t) => t.style === 'solid' && t.color === oldCanceled), `canceled keeps its old outline: ${canceled.map((t) => t.color)}`);
       assert(page.errors.length === 0, page.errors.join(' | '));
       await ctx.close();
@@ -211,6 +221,7 @@ async function main() {
       if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `later-${scheme}-390.png`), fullPage: true });
       const list = await tiles(page);
       const later = list.filter((t) => t.row === 'later' && !t.off);
+      const { quiet } = await olColors(page);
       assert(later.length >= 3, `LATER games on the page: ${later.length} (rows: ${list.map((t) => t.row + (t.off ? "-off" : "")).join(",")})`);
       assert(new Set(later.map((t) => `${t.style} ${t.width} ${t.color}`)).size === 1, `identical LATER outline: ${[...new Set(later.map((t) => `${t.status} ${t.width} ${t.color}`))]}`);
       assert(later[0].width === '1px' && later[0].color === quiet && later[0].style === 'solid', `later 1px ${quiet}: ${later[0].width} ${later[0].color}`);

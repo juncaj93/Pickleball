@@ -533,32 +533,43 @@ async function main() {
 
   // ================================================================ server decides: pressed look and spinner
   await check('where the server decides (a full game: waitlist or not), the tapped button shows a pressed look and spinner within 100 ms', async () => {
-    // Zip 10 "Card cleanup" (on in the fake world): no game is full; the game at the database's 12 is the one the server decides.
-    const full = upcoming.find((x) => names(x).length >= 12) ?? upcoming.find((x) => names(x).length >= 10);
-    assert(full, 'a full game');
-    const { ctx, page } = await openPlayer('Casey');
-    const sent = counter(page, 'POST', /\/api\/sessions\/[^/]+\/join$/);
-    const off = await network(page, /\/api\/sessions\/[^/]+\/join$/, 'slow');
-    const btn = row(page, full.id).getByRole('button').filter({ hasText: /I’m in|waitlist|standby|Join/i }).first();
-    await btn.waitFor();
-    const t0 = await page.evaluate(() => performance.now());
-    await btn.click();
-    const ms = await page.evaluate(
-      (t0) =>
-        new Promise((done) => {
-          const look = () => (document.querySelector('[data-tap-wait]') ? done(performance.now() - t0) : performance.now() - t0 > 1000 ? done(9999) : requestAnimationFrame(look));
-          look();
-        }),
-      t0,
-    );
-    await shot(page, 'pressed');
-    assert(ms < 100, `the working look took ${ms} ms`);
-    await btn.click({ timeout: 300 }).catch(() => {});
-    await sleep(SLOW_MS + 1200);
-    assert((await page.locator('[data-tap-wait]').count()) === 0, 'the working look goes when the server answers');
-    await off();
-    assert(sent.n === 1, `${sent.n} join requests`);
-    await ctx.close();
+    // Zip 10 "Card cleanup" (on in the fake world): no game is full under 12, and Zip 76: a game at 12 shows a disabled "Full" (the server is
+    // never asked). So for this check Card cleanup goes off: a game at the group's limit (under 12) is full again, and its Join waitlist is
+    // the server's call.
+    const max = d0.group.settings.maxPlayers;
+    const full = upcoming.filter((x) => names(x).length >= max && names(x).length < 12 && !names(x).includes('Casey'))[0];
+    assert(full, `a full game (${max} in, under 12)`);
+    assert((await put(areq, '/api/admin/card-cleanup-switch', { on: false })).ok(), 'Card cleanup off');
+    try {
+      const { ctx, page } = await openPlayer('Casey');
+      const sent = counter(page, 'POST', /\/api\/sessions\/[^/]+\/join$/);
+      const off = await network(page, /\/api\/sessions\/[^/]+\/join$/, 'slow');
+      const btn = row(page, full.id).getByRole('button').filter({ hasText: /I’m in|waitlist|standby|Join/i }).first();
+      await btn.waitFor({ timeout: 10000 }).catch(async (e) => {
+        const r = row(page, full.id);
+        throw new Error(`${e.message.split('\n')[0]} | row ${(await r.count()) ? (await r.innerText()).replace(/\s+/g, ' ') : 'not on the page'} | roster ${names(full).join(',')}`);
+      });
+      const t0 = await page.evaluate(() => performance.now());
+      await btn.click();
+      const ms = await page.evaluate(
+        (t0) =>
+          new Promise((done) => {
+            const look = () => (document.querySelector('[data-tap-wait]') ? done(performance.now() - t0) : performance.now() - t0 > 1000 ? done(9999) : requestAnimationFrame(look));
+            look();
+          }),
+        t0,
+      );
+      await shot(page, 'pressed');
+      assert(ms < 100, `the working look took ${ms} ms`);
+      await btn.click({ timeout: 300 }).catch(() => {});
+      await sleep(SLOW_MS + 1200);
+      assert((await page.locator('[data-tap-wait]').count()) === 0, 'the working look goes when the server answers');
+      await off();
+      assert(sent.n === 1, `${sent.n} join requests`);
+      await ctx.close();
+    } finally {
+      await put(areq, '/api/admin/card-cleanup-switch', { on: true });
+    }
   });
 
   await check('dark mode: the error toast and the working look read in dark too, the toast clears the tab bar', async () => {

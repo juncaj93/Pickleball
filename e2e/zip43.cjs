@@ -150,7 +150,15 @@ async function main() {
       const cards = page.locator('[data-venue-alerts] [data-alert-card="amber"]');
       assert((await cards.count()) === 2, `${await cards.count()} cards`);
       const first = await cards.first().boundingBox();
-      assert(first && first.y < 140, `the first card is not at the top: ${JSON.stringify(first)}`);
+      // Later zips put two things above them on purpose: Zip 81's venue-hours cards ("at the very top") and the open tournament's card (Zip 55).
+      // The venue cards are the first thing after those.
+      const above = await page.evaluate(() => {
+        const v = document.querySelector('[data-venue-alerts]');
+        const out = [];
+        for (let e = v.previousElementSibling; e; e = e.previousElementSibling) out.push(e.matches('[data-venue-conflicts], [data-tm-home], .tm-test-home, [data-tm-test]') || e.querySelector('[data-tm-home], .tm-test-home') ? 'ok' : e.outerHTML.slice(0, 120));
+        return out.filter((x) => x !== 'ok');
+      });
+      assert(first && above.length === 0, `something else is above the venue cards: ${JSON.stringify({ first, above })}`);
       const t0 = (await cards.nth(0).innerText()).replace(/\s+/g, ' ').trim();
       const t1 = (await cards.nth(1).innerText()).replace(/\s+/g, ' ').trim();
       assert(t0 === `${MEMBERSHIP} Monthly membership, ${VENUE} Mark paid`, `membership card: ${t0}`);
@@ -199,12 +207,23 @@ async function main() {
   await check('H3: the three versions say the mock\'s exact words (courts, membership, both on one day)', async () => {
     await resetAll();
     const { ctx, page } = await open(BASE, 'light', 390);
-    const text = async () => (await page.locator('[data-venue-alerts]').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    const read = async () => (await page.locator('[data-venue-alerts]').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    // Home first draws the last screen it saw (the speed switches), then the fresh answer: wait (up to 8 s) for the words to settle on the
+    // expected ones before comparing, so a read in between is not taken for the answer.
+    let want = null;
+    const text = async () => {
+      for (let i = 0; i < 40 && want !== null; i++) {
+        if ((await read()) === want) break;
+        await page.waitForTimeout(200);
+      }
+      return read();
+    };
     // courts only
     await call('POST', '/api/admin/venue-alert/paid', { keys: ['membership:2026-10'], cents: 3000 });
     await page.reload();
     await page.locator('[data-venue-alerts]').waitFor();
-    assert((await text()) === `${COURTS} 2 games x $48 = $96 Mark paid`, `courts: ${await text()}`);
+    want = `${COURTS} 2 games x $48 = $96 Mark paid`;
+    assert((await text()) === `${COURTS} 2 games x $48 = $96 Mark paid`, `courts: ${await text()} (want ${COURTS} 2 games x $48 = $96 Mark paid)`);
     // membership only (put the membership back, mark the courts)
     const d = new DatabaseSync(dbFile);
     d.prepare("DELETE FROM task_log WHERE task LIKE 'venue_paid:%'").run();
@@ -212,6 +231,7 @@ async function main() {
     await call('POST', '/api/admin/venue-alert/paid', { keys: ['court:2026-10'], cents: 9600 });
     await page.reload();
     await page.locator('[data-venue-alerts]').waitFor();
+    want = `${MEMBERSHIP} Monthly membership, ${VENUE} Mark paid`;
     assert((await text()) === `${MEMBERSHIP} Monthly membership, ${VENUE} Mark paid`, `membership: ${await text()}`);
     // both on one day: membership on the last day too
     const d2 = new DatabaseSync(dbFile);
@@ -220,7 +240,8 @@ async function main() {
     setDaysDirect(31, 0);
     await page.reload();
     await page.locator('[data-venue-alerts]').waitFor();
-    assert((await text()) === `${VENUE} should have charged you $126 2 games x $48 = $96, plus membership $30 Mark paid`, `combined: ${await text()}`);
+    want = `${VENUE} should have charged you $126 2 games x $48 = $96, plus membership $30 Mark paid`;
+    assert((await text()) === want, `combined: ${await read()}`);
     assert((await page.locator('[data-venue-alerts] [data-alert-card="amber"]').count()) === 1, 'one combined card');
     await ctx.close();
   });
