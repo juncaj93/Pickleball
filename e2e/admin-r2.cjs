@@ -568,8 +568,8 @@ async function main() {
     assert(after.sessions.some((s) => s.roster.some((r) => r.name === target)), 'the player still has seats');
     // Add someone on a game: not offered.
     await tab(page, 'Home');
-    await (await reveal(page, C.id)).locator('.game-menu .icon-round').click();
-    await page.getByRole('menuitem', { name: 'Players' }).click();
+    // Zip 87: the game menu has no Players row; the paid pill opens the same Players sheet.
+    await (await reveal(page, C.id)).locator('.r86-paid').click();
     await page.getByRole('dialog').waitFor();
     // (The sheet's own words, without a toast that sits inside it since Zip 13.)
     const sheetText = await page.locator('dialog[open]').last().evaluate((d) => {

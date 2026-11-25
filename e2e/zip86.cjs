@@ -77,13 +77,15 @@ const cutOrBroken = (page, sel) =>
           assert(flat(await page.locator('[data-tm-stage]').textContent()) === '4 unpaid', 'the pill');
           await page.locator('[data-tm-home-toggle]').click();
           await page.waitForTimeout(300);
-          assert((await page.locator('[data-tm-steps="1"] .tm86-done').count()) === 1, 'Sign up done');
+          // Zip 87: the steps are underlined words (.tm87-done), the date row is the tile, the time and the plan line.
+          assert((await page.locator('[data-tm-steps="1"] .tm87-done').count()) === 1, 'Sign up done');
           assert((await page.locator('[data-tm-steps="1"] [aria-current="step"]').textContent()).includes('Payments'), 'Payments current');
           const when = flat(await page.locator('[data-tm86-when]').textContent());
-          assert(when.startsWith('Tue Dec 1 · 7:30 to 10 PM2 courts · Locked doubles · $18'), `When: ${when}`);
+          assert(when.startsWith('TUE1DEC7:30 to 10 PM2 courts · Locked doubles · $18'), `When: ${when}`);
           assert(!/pay by/.test(when), 'no pay by in When');
           const tickets = flat(await page.locator('.tm86-grid [data-tm-tickets]').textContent());
-          assert(tickets === 'Tickets6 of 8 locked in', `Tickets: ${tickets}`);
+          // Zip 87: Players (was Tickets), of everyone who can make the date (10), not the plan's 8.
+          assert(tickets === 'Players6 of 10 locked in', `Players: ${tickets}`);
           assert(flat(await page.locator('[data-tm-remind-btn]').textContent()) === 'Remind4 haven’t paid', 'Remind');
           assert(/^sms:/.test(await page.locator('[data-tm-remind-btn]').getAttribute('href')), 'Remind opens Messages');
           assert(flat(await page.locator('[data-tm86-prizes]').textContent()) === 'PrizesNot set yet', 'Prizes');
@@ -126,12 +128,12 @@ const cutOrBroken = (page, sel) =>
           const mt = flat(await ms.textContent());
           assert(mt.includes('5 tickets paid$90') && mt.includes('9 tickets (you play free)$162') && mt.includes('You keep+$14') && mt.includes('If all 10 pay'), `Money: ${mt}`);
           await page.screenshot({ path: path.join(SHOTS, `A-money-${width}-${scheme}.png`) });
-          // Set prizes opens the Prizes sheet with the 🎾82 suggestion.
+          // Set prizes opens the Prizes sheet (Zip 87: both styles, "Suggested for both styles").
           await ms.locator('[data-tm86-set-prizes]').click();
           await page.waitForTimeout(500);
           const pz = page.locator('[data-tm86-prize-sheet]');
-          assert(flat(await pz.locator('[data-tm-suggest-words]').textContent()) === 'Suggested: $14 each to the winners', 'suggestion');
-          assert(flat(await pz.locator('[data-tm-suggest-left]').textContent()) === 'Tickets $162 − courts $120 = $42 left.', 'left words');
+          assert(flat(await pz.locator('.pz-suggest-words').textContent()) === 'Suggested for both styles', 'suggestion');
+          assert(flat(await pz.locator('.pz-left').textContent()) === 'Tickets $162 − courts $120 = $42 left', 'left words');
           await page.screenshot({ path: path.join(SHOTS, `A-prizes-${width}-${scheme}.png`) });
           assert(errors.length === 0, errors.join('; '));
           await ctx.close();
@@ -145,9 +147,9 @@ const cutOrBroken = (page, sel) =>
       await page.locator('[data-tm-home-toggle]').click();
       await page.locator('[data-tm86-prizes]').click();
       await page.waitForTimeout(400);
-      await page.locator('[data-tm-suggest-use]').click();
+      await page.locator('[data-pz-use]').click();
       await page.locator('[data-tm86-prizes-save]').click();
-      await page.waitForFunction(() => /\$14 each to the winners/.test(document.querySelector('[data-tm86-prizes]')?.textContent || ''), null, { timeout: 8000 });
+      await page.waitForFunction(() => /\$14 each to winners/.test(document.querySelector('[data-tm86-prizes]')?.textContent || ''), null, { timeout: 8000 });
       assert(flat(await page.locator('[data-tm86-money]').textContent()) === 'Money+$14 if all pay', 'button after prizes');
       const t = (await b.call('GET', '/api/admin/dashboard')).tournament;
       assert(t.championCreditCents === 1400 && t.ticketCents === 1800 && t.format === 'doubles', 'saved as set');
@@ -228,12 +230,15 @@ const cutOrBroken = (page, sel) =>
       assert(!/waitlist/i.test(await first.locator('.r86-actions').textContent()), 'no Waitlist on the card');
       const refused = await b.call('POST', `/api/admin/sessions/${id}/court-status`, { status: 'waitlist' }).then(() => 'ok', (e) => String(e));
       assert(/400/.test(refused), `waitlist refused (${refused})`);
-      // The quick court picker: Court 4 opens it; one tap on 7 saves (after the Undo window), Clear clears.
+      // The quick court picker (Zip 87: the venue's court map, as in Add / Edit game): Court 4 opens it; one tap on 7 saves (after the Undo
+      // window), Clear clears.
       await first.locator('.r86-court').click();
       await page.waitForTimeout(500);
-      assert((await page.locator('[data-court-picker] .r86-pick').count()) === 16, '16 courts');
-      assert((await page.locator('[data-court-pick="4"]').getAttribute('aria-pressed')) === 'true', 'court 4 lit');
-      await page.locator('[data-court-pick="7"]').click();
+      assert((await page.locator('[data-court-map="pick"] [data-court-cell]').count()) === 16, '16 courts on the map');
+      assert((await page.locator('[data-court-map="pick"]').textContent()).includes('ENTRANCE'), 'the venue map');
+      assert((await page.locator('[data-court-map="pick"] [data-court-cell="4"]').getAttribute('aria-pressed')) === 'true', 'court 4 lit');
+      assert(flat(await page.locator('[data-court-map="pick"] .cm-title').textContent()).startsWith('Court for '), 'the title');
+      await page.locator('[data-court-map="pick"] [data-court-cell="7"]').click();
       assert(flat(await first.locator('.r86-court').textContent()) === 'Court 7', 'Court 7 at once');
       await page.waitForTimeout(7000);
       s1 = (await b.call('GET', '/api/admin/dashboard')).sessions.find((x) => x.id === id);
@@ -241,7 +246,8 @@ const cutOrBroken = (page, sel) =>
       if (undo) {
         await first.locator('.r86-court').click();
         await page.waitForTimeout(500);
-        await page.locator('[data-court-pick-clear]').click();
+        assert(flat(await page.locator('[data-court-map="pick"] [data-court-clear]').textContent()) === 'Clear', 'Clear');
+        await page.locator('[data-court-map="pick"] [data-court-clear]').click();
         assert(flat(await first.locator('.r86-court').textContent()) === 'Court ?', 'Court ? at once');
         await page.locator('.toast-action').click();
         await page.waitForTimeout(6500);
@@ -300,7 +306,7 @@ const cutOrBroken = (page, sel) =>
       const { page, ctx } = await b.adminHome({ width: 390 });
       const row = page.locator('[data-tour-row="admin"]');
       assert((await row.count()) === 1, 'one row');
-      assert(flat(await row.textContent()) === 'TUE1DECTournamentThe Cold Open7:30 to 10 PM · 6 of 8 locked in', flat(await row.textContent()));
+      assert(flat(await row.textContent()) === 'TUE1DECTournamentThe Cold Open7:30 to 10 PM · 6 of 10 locked in', flat(await row.textContent()));
       assert((await row.locator('button').count()) === 0, 'no button');
       await ctx.close();
     });

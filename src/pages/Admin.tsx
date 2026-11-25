@@ -39,6 +39,7 @@ import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeC
 import { VenueAlertCards } from './admin/VenueAlert';
 import { VenueConflictCards } from './admin/VenueHours';
 import { TournamentHomeCard } from './admin/Tournament';
+import { ticketCount, ticketWords } from '../../shared/tournamentCard';
 import { preloadTournamentHome } from '../TournamentSlot';
 
 /** Zip 55, PREVIEW BUILDS ONLY: the Tournament test row on a calm preview's Home. Null in every live build (vite.config.ts `__PREVIEW_BUILD__`). */
@@ -799,7 +800,8 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
       <TourWeekRow
         day={tour.finalDate!}
         name={tour.name}
-        sub={`${planRange(tour.start, tour.minutes)} · ${tour.lockedIn ?? 0} of ${tour.spots ?? tour.size} locked in`}
+        // Zip 87: of everyone who can make the date (the organizer too), the balls players see.
+        sub={`${planRange(tour.start, tour.minutes)} · ${ticketWords(ticketCount(tour))}`}
         data="admin"
       />
     ) : null;

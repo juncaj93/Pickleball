@@ -250,42 +250,6 @@
   }
 }
 
-/* The quick court picker (round 2): the venue's courts 1 to 16 as big buttons, four to a row, and Clear. */
-.r86-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.r86-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-.r86-pick {
-  min-height: 56px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-2);
-  color: var(--ink);
-  font: inherit;
-  font-size: 1.25rem;
-  font-weight: 800;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.r86-pick:active {
-  background: var(--fill-press);
-}
-.r86-pick:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-}
-.r86-pick[aria-pressed='true'] {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-ink);
-}
-
 /* The TONIGHT and TOMORROW tile (picture 8): a smaller word, so the tile keeps the normal tile width at every text size. */
 :root[data-tonight-glow] .scard86 .tile .day-tag {
   font-size: 11px;

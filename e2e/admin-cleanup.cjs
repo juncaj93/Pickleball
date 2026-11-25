@@ -318,14 +318,16 @@ async function main() {
   }
 
   // ---------- the gear pop-up ----------
-  await check('the gear opens a small pop-up next to it with the five rows in order; Cancel is red, last and apart', async () => {
+  await check('the gear opens a small pop-up next to it with its rows in order (Zip 87: Text the group, Edit game, Cancel game); Cancel is red, last and apart', async () => {
     const { ctx, page } = await openAdmin();
     const c = card(page, roles.paid);
     await c.getByRole('button', { name: /^Game menu for/ }).click();
     const menu = page.getByRole('menu');
     await menu.waitFor();
     const rows = (await menu.getByRole('menuitem').allInnerTexts()).map((t) => t.trim());
-    assert(JSON.stringify(rows) === JSON.stringify(['Text the group', 'Edit game', 'Players', 'Add to calendar', 'Cancel game']), `rows: ${rows}`);
+    // Zip 87 (Alex): no Players row (the paid pill opens it) and no Add to calendar; Text the players only with Late fees on.
+    const want = rows.includes('Text the players') ? ['Text the group', 'Text the players', 'Edit game', 'Cancel game'] : ['Text the group', 'Edit game', 'Cancel game'];
+    assert(JSON.stringify(rows) === JSON.stringify(want), `rows: ${rows}`);
     const gear = await c.getByRole('button', { name: /^Game menu for/ }).boundingBox();
     const box = await menu.boundingBox();
     assert(Math.abs(box.x + box.width - (gear.x + gear.width)) < 16, `not anchored to the gear (menu right ${box.x + box.width}, gear right ${gear.x + gear.width})`);
@@ -365,17 +367,18 @@ async function main() {
     await ctx.close();
   });
 
-  await check('Players opens the same players screen the pill opens; Edit game opens the one sheet', async () => {
+  await check('the paid pill opens the players screen (Zip 87: the menu has no Players row); Edit game opens the one sheet', async () => {
     const { ctx, page } = await openAdmin();
     const c = card(page, roles.paid);
     await c.getByRole('button', { name: /^Game menu for/ }).click();
-    await page.getByRole('menuitem', { name: 'Players' }).click();
-    const title1 = await page.locator('dialog[open] h2').innerText();
-    assert(/^Players/.test(title1), `title ${title1}`);
-    await page.locator('dialog[open]').getByRole('button', { name: 'Close' }).click();
+    assert((await page.getByRole('menuitem', { name: 'Players' }).count()) === 0, 'no Players row in the menu');
+    await page.getByRole('menuitem', { name: 'Edit game' }).click();
+    assert((await page.locator('dialog[open]').count()) >= 1, 'Edit game opens its sheet');
+    await page.keyboard.press('Escape');
+    await page.locator('dialog[open]').waitFor({ state: 'detached' });
     await c.getByRole('button', { name: /of 3 paid/ }).click();
-    const title2 = await page.locator('dialog[open] h2').innerText();
-    assert(title2 === title1, `pill opened "${title2}", menu opened "${title1}"`);
+    const title = await page.locator('dialog[open] h2').innerText();
+    assert(/^Players/.test(title), `the pill opened "${title}"`);
     await ctx.close();
   });
 
@@ -449,17 +452,19 @@ async function main() {
         seen.add(r.place);
         const w = `card ${i + 1}/${n} (${r.place})`;
         const names = r.rows.map((x) => x.text);
-        assert(['Text the group', 'Edit game', 'Players', 'Cancel game'].every((t) => names.includes(t)), `${w}: rows ${names}`);
+        // Zip 87: no Players row (the paid pill opens it).
+        assert(['Text the group', 'Edit game', 'Cancel game'].every((t) => names.includes(t)) && !names.includes('Players'), `${w}: rows ${names}`);
         assert(names[names.length - 1] === 'Cancel game', `${w}: Cancel session should be last`);
         for (const row of r.rows) {
           assert(row.top >= 0 && row.bottom <= r.barTop + 0.5 && row.bottom <= r.vh && row.left >= 0 && row.right <= r.vw, `${w}: "${row.text}" is off screen or behind the tab bar (top ${Math.round(row.top)}, bottom ${Math.round(row.bottom)}, tab bar at ${Math.round(r.barTop)})`);
           assert(row.tappable, `${w}: "${row.text}" is covered by something else`);
         }
         assert(r.popBottom <= r.barTop + 0.5, `${w}: pop-up runs behind the tab bar`);
-        // Players really opens from here, then the menu works again.
-        await page.getByRole('menuitem', { name: 'Players' }).click();
-        assert(/^Players/.test(await page.locator('dialog[open] h2').innerText()), `${w}: Players did not open`);
-        await page.locator('dialog[open]').getByRole('button', { name: 'Close' }).click();
+        // Edit game really opens from here, then the menu works again (Zip 87: Players left the menu).
+        await page.getByRole('menuitem', { name: 'Edit game' }).click();
+        await page.locator('dialog[open]').waitFor();
+        await page.keyboard.press('Escape');
+        await page.locator('dialog[open]').waitFor({ state: 'detached' });
         // Close paths and scrolling still work.
         await gear.click();
         await page.getByRole('menu').waitFor();
@@ -487,7 +492,7 @@ async function main() {
     });
   }
 
-  await check('390px: opening the gear menu (and Edit game, Players, Cancel) never moves the page, at several scroll positions, on the first, a middle and the last card', async () => {
+  await check('390px: opening the gear menu (and Edit game, Cancel) never moves the page, at several scroll positions, on the first, a middle and the last card', async () => {
     const ctx = await browser.newContext({ ...phone(390, 'light'), viewport: { width: 390, height: 700 } });
     await post(ctx.request, '/api/admin/login', { pin: PIN });
     const page = await ctx.newPage();
@@ -535,7 +540,7 @@ async function main() {
         await page.getByRole('menu').waitFor({ state: 'detached' });
         assert((await y()) === before, `card ${i + 1}: closing the menu moved the page`);
         // The other pop-ups opened from the menu.
-        for (const row of ['Edit game', 'Players', 'Cancel game']) {
+        for (const row of ['Edit game', 'Cancel game']) {
           await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
           await page.getByRole('menu').waitFor();
           await page.getByRole('menuitem', { name: row }).click();

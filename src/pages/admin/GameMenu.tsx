@@ -7,7 +7,7 @@ import { smsHref } from '../../../shared/messages';
 import { formatShortDate } from '../../../shared/time';
 import { holdLive } from '../../busy';
 import { api, ApiError, isIOS } from '../../lib';
-import { CalendarPlusIcon, GearIcon, MessageIcon, useToast } from '../../ui';
+import { GearIcon, MessageIcon, useToast } from '../../ui';
 import { canMove } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { sessionTexts } from './textMenu';
@@ -17,12 +17,12 @@ import { canHide } from './moneyRework';
 
 /**
  * The gear's small pop-up, anchored next to the gear (not a full sheet):
- * Text the group, Edit game, Players, Add to calendar, then Cancel session
- * in red on its own at the bottom. Tap outside or Escape closes it; the
+ * Text the group, Text the players, Edit game, then Cancel game in red on its own at the bottom (Zip 87, Alex: no Players, no Add to
+ * calendar; a canceled game's own rows, its Players (no paid pill on a canceled card) and Hide from list still show where they apply). Tap outside or Escape closes it; the
  * arrow keys move between rows; focus goes back to the gear on close. While
  * it is open, live refreshes wait so it never closes under a finger.
  */
-export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessionView; canCalendar: boolean }) {
+export function GameMenu({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const [open, setOpen] = useState(false);
   const [texts, setTexts] = useState(false);
@@ -227,15 +227,13 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               Edit game
             </button>
           )}
-          <button role="menuitem" className="menu-row" onClick={pick(() => ctx.open('roster', s.id))}>
-            <PeopleSmallIcon />
-            Players
-          </button>
-          {canCalendar && (
-            <a role="menuitem" className="menu-row" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${day} to calendar`} onClick={() => close(false)}>
-              <CalendarPlusIcon />
-              Add to calendar
-            </a>
+          {/* Zip 87 (Alex): no Players row (the paid pill opens it) and no Add to calendar. Review fix: a canceled game has no paid pill, so
+              its Players list (view only, late fees) stays reachable here. */}
+          {canceled && (
+            <button role="menuitem" className="menu-row" data-menu-players onClick={pick(() => ctx.open('roster', s.id))}>
+              <PeopleSmallIcon />
+              Players
+            </button>
           )}
           {ctx.d.adminR2 === true && s.holiday && s.holidayHoursOk && (
             <button role="menuitem" className="menu-row" data-holiday-undo onClick={pick(() => void undoHours())}>

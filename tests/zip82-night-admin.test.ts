@@ -285,7 +285,7 @@ describe('zip 82: suggested prizes and the price check (Alex’s rules)', () => 
   });
 });
 
-describe('zip 83: Locked doubles has NO 2nd place, ever (Alex; Zip 82’s runner-up credit is gone), to the cent', () => {
+describe('zip 83, as read by Zip 87: a Locked doubles row with no saved prize boxes never pays its 2nd place amount; to the cent', () => {
   it('even with $7 saved for 2nd: no 2nd place on the End card, only the winners get credit (once), no 2nd place row or card; the books read zero', async () => {
     const ctx = await doublesDone(8);
     expect(raw(ctx).prepare('SELECT second_credit_cents AS c FROM tournaments WHERE id = ?').get(ctx.tid)).toEqual({ c: 700 });
@@ -307,11 +307,12 @@ describe('zip 83: Locked doubles has NO 2nd place, ever (Alex; Zip 82’s runner
     books(ctx);
   });
 
-  it('Edit awards: a 2nd place pick or amount sent for Locked doubles is ignored; moving 1st keeps the Final’s winner right below it', async () => {
+  it('Edit awards: moving 1st keeps the Final’s winner right below it (Zip 87: a 2nd place amount sent for Locked doubles is now paid to that team; see tests/zip87-card-polish.test.ts)', async () => {
     const ctx = await doublesDone(8);
     const end = (await adminTour(ctx)).end;
     const other = end.choices.find((c: any) => c.key !== end.first.key);
-    expect((await awards(ctx, { action: 'save', first: other.key, second: end.first.key, championCents: 1400, secondCents: 900, weeks: 1 })).status).toBe(200);
+    // Zip 87 (Alex, reversing Zip 83): Locked doubles may pay a 2nd place team again. At $0 there is none.
+    expect((await awards(ctx, { action: 'save', first: other.key, championCents: 1400, secondCents: 0, weeks: 1 })).status).toBe(200);
     const end2 = (await adminTour(ctx)).end;
     expect(end2.second).toBeNull();
     expect(end2.secondCents).toBe(0);

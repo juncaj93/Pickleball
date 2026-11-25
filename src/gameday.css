@@ -428,6 +428,15 @@ button.cm-cl:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* Zip 87: the Home card's quick picker names the game over the map ("Court for Tue, Dec 8"). */
+.cm-title {
+  margin: 6px 40px 4px;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--ink);
+}
 .cm-clear {
   position: relative;
   margin-top: 8px;

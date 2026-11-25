@@ -8344,6 +8344,117 @@ with no stripe, Court 4 opens the picker; Not booked / Out card tomorrow).
 - Rollback: deployment **c206d3f6-ba2f-4192-b1f0-1faa60ab7300** (🎾86 round 1), Cloudflare Deployments > Rollback. No database undo needed.
 - Read-only live look (GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light and dark: the new bundle, no
   page errors, nothing wider than the screen.
+## Zip 87: tournament card polish, button colors over time, Prizes for both styles, "6 of 10" (🎾87.card polish), Tue Nov 24, 2026
+
+Built on main `6cc0561` (🎾86 live, deployment c206d3f6). Branch `claude/new-session-9215zh`. No migration, no Worker deploy, no new switch (rides
+the Tournaments switch, on live). Deploy windows waived by Alex until Dec 1, never during a game.
+
+### What it does (pictures 1 to 9)
+1. The organizer's tournament card before the night (src/pages/admin/Tournament.tsx HomeCard, src/pages/admin/tournament-card87.css): the 4
+   steps as underlined words flush under the head (✓ on done steps; none at 320, where it would break "Payments"); the date row: the game cards'
+   DateTile (TONIGHT / TOMORROW with TONIGHT_GLOW), "7:30 to 10 PM" bold, "2 courts · Locked doubles · $18" gray, a round 44 px gear (Change).
+   No Change button, no Cancel or reschedule link. No flex gap: 12 px around the date row, a line, 12 px, the buttons, 12 px. Game night is the
+   step from the tournament's day on (shared/tournamentCard.ts stepOf(t, gameDay)); the card keeps its date row and buttons until the night
+   starts, then the night body as before (🎾88's).
+2. Change sheet: a line under Courts cost, "Plans changed?" Reschedule / Cancel (the Date box's style), each "Are you sure?" (today's words)
+   then today's reschedule / cancel call. One screen on an iPhone Air (420 x 912).
+3. Buttons over time (shared/tournamentCard.ts cardButtons; the tones in tournament-card87.css from the tokens): Tickets soft green / solid
+   "All 10"; Remind plain amber words, amber tint on the Pay by day ("2 left · due 7 PM"), red tint past Pay by ("1 past due", Messages as
+   before), quiet "Everyone paid"; on game day Teams (amber "Draft before 7:30" until published, soft green "5 teams set"; scrolls to the draft
+   card) or Rounds (Americano, Alex round 2: always soft green "6 rounds ready", the real count; no draft, nothing to do); Prizes plain / amber on game day / soft green once saved; Money plain, the line green or red ("−$6"),
+   "You keep +$14" on game day once prizes are set (picture 7 keeps "+$42 if all pay" while they are not). Status lines never bold. The status
+   line "pay by today 7 PM", "Pay by passed", "all paid", "Game night · 7:30 PM"; the pill counts the unpaid also past Pay by (dueOf).
+4. "6 of 10" (ticketCount): locked in of everyone who can make the date (the organizer too), not on standby: the balls players see. Used by the
+   Tickets button, the Tickets page chip, the Settings row, the admin week row and the night's Locked in row. Players unchanged.
+5. Prizes for both styles (src/pages/admin/PrizeBoxes.tsx, shared/tournamentPrizes.ts): the money left (expected tickets before the night, paid
+   tickets on it), Suggested for both styles + Use these (shared/tournamentMoney.ts suggestedBoxes: Locked doubles 1st only, 2nd $0; Americano
+   the 🎾82 tiers), the planned box on top ("Plan now", "Tonight" on the night), "If Americano" / "If Locked doubles", Costs and You keep. Saved
+   by the Edit save (PUT /api/admin/tournament/:id `prizes`) before the night and by Edit awards on the night (the same boxes, plus the picks and
+   the banner; a "2nd place team" pick for Locked doubles while its credit is above $0). Stored in tournaments.award_pick ({"prizes": ...});
+   the columns keep the planned box (older code reads them). A row with no saved boxes reads exactly as before. The money line (planMoney
+   `prizes`) prices the style's own box everywhere (card, Time, Plan, Finalize, Totals). The old note "Medal and banner are automatic..." is gone
+   from the sheet.
+6. Locked doubles 2nd place paid again (server/tournamentEnd.ts endPlan, Zip 82's logic back): the Final's runner-up or the team picked, each
+   player once ('second' award, the unique index), never at $0, the organizer no credit; the End card's "2nd place" and "Credit for each" rows;
+   History > Tournaments names the team. End's guard now checks the columns and award_pick as read.
+Stages (THIS_ZIP): zip87_early, zip87_payday, zip87_past (8 of 10, 2 past due: 9 would switch to Americano by the odd-count rule), zip87_paid,
+zip87_gameday, zip87_allset, zip87_prizes (server/tournamentTest.ts zip87Stage on Zip 86's payments card).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) the Edit page kept the saved style's amounts when the style was switched in the form (it showed one box and saved the other): the
+amounts now follow the style picked, and "untouched" is checked against that style's box; (2) Edit awards' Locked doubles 2nd place defaulted to
+the lowest seat, not the Final's runner-up: now the team right below the winners in the standings; (3) the tournament page's prize rows read the
+old columns (after an odd switch the doubles amounts showed under Americano): they read the boxes; (4) "Payments · all paid" with every spot
+taken: now "every spot taken"; (5) a row with no Pay by could send Remind a missing date: dueOf needs a Pay by (Remind says "No pay by set");
+(6) the night's Prizes sheet from the card counted tickets differently from Edit awards: it uses End's money once the End card exists. Checked
+fine: End's guard (seen + columns + award_pick), doubles 2nd place once per player and never at $0, legacy rows unchanged, no new trip. Kept
+as notes: the reminder text after Pay by still says "pay today/tonight"; the Prizes PUT and the awards save are last-save-wins (End's guard
+catches a change); an Auto / vote Edit that changes 1st place sets both styles' 1st place (as the form shows one box).
+Rollback note: older code reads only the columns, which hold the PLANNED box; after an odd switch to Americano older code would pay the Locked
+doubles amounts. Only a concern if rolled back between a saved Prizes sheet and End.
+
+### Admin speed (ADMIN SPEED RULE; scripts/zip82-speed.ts, the calm world)
+Dashboard 4 trips / 63 statements before and after (none, all_locked, mid, am_round3, zip87_early, zip87_allset; +99 bytes: the prize boxes);
+the 5 second check 2 trips / 16 statements, unchanged. award_pick was already in the row (SELECT *); no new read.
+
+### Tests
+Unit: 237 files, 4,392 passed, 2 skipped, 0 failed (new tests/zip87-card-polish.test.ts, 11: the boxes (pure), Locked doubles 2nd place paid
+once per player and never at $0 with all three integrity files 0, Edit awards moving 2nd place, both boxes saved and an odd count paying the
+Americano box to the cent, "6 of 10", the buttons over time, game day, the look). Updated on purpose: tests/zip82-night-admin.test.ts's Zip 83
+case (Alex reversed "no 2nd place in Locked doubles"). Browser: e2e/zip87.cjs 6 of 6 (A every state at 320/390/420 light and dark, B the 12 px
+gaps, C 125% / 150% text and the Christmas skin, D the Change sheet on an iPhone Air with Are you sure?, E Prizes Use these and Save, F Teams
+opens the draft). Older browser scripts that read the 🎾86 card's Change button, "of 8" or the step dots check screens that changed by design.
+
+### Preview
+`pickleball-preview` (fake): bookmark `000001d8-00000000-0000512d-447de571fd40286de896630b63af5928` before the re-seed; re-seeded;
+https://claude-new-session-9215zh.pickleball-club-9h0.pages.dev (deployment c13d6be0). Calm start: "Card: early payments" (organizer Home:
+the card, its week row "6 of 10 locked in", two slim games).
+
+### Round 2 (Alex, after the preview), and two adds after 🎾86 round 2 went live
+- Americano on game day: Rounds, soft green "6 rounds ready" (the real count), never amber. Locked doubles keeps Teams.
+- The gear is every setting in one sheet (SettingsSheet; one Save, only what changed, today's calls). Tickets renamed Players; its sheet holds the
+  tickets, Levels with the pencils and Projected teams only (PlayersSheet). Pick the date is its own sheet (DatesSheet). The Edit page and the
+  tournament page are gone with their entry points (the Edit button, the tournament page's Plan, Settings, Pick the date, Cancel or reschedule).
+  Create has no prize boxes (creditCents 0; prizes only in Prizes). The night card's "You make if it fills" row is gone (only in Money). The gear
+  is src/ui.tsx GearIcon in a 44 px --fill circle (centered within 0.5 px, light and dark).
+- Court picker (Alex, after 🎾86 round 2): the Home card's court button opens src/GameDay.tsx CourtMap in picker mode (the venue map with ENTRANCE,
+  a title "Court for Thu, Nov 19", the current court lit green, Clear); a tap saves with 🎾86's save and Undo, unchanged. The 4 x 4 grid and its
+  CSS are gone.
+- Game menu (src/pages/admin/GameMenu.tsx): Text the group, Text the players, Edit game, Cancel game (red, last). No Players, no Add to calendar
+  (the players' Add to calendar and the .ics route are unchanged). The rows that apply only to a canceled game, Hide from list and a holiday's
+  Undo hours confirmed stay where they apply.
+- Merged 🎾86 round 2 (main `ba76d4a`, live deployment 25c9ec98) into the branch; one notes conflict (both kept).
+- Round 2 review (a fresh reviewer): fixed (1) one Save moving the start and Pay by earlier together always failed (time sent first): a Pay by
+  moved earlier now goes first (browser check G2); (2) a later call failing left the earlier ones saved without saying so: the toast names what
+  saved and what did not, the screen reads the server again, and the venue card still follows a saved time; (3) a venue-hours problem blocked
+  every setting: it blocks only a time change; (4) a canceled game lost its only way to its Players (the card has no pill): the menu keeps
+  Players on a canceled game. Notes kept: the gear sheet scrolls on a phone (every setting); at 320 px "Players you expect" and "7 to 7:30 PM,
+  by players" wrap between words (nothing cut); the Auto choice no longer shows "The vote's winner" under it.
+- Older browser scripts (Alex: fix what 🎾87 broke, leave what already fails on live). Each was run on 🎾86 round 2 as live (`07e0378`,
+  the same code as deployment 25c9ec98) and on this branch, and compared check by check. Updated so their failing sets equal live's:
+  zip55 79/12, zip56 43/14, zip58 22/2, zip60 11/18, zip66 67/17, zip71 11/0, zip86 8/0, admin-cleanup 31/4, admin-r2 27/0, zip32 48/2,
+  run 193/36 (passed/failed, every failure also on live). Unchanged and equal to live: zip9 13/2, zip61, zip63 56/8, zip64 55/28, zip70 32/42,
+  zip72 7/1, zip82 4/2, zip84-night 1/4; zip32-off crashes on live too. The checks rewritten follow the moves: the tournament page and the Edit
+  page to the Players sheet, the Dates sheet and the gear's sheet; Create without prize boxes; Edit awards' prize boxes; Players from the paid
+  pill; the organizer's menu without Add to calendar.
+- Final checks before the deploy (after merging 🎾86 round 2; a container restart lost one run, which was run again): unit 237 files, 4,383
+  passed, 2 skipped, 0 failed (🎾86 round 2 folded 9 court-state tests); e2e/zip87.cjs 11 of 11 (A to J and G2); admin speed: dashboard 4
+  trips / 63 statements, the 5 second check 2 / 16, unchanged (none, all_locked, mid, am_round3, zip87_early, zip87_allset; 6.9 to 7.9 ms
+  local). Preview redeployed (6df5f2c9, https://claude-new-session-9215zh.pickleball-club-9h0.pages.dev), calm start "Card: early payments".
+
+### Live (Tue Nov 24, 2026, about 10:15 PM Eastern; after the game, Alex cleared it at 10:09 PM; loud hours overridden as agreed)
+- Restore point first (`npm run backup:before-deploy`, no rate limit): export `export-20261125031033` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00001f56-00000006-0000512e-01b93b8ae9b75eac05a003ef2527fc3e`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `ba76d4a` to `9046c8b`, pushed; `npm run deploy -- --override-loud-hours`: deployment
+  **37dfc0be-0210-47f3-871f-43d1ff85aa98** (bundle `index-DhxshNJa.js`). No migration, no Worker or Error box deploy, no live data touched; The
+  Cold Open's settings unchanged (prize boxes stay unsaved until Alex saves the Prizes sheet; its columns read as before).
+- Rollback: deployment **25c9ec98-959c-4adb-8865-a094301e9547** (🎾86 round 2), Cloudflare Deployments > Rollback. No database undo needed
+  (older code reads only the columns; a Prizes sheet saved after this deploy keeps the planned box in the columns).
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home and /admin
+  at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN
+  in this session). 🎾88 told it can deploy next.
+
 
 ## 🎾88.rolling courts (Tue Nov 24, 2026; built, preview up, NOT live yet: ships after 🎾86 round 2 and 🎾87 are live)
 

@@ -274,8 +274,10 @@ async function main() {
         assert((await row.count()) === 1, `${width} ${scheme}: the row`);
         assert(flat(await row.innerText()) === 'Projected teams 4', `${width} ${scheme}: ${await row.innerText()}`);
         assert((await p.page.locator('[data-tm-projected-team]').count()) === 0, 'folded at first');
-        // The last row of the Levels card.
-        assert(await p.page.locator('[data-tm-card="levels"] [data-tm-projected]').count(), 'inside Levels');
+        // Zip 87: Projected teams is its own card in the Players sheet, right under Levels (no longer a row inside the Levels card).
+        assert(await p.page.locator('[data-tm-card="projected"] [data-tm-projected]').count(), 'in its own card');
+        const after = await p.page.locator('[data-tm-card="levels"]').evaluate((el) => el.nextElementSibling && el.nextElementSibling.getAttribute('data-tm-card'));
+        assert(after === 'projected', `right under Levels, got ${after}`);
         await row.click();
         assert(JSON.stringify(await rows(p.page)) === JSON.stringify(PICTURE), `${width} ${scheme}: ${JSON.stringify(await rows(p.page))}`);
         await p.page.locator('[data-tm-projected]').scrollIntoViewIfNeeded();

@@ -208,6 +208,22 @@ async function main() {
   }
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
   const sheetOpen = (page) => page.locator('dialog[open]').last();
+  /** Zip 87 ("6 of 10"): the Home line counts against everyone on the list who can make the date (shared/tournamentCard.ts ticketCount). */
+  const countOf = (t) => {
+    const tickets = (t.tickets || []).filter((k) => !k.out);
+    const gold = new Set(tickets.filter((k) => k.place === 'spot' || (k.place !== 'line' && k.claimCents > 0 && k.creditCents + k.paidCents + k.claimCents >= k.priceCents)).map((k) => k.playerId));
+    const line = new Set(tickets.filter((k) => k.place === 'line').map((k) => k.playerId));
+    const going = t.finalDate ? t.signups.filter((s) => s.dates.includes(t.finalDate)) : t.signups;
+    const locked = t.lockedIn ?? gold.size;
+    return `${locked}/${Math.max(locked, gold.size + going.filter((s) => !gold.has(s.playerId) && !line.has(s.playerId)).length)}`;
+  };
+  /** Zip 87 round 2: the card's gear opens the one settings sheet (Date ... Plans changed? Reschedule, Cancel ... Save). */
+  async function openGear(page) {
+    await page.waitForTimeout(600); // the site's double-tap guard drops a tap right after the last one
+    await page.locator('[data-tm86-change]').first().click();
+    await page.locator('dialog[open] [data-tm86-change-sheet]').waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+  }
 
   let d = await dash();
 
@@ -247,7 +263,7 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- B  picking the date opens tickets
-  await check('B picking the date opens tickets at once: the date sheet says so, Pay by Wed 7:00 PM, the Home line says Tickets: 0 of 6 locked in', async () => {
+  await check('B picking the date opens tickets at once: the date sheet says so, Pay by Wed 7:00 PM, the Home line says Tickets: 0 of 6 locked in (Zip 87: 0 of everyone who can make it)', async () => {
     await stage('signup');
     const a = await adminPage();
     await a.page.locator('[data-tm-open-dates]').click();
@@ -263,7 +279,8 @@ async function main() {
     assert(d.tournament.status === 'tickets' && d.tournament.finalDate === '2026-12-17' && d.tournament.payBy === '2026-12-17T00:00:00.000Z', JSON.stringify({ s: d.tournament.status, p: d.tournament.payBy }));
     const h = await adminPage();
     await h.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
-    assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === `0/${d.tournament.size}`, 'the Home line');
+    // Zip 87: "0 of 10" counts everyone who can make the date, not the plan's size.
+    assert((await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === countOf(d.tournament) && countOf(d.tournament).startsWith('0/'), `the Home line: ${await h.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')} (${countOf(d.tournament)})`);
     // Zip 66b: the tickets card is folded into the tournament card: its pill says who has not paid, and the Not paid yet row counts them.
     assert(/^\d+ unpaid$/.test(flat(await h.page.locator('[data-tm-stage]').innerText())) && (await h.page.locator('[data-tm-row-unpaid]').count()) === 1, 'unpaid pill and row');
     await shot(h.page, 'B-admin-tickets-open');
@@ -300,14 +317,17 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- D  Alex answers
-  await check('D Alex taps Paid on Home: Parker is locked in ("You\'re in · 2 hours · You\'re locked in")', async () => {
+  await check('D Alex taps Paid on Home: Parker is locked in ("You\'re in · 2 hours · You\'re locked in") (Zip 87: 1 of everyone who can make it)', async () => {
     const a = await adminPage();
     const claim = a.page.locator('[data-ticket-claim="Parker"]');
     await claim.waitFor({ timeout: 15000 });
     assert(flat(await claim.innerText()).includes('Parker tapped I paid ($16), not confirmed.'), flat(await claim.innerText()));
     await claim.locator('[data-claim-paid]').click();
     await claim.waitFor({ state: 'detached', timeout: 10000 });
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === `1/${(await dash()).tournament.size}`, 'the Home line');
+    // Zip 87: "1 of 10" counts everyone who can make the date, not the plan's size.
+    const want = countOf((await dash()).tournament);
+    await a.page.locator(`[data-tickets-card="${want}"]`).waitFor({ timeout: 10000 });
+    assert(want.startsWith('1/'), `the Home line: ${want}`);
     await a.ctx.close();
     const p = await playerPage('Parker');
     const words = flat(await p.page.locator('.tc').first().innerText());
@@ -389,14 +409,19 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- G  cancel or reschedule
-  await check('G Cancel or reschedule (picture 30): Reschedule asks, then players see "Rescheduled. Pick your dates again."', async () => {
+  await check('G Cancel or reschedule (picture 30): Reschedule asks, then players see "Rescheduled. Pick your dates again." (Zip 87: the gear\'s Plans changed?)', async () => {
     await stage('tickets_open');
     const a = await adminPage();
-    await a.page.locator('[data-tm-cancel-or-reschedule]').click();
-    await a.page.locator('[data-tm-reschedule]').waitFor({ timeout: 10000 });
-    const sheet = flat(await sheetOpen(a.page).innerText());
-    assert(sheet.includes('Reschedule') && sheet.includes('Cancel tournament'), sheet);
-    await a.page.locator('[data-tm-reschedule]').click();
+    // Zip 87 round 2: no Cancel or reschedule link or sheet (picture 30): the gear's "Plans changed?" has Reschedule and Cancel.
+    await openGear(a.page);
+    const plans = a.page.locator('dialog[open] [data-tm87-plans]');
+    await plans.scrollIntoViewIfNeeded();
+    const pw = flat(await plans.innerText());
+    assert(pw.includes('Plans changed?') && pw.includes('Reschedule') && pw.includes('Cancel') && (await plans.locator('[data-tm-cancel-tournament]').count()) === 1, pw);
+    await plans.locator('[data-tm-reschedule]').click();
+    await a.page.locator('dialog[open] [data-confirm-go]').waitFor({ timeout: 10000 });
+    const ask = flat(await sheetOpen(a.page).innerText());
+    assert(ask.includes('Are you sure?') && ask.includes('Keep it') && ask.includes('Reschedule'), ask);
     await a.page.locator('dialog[open] [data-confirm-go]').click();
     await a.page.waitForTimeout(800);
     await a.ctx.close();
@@ -409,12 +434,17 @@ async function main() {
     await shot(p.page, 'G-rescheduled');
     await p.ctx.close();
   });
-  await check('G Cancel tournament asks, then every paid ticket is credit and players on the list see the plain Canceled card', async () => {
+  await check('G Cancel tournament asks, then every paid ticket is credit and players on the list see the plain Canceled card (Zip 87: from the gear)', async () => {
     await stage('tickets_open');
     const before = (await answerOf('Parker')).data.credit.balanceCents;
     const a = await adminPage();
-    await a.page.locator('[data-tm-cancel-or-reschedule]').click();
-    await a.page.locator('[data-tm-cancel-tournament]').click();
+    // Zip 87 round 2: the gear's "Plans changed?" Cancel, then "Are you sure?" (Keep it / Cancel tournament).
+    await openGear(a.page);
+    await a.page.locator('dialog[open] [data-tm-cancel-tournament]').scrollIntoViewIfNeeded();
+    await a.page.locator('dialog[open] [data-tm-cancel-tournament]').click();
+    await a.page.locator('dialog[open] [data-confirm-go]').waitFor({ timeout: 10000 });
+    const ask = flat(await sheetOpen(a.page).innerText());
+    assert(ask.includes('Are you sure?') && ask.includes('Keep it') && ask.includes('Cancel tournament') && ask.includes('back as credit'), ask);
     await a.page.locator('dialog[open] [data-confirm-go]').click();
     await a.page.locator('[data-tm-canceled-note]').waitFor({ timeout: 15000 });
     assert(flat(await a.page.locator('[data-tm-canceled-note]').innerText()) === 'Every paid ticket came back as credit.', 'the organizer note');
@@ -432,14 +462,16 @@ async function main() {
 
   // ---------------------------------------------------------------- H  evens
   // Zip 64 (the style rules): an odd number after Pay by plays Americano by itself, so the evens warning gave way to the switched card.
-  await check('H 7 locked in after Pay by: Americano by itself (the switched card), no evens warning, and nobody is taken off', async () => {
+  await check('H 7 locked in after Pay by: Americano by itself (the switched card), no evens warning, and nobody is taken off (Zip 87: 7 of everyone who can make it)', async () => {
     await stage('odd');
     const a = await adminPage();
     const warn = a.page.locator('[data-tm-odd-switch]');
     await warn.waitFor({ timeout: 15000 });
     assert(/switched to Americano \(odd number of players\)/.test(flat(await warn.innerText())), flat(await warn.innerText()));
     assert((await a.page.locator('[data-tm-evens]').count()) === 0, 'no evens warning');
-    assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '7/10', 'the Home line (7 locked in: 10 planned)');
+    // Zip 87: "7 of N" counts everyone who can make the date (not the 10 planned).
+    const want = countOf((await dash()).tournament);
+    assert(want.startsWith('7/') && (await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === want, `the Home line (7 locked in): ${await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')} (${want})`);
     await shot(a.page, 'H-odd');
     await a.ctx.close();
     d = await dash();
@@ -508,8 +540,9 @@ async function main() {
       });
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`I organizer: Home's ticket card and line, the Tickets page, the plan and picture 30 fit (${width} ${scheme})`, async () => {
+      await check(`I organizer: Home's ticket card and line, the Tickets page, the plan and picture 30 fit (${width} ${scheme}) (Zip 87: Players sheet; the plan and Plans changed? on the gear)`, async () => {
         await stage('all_locked');
+        const want = countOf((await dash()).tournament).split('/');
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tickets-card]').waitFor({ timeout: 15000 });
         await fits(a.page, 'main');
@@ -520,19 +553,31 @@ async function main() {
         await a.page.waitForTimeout(300);
         await fits(a.page, 'dialog[open]');
         const list = flat(await a.page.locator('dialog[open] [data-tm-card="tickets"]').innerText());
-        assert(list.includes('Christopher Vanderberg') && /10 of 12 locked in/i.test(list), list);
+        // Zip 87: "10 of 12" became "N of everyone who can make the date" ("All N locked in" once they all are).
+        const words = want[0] === want[1] ? `All ${want[1]} locked in` : `${want[0]} of ${want[1]} locked in`;
+        assert(list.includes('Christopher Vanderberg') && list.toLowerCase().includes(words.toLowerCase()), `${list} (${words})`);
         await oneLineRows(a.page, 'dialog[open] [data-tm-ticket-row]');
-        await a.page.locator('dialog[open] [data-tm-card="plan"]').scrollIntoViewIfNeeded();
-        await oneLineRows(a.page, 'dialog[open] [data-tm-card="plan"] .tm-row');
-        await shot(a.page, `I-admin-plan-${width}-${scheme}`);
         await shot(a.page, `I-admin-tickets-${width}-${scheme}`);
         await a.page.keyboard.press('Escape');
-        await a.page.waitForTimeout(300);
-        await a.page.locator('[data-tm-cancel-or-reschedule]').first().click();
-        await a.page.locator('dialog[open] [data-tm-cor]').waitFor({ timeout: 10000 });
+        await a.page.locator('[data-tm-page="players"]').waitFor({ state: 'detached', timeout: 10000 });
+        // Zip 87 round 2: no Plan card and no picture 30 sheet: the plan (Courts, Players you expect, Courts cost) and "Plans changed?" are on
+        // the gear's one settings sheet.
+        await openGear(a.page);
+        await fits(a.page, 'dialog[open]');
+        // The plan's values each on one line (the label "Players you expect" may wrap at 320; the old Plan card's labels were shorter).
+        await oneLineRows(a.page, 'dialog[open] .tm86-courts, dialog[open] .tm86-stepper, dialog[open] [data-tm86-court-cost]');
+        await shot(a.page, `I-admin-plan-${width}-${scheme}`);
+        await a.page.locator('dialog[open] [data-tm87-plans]').scrollIntoViewIfNeeded();
+        await fits(a.page, 'dialog[open]');
+        await oneLineRows(a.page, 'dialog[open] [data-tm87-plans]');
+        await shot(a.page, `I-admin-30-${width}-${scheme}`);
+        await a.page.locator('dialog[open] [data-tm-reschedule]').click();
+        await a.page.locator('dialog[open] [data-confirm-safe]').waitFor({ timeout: 10000 });
         await a.page.waitForTimeout(300);
         await fits(a.page, 'dialog[open]');
-        await shot(a.page, `I-admin-30-${width}-${scheme}`);
+        await shot(a.page, `I-admin-30-sure-${width}-${scheme}`);
+        await a.page.locator('dialog[open] [data-confirm-safe]').click(); // Keep it
+        await a.page.locator('dialog[open] [data-confirm-safe]').waitFor({ state: 'detached', timeout: 10000 });
         assert(a.errors.length === 0, a.errors.join(' | '));
         await a.ctx.close();
       });
@@ -621,7 +666,7 @@ async function main() {
         });
   for (const scheme of SCHEMES)
     for (const width of [390, 320])
-      await check(`K Create and Edit: no players expected, no court plan; the $ boxes have clear space between them (${width} ${scheme})`, async () => {
+      await check(`K Create and Edit: no players expected, no court plan; the $ boxes have clear space between them (${width} ${scheme}) (Zip 87: the $ boxes are in Prizes)`, async () => {
         await stage('none');
         const a = await adminPage({ width, scheme });
         await a.page.locator('.tabbar button', { hasText: 'Settings' }).click();
@@ -635,15 +680,33 @@ async function main() {
         await a.page.waitForTimeout(600);
         await a.page.locator('[data-format="americano"]').click();
         assert((await a.page.locator('[data-format="americano"]').getAttribute('aria-pressed')) === 'true', 'Americano picked');
-        await a.page.locator('[data-tm-card="prize"]').scrollIntoViewIfNeeded();
-        const gaps = await a.page.evaluate(() => {
-          const boxes = [...document.querySelectorAll('dialog[open] .tm-money')].map((b) => b.getBoundingClientRect()).sort((x, y) => x.top - y.top);
-          return boxes.slice(1).map((b, i) => Math.round(b.top - boxes[i].bottom));
-        });
-        assert(gaps.length >= 2 && gaps.every((g) => g >= 10), `space between the $ boxes: ${gaps}`);
+        // Zip 87 round 2: Create has no prize boxes (its one $ box is the ticket price); the Edit page is gone (its settings are on the gear,
+        // where Players you expect is the money plan on purpose). The prize $ boxes live only in the card's Prizes sheet: measure them there.
+        assert((await a.page.locator('dialog[open] [data-tm-card="prize"], dialog[open] #tm-credit').count()) === 0, 'no prize boxes on Create');
+        await a.page.locator('dialog[open] [data-tm-card="ticket"]').scrollIntoViewIfNeeded();
         await fits(a.page, 'dialog[open]');
         await shot(a.page, `K-create-prizes-${width}-${scheme}`);
         await a.ctx.close();
+        await stage('signup');
+        const b = await adminPage({ width, scheme });
+        await b.page.waitForTimeout(600);
+        if (await b.page.locator('[data-tm86-prizes]').count()) await b.page.locator('[data-tm86-prizes]').first().click();
+        else {
+          await b.page.locator('[data-tm86-money]').first().click();
+          await b.page.locator('dialog[open] [data-tm86-set-prizes]').waitFor({ timeout: 10000 });
+          await b.page.waitForTimeout(600);
+          await b.page.locator('dialog[open] [data-tm86-set-prizes]').click();
+        }
+        await b.page.locator('dialog[open] [data-pz]').waitFor({ timeout: 10000 });
+        await b.page.waitForTimeout(300);
+        const gaps = await b.page.evaluate(() => {
+          const boxes = [...document.querySelectorAll('dialog[open] .pz-money')].map((x) => x.getBoundingClientRect()).sort((x, y) => x.top - y.top);
+          return boxes.slice(1).map((x, i) => Math.round(x.top - boxes[i].bottom));
+        });
+        assert(gaps.length >= 2 && gaps.every((g) => g >= 10), `space between the $ boxes: ${gaps}`);
+        await fits(b.page, 'dialog[open]');
+        await shot(b.page, `K-prizes-boxes-${width}-${scheme}`);
+        await b.ctx.close();
       });
   await check('K the night is over (the answer stood in for): no Cancel or reschedule, no Pay by Change, and Vic\'s ticket has no Mark paid or Take off', async () => {
     await stage('tickets_open');

@@ -60,7 +60,7 @@ async function confirmDrop(p) {
 const tab = (page, name) => page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: new RegExp(`^${name}`) });
 /** Session cards on the organizer Home (attention cards above them are articles too). */
 const sessionCards = (page) => page.locator('section[aria-labelledby="sessions-title"] article');
-/** Open a game card's gear pop-up (Text the group, Edit game, Players, Add to calendar, Cancel session). */
+/** Open a game card's gear pop-up (Zip 87: Text the group, Text the players, Edit game, Cancel game). */
 async function more(card) {
   const gear = card.getByRole('button', { name: /^Game menu for/ });
   // Wait until the card has drawn, then open the pop-up unless it is open.
@@ -1159,9 +1159,8 @@ async function main() {
       const menu = card.page().locator('[role="menu"]');
       await menu.waitFor();
       const rows = (await menu.getByRole('menuitem').allInnerTexts()).map((t) => t.trim());
-      // Once the court is booked, Add to calendar joins the list; Cancel session is always last.
-      const isBooked = (await card.getAttribute('data-court')) === 'booked';
-      const want = isBooked ? ['Text the group', 'Edit game', 'Players', 'Add to calendar', 'Cancel game'] : ['Text the group', 'Edit game', 'Players', 'Cancel game'];
+      // Zip 87 (Alex): Text the group, Text the players (Late fees on), Edit game, Cancel game last; no Players, no Add to calendar.
+      const want = rows.includes('Text the players') ? ['Text the group', 'Text the players', 'Edit game', 'Cancel game'] : ['Text the group', 'Edit game', 'Cancel game'];
       assert(JSON.stringify(rows) === JSON.stringify(want), `menu rows were ${rows}`);
       const textRow = menu.getByRole('menuitem', { name: 'Text the group', exact: true });
       assert((await textRow.locator('svg[data-icon="message"]').count()) === 1, 'Text the group has a message icon');
@@ -2560,7 +2559,7 @@ async function main() {
       await tab(admin, 'Home').click();
     });
 
-    await check('"Add to calendar" shows after "I\'m in" and after "I booked it"; the file is Eastern time, not GMT', async () => {
+    await check('"Add to calendar" shows after "I\'m in" (Zip 87: not in the organizer\'s menu any more); the file is Eastern time, not GMT', async () => {
       const icsOk = async (page, href) => {
         const res = await page.request.get(BASE + href);
         assert(res.headers()['content-type'].includes('text/calendar'), 'not a calendar file');
@@ -2604,12 +2603,11 @@ async function main() {
       await closeOptions(booked);
       assert((await booked.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar icon under the gear');
       assert((await booked.locator('.cal-btn').count()) === 0, 'the floating calendar icon is gone');
+      // Zip 87 (Alex): the organizer's gear menu has no Add to calendar any more (Text the group, Text the players, Edit game, Cancel game).
       await more(booked);
-      const orgCal = booked.page().locator('[role="menu"]').getByRole('menuitem', { name: /to calendar$/ });
-      await orgCal.waitFor();
-      assert((await orgCal.innerText()).trim() === 'Add to calendar', 'says Add to calendar');
-      await icsOk(admin, await orgCal.getAttribute('href'));
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-add-to-calendar.png') });
+      await booked.page().locator('[role="menu"]').waitFor();
+      assert((await booked.page().locator('[role="menu"]').getByRole('menuitem', { name: /to calendar$/ }).count()) === 0, 'no Add to calendar in the organizer menu');
+      await admin.keyboard.press('Escape');
       // Put the court back to "not booked" for the checks after this one.
       const sid = id.replace('session-', '');
       const sess = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.find((x) => x.id === sid);

@@ -353,7 +353,7 @@ async function main() {
 
   // ---------------------------------------------------------------- E  End tournament
   for (const scheme of SCHEMES)
-    await check(`E End tournament (${scheme}): Final is done, the rows, Edit awards, Confirm winners and end`, async () => {
+    await check(`E End tournament (${scheme}): Final is done, the rows, Edit awards, Confirm winners and end${scheme === 'light' ? ' (Zip 87: the shared prize boxes)' : ''}`, async () => {
       await stage('final_done');
       const a = await adminPage({ scheme });
       await a.page.locator('[data-tm-end]').waitFor({ timeout: 20000 });
@@ -377,7 +377,9 @@ async function main() {
         await a.page.locator('[data-tm-award-change="first"]').click();
         assert((await a.page.locator('[data-tm-award-choice]').count()) === 4, 'four teams to pick from');
         await a.page.locator('[data-tm-award-choice="Net Ninjas"]').click();
-        await a.page.locator('[data-tm-award-money="champion"]').fill('10');
+        // Zip 87: Edit awards uses the shared prize boxes (src/pages/admin/PrizeBoxes.tsx): the style played (Locked doubles) on top, "Tonight".
+        assert((await a.page.locator('[data-tm-awards] [data-pz-box="doubles"]').getAttribute('data-pz-top')) === 'true' && (await a.page.locator('[data-tm-awards] .pz-left').count()) === 1, 'the prize boxes, Locked doubles on top');
+        await a.page.locator('[data-tm-awards] [data-pz-money="doubles-first"]').fill('10');
         await a.page.locator('[data-tm-weeks="2"]').click();
         for (const w of SIZES) {
           await a.page.setViewportSize({ width: w, height: 844 });

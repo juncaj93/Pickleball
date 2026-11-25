@@ -10,7 +10,8 @@ import { formatPrice } from '../../../shared/money';
 import { api, ApiError, VIEW_ONLY_MESSAGE } from '../../lib';
 import { Sheet, useToast } from '../../ui';
 import { Wheel } from '../../tournament/parts';
-import { leftWords, suggestedTier, suggestionWords, tierAmounts } from '../../../shared/tournamentMoney';
+import { prizesOf } from '../../../shared/tournamentCard';
+import { type BoxesDraft, draftOf, PrizeBoxes, sendOf } from './PrizeBoxes';
 import { StandingsList } from './StandingsList';
 import type { AdminCtx } from '../Admin';
 import './tournament-end.css';
@@ -204,6 +205,18 @@ export function EndCards({ ctx, t, end }: { ctx: AdminCtx; t: AdminTournamentVie
                 sub={end.noCredit && end.first.players?.includes(end.noCredit) ? `${end.noCredit}: medal only` : undefined}
                 data="credit"
               />
+              {/* Zip 87: a 2nd place team again, only while its credit is above $0 (no medal). */}
+              {end.second && (
+                <>
+                  <EndRow label="2nd place" value={end.second.name} sub={end.second.players?.join(' + ')} data="second" />
+                  <EndRow
+                    label="Credit for each"
+                    value={money(end.secondCents)}
+                    sub={end.noCredit && end.second.players?.includes(end.noCredit) ? `${end.noCredit}: no credit` : undefined}
+                    data="second-credit"
+                  />
+                </>
+              )}
               <EndRow label="Winners banner" value={bannerLabel(end.weeks)} data="banner" />
               {end.third && <EndRow label="3rd place" value={end.third.name} sub={end.third.players?.join(' + ')} data="third" />}
             </>
@@ -257,33 +270,6 @@ function EndRow({ label, value, sub, data }: { label: string; value: string; sub
   );
 }
 
-/** A whole-dollar box ($14); null while it does not read as whole dollars. */
-function Dollars({ cents, onChange, label, data }: { cents: number | null; onChange: (c: number | null) => void; label: string; data: string }) {
-  const [text, setText] = useState(cents === null ? '' : String(cents / 100));
-  return (
-    <span className="tm-money tm-end-money">
-      <span aria-hidden="true">$</span>
-      <input
-        type="text"
-        inputMode="numeric"
-        enterKeyHint="done"
-        autoComplete="off"
-        aria-label={label}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          const v = e.target.value.trim();
-          onChange(/^\d{1,3}$/.test(v) ? Number(v) * 100 : null);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-        data-tm-award-money={data}
-      />
-    </span>
-  );
-}
-
 /** Edit awards (pictures 41 and 42): the winners (Change), the credit amounts, how long the banner stays up, Save. */
 function EditAwardsSheet({ ctx, t, end, open, onClose }: { ctx: AdminCtx; t: AdminTournamentView; end: AdminEndView; open: boolean; onClose: () => void }) {
   return (
@@ -297,21 +283,20 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
   const { busy, save } = useSave(ctx);
   const doubles = end.format === 'doubles';
   const [first, setFirst] = useState(end.first.key);
-  const [second, setSecond] = useState(end.second?.key ?? null);
-  const [champion, setChampion] = useState<number | null>(end.championCents);
-  const [secondCents, setSecondCents] = useState<number | null>(end.secondCents);
+  // Zip 87: Locked doubles has a 2nd place team again (only while its credit is above $0): the Final's runner-up unless changed.
+  // Review fix: the Final's order (the standings), not the seat order: the team right below the winners.
+  const below = end.standings.find((r, i) => i > 0 && r.name !== end.first.name && !r.out)?.name;
+  const runnerUp = end.second?.key ?? end.choices.find((c) => c.name === below && c.key !== end.first.key)?.key ?? end.choices.find((c) => c.key !== end.first.key)?.key ?? null;
+  const [second, setSecond] = useState<string | null>(runnerUp);
+  // Zip 87 (picture 9): the same Prizes sheet as before the night, both styles (the style played on top, "Tonight"), the night's real money.
+  const [draft, setDraft] = useState<BoxesDraft>(() => draftOf(prizesOf(t)));
   const [weeks, setWeeks] = useState(end.weeks);
   const [changing, setChanging] = useState<'first' | 'second' | null>(null);
-  // "Use these" puts new numbers in the boxes: a new key draws them again with the new amounts (the boxes keep what is typed otherwise).
-  const [filled, setFilled] = useState(0);
   const pickOf = (k: string | null) => end.choices.find((c) => c.key === k) ?? null;
-  // Zip 83: Locked doubles has no 2nd place (no pick, no credit box).
-  const ok = champion !== null && (doubles || (secondCents !== null && second !== null && second !== first));
-  // Zip 82 (Alex's rules): what is left after the courts, and the best tier it pays (shared/tournamentMoney.ts, the same as the price check).
-  const money = end.money;
-  const tier = money ? suggestedTier(money.ticketsCents - money.courtCents, end.format) : null;
-  const amounts = tier ? tierAmounts(tier, end.format) : null;
-  const same = !!amounts && champion === amounts.firstCents && (doubles || secondCents === amounts.secondCents);
+  const sendable = sendOf(draft);
+  const box = draft[end.format];
+  const hasSecond = !doubles || (box.second ?? 0) > 0;
+  const ok = !!sendable && (!hasSecond || (second !== null && second !== first));
   return (
     <div className="stack tm-awards" data-tm-awards>
       <PickRow
@@ -327,9 +312,9 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
         }}
         data="first"
       />
-      {!doubles && (
+      {hasSecond && (
         <PickRow
-          label="2nd place"
+          label={doubles ? '2nd place team' : '2nd place'}
           pick={pickOf(second)}
           open={changing === 'second'}
           onToggle={() => setChanging(changing === 'second' ? null : 'second')}
@@ -341,41 +326,7 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
           data="second"
         />
       )}
-      {money && tier && amounts && (
-        <div className="tm-awards-suggest" data-tm-suggest={tier}>
-          <p className="tm-awards-left" data-tm-suggest-left>
-            {leftWords(money.ticketsCents, money.courtCents)}
-          </p>
-          <div className="tm-awards-suggest-row">
-            <p className="tm-awards-suggest-words" data-tm-suggest-words>
-              {suggestionWords(tier, end.format)}
-            </p>
-            <button
-              type="button"
-              className="tm-awards-use"
-              disabled={same}
-              onClick={() => {
-                setChampion(amounts.firstCents);
-                if (!doubles) setSecondCents(amounts.secondCents);
-                setFilled((n) => n + 1);
-              }}
-              data-tm-suggest-use
-            >
-              {same ? 'Using these' : 'Use these'}
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="tm-row tm-awards-row">
-        <span>{doubles ? 'Credit for each winner' : '1st place credit'}</span>
-        <Dollars key={`c${filled}`} cents={champion} onChange={setChampion} label={doubles ? 'Credit for each winner' : '1st place credit'} data="champion" />
-      </div>
-      {!doubles && (
-        <div className="tm-row tm-awards-row">
-          <span>2nd place credit</span>
-          <Dollars key={`s${filled}`} cents={secondCents} onChange={setSecondCents} label="2nd place credit" data="second" />
-        </div>
-      )}
+      {end.money && <PrizeBoxes tickets={end.money.ticketsCents} courts={end.money.courtCents} planned={end.format} tag="Tonight" value={draft} onChange={setDraft} />}
       <div className="tm-awards-banner">
         <span>Banner stays up</span>
         <div className="tm-awards-weeks" role="radiogroup" aria-label="Banner stays up">
@@ -391,7 +342,21 @@ function AwardsForm({ ctx, t, end, onClose }: { ctx: AdminCtx; t: AdminTournamen
         className="btn block big tm-end-go"
         disabled={busy || !ok}
         onClick={async () => {
-          const r = await save(() => api('POST', `/api/admin/tournament/${t.id}/awards`, doubles ? { action: 'save', first, championCents: champion, weeks } : { action: 'save', first, second, secondCents, championCents: champion, weeks }), 'Awards saved');
+          if (!sendable) return;
+          const p = sendable[end.format];
+          const r = await save(
+            () =>
+              api('POST', `/api/admin/tournament/${t.id}/awards`, {
+                action: 'save',
+                first,
+                ...(hasSecond && second ? { second } : {}),
+                championCents: p.first,
+                secondCents: p.second,
+                prizes: sendable,
+                weeks,
+              }),
+            'Awards saved',
+          );
           if (r) onClose();
         }}
         data-tm-awards-save

@@ -319,26 +319,23 @@ async function main() {
     });
 
   // ---------------------------------------------------------------- D  the Edit page
+  // Zip 87: the Edit page is gone. Its parts are split: Levels (and Projected teams) in the Players sheet (Who's signed up), Pick the date in its
+  // own Dates sheet (always open), and the Plan, Settings, Who can see it and Cancel tournament in the gear's one settings sheet.
   for (const width of [420, 390, 360, 320])
     for (const scheme of SCHEMES)
-      await check(`D ${width} ${scheme}: Edit: Plan, Levels, Pick the date (folded: opens and closes), Settings (Who can see it, no caret), Edit, Cancel tournament`, async () => {
+      await check(`D ${width} ${scheme}: Edit: Plan, Levels, Pick the date (folded: opens and closes), Settings (Who can see it, no caret), Edit, Cancel tournament (Zip 87: Players sheet, Dates sheet, the gear's settings sheet)`, async () => {
         const a = await adminPage({ width, scheme });
         await openCard(a.page);
+        // Players sheet (Who's signed up): Levels, then Projected teams; nothing of the old page.
         await a.page.locator('[data-tm-open-edit]').click();
-        await a.page.locator('[data-tm-page]').waitFor();
+        const players = a.page.locator('[data-tm-page="players"]');
+        await players.waitFor();
         await a.page.waitForTimeout(400);
-        const order = await a.page.locator('[data-tm-page] > [data-tm-card]').evaluateAll((els) => els.map((e) => e.dataset.tmCard));
-        assert(JSON.stringify(order) === JSON.stringify(['plan', 'levels', 'dates', 'settings']), JSON.stringify(order));
-        assert((await a.page.locator('[data-tm-card="page-who"]').count()) === 0, 'no Who can see it card');
-        // Plan (mock 03): the pills and one cost line.
-        const pills = await a.page.locator('.tm-plan-pill').allInnerTexts();
-        // Zip 70: the Plan's expected players (the 8 signed up) and the table's 2 courts and 2 hours for 8.
-        assert(JSON.stringify(pills.map(flat)) === JSON.stringify(['8 players', '2 courts', '2 hrs']), JSON.stringify(pills));
-        const pillTops = new Set(await a.page.locator('.tm-plan-pill').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top))));
-        assert(pillTops.size === 1, 'the pills stay on one line');
-        assert(/^\$\d+ \(\$\d+ with 0 paid\)$/.test(flat(await a.page.locator('.tm-plan-cost-val').innerText())), await a.page.locator('.tm-plan-cost-val').innerText());
+        const order = await players.locator(':scope > [data-tm-card]').evaluateAll((els) => els.map((e) => e.dataset.tmCard));
+        assert(order[0] === 'levels' && order.every((c) => c === 'levels' || c === 'projected'), JSON.stringify(order));
+        assert((await a.page.locator('[data-tm-card="page-who"], [data-tm-card="plan"], [data-tm-card="settings"], [data-tm-edit-settings], [data-tm-cancel]').count()) === 0, 'no Plan, Settings, Edit or Cancel in Players');
         // Levels: the body font, smaller rows and pencils.
-        const lv = await a.page.locator('.tm-lrow').first().evaluate((el) => ({
+        const lv = await players.locator('.tm-lrow').first().evaluate((el) => ({
           h: el.getBoundingClientRect().height,
           name: getComputedStyle(el.querySelector('.tm-lrow-name')).fontFamily,
           body: getComputedStyle(document.body).fontFamily,
@@ -346,39 +343,66 @@ async function main() {
         }));
         assert(lv.name === lv.body, `levels in the body font: ${lv.name} vs ${lv.body}`);
         assert(lv.h <= 50 && lv.pencil <= 37, JSON.stringify(lv));
-        // Pick the date: folded, "16 offered".
-        const dates = a.page.locator('[data-tm-card="dates"]');
-        assert((await dates.locator('.tm-day').count()) === 0, 'folded: no calendar');
-        assert(/^\d+ offered$/.test(flat(await dates.locator('.tm-chip').innerText())), await dates.locator('.tm-chip').innerText());
-        await dates.locator('[data-tm-dates-toggle]').click();
+        await fits(a.page, '[data-tm-page="players"]');
+        await oneLine(a.page, '.tm-lrow-level');
+        await noDash(a.page, 'Players');
+        if (width === 420 || width === 320) await shot(a.page, `D-players-${width}-${scheme}`);
+        // Pick the date: Zip 87: its own sheet from the Sign up step's Dates button, always open (no fold): the heat map and the note.
+        await a.page.reload();
+        await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+        await openCard(a.page);
+        await a.page.locator('[data-tm-open-dates]').click();
+        const dates = a.page.locator('[data-tm-page="dates"] [data-tm-card="dates"]');
         await dates.locator('.tm-day.tm-open').first().waitFor();
         assert((await dates.locator('.tm-day.tm-open').first().evaluate((el) => getComputedStyle(el).getPropertyValue('--heat-bg').trim())) !== '', 'the heat map');
-        await tapGap(a.page);
-        await dates.locator('[data-tm-dates-toggle]').click();
-        await a.page.waitForTimeout(200);
-        assert((await dates.locator('.tm-day').count()) === 0, 'folds again');
-        // Settings (mock 04).
-        const settings = a.page.locator('[data-tm-card="settings"]');
-        await settings.scrollIntoViewIfNeeded();
-        const labels = (await settings.locator('.tm-row > span:first-child').allInnerTexts()).map(flat);
-        assert(JSON.stringify(labels) === JSON.stringify(['Format', 'Ticket price', '1st place credit', '2nd place credit', 'Who can see it']), JSON.stringify(labels));
-        const who = flat(await settings.locator('[data-tm-who-row]').innerText());
-        assert(who === 'Everyone', who);
-        assert((await settings.locator('[data-tm-who-row]').evaluate((el) => el.closest('button'))) === null, 'not tappable by itself');
-        assert((await settings.locator('[data-tm-edit-settings]').count()) === 1, 'Edit');
-        assert((await a.page.locator('[data-tm-card="settings"] ~ [data-tm-cancel]').count()) === 1, 'Cancel tournament below');
-        await fits(a.page, '[data-tm-page]');
-        await oneLine(a.page, '[data-tm-card="settings"] .tm-row, [data-tm-card="plan"] .tm-card-head, .tm-lrow-level');
-        await noDash(a.page, 'Edit');
-        if (width === 420 || width === 320) {
-          await a.page.locator('[data-tm-card="plan"]').scrollIntoViewIfNeeded();
-          await shot(a.page, `D-edit-top-${width}-${scheme}`);
-          await settings.scrollIntoViewIfNeeded();
-          await shot(a.page, `D-edit-settings-${width}-${scheme}`);
-        }
-        // Who can see it changes with Edit (the form's Only me / Everyone).
-        await settings.locator('[data-tm-edit-settings]').click();
-        await a.page.locator('[data-tm-form="edit"] [data-vis="me"]').waitFor();
+        assert(flat(await a.page.locator('[data-tm-dates-note]').innerText()) === 'Brighter green means more can play. Tap a date to pick it.', await a.page.locator('[data-tm-dates-note]').innerText());
+        assert((await a.page.locator('[data-tm-dates-toggle]').count()) === 0, 'no fold');
+        await fits(a.page, '[data-tm-page="dates"]');
+        await noDash(a.page, 'Pick the date');
+        if (width === 420 || width === 320) await shot(a.page, `D-dates-${width}-${scheme}`);
+        // Plan and Settings (mock 04): Zip 87: the gear's one settings sheet.
+        await a.page.reload();
+        await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
+        await openCard(a.page);
+        await a.page.locator('.tm87-gear').click();
+        const sheet = a.page.locator('[data-tm86-change-sheet]');
+        await sheet.waitFor();
+        await a.page.waitForTimeout(400);
+        const labels = (await sheet.locator('.tm86-field .tm86-label').allInnerTexts()).map(flat);
+        const want = ['Date', 'Start time', 'Ends', 'Courts', 'Players you expect', 'Courts cost', 'Style', 'Ticket price', 'Who can see it', 'Name', 'Dates offered', 'Plans changed?'];
+        assert(JSON.stringify(labels) === JSON.stringify(want), JSON.stringify(labels));
+        // Zip 70: the Plan's expected players (the 8 signed up) and the table's 2 courts. (Zip 87: no "2 hrs" pill; the hours show only in the cost.)
+        assert(flat(await sheet.locator('[data-tm-expect]').innerText()) === '8', await sheet.locator('[data-tm-expect]').innerText());
+        assert((await sheet.locator('[data-tm-plan-courts="2"]').getAttribute('aria-pressed')) === 'true', '2 courts');
+        assert(/^\$\d+$/.test(flat(await sheet.locator('[data-tm86-court-cost]').innerText())), await sheet.locator('[data-tm86-court-cost]').innerText());
+        assert((await sheet.locator('[data-format="vote"]').getAttribute('aria-pressed')) === 'true' && flat(await sheet.locator('[data-format="vote"]').innerText()) === 'Players vote', 'Style: Players vote');
+        // Who can see it: Everyone, a plain switch (no caret, no row to tap through).
+        const who = sheet.locator('[data-tm87-who]');
+        assert((await who.locator('[data-vis="all"]').getAttribute('aria-pressed')) === 'true', 'Everyone');
+        assert(!/[›>]/.test(await who.innerText()) && (await who.locator('svg').count()) === 0, 'no caret');
+        assert(!/credit|prize/i.test(flat(await sheet.innerText())), 'no prize credits here (they live in Prizes)');
+        // Edit: Zip 87: one Save (nothing changed yet, so it waits); Who can see it changes right here.
+        const save = sheet.locator('[data-tm86-save]');
+        assert((await save.count()) === 1 && (await save.isDisabled()), 'one Save, waiting for a change');
+        if (width === 420 || width === 320) await shot(a.page, `D-settings-${width}-${scheme}`);
+        await fits(a.page, '[data-tm86-change-sheet]');
+        // Zip 87: at 320 the sheet's two-column rows wrap their labels ("Start time", "Players you expect", "Who can see it") onto two lines by
+        // design of the new sheet (nothing is cut: fits above); the one-line rule holds from 360 up.
+        if (width > 320) await oneLine(a.page, '[data-tm86-change-sheet] .tm86-label, [data-tm86-change-sheet] .tm86-fixed');
+        await noDash(a.page, 'Settings');
+        await who.locator('[data-vis="me"]').click();
+        assert((await who.locator('[data-vis="me"]').getAttribute('aria-pressed')) === 'true' && !(await save.isDisabled()), 'Only me, Save ready');
+        // Cancel tournament below: Zip 87: in Plans changed?, last before Save; "Are you sure?" first, Keep it changes nothing.
+        const cancel = sheet.locator('[data-tm87-plans] [data-tm-cancel-tournament]');
+        assert((await cancel.count()) === 1, 'Cancel tournament');
+        await cancel.scrollIntoViewIfNeeded();
+        await cancel.click();
+        await a.page.waitForTimeout(300);
+        assert((await a.page.locator('.sheet').filter({ hasText: 'Are you sure?' }).count()) >= 1, 'Cancel asks first');
+        await a.page.getByRole('button', { name: 'Keep it' }).click();
+        await a.page.waitForTimeout(300);
+        const t = (await dash()).tournament;
+        assert(t.status !== 'canceled' && t.visibility === 'all', `nothing changed: ${t.status} ${t.visibility}`);
         await a.ctx.close();
       });
 
