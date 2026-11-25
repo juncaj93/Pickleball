@@ -698,32 +698,50 @@ export function PlayerHome({
   const choosing = !!g && (switching || (!viewAs && !g.me));
   // Zip 90: this player's unclaimed prize card. Until its card is flipped, the header shows the medals without its medal and the credit
   // without its credit (on this phone only, only on screen: no amount or count changes anywhere). With no credit left that way, no chip.
+  // The phases are keyed by the player too (a "not you?" or View as switch to the partner, whose card has the same key, starts masked), and
+  // the card puts them back to masked each time it appears (its own face-down state starts over then too). Other unclaimed prizes (a second
+  // tournament's, whose card comes after this one's Nice) stay held back the whole time.
   const prizeCard = g && !choosing ? (view?.tourAwards?.congrats ?? null) : null;
-  const pz = prizeCard && prize.key === prizeCard.key ? prize : { key: prizeCard?.key ?? '', medal: 'masked' as PrizePhase, credit: 'masked' as PrizePhase };
+  const prizeKey = prizeCard ? `${g?.me?.id ?? viewAs?.name ?? ''}:${prizeCard.key}` : '';
+  const pz = prizeCard && prize.key === prizeKey ? prize : { key: prizeKey, medal: 'masked' as PrizePhase, credit: 'masked' as PrizePhase };
   const setPrizePhase = useCallback(
     (key: string, k: PrizeKind, p: PrizePhase) => setPrize((x) => ({ ...(x.key === key ? x : { key, medal: 'masked' as PrizePhase, credit: 'masked' as PrizePhase }), [k]: p })),
     [],
   );
   const realBalance = credit?.balanceCents ?? 0;
+  const laterCredit = prizeCard?.laterCreditCents ?? 0;
   const creditHeld = !!prizeCard && prizeCard.creditCents > 0 && pz.credit !== 'landed';
-  const heldBalance = creditHeld ? Math.max(0, realBalance - prizeCard!.creditCents) : realBalance;
+  const heldBalance = prizeCard ? Math.max(0, realBalance - laterCredit - (creditHeld ? prizeCard.creditCents : 0)) : realBalance;
+  // What the chip shows once this card's credit has landed (the real balance, less any later card's).
+  const landedBalance = Math.max(0, realBalance - laterCredit);
   // The chip as it was before the prize (or a cash out waiting); while the credit flies in, a new chip opens for it (closed until it lands).
   const chipBefore = heldBalance > 0 || !!credit?.pending;
-  const creditSlot = creditHeld && pz.credit === 'arriving' && !chipBefore && realBalance > 0;
+  const creditSlot = creditHeld && pz.credit === 'arriving' && !chipBefore && landedBalance > 0;
   const myMedals = g?.me ? (g.tourAwards?.medals?.[g.me.name] ?? 0) : 0;
-  const medalHeld = !!prizeCard?.medalCounted && pz.medal !== 'landed' && myMedals >= 1;
-  const medalSlot = medalHeld && pz.medal === 'arriving' && myMedals === 1;
-  const topMedals = medalHeld && !medalSlot ? myMedals - 1 : myMedals;
+  const laterMedals = Math.min(myMedals, prizeCard?.laterMedals ?? 0);
+  const medalHeld = !!prizeCard?.medalCounted && pz.medal !== 'landed' && myMedals - laterMedals >= 1;
+  const medalSlot = medalHeld && pz.medal === 'arriving' && myMedals - laterMedals === 1;
+  const topMedals = myMedals - laterMedals - (medalHeld && !medalSlot ? 1 : 0);
   const balance = g && (switching || (!viewAs && !g.me)) ? null : credit ? heldBalance : null;
   useEffect(() => {
     if (balance !== null) lastBalance.current = balance;
   }, [balance]);
   // Scroll to a shared session once the schedule shows (after picking a name).
   const focusIndex = g && focusId ? g.sessions.findIndex((s) => s.id === focusId) : -1;
-  // The CREDIT chip pops in when it first appears and fades out at $0 (motion).
-  const chipOn = !!g && !!credit && !choosing && (chipBefore || creditSlot);
-  const chipEnter = useJustChanged(chipOn, 600) && chipOn && live && !creditSlot && !creditHeld;
-  const chipShown = useLingering(chipOn ? credit : null, 220);
+  // The CREDIT chip pops in when it first appears and fades out at $0 (motion). Zip 90: a chip the prize opened lands with its own bump
+  // instead (no pop-in on top of it).
+  const chipOn = !!g && !!credit && !choosing && (chipBefore || creditSlot || (!!prizeCard && !creditHeld && landedBalance > 0) || (!prizeCard && realBalance > 0));
+  const prizeOpened = useRef(false);
+  if (creditSlot) prizeOpened.current = true;
+  else if (!chipOn) prizeOpened.current = false;
+  const chipEnter = useJustChanged(chipOn, 600) && chipOn && live && !creditHeld && !prizeOpened.current;
+  // The chip's numbers as the header shows them (a chip fading out shows what it showed, never the held-back credit).
+  const chipCredit = credit && prizeCard ? { ...credit, balanceCents: creditHeld ? heldBalance : landedBalance } : credit;
+  // The amount the chip says now (it rolls up when this goes up); the chip's width is the landed amount's from the start. A chip that opens
+  // for the prize already says the new total: the flying amount lands on it.
+  const chipHold = prizeCard ? (creditHeld && !creditSlot ? heldBalance : landedBalance) : undefined;
+  const chipWidth = credit && prizeCard ? { ...credit, balanceCents: landedBalance } : credit;
+  const chipShown = useLingering(chipOn ? chipCredit : null, 220);
   usePullToRefresh({ enabled: motion && canMove() && !!g && !choosing, onRefresh: load.quiet, ball: ptrBall, shift: mainRef });
   const mineOnly = filter === 'mine';
   const filtered = view ? (mineOnly ? view.sessions.filter(isMineGame) : view.sessions) : [];
@@ -866,10 +884,9 @@ export function PlayerHome({
         }
         chip={
           showChip ? (
-            // Zip 90: one steady wrapper (it draws nothing), so the chip is the same element from held back to landed and its number rolls up
-            // (a chip that opens for the prize already says the new total: the flying amount lands on it).
+            // Zip 90: one steady wrapper (it draws nothing), so the chip is the same element from held back to landed and its number rolls up.
             <span className={creditSlot ? 'rv-chip rv-slot' : 'rv-chip'} data-rv-slot={creditSlot ? 'credit' : undefined}>
-              <CreditChip credit={credit!} startFrom={chipStart} enter={chipEnter} hold={creditHeld ? (creditSlot ? realBalance : heldBalance) : undefined} onOpen={() => setCreditOpen(true)} />
+              <CreditChip credit={chipWidth!} startFrom={chipStart} enter={chipEnter} hold={chipHold} onOpen={() => setCreditOpen(true)} />
             </span>
           ) : chipShown.value ? (
             <CreditChip credit={chipShown.value} leave={chipShown.leaving} onOpen={() => {}} />
@@ -933,10 +950,10 @@ export function PlayerHome({
             {view!.tourAwards?.congrats && (
               <Suspense fallback={null}>
                 <TourAwards
-                  key={view!.tourAwards.congrats.key}
+                  key={prizeKey}
                   c={view!.tourAwards.congrats}
                   onChanged={load.reload}
-                  onPhase={(k: PrizeKind, p: PrizePhase) => setPrizePhase(view!.tourAwards!.congrats!.key, k, p)}
+                  onPhase={(k: PrizeKind, p: PrizePhase) => setPrizePhase(prizeKey, k, p)}
                 />
               </Suspense>
             )}

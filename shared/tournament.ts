@@ -1184,6 +1184,9 @@ export interface CongratsView {
   medal: boolean;
   /** The medal counts in the medals by name (a tournament everyone could see), so the header holds it back until the slam. */
   medalCounted: boolean;
+  /** This player's other unclaimed prizes (their cards come after this one's Nice): held back from the header too. Left out at 0. */
+  laterCreditCents?: number;
+  laterMedals?: number;
 }
 
 /** Zip 58: what a player's Home gets after a tournament ends (GET /api/group `tourAwards`). Left out when there is nothing. */

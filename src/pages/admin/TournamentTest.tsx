@@ -17,7 +17,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header'];
+const THIS_ZIP: readonly string[] = ['zip90_replay', 'zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -39,6 +39,7 @@ const EARLY_LOOK: NightModel = {
 
 const STAGES = [
   // Zip 90 (🎾90.prize reveal): the prize cards and the header.
+  { stage: 'zip90_replay', label: 'Replay: medal and credit slam (start here)', line: 'View as Vic: two face-down cards, no medal by the name, no credit yet. Tap the left card: watch the medal fly in next to “Vic” and land (then the cup glows); tap the right: $14 lands in the credit spot between light/dark and the date. Come back here and pick this again to replay: it only turns the cards back face down (same night, same money).' },
   { stage: 'zip90_ld', label: 'Prize: Locked doubles champs', line: 'Net Ninjas (Vic and Wren) won, $14 each. View as Vic: “Congrats, you and Wren won!” with two face-down cards; no medal by the name and no credit yet. Tap the left card: the medal slams onto the name, the cup glows. Tap the right: $14 slams into the credit. Nice ends it. Leave before Nice: the cards come back face down.' },
   { stage: 'zip90_am', label: 'Prize: Americano champion, no credit', line: 'Americano, Vic won, prizes $0 (medals only). View as Vic: “Congrats, you won!”, one card: the gold medal.' },
   { stage: 'zip90_second', label: 'Prize: runner-up', line: 'Locked doubles 2nd place pays $7 each. View as Parker (Third Shot Gang lost the Final): “Congrats on 2nd place!”, one card: $7 credit, no medal.' },

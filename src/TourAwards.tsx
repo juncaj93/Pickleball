@@ -182,7 +182,10 @@ async function slam(kind: PrizeKind, from: HTMLElement, ghost: HTMLElement, setP
   }
   await flight.finished.catch(() => undefined);
   ghost.remove();
-  if (!alive()) return;
+  if (!alive()) {
+    opening?.cancel();
+    return;
+  }
   setPhase(kind, 'landed');
   await frame();
   opening?.cancel();
@@ -320,9 +323,12 @@ export function PrizeReveal({ c, onChanged, onPhase }: { c: Congrats; onChanged:
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
+    // The cards start face down each time they appear, so the header starts masked with them.
+    for (const k of ['medal', 'credit'] as const) onPhase?.(k, 'masked');
     return () => {
       live.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const words = prizeWords(c);
   useFitTitle(title, words.title);

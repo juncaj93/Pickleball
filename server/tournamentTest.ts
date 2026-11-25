@@ -256,7 +256,10 @@ export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'z
  *   zip90_header  "Header: long names": zip90_ld with every card already claimed, plus an older win for Christopher Vanderberg and $14 of
  *                 test credit: the header with medals, the cup and credit (View as Vic, Christopher Vanderberg).
  */
-export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header'] as const;
+//   zip90_replay  "Replay: medal and credit slam": Alex's look on his phone (the flight, the landing, the spacing; the buttons and the
+//                 credit). Each pick puts the prize cards back to unclaimed (seen_at cleared, nothing else touched: same night, same money);
+//                 the first pick (or one after another stage) builds zip90_ld. View as Vic.
+export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header', 'zip90_replay'] as const;
 type Zip90Stage = (typeof ZIP90_STAGES)[number];
 const isZip90Stage = (s: string): s is Zip90Stage => (ZIP90_STAGES as readonly string[]).includes(s);
 type Zip89Stage = (typeof ZIP89_STAGES)[number];
@@ -426,6 +429,18 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   // Either format at each stage (left out: Doubles). Americano has its own name and the 2nd place credit.
   const format = body.format === undefined ? 'doubles' : v.oneOf(body.format, 'format', FORMATS);
   await setTournamentsForAll(ctx.db, group.id, true, ctx.nowIso);
+  // Zip 90: the replay stage only puts the last replay night's prize cards back to unclaimed (no money row is touched), so it can be picked
+  // again and again.
+  if (stage === 'zip90_replay') {
+    const t = await ctx.db
+      .prepare("SELECT id FROM tournaments WHERE group_id = ? AND status = 'ended' AND award_pick LIKE ? AND banner_until > ? ORDER BY ended_at DESC LIMIT 1")
+      .bind(group.id, '%"stage":"zip90_replay"%', ctx.nowIso)
+      .first<{ id: string }>();
+    if (t) {
+      await ctx.db.prepare('UPDATE tournament_results SET seen_at = NULL WHERE tournament_id = ? AND award IS NOT NULL').bind(t.id).run();
+      return { ok: true, id: t.id, stage };
+    }
+  }
   // The fake database only: the last stage's ticket credit rows and test credit go, then every tournament of the (fake) group; its sign-ups,
   // level history and tickets go with it (ON DELETE CASCADE).
   await ctx.db.batch([
@@ -1281,9 +1296,11 @@ async function zip90Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
     ? { doubles: { first: 0, second: 0 }, americano: { first: 0, second: 0 } }
     : { doubles: { first: 1400, second: stage === 'zip90_second' ? 700 : 0 }, americano: { first: 1400, second: 700 } };
   const row = (await ctx.db.prepare('SELECT award_pick FROM tournaments WHERE id = ?').bind(id).first<{ award_pick: string | null }>())!;
+  // The replay night carries a marker in its award settings (read by nothing but the replay stage), so a later pick finds it.
+  const pick = stage === 'zip90_replay' ? JSON.stringify({ ...JSON.parse(withPrizes(row.award_pick, boxes)), stage: 'zip90_replay' }) : withPrizes(row.award_pick, boxes);
   await ctx.db
     .prepare('UPDATE tournaments SET award_pick = ?, champion_credit_cents = ?, second_credit_cents = ? WHERE id = ?')
-    .bind(withPrizes(row.award_pick, boxes), am ? 0 : 1400, am ? 0 : boxes.doubles.second, id)
+    .bind(pick, am ? 0 : 1400, am ? 0 : boxes.doubles.second, id)
     .run();
   const t = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<EndRow>())!;
   const night = await readNight(ctx, t);

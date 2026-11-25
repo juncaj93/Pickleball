@@ -16,6 +16,8 @@
  *       Christopher Vanderberg, with and without a medal: one row, "not you?" beside or under (lined up with the name), "…" only when the name
  *       alone can't fit, the medal right after the name, tap areas 44 x 44, nothing wider than the screen. Christmas skin on too.
  *   G   Admin: the pill says "+ Add" and opens the same Add game sheet.
+ *   H   The replay stage (zip90_replay), View as Vic twice: face down and masked each time, the slam, the spacing Alex checks (the medal right
+ *       after the name, about 4 px between the cup and light/dark circles, about 8 px each side of the credit).
  * Screenshots: .data/zip90-shots (not in git).
  */
 const path = require('node:path');
@@ -130,6 +132,28 @@ const header = (page) =>
       assert((await card.locator('[data-pz-flipped]').count()) === 0, 'both face down again');
       const h = await header(page);
       assert(h.medals === 0 && h.credit === '', `masked again: ${JSON.stringify(h)}`);
+      // One phone, two winners (the reviewer's case): Vic lands both, then "not you?" picks Wren (her card has the same key): Wren's cards are
+      // face down and her header is masked; back to Vic: face down and masked again too.
+      await page.waitForTimeout(200);
+      for (const k of ['medal', 'credit']) {
+        if (await card.locator(`[data-pz-card="${k}"][data-pz-flipped]`).count()) continue;
+        await card.locator(`[data-pz-card="${k}"] .pz-front`).click();
+        await page.waitForFunction(() => document.querySelector('.pz-ghost') !== null, null, { timeout: 3000 });
+        await page.waitForFunction(() => !document.querySelector('.pz-ghost') && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 4000 });
+        await sleep(900);
+      }
+      let hv = await header(page);
+      assert(hv.medals === 1 && hv.credit.startsWith('$14|'), `Vic landed: ${JSON.stringify(hv)}`);
+      for (const who of ['Wren', 'Vic']) {
+        await page.locator('.topbar .not-you').click();
+        await page.getByRole('button', { name: who, exact: true }).first().click();
+        await page.waitForFunction((w) => (document.querySelector('.topbar h1')?.textContent ?? '').startsWith(w), who, { timeout: 15000 });
+        await card.waitFor({ timeout: 15000 });
+        await sleep(600);
+        assert((await card.locator('[data-pz-flipped]').count()) === 0, `${who}: face down`);
+        hv = await header(page);
+        assert(hv.medals === 0 && hv.credit === '', `${who}: masked ${JSON.stringify(hv)}`);
+      }
       // Wren's phone holds Wren's own prize; Parker's screen shows Vic and Wren's medals on the ticker and the game cards.
       const p = await b.pickedPage('Parker', { width: 390 });
       const tick = flat(await p.page.locator('.tw').first().innerText());
@@ -347,6 +371,39 @@ const header = (page) =>
       } finally {
         await b.call('PUT', '/api/admin/christmas-skin-switch', { mode: 'off' });
         await b.setClock(NOW);
+      }
+    });
+
+    await check('H Replay stage: View as Vic, the slam, pick it again, the cards are face down again (Alex\'s phone check)', async () => {
+      for (let round = 0; round < 2; round++) {
+        await b.stage('zip90_replay');
+        const { page, ctx, errors } = await b.playerPage('Vic', { width: 390, scheme: round ? 'dark' : 'light', reducedMotion: 'no-preference' });
+        const card = page.locator('[data-tour-congrats]');
+        await card.waitFor({ timeout: 15000 });
+        assert((await card.locator('[data-pz-flipped]').count()) === 0, `round ${round}: face down`);
+        let h = await header(page);
+        assert(h.medals === 0 && h.credit === '', `round ${round}: masked ${JSON.stringify(h)}`);
+        for (const k of ['medal', 'credit']) {
+          await card.locator(`[data-pz-card="${k}"] .pz-front`).click();
+          await page.waitForFunction(() => document.querySelector('.pz-ghost') !== null, null, { timeout: 3000 });
+          await page.waitForFunction(() => !document.querySelector('.pz-ghost') && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 3000 });
+        }
+        await sleep(1000);
+        h = await header(page);
+        assert(h.medals === 1 && h.credit.startsWith('$14|'), `round ${round}: landed ${JSON.stringify(h)}`);
+        // The spacing Alex will look at: the medal right after "Vic", the circles about 4 px apart, about 8 px each side of the credit.
+        const sp = await page.evaluate(() => {
+          const r = (s) => document.querySelector(s).getBoundingClientRect();
+          const circle = (s) => { const x = r(s); return { left: x.left + 4, right: x.right - 4 }; };
+          const cup = circle('.topbar .cup-btn');
+          const mode = circle('.topbar .mode-btn:not(.cup-btn)');
+          const amt = [r('.topbar .cc-label'), r('.topbar .cc-amount')];
+          return { medal: r('.topbar .h1-badge').left - r('.topbar .h1-name').right, circles: mode.left - cup.right, left: Math.min(amt[0].left, amt[1].left) - mode.right, right: r('.topbar .today').left - Math.max(amt[0].right, amt[1].right) };
+        });
+        assert(Math.abs(sp.medal) <= 1.5 && Math.abs(sp.circles - 4) <= 1 && sp.left >= 6 && sp.left <= 11 && Math.abs(sp.right - 8) <= 1.5, `round ${round}: spacing ${JSON.stringify(sp)}`);
+        await shot(page, `H-replay-${round}`);
+        assert(!errors.length, errors.join('; '));
+        await ctx.close();
       }
     });
 

@@ -107,6 +107,47 @@ describe('zip 90: the prize reveal', () => {
     integrity();
   });
 
+  it('two unclaimed prizes: the first card carries the other one\'s credit and medal so the header holds both back', async () => {
+    const { ctx, stage, group } = await previewWorld();
+    const id = await stage('zip90_ld');
+    const vic = ctx.app.db.raw.prepare("SELECT id, group_id FROM players WHERE display_name = 'Vic'").get() as { id: string; group_id: string };
+    const now = new Date(ctx.app.now).toISOString();
+    const until = new Date(ctx.app.now + 7 * 86_400_000).toISOString();
+    ctx.app.db.raw
+      .prepare(
+        `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date, status, visibility, created_at, updated_at, format, second_credit_cents, ended_at, end_key, banner_until)
+         SELECT 'later-t', group_id, 'Turkey Trot', size, courts, minutes, start_minutes, ticket_cents, 700, offered_dates, final_date, 'ended', 'all', ?, ?, 'americano', 0, ?, 'later-key', ? FROM tournaments WHERE id = ?`,
+      )
+      .run(now, now, new Date(ctx.app.now - 86_400_000).toISOString(), until, id);
+    ctx.app.db.raw
+      .prepare(
+        `INSERT INTO tournament_results (id, tournament_id, player_id, finish, wins, losses, points, picked_level, approved_level, medal, award, credit_cents, seen_at, created_at) VALUES ('later-r', 'later-t', ?, 1, 5, 0, 60, 300, NULL, 1, 'champion', 700, NULL, ?)`,
+      )
+      .run(vic.id, now);
+    const c = (await group('Vic')).tourAwards.congrats as CongratsView;
+    expect(c).toMatchObject({ tournament: 'The Cold Open', creditCents: 1400, laterCreditCents: 700, laterMedals: 1 });
+    expect((await group('Wren')).tourAwards.congrats.laterCreditCents).toBeUndefined();
+  });
+
+  it('Replay stage: each pick turns the cards back face down (same night, same money); another stage in between builds it fresh', async () => {
+    const { stage, phone, group, integrity, everyone } = await previewWorld();
+    const id = await stage('zip90_replay');
+    expect((await group('Vic')).tourAwards.congrats).toMatchObject({ award: 'champion', partner: 'Wren', creditCents: 1400 });
+    const money = await everyone();
+    for (const n of ['Vic', 'Wren']) expect((await (await phone(n)).call('POST', '/api/tournament/award-seen', { tournamentId: id })).data.changed).toBe(true);
+    expect((await group('Vic')).tourAwards.congrats).toBeUndefined();
+    expect(await stage('zip90_replay')).toBe(id);
+    expect((await group('Vic')).tourAwards.congrats).toMatchObject({ award: 'champion', creditCents: 1400 });
+    expect((await group('Wren')).tourAwards.congrats).toMatchObject({ award: 'champion' });
+    expect(await everyone()).toEqual(money);
+    integrity();
+    await stage('zip90_header');
+    const fresh = await stage('zip90_replay');
+    expect(fresh).not.toBe(id);
+    expect((await group('Vic')).tourAwards.congrats).toMatchObject({ award: 'champion' });
+    integrity();
+  });
+
   it('the card words and cards (pictures 1 to 6)', () => {
     const base = { key: 'k', tournamentId: 't', title: '', sub: '', tournament: 'The Cold Open', medalCounted: true };
     const ld = { ...base, award: 'champion', format: 'doubles', partner: 'Wren', creditCents: 1400, medal: true } as CongratsView;

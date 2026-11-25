@@ -591,6 +591,15 @@ export async function playerAwardsFor(ctx: Ctx, group: GroupRow, playerId: strin
       medal: champion,
       medalCounted: champion && Number(mine.medal) === 1 && t.visibility === 'all',
     };
+    // Another unclaimed prize of this player (a second tournament whose banner is still up): its card comes after this one's Nice, so the
+    // header keeps its credit and medal back too.
+    const later = a.winners.filter(
+      (w) => w !== mine && w.player_id === playerId && !w.seen_at && (w.award === 'champion' || (w.award === 'second' && Number(w.credit_cents) > 0)) && banners.some((x) => x.id === w.tournament_id),
+    );
+    const laterCredit = later.reduce((sum, w) => sum + (Number(w.credit_cents) || 0), 0);
+    const laterMedals = later.filter((w) => w.award === 'champion' && Number(w.medal) === 1 && banners.find((x) => x.id === w.tournament_id)?.visibility === 'all').length;
+    if (laterCredit > 0) out.congrats.laterCreditCents = laterCredit;
+    if (laterMedals > 0) out.congrats.laterMedals = laterMedals;
   }
   if (Object.keys(medals).length) out.medals = medals;
   return Object.keys(out).length ? out : null;

@@ -38,23 +38,19 @@ export function CreditChip({
   startFrom?: number | null;
   enter?: boolean;
   leave?: boolean;
-  /** Zip 90 (the prize reveal): the amount to show for now (the balance without the prize not yet claimed). The width is the real balance's
-   *  already, so nothing moves when it goes; left out, the chip counts up (or rolls) from it to the real balance. */
+  /** Zip 90 (the prize reveal): the amount to show (the balance without a prize not yet claimed). The width is `credit`'s balance already,
+   *  so nothing moves when it changes; when it goes up the chip counts up (or rolls) to it, like any credit coming in. */
   hold?: number;
 }) {
   const motion = useMotion();
   const pending = !!credit.pending;
-  const target = credit.balanceCents;
+  const target = hold ?? credit.balanceCents;
   const [shown, setShown] = useState(() => (hold !== undefined ? hold : startFrom != null && startFrom < target && !reducedMotion() ? startFrom : target));
   const [fresh] = useState(() => hold === undefined && startFrom != null && startFrom < target && !reducedMotion());
   const [pulse, setPulse] = useState(false);
   const shownRef = useRef(shown);
   shownRef.current = shown;
   useEffect(() => {
-    if (hold !== undefined) {
-      setShown(hold);
-      return;
-    }
     const from = shownRef.current;
     if (from === target) return;
     // With the motion on the number rolls (RollText below) instead of counting up.
@@ -83,9 +79,9 @@ export function CreditChip({
       clearTimeout(pulseTimer);
       setPulse(false);
     };
-  }, [target, hold]);
+  }, [target]);
   const text = formatPrice(shown);
-  const said = hold !== undefined ? hold : target;
+  const said = target;
   return (
     <button
       type="button"
@@ -99,7 +95,7 @@ export function CreditChip({
       </span>
       <span className="cc-amount" aria-hidden="true">
         {/* The finished number, invisible, holds the width so counting up never moves the chip. */}
-        <span className="cc-ghost">{formatPrice(target)}</span>
+        <span className="cc-ghost">{formatPrice(Math.max(target, credit.balanceCents))}</span>
         <span className="cc-now">{motion ? <RollText text={formatPrice(said)} /> : text}</span>
       </span>
     </button>
