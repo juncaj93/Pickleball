@@ -1,11 +1,11 @@
 import type { Ctx } from './context';
 import { HttpError } from './http';
 import { newId } from './crypto';
-import { OWED_MARK } from '../shared/tournamentTickets';
+import { OWED_MARK, startMsOf } from '../shared/tournamentTickets';
 import { requireAdmin } from './auth';
 import * as v from './validate';
 import { hiddenTask, lockDate, setTournamentsForAll, type SignupRow, todayKey, type TournamentRow } from './tournament';
-import { adminDayView, gamesFor, type GameRow, playerDayView, spinTie, type TeamRow, writeTeamsAndGames } from './tournamentDay';
+import { adminDayView, gamesFor, type GameRow, loadDay, playerDayView, spinTie, type TeamRow, writeBestOf3, writeSemis, writeTeamsAndGames } from './tournamentDay';
 import { americanoNight, pairSlot } from '../shared/americanoSchedule';
 import { previewSiteFor } from './secondChance';
 import { type GroupRow, organizerIdOf } from './repo';
@@ -232,6 +232,18 @@ export const ZIP85_STAGES = ['zip85_idle', 'zip85_owed'] as const;
 //   zip88_soon     Player: 20 minutes before start. Americano tonight (Zip 61's 10 names), the start 20 minutes from now: View as Vic: "Games
 //                  start soon" with "Starts in 20:00" ticking down each second, Your rounds under it.
 export const ZIP88_STAGES = ['zip88_soon', 'zip88_ready', 'zip88_early', 'zip88_rd3', 'zip88_final', 'zip88_sitting'] as const;
+/**
+ * Zip 89 (🎾89.smart pacing), on the real rows and the real pacing rules (shared/smartPacing.ts):
+ *   zip89_am_ahead  "Pacing: Americano ahead (offer showing)": Americano tonight (10 names), started about 32 minutes ago, Rounds 1 and 2 in at
+ *                   14 minutes a round: the night card's "Ahead of time" line with Add a round. Yes adds Round 7 at once.
+ *   zip89_ld_semis  "Pacing: Locked doubles ahead (semis offer)": the 4 teams tonight, started about 18 minutes ago, Round 1 in at 14 minutes:
+ *                   "Ahead of time"; Add a round asks "Add semifinals?"; Yes: SEMIS between the round robin and the FINAL.
+ *   zip89_bo3       "Pacing: best-of-3 Final in play": the round robin and the semifinals in (as the bonus wrote them), the Final best of 3:
+ *                   Net Ninjas won Game 1 11 to 8, Game 2 on a court beside 3rd place: "Final · G2" and "Best of 3 · G1 11–8 · G2 –".
+ */
+export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3'] as const;
+type Zip89Stage = (typeof ZIP89_STAGES)[number];
+const isZip89Stage = (s: string): s is Zip89Stage => (ZIP89_STAGES as readonly string[]).includes(s);
 type Zip88Stage = (typeof ZIP88_STAGES)[number];
 const isZip88Stage = (s: string): s is Zip88Stage => (ZIP88_STAGES as readonly string[]).includes(s);
 export const ZIP86_STAGES = ['zip86_payments', 'zip86_home', 'zip86_next', 'zip86_signup', 'zip86_lockin', 'zip86_whosin'] as const;
@@ -252,7 +264,7 @@ const isZip86Stage = (s: string): s is Zip86Stage => (ZIP86_STAGES as readonly s
 export const ZIP87_STAGES = ['zip87_early', 'zip87_payday', 'zip87_past', 'zip87_paid', 'zip87_gameday', 'zip87_allset', 'zip87_prizes'] as const;
 type Zip87Stage = (typeof ZIP87_STAGES)[number];
 const isZip87Stage = (s: string): s is Zip87Stage => (ZIP87_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -407,6 +419,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%' OR task LIKE 'tournament_start:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip89Stage(stage)) return zip89Stage(ctx, group, stage);
   if (isZip88Stage(stage)) return zip88Stage(ctx, group, stage);
   if (isZip87Stage(stage)) return zip87Stage(ctx, group, stage);
   if (isZip86Stage(stage)) return zip86Stage(ctx, group, stage);
@@ -1022,6 +1035,69 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
     });
   await ctx.db.batch([...rows, ...scores]);
   return { ok: true, stage, id, date, signedUp: n };
+}
+
+/** Zip 89: the pacing stages (ZIP89_STAGES above). */
+async function zip89Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip89Stage) {
+  const tz = group.timezone;
+  const now = localParts(ctx.nowMs, tz);
+  const nowMin = now.hour * 60 + now.minute;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  if (stage === 'zip89_am_ahead') {
+    // Zip 61's night (Rounds 1 and 2 in), moved so it started about 32 minutes ago and each round took 14 minutes (Court 2 a minute after Court 1).
+    const made = await americanoStage(ctx, group, 'am_round3');
+    const start = Math.max(0, Math.floor((nowMin - 32) / 5) * 5);
+    const startMs = startMsOf(made.date!, start, tz);
+    const { results } = await ctx.db.prepare('SELECT num, round, court FROM tournament_games WHERE tournament_id = ? AND round <= 2').bind(made.id).all<{ num: number; round: number; court: number }>();
+    await ctx.db.batch([
+      ctx.db.prepare('UPDATE tournaments SET start_minutes = ?, updated_at = ? WHERE id = ?').bind(start, ctx.nowIso, made.id),
+      ...results.map((g) => {
+        const when = iso(startMs + (g.round * 14 - 2 + g.court) * 60_000);
+        return ctx.db.prepare('UPDATE tournament_games SET claim_at = ?, result_at = ?, updated_at = ? WHERE tournament_id = ? AND num = ?').bind(when, when, when, made.id, g.num);
+      }),
+    ]);
+    return { ...made, stage };
+  }
+  if (stage === 'zip89_ld_semis') {
+    // The 4 teams tonight (zip 57's game1 night), started about 18 minutes ago; Round 1's two games in at 13 and 14 minutes, as Enter score writes them.
+    const made = await dayStage(ctx, group, 'game1');
+    const start = Math.max(0, Math.floor((nowMin - 18) / 5) * 5);
+    const startMs = startMsOf(made.date!, start, tz);
+    const { results } = await ctx.db.prepare('SELECT num, court, slot_a, slot_b FROM tournament_games WHERE tournament_id = ? AND round = 1').bind(made.id).all<{ num: number; court: number; slot_a: string; slot_b: string }>();
+    await ctx.db.batch([
+      ctx.db.prepare('UPDATE tournaments SET start_minutes = ?, updated_at = ? WHERE id = ?').bind(start, ctx.nowIso, made.id),
+      ...results.map((g) => {
+        const when = iso(startMs + (12 + g.court) * 60_000);
+        return ctx.db
+          .prepare("UPDATE tournament_games SET winner = 'a', score_a = 11, score_b = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
+          .bind(5 + g.court * 2, when, Number(g.slot_a.slice(1)), Number(g.slot_b.slice(1)), when, made.id, g.num);
+      }),
+    ]);
+    return { ...made, stage };
+  }
+  // zip89_bo3: the round robin in (pools_done, Net Ninjas 3-0 ... Dill With It 0-3), the semifinals and the best of 3 written by the bonus's own
+  // code, the semifinals in (1st and 2nd win), the Final's Game 1 in (Net Ninjas 11 to 8, 5 minutes ago): Game 2 and 3rd place on the courts.
+  const made = await dayStage(ctx, group, 'pools_done', BY_ORDER);
+  const id = made.id!;
+  const t = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<TournamentRow>())!;
+  const wrote = (await writeSemis(ctx.db, t, await loadDay(ctx.db, id), iso(ctx.nowMs - 40 * 60_000))) && (await writeBestOf3(ctx.db, t, await loadDay(ctx.db, id), iso(ctx.nowMs - 25 * 60_000)));
+  if (!wrote) throw new HttpError(500, 'stage_failed', 'The bonus rows were not written.');
+  const day = await loadDay(ctx.db, id);
+  const semis = day.games.filter((g) => g.stage === 'semi');
+  const fin = day.games.filter((g) => g.stage === 'final').sort((a, b) => a.num - b.num)[0];
+  const ago = (m: number) => iso(ctx.nowMs - m * 60_000);
+  await ctx.db.batch([
+    // Semifinals: 1st (Net Ninjas) beat 4th (Dill With It) 11 to 6; 2nd (Third Shot Gang) beat 3rd (Kitchen Crew) 11 to 9.
+    ...semis.map((g) =>
+      ctx.db
+        .prepare("UPDATE tournament_games SET winner = 'a', score_a = 11, score_b = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE id = ?")
+        .bind(g.court === 1 ? 6 : 9, ago(g.court === 1 ? 22 : 21), g.court === 1 ? 1 : 2, g.court === 1 ? 4 : 3, ago(21), g.id),
+    ),
+    ctx.db
+      .prepare("UPDATE tournament_games SET winner = 'a', score_a = 11, score_b = 8, result_at = ?, result_by = 'players', seat_a = 1, seat_b = 2, updated_at = ? WHERE id = ?")
+      .bind(ago(5), ago(5), fin.id),
+  ]);
+  return { ...made, stage };
 }
 
 /** Zip 88: the night card's stages (ZIP88_STAGES above), on the existing nights. */

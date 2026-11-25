@@ -677,7 +677,7 @@ const lenOf = (r: RoundState, to?: GameTo) => (r.pool ? ROUND_MINUTES[to ?? r.pl
 
 /**
  * Smart timing. Each round is planned back to back from the start; a round that finished late pushes the rest. The current round ends at its
- * planned end pushed by that, or now, whichever is later. When the last round would end after the courts close minus the 10 minute buffer,
+ * planned end pushed by that, or now, whichever is later. When the last round would end after the courts close minus the buffer (Zip 89: 20 minutes),
  * it suggests shorter pool games: games to 9 from the latest round that is enough, else to 7 from the latest round that is enough, else to 7 from
  * the first round that can change (and says how far over it still runs). A round with a result in it is never changed; playoffs never are.
  */

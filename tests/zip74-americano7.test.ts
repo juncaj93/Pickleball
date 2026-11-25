@@ -25,8 +25,10 @@ describe('zip 74: the 7 player, 1 court Americano pattern', () => {
     }
   });
 
-  it('the plan picks lengths the pattern covers (7 players, 1 court: 6 to 10 rounds for 2 to 4 hours)', () => {
-    expect([120, 150, 180, 210, 240].map((m) => americanoPlan(N, 1, m).rounds)).toEqual([6, 7, 7, 8, 10]);
+  it('the plan picks lengths the pattern covers (7 players, 1 court: 7 to 11 rounds for 2 to 4 hours)', () => {
+    // Zip 89 (20 a round to 11, 16 to 9, 13 to 7; 20 minutes kept free): 2h is 7 rounds to 7 (the fewest giving all 7 players 4 games), 2.5h 8
+    // rounds to 9, 3h 8 to 11, 3.5h 9 to 11, 4h 11 to 11.
+    expect([120, 150, 180, 210, 240].map((m) => americanoPlan(N, 1, m).rounds)).toEqual([7, 8, 8, 9, 11]);
     expect(planLengths.length).toBeGreaterThan(5);
   });
 

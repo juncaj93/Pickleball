@@ -269,7 +269,8 @@ describe('zip 61: game night, scores', () => {
     expect(d.games[0]).toMatchObject({ status: 'done' });
     expect(d.games[0].late).toBeUndefined();
     expect(d.games[1].late).toBeUndefined();
-    ctx.app.now = START_MS + 31 * 60_000;
+    // Zip 89: a round to 11 is 20 minutes (was 23), so 28 minutes in, the game still playing is 8 minutes past its round's time.
+    ctx.app.now = START_MS + 28 * 60_000;
     expect((await dash(ctx)).rounds.games[1].late).toBe('8 min over');
   });
 
@@ -277,9 +278,10 @@ describe('zip 61: game night, scores', () => {
     const ctx = await world(8, { courts: 2, minutes: 120 });
     ctx.app.now = START_MS + 60_000;
     let d = (await dash(ctx)).rounds;
-    expect(d.plan).toMatchObject({ gameTo: 11, rounds: 4 });
+    // Zip 89: 2 hours less the 20 minute buffer is 100 minutes, 5 rounds of 20 to 11 (it was 4 rounds of 23).
+    expect(d.plan).toMatchObject({ gameTo: 11, rounds: 5 });
     for (const g of d.games) {
-      // Side a always wins 11 to 5: everybody ends 2-2 with the same points somewhere.
+      // Side a always wins 11 to 5: players end level on wins and points somewhere.
       const fresh = (await dash(ctx)).rounds.games.find((x: any) => x.num === g.num);
       expect((await admin(ctx, { action: 'score', num: g.num, a: 11, b: 5, seen: fresh.stamp })).status).toBe(200);
     }
@@ -303,7 +305,7 @@ describe('zip 61: game night, scores', () => {
 describe('zip 61: Time check, Pause, Player left, back outs', () => {
   it('the Time check counts in rounds and never shortens the last round', async () => {
     const ctx = await world(10, { minutes: 150 });
-    // 7:30 PM, 6 rounds to 11 (138 minutes). An hour in and nothing entered: well behind.
+    // 7:30 PM, 6 rounds to 11 (120 minutes; Zip 89: 20 a round). An hour in and nothing entered: well behind.
     ctx.app.now = START_MS + 75 * 60_000;
     const d = (await dash(ctx)).rounds;
     expect(d.timeCheck).toBeTruthy();

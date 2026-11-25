@@ -117,9 +117,13 @@ export function pacing(p: PaceInput): PaceResult {
 /**
  * Zip 89: the pace the Time check counts the rounds still to play at (shared/tournamentSchedule.ts timeCheck), or undefined for the table as
  * before. Two cases: a night with a bonus round in it (it was judged by its pace when the bonus was added), and a night running SLOWER than the
- * table (its real pace warns earlier, so the courts are not run past the booked end). A fast night with no bonus is checked exactly as before.
+ * table once 2 rounds are in (its real pace warns earlier, so the courts are not run past the booked end). A fast night with no bonus is checked exactly as before.
  */
-export function paceForCheck(bonusIn: boolean, pace: number | null): number | undefined {
+export function paceForCheck(bonusIn: boolean, pace: number | null, done = 2): number | undefined {
   if (pace === null) return undefined;
-  return bonusIn || pace > FULL ? pace : undefined;
+  // A slow night is judged by its pace only once 2 rounds are in: one slow round (a late first round, people still arriving) never sets the
+  // whole night's time by itself, as one fast round never offers a bonus by itself (the floor).
+  return bonusIn || (pace > FULL && done >= SLOW_ROUNDS) ? pace : undefined;
 }
+/** Rounds fully in before a slow pace counts for the Time check. */
+export const SLOW_ROUNDS = 2;

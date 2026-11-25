@@ -115,6 +115,9 @@ describe('zip 89: the pace and the offer (pure)', () => {
     expect(paceForCheck(false, 15)).toBeUndefined();
     expect(paceForCheck(true, 15)).toBe(15);
     expect(paceForCheck(false, 24)).toBe(24);
+    // One slow round alone never sets the night's time (a late first round): the table, as before.
+    expect(paceForCheck(false, 55, 1)).toBeUndefined();
+    expect(paceForCheck(false, 24, 2)).toBe(24);
   });
 });
 
@@ -285,4 +288,60 @@ describe('zip 89: Locked doubles on the real server', () => {
     expect(JSON.stringify((await phone.call('GET', '/api/group')).data)).not.toContain('"bonus"');
     void START_MS;
   }, 60_000);
+});
+
+describe('zip 89: the preview stages (the preview’s fixed names)', () => {
+  const NAMES = ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Vic', 'Wren', 'Zoe', 'Quinn', 'Reese'];
+  async function preview() {
+    const { setupGroup } = await import('./harness');
+    const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex' });
+    ctx.app.env.PREVIEW_CALM = 'on';
+    for (const n of NAMES) await ctx.organizer.call('POST', '/api/admin/players', { name: n });
+    // Thursday Nov 12, 8:15 PM Eastern.
+    ctx.app.now = Date.parse('2026-11-13T01:15:00.000Z');
+    const stage = async (s: string) => {
+      const r = await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: s });
+      expect(r.status, r.text).toBe(200);
+      return r.data.id as string;
+    };
+    const tour = async () => (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament;
+    const games = (id: string, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${id}/games`, body);
+    return { ctx, stage, tour, games };
+  }
+  it('Americano ahead: the offer shows; Yes adds Round 7', async () => {
+    const { stage, tour, games } = await preview();
+    const id = await stage('zip89_am_ahead');
+    const t = await tour();
+    expect(t.rounds.bonus).toMatchObject({ kind: 'round' });
+    expect(t.rounds.timeCheck ?? null).toBeNull();
+    expect((await games(id, { action: 'bonus', key: t.rounds.bonus.key })).status).toBe(200);
+    expect(Math.max(...(await tour()).rounds.games.map((g: any) => g.round))).toBe(7);
+  });
+  it('Locked doubles ahead: the semis offer; Yes puts SEMIS before the FINAL', async () => {
+    const { stage, tour, games } = await preview();
+    const id = await stage('zip89_ld_semis');
+    const t = await tour();
+    expect(t.day.bonus).toMatchObject({ kind: 'semis' });
+    expect((await games(id, { action: 'bonus', key: t.day.bonus.key })).status).toBe(200);
+    expect((await tour()).day.games.map((g: any) => g.stage)).toEqual(['pool', 'pool', 'pool', 'pool', 'pool', 'pool', 'semi', 'semi', 'final', 'third']);
+  });
+  it('best-of-3 Final in play: Game 1 in, Game 2 and 3rd place on the courts; 1-1 brings Game 3; 2-1 ends it', async () => {
+    const { stage, tour, games } = await preview();
+    const id = await stage('zip89_bo3');
+    let d = (await tour()).day;
+    expect(d.bestOf3).toEqual({ wins: [1, 0], winner: null });
+    expect(d.bonus).toBeUndefined();
+    const g2 = d.games.find((g: any) => g.finalGame === 2);
+    const third = d.games.find((g: any) => g.stage === 'third');
+    expect(d.courtsNow.map((c: any) => c.num).sort()).toEqual([g2.num, third.num].sort());
+    const fix = (g: any, a: number, b: number) => games(id, { action: 'result', num: g.num, a, b, seen: { winner: g.winner, scoreA: g.scoreA, scoreB: g.scoreB } });
+    expect((await fix(g2, 9, 11)).status).toBe(200);
+    d = (await tour()).day;
+    expect(d.bestOf3).toEqual({ wins: [1, 1], winner: null });
+    const g3 = d.games.find((g: any) => g.finalGame === 3);
+    expect(g3.started).toBe(true);
+    expect((await fix(g3, 11, 4)).status).toBe(200);
+    expect((await tour()).day.bestOf3).toEqual({ wins: [2, 1], winner: 'a' });
+  });
 });

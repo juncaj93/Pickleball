@@ -175,6 +175,7 @@ describe('zip 58: End tournament, Locked doubles', () => {
 
 describe('zip 58: End tournament, Americano', () => {
   it('1st place: a medal and $14; 2nd place: $7, no medal; the ticker says Winner then Runner-up; the runner-up gets a card too', async () => {
+    // 8 players on 2 courts for 2 hours (Zip 89: 100 minutes before the 20 minute buffer, 20 a round to 11): 5 rounds to 11.
     const ctx = await world(8, { format: 'americano', minutes: 120 });
     ctx.app.now = START_MS + 60_000;
     const d = (await adminTour(ctx)).rounds;
@@ -185,7 +186,7 @@ describe('zip 58: End tournament, Americano', () => {
       expect(r.status, r.text).toBe(200);
     }
     const end = (await adminTour(ctx)).end;
-    expect(end).toMatchObject({ format: 'americano', hero: 'Round 4 of 4', championCents: 1400, secondCents: 700, done: { kicker: 'Round 4 is done' } });
+    expect(end).toMatchObject({ format: 'americano', hero: 'Round 5 of 5', championCents: 1400, secondCents: 700, done: { kicker: 'Round 5 is done' } });
     expect(end.done.title).toBe(`${end.first.name} finished first`);
     expect(end.done.sub).toBe(`${end.second.name} was second.`);
     const first = end.first.name;

@@ -22,7 +22,7 @@ import {
   winLoss,
 } from '../shared/americanoSchedule';
 import { AMERICANO_PATTERNS } from '../shared/americanoPatterns';
-import { americanoPlan, doublesPlan } from '../shared/tournamentPlan';
+import { americanoPlan, doublesPlan, END_BUFFER } from '../shared/tournamentPlan';
 
 // Zip 61: the Americano schedule (shared/americanoSchedule.ts) checked against the game plan table (reference/GAME_PLAN_TABLE.md, copied
 // unchanged into tests/fixtures) and the brief's rules, for EVERY row of the table (both styles: the Locked doubles rows are the plan zip 57
@@ -127,9 +127,9 @@ describe('zip 61: every row of the game plan table, both styles', () => {
       const m = /^to (\d+), (\d+) rounds, ([\d.]+) games each$/.exec(r.expect)!;
       expect([p.gameTo, p.rounds, p.gamesEach]).toEqual([Number(m[1]), Number(m[2]), Number(m[3])]);
       const c = checkNight(r.players, r.courts, r.minutes);
-      // Every player gets at least 4 games (the table's rule), and the finish is inside the court time minus 10 minutes.
+      // Every player gets at least 4 games (the table's rule), and the finish is inside the court time minus the end buffer (Zip 89: 20 minutes).
       expect(c.minGames).toBeGreaterThanOrEqual(4);
-      expect(p.minutesUsed).toBeLessThanOrEqual(r.minutes - 10);
+      expect(p.minutesUsed).toBeLessThanOrEqual(r.minutes - END_BUFFER);
     });
   }
 });
@@ -150,8 +150,9 @@ describe('zip 61: every size 6 to 16, every court count and court time', () => {
         expect(c.plan.onCourt).toBe(8);
         report.push(`${n} players ${minutes / 60}h: ${c.plan.rounds} rounds to ${c.plan.gameTo}, ${c.minGames === c.maxGames ? c.minGames : `${c.minGames} to ${c.maxGames}`} games each`);
       }
-    // 14: 7 rounds x 8 = 56 = 4 each. 16: 8 rounds x 8 = 64 = 4 each.
-    expect(report).toEqual(['14 players 2.5h: 7 rounds to 9, 4 games each', '14 players 3h: 7 rounds to 11, 4 games each', '16 players 2.5h: 8 rounds to 7, 4 games each', '16 players 3h: 8 rounds to 9, 4 games each']);
+    // Zip 89 (130 or 160 minutes before the 20 minute buffer; 20 a round to 11, 16 to 9): 2.5h fits 8 rounds to 9 (6 to 11 is only 48 seats),
+    // 3h fits 8 rounds to 11. 14: 8 rounds x 8 = 64 = 4 each and 8 players get a 5th. 16: 8 rounds x 8 = 64 = 4 each.
+    expect(report).toEqual(['14 players 2.5h: 8 rounds to 9, 4 to 5 games each', '14 players 3h: 8 rounds to 11, 4 to 5 games each', '16 players 2.5h: 8 rounds to 9, 4 games each', '16 players 3h: 8 rounds to 11, 4 games each']);
   });
 
   it('the pictures: 10 players, 2 courts, 7:30 to 10 PM = 6 rounds to 11, 2 sit each round', () => {
@@ -165,9 +166,11 @@ describe('zip 61: every size 6 to 16, every court count and court time', () => {
   });
 
   it('8 players on 2 courts, 3 hours: every partner exactly once and every opponent exactly twice (a whist night)', () => {
+    // Zip 89: 3 hours is 160 minutes before the 20 minute buffer, 8 rounds to 11 at 20 each (it was 7 at 23). Its first 7 rounds are the whole
+    // whist: every partner exactly once, every opponent exactly twice; the 8th round is one more on top.
     const night = americanoNight(ids(8), 2, 180, 'w');
-    const t = tallyOf(8, seatRounds(8, 8, 7));
-    expect(night.rounds).toBe(7);
+    const t = tallyOf(8, seatRounds(8, 8, night.rounds).slice(0, 7));
+    expect(night.rounds).toBe(8);
     expect(spreadOf(t)).toMatchObject({ oppMin: 2, oppMax: 2 });
     for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) if (x !== y) expect(t.partner[x][y]).toBe(1);
   });

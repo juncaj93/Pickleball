@@ -461,7 +461,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const measured = measuredPace(paceRounds, startMin);
   const check =
     started && !over && !t.paused_at && games.length && t.final_date
-      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace))
+      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done))
       : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
@@ -1509,78 +1509,92 @@ async function addDoublesBonus(ctx: Ctx, group: { id: string; timezone: string }
   const key = typeof body.key === 'string' ? body.key : '';
   const offer = f.pace.offer;
   if (!offer || offer.key !== key) bad('tournament_changed', 'This just changed. Look again.');
-  const nowIso = ctx.nowIso;
-  const fresh = (alias: string) => `${alias}.winner IS NULL AND ${alias}.claim IS NULL AND ${alias}.skipped = 0 AND (${alias}.claim_at IS NULL OR ${alias}.claim_at NOT LIKE 'on:%')`;
+  const ok = offer!.kind === 'semis' ? await writeSemis(ctx.db, t, day, ctx.nowIso) : await writeBestOf3(ctx.db, t, day, ctx.nowIso);
+  if (!ok) bad('tournament_changed', 'This just changed. Look again.');
+  await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: offer!.kind === 'semis' ? 'semifinals' : 'best of 3 final', pace: Math.round(f.pace.pace ?? 0) }, ctx.nowIso);
+  return { ok: true, bonus: offer!.kind };
+}
+
+/** A game row nothing has happened to yet (no result, not skipped, never put on a court). SQL on the given table alias. */
+const freshGame = (alias: string) => `${alias}.winner IS NULL AND ${alias}.claim IS NULL AND ${alias}.skipped = 0 AND (${alias}.claim_at IS NULL OR ${alias}.claim_at NOT LIKE 'on:%')`;
+const INSERT_GAME = `INSERT INTO tournament_games (id, tournament_id, num, round, court, stage, pool, slot_a, slot_b, play_to, skipped, created_at, updated_at)`;
+
+/**
+ * Zip 89: THE SEMIFINALS write (a round robin night of 4 or 5 teams on 2 courts): the Final and 3rd place rows (never started, the last two game
+ * numbers) move one round later and two numbers on, and point at the semifinals' winners and losers; the two semifinals take their numbers:
+ * 1st vs 4th on Court 1, 2nd vs 3rd on Court 2, to 11. One batch, each step only if the one before it happened; anything off: put back, false.
+ * (The preview's test stage uses it too.)
+ */
+export async function writeSemis(db: D1Database, t: TournamentRow, day: DayRows, nowIso: string): Promise<boolean> {
   const fin = day.games.find((g) => g.stage === 'final');
-  if (!fin) bad('tournament_changed', 'This just changed. Look again.');
-  const insert = `INSERT INTO tournament_games (id, tournament_id, num, round, court, stage, pool, slot_a, slot_b, play_to, skipped, created_at, updated_at)`;
-  if (offer!.kind === 'semis') {
-    const third = day.games.find((g) => g.stage === 'third');
-    if (!third || day.games.some((g) => g.stage === 'semi' || g.stage === 'tie') || third.num !== fin!.num + 1 || Math.max(...day.games.map((g) => g.num)) !== third.num)
-      bad('tournament_changed', 'This just changed. Look again.');
-    const F = fin!.num;
-    const R = fin!.round;
-    const noSemi = `NOT EXISTS (SELECT 1 FROM tournament_games s WHERE s.tournament_id = ? AND s.stage = 'semi' AND s.created_at <> ?)`;
-    const res = await ctx.db.batch([
-      ctx.db
-        .prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND stage = 'third' AND ${fresh('tournament_games')} AND ${noSemi}`)
-        .bind(F + 3, R + 1, `L${F}`, `L${F + 1}`, nowIso, third!.id, third!.num, t.id, nowIso),
-      ctx.db
+  const third = day.games.find((g) => g.stage === 'third');
+  if (!fin || !third || day.games.some((g) => g.stage === 'semi' || g.stage === 'tie') || third.num !== fin.num + 1 || Math.max(...day.games.map((g) => g.num)) !== third.num) return false;
+  const F = fin.num;
+  const R = fin.round;
+  const noSemi = `NOT EXISTS (SELECT 1 FROM tournament_games s WHERE s.tournament_id = ? AND s.stage = 'semi' AND s.created_at <> ?)`;
+  const res = await db
+    .batch([
+      db
+        .prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND stage = 'third' AND ${freshGame('tournament_games')} AND ${noSemi}`)
+        .bind(F + 3, R + 1, `L${F}`, `L${F + 1}`, nowIso, third.id, third.num, t.id, nowIso),
+      db
         .prepare(
-          `UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND stage = 'final' AND ${fresh('tournament_games')} AND ${noSemi}
+          `UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND stage = 'final' AND ${freshGame('tournament_games')} AND ${noSemi}
              AND EXISTS (SELECT 1 FROM tournament_games x WHERE x.id = ? AND x.num = ?)`,
         )
-        .bind(F + 2, R + 1, `W${F}`, `W${F + 1}`, nowIso, fin!.id, F, t.id, nowIso, third!.id, F + 3),
+        .bind(F + 2, R + 1, `W${F}`, `W${F + 1}`, nowIso, fin.id, F, t.id, nowIso, third.id, F + 3),
       ...[
         { num: F, court: 1, a: 'P1', b: 'P4' },
         { num: F + 1, court: 2, a: 'P2', b: 'P3' },
       ].map((g) =>
-        ctx.db
+        db
           .prepare(
-            `${insert} SELECT ?, ?, ?, ?, ?, 'semi', NULL, ?, ?, ?, 0, ?, ?
+            `${INSERT_GAME} SELECT ?, ?, ?, ?, ?, 'semi', NULL, ?, ?, ?, 0, ?, ?
                WHERE EXISTS (SELECT 1 FROM tournament_games x WHERE x.id = ? AND x.num = ?) AND ${noSemi}
                  AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
           )
-          .bind(newId(), t.id, g.num, R, g.court, g.a, g.b, PLAYOFF_TO, nowIso, nowIso, fin!.id, F + 2, t.id, nowIso, t.id),
+          .bind(newId(), t.id, g.num, R, g.court, g.a, g.b, PLAYOFF_TO, nowIso, nowIso, fin.id, F + 2, t.id, nowIso, t.id),
       ),
-    ]);
-    if (res.some((r) => (r.meta?.changes ?? 0) !== 1)) {
-      // A step did not happen (something changed in between): put the two rows back exactly as they were, if they moved.
-      await ctx.db
-        .batch([
-          ctx.db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'semi' AND created_at = ?`).bind(t.id, nowIso),
-          ctx.db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(fin!.num, fin!.round, fin!.slot_a, fin!.slot_b, fin!.id, nowIso),
-          ctx.db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(third!.num, third!.round, third!.slot_a, third!.slot_b, third!.id, nowIso),
-        ])
-        .catch(() => undefined);
-      bad('tournament_changed', 'This just changed. Look again.');
-    }
-    await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: 'semifinals', round: R, pace: Math.round(f.pace.pace ?? 0) }, nowIso);
-    return { ok: true, bonus: 'semis' };
-  }
-  // Best of 3: games 2 and 3 of the Final, after the Final's own round.
-  if (day.games.filter((g) => g.stage === 'final').length !== 1) bad('tournament_changed', 'This just changed. Look again.');
+    ])
+    .catch(() => null);
+  if (res && res.every((r) => (r.meta?.changes ?? 0) === 1)) return true;
+  // A step did not happen (something changed in between): put the two rows back exactly as they were, if they moved.
+  await db
+    .batch([
+      db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'semi' AND created_at = ?`).bind(t.id, nowIso),
+      db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(fin.num, fin.round, fin.slot_a, fin.slot_b, fin.id, nowIso),
+      db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(third.num, third.round, third.slot_a, third.slot_b, third.id, nowIso),
+    ])
+    .catch(() => undefined);
+  return false;
+}
+
+/**
+ * Zip 89: THE BEST OF 3 write: the Final's games 2 and 3 (the same two teams, to 11, a round after the Final's own round and one after that, the
+ * next game numbers), only while the Final is the only final game and nothing has happened to it. False when anything was off.
+ */
+export async function writeBestOf3(db: D1Database, t: TournamentRow, day: DayRows, nowIso: string): Promise<boolean> {
+  const finals = day.games.filter((g) => g.stage === 'final');
+  if (finals.length !== 1) return false;
+  const fin = finals[0];
   const next = Math.max(...day.games.map((g) => g.num)) + 1;
   const oneFinal = `(SELECT COUNT(*) FROM tournament_games x WHERE x.tournament_id = ? AND x.stage = 'final' AND x.created_at <> ?) = 1`;
-  const notStarted = `EXISTS (SELECT 1 FROM tournament_games x WHERE x.id = ? AND ${fresh('x')})`;
-  const res = await ctx.db
+  const notStarted = `EXISTS (SELECT 1 FROM tournament_games x WHERE x.id = ? AND ${freshGame('x')})`;
+  const res = await db
     .batch(
       [1, 2].map((i) =>
-        ctx.db
+        db
           .prepare(
-            `${insert} SELECT ?, ?, ?, ?, 1, 'final', NULL, ?, ?, ?, 0, ?, ? WHERE ${oneFinal} AND ${notStarted}
+            `${INSERT_GAME} SELECT ?, ?, ?, ?, 1, 'final', NULL, ?, ?, ?, 0, ?, ? WHERE ${oneFinal} AND ${notStarted}
                AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
           )
-          .bind(newId(), t.id, next + i - 1, fin!.round + i, fin!.slot_a, fin!.slot_b, PLAYOFF_TO, nowIso, nowIso, t.id, nowIso, fin!.id, t.id),
+          .bind(newId(), t.id, next + i - 1, fin.round + i, fin.slot_a, fin.slot_b, PLAYOFF_TO, nowIso, nowIso, t.id, nowIso, fin.id, t.id),
       ),
     )
     .catch(() => null);
-  if (!res || res.some((r) => (r.meta?.changes ?? 0) !== 1)) {
-    await ctx.db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'final' AND created_at = ? AND id <> ?`).bind(t.id, nowIso, fin!.id).run().catch(() => undefined);
-    bad('tournament_changed', 'This just changed. Look again.');
-  }
-  await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: 'best of 3 final', pace: Math.round(f.pace.pace ?? 0) }, nowIso);
-  return { ok: true, bonus: 'bestOf3' };
+  if (res && res.every((r) => (r.meta?.changes ?? 0) === 1)) return true;
+  await db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'final' AND created_at = ? AND id <> ?`).bind(t.id, nowIso, fin.id).run().catch(() => undefined);
+  return false;
 }
 
 async function startNow(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow) {

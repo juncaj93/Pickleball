@@ -271,34 +271,36 @@ describe('zip 57: standings and the playoffs', () => {
 });
 
 describe('zip 57: the Time check', () => {
-  // 12 players on 2 courts, 7:30 to 10:00 PM: 3 pool rounds to 11, the semis, then the Final and 3rd place (115 minutes; the limit is 9:50 PM).
+  // 12 players on 2 courts, 7:30 to 10:00 PM: 3 pool rounds to 11, the semis, then the Final and 3rd place. Zip 89: 20 minutes a round to 11, 16
+  // to 9, 13 to 7, so 100 minutes (done 9:10 PM); the limit is 9:40 PM (20 minutes kept free before the courts close).
   const rounds = (done: number, doneAt: number[] = []) =>
     [1, 2, 3, 4, 5].map((r) => ({ round: r, pool: r <= 3, playTo: 11 as const, done: r <= done, doneAt: doneAt[r - 1] }));
   const S = 19 * 60 + 30;
   const E = 22 * 60;
   it('on time: nothing to say', () => {
-    expect(timeCheck(rounds(1, [S + 23]), S, E, S + 30)).toMatchObject({ current: 2, behind: 0, suggest: null });
+    // Round 1 done right at its planned end (7:50 PM).
+    expect(timeCheck(rounds(1, [S + 20]), S, E, S + 30)).toMatchObject({ current: 2, behind: 0, suggest: null });
   });
   it('a little behind but it still fits before the buffer: no banner', () => {
-    // Round 1 done at 8:15 PM (22 minutes late): finish 9:47 PM, inside 9:50.
-    expect(timeCheck(rounds(1, [20 * 60 + 15]), S, E, 20 * 60 + 16)).toMatchObject({ behind: 22, suggest: null });
+    // Round 1 done at 8:15 PM (25 minutes late): finish 9:35 PM, inside 9:40.
+    expect(timeCheck(rounds(1, [20 * 60 + 15]), S, E, 20 * 60 + 16)).toMatchObject({ behind: 25, suggest: null });
   });
   it('behind: games to 9 from the latest round that is enough, else 7; and how far over when nothing is enough', () => {
-    // Done at 8:25 PM (32 late): finish 9:57. To 9 from round 3 saves 4 (9:53, not enough); from round 2 saves 8: 9:49.
+    // Done at 8:25 PM (35 late): finish 9:45. To 9 from round 3 saves 4 (9:41, not enough); from round 2 saves 8: 9:37.
     const tc = timeCheck(rounds(1, [20 * 60 + 25]), S, E, 20 * 60 + 26);
-    expect(tc.behind).toBe(32);
+    expect(tc.behind).toBe(35);
     expect(tc.suggest).toEqual({ fromRound: 2, to: 9, stillOver: 0 });
-    expect(timeCheckWords(tc.behind, 2, 9, '10:00 PM')).toBe('Running about 32 minutes behind. From Round 2 on, play to 9 so we finish on time.');
-    // Done at 8:30 PM (37 late): finish 10:02. To 9 from round 2: 9:54, no; to 7 from round 3 saves 7: 9:55, no; from round 2 saves 14: 9:48.
+    expect(timeCheckWords(tc.behind, 2, 9, '10:00 PM')).toBe('Running about 35 minutes behind. From Round 2 on, play to 9 so we finish on time.');
+    // Done at 8:30 PM (40 late): finish 9:50. To 9 from round 2: 9:42, no; to 7 from round 3 saves 7: 9:43, no; from round 2 saves 14: 9:36.
     expect(timeCheck(rounds(1, [20 * 60 + 30]), S, E, 20 * 60 + 31).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 0 });
-    // Done at 8:40 PM (47 late): finish 10:12; the most it can save is 14 minutes: 9:58, still 8 minutes over the 9:50 limit.
-    expect(timeCheck(rounds(1, [20 * 60 + 40]), S, E, 20 * 60 + 41).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 8 });
-    expect(timeCheckWords(47, 2, 7, '10:00 PM', 8)).toBe('Running about 47 minutes behind. From Round 2 on, play to 7. That still runs about 8 minutes over.');
+    // Done at 8:40 PM (50 late): finish 10:00; the most it can save is 14 minutes: 9:46, still 6 minutes over the 9:40 limit.
+    expect(timeCheck(rounds(1, [20 * 60 + 40]), S, E, 20 * 60 + 41).suggest).toEqual({ fromRound: 2, to: 7, stillOver: 6 });
+    expect(timeCheckWords(50, 2, 7, '10:00 PM', 6)).toBe('Running about 50 minutes behind. From Round 2 on, play to 7. That still runs about 6 minutes over.');
   });
   it('the current round counts as late while it runs past its planned end', () => {
-    // Round 2 planned to end 8:16 PM; still playing at 8:40 PM: it ends no earlier than now.
-    const tc = timeCheck(rounds(1, [S + 23]), S, E, 20 * 60 + 40);
-    expect(tc.behind).toBe(24);
+    // Round 1 on time; round 2 planned to end 8:10 PM; still playing at 8:40 PM: it ends no earlier than now (3 rounds of 20 after it: 9:40).
+    const tc = timeCheck(rounds(1, [S + 20]), S, E, 20 * 60 + 40);
+    expect(tc.behind).toBe(30);
   });
   it('never touches the playoffs or a round being played', () => {
     const tc = timeCheck(rounds(3, [S + 40, S + 80, 21 * 60 + 20]), S, E, 21 * 60 + 21);

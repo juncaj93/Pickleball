@@ -133,8 +133,10 @@ describe('THE money line (one function everywhere)', () => {
   });
 
   it('the fit line names the style really played (picture 4)', () => {
-    expect(fitWords(nightPlan(9, 2, 150, 'doubles'), 1170).text).toBe('Americano for 9: games to 11, done about 9:50 PM.');
-    expect(fitWords(nightPlan(10, 2, 150, 'doubles'), 1170).text).toBe('Locked doubles for 10: games to 11, done about 9:50 PM.');
+    // Zip 89 (20 a round to 11, 20 minutes kept free): 9 plays Americano, 6 rounds to 11 in the 130 minutes; 10 plays a round robin of 5 rounds
+    // and the Final, 6 rounds to 11. Both 120 minutes from 7:30 PM.
+    expect(fitWords(nightPlan(9, 2, 150, 'doubles'), 1170).text).toBe('Americano for 9: games to 11, done about 9:30 PM.');
+    expect(fitWords(nightPlan(10, 2, 150, 'doubles'), 1170).text).toBe('Locked doubles for 10: games to 11, done about 9:30 PM.');
   });
 });
 

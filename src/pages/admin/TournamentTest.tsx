@@ -17,7 +17,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip88_rd3', 'zip88_early', 'zip88_final', 'zip88_sitting', 'zip88_ready', 'zip88_soon'];
+const THIS_ZIP: readonly string[] = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -38,6 +38,10 @@ const EARLY_LOOK: NightModel = {
 };
 
 const STAGES = [
+  // Zip 89 (🎾89.smart pacing): the bonus offer and what it adds.
+  { stage: 'zip89_am_ahead', label: 'Pacing: Americano ahead (offer showing)', line: 'Americano tonight, Rounds 1 and 2 in at 14 minutes a round. Home: the night card’s green “Ahead of time” line with Add a round, above All rounds. Tap it: “Add a round? Are you sure?”, Yes: RD7 joins the bars, All rounds and every phone (View as Vic).' },
+  { stage: 'zip89_ld_semis', label: 'Pacing: Locked doubles ahead (semis offer)', line: '4 teams tonight, Round 1 in at 14 minutes. “Ahead of time”, Add a round asks “Add semifinals?”. Yes: SEMIS joins the bars between RD3 and FINAL (1st vs 4th, 2nd vs 3rd after the round robin; the Final and 3rd place after them).' },
+  { stage: 'zip89_bo3', label: 'Pacing: best-of-3 Final in play', line: 'Semifinals in, the Final is best of 3: Net Ninjas won Game 1 11 to 8. Home: “Final · G2” on a court beside 3rd place, “Best of 3 · G1 11–8 · G2 –” under it. Score Game 2 for Third Shot Gang to see Game 3 appear at 1-1; win it for Net Ninjas to see End tournament.' },
   // Zip 88 (🎾88.rolling courts): the night card (pictures 1 to 3) and a sitting player's phone.
   { stage: 'zip88_rd3', label: 'Night: Americano, both courts in RD3 (start here)', line: 'Picture 1. Tonight, Rounds 1 and 2 in; Court 1’s Round 3 game is in (11 to 7), Court 2 still playing. Home: the one night card: RD3 outlined, Court 1 Done (tap 11 – 7 to fix), Court 2 Playing with Score, Sitting with a ball each, All rounds, Standings, Pause and Player left (each asks first).' },
   { stage: 'zip88_early', label: 'Night: Americano, court 1 started RD4 early', line: 'Picture 2, drawn as a look below (10 players never start a round early: the fair schedule always has someone of the next game still on the other court). Home gets the picture 1 night.' },

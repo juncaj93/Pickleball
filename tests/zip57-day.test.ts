@@ -275,15 +275,15 @@ describe('zip 57: game night', () => {
     expect((await play(ctx, name, d.games[0].num, 'won')).status).toBe(409);
   });
   it('the Time check: late, it suggests shorter pool games; Apply plays them to 9 or 7; players see the words', async () => {
-    const ctx = await world(12, { start: 19 * 60 + 30, minutes: 150 }); // 12 on 2 courts for 2.5 hours: pools to 11, 115 minutes
+    const ctx = await world(12, { start: 19 * 60 + 30, minutes: 150 }); // 12 on 2 courts for 2.5 hours: pools to 11, 100 minutes
     await draftAndPublish(ctx);
-    // Round 1 ends 32 minutes late.
-    ctx.app.now = START_MS + (23 + 32) * 60_000;
+    // Round 1 ends 35 minutes late (Zip 89: a round to 11 is 20 minutes; one late round alone never switches the Time check to the pace).
+    ctx.app.now = START_MS + (20 + 35) * 60_000;
     const d = (await dash(ctx)).day;
     for (const g of d.games.filter((x: any) => x.round === 1)) expect((await games(ctx, { action: 'result', num: g.num, winner: 'a' })).status).toBe(200);
     const tc = (await dash(ctx)).day.timeCheck;
     expect(tc).toMatchObject({ fromRound: 2, to: 9 });
-    expect(tc.text).toBe('Running about 32 minutes behind. From Round 2 on, play to 9 so we finish on time.');
+    expect(tc.text).toBe('Running about 35 minutes behind. From Round 2 on, play to 9 so we finish on time.');
     expect((await games(ctx, { action: 'apply', fromRound: tc.fromRound, to: tc.to })).status).toBe(200);
     const after = (await dash(ctx)).day;
     expect(after.games.filter((g: any) => g.stage === 'pool' && g.round >= 2).every((g: any) => g.playTo === 9)).toBe(true);

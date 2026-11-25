@@ -269,7 +269,7 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
   const bonusIn = stored.length > 0 && rounds > plannedRounds;
   const check =
     started && !over && !t.paused_at && rounds && t.final_date
-      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace))
+      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done))
       : null;
   const lowered = games.filter((g) => !decided(g) && g.playTo < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.playTo)) as GameTo } : null;

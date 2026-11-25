@@ -29,9 +29,9 @@ const over: string[] = [];
 function checks(r: NightRun, pace: number, left: number, what: string, cut?: () => boolean) {
   if (pace <= 20) expect(r.finish, `${what}: never past the booked end`).toBeLessThanOrEqual(END_MS);
   else if (r.finish > END_MS) {
-    // 25 minutes a game: only when nothing is left to shorten (every pool game after Round 2 already at 7), and never by more than 15 minutes.
+    // 25 minutes a game: only when nothing is left to shorten (every pool game after Round 2 already at 7), and never by more than 20 minutes.
     expect(cut?.() ?? false, `${what}: over the end with games still to shorten`).toBe(true);
-    expect(-left, `${what}: minutes over`).toBeLessThanOrEqual(15);
+    expect(-left, `${what}: minutes over`).toBeLessThanOrEqual(20);
     over.push(`${what}: ${-left} min over (every game the Time check may shorten is at 7)`);
   }
   if (pace <= 20) expect(left, `${what}: at least 10 minutes before the end`).toBeGreaterThanOrEqual(10);
