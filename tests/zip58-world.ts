@@ -91,7 +91,7 @@ async function afterBreak<T extends { status: number; data: any }>(ctx: World, s
   const r = await send();
   if (r.status !== 409 || r.data?.error !== 'not_yet') return r;
   const t = await adminTour(ctx);
-  const b = (t?.day ?? t?.rounds)?.breakNow;
+  const b = t?.day?.breakNow ?? t?.rounds?.breakNow;
   if (!b) return r;
   ctx.app.now = Math.max(ctx.app.now, Date.parse(b.until) + 1000);
   return send();

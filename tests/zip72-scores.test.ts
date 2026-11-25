@@ -31,10 +31,20 @@ async function night(n = 8, opts: Parameters<typeof world>[1] = {}) {
   return { ctx, num: g1.num as number, teamA: ta.name as string, teamB: tb.name as string, a: ta.players[0].name as string, a2: ta.players[1].name as string, b: tb.players[0].name as string, b2: tb.players[1].name as string };
 }
 
+/**
+ * Zip 89 (Alex): 8 players (4 teams on 2 courts) is a night where nobody sits: a 5 minute break after every 2nd round, and the next round's games
+ * are not on a court until it ends (a score for them is refused, "not on a court yet"). As on a real night the clock runs on: while a break is
+ * on, it moves to the break's end before the next score.
+ */
+async function pastBreak(ctx: World) {
+  const b = (await adminTour(ctx)).day?.breakNow;
+  if (b) ctx.app.now = Math.max(ctx.app.now, Date.parse(b.until) + 1000);
+}
 /** Every pool game scored by the organizer: `score(seatA, seatB)` gives [points of seat A, points of seat B]. */
 async function scorePools(ctx: World, score: (a: number, b: number) => [number, number]) {
   for (const g of (await adminTour(ctx)).day.games.filter((x: any) => x.stage === 'pool')) {
     const [x, y] = score(g.a.seat, g.b.seat);
+    await pastBreak(ctx);
     const r = await fix(ctx, { action: 'result', num: g.num, a: x, b: y });
     expect(r.status, r.text).toBe(200);
   }

@@ -65,6 +65,19 @@ async function lockWithCredit(ctx: Ctx, name: string) {
 const dash = async (ctx: Ctx) => (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament;
 const card = async (ctx: Ctx, name: string) => (await (await playerPhone(ctx, name)).call('GET', '/api/group')).data.tournament;
 const admin = (ctx: Ctx, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, body);
+/**
+ * Zip 89 (Alex): on a night where nobody sits (8 on 2 courts) the round after every 2nd round waits a 5 minute break, and a score sent for it
+ * during the break is refused ("not on a court yet"). As on a real night the clock runs on: when, and only when, a break is on, the clock moves
+ * to its end and the same tap is sent again (the same as tests/zip58-world.ts games()). Any other refusal is returned as it was.
+ */
+const adminAfterBreak = async (ctx: Ctx, body: Record<string, unknown>) => {
+  const r = await admin(ctx, body);
+  if (r.status !== 409 || r.data?.error !== 'not_yet') return r;
+  const b = (await dash(ctx)).rounds?.breakNow;
+  if (!b) return r;
+  ctx.app.now = Math.max(ctx.app.now, Date.parse(b.until) + 1000);
+  return admin(ctx, body);
+};
 /** A player's tap as their screen sends it: the game's key from their own card, and with Yes or No, fix it the score the screen showed. */
 const play = async (ctx: Ctx, name: string, body: Record<string, unknown>) => {
   const phone = await playerPhone(ctx, name);
@@ -269,8 +282,9 @@ describe('zip 61: game night, scores', () => {
     expect(d.games[0]).toMatchObject({ status: 'done' });
     expect(d.games[0].late).toBeUndefined();
     expect(d.games[1].late).toBeUndefined();
-    // Zip 89: a round to 11 is 20 minutes (was 23), so 28 minutes in, the game still playing is 8 minutes past its round's time.
-    ctx.app.now = START_MS + 28 * 60_000;
+    // Zip 89: Round 1 starts after the 10 minute warm-up and a round to 11 is 20 minutes (was 23), so 38 minutes in, the game still playing is
+    // 8 minutes past its round's time.
+    ctx.app.now = START_MS + 38 * 60_000;
     expect((await dash(ctx)).rounds.games[1].late).toBe('8 min over');
   });
 
@@ -278,12 +292,13 @@ describe('zip 61: game night, scores', () => {
     const ctx = await world(8, { courts: 2, minutes: 120 });
     ctx.app.now = START_MS + 60_000;
     let d = (await dash(ctx)).rounds;
-    // Zip 89: 2 hours less the 20 minute buffer is 100 minutes, 5 rounds of 20 to 11 (it was 4 rounds of 23).
-    expect(d.plan).toMatchObject({ gameTo: 11, rounds: 5 });
+    // Zip 89: 2 hours less the 10 minute warm-up and the 20 minute buffer is 90 minutes; nobody sits (8 on 2 courts), so a 5 minute break
+    // after every 2nd round: 4 rounds of 20 to 11 and 1 break (85 minutes; 5 rounds and 2 breaks would be 110).
+    expect(d.plan).toMatchObject({ gameTo: 11, rounds: 4 });
     for (const g of d.games) {
-      // Side a always wins 11 to 5: players end level on wins and points somewhere.
+      // Side a always wins 11 to 5: everybody ends 2-2 with the same points somewhere. Round 3 waits for the break after Round 2.
       const fresh = (await dash(ctx)).rounds.games.find((x: any) => x.num === g.num);
-      expect((await admin(ctx, { action: 'score', num: g.num, a: 11, b: 5, seen: fresh.stamp })).status).toBe(200);
+      expect((await adminAfterBreak(ctx, { action: 'score', num: g.num, a: 11, b: 5, seen: fresh.stamp })).status).toBe(200);
     }
     d = (await dash(ctx)).rounds;
     expect(d.round).toBeNull();
@@ -565,9 +580,10 @@ describe('zip 61: the independent review, each finding', () => {
     expect(rowCount(early)).toBe(0);
     const ctx = await world(8, { courts: 2, minutes: 120 });
     ctx.app.now = START_MS + 60_000;
+    // Every game in (Zip 89: Round 3 after the break that follows Round 2 on this no-sit night).
     for (const g of (await dash(ctx)).rounds.games) {
       const fresh = (await dash(ctx)).rounds.games.find((x: any) => x.num === g.num);
-      await admin(ctx, { action: 'score', num: g.num, a: 11, b: 5, seen: fresh.stamp });
+      expect((await adminAfterBreak(ctx, { action: 'score', num: g.num, a: 11, b: 5, seen: fresh.stamp })).status).toBe(200);
     }
     const r = await admin(ctx, { action: 'left', playerId: ctx.byName.Blair });
     expect(r.data).toMatchObject({ ok: true, skipped: 0 });

@@ -76,7 +76,7 @@ describe('zip 80: a 12 player night on the real server: a three-way tie in a gro
   it('Game A and Game B: the players\' night times say the semis begin after them', async () => {
     const ctx = await world(12);
     await draftAndPublish(ctx);
-    ctx.app.now = START_MS + 75 * 60_000; // 8:45 PM, the pools are in (Zip 89: 3 rounds of 20 minutes end 8:30 PM)
+    ctx.app.now = START_MS + 75 * 60_000; // 8:45 PM, the pools are in (Zip 89: after the 10 minute warm-up, 3 rounds of 20 minutes end 8:40 PM)
     const d = (await adminTour(ctx)).day;
     // Dink group (seats 1 to 3): a circle (1 beats 2, 2 beats 3, 3 beats 1, all 11 to 7); Drive group: the lower seat wins.
     for (const g of d.games.filter((x: any) => x.stage === 'pool')) {
@@ -88,7 +88,7 @@ describe('zip 80: a 12 player night on the real server: a three-way tie in a gro
     const name = await playerOfSeat(ctx, 4);
     const before = (await card(ctx, name)).day.night as { label: string; time: string }[];
     expect(before.map((x) => x.label)).toEqual(['Group play · 3 rounds', 'Semifinals', 'Final and 3rd place']);
-    expect(before[1].time).toBe('8:30 PM');
+    expect(before[1].time).toBe('8:40 PM');
     const tie = (await adminTour(ctx)).day.ties[0];
     expect(tie).toMatchObject({ mode: 'wheel' });
     expect((await games(ctx, { action: 'spin', key: tie.key })).status).toBe(200);

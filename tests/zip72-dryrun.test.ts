@@ -39,8 +39,18 @@ async function endNight(ctx: World) {
  * Play every Locked doubles game still open, round by round, each by the first player of side a with `score(seatA, seatB)` (points of side a,
  * points of side b), except games `byOrganizer` (Alex enters them: nobody in it has a phone).
  */
+/**
+ * Zip 89 (Alex): 8 players (4 teams on 2 courts) is a night where nobody sits: a 5 minute break after every 2nd round, and the next round's games
+ * are not on a court until it ends (a score for them is refused, "not on a court yet"). As on a real night the clock runs on: while a break is
+ * on, it moves to the break's end before the next score.
+ */
+async function pastBreak(ctx: World) {
+  const b = (await adminTour(ctx)).day?.breakNow;
+  if (b) ctx.app.now = Math.max(ctx.app.now, Date.parse(b.until) + 1000);
+}
 async function playLocked(ctx: World, score: (a: number, b: number, stage: string) => [number, number], byOrganizer: (g: any) => boolean = () => false) {
   for (let guard = 0; guard < 40; guard++) {
+    await pastBreak(ctx);
     const d = (await adminTour(ctx)).day;
     const open = d.games.filter((g: any) => !g.winner && !g.skipped && g.a && g.b);
     if (!open.length) return;

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { americanoPlan, doublesPlan, END_BUFFER, fitWords, nightPlan, ROUND_MINUTES, suggestedPlan } from '../shared/tournamentPlan';
+import { americanoPlan, BREAK_MINUTES, doublesPlan, END_BUFFER, fitWords, nightPlan, ROUND_MINUTES, suggestedPlan, WARM_UP } from '../shared/tournamentPlan';
 import { planFit, smartPlan } from '../shared/tournament';
 
 // Zip 57: the game plan table (reference/GAME_PLAN_TABLE.md from the zip, copied unchanged into tests/fixtures) is the single source of truth.
@@ -56,12 +56,17 @@ describe('zip 57: the game plan table, every row', () => {
       if (r.style === 'doubles') {
         const m = /^to (\d+), (\d+) rounds, (\d+) min$/.exec(r.expect)!;
         expect([p.gameTo, p.rounds, p.minutesUsed]).toEqual([Number(m[1]), Number(m[2]), Number(m[3])]);
-        // The finish time: start + minutes used (7:00 PM start, 92 minutes: 8:32 PM).
+        // The finish time: start + minutes used, warm-up and breaks included (Zip 89; 7:00 PM start, 95 minutes: 8:35 PM).
         expect(19 * 60 + p.minutesUsed).toBe(19 * 60 + Number(m[3]));
       } else {
         const m = /^to (\d+), (\d+) rounds, ([\d.]+) games each$/.exec(r.expect)!;
         expect([p.gameTo, p.rounds, p.gamesEach!.toFixed(1)]).toEqual([Number(m[1]), Number(m[2]), m[3]]);
-        expect(p.minutesUsed).toBe(p.rounds * ROUND_MINUTES[p.gameTo]);
+        // Zip 89: the minutes used are the warm-up, the rounds and the breaks. Nobody sits when everyone is on court every round (8 on 2
+        // courts): then a 5 minute break after every 2nd round, never after the last.
+        const noSit = p.onCourt! >= r.players;
+        const breaks = noSit ? Math.floor((p.rounds - 1) / 2) : 0;
+        expect([p.noSit, p.breaks]).toEqual([noSit, breaks]);
+        expect(p.minutesUsed).toBe(WARM_UP + p.rounds * ROUND_MINUTES[p.gameTo] + breaks * BREAK_MINUTES);
       }
     });
   }
@@ -88,17 +93,20 @@ describe('zip 57: the starting suggestion, the plan line and the words', () => {
     expect(planFit(19)).toEqual({ fits: 16, over: 3 });
   });
   it('fit words: mocks 60 and 61', () => {
-    // Zip 89 (20 a round to 11, 16 to 9, 13 to 7; 20 minutes kept free at the end): 12 on 2 courts is 5 rounds to 11 = 100 minutes, 7:00 + 100.
-    expect(fitWords(nightPlan(12, 2, 180, 'doubles'), 19 * 60)).toEqual({ fits: true, text: 'Locked doubles for 12: pool games to 11, done about 8:40 PM.' });
+    // Zip 89 (20 a round to 11, 16 to 9, 13 to 7; 10 minutes of warm-up at the start, 20 kept free at the end, so 30 less to plan in; a 5
+    // minute break after every 2nd round when nobody sits): "done about" is the start plus the warm-up, the rounds and the breaks.
+    // 12 on 2 courts: 5 rounds to 11 = 100 minutes + 10 warm-up, 7:00 + 110.
+    expect(fitWords(nightPlan(12, 2, 180, 'doubles'), 19 * 60)).toEqual({ fits: true, text: 'Locked doubles for 12: pool games to 11, done about 8:50 PM.' });
     expect(fitWords(nightPlan(12, 1, 120, 'doubles'), 19 * 60 + 30)).toEqual({ fits: false, text: 'Locked doubles for 12: too tight on 1 court. Use 2 courts or add court time.' });
-    // 8 on 2 courts: 4 rounds to 11 = 80 minutes from 7:30. 9 (Americano): 130 minutes before the buffer = 6 rounds to 11 = 120 minutes.
-    expect(fitWords(nightPlan(8, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Locked doubles for 8: games to 11, done about 8:50 PM.');
-    expect(fitWords(nightPlan(9, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Americano for 9: games to 11, done about 9:30 PM.');
-    // 14 and 16 (mocks 52 and 53; Zip 89 numbers): 14 is 5 pool rounds + 2 playoff rounds, all to 11 (140 minutes): semifinals about 8:40 PM,
-    // done about 9:20. 16 is 6 + 2 rounds, all to 11 now (160 minutes, exactly the 3 hours less the 20 minute buffer): semifinals about 9:00 PM,
-    // done about 9:40.
-    expect(fitWords(nightPlan(14, 2, 180, 'doubles'), 19 * 60).text).toBe('Locked doubles for 14: pool games to 11, done about 9:20 PM.');
-    expect(fitWords(nightPlan(16, 2, 180, 'doubles'), 19 * 60).text).toBe('Locked doubles for 16: pool games to 11, done about 9:40 PM.');
+    // 8 on 2 courts (4 teams, nobody sits): 4 rounds to 11 = 80 minutes + 1 break (after round 2) + 10 warm-up = 95 from 7:30. 9 (Americano,
+    // one sits each round): 120 minutes to plan in = 6 rounds to 11 = 120 minutes + 10 warm-up.
+    expect(fitWords(nightPlan(8, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Locked doubles for 8: games to 11, done about 9:05 PM.');
+    expect(fitWords(nightPlan(9, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Americano for 9: games to 11, done about 9:40 PM.');
+    // 14 and 16 (mocks 52 and 53; Zip 89 numbers, 150 minutes to plan in): 14 is 5 pool rounds + 2 playoff rounds, all to 11 (140 minutes + 10
+    // warm-up): semifinals about 8:50 PM, done about 9:30. 16 is 6 + 2 rounds: all to 11 would be 160, too many, so pool games to 9 (6 x 16 + 2
+    // x 20 = 136 + 10 warm-up = 146): semifinals about 8:45 PM, done about 9:25.
+    expect(fitWords(nightPlan(14, 2, 180, 'doubles'), 19 * 60).text).toBe('Locked doubles for 14: pool games to 11, done about 9:30 PM.');
+    expect(fitWords(nightPlan(16, 2, 180, 'doubles'), 19 * 60).text).toBe('Locked doubles for 16: pool games to 9, done about 9:25 PM.');
   });
   it('an odd count on Locked doubles plans as Americano (zip 64: odd plays Americano)', () => {
     expect(nightPlan(9, 2, 150, 'doubles').style).toBe('americano');
