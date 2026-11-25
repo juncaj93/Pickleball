@@ -17,6 +17,7 @@
 const { spawn, spawnSync } = require('node:child_process');
 const { readFileSync, mkdirSync, rmSync } = require('node:fs');
 const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
@@ -543,6 +544,14 @@ async function main() {
       assert(page.errors.length === 0, page.errors.join(' | '));
       await ctx.close();
     });
+  }
+
+  // A later zip: on a preview, tapping Off in Settings also marks "preview off" (server/christmasSkin.ts markPreviewOff), so the preview no longer
+  // defaults to Everyone. S ends on Off; put the preview default back for E and F, which use the preview's date link.
+  {
+    const d = new DatabaseSync(dbFile);
+    d.prepare("DELETE FROM task_log WHERE task = 'christmas_skin_preview_off'").run();
+    d.close();
   }
 
   await check('E reduced motion: nothing animates, the swaps are instant', async () => {

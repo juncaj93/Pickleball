@@ -166,8 +166,12 @@ async function main() {
       // Zip 78 (one look): every card takes the site's one card radius (--card-r, 20 px); the mock's 24 px is gone.
       assert(s.radius === '20px' && ['1px', '1.5px'].includes(s.border), `radius ${s.radius}, border ${s.border}`);
       assert(/\.hs-tip \{[^}]*border: 1\.5px solid var\(--hs-card-line\)/s.test(readFileSync(path.join(ROOT, 'src/home-screen-tip.css'), 'utf8')), 'the card border is 1.5px in the stylesheet');
-      assert(rgb(s.bg) === want.bg && rgb(s.line) === want.line && rgb(s.subColor) === want.sub, `colors ${s.bg} ${s.line} ${s.subColor}`);
-      assert(rgb(s.pillBg) === want.pillBg && rgb(s.pillInk) === want.pillInk && rgb(s.iconBg) === want.iconBg, `pill/icon ${s.pillBg} ${s.pillInk} ${s.iconBg}`);
+      // Retired in Zip 92: the mock's exact colors (want above) were removed in Zip 78 (the one-look color tokens). Still: a light card in light
+      // mode and a dark one in dark mode, and the pill's words readable on the pill.
+      const lumOf = (c) => { const [r, g, b] = c.match(/\d+/g).map(Number); return (r * 299 + g * 587 + b * 114) / 1000; };
+      assert(scheme === 'light' ? lumOf(s.bg) > 200 : lumOf(s.bg) < 70, `card ${s.bg}`);
+      assert(Math.abs(lumOf(s.pillBg) - lumOf(s.pillInk)) > 90, `pill ${s.pillBg} / ${s.pillInk}`);
+      void want;
       assert(s.titleSize === '16.5px' && s.titleWeight === '700' && s.subSize === '14px', `type ${s.titleSize} ${s.titleWeight} ${s.subSize}`);
       assert(s.pillH === 38 && s.pillBelowText, `pill ${s.pillH} below ${s.pillBelowText}`);
       assert(s.xRing[0] === 32 && s.xRing[1] === 32 && s.icon[0] === 34 && s.icon[1] === 34, `x ${s.xRing} icon ${s.icon}`);

@@ -116,6 +116,17 @@ async function main() {
     assert(o.sw <= o.cw + 1, `${what}: sideways overflow ${o.sw} > ${o.cw}`);
   };
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `money-rework-${name}.png`), fullPage: true });
+  /** What a token (or any CSS) resolves to on this page: { color, bg, border }. Zip 78 moved every color onto the token list. */
+  const probe = (page, css) =>
+    page.evaluate((css) => {
+      const e = document.createElement('i');
+      e.style.cssText = `border: 1px solid; ${css}`;
+      document.body.appendChild(e);
+      const c = getComputedStyle(e);
+      const out = { color: c.color, bg: c.backgroundColor, border: c.borderTopColor };
+      e.remove();
+      return out;
+    }, css);
   const money = async (page) => {
     await tab(page, 'Money');
     await page.locator('[data-month-box]').waitFor();
@@ -786,7 +797,8 @@ async function main() {
       // Zip 12 (Nov 7) added Show last screen at once, Load games at once and Fewer database trips above those, Zip 11 had added Alert cards just before, Seat dots, and Zip 12 step C's Instant admin is newest (18 rows above the group now).
       // Zip 13 (Nov 7) added Undo on admin toasts, Swap to Alex and Players redo on top (21 rows above the group now).
       // Zip 14 (Nov 8) added Game day card on top; Zip 15 (Nov 8) Second Chance above it; Zip 16 (Nov 8) After-game cards on top; Zip 17 (Nov 8) Unpaid nudge above it; Zip 21 (Nov 9) Error alerts on top; Zip 23 (Nov 9) Totals refresh above it; Zip 24 (Nov 9) Booking hours on top; Zip 27 (Nov 9) Spent matches Totals above it; Zip 30 (Nov 10) Acting for others and Zip 32 (Nov 12) Players sheet redo on top (31 rows above the group now).
-      assert(names.slice(0, 40).join('|') === 'Guest spot|Venue charge alert|Christmas skin|Made cheaper after paying|Home Screen tip|Game day text|Tap guard fix|Extended time|Check-in pay line|Players sheet redo|Acting for others|Spent matches Totals|Booking hours|Totals refresh|Error alerts|Unpaid nudge|After-game cards|Second Chance|Game day card|Undo on admin toasts|Swap to Alex|Players redo|Instant admin|Seat dots|Show last screen at once|Load games at once|Fewer database trips|Alert cards|Card cleanup|Short games|Card time and buttons|Last call texts|Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 40)}`);
+      // Zip 51b's Money change note and the Tournaments switch are newer still, on top (42 rows above the group now).
+      assert(names.slice(0, 42).join('|') === 'Tournaments|Money change note|Guest spot|Venue charge alert|Christmas skin|Made cheaper after paying|Home Screen tip|Game day text|Tap guard fix|Extended time|Check-in pay line|Players sheet redo|Acting for others|Spent matches Totals|Booking hours|Totals refresh|Error alerts|Unpaid nudge|After-game cards|Second Chance|Game day card|Undo on admin toasts|Swap to Alex|Players redo|Instant admin|Seat dots|Show last screen at once|Load games at once|Fewer database trips|Alert cards|Card cleanup|Short games|Card time and buttons|Last call texts|Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 42)}`);
       // Every other switch is on for everyone on live (the fee split since Wed Nov 4), so they are all in the group, newest first.
       const group = page.locator('[data-live-stable]');
       assert((await group.count()) === 1, 'Live and stable group');
@@ -797,7 +809,7 @@ async function main() {
       assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
       assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
       // This test server keeps the two animation switches dark, so those two rows sit above the group as well.
-      assert(names.length === 40 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the fifteen newest sit above the group): ${names.length} vs ${live.length}`);
+      assert(names.length === 42 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the fifteen newest sit above the group): ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {
@@ -957,7 +969,9 @@ async function main() {
       assert(m.size === m.tsize && m.weight === m.tweight && m.tfamily, `same font as the toggle: ${m.size}/${m.weight} vs ${m.tsize}/${m.tweight} (${tag})`);
       assert(m.bw === '1px', `1px outline (${tag})`);
       if (scheme === 'light') {
-        assert(m.bc === 'rgb(220, 220, 213)' && m.bg === 'rgb(255, 255, 255)', `outline #dcdcd5 on white: ${m.bc} ${m.bg}`);
+        // Retired in Zip 92: the exact outline pixel #dcdcd5 was removed in Zip 78 (one-look tokens); it is the site's --line token now.
+        const line = (await probe(page, 'border-color: var(--line)')).border;
+        assert(m.bc === line && m.bg === 'rgb(255, 255, 255)', `--line outline on white: ${m.bc} ${m.bg} (--line ${line})`);
       }
       assert(Math.abs(m.h - 42) <= 0.6 && Math.abs(m.th - 42) <= 0.6, `box and toggle track are both 42 px: ${m.h} / ${m.th} (${tag})`);
       assert(m.radius === '14px', `box corners 14 px: ${m.radius} (${tag})`);
@@ -971,7 +985,7 @@ async function main() {
       await ctx.close();
     }
   });
-  await check('10 Mark paid: 14 px medium (500), 34 px high, 11 px corners, 1.5 px soft outline, white fill, never wraps, a 44 px tap area; names stay semibold; light and dark', async () => {
+  await check('10 Mark paid (Zip 78: the small secondary button): 14 px bold (700), 44 px high, 12 px corners, gray fill, never wraps, a 44 px tap area; names stay semibold; light and dark', async () => {
     for (const [width, scheme] of [[320, 'light'], [360, 'dark'], [430, 'light'], [390, 'dark']]) {
       // A 2x screen, like a phone: a 1.5 px line only exists at 2x and up (at 1x the browser draws 1 px).
       const { ctx, page } = await openAdmin({ width, scheme, dpr: 2 });
@@ -982,7 +996,7 @@ async function main() {
           const cs = getComputedStyle(b);
           const before = getComputedStyle(b, '::before');
           const r = b.getBoundingClientRect();
-          return { t: b.innerText.trim(), size: cs.fontSize, weight: cs.fontWeight, h: Math.round(r.height * 10) / 10, radius: cs.borderTopLeftRadius, bw: cs.borderTopWidth, bc: cs.borderTopColor, bg: cs.backgroundColor, ws: cs.whiteSpace, one: b.scrollWidth <= b.clientWidth + 1, hit: r.height + parseFloat(before.top) * -2 };
+          return { t: b.innerText.trim(), size: cs.fontSize, weight: cs.fontWeight, h: Math.round(r.height * 10) / 10, radius: cs.borderTopLeftRadius, bw: cs.borderTopWidth, bc: cs.borderTopColor, bg: cs.backgroundColor, ink: cs.color, ws: cs.whiteSpace, one: b.scrollWidth <= b.clientWidth + 1, hit: r.height + parseFloat(before.top) * -2 };
         });
         const name = getComputedStyle(document.querySelector('.mrw-name')).fontWeight;
         // The browser snaps a drawn line to whole device pixels (1.5 px shows as 1 px at 1x and 2x in this test browser), so the 1.5 px is read from the style itself.
@@ -991,12 +1005,14 @@ async function main() {
         return { out, name, dpr: window.devicePixelRatio, authored };
       });
       const tag = `${width} ${scheme}`;
+      const sec = await probe(page, 'color: var(--ink); background: var(--fill)');
       assert(m.out.length >= 8, `there are Mark paid buttons to check: ${m.out.length}`);
       for (const b of m.out) {
-        assert(b.t === 'Mark paid' && b.size === '14px' && b.weight === '500', `type ${b.size}/${b.weight} (${tag})`);
-        assert(b.h === 34 && b.radius === '11px' && parseFloat(b.bw) >= 1 && m.authored === '1.5px' && b.ws === 'nowrap' && b.one, `shape ${b.h}px ${b.radius} ${b.bw} ${b.ws} dpr ${m.dpr} (${tag})`);
+        // Zip 78: Mark paid, Request and Text are one small secondary button (44 px, gray fill, ink words, 700, the one 12 px corner).
+        assert(b.t === 'Mark paid' && b.size === '14px' && b.weight === '700', `type ${b.size}/${b.weight} (${tag})`);
+        assert(b.h === 44 && b.radius === '12px' && parseFloat(b.bw) >= 1 && m.authored === '1.5px' && b.ws === 'nowrap' && b.one, `shape ${b.h}px ${b.radius} ${b.bw} ${b.ws} dpr ${m.dpr} (${tag})`);
         assert(b.hit >= 44, `tap area ${b.hit}px (${tag})`);
-        if (scheme === 'light') assert(b.bc === 'rgb(207, 210, 201)' && b.bg === 'rgb(255, 255, 255)', `outline #cfd2c9 on white: ${b.bc} ${b.bg}`);
+        assert(b.bc === sec.bg && b.bg === sec.bg && b.ink === sec.color, `the gray secondary button: ${b.bc} ${b.bg} ${b.ink} vs ${JSON.stringify(sec)} (${tag})`);
       }
       assert(Number(m.name) >= 600, `names stay semibold or heavier: ${m.name}`);
       await noOverflow(page, `mark paid ${tag}`);
@@ -1004,19 +1020,20 @@ async function main() {
       await ctx.close();
     }
   });
-  await check('2 Remind button: solid purple, 38 px, 14 px / 600, 12 px corners, no outline, light and dark, 320 / 360 / 430', async () => {
+  await check('2 Remind button (Zip 78: the small secondary button): gray fill, ink words, 44 px, 14 px / 700, 12 px corners, no outline, light and dark, 320 / 360 / 430', async () => {
     for (const [width, scheme] of [[320, 'light'], [360, 'dark'], [430, 'light'], [320, 'dark'], [360, 'light'], [430, 'dark']]) {
       const { ctx, page } = await openAdmin({ width, scheme });
       await money(page);
       const b = await page.locator('[data-remind]').first().evaluate((el) => {
         const cs = getComputedStyle(el);
         const r = el.getBoundingClientRect();
-        return { bg: cs.backgroundColor, color: cs.color, h: r.height, size: cs.fontSize, weight: cs.fontWeight, radius: cs.borderTopLeftRadius, bw: cs.borderTopWidth, one: el.scrollWidth <= el.clientWidth + 1 && r.height < 40, text: el.innerText.trim() };
+        return { bg: cs.backgroundColor, color: cs.color, h: r.height, size: cs.fontSize, weight: cs.fontWeight, radius: cs.borderTopLeftRadius, bw: cs.borderTopWidth, one: el.scrollWidth <= el.clientWidth + 1 && r.height < 46, text: el.innerText.trim() };
       });
       const tag = `${width} ${scheme}`;
-      const want = scheme === 'light' ? ['rgb(106, 86, 166)', 'rgb(255, 255, 255)'] : ['rgb(178, 160, 230)', 'rgb(29, 20, 51)'];
-      assert(b.bg === want[0] && b.color === want[1], `colors ${b.bg} on ${b.color} (${tag})`);
-      assert(b.h === 38 && b.size === '14px' && b.weight === '600' && b.radius === '12px' && b.bw === '0px' && b.one, `shape ${b.h} ${b.size}/${b.weight} ${b.radius} ${b.bw} (${tag})`);
+      // Retired in Zip 92: the solid purple (#6a56a6 / #b2a0e6) and the 38 px / 600 shape were removed in Zip 78 (one secondary button).
+      const sec = await probe(page, 'color: var(--ink); background: var(--fill)');
+      assert(b.bg === sec.bg && b.color === sec.color, `colors ${b.bg} on ${b.color} (${tag})`);
+      assert(b.h === 44 && b.size === '14px' && b.weight === '700' && b.radius === '12px' && b.bw === '0px' && b.one, `shape ${b.h} ${b.size}/${b.weight} ${b.radius} ${b.bw} (${tag})`);
       assert(/^Remind \(\d+\)$/.test(b.text), `text ${b.text}`);
       await noOverflow(page, `remind ${tag}`);
       if (width === 360) await shot(page, `remind-button-${scheme}`);
@@ -1053,9 +1070,10 @@ async function main() {
       assert(m.small.every((t) => /^owes \$14$/.test(t)), `small "owes $14": ${m.small}`);
       // Zip 6: a person with a Venmo username shows "Venmo request" next to Text; on a 320 px phone those two buttons drop under the name (about 98 px), by design.
       assert(m.rowH.every((h) => (h >= 52 && h <= 60) || (/^320/.test(tag) && h <= 100)), `rows about 54 px: ${m.rowH} (${tag})`);
-      const purple = scheme === 'light' ? 'rgb(106, 86, 166)' : 'rgb(178, 160, 230)';
-      assert(m.oneH === 36 && m.oneColor === purple && m.oneBorder === purple && m.oneSize === '14px' && m.oneRadius === '12px', `Text button ${m.oneH} ${m.oneColor} ${m.oneBorder} (${tag})`);
-      assert(m.allH === 34 && m.allBg === purple && m.allColor === (scheme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(29, 20, 51)') && m.allSize === '14px' && m.allWeight === '600', `Text all ${m.allH} ${m.allBg} ${m.allColor} (${tag})`);
+      // Retired in Zip 92: the purple texting pixels were removed in Zip 78: Text and Text all are the gray secondary look (--fill, --ink).
+      const sec = await probe(page, 'color: var(--ink); background: var(--fill)');
+      assert(m.oneH === 36 && m.oneColor === sec.color && m.oneBg === sec.bg && m.oneBorder === sec.bg && m.oneSize === '14px' && m.oneRadius === '12px', `Text button ${m.oneH} ${m.oneColor} ${m.oneBg} ${m.oneBorder} (${tag})`);
+      assert(m.allH === 34 && m.allBg === sec.bg && m.allColor === sec.color && m.allSize === '14px' && m.allWeight === '600', `Text all ${m.allH} ${m.allBg} ${m.allColor} (${tag})`);
       assert(m.order, `Text all sits between the title and the close button (${tag})`);
       assert(m.fit, `no sideways overflow in the sheet (${tag})`);
       // Group text: one new message addressed to the people who owe (Kai and Gray, who both have numbers), the agreed words with line breaks.
@@ -1150,7 +1168,7 @@ async function main() {
       await post(areq, `/api/admin/sessions/${g.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen });
     }
   });
-  await check('4 5 color tokens: credit is the softer blue, paid green and owes amber are unchanged, texting is purple, in light and dark', async () => {
+  await check('4 5 color tokens: credit is the site blue, paid green and owes amber are unchanged, texting is the gray secondary (Zip 78), in light and dark', async () => {
     for (const scheme of ['light', 'dark']) {
       const { ctx, page } = await openAdmin({ width: 360, scheme });
       await money(page);
@@ -1173,18 +1191,21 @@ async function main() {
           tokens: ['--tok-paid-fg', '--tok-paid-bg', '--tok-owes-fg', '--tok-owes-bg', '--tok-credit-fg', '--tok-credit-bg', '--tok-text-fill', '--tok-text-ink'].map(tok),
           creditText: cs('.mrw-state.credit'), creditRow: cs('.mrw-row.credit', 'bg'), creditFoot: cs('.mrw-foot-mid'),
           paidText: cs('.mrw-state.ok'), paidRow: cs('.mrw-row.paid', 'bg'),
-          oldGreen: probe('color: var(--ok-fg); background: var(--ok-bg)'), oldAmber: probe('color: var(--warn-fg)'),
+          oldGreen: probe('color: var(--ok-fg); background: var(--ok-bg)'), oldAmber: probe('color: var(--warn-fg)'), blue: probe('color: var(--info-fg); background: var(--info-bg)'),
+          secondary: [probe('background: var(--fill)').bg, probe('background: var(--tok-text-fill)').bg, probe('color: var(--ink)').color, probe('color: var(--tok-text-ink)').color],
           dot: cs('.mrw-dots i.p', 'bg'), oldDot: probe('background: var(--ok-edge)').bg,
         };
       });
       const L = scheme === 'light';
-      assert(m.creditText === (L ? 'rgb(58, 79, 163)' : 'rgb(147, 166, 230)'), `credit text ${m.creditText} (${scheme})`);
-      assert(m.creditRow === (L ? 'rgb(233, 237, 246)' : 'rgb(32, 40, 64)'), `credit row ${m.creditRow} (${scheme})`);
+      // Retired in Zip 92: the exact credit pixels (58,79,163 / 233,237,246 ...) were removed in Zip 78; credit is the site's one blue (--info-*).
+      assert(m.creditText === m.blue.color, `credit text ${m.creditText} vs --info-fg ${m.blue.color} (${scheme})`);
+      assert(m.creditRow === m.blue.bg, `credit row ${m.creditRow} vs --info-bg ${m.blue.bg} (${scheme})`);
       assert(m.creditFoot === m.creditText, `"Credit: $3 per" is the credit blue (${scheme})`);
       assert(m.paidText === m.oldGreen.color && m.paidRow === m.oldGreen.bg && m.dot === m.oldDot, `paid green is exactly the site's (${scheme})`);
       assert(owedColor === m.oldAmber.color, `owes amber is exactly the site's (${scheme})`);
       assert(m.tokens.every(Boolean), `all eight tokens are defined (${scheme}): ${m.tokens}`);
-      assert(m.tokens[6].toLowerCase() === (L ? '#6a56a6' : '#b2a0e6') && m.tokens[7].toLowerCase() === (L ? '#ffffff' : '#1d1433'), `texting purple (${scheme})`);
+      // Retired in Zip 92: texting purple (#6a56a6 / #b2a0e6) was removed in Zip 78: Text is the gray secondary button (--fill, --ink).
+      assert(m.secondary[0] === m.secondary[1] && m.secondary[2] === m.secondary[3], `texting is the secondary button (${scheme}): ${m.secondary}`);
       await ctx.close();
     }
   });

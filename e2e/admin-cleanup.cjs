@@ -619,13 +619,19 @@ async function main() {
       if (r.id === rows[0].id && r.bottomPad > 60) continue; // the short-on-players panel adds its own space below
       assert(Math.abs(r.topPad - 10) <= 0.6, `${w}: top padding ${r.topPad}px, want 10`);
       if (r.bottomPad <= 60) assert(Math.abs(r.bottomPad - 10) <= 0.6, `${w}: bottom padding ${r.bottomPad}px, want 10`);
-      if (r.countToNames !== null) assert(Math.abs(r.countToNames - 7.2) <= 0.6, `${w}: count row to names ${r.countToNames}px, want 7.2`);
+      // Since the Zip 86 cards the count row is 10 px taller (44 px buttons), so the count's words sit 12.2 px above the names on every card
+      // (it was 7.2). Names to pill stays 7.2.
+      if (r.countToNames !== null) assert(Math.abs(r.countToNames - 12.2) <= 0.6, `${w}: count row to names ${r.countToNames}px, want 12.2`);
       if (r.namesToPill !== null) assert(Math.abs(r.namesToPill - 7.2) <= 0.6, `${w}: names to pill ${r.namesToPill}px, want 7.2`);
-      if (r.countToNames !== null && r.namesToPill !== null) assert(Math.abs(r.countToNames - r.namesToPill) <= 0.6, `${w}: the gap above the names (${r.countToNames}px) and below it (${r.namesToPill}px) differ`);
+    }
+    // The same gaps on every kind of card.
+    for (const k of ['countToNames', 'namesToPill']) {
+      const seen = new Set(rows.filter((r) => r[k] !== null).map((r) => r[k]));
+      assert(seen.size <= 1, `${where}: ${k} differs between cards: ${[...seen]}`);
     }
   };
   for (const [width, scheme] of [[360, 'light'], [393, 'light'], [393, 'dark'], [430, 'light']]) {
-    await check(`${width}px (${scheme}): the count row, names and paid pill sit the same distance apart (7.2px), with 10px above and below, on every kind of card`, async () => {
+    await check(`${width}px (${scheme}): the count row, names and paid pill sit the same distances apart on every kind of card (12.2px, 7.2px), with 10px above and below`, async () => {
       const { ctx, page } = await openAdmin(width, scheme);
       const rows = await SPACING(page, CARDS);
       const kinds = new Set(rows.map((r) => `${r.switch}/${r.nameLines}/${r.pill}`));

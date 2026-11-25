@@ -266,8 +266,17 @@ async function main() {
     await h.page.locator('[data-bh-start]').click();
     const sel = h.page.locator(`${GRID} .bh-chip[aria-pressed="true"]`);
     await sel.waitFor();
-    const c = await sel.evaluate((e) => ({ bg: getComputedStyle(e).backgroundColor, fg: getComputedStyle(e).color }));
-    assert(c.bg === 'rgb(76, 194, 122)' && c.fg === 'rgb(6, 32, 15)', JSON.stringify(c));
+    // Retired in Zip 92: the exact pixels (76,194,122 on 6,32,15) were removed in Zip 78 (one green, court switch colors defined once):
+    // the picked chip is the site's green with its own ink, in dark too.
+    const c = await sel.evaluate((e) => {
+      const p = document.createElement('i');
+      p.style.cssText = 'color: var(--primary-ink); background: var(--primary)';
+      document.body.appendChild(p);
+      const want = { bg: getComputedStyle(p).backgroundColor, fg: getComputedStyle(p).color };
+      p.remove();
+      return { bg: getComputedStyle(e).backgroundColor, fg: getComputedStyle(e).color, want };
+    });
+    assert(c.bg === c.want.bg && c.fg === c.want.fg && c.bg !== c.fg, JSON.stringify(c));
     await shot(h.page, 'grid-dark');
     await h.ctx.close();
   });
@@ -660,14 +669,22 @@ async function main() {
     await page.locator('dialog.sheet[open] form').waitFor();
     await page.waitForTimeout(300);
   };
+  // Zip 81: the usual game time is tap-to-pick (the 30-minute grid sheet over the Usual game time sheet), no native time boxes.
+  const USUAL = 'dialog.sheet[open]:has([data-usual-start])';
+  const pickUsual = async (page, which, hhmm) => {
+    await page.locator(`${USUAL} [data-usual-${which}]`).click();
+    const grid = page.locator('dialog[open]:has([data-bh-grid])').last();
+    await grid.locator(`[data-chip="${hhmm}"]`).click();
+    await grid.waitFor({ state: 'detached' }).catch(() => {});
+    await page.waitForTimeout(150);
+  };
   await check('SETTINGS > Schedule: 9:00 to 11:00 PM shows the message under the boxes and turns Save off; inside the hours Save works', async () => {
     const h = await openAdmin({ width: 390 });
     await openUsual(h.page);
-    const sheet = h.page.locator('dialog.sheet[open]');
+    const sheet = h.page.locator(USUAL);
     assert((await sheet.locator('[data-bh-message]').count()) === 0, 'no message for the usual 8 to 10 PM');
-    const times = sheet.locator('input[type="time"]');
-    await times.nth(0).fill('21:00');
-    await times.nth(1).fill('23:00');
+    await pickUsual(h.page, 'start', '21:00');
+    await pickUsual(h.page, 'end', '23:00');
     const msg = sheet.locator('[data-bh-message]');
     await msg.waitFor();
     assert((await msg.innerText()).replace(/\s+/g, ' ').trim() === MSG_ANY, `message: ${await msg.innerText()}`);
@@ -675,15 +692,14 @@ async function main() {
     // The message sits under the two boxes.
     const pos = await sheet.evaluate((e) => ({ boxes: e.querySelector('.time-pair').getBoundingClientRect().bottom, msg: e.querySelector('[data-bh-message]').getBoundingClientRect().top }));
     assert(pos.msg >= pos.boxes - 1, `under the boxes: ${JSON.stringify(pos)}`);
-    await times.nth(0).fill('19:00');
-    await times.nth(1).fill('21:00');
-    await h.page.waitForTimeout(150);
+    await pickUsual(h.page, 'start', '19:00');
+    await pickUsual(h.page, 'end', '21:00');
     assert((await sheet.locator('[data-bh-message]').count()) === 0 && (await sheet.getByRole('button', { name: 'Save' }).isEnabled()), 'fixed: message gone, Save on');
-    await times.nth(0).fill('07:00');
-    await times.nth(1).fill('09:00');
+    await pickUsual(h.page, 'start', '07:00');
+    await pickUsual(h.page, 'end', '09:00');
     assert((await sheet.locator('[data-bh-message]').count()) === 1, '7:00 AM start is out of hours too');
-    await times.nth(0).fill('19:00');
-    await times.nth(1).fill('21:00');
+    await pickUsual(h.page, 'start', '19:00');
+    await pickUsual(h.page, 'end', '21:00');
     await sheet.getByRole('button', { name: 'Save' }).click();
     await h.page.waitForTimeout(900);
     const g = (await dash()).group.settings;
@@ -695,9 +711,9 @@ async function main() {
     await put(real, '/api/admin/booking-hours-switch', { on: false });
     const h = await openAdmin({ width: 390 });
     await openUsual(h.page);
-    const sheet = h.page.locator('dialog.sheet[open]');
-    await sheet.locator('input[type="time"]').nth(0).fill('21:00');
-    await sheet.locator('input[type="time"]').nth(1).fill('23:00');
+    const sheet = h.page.locator(USUAL);
+    await pickUsual(h.page, 'start', '21:00');
+    await pickUsual(h.page, 'end', '23:00');
     assert((await sheet.locator('[data-bh-message]').count()) === 0 && (await sheet.getByRole('button', { name: 'Save' }).isEnabled()), 'no message, Save on');
     await h.ctx.close();
     await put(real, '/api/admin/booking-hours-switch', { on: true });
@@ -752,11 +768,11 @@ async function main() {
           await scan('edit', 'dialog.sheet[open]');
           await closeTop(h.page);
           await openUsual(h.page);
-          const sheet = h.page.locator('dialog.sheet[open]');
-          await sheet.locator('input[type="time"]').nth(0).fill('21:00');
-          await sheet.locator('input[type="time"]').nth(1).fill('23:00');
+          const sheet = h.page.locator(USUAL);
+          await pickUsual(h.page, 'start', '21:00');
+          await pickUsual(h.page, 'end', '23:00');
           await sheet.locator('[data-bh-message]').waitFor();
-          await scan('message', 'dialog.sheet[open]');
+          await scan('message', USUAL);
           const wide = await h.page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
           if (wide.sw > wide.cw + 1) problems.push(`${tag}: sideways overflow ${wide.sw} > ${wide.cw}`);
           const m = await sheet.locator('[data-bh-message]').evaluate((e) => ({ r: e.getBoundingClientRect(), p: e.closest('form').getBoundingClientRect() }));

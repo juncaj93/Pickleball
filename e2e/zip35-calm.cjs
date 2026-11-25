@@ -4,9 +4,9 @@
  *
  * The CALM small world on its own dev server (PREVIEW_CALM and SECOND_CHANCE_TEST on, as on a preview), at 390 px wide, light and dark:
  *   (Zip 42: the calm profile now holds the Guest spot games; the Second Chance and "Test game" checks this file had moved to the full world.)
- *   C1  admin Home: the "Guest test" card is on the first screen, Home fits two screens at most, no unrelated money rows (Remind, Finalize, haven't paid);
+ *   C1  admin Home: the "Guest test" card is on the first screen, Home fits two and a half screens at most (Zip 86's taller cards), no unrelated money rows (Remind, Finalize, haven't paid);
  *   C2  the money cell opens the Players sheet with Rowan, his guest Sam, Parker, his guest Billy and Christopher (two taps from the preview link);
- *   C4  player Home (Rowan): no alert cards, no money, at most three plain games and "More sessions".
+ *   C4  player Home (Rowan): no alert cards, no money, at most three plain games and "More games".
  */
 const { spawn, spawnSync } = require('node:child_process');
 const { readFileSync, mkdirSync, rmSync } = require('node:fs');
@@ -110,7 +110,7 @@ async function main() {
   }
 
   for (const scheme of ['light', 'dark']) {
-    await check(`C1 (${scheme}): admin Home at 390 px: the five Guest spot games come first, Home fits two screens at most, no unrelated money rows`, async () => {
+    await check(`C1 (${scheme}): admin Home at 390 px: the five Guest spot games come first, Home fits two and a half screens at most, no unrelated money rows`, async () => {
       const { ctx, page } = await openAdmin(scheme, '/admin');
       const ids = await page.locator('article[data-r2-card]').evaluateAll((els) => els.map((e) => e.id));
       if (process.env.CALM_SHOT) await page.screenshot({ path: process.env.CALM_SHOT, fullPage: true });
@@ -121,7 +121,9 @@ async function main() {
       const box = await page.locator(`article[id="${want[0]}"]`).boundingBox();
       assert(box && box.y + 120 < 844, `the first Guest spot card is not on the first screen: ${JSON.stringify(box)}`);
       const fit = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, w: window.innerHeight }));
-      assert(fit.h <= fit.w * 2 + 2, `Home needs more than two screens: page ${fit.h}px, screen ${fit.w}px`);
+      // Two screens at Zip 35; Zip 86 made every game card taller on purpose (a floating card, 44 px buttons, the paid / court / directions row)
+      // and Zip 81's venue-hours card sits on top of the calm Home: the five Guest spot cards and the rest now fit two and a half screens.
+      assert(fit.h <= fit.w * 2.5 + 2, `Home needs more than two and a half screens: page ${fit.h}px, screen ${fit.w}px`);
       const text = await page.locator('body').innerText();
       for (const bad of ['Remind', 'Finalize', "haven’t paid", 'Who owes']) assert(!text.includes(bad), `unrelated money text on Home: "${bad}"`);
       assert((await page.locator('article').count()) <= 7, `${await page.locator('article').count()} games on Home`);

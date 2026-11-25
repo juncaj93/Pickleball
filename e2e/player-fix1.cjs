@@ -186,7 +186,8 @@ async function main() {
       assert(t, 'no TONIGHT tag');
       assert(t.side >= 6, `side room ${t.side.toFixed(1)}px (was ${was.side.toFixed(1)})`);
       assert(t.h <= was.h + 6, `the pill grew too much: ${t.h.toFixed(1)} vs ${was.h.toFixed(1)}`);
-      assert(t.left >= 4 && t.right >= 4, `inside its tile with a gap: ${t.left.toFixed(1)} / ${t.right.toFixed(1)}`);
+      // Zip 78's "no text under 11 px" floor makes the word a little wider in the 76 px tile (320 / 360): about 3.2 px each side there (was 4).
+      assert(t.left >= 3 && t.right >= 3, `inside its tile with a gap: ${t.left.toFixed(1)} / ${t.right.toFixed(1)}`);
       assert(t.scrollOver <= 0, 'the word is cut off');
       assert(t.bg === was.bg && t.ink === was.ink, `colors changed: ${was.bg}/${was.ink} -> ${t.bg}/${t.ink}`);
       const problems = await a.page.evaluate(audit, { allowEllipsis: ['.topbar h1', '.topbar .eyebrow'] });

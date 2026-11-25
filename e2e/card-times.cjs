@@ -80,6 +80,7 @@ const report = (page) =>
         lines: lines.map((l) => l.text),
         fits: lines.every((l) => l.box.left >= col.left - 0.5 && l.box.right <= col.right + 0.5),
         widest: Math.max(...lines.map((l) => l.box.right - l.box.left)),
+        past: lines.map((l) => `"${l.text}" ${(l.box.left - col.left).toFixed(1)}..${(l.box.right - col.right).toFixed(1)}`).join(', '),
         colWidth: col.width,
         centered: lines.every((l) => Math.abs((l.box.left + l.box.right) / 2 - (tile.left + tile.right) / 2) <= 3),
         belowTile: lines[0].box.top >= tile.bottom - 1,
@@ -186,7 +187,7 @@ async function main() {
         assert(tiers.size >= 2, `only ${[...tiers]} cards on screen`);
         rows.forEach((r, i) => {
           const where = `card ${i + 1} (${r.tier}, ${JSON.stringify(r.lines)})`;
-          assert(r.fits, `${where}: text ${r.widest.toFixed(1)}px wide runs past the ${r.colWidth}px tile column`);
+          assert(r.fits, `${where}: text ${r.widest.toFixed(1)}px wide runs past the ${r.colWidth}px tile column (left/right edges vs the column: ${r.past}; overlaps: ${r.hits.join('; ') || 'none'})`);
           assert(r.hits.length === 0, `${where}: ${r.hits.join('; ')}`);
           assert(r.centered && r.belowTile && r.insideCard, `${where}: not centered under the tile (centered ${r.centered}, below ${r.belowTile}, inside ${r.insideCard})`);
           assert(!r.pageOverflow, `${where}: the page scrolls sideways`);

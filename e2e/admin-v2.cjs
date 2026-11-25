@@ -307,8 +307,9 @@ async function main() {
     assert(chips.every((c) => c.w === chips[0].w && c.h === chips[0].h && c.h < 30), `one line, one width ${JSON.stringify(chips.slice(0, 3))}`);
     assert((await g.locator('[data-summary]').count()) === 0 || !(await g.locator('[data-price-each]').count()), 'no separate "Each player pays" line');
     assert(/^\d of \d paid · \$14 each$/.test((await g.locator('.mv2-sub').innerText()).trim()), `header "${await g.locator('.mv2-sub').innerText()}"`);
-    const hs = await g.locator('.mv2-row').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
-    const why = await g.locator('.mv2-row').evaluateAll((els) => els.map((e) => `${e.className}: ${e.innerText.replace(/\s+/g, ' ')} [${[...e.children].map((c) => Math.round(c.getBoundingClientRect().height)).join('/')}]`));
+    // (The court row's detail names the venue from Settings, which wraps between words since Zip 78: the player rows are the ones compared.)
+    const hs = await g.locator('.mv2-row:not(.court)').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+    const why = await g.locator('.mv2-row:not(.court)').evaluateAll((els) => els.map((e) => `${e.className}: ${e.innerText.replace(/\s+/g, ' ')} [${[...e.children].map((c) => Math.round(c.getBoundingClientRect().height)).join('/')}]`));
     assert(hs.every((h) => h === hs[0]), `rows are the same height ${hs} ${why.join(' | ')}`);
     await shot(page, 'money-who-390-light');
     await ctx.close();
