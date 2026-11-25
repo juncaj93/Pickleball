@@ -434,7 +434,8 @@ async function main() {
       if (await all.count()) await all.click();
       if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
     }
-    await card.locator('.court-switch [data-seg="booked"]').click();
+    // Zip 86: one status button on the Home card (Not booked -> Booked); the 2-way switch is in Edit game only.
+    await card.locator('button.r86-status[data-status="not_booked"]').click();
   });
   await undoCase(
     'Finalize (Everyone played)',
@@ -470,8 +471,8 @@ async function main() {
       if (await all.count()) await all.click();
       if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
     }
-    await card.locator('button[aria-label^="Game menu"]').click();
-    await page.getByRole('menuitem', { name: /^Players/ }).click();
+    // Zip 87: no Players row in the game menu; the paid pill opens the players list.
+    await card.locator('[data-paid-cell]').click();
     await page.locator('dialog[open] button', { hasText: 'Give spot' }).first().click();
   });
   await undoCase(
@@ -485,8 +486,8 @@ async function main() {
         if (await all.count()) await all.click();
         if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
       }
-      await card.locator('button[aria-label^="Game menu"]').click();
-      await page.getByRole('menuitem', { name: /^Players/ }).click();
+      // Zip 87: no Players row in the game menu; the paid pill opens the players list.
+      await card.locator('[data-paid-cell]').click();
       await page.locator('dialog[open] button', { hasText: /^Remove$/ }).first().click();
       await page.locator('dialog[open] button', { hasText: /^Remove$/ }).last().click();
       // The Undo must be what a finger lands on (the open sheet used to cover it for taps).
@@ -511,8 +512,8 @@ async function main() {
         if (await all.count()) await all.click();
         if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
       }
-      await card.locator('button[aria-label^="Game menu"]').click();
-      await page.getByRole('menuitem', { name: /^Players/ }).click();
+      // Zip 87: no Players row in the game menu; the paid pill opens the players list.
+      await card.locator('[data-paid-cell]').click();
       await page.locator('dialog[open] button', { hasText: /^Remove$/ }).first().click();
       await page.locator('dialog[open] button', { hasText: /^Remove$/ }).last().click();
       // The Undo must be what a finger lands on (the open sheet used to cover it for taps).

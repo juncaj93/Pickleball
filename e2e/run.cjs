@@ -373,8 +373,15 @@ function headerReport() {
   const after = getComputedStyle(mode, '::after');
   return {
     welcome: /Welcome,/.test(head.innerText),
-    oneLine: line.getBoundingClientRect().height < 40 && nu.getClientRects().length === 1,
-    height: line.getBoundingClientRect().height,
+    // Zip 90: the header is ONE row (logo, name, buttons, date); "not you?" sits beside the name, or under it lined up with its first letter
+    // when they do not fit side by side. So the name itself is one line, "not you?" is one line, and the buttons and date stay on the name's row.
+    oneLine:
+      h1.getBoundingClientRect().height < 40 &&
+      nu.getClientRects().length === 1 &&
+      parts.mode.top < parts.name.bottom &&
+      parts.square.top < parts.name.bottom &&
+      (parts.notYou.top < parts.name.bottom - 1 || Math.abs(parts.notYou.left - parts.name.left) <= 1),
+    height: h1.getBoundingClientRect().height,
     allVisible: vis(parts.notYou) && vis(parts.mode) && vis(parts.square) && (() => {
       const r = document.createRange();
       r.selectNodeContents(nu);
@@ -2714,7 +2721,7 @@ async function main() {
     });
 
     for (const [width, scheme] of [[360, 'light'], [390, 'dark'], [430, 'light'], [375, 'dark']]) {
-      await check(`sessions per iPhone screen at ${width}px (${scheme}): organizer 4+ on a short 664px screen (was 3 at 360/375), player 3+`, async () => {
+      await check(`sessions per iPhone screen at ${width}px (${scheme}): organizer 4+ on a short 664px screen (3+ at 360/375), player 3+`, async () => {
         const ctx = await browser.newContext({ ...phone(width), viewport: { width, height: 664 }, colorScheme: scheme });
         const p = await ctx.newPage();
         await p.goto(`${BASE}/admin`);
@@ -2733,8 +2740,8 @@ async function main() {
           }).length;
         });
         await p.screenshot({ path: path.join(SHOTS, `dense-admin-${width}-${scheme}.png`) });
-        // On this short screen it was 3 at 360/375 and 4 at 390/430 before; now 4 everywhere (5 to 6 on a full-height phone).
-        assert(fitAdmin >= 4, `only ${fitAdmin} organizer session cards fit on screen`);
+        // On this short screen: 4 at 390/430; 3 at 360/375 again since the Zip 86 cards (one status button and the card's own button row).
+        assert(fitAdmin >= (width >= 390 ? 4 : 3), `only ${fitAdmin} organizer session cards fit on screen`);
         const small = await p.evaluate(() =>
           [...document.querySelectorAll('main button:not(.link-btn), main a.btn, header button, nav.tabbar button')]
             .filter((b) => b.offsetParent !== null)
@@ -3546,7 +3553,8 @@ async function main() {
         const states = await p.evaluate(() => [...new Set([...document.querySelectorAll('section[aria-labelledby="sessions-title"] article:has(.me-in)')].map((a) => a.dataset.court))]);
         assert(states.length >= 2, `expected I'm in on cards in several court states, saw ${states}`);
         const ib = await card.getByRole('button', { name: /^I’m in for / }).boundingBox();
-        assert(ib.height >= 33 && ib.height <= 36, `I'm in should be as tall as the other small buttons: ${ib.height}`);
+        // Zip 86: In / Out is one of the card's 44 px buttons (beside the status button), no longer a 34 px small button.
+        assert(ib.height >= 43.5 && ib.height <= 46, `I'm in should be as tall as the card's other buttons (44 px): ${ib.height}`);
         await card.getByRole('button', { name: /^I’m in for / }).click();
         await card.locator('.me-in-text', { hasText: /^(You’re in|Waitlist)$/ }).waitFor();
         const inNow = (await card.locator('.me-in-text').innerText()).trim() === "You’re in";

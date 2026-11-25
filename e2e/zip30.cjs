@@ -277,7 +277,7 @@ async function main() {
     const { ctx, page } = await openAdmin();
     const c = await cardOf(page);
     assert(c.rows.length === 3, `rows ${c.rows.length}`);
-    assert(c.rows[0].text === 'Casey backed out for Harper', c.rows[0].text);
+    assert(c.rows[0].text === 'Casey dropped out for Harper', c.rows[0].text); // "backed out" is "dropped out" (the site's one word for it)
     assert(c.more === '+2 more in History', `more «${c.more}»`);
     await page.locator('[data-afo-more]').click();
     await page.waitForTimeout(600);
@@ -432,7 +432,7 @@ async function main() {
       assert(m.titleW >= 700 && Number(m.bold) >= 700, `title ${m.titleW}, names ${m.bold}`);
       assert(m.tapW >= 44 && m.tapH >= 44, `X tap area ${m.tapW} x ${m.tapH}`);
       assert(m.lines.length > 0 && m.lines.every((w) => w === '1px'), `row lines ${m.lines}`);
-      assert(m.radius === '18px', `corners ${m.radius}`);
+      assert(m.radius === '20px', `corners ${m.radius}`); // Zip 78 (one look): every card takes the one card radius, --card-r (was 18 px)
       assert(m.verb !== m.name, 'the verb should be muted next to the names');
       if (scheme === 'dark') assert(lum(m.bg) < 0.2, `dark card ${m.bg}`);
       else assert(lum(m.bg) > 0.9, `light card ${m.bg}`);

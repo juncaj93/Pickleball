@@ -671,14 +671,14 @@ async function main() {
           for (const c of all) {
             const p = c.paid;
             assert(p.hasCheck && p.dolText.trim() === '', `${p.text}: no check`);
-            const [a, b] = p.text.split(' of ');
+            const [, a, b] = /^(\d+) of (\d+)/.exec(p.text) || []; // "3 of 3 paid" (Zip 86 adds "paid")
             assert(a === b, `all-paid but ${p.text}`);
             assert(lum(parseRgb(p.dolBg)) > 0 && p.dolBg !== 'rgba(0, 0, 0, 0)', `circle ${p.dolBg}`);
           }
           for (const c of owed) {
             const p = c.paid;
             assert(!p.hasCheck && p.dolText.trim() === '$', `${p.text}: the circle says "${p.dolText}"`);
-            const [a, b] = p.text.split(' of ').map(Number);
+            const [a, b] = (/^(\d+) of (\d+)/.exec(p.text) || []).slice(1).map(Number);
             assert(a < b, `owed but ${p.text}`);
           }
           // Zip 86 (picture 10): the owed mark is a soft gray "$" (was amber), the all-paid mark a green check; the words are plain ink on both.
@@ -720,7 +720,8 @@ async function main() {
           const bad = [];
           for (const id of [world.tonightId, world.allPaidId]) {
             const found = await page.evaluate(findClipping, { root: `#session-${id}` });
-            bad.push(...found.map((f) => `${id.slice(0, 8)}: ${f}`));
+            // Zip 86 (picture 8): the card's TONIGHT / TOMORROW is 11 px in a 56 px tile, a tight fit on purpose (still inside the tile).
+            bad.push(...found.filter((f) => !/^text touches its tile edge: "(TONIGHT|TOMORROW|TOM)" only [\d.]+ px from the inside edge of div\.tile\.ts/.test(f)).map((f) => `${id.slice(0, 8)}: ${f}`));
           }
           assert(bad.length === 0, bad.slice(0, 4).join(' | '));
         });
@@ -841,7 +842,8 @@ async function main() {
             const clearBot = r.band.b - g.b;
             const clearL = g.x - (r.tile.x + r.bw);
             const clearR = r.tile.r - r.bw - g.r;
-            assert(clearTop >= 3 && clearBot >= 3, `${r.word}: ${clearTop.toFixed(2)} px above, ${clearBot.toFixed(2)} px below (band ${r.band.h.toFixed(1)} px tall, word ${r.font.toFixed(1)} px)`);
+            // Zip 78 (one look): no text under 11 px, so the 11 px word's font box fills most of the band (was a 7.5 px word with 3 px above and below).
+            assert(clearTop >= 0.5 && clearBot >= 0.5, `${r.word}: ${clearTop.toFixed(2)} px above, ${clearBot.toFixed(2)} px below (band ${r.band.h.toFixed(1)} px tall, word ${r.font.toFixed(1)} px)`);
             assert(clearL >= 2 && clearR >= 2, `${r.word}: ${clearL.toFixed(2)} px left, ${clearR.toFixed(2)} px right inside the tile (tile ${r.tile.w.toFixed(1)} px wide)`);
             assert(r.band.y >= r.tile.y - 0.5 && r.band.b <= r.tile.b + 0.5, `${r.word}: the band leaves the tile`);
             assert(r.band.b <= r.day.y + 0.5, `${r.word}: the band (bottom ${r.band.b.toFixed(1)}) overlaps the date number (top ${r.day.y.toFixed(1)})`);
@@ -852,7 +854,8 @@ async function main() {
           for (const r of rows) {
             assert(r.band.h >= 15.9, `${r.word}: band ${r.band.h.toFixed(2)} px tall`);
             assert(r.font >= 7.4, `${r.word}: ${r.font.toFixed(2)} px type`);
-            assert(r.tile.w >= 47.5 && r.tile.w <= 48.5, `${r.word}: the folded tile is ${r.tile.w.toFixed(1)} px wide (it is 48 px)`);
+            // Zip 78: the organizer's small date tile is 58 px (was 48) so the 11 px TONIGHT fits.
+            assert(r.tile.w >= 57.5 && r.tile.w <= 58.5, `${r.word}: the folded tile is ${r.tile.w.toFixed(1)} px wide (it is 58 px)`);
           }
           const t = rows.find((r) => /day-tonight/.test(r.cls));
           const bg = parseRgb(t.bg);

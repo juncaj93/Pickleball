@@ -134,7 +134,7 @@ const scan = (page, sel, pairs = []) =>
         await b.stage(st);
         await sweep(`end-${st}`, async (w) => {
           const p = await b.adminHome({ width: w });
-          await p.page.locator('[data-tm-edit-awards]').first().waitFor({ timeout: 15000 });
+          await p.page.locator('.tm-end .tm-card-head').first().waitFor({ timeout: 15000 });
           return p;
         }, '.tm-end .tm-card-head .tm-label, .tm-end-edit, .tm-end .tm-card-head');
       }
