@@ -1084,11 +1084,12 @@ export function NamesLine({
   const mineAt = (i: number) => (isGuest(i) ? i > 0 && names[i - 1] === me : names[i] === me);
   const label1 = (n: string, i: number) => (isGuest(i) ? n : show(n));
   // Zip 58: a tournament winner's medals after the name (nothing without medals: MedalsContext is empty everywhere else).
+  // Zip 90 round 4: a name and its medals never split across two lines (.nm-pair stays on one line only when it holds medals).
   const one = (n: string, i: number) => (
-    <>
+    <span className="nm-pair">
       {mineAt(i) ? <strong>{label1(n, i)}</strong> : label1(n, i)}
       {!isGuest(i) && <NameMedals name={n} />}
-    </>
+    </span>
   );
   const list = names.map((n, i) => (
     <Fragment key={n + i}>

@@ -124,32 +124,21 @@ main.page > .rvl:has(+ .tc-wrap) {
   perspective: 900px;
   container-type: inline-size;
 }
-/* Round 3 (Alex: the flip froze mid-turn on the iPhone): the turn is one transform animation on a layer prepared ahead (will-change), each
-   face its own layer; nothing else changes while it turns (no shadow, filter or layout; the glow stops on that card; Nice waits). */
+/* Rounds 3 and 4 (Alex: the flip hitched at the halfway point on the iPhone): ONE uninterrupted CSS transition of one transform on a layer
+   prepared ahead. Both faces are always in the page, each its own 3D layer (translateZ(0)) with its back hidden; nothing inside a face is a
+   layer of its own while it turns (the glow is gone from the tapped card at the tap; the credit's count runs after the turn); no class,
+   state or element changes until it is over. The slight pop: the curve overshoots a touch past the half turn and settles. */
 .rvl-flip {
   display: grid;
   height: 100%;
+  transform: rotateY(0deg);
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
+  transition: transform 0.52s cubic-bezier(0.3, 1.18, 0.5, 1);
   will-change: transform;
 }
 .rvl-flipped .rvl-flip {
   transform: rotateY(180deg);
-}
-/* The slight pop while it turns. */
-.rvl-turning.rvl-flipped .rvl-flip {
-  animation: rvl-turn 0.52s cubic-bezier(0.3, 0.9, 0.4, 1) both;
-}
-@keyframes rvl-turn {
-  0% {
-    transform: rotateY(0deg) scale(1);
-  }
-  55% {
-    transform: rotateY(110deg) scale(1.07);
-  }
-  100% {
-    transform: rotateY(180deg) scale(1);
-  }
 }
 /* Both faces: the same subtle fill and 1 px line (the front is not black, not striped). */
 .rvl-face {
@@ -171,6 +160,7 @@ main.page > .rvl:has(+ .tc-wrap) {
   backface-visibility: hidden;
 }
 .rvl-front {
+  transform: rotateY(0deg) translateZ(0);
   font: inherit;
   cursor: pointer;
   gap: 10px;
@@ -182,7 +172,7 @@ main.page > .rvl:has(+ .tc-wrap) {
   outline-offset: 2px;
 }
 .rvl-back {
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) translateZ(0);
 }
 .rvl-ballwrap {
   position: relative;
@@ -197,19 +187,19 @@ main.page > .rvl:has(+ .tc-wrap) {
   width: 60px;
   height: 60px;
 }
-/* The soft lime glow: its own layer, pulsing by opacity only (never a shadow change); still on the card that is turning or turned. */
+/* The soft lime glow, pulsing by opacity only (never a shadow change). Gone from the tapped card at the tap (so no layer of its own turns
+   with the card). */
 .rvl-glow {
   position: absolute;
   inset: -16px;
   border-radius: 50%;
   background: radial-gradient(circle, color-mix(in srgb, var(--ball) 55%, transparent) 38%, transparent 70%);
   opacity: 0.55;
-  will-change: opacity;
   animation: rvl-glow 2.6s ease-in-out infinite;
 }
 .rvl-turning .rvl-glow,
 .rvl-flipped .rvl-glow {
-  animation: none;
+  display: none;
 }
 .rvl-holes circle {
   fill: color-mix(in srgb, var(--ball-ink) 42%, var(--ball));
@@ -219,7 +209,7 @@ main.page > .rvl:has(+ .tc-wrap) {
     opacity: 1;
   }
 }
-/* The odometer (the credit's count): every amount drawn ahead, one per line; the turn only slides the strip. */
+/* The odometer (the credit's count): every amount drawn ahead, one per line; right after the turn it slides the strip ($1 up to $14). */
 .rvl-odo {
   position: relative;
   display: inline-block;
@@ -237,7 +227,6 @@ main.page > .rvl:has(+ .tc-wrap) {
   right: 0;
   display: flex;
   flex-direction: column;
-  will-change: transform;
 }
 .rvl-odo-strip > span {
   display: block;

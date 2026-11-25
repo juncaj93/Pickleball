@@ -78,6 +78,8 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const FLIP_MS = 520;
 const FLY_MS = 520;
 const OPEN_AT = 0.4;
+/** Round 4: the credit's count runs right after the turn (nothing starts inside a card while it turns), then its flight. */
+const COUNT_MS = 380;
 const GLOW_AFTER_MS = 1000;
 const GLOW_MS = 1300;
 
@@ -221,9 +223,9 @@ function countSteps(cents: number): string[] {
 }
 
 /**
- * Zip 90 round 3: the credit counts up $1 to $14 as the card turns, as an odometer: every amount is drawn before the tap, one under the other,
- * and the turn only slides the strip (a transform, stepped), so nothing is laid out or redrawn while the card turns. Without motion: the
- * final amount.
+ * Zip 90 rounds 3 and 4: the credit counts up $1 to $14 as an odometer: every amount is drawn before the tap, one under the other, and the
+ * strip only slides (a stepped transform), right after the turn (so nothing starts inside the card while it turns). It shows $1 while it
+ * turns. Without motion: the final amount.
  */
 function Odometer({ cents, strip }: { cents: number; strip: RefObject<HTMLSpanElement | null> }) {
   const steps = countSteps(cents);
@@ -231,7 +233,7 @@ function Odometer({ cents, strip }: { cents: number; strip: RefObject<HTMLSpanEl
   return (
     <span className="rvl-odo">
       <span className="rvl-odo-size">{last}</span>
-      <span ref={strip} className="rvl-odo-strip" style={{ transform: `translateY(-${steps.length - 1}em)` }} data-steps={steps.length}>
+      <span ref={strip} className="rvl-odo-strip" style={{ transform: reduced() ? `translateY(-${steps.length - 1}em)` : 'translateY(0)' }} data-steps={steps.length}>
         {steps.map((v, i) => (
           <span key={i}>{v}</span>
         ))}
@@ -240,11 +242,15 @@ function Odometer({ cents, strip }: { cents: number; strip: RefObject<HTMLSpanEl
   );
 }
 
-/** Starts the odometer (with the turn). */
-function countUp(strip: HTMLElement | null) {
+/** Runs the odometer (after the turn) and resolves when it shows the final amount. */
+function countUp(strip: HTMLElement | null): Promise<void> {
   const n = Number(strip?.dataset.steps ?? 1);
-  if (!strip || n < 2) return;
-  strip.animate([{ transform: 'translateY(0)' }, { transform: `translateY(-${n - 1}em)` }], { duration: FLIP_MS, easing: `steps(${n}, jump-none)`, fill: 'backwards' });
+  if (!strip || n < 2) return Promise.resolve();
+  const a = strip.animate([{ transform: 'translateY(0)' }, { transform: `translateY(-${n - 1}em)` }], { duration: COUNT_MS, easing: `steps(${n}, jump-none)`, fill: 'forwards' });
+  return a.finished.then(
+    () => undefined,
+    () => undefined,
+  );
 }
 
 function PrizeCard({ kind, c, flipped, onFlip, index, of }: { kind: PrizeKind; c: Congrats; flipped: boolean; onFlip: (card: HTMLElement, art: HTMLElement) => void; index: number; of: number }) {
@@ -264,12 +270,10 @@ function PrizeCard({ kind, c, flipped, onFlip, index, of }: { kind: PrizeKind; c
           tabIndex={flipped ? -1 : undefined}
           onClick={() => {
             if (flipped || !card.current || !art.current) return;
-            // Everything for the turn starts in this one tap (the turn, the dots, the count): no new work while the card turns.
+            // Everything for the turn starts in this one tap (the turn and the dots, outside the turning layer); nothing starts, swaps or
+            // re-renders inside the card until the turn is over (the count, Nice and the flight come after it).
             setTurning(true);
-            if (!reduced()) {
-              burst(card.current);
-              countUp(strip.current);
-            }
+            if (!reduced()) burst(card.current);
             onFlip(card.current, art.current);
           }}
         >
@@ -369,7 +373,9 @@ export function PrizeReveal({ c, onChanged, onPhase }: { c: Congrats; onChanged:
     void (async () => {
       if (!still) await wait(FLIP_MS);
       if (!live.current) return;
-      // Nice comes in only once the turn is over (nothing below the cards moves while one turns).
+      // The credit counts up right after the turn, then flies. Nice comes in only once the turn is over (nothing moves while one turns).
+      if (kind === 'credit' && !still) await countUp(art.querySelector<HTMLElement>('.rvl-odo-strip'));
+      if (!live.current) return;
       setSettled((x) => (x.includes(kind) ? x : [...x, kind]));
       const ghost = document.createElement('div');
       ghost.className = `rvl-ghost rvl-ghost-${kind}`;

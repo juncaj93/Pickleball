@@ -16,6 +16,7 @@
  *       Christopher Vanderberg, with and without a medal: one row, "not you?" beside or under (lined up with the name), "…" only when the name
  *       alone can't fit, the medal right after the name, tap areas 44 x 44, nothing wider than the screen. Christmas skin on too.
  *   G   Admin: the pill says "+ Add" and opens the same Add game sheet.
+ *   J   Round 4: the flip is one CSS transition and nothing inside the card changes while it turns; "Header: medal counts" (1, 2, 3, ×4, ×7).
  *   H   The replay stage (zip90_replay), View as Vic twice: face down and masked each time, the slam, the spacing Alex checks (the medal right
  *       after the name, about 4 px between the cup and light/dark circles, about 8 px each side of the credit).
  * Screenshots: .data/zip90-shots (not in git).
@@ -314,7 +315,8 @@ const header = (page) =>
             if (beside) assert(!r.cut, `${where}: cut while "not you?" is beside`);
             if (under) assert(r.needed + 7 + r.ny.width > r.room - 0.5, `${where}: "not you?" under though both fit (${r.needed} + ${r.ny.width} in ${r.room})`);
             if (r.cut) assert(r.needed > r.room - 0.5, `${where}: "…" though the name fits`);
-            assert(Math.abs(r.badgeGap) <= 1.5, `${where}: a gap before the medal (${r.badgeGap})`);
+            // Round 4 (Alex): about 3 px between the name (or its "…") and the medal.
+            if (medal) assert(r.badgeGap >= 2 && r.badgeGap <= 4, `${where}: the gap before the medal (${r.badgeGap})`);
             assert(r.taps.every(([w, h]) => w >= 44 && h >= 44), `${where}: tap areas ${JSON.stringify(r.taps)}`);
           }
         }
@@ -400,7 +402,7 @@ const header = (page) =>
           const amt = [r('.topbar .cc-label'), r('.topbar .cc-amount')];
           return { medal: r('.topbar .h1-badge').left - r('.topbar .h1-name').right, circles: mode.left - cup.right, left: Math.min(amt[0].left, amt[1].left) - mode.right, right: r('.topbar .today').left - Math.max(amt[0].right, amt[1].right) };
         });
-        assert(Math.abs(sp.medal) <= 1.5 && Math.abs(sp.circles - 4) <= 1 && sp.left >= 6 && sp.left <= 11 && Math.abs(sp.right - 8) <= 1.5, `round ${round}: spacing ${JSON.stringify(sp)}`);
+        assert(Math.abs(sp.medal - 3) <= 1 && Math.abs(sp.circles - 4) <= 1 && sp.left >= 6 && sp.left <= 11 && Math.abs(sp.right - 8) <= 1.5, `round ${round}: spacing ${JSON.stringify(sp)}`);
         await shot(page, `H-replay-${round}`);
         assert(!errors.length, errors.join('; '));
         await ctx.close();
@@ -449,7 +451,8 @@ const header = (page) =>
         });
       const same = (m, n, what) => {
         assert(m.card && m.header.length === n, `${what}: ${JSON.stringify(m)}`);
-        for (const h of m.header) assert(Math.abs(h.drop - m.card.drop) <= 0.01 && Math.abs(h.size - m.card.size) <= 0.01, `${what}: like the game card ${JSON.stringify(m)}`);
+        // Round 4 (Alex): the bottom stays where round 3 put it (the game card's), the medal 85% of the game card's size.
+        for (const h of m.header) assert(Math.abs(h.drop - m.card.drop) <= 0.01 && Math.abs(h.size - 0.85 * m.card.size) <= 0.01, `${what}: like the game card ${JSON.stringify(m)}`);
       };
       const withGame = async (page) => {
         const fut = page.getByRole('button', { name: 'Show future games' });
@@ -481,6 +484,78 @@ const header = (page) =>
       assert(Math.abs(g.pad - 18) <= 1 && g.a <= 3 && g.b <= 12, `card top: ${JSON.stringify(g)}`);
       await shot(page, 'I-card');
       await ctx.close();
+    });
+
+    await check('J Round 4: the flip is one transition, nothing in the card changes while it turns; medal counts 1, 2, 3, ×4, ×7', async () => {
+      await b.stage('zip90_replay');
+      const { page, ctx, errors } = await b.pickedPage('Vic', { width: 390, reducedMotion: 'no-preference' });
+      await page.locator('[data-tour-congrats]').waitFor({ timeout: 15000 });
+      const setup = await page.evaluate(() => {
+        const f = document.querySelector('[data-pz-card="medal"] .rvl-flip');
+        const cs = getComputedStyle(f);
+        const faces = [...f.children].map((x) => { const c = getComputedStyle(x); return [c.backfaceVisibility, c.transform]; });
+        return { transition: cs.transitionProperty + ' ' + cs.transitionDuration, style: cs.transformStyle, animation: cs.animationName, faces };
+      });
+      assert(setup.transition === 'transform 0.52s' && setup.style === 'preserve-3d' && setup.animation === 'none', `one transition: ${JSON.stringify(setup)}`);
+      // Each face: its back hidden and a transform of its own (rotateY + translateZ(0); the front's reads back as a flat matrix).
+      assert(setup.faces.length === 2 && setup.faces.every(([bv, t]) => bv === 'hidden' && t !== 'none'), `both faces, back hidden: ${JSON.stringify(setup)}`);
+      for (const k of ['medal', 'credit']) {
+        // Watch the card from two frames after the tap to the end of the turn: no element, class, attribute or text may change in it.
+        await page.evaluate((k) => {
+          window.__muts = [];
+          const card = document.querySelector(`[data-pz-card="${k}"]`);
+          card.querySelector('.rvl-front').click();
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const mo = new MutationObserver((l) => window.__muts.push(...l.map((m) => `${m.type} ${m.target.className || m.target.nodeName} ${m.attributeName || ''}`)));
+              mo.observe(card.querySelector('.rvl-flip'), { subtree: true, childList: true, attributes: true, characterData: true });
+              mo.observe(card, { attributes: true });
+              setTimeout(() => mo.disconnect(), 480);
+            }),
+          );
+        }, k);
+        await sleep(700);
+        const muts = await page.evaluate(() => window.__muts);
+        assert(muts.length === 0, `${k}: changed while turning: ${muts.slice(0, 5).join(' | ')}`);
+        await page.waitForFunction(() => !document.querySelector('.rvl-ghost') && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 4000 });
+        await sleep(400);
+      }
+      assert(flat(await page.locator('[data-pz-card="credit"] .rvl-odo-size').textContent()) === '$14', 'the count ends on $14');
+      assert(!errors.length, errors.join('; '));
+      await ctx.close();
+      // Medal counts: the top-left stack / ×n, the same bottom for every count, 3 px after the name, never touching "not you?".
+      await b.stage('zip90_counts');
+      const want = { Vic: ['1', ''], Wren: ['2', ''], Parker: ['3', ''], Quinn: ['4', '×4'], Sage: ['7', '×7'] };
+      for (const width of [375, 420, 440])
+        for (const scheme of ['light', 'dark']) {
+          const drops = [];
+          for (const [who, [n, count]] of Object.entries(want)) {
+            const p = await b.pickedPage(who, { width, scheme });
+            const m = await p.page.evaluate(() => {
+              const h1n = document.querySelector('.topbar .h1-name');
+              const pr = document.createElement('span');
+              pr.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+              h1n.appendChild(pr);
+              const base = pr.getBoundingClientRect().bottom;
+              pr.remove();
+              const fs = parseFloat(getComputedStyle(h1n).fontSize);
+              const bd = document.querySelector('.topbar .h1-badge');
+              const md = bd.querySelector('.md');
+              const icos = [...md.querySelectorAll('.md-ico')].map((i) => i.getBoundingClientRect());
+              const rg = document.createRange();
+              rg.selectNodeContents(h1n);
+              const b = bd.getBoundingClientRect(), y = document.querySelector('.topbar .not-you').getBoundingClientRect();
+              return { n: md.getAttribute('data-medals'), count: md.querySelector('.md-count')?.textContent ?? '', drop: icos.map((r) => (r.top + (r.height * 25.5) / 26 - base) / fs), gap: icos[0].left - Math.min(rg.getBoundingClientRect().right, h1n.getBoundingClientRect().right), touch: !(y.left >= b.right - 0.5 || y.top >= b.bottom - 0.5), wide: document.documentElement.scrollWidth > innerWidth };
+            });
+            const where = `${who} ${width} ${scheme}`;
+            assert(m.n === n && m.count === count, `${where}: ${JSON.stringify(m)}`);
+            assert(m.gap >= 2 && m.gap <= 4 && !m.touch && !m.wide, `${where}: ${JSON.stringify(m)}`);
+            drops.push(...m.drop);
+            if (scheme === 'light' && width === 375) await shot(p.page, `J-${who}`);
+            await p.ctx.close();
+          }
+          assert(Math.max(...drops) - Math.min(...drops) <= 0.01, `${width} ${scheme}: bottoms not lined up ${drops}`);
+        }
     });
 
     await check('G Admin: "+ Add" opens the Add game sheet', async () => {

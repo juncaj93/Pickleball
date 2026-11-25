@@ -38,3 +38,7 @@
   letter-spacing: 0.01em;
   color: var(--ink-2, currentColor);
 }
+/* Zip 90 round 4: on the game cards a name and its medals stay together (the medals never start the next line alone). */
+.nm-pair:has(.md) {
+  white-space: nowrap;
+}

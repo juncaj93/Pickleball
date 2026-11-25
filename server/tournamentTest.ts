@@ -259,7 +259,9 @@ export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'z
 //   zip90_replay  "Replay: medal and credit slam": Alex's look on his phone (the flight, the landing, the spacing; the buttons and the
 //                 credit). Each pick puts the prize cards back to unclaimed (seen_at cleared, nothing else touched: same night, same money);
 //                 the first pick (or one after another stage) builds zip90_ld. View as Vic.
-export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header', 'zip90_replay'] as const;
+//   zip90_counts  "Header: medal counts" (round 4): seven older finished tournaments (Everyone, banners long over, every prize claimed), so
+//                 Vic has 1 medal, Wren 2, Parker 3, Quinn 4 (one medal and "×4") and Sage 7: View as each. No money rows.
+export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header', 'zip90_replay', 'zip90_counts'] as const;
 type Zip90Stage = (typeof ZIP90_STAGES)[number];
 const isZip90Stage = (s: string): s is Zip90Stage => (ZIP90_STAGES as readonly string[]).includes(s);
 type Zip89Stage = (typeof ZIP89_STAGES)[number];
@@ -1288,7 +1290,48 @@ async function zip58Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
 }
 
 /** Zip 90's stages (see ZIP90_STAGES): the night as the stage left it, the prize boxes written in (both styles), then End by the real code. */
+/** Round 4: how many gold medals each name gets on "Header: medal counts". */
+const MEDAL_COUNTS: Record<string, number> = { Vic: 1, Wren: 2, Parker: 3, Quinn: 4, Sage: 7 };
+
+async function zip90Counts(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>) {
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const names = ['Harvest Cup', 'Pumpkin Smash', 'Turkey Trot', 'Frost Open', 'Snow Slam', 'Maple Masters', 'Leaf Bash'];
+  const statements = [];
+  for (const [k, name] of names.entries()) {
+    const tid = newId();
+    const date = todayKeyMinus(ctx.nowMs, group.timezone, 30 + k * 14);
+    const at = `${date}T23:00:00.000Z`;
+    statements.push(
+      ctx.db
+        .prepare(
+          `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date, status,
+             visibility, created_at, updated_at, format, second_credit_cents, ended_at, end_key, banner_until)
+           VALUES (?, ?, ?, ${STORED_PLAN.size}, 2, 150, 1170, 1600, 0, ?, ?, 'ended', 'all', ?, ?, 'americano', 0, ?, ?, ?)`,
+        )
+        .bind(tid, group.id, name, JSON.stringify([date]), date, at, at, at, newId(), at),
+    );
+    let place = 0;
+    for (const [who, n] of Object.entries(MEDAL_COUNTS)) {
+      const pid = idOf.get(who);
+      if (!pid || n <= k) continue;
+      place++;
+      statements.push(
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_results (id, tournament_id, player_id, finish, wins, losses, points, picked_level, approved_level, medal, award, credit_cents, seen_at, created_at)
+             VALUES (?, ?, ?, ?, 5, 0, 60, 300, NULL, 1, 'champion', 0, ?, ?)`,
+          )
+          .bind(newId(), tid, pid, place, at, at),
+      );
+    }
+  }
+  await ctx.db.batch(statements);
+  return { ok: true, stage: 'zip90_counts' };
+}
+
 async function zip90Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip90Stage) {
+  if (stage === 'zip90_counts') return zip90Counts(ctx, group);
   const am = stage === 'zip90_am';
   const made = am ? await americanoStage(ctx, group, 'am_done') : await zip58Stage(ctx, group, 'final_done');
   const id = made.id!;

@@ -4805,7 +4805,8 @@ dialog.sheet[open]::backdrop {
   text-overflow: ellipsis;
 }
 .ph-head .title-line h1.has-badge .h1-badge {
-  margin-left: 0;
+  /* Round 4 (Alex): about 3 px between the name (or its "…") and the medal. */
+  margin-left: 3px;
   line-height: inherit;
 }
 /* Zip 90 round 3 (Alex): the medal by the name is laid out exactly like the medal after a name on the game cards (the look Alex approved):
@@ -4825,16 +4826,18 @@ dialog.sheet[open]::backdrop {
   margin-left: 0;
   vertical-align: -0.12em;
 }
+/* Round 4 (Alex): 85% of the game cards' size (0.78 x 1.02 em), its bottom where it was: the medal row's bottom sits 0.12 em under the line
+   whatever its height, so it shrinks toward its bottom. Stacks and "×n" scale the same way. */
 .ph-head .h1-badge .md-ico {
-  width: 0.78em;
-  height: 1.02em;
+  width: 0.663em;
+  height: 0.867em;
 }
 .ph-head .h1-badge .md-ico + .md-ico {
-  margin-left: -0.3em;
+  margin-left: -0.255em;
 }
 .ph-head .h1-badge .md-count {
-  font-size: max(11px, 0.78em);
-  margin-left: 0.22em;
+  font-size: max(11px, 0.663em);
+  margin-left: 0.19em;
 }
 .ph-head .title-swap {
   overflow: hidden;
