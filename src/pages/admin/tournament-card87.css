@@ -69,6 +69,9 @@
   flex: 0 0 auto;
   display: flex;
   width: 54px;
+  /* Zip 92 (Alex: "TOMORRO" was cut): the tile's own column, as on the game cards (.sched-tilecol), so the site's TOMORROW / TOM rule in
+     src/zip7.css (TOM when the tile is narrower than TOMORROW) reads this tile's width. */
+  container-type: inline-size;
 }
 /* Picture 1: the time and the plan line fit beside the tile and the gear on one line each at 390 (they wrap between words when narrower). */
 .tm87-when .tm86-when-main {
@@ -88,17 +91,6 @@
   letter-spacing: 0;
   overflow: hidden;
   text-overflow: clip;
-}
-/* Zip 92 (Alex: "TOMORRO" was cut at 390): the tile grows to its whole word (54 px at least), so TOMORROW reads in full at every width and
-   text size, light and dark; the word keeps its 11 px and a 3 px side margin. */
-:root[data-tonight-glow] .tm87-tile {
-  width: auto;
-  min-width: 54px;
-}
-:root[data-tonight-glow] .tm87-tile .tile .day-tag {
-  overflow: visible;
-  padding-left: 3px;
-  padding-right: 3px;
 }
 /* Round 2 (Alex): the gear is the bottom Settings tab's own gear (src/ui.tsx GearIcon), centered in a 44 px round button, the same gray as the
    other round buttons (the sheets' close button: --fill, ink-2 words). */
