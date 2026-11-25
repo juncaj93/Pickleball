@@ -8651,3 +8651,37 @@ and scenario times only). Browser: e2e/zip89.cjs 4 of 4 (320/390/420, light and 
 5. ADMIN: "+ Add game" is "+ Add" (src/pages/Admin.tsx); the e2e files that looked for the old words updated.
 6. STAGES (THIS_ZIP): zip90_ld "Prize: Locked doubles champs", zip90_am "Prize: Americano champion, no credit", zip90_second "Prize:
    runner-up", zip90_header "Header: long names" (server/tournamentTest.ts zip90Stage, ended by the real End).
+7. REPLAY (Alex's phone check before the deploy): stage zip90_replay "Replay: medal and credit slam (start here)". The first pick builds
+   zip90_ld with a marker in its award settings (`"stage":"zip90_replay"`, read by nothing else); every later pick only clears seen_at on
+   that night's award rows (no money row touched), so the cards are face down again. Another stage in between builds it fresh.
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) the prize phases outlived the cards: on one phone, Vic's landed phases carried over to Wren after "not you?" (the partner's card
+has the same key), or to a View as switch: now keyed by player and set back to masked whenever the cards appear; (2) two unclaimed prizes:
+the second one's credit and medal showed while the first card was up and then dropped after Nice: the server sends laterCreditCents /
+laterMedals and the header holds them back the whole time; (3) a flight cut short could leave the opening animation on the chip wrapper;
+(4) the chip's pop-in could replay on top of the landing bump. Kept (scope, Alex's brief: the header only): the ticker, the game cards and
+the credit sheet show the real medal and balance; a credit partly spent since the award lands the award's amount on a chip that reads less.
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 63 statements before (main) and after, at all_locked, mid, am_round3, ended, history and zip90_ld (7.5 to 10.2 ms before,
+8.0 to 10.1 after; one 15.5 ms first-run reading while the unit suite ran). The 5 second check 2 trips / 16 statements, unchanged. Nothing
+on the organizer side reads the new fields.
+
+### Size
+Player script 146.7 KB gzipped (main about 146.2), style about +0.35 KB: tests/zip48-split.test.ts budget 146.5 -> 147.0 on purpose (the
+masking must be on Home; the reveal itself is in the lazy TourAwards file).
+
+### Preview
+https://claude-new-session-2bc3od.pickleball-club-9h0.pages.dev (PIN 739514; the fake `pickleball-preview` database, no re-seed). Replay
+stage tried on the preview itself and left face down for Alex.
+
+### Tests
+Unit: 243 files, 4,497 passed, 2 skipped, 3 failed in the full run; those 3 were tests changed after the run started (the size budget, two
+new zip90 tests) and pass on rerun (14 of 14 in their two files). New tests/zip90-prize.test.ts (8): the view per case, who gets a card,
+Nice moves no money or count for anyone (everyone's balance and medals compared), two unclaimed prizes, the replay stage, the words, the
+look rules. Updated on purpose: zip78-look (the "…" on the player header name), zip48-split (budget). Browser: e2e/zip90.cjs 8 of 8;
+e2e/zip83.cjs A, B, C, D, E, G, H, J pass (A and H follow the 4 px circles and the one-row "…"); F and I fail exactly as on main (I lists
+Zip 83's own stages; F's cup mid-reveal). e2e/zip58.cjs F fails at "no live view" exactly as on main (after its new prize steps pass).
+
+### Ship: HELD for Alex's OK (he checks the medal landing and the header spacing on his phone first). Nothing deployed to live.

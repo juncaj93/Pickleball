@@ -32,7 +32,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // the night hold (a phone left on during the tournament night keeps checking).
 // Zip 86: the tournament's row in the player's week list (src/TourWeekRow.tsx, its placement and Lock in rule in PlayerHome) and the player
 // rhythm: main (Zip 85) 145.50 KB script + 33.13 KB style, this zip 146.34 + 33.54; the first visit about 179.5 -> 180.8.
-export const BUDGET = { scriptKB: 146.5, styleKB: 36.5, pageKB: 1.5, totalKB: 181.2 };
+// Zip 90: 146.5 to 147.0 on purpose (total 181.2 to 181.8): the prize reveal's header masking has to live on Home itself (the medal and
+// credit held back until each card is flipped, the chip's hold, the one-row player header rules), about 0.5 KB script and 0.35 KB style
+// gzipped; the reveal itself (cards, flight, burst) stays in the lazy TourAwards file. Main (Zip 89) about 146.2 KB script, this zip 146.7.
+export const BUDGET = { scriptKB: 147.0, styleKB: 36.5, pageKB: 1.5, totalKB: 181.8 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

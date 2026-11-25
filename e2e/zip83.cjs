@@ -71,7 +71,9 @@ const DATE_RE = /^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2}, \d{4}$/;
     assert(look.cup.width === 44 && look.cup.height === 44, `${what}: cup ${look.cup.width} x ${look.cup.height}`);
     assert(look.mode.width === look.cup.width && look.mode.height === look.cup.height, `${what}: same size as light/dark`);
     assert(look.ringC === look.ringM, `${what}: the same ring\n  ${look.ringC}\n  ${look.ringM}`);
-    assert(look.cup.x + look.cup.width <= look.mode.x + 0.5, `${what}: the cup is left of light/dark`);
+    // Zip 90 (Alex): on the player header the two circles sit about 4 px apart (each tap area still 44 x 44): the visible circles (4 px inside
+    // the tap area) never touch, the cup on the left.
+    assert(look.mode.x + 4 - (look.cup.x + look.cup.width - 4) >= 3.5, `${what}: the cup is left of light/dark, the circles apart`);
     assert(Math.abs(look.cup.y - look.mode.y) < 0.5, `${what}: on one line`);
     assert(Math.round(look.svg.width) === 26 && Math.round(look.svg.height) === 26, `${what}: the cup is 26 px (${look.svg.width})`);
     const dx = look.svg.x + look.svg.width / 2 - (look.cup.x + look.cup.width / 2);
@@ -123,8 +125,9 @@ const DATE_RE = /^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2}, \d{4}$/;
       for (const who of ['Parker', 'Christopher Vanderberg']) {
         const p = await h.playerPage(who, { width, scheme });
         await cupLook(p.page, `${who} ${width} ${scheme}`);
-        // The name's own box (a medal's 44 x 44 tap area reaches outside the h1 by design, Zip 82).
-        await noCut(p.page.locator('.topbar h1:not(.has-badge), .topbar h1 .h1-name'), `${who} ${width} name`);
+        // The name's own box (a medal's 44 x 44 tap area reaches outside the h1 by design, Zip 82). Zip 90 (Alex): the player header is one
+        // row and a name that alone can't fit ends in "…" (e2e/zip90.cjs F checks when); a short name is never cut.
+        if (who === 'Parker') await noCut(p.page.locator('.topbar h1:not(.has-badge), .topbar h1 .h1-name'), `${who} ${width} name`);
         // At 320 the buttons and the date stay on the name's row for a short name (Parker); a long one may drop them to a row of their own.
         if (who === 'Parker') {
           const rows = await p.page.evaluate(() => [document.querySelector('.topbar h1').getBoundingClientRect().top, document.querySelector('[data-cup]').getBoundingClientRect().bottom]);
