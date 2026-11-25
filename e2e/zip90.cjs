@@ -68,12 +68,12 @@ const header = (page) =>
         const { page, ctx, errors } = await b.pickedPage('Vic', { width: 420, scheme, reducedMotion: 'no-preference' });
         const card = page.locator('[data-tour-congrats]');
         await card.waitFor({ timeout: 15000 });
-        assert(flat(await card.locator('.pz-kicker').textContent()) === 'The Cold Open champions', 'the caps line');
-        assert(flat(await card.locator('.pz-title').textContent()) === 'Congrats, you and Wren won!', 'the title');
+        assert(flat(await card.locator('.rvl-kicker').textContent()) === 'The Cold Open champions', 'the caps line');
+        assert(flat(await card.locator('.rvl-title').textContent()) === 'Congrats, you and Wren won!', 'the title');
         assert((await card.locator('[data-pz-card]').count()) === 2, 'two cards');
         assert((await card.locator('[data-tour-nice]').count()) === 0, 'no Nice before the cards are turned');
-        const ball = await card.locator('[data-pz-card="medal"] .pz-ball').boundingBox();
-        const tap = await card.locator('[data-pz-card="medal"] .pz-tap').boundingBox();
+        const ball = await card.locator('[data-pz-card="medal"] .rvl-ball').boundingBox();
+        const tap = await card.locator('[data-pz-card="medal"] .rvl-tap').boundingBox();
         assert(Math.abs(ball.width - 60) <= 1 && Math.abs(tap.width - ball.width) <= 1, `ball ${ball.width}, TAP ${tap.width}`);
         assert(Math.abs(ball.x + ball.width / 2 - (tap.x + tap.width / 2)) <= 1, 'TAP centered under the ball');
         let h = await header(page);
@@ -82,22 +82,22 @@ const header = (page) =>
         assert(g.tourAwards.medals.Vic === 1 && g.credit.balanceCents >= 1400, 'the server still sends the real medal and credit');
         await shot(page, `A-before-${scheme}`);
         // The medal.
-        await card.locator('[data-pz-card="medal"] .pz-front').click();
-        await page.waitForFunction(() => document.querySelector('.pz-ghost') !== null, null, { timeout: 3000 });
-        await page.waitForFunction(() => document.querySelector('.pz-ghost') === null, null, { timeout: 3000 });
+        await card.locator('[data-pz-card="medal"] .rvl-front').click();
+        await page.waitForFunction(() => document.querySelector('.rvl-ghost') !== null, null, { timeout: 3000 });
+        await page.waitForFunction(() => document.querySelector('.rvl-ghost') === null, null, { timeout: 3000 });
         h = await header(page);
         assert(h.medals === 1 && h.credit === '', `the medal landed, the credit still held: ${JSON.stringify(h)}`);
         await page.waitForFunction(() => document.querySelector('.topbar .cup-btn.rv-glow') !== null, null, { timeout: 3000 });
         await shot(page, `A-medal-${scheme}`);
         assert((await card.locator('[data-tour-nice]').count()) === 0, 'no Nice after one card');
         // The credit.
-        await card.locator('[data-pz-card="credit"] .pz-front').click();
-        await page.waitForFunction(() => document.querySelector('.pz-ghost-credit') !== null, null, { timeout: 3000 });
-        await page.waitForFunction(() => document.querySelector('.pz-ghost') === null && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 3000 });
+        await card.locator('[data-pz-card="credit"] .rvl-front').click();
+        await page.waitForFunction(() => document.querySelector('.rvl-ghost-credit') !== null, null, { timeout: 3000 });
+        await page.waitForFunction(() => document.querySelector('.rvl-ghost') === null && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 3000 });
         await sleep(900);
         h = await header(page);
         assert(h.medals === 1 && h.credit.startsWith('$14|$14 credit'), `both landed: ${JSON.stringify(h)}`);
-        assert(flat(await card.locator('[data-pz-card="credit"] .pz-amount').textContent()) === '$14', 'the credit card says $14');
+        assert(flat(await card.locator('[data-pz-card="credit"] .rvl-odo-size').textContent()) === '$14', 'the credit card says $14');
         const nice = card.locator('[data-tour-nice]');
         await nice.waitFor();
         await sleep(1400);
@@ -124,8 +124,8 @@ const header = (page) =>
       const { page, ctx } = await b.pickedPage('Vic', { width: 390, reducedMotion: 'no-preference' });
       const card = page.locator('[data-tour-congrats]');
       await card.waitFor({ timeout: 15000 });
-      await card.locator('[data-pz-card="medal"] .pz-front').click();
-      await page.waitForFunction(() => document.querySelector('.topbar .h1-badge .md') && !document.querySelector('.pz-ghost'), null, { timeout: 4000 });
+      await card.locator('[data-pz-card="medal"] .rvl-front').click();
+      await page.waitForFunction(() => document.querySelector('.topbar .h1-badge .md') && !document.querySelector('.rvl-ghost'), null, { timeout: 4000 });
       await page.reload();
       await card.waitFor({ timeout: 15000 });
       await sleep(600);
@@ -137,9 +137,9 @@ const header = (page) =>
       await page.waitForTimeout(200);
       for (const k of ['medal', 'credit']) {
         if (await card.locator(`[data-pz-card="${k}"][data-pz-flipped]`).count()) continue;
-        await card.locator(`[data-pz-card="${k}"] .pz-front`).click();
-        await page.waitForFunction(() => document.querySelector('.pz-ghost') !== null, null, { timeout: 3000 });
-        await page.waitForFunction(() => !document.querySelector('.pz-ghost') && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 4000 });
+        await card.locator(`[data-pz-card="${k}"] .rvl-front`).click();
+        await page.waitForFunction(() => document.querySelector('.rvl-ghost') !== null, null, { timeout: 3000 });
+        await page.waitForFunction(() => !document.querySelector('.rvl-ghost') && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 4000 });
         await sleep(900);
       }
       let hv = await header(page);
@@ -170,17 +170,17 @@ const header = (page) =>
         const { page, ctx, errors } = await b.pickedPage('Vic', { width: 420, scheme, reducedMotion: 'reduce' });
         const card = page.locator('[data-tour-congrats]');
         await card.waitFor({ timeout: 15000 });
-        assert(flat(await card.locator('.pz-kicker').textContent()) === 'The Cold Open champion', 'the caps line');
-        assert(flat(await card.locator('.pz-title').textContent()) === 'Congrats, you won!', 'the title');
+        assert(flat(await card.locator('.rvl-kicker').textContent()) === 'The Cold Open champion', 'the caps line');
+        assert(flat(await card.locator('.rvl-title').textContent()) === 'Congrats, you won!', 'the title');
         assert((await card.locator('[data-pz-card]').count()) === 1 && (await card.locator('[data-pz-card="medal"]').count()) === 1, 'one card: the medal');
         const one = await card.locator('[data-pz-card]').boundingBox();
         const box = await card.boundingBox();
         assert(Math.abs(one.x + one.width / 2 - (box.x + box.width / 2)) <= 1 && one.width < box.width / 2, 'centered at the two-card size');
         let h = await header(page);
         assert(h.medals === 0, `the medal held: ${JSON.stringify(h)}`);
-        await card.locator('[data-pz-card="medal"] .pz-front').click();
+        await card.locator('[data-pz-card="medal"] .rvl-front').click();
         await sleep(200);
-        assert((await page.locator('.pz-ghost').count()) === 0, 'reduced motion: nothing flies');
+        assert((await page.locator('.rvl-ghost').count()) === 0, 'reduced motion: nothing flies');
         h = await header(page);
         assert(h.medals === 1, `the medal at once: ${JSON.stringify(h)}`);
         await card.locator('[data-tour-nice]').waitFor();
@@ -196,22 +196,22 @@ const header = (page) =>
         const { page, ctx, errors } = await b.pickedPage('Parker', { width: 420, scheme, reducedMotion: 'no-preference' });
         const card = page.locator('[data-tour-congrats]');
         await card.waitFor({ timeout: 15000 });
-        assert(flat(await card.locator('.pz-kicker').textContent()) === 'The Cold Open runner-up', 'the caps line');
-        assert(flat(await card.locator('.pz-title').textContent()) === 'Congrats on 2nd place!', 'the title');
+        assert(flat(await card.locator('.rvl-kicker').textContent()) === 'The Cold Open runner-up', 'the caps line');
+        assert(flat(await card.locator('.rvl-title').textContent()) === 'Congrats on 2nd place!', 'the title');
         assert((await card.locator('[data-pz-card]').count()) === 1 && (await card.locator('[data-pz-card="credit"]').count()) === 1, 'one card: the credit');
         const bal = (await (await page.request.get(`${b.BASE}/api/group`)).json()).credit.balanceCents;
         let h = await header(page);
         const held = bal - 700;
         assert(held > 0 ? h.credit.includes(`$${held / 100} credit`) : h.credit === '', `the $7 held back: ${JSON.stringify(h)} (balance ${bal})`);
         await shot(page, `D-before-${scheme}`);
-        await card.locator('[data-pz-card="credit"] .pz-front').click();
-        await page.waitForFunction(() => document.querySelector('.pz-ghost-credit') !== null, null, { timeout: 3000 });
-        await page.waitForFunction(() => !document.querySelector('.pz-ghost') && !document.querySelector('.topbar [data-rv-slot]') && document.querySelector('[data-tour-nice]'), null, { timeout: 5000 });
+        await card.locator('[data-pz-card="credit"] .rvl-front').click();
+        await page.waitForFunction(() => document.querySelector('.rvl-ghost-credit') !== null, null, { timeout: 3000 });
+        await page.waitForFunction(() => !document.querySelector('.rvl-ghost') && !document.querySelector('.topbar [data-rv-slot]') && document.querySelector('[data-tour-nice]'), null, { timeout: 5000 });
         await sleep(900);
         h = await header(page);
         assert(h.credit.includes(`$${bal / 100} credit`) && h.medals === 0, `landed: ${JSON.stringify(h)}`);
-        assert(flat(await card.locator('.pz-amount').textContent()) === '$7', '$7 on the card');
-        const lines = await card.locator('.pz-what, .pz-why').evaluateAll((els) => els.map((e) => e.getClientRects().length));
+        assert(flat(await card.locator('.rvl-odo-size').textContent()) === '$7', '$7 on the card');
+        const lines = await card.locator('.rvl-what, .rvl-why').evaluateAll((els) => els.map((e) => e.getClientRects().length));
         assert(lines.every((n) => n === 1), 'Credit and Towards next game on one line each');
         await shot(page, `D-after-${scheme}`);
         assert(!errors.length, errors.join('; '));
@@ -232,7 +232,7 @@ const header = (page) =>
         if (pct !== 100) await zoom(page, pct);
         await page.setViewportSize({ width, height: 844 });
         await sleep(300);
-        const t = await page.locator('.pz-title').evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth, h: e.getBoundingClientRect().height, fs: parseFloat(getComputedStyle(e).fontSize), lh: parseFloat(getComputedStyle(e).lineHeight), root: parseFloat(getComputedStyle(document.documentElement).fontSize) }));
+        const t = await page.locator('.rvl-title').evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth, h: e.getBoundingClientRect().height, fs: parseFloat(getComputedStyle(e).fontSize), lh: parseFloat(getComputedStyle(e).lineHeight), root: parseFloat(getComputedStyle(document.documentElement).fontSize) }));
         // One line, shrinking down to 0.9 rem; only past that (very big text on the smallest phone) may it wrap, never cut.
         const oneLine = t.sw <= t.cw + 1 && t.h < t.lh * 1.5;
         assert(oneLine || (pct > 100 && Math.abs(t.fs - 0.9 * t.root) <= 0.5 && t.sw <= t.cw + 1), `one line at ${width}/${pct}%: ${JSON.stringify(t)}`);
@@ -384,9 +384,9 @@ const header = (page) =>
         let h = await header(page);
         assert(h.medals === 0 && h.credit === '', `round ${round}: masked ${JSON.stringify(h)}`);
         for (const k of ['medal', 'credit']) {
-          await card.locator(`[data-pz-card="${k}"] .pz-front`).click();
-          await page.waitForFunction(() => document.querySelector('.pz-ghost') !== null, null, { timeout: 3000 });
-          await page.waitForFunction(() => !document.querySelector('.pz-ghost') && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 3000 });
+          await card.locator(`[data-pz-card="${k}"] .rvl-front`).click();
+          await page.waitForFunction(() => document.querySelector('.rvl-ghost') !== null, null, { timeout: 3000 });
+          await page.waitForFunction(() => !document.querySelector('.rvl-ghost') && !document.querySelector('.topbar [data-rv-slot]'), null, { timeout: 3000 });
         }
         await sleep(1000);
         h = await header(page);
@@ -407,7 +407,7 @@ const header = (page) =>
       }
     });
 
-    await check('I Round 2: the organizer header spacing, the card\'s condensed top, the medal on the baseline like the ticker', async () => {
+    await check('I Rounds 2 and 3: the organizer header spacing, the card\'s condensed top, the medal placed exactly like the game cards\' medal', async () => {
       await b.stage('zip90_header');
       for (const width of [375, 420, 440])
         for (const scheme of ['light', 'dark']) {
@@ -424,41 +424,60 @@ const header = (page) =>
           await a.ctx.close();
         }
       // The medal: the disc's edge under the name's baseline by the ticker's measure (about 0.17 of the size), for 1 medal, after the slam, 2.
-      const drop = (page) =>
+      // Round 3 (Alex): the medal by the name sits exactly like the medal after a name on the game cards (the look he approved): its bottom
+      // against the name's baseline, as a share of the font size, and its height, the same for 1 medal, 2, and right after the slam.
+      const medals = (page) =>
         page.evaluate(() => {
-          const one = (nameEl) => {
-            const t = [...nameEl.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
-            const w = document.createElement('span');
-            t.parentNode.insertBefore(w, t);
-            w.appendChild(t);
+          const one = (ico) => {
+            const md = ico.closest('.md-btn') || ico.closest('.md');
+            let n = md.previousSibling;
+            while (n && !(n.nodeType === 3 && n.textContent.trim()) && !(n.nodeType === 1 && n.textContent.trim())) n = n.previousSibling;
+            if (!n) n = md.closest('h1') && md.closest('h1').querySelector('.h1-name');
+            const host = n.nodeType === 3 ? n.parentNode : n;
             const p = document.createElement('span');
-            p.style.cssText = 'display:inline-block;width:0;height:0';
-            w.appendChild(p);
+            p.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+            if (n.nodeType === 3) n.parentNode.insertBefore(p, n.nextSibling);
+            else n.appendChild(p);
             const base = p.getBoundingClientRect().bottom;
-            const ico = [...(nameEl.querySelector('.md-ico') ? [nameEl.querySelector('.md-ico')] : nameEl.parentElement.querySelectorAll('.h1-badge .md-ico'))];
-            return ico.map((i) => { const x = i.getBoundingClientRect(); return (x.top + (x.height * 25.5) / 26 - base) / parseFloat(getComputedStyle(nameEl).fontSize); });
+            p.remove();
+            const fs = parseFloat(getComputedStyle(host).fontSize);
+            const r = ico.getBoundingClientRect();
+            return { drop: (r.top + (r.height * 25.5) / 26 - base) / fs, size: r.height / fs };
           };
-          const tick = [...document.querySelectorAll('.tw-run')[0].querySelectorAll('.tw-name')].find((e) => e.querySelector('.md-ico'));
-          return { ticker: one(tick)[0], header: one(document.querySelector('.topbar .h1-name')) };
+          const card = [...document.querySelectorAll('main .md-ico')].find((i) => !i.closest('.tw') && !i.closest('.rvl'));
+          return { card: card ? one(card) : null, header: [...document.querySelectorAll('.topbar .h1-badge .md-ico')].map(one) };
         });
+      const same = (m, n, what) => {
+        assert(m.card && m.header.length === n, `${what}: ${JSON.stringify(m)}`);
+        for (const h of m.header) assert(Math.abs(h.drop - m.card.drop) <= 0.01 && Math.abs(h.size - m.card.size) <= 0.01, `${what}: like the game card ${JSON.stringify(m)}`);
+      };
+      const withGame = async (page) => {
+        const fut = page.getByRole('button', { name: 'Show future games' });
+        if (await fut.count()) {
+          await fut.click();
+          await sleep(600);
+        }
+      };
       const hid = (await b.stage('history')).id;
-      await (await b.phone('Vic')).post('/api/tournament/award-seen', { tournamentId: hid });
+      const vic = await b.phone('Vic');
+      await vic.post('/api/tournament/award-seen', { tournamentId: hid });
+      for (const se of (await vic.group()).sessions.slice(0, 1)) await vic.post(`/api/sessions/${se.id}/join`, {});
       const two = await b.pickedPage('Vic', { width: 390 });
-      await two.page.addStyleTag({ content: '.tw-track{animation:none!important}' });
-      const d2 = await drop(two.page);
-      assert(d2.header.length === 2 && d2.header.every((x) => Math.abs(x - d2.ticker) <= 0.04), `2 medals like the ticker: ${JSON.stringify(d2)}`);
+      await withGame(two.page);
+      same(await medals(two.page), 2, '2 medals');
       await two.ctx.close();
       await b.stage('zip90_replay');
+      for (const se of (await vic.group()).sessions.slice(0, 1)) await vic.post(`/api/sessions/${se.id}/join`, {});
       const { page, ctx } = await b.pickedPage('Vic', { width: 390, reducedMotion: 'no-preference' });
-      await page.locator('[data-pz-card="medal"] .pz-front').click();
-      await page.waitForFunction(() => document.querySelector('.pz-ghost') !== null);
-      await page.waitForFunction(() => !document.querySelector('.pz-ghost'));
+      await page.locator('[data-pz-card="medal"] .rvl-front').click();
+      await page.waitForFunction(() => document.querySelector('.rvl-ghost') !== null);
+      await page.waitForFunction(() => !document.querySelector('.rvl-ghost'));
       await sleep(500);
-      await page.addStyleTag({ content: '.tw-track{animation:none!important}' });
-      const d1 = await drop(page);
-      assert(d1.header.length === 1 && Math.abs(d1.header[0] - d1.ticker) <= 0.04, `after the slam like the ticker: ${JSON.stringify(d1)}`);
+      await withGame(page);
+      same(await medals(page), 1, 'after the slam');
+      await page.evaluate(() => window.scrollTo(0, 0));
       // The card's top: the caps line, the title and the cards closer (2 px and 11 px), the padding as before (18 px).
-      const g = await page.evaluate(() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { pad: r('.pz-kicker').top - r('.pz').top, a: r('.pz-title').top - r('.pz-kicker').bottom, b: r('.pz-cards').top - r('.pz-title').bottom }; });
+      const g = await page.evaluate(() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { pad: r('.rvl-kicker').top - r('.rvl').top, a: r('.rvl-title').top - r('.rvl-kicker').bottom, b: r('.rvl-cards').top - r('.rvl-title').bottom }; });
       assert(Math.abs(g.pad - 18) <= 1 && g.a <= 3 && g.b <= 12, `card top: ${JSON.stringify(g)}`);
       await shot(page, 'I-card');
       await ctx.close();

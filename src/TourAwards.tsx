@@ -85,7 +85,7 @@ const GLOW_MS = 1300;
 function RevealBall() {
   const id = useId().replace(/:/g, '');
   return (
-    <svg className="pz-ball" viewBox="0 0 60 60" aria-hidden="true">
+    <svg className="rvl-ball" viewBox="0 0 60 60" aria-hidden="true">
       <defs>
         <radialGradient id={`pzb${id}`} cx="35%" cy="35%" r="70%">
           <stop offset="0%" style={{ stopColor: 'var(--ball-hi)' }} />
@@ -94,7 +94,7 @@ function RevealBall() {
         </radialGradient>
       </defs>
       <circle cx="30" cy="30" r="29" fill={`url(#pzb${id})`} />
-      <g className="pz-holes">
+      <g className="rvl-holes">
         <circle cx="30" cy="15.6" r="3.9" />
         <circle cx="16.8" cy="24" r="3.9" />
         <circle cx="43.2" cy="24" r="3.9" />
@@ -106,26 +106,25 @@ function RevealBall() {
   );
 }
 
-/** A small burst of gold, lime and white dots from the card's middle (motion only). */
+/** The burst's dots, drawn with the card (hidden) so the tap only starts their animations: where each one flies (fixed per dot). */
+const DOTS = Array.from({ length: 16 }, (_, i) => {
+  const a = (i / 16) * Math.PI * 2 + ((i * 7) % 5) * 0.07;
+  const d = 46 + ((i * 13) % 7) * 5;
+  return { color: ['var(--gold)', 'var(--ball)', 'var(--tour-ink)'][i % 3], dx: Math.round(Math.cos(a) * d), dy: Math.round(Math.sin(a) * d), ms: 560 + ((i * 11) % 5) * 40 };
+});
+
+/** A small burst of gold, lime and white dots from the card's middle (motion only): transform and opacity only, on dots already there. */
 function burst(card: HTMLElement) {
-  const colors = ['var(--gold)', 'var(--ball)', 'var(--tour-ink)'];
-  for (let i = 0; i < 16; i++) {
-    const dot = document.createElement('span');
-    dot.className = 'pz-dot';
-    dot.style.background = colors[i % 3];
-    card.appendChild(dot);
-    const a = (i / 16) * Math.PI * 2 + Math.random() * 0.35;
-    const d = 46 + Math.random() * 34;
-    dot
-      .animate(
-        [
-          { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
-          { transform: `translate(calc(-50% + ${Math.cos(a) * d}px), calc(-50% + ${Math.sin(a) * d}px)) scale(0.4)`, opacity: 0 },
-        ],
-        { duration: 560 + Math.random() * 160, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' },
-      )
-      .finished.then(() => dot.remove(), () => dot.remove());
-  }
+  card.querySelectorAll<HTMLElement>('.rvl-dot').forEach((dot, i) => {
+    const d = DOTS[i];
+    dot.animate(
+      [
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+        { transform: `translate(calc(-50% + ${d.dx}px), calc(-50% + ${d.dy}px)) scale(0.4)`, opacity: 0 },
+      ],
+      { duration: d.ms, easing: 'cubic-bezier(.2,.7,.3,1)' },
+    );
+  });
 }
 
 /** The header piece a prize lands on: a new piece still closed (`slot`), or the one already there. */
@@ -211,75 +210,102 @@ async function slam(kind: PrizeKind, from: HTMLElement, ghost: HTMLElement, setP
   }
 }
 
-/** The credit counts up $1 to $14 while the card turns. */
-function CountUp({ cents, run }: { cents: number; run: boolean }) {
+/** The amounts the credit counts through ($1 to $14; at most 15 steps for a big prize), the last one exact. */
+function countSteps(cents: number): string[] {
   const dollars = Math.max(1, Math.round(cents / 100));
-  const [n, setN] = useState(run && !reduced() ? 1 : dollars);
-  useEffect(() => {
-    if (!run || reduced()) {
-      setN(dollars);
-      return;
-    }
-    let raf = 0;
-    const t0 = performance.now();
-    const tick = (now: number) => {
-      const k = Math.min(1, (now - t0) / FLIP_MS);
-      setN(Math.max(1, Math.round(1 + (dollars - 1) * (1 - Math.pow(1 - k, 2)))));
-      if (k < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [run, dollars]);
-  return <>{n === dollars ? formatPrice(cents) : `$${n}`}</>;
+  const n = Math.min(dollars, 15);
+  const out: string[] = [];
+  for (let i = 1; i < n; i++) out.push(`$${Math.max(1, Math.round((dollars * i) / n))}`);
+  out.push(formatPrice(cents));
+  return out;
+}
+
+/**
+ * Zip 90 round 3: the credit counts up $1 to $14 as the card turns, as an odometer: every amount is drawn before the tap, one under the other,
+ * and the turn only slides the strip (a transform, stepped), so nothing is laid out or redrawn while the card turns. Without motion: the
+ * final amount.
+ */
+function Odometer({ cents, strip }: { cents: number; strip: RefObject<HTMLSpanElement | null> }) {
+  const steps = countSteps(cents);
+  const last = steps[steps.length - 1];
+  return (
+    <span className="rvl-odo">
+      <span className="rvl-odo-size">{last}</span>
+      <span ref={strip} className="rvl-odo-strip" style={{ transform: `translateY(-${steps.length - 1}em)` }} data-steps={steps.length}>
+        {steps.map((v, i) => (
+          <span key={i}>{v}</span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+/** Starts the odometer (with the turn). */
+function countUp(strip: HTMLElement | null) {
+  const n = Number(strip?.dataset.steps ?? 1);
+  if (!strip || n < 2) return;
+  strip.animate([{ transform: 'translateY(0)' }, { transform: `translateY(-${n - 1}em)` }], { duration: FLIP_MS, easing: `steps(${n}, jump-none)`, fill: 'backwards' });
 }
 
 function PrizeCard({ kind, c, flipped, onFlip, index, of }: { kind: PrizeKind; c: Congrats; flipped: boolean; onFlip: (card: HTMLElement, art: HTMLElement) => void; index: number; of: number }) {
   const card = useRef<HTMLDivElement>(null);
   const art = useRef<HTMLSpanElement>(null);
+  const strip = useRef<HTMLSpanElement>(null);
   const [turning, setTurning] = useState(false);
   return (
-    <div ref={card} className={`pz-card${flipped ? ' pz-flipped' : ''}${turning ? ' pz-turning' : ''}`} data-pz-card={kind} data-pz-flipped={flipped ? '' : undefined}>
-      <div className="pz-flip">
+    <div ref={card} className={`rvl-card${flipped ? ' rvl-flipped' : ''}${turning ? ' rvl-turning' : ''}`} data-pz-card={kind} data-pz-flipped={flipped ? '' : undefined}>
+      <div className="rvl-flip">
         <button
           type="button"
-          className="pz-face pz-front"
+          className="rvl-face rvl-front"
           aria-label={of > 1 ? `Tap to reveal prize ${index + 1} of ${of}` : 'Tap to reveal your prize'}
           disabled={flipped}
           aria-hidden={flipped ? true : undefined}
           tabIndex={flipped ? -1 : undefined}
           onClick={() => {
             if (flipped || !card.current || !art.current) return;
+            // Everything for the turn starts in this one tap (the turn, the dots, the count): no new work while the card turns.
             setTurning(true);
+            if (!reduced()) {
+              burst(card.current);
+              countUp(strip.current);
+            }
             onFlip(card.current, art.current);
           }}
         >
-          <RevealBall />
-          <span className="pz-tap" aria-hidden="true">
+          <span className="rvl-ballwrap" aria-hidden="true">
+            <span className="rvl-glow" />
+            <RevealBall />
+          </span>
+          <span className="rvl-tap" aria-hidden="true">
             <span>T</span>
             <span>A</span>
             <span>P</span>
           </span>
         </button>
-        <div className="pz-face pz-back" aria-hidden={flipped ? undefined : true}>
+        <div className="rvl-face rvl-back" aria-hidden={flipped ? undefined : true}>
           {kind === 'medal' ? (
             <>
-              <span ref={art} className="pz-art pz-medal">
-                <MedalIcon className="pz-medal-ico" />
+              <span ref={art} className="rvl-art rvl-medal">
+                <MedalIcon className="rvl-medal-ico" />
               </span>
-              <span className="pz-what">Gold medal</span>
-              <span className="pz-why">Permanent clout</span>
+              <span className="rvl-what">Gold medal</span>
+              <span className="rvl-why">Permanent clout</span>
             </>
           ) : (
             <>
-              <span ref={art} className="pz-art pz-amount">
-                <CountUp cents={c.creditCents} run={turning} />
+              <span ref={art} className="rvl-art rvl-amount">
+                <Odometer cents={c.creditCents} strip={strip} />
               </span>
-              <span className="pz-what">Credit</span>
-              <span className="pz-why">Towards next game</span>
+              <span className="rvl-what">Credit</span>
+              <span className="rvl-why">Towards next game</span>
             </>
           )}
         </div>
       </div>
+      {DOTS.map((d, i) => (
+        <span key={i} className="rvl-dot" style={{ background: d.color }} aria-hidden="true" />
+      ))}
     </div>
   );
 }
@@ -318,6 +344,7 @@ export function PrizeReveal({ c, onChanged, onPhase }: { c: Congrats; onChanged:
   const [gone, setGone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [flipped, setFlipped] = useState<PrizeKind[]>([]);
+  const [settled, setSettled] = useState<PrizeKind[]>([]);
   const toast = useToast();
   const title = useRef<HTMLHeadingElement>(null);
   const live = useRef(true);
@@ -338,25 +365,27 @@ export function PrizeReveal({ c, onChanged, onPhase }: { c: Congrats; onChanged:
   const flip = (kind: PrizeKind) => (card: HTMLElement, art: HTMLElement) => {
     setFlipped((f) => (f.includes(kind) ? f : [...f, kind]));
     const still = reduced();
-    if (!still) burst(card);
+    void card;
     void (async () => {
       if (!still) await wait(FLIP_MS);
       if (!live.current) return;
+      // Nice comes in only once the turn is over (nothing below the cards moves while one turns).
+      setSettled((x) => (x.includes(kind) ? x : [...x, kind]));
       const ghost = document.createElement('div');
-      ghost.className = `pz-ghost pz-ghost-${kind}`;
+      ghost.className = `rvl-ghost rvl-ghost-${kind}`;
       ghost.setAttribute('aria-hidden', 'true');
       ghost.innerHTML = kind === 'medal' ? art.innerHTML : formatPrice(c.creditCents);
       await slam(kind, art, ghost, setPhase, () => live.current);
     })();
   };
-  const done = kinds.every((k) => flipped.includes(k));
+  const done = kinds.every((k) => settled.includes(k));
   return (
-    <section className="pz" aria-label={words.kicker} data-tour-congrats={c.key} data-prize={c.award} data-prize-cards={kinds.join(' ')}>
-      <p className="pz-kicker">{words.kicker}</p>
-      <h2 ref={title} className="pz-title">
+    <section className="rvl" aria-label={words.kicker} data-tour-congrats={c.key} data-prize={c.award} data-prize-cards={kinds.join(' ')}>
+      <p className="rvl-kicker">{words.kicker}</p>
+      <h2 ref={title} className="rvl-title">
         {words.title}
       </h2>
-      <div className={`pz-cards${kinds.length === 1 ? ' pz-one' : ''}`}>
+      <div className={`rvl-cards${kinds.length === 1 ? ' rvl-one' : ''}`}>
         {kinds.map((k, i) => (
           <PrizeCard key={k} kind={k} c={c} flipped={flipped.includes(k)} onFlip={flip(k)} index={i} of={kinds.length} />
         ))}
@@ -364,7 +393,7 @@ export function PrizeReveal({ c, onChanged, onPhase }: { c: Congrats; onChanged:
       {done && (
         <button
           type="button"
-          className="btn block big pz-nice"
+          className="btn block big rvl-nice"
           disabled={busy}
           onClick={async () => {
             setBusy(true);

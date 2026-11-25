@@ -66,7 +66,7 @@
 /* ---------- Zip 90 (🎾90.prize reveal, pictures 1 to 6): the prize reveal, in the congratulations card's place ----------
    The dark tournament card (the results row's look under it), the lime caps line, one line of title, then the face-down prize cards side by
    side (one card: centered at the same size), and Nice (lime) once every card is turned. */
-.pz {
+.rvl {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -80,13 +80,13 @@
 }
 /* Spacing (Zip 86's rhythm): the same top gap as the tournament card when it is first (14 px under the header, a touch less than the old
    congratulations card's 20); under it, the gap the tournament card keeps above Your games (12 px). */
-main.page > .pz:first-child {
+main.page > .rvl:first-child {
   margin-top: -6px;
 }
-main.page > .pz:has(+ .tc-wrap) {
+main.page > .rvl:has(+ .tc-wrap) {
   margin-bottom: -8px;
 }
-.pz-kicker {
+.rvl-kicker {
   margin: 0;
   font-size: max(11px, 0.8rem);
   font-weight: 800;
@@ -96,7 +96,7 @@ main.page > .pz:has(+ .tc-wrap) {
   color: var(--ball);
   overflow-wrap: break-word;
 }
-.pz-title {
+.rvl-title {
   /* Zip 90 round 2 (Alex): the caps line, the title and the cards closer together (the card's padding unchanged). */
   margin: 2px 0 0;
   font-family: var(--body);
@@ -107,37 +107,40 @@ main.page > .pz:has(+ .tc-wrap) {
   color: var(--tour-ink);
   white-space: nowrap;
 }
-.pz-cards {
+.rvl-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 11px;
 }
-.pz-one .pz-card {
+.rvl-one .rvl-card {
   grid-column: 1 / -1;
   justify-self: center;
   width: calc((100% - 10px) / 2);
 }
-.pz-card {
+.rvl-card {
   position: relative;
   min-width: 0;
   perspective: 900px;
   container-type: inline-size;
 }
-.pz-flip {
+/* Round 3 (Alex: the flip froze mid-turn on the iPhone): the turn is one transform animation on a layer prepared ahead (will-change), each
+   face its own layer; nothing else changes while it turns (no shadow, filter or layout; the glow stops on that card; Nice waits). */
+.rvl-flip {
   display: grid;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.52s cubic-bezier(0.3, 1.25, 0.5, 1);
+  -webkit-transform-style: preserve-3d;
+  will-change: transform;
 }
-.pz-flipped .pz-flip {
+.rvl-flipped .rvl-flip {
   transform: rotateY(180deg);
 }
 /* The slight pop while it turns. */
-.pz-turning.pz-flipped .pz-flip {
-  animation: pz-turn 0.52s cubic-bezier(0.3, 0.9, 0.4, 1) both;
+.rvl-turning.rvl-flipped .rvl-flip {
+  animation: rvl-turn 0.52s cubic-bezier(0.3, 0.9, 0.4, 1) both;
 }
-@keyframes pz-turn {
+@keyframes rvl-turn {
   0% {
     transform: rotateY(0deg) scale(1);
   }
@@ -149,7 +152,7 @@ main.page > .pz:has(+ .tc-wrap) {
   }
 }
 /* Both faces: the same subtle fill and 1 px line (the front is not black, not striped). */
-.pz-face {
+.rvl-face {
   grid-area: 1 / 1;
   box-sizing: border-box;
   min-height: 140px;
@@ -167,42 +170,82 @@ main.page > .pz:has(+ .tc-wrap) {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
-.pz-front {
+.rvl-front {
   font: inherit;
   cursor: pointer;
   gap: 10px;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
-.pz-front:focus-visible {
+.rvl-front:focus-visible {
   outline: 3px solid var(--ball);
   outline-offset: 2px;
 }
-.pz-front:active:not(:disabled) {
-  filter: brightness(1.08);
-}
-.pz-back {
+.rvl-back {
   transform: rotateY(180deg);
 }
-.pz-ball {
+.rvl-ballwrap {
+  position: relative;
   display: block;
   flex: none;
   width: 60px;
   height: 60px;
-  border-radius: 50%;
-  box-shadow: 0 0 18px 2px color-mix(in srgb, var(--ball) 30%, transparent);
-  animation: pz-glow 2.6s ease-in-out infinite;
 }
-.pz-holes circle {
+.rvl-ball {
+  position: relative;
+  display: block;
+  width: 60px;
+  height: 60px;
+}
+/* The soft lime glow: its own layer, pulsing by opacity only (never a shadow change); still on the card that is turning or turned. */
+.rvl-glow {
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--ball) 55%, transparent) 38%, transparent 70%);
+  opacity: 0.55;
+  will-change: opacity;
+  animation: rvl-glow 2.6s ease-in-out infinite;
+}
+.rvl-turning .rvl-glow,
+.rvl-flipped .rvl-glow {
+  animation: none;
+}
+.rvl-holes circle {
   fill: color-mix(in srgb, var(--ball-ink) 42%, var(--ball));
 }
-@keyframes pz-glow {
+@keyframes rvl-glow {
   50% {
-    box-shadow: 0 0 26px 6px color-mix(in srgb, var(--ball) 48%, transparent);
+    opacity: 1;
   }
 }
+/* The odometer (the credit's count): every amount drawn ahead, one per line; the turn only slides the strip. */
+.rvl-odo {
+  position: relative;
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+}
+.rvl-odo-size {
+  display: block;
+  visibility: hidden;
+}
+.rvl-odo-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+.rvl-odo-strip > span {
+  display: block;
+  height: 1em;
+  text-align: center;
+}
 /* "TAP": lime caps, exactly as wide as the ball. */
-.pz-tap {
+.rvl-tap {
   display: flex;
   justify-content: space-between;
   width: 60px;
@@ -211,17 +254,17 @@ main.page > .pz:has(+ .tc-wrap) {
   line-height: 1;
   color: var(--ball);
 }
-.pz-art {
+.rvl-art {
   display: flex;
   align-items: flex-end;
   justify-content: center;
 }
-.pz-medal-ico {
+.rvl-medal-ico {
   display: block;
   width: 38px;
   height: 49px;
 }
-.pz-amount {
+.rvl-amount {
   font-size: 2.6rem;
   font-weight: 900;
   line-height: 1;
@@ -230,34 +273,34 @@ main.page > .pz:has(+ .tc-wrap) {
   color: var(--ball);
   margin-bottom: 4px;
 }
-.pz-what,
-.pz-why {
+.rvl-what,
+.rvl-why {
   max-width: 100%;
   white-space: nowrap;
 }
-.pz-what {
+.rvl-what {
   margin-top: 8px;
   font-size: min(1.08rem, max(11px, calc((100cqi - 12px) / 6)));
   font-weight: 800;
   line-height: 1.2;
 }
-.pz-amount + .pz-what {
+.rvl-amount + .rvl-what {
   margin-top: 0;
 }
-.pz-why {
+.rvl-why {
   margin-top: 2px;
   font-size: min(0.98rem, max(11px, calc((100cqi - 14px) / 8.7)));
   line-height: 1.25;
   color: var(--tour-sub);
 }
-.pz-nice {
+.rvl-nice {
   width: 100%;
   margin-top: 16px;
   background: var(--ball);
   color: var(--ball-ink);
   box-shadow: 0 0 22px color-mix(in srgb, var(--ball) 26%, transparent), 0 6px 16px rgb(0 0 0 / 22%);
 }
-.pz-dot {
+.rvl-dot {
   position: absolute;
   left: 50%;
   top: 42%;
@@ -266,9 +309,11 @@ main.page > .pz:has(+ .tc-wrap) {
   height: 7px;
   border-radius: 50%;
   pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%);
 }
 /* The copy that flies to the header (it lives on the page body for the flight). */
-.pz-ghost {
+.rvl-ghost {
   position: fixed;
   z-index: 70;
   margin: 0;
@@ -279,12 +324,12 @@ main.page > .pz:has(+ .tc-wrap) {
   transform-origin: center;
   will-change: transform;
 }
-.pz-ghost svg {
+.rvl-ghost svg {
   display: block;
   width: 100%;
   height: 100%;
 }
-.pz-ghost-credit {
+.rvl-ghost-credit {
   font-family: var(--body);
   font-size: 2.6rem;
   font-weight: 900;

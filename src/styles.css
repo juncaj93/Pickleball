@@ -4805,30 +4805,36 @@ dialog.sheet[open]::backdrop {
   text-overflow: ellipsis;
 }
 .ph-head .title-line h1.has-badge .h1-badge {
-  margin-left: 0.04em;
+  margin-left: 0;
   line-height: inherit;
 }
-/* Zip 90 (Alex, round 2): the medal's bottom on the name's baseline (as in the winners ticker), in every browser: plain inline layout down to
-   the medal drawing (an inline picture sits on the text baseline by the rules; a flex or button box's baseline is each browser's guess,
-   which put it too high on the iPhone). The same after the slam lands and with 2 or more medals. */
+/* Zip 90 round 3 (Alex): the medal by the name is laid out exactly like the medal after a name on the game cards (the look Alex approved):
+   the same boxes (an inline-flex button or slot in the text line, the medal row inside it, 0.12 em under the line), the same size against
+   the name (0.78 x 1.02 em), so it sits the same in every browser, just scaled to the bigger name. No gap after the name or the "…". */
 .ph-head .h1-badge .md-btn,
 .ph-head .h1-badge .rv-slot {
-  display: inline-block;
-  vertical-align: baseline;
-  line-height: inherit;
-}
-.ph-head .h1-badge .md {
-  display: inline;
-  vertical-align: baseline;
-}
-.ph-head .h1-badge .md-ico {
-  display: inline-block;
-  /* The winners ticker's placement (measured: the disc's edge 0.17 of the name's size under the text baseline), so the two read alike. */
-  vertical-align: -0.17em;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -0.12em;
 }
 .ph-head .h1-badge .rv-slot {
   overflow: visible;
   white-space: nowrap;
+}
+.ph-head .h1-badge .md {
+  margin-left: 0;
+  vertical-align: -0.12em;
+}
+.ph-head .h1-badge .md-ico {
+  width: 0.78em;
+  height: 1.02em;
+}
+.ph-head .h1-badge .md-ico + .md-ico {
+  margin-left: -0.3em;
+}
+.ph-head .h1-badge .md-count {
+  font-size: max(11px, 0.78em);
+  margin-left: 0.22em;
 }
 .ph-head .title-swap {
   overflow: hidden;

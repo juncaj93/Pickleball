@@ -161,11 +161,29 @@ describe('zip 90: the prize reveal', () => {
     expect(prizeKinds(second)).toEqual(['credit']);
   });
 
+  it('round 3: the prize card\'s class names are its own (the organizer\'s prize boxes used .pz too, and their late style file spread the card out)', async () => {
+    const { readdirSync } = await import('node:fs');
+    const all: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(join(process.cwd(), d), { withFileTypes: true })) {
+        if (e.isDirectory()) walk(`${d}/${e.name}`);
+        else if (e.name.endsWith('.css') && `${d}/${e.name}` !== 'src/tour-awards.css') all.push(`${d}/${e.name}`);
+      }
+    };
+    walk('src');
+    const mine = new Set(css('src/tour-awards.css').match(/\.rvl[\w-]*/g));
+    expect(mine.size).toBeGreaterThan(10);
+    for (const f of all) {
+      const theirs = new Set(css(f).match(/\.[a-z][\w-]*/gi));
+      for (const c of mine) expect(theirs.has(c), `${c} also in ${f}`).toBe(false);
+    }
+  });
+
   it('look rules: colors only from tokens; the header rules only for the player header (.ph-head)', () => {
     const card = css('src/tour-awards.css');
-    const pz = card.slice(card.indexOf('.pz {'));
-    expect(pz).not.toMatch(/#[0-9a-f]{3,8}\b/i);
-    expect(pz.replace(/rgb\(0 0 0 \/ \d+%\)/g, '')).not.toMatch(/rgba?\(/);
+    const rvl = card.slice(card.indexOf('.rvl {'));
+    expect(rvl).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(rvl.replace(/rgb\(0 0 0 \/ \d+%\)/g, '')).not.toMatch(/rgba?\(/);
     const styles = css('src/styles.css');
     const head = styles.slice(styles.indexOf('.ph-head .topbar-row'), styles.indexOf('@keyframes rv-cup-glow'));
     expect(head).not.toMatch(/#[0-9a-f]{3,8}\b/i);

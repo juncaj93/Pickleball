@@ -378,7 +378,7 @@ async function main() {
         assert((await a.page.locator('[data-tm-award-choice]').count()) === 4, 'four teams to pick from');
         await a.page.locator('[data-tm-award-choice="Net Ninjas"]').click();
         // Zip 87: Edit awards uses the shared prize boxes (src/pages/admin/PrizeBoxes.tsx): the style played (Locked doubles) on top, "Tonight".
-        assert((await a.page.locator('[data-tm-awards] [data-pz-box="doubles"]').getAttribute('data-pz-top')) === 'true' && (await a.page.locator('[data-tm-awards] .pz-left').count()) === 1, 'the prize boxes, Locked doubles on top');
+        assert((await a.page.locator('[data-tm-awards] [data-pz-box="doubles"]').getAttribute('data-pz-top')) === 'true' && (await a.page.locator('[data-tm-awards] .rvl-left').count()) === 1, 'the prize boxes, Locked doubles on top');
         await a.page.locator('[data-tm-awards] [data-pz-money="doubles-first"]').fill('10');
         await a.page.locator('[data-tm-weeks="2"]').click();
         for (const w of SIZES) {
@@ -413,10 +413,10 @@ async function main() {
       const anim = await v.page.locator('.tw-track').evaluate((el) => getComputedStyle(el).animationName);
       assert(anim === 'tw-run', `runs: ${anim}`);
       // Zip 90: the prize reveal replaced the words card; the medal by the name lands when its card is flipped (e2e/zip90.cjs has the rest).
-      const c = flat(await v.page.locator('[data-tour-congrats] .pz-title').innerText());
+      const c = flat(await v.page.locator('[data-tour-congrats] .rvl-title').innerText());
       assert(c === 'Congrats, you and Wren won!', c);
-      for (const k of ['medal', 'credit']) await v.page.locator(`[data-pz-card="${k}"] .pz-front`).click();
-      await v.page.waitForFunction(() => !document.querySelector('.pz-ghost') && !document.querySelector('.topbar [data-rv-slot]') && document.querySelector('[data-tour-nice]') && document.querySelector('.topbar .h1-badge [data-medals="1"]'), null, { timeout: 6000 });
+      for (const k of ['medal', 'credit']) await v.page.locator(`[data-pz-card="${k}"] .rvl-front`).click();
+      await v.page.waitForFunction(() => !document.querySelector('.rvl-ghost') && !document.querySelector('.topbar [data-rv-slot]') && document.querySelector('[data-tour-nice]') && document.querySelector('.topbar .h1-badge [data-medals="1"]'), null, { timeout: 6000 });
       assert((await v.page.locator('header [data-medals="1"], .topbar [data-medals="1"]').count()) >= 1, 'a medal by the name at the top');
       assert((await v.page.locator('[data-tc-day-hero], [data-future-toggle]').count()) === 0, 'no live view, no Show future games');
       for (const w of SIZES) {
