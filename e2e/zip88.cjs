@@ -195,6 +195,8 @@ const cutOrBroken = (page, sel) =>
     await check('E picture 2: the look on the Tournament test page', async () => {
       const { page, ctx, errors } = await b.adminHome({ width: 390 });
       await page.locator('[data-tm-test-row]').first().click();
+      // Zip 89: the page lists only the newest zip's stages; the older ones sit behind "All tests" (SITE_RULES, Tournament test list).
+      if (!(await page.locator('[data-tm-stage="zip88_early"]').count())) await page.locator('[data-tm-test-all-link]').click();
       await page.locator('[data-tm-stage="zip88_early"]').click();
       await page.locator('[data-tm88-look] [data-nc]').waitFor({ timeout: 15000 });
       const look = page.locator('[data-tm88-look]');

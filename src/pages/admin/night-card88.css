@@ -227,7 +227,8 @@
 /* The row: first team right-aligned | the 78 px middle | second team left-aligned. */
 .nc-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 78px minmax(0, 1fr);
+  /* Zip 89 (the large text audit): the middle column grows with its words (Score at 150% text), never under 78 px. */
+  grid-template-columns: minmax(0, 1fr) minmax(78px, auto) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }
@@ -254,7 +255,8 @@
 }
 .nc-score-btn,
 .nc-score-box {
-  width: 78px;
+  width: auto;
+  min-width: 78px;
   min-height: 46px;
   padding: 0 4px;
   border-radius: 12px;
@@ -474,12 +476,13 @@
     padding-inline: 9px;
   }
   .nc-row {
-    grid-template-columns: minmax(0, 1fr) 62px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(62px, auto) minmax(0, 1fr);
     gap: 6px;
   }
   .nc-score-btn,
   .nc-score-box {
-    width: 62px;
+    width: auto;
+    min-width: 62px;
     font-size: 0.98rem;
   }
   .nc-side {
@@ -583,5 +586,55 @@
   .tm88-start,
   .tm88-ask-btn {
     transition: none;
+  }
+}
+
+/* Zip 89 (the large text audit, 125% and 150%): a court box measured in its own text size. Narrow for its words (a 390 px phone at 125%,
+   at 17 to 17.5 rem): the narrow phone layout above (62 px Score, smaller names). Narrower (a 320 px phone, or 125% and 150% text): the
+   two sides sit side by side over the whole width and Score (or the score) goes under them, full width: a name is never cut or broken. At
+   the usual text sizes on 360 px and wider nothing changes. Last in the file, so it wins over the narrow phone rules above. */
+.nc-box {
+  container: nc-box / inline-size;
+}
+@container nc-box (max-width: 17.5rem) {
+  .nc-row {
+    grid-template-columns: minmax(0, 1fr) minmax(62px, auto) minmax(0, 1fr);
+    gap: 6px;
+  }
+  .nc-score-btn,
+  .nc-score-box {
+    min-width: 62px;
+    font-size: 0.98rem;
+  }
+  .nc-side {
+    font-size: 0.9rem;
+  }
+}
+@container nc-box (max-width: 17rem) {
+  .nc-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'a b' 's s';
+    row-gap: 8px;
+  }
+  .nc-side-a {
+    grid-area: a;
+    text-align: left;
+  }
+  .nc-side-b {
+    grid-area: b;
+    text-align: right;
+  }
+  .nc-score-btn,
+  .nc-score-box {
+    grid-area: s;
+    width: 100%;
+  }
+}
+/* Narrowest of all (a 320 px phone at 150% text): each side on its own full-width line, the first left, the second right, Score under them. */
+@container nc-box (max-width: 12.5rem) {
+  .nc-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'a' 'b' 's';
+    row-gap: 4px;
   }
 }

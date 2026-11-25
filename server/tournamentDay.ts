@@ -368,11 +368,17 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   }
   // A game that got a result keeps the teams it had then (a later change to an earlier game never moves it to other teams).
   const frozen = new Map(stored.filter((g) => g.seat_a != null || g.seat_b != null).map((g) => [g.num, { a: g.seat_a ?? null, b: g.seat_b ?? null }]));
+  // Zip 89 (review): a best of 3 Final is one series between the same two teams: once game 1 has its teams frozen (its result), games 2 and 3
+  // are between those teams too (a semifinal fixed later never moves the rest of the series to another team).
+  const finalRows = stored.filter((g) => g.stage === 'final').sort((x, y) => x.num - y.num);
+  const g1Frozen = finalRows.length > 1 ? frozen.get(finalRows[0].num) : undefined;
+  if (g1Frozen) for (const g of finalRows.slice(1)) if (!frozen.has(g.num)) frozen.set(g.num, g1Frozen);
   const resolve = (list: GameRow[]) =>
     new Map(resolveGames(teams.length, list.map(asPlanned), new Map(list.map((g) => [g.num, resultOf(g)])), out, frozen, gone, records).map((r) => [r.num, r]));
   // A playoff game one side of which can never be filled is not played (counted as skipped): the team there goes on (a walkover).
   const first = resolve(stored);
   let planned = stored.map((g) => (first.get(g.num)?.never && !g.winner && !g.skipped ? { ...g, skipped: 1, claim: null, result_by: 'skipped' } : g));
+  let hiddenRound: number | null = null;
   // Zip 89: a best of 3 Final (a bonus): its game 3 is part of the night only once the series is 1-1 (or it was already played or put on a court).
   const finals = planned.filter((g) => g.stage === 'final').sort((x, y) => x.num - y.num);
   if (finals.length >= 3) {
@@ -380,7 +386,11 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     const w1 = resultOf(g1).winner;
     const w2 = resultOf(g2).winner;
     const needed = !!w1 && !!w2 && w1 !== w2;
-    if (!needed && !decided(g3) && !g3.result_at && !pinOf(g3.claim_at, g3.court)) planned = planned.filter((g) => g.num !== g3.num);
+    if (!needed && !decided(g3) && !g3.result_at && !pinOf(g3.claim_at, g3.court)) {
+      planned = planned.filter((g) => g.num !== g3.num);
+      // Not on the screens until 1-1, but while the series is open it may still be played: the Time check and the pace count it (review).
+      if (!(w1 && w2 && w1 === w2)) hiddenRound = g3.round;
+    }
   }
   const results = new Map(planned.map((g) => [g.num, resultOf(g)]));
   const resolved = resolve(planned);
@@ -447,6 +457,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
       ...(tiesEnd !== undefined ? { tiesEnd } : {}),
     };
   });
+  if (hiddenRound !== null && !states.some((r) => r.round === hiddenRound)) states.push({ round: hiddenRound, pool: false, playTo: PLAYOFF_TO, done: false, anyResult: false });
   // Zip 89: the night's real start (Start now included) and its measured pace; the bonus the night would get next: Locked doubles 4 or 5 teams on
   // 2 courts first get SEMIFINALS (1 vs 4, 2 vs 3), then a best of 3 Final; every other night (semis already, or 1 court) only the best of 3
   // Final. None once the Final is best of 3, or while a team is out of the night. With a bonus in the night, the Time check counts the rounds
@@ -455,13 +466,13 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const shape = doublesStructure(teams.length, courtsOf(t));
   const semisIn = games.some((g) => g.stage === 'semi');
   const bonusIn = (shape.shape === 'rr' && semisIn) || series.bestOf3;
-  const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : 'bestOf3';
+  const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size || !plan.fits ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : 'bestOf3';
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
-  const paceRounds: PaceRound[] = states.map((r) => ({ round: r.round, planned: r.pool, done: r.done, doneAt: r.doneAt, minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO] }));
+  const paceRounds: PaceRound[] = states.map((r) => ({ round: r.round, planned: r.pool, done: r.done, doneAt: r.doneAt, minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO], ...(r.pool ? {} : { fixed: true }) }));
   const measured = measuredPace(paceRounds, startMin);
   const check =
     started && !over && !t.paused_at && games.length && t.final_date
-      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done))
+      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done, measured.latest))
       : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
@@ -471,6 +482,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     endMin: real.start + real.minutes,
     nowMin,
     kind: t.teams_at ? kind : null,
+    fixedBonus: true,
     bonusMinutes: kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
     started,
     over,
@@ -858,13 +870,20 @@ export function playerDayView(
     const add = (stage: 'semi' | 'final', pending: string, g?: GameRow) =>
       games.push({ num: g?.num ?? 0, label: stageLabel(stage), stage, round: g?.round ?? 0, court: null, opponent: null, pending, state: firstOpen ? 'next' : 'later', playTo: PLAYOFF_TO });
     const poolSeats = groupsOf(rows.teams.length).find((x) => x.seats.includes(seat))?.seats ?? [];
+    const semisRr = !pools && playoff.some((g) => g.stage === 'semi');
     const stillIn = () => {
       // Out of reach once the group is done and they finished below the places that go on.
       const st = standings(f.games.map(asPlanned), f.results, poolSeats, f.out);
       const done = f.games.filter((g) => g.stage === 'pool' && poolSeats.includes(Number(g.slot_a.slice(1)))).every(decided);
-      return !done || (st.find((x) => x.seat === seat)?.rank ?? 99) <= 2 || st.some((x) => x.tied && x.seat === seat);
+      return !done || (st.find((x) => x.seat === seat)?.rank ?? 99) <= (semisRr ? 4 : 2) || st.some((x) => x.tied && x.seat === seat);
     };
-    if (pools) {
+    if (semisRr) {
+      // Zip 89: a round robin night with the semifinals bonus: the top 4 go on (1st vs 4th, 2nd vs 3rd).
+      if (semisOpen && !inSemi && stillIn()) {
+        add('semi', 'If you finish in the top 4', playoff.find((g) => g.stage === 'semi'));
+        add('final', 'If you win your semifinal', fin);
+      } else if (inSemi && finOpen) add('final', 'If you win your semifinal', fin);
+    } else if (pools) {
       if (semisOpen && !inSemi && stillIn()) {
         add('semi', slotWords('semi', myPool), playoff.find((g) => g.stage === 'semi'));
         add('final', 'If you win your semifinal', fin);
@@ -1489,11 +1508,6 @@ async function doublesGamesAction(
 }
 
 /**
- * Zip 88: Start now. Allowed only when the card offers it (startNowOpen: game day, before the start, the style decided, the teams published on
- * Locked doubles, the courts' numbers set). Writes one task_log row (START_TASK) with this moment; a second tap (two phones) changes nothing.
- * Money never moves: the planned start and end, the court cost, the tickets and the prizes stay as they are.
- */
-/**
  * Zip 89: ADD A ROUND on a Locked doubles night (the organizer's tap on "Ahead of time"), only the offer the screen showed while it still stands:
  *   SEMIFINALS (4 or 5 teams on 2 courts, the first bonus): 1st vs 4th and 2nd vs 3rd of the round robin, both courts at once, to 11; then the
  *     Final (the semifinal winners) and the 3rd place game (the semifinal losers). The schedule's Final and 3rd place rows (never started) are
@@ -1597,6 +1611,11 @@ export async function writeBestOf3(db: D1Database, t: TournamentRow, day: DayRow
   return false;
 }
 
+/**
+ * Zip 88: Start now. Allowed only when the card offers it (startNowOpen: game day, before the start, the style decided, the teams published on
+ * Locked doubles, the courts' numbers set). Writes one task_log row (START_TASK) with this moment; a second tap (two phones) changes nothing.
+ * Money never moves: the planned start and end, the court cost, the tickets and the prizes stay as they are.
+ */
 async function startNow(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow) {
   const tz = group.timezone;
   if (t.started_early && Date.parse(t.started_early) <= ctx.nowMs) return { ok: true, started: t.started_early, already: true };
@@ -1646,10 +1665,12 @@ export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowM
   let runnerUp: number | null = null;
   // Zip 89: a best of 3 Final: the team with 2 game wins is the Final's winner (champion, medals, credit); the other is the runner-up.
   const won = f.series.bestOf3 ? f.series.winner : (fres?.winner ?? null);
+  // A team left during the series (a game of it not played): the team still in wins the Final, as a single Final's walkover (review).
+  const seriesOff = f.series.bestOf3 && !won && f.series.nums.some((n) => f.results.get(n)?.skipped);
   if (fin && won && fr?.a && fr?.b) {
     champion = won === 'a' ? fr.a : fr.b;
     runnerUp = champion === fr.a ? fr.b : fr.a;
-  } else if (fin && fres?.skipped && fr) {
+  } else if (fin && (fres?.skipped || seriesOff) && fr) {
     // A walkover: the one team still there wins it.
     const still = [fr.a, fr.b].filter((x): x is number => x !== null && !rows.teams.find((tm) => tm.seat === x)?.out_at);
     if (still.length === 1) champion = still[0];

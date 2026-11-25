@@ -76,21 +76,23 @@ describe('zip 89: the pace and the offer (pure)', () => {
     expect(measuredPace(gap, START).done).toBe(1);
   });
   it('offers after a fast round when the rest + the bonus ends 20 minutes early; nothing when it would not', () => {
-    // 15 a round: Round 1 done at 7:45, 5 left + 1 = 6 x 15 = 90: 9:15 PM, 45 minutes to spare.
+    // 15 a round: Round 1 done at 7:45, 5 left x 15 = 75, the bonus round at the table's 20 at least (it can never be shortened as it is
+    // the night's new last round... and the review's rule): 9:20 PM, 40 minutes to spare.
     const fast = pacing(base({ rounds: doneUpTo(1, 15), nowMin: START + 15 }));
     expect(fast.offer).toEqual({ kind: 'round', key: 'round:1:6' });
-    expect(fast.finishWithBonus).toBe(START + 105);
-    // 20 a round: 20 + 6 x 20 = 140 > 130: no offer.
+    expect(fast.finishWithBonus).toBe(START + 110);
+    // 20 a round: 20 + 5 x 20 + 20 = 140 > 130: no offer.
     expect(pacing(base({ rounds: doneUpTo(1, 20), nowMin: START + 20 })).offer).toBeNull();
     // Exactly 20 to spare is enough; 19 is not.
     const edge = (each: number) => pacing(base({ rounds: doneUpTo(1, each), nowMin: START + each })).offer;
-    expect(edge(129.9 / 7)).not.toBeNull();
-    expect(edge(131 / 7)).toBeNull();
+    // each + 5 x each + 20 <= 130: each <= 18.33.
+    expect(edge(109.9 / 6)).not.toBeNull();
+    expect(edge(110.1 / 6)).toBeNull();
   });
   it('a round in progress counts as at most half done', () => {
     const late = pacing(base({ rounds: doneUpTo(1, 15), nowMin: START + 50 }));
-    // From 50 - 7.5 = 42.5 minutes in: 42.5 + 90 = 132.5 > 130: no offer.
-    expect(late.finishWithBonus).toBe(START + 132.5);
+    // From 50 - 7.5 = 42.5 minutes in: 42.5 + 75 + 20 = 137.5 > 130: no offer.
+    expect(late.finishWithBonus).toBe(START + 137.5);
     expect(late.offer).toBeNull();
   });
   it('never inside the last 2 planned rounds (a bonus round is never counted as planned)', () => {
@@ -199,8 +201,9 @@ describe('zip 89: Americano on the real server (10 players, the Dec 1 night)', (
 });
 
 describe('zip 89: Locked doubles on the real server', () => {
-  it('10 players (5 teams): Semifinals first (1 vs 4, 2 vs 3, both courts after the round robin), then the Final best of 3', async () => {
-    const ctx = await world(10, { format: 'doubles' });
+  it('10 players (5 teams, a 3 hour night): Semifinals first (1 vs 4, 2 vs 3, both courts after the round robin), then the Final best of 3', async () => {
+    // (On 2.5 hours a best of 3 never fits: its two games to 11 count at the table's 20 minutes each, as they can never be shortened.)
+    const ctx = await world(10, { format: 'doubles', minutes: 180 });
     await draftAndPublish(ctx);
     await playPaced(ctx, 10, false, ({ v }) => !!v.bonus);
     let { v } = await night(ctx);
@@ -269,8 +272,14 @@ describe('zip 89: Locked doubles on the real server', () => {
     expect(v.bestOf3).toBeUndefined();
     books(ctx);
   }, 60_000);
-  it('12 players (groups, semifinals already): the first bonus is the best of 3 Final; 2-0 ends it without game 3', async () => {
+  it('12 players (groups of 3: 3 pool rounds): never a best of 3 (it needs 3 planned rounds still to play after a round is in)', async () => {
     const ctx = await world(12, { format: 'doubles' });
+    await draftAndPublish(ctx);
+    const run = await playPaced(ctx, 10);
+    expect(run.offers).toEqual([]);
+  }, 60_000);
+  it('14 players (groups, semifinals already; 3 hours): the first bonus is the best of 3 Final', async () => {
+    const ctx = await world(14, { format: 'doubles', minutes: 180 });
     await draftAndPublish(ctx);
     const run = await playPaced(ctx, 12);
     expect(run.offers.map((o) => o.kind)).toEqual(['bestOf3']);
@@ -343,5 +352,45 @@ describe('zip 89: the preview stages (the preview’s fixed names)', () => {
     expect(g3.started).toBe(true);
     expect((await fix(g3, 11, 4)).status).toBe(200);
     expect((await tour()).day.bestOf3).toEqual({ wins: [2, 1], winner: 'a' });
+  });
+});
+
+describe('zip 89 (review): a best of 3 Final stays one series between the same two teams', () => {
+  async function bo3() {
+    const { setupGroup } = await import('./harness');
+    const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex' });
+    ctx.app.env.PREVIEW_CALM = 'on';
+    for (const n of ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Vic', 'Wren', 'Zoe', 'Quinn', 'Reese']) await ctx.organizer.call('POST', '/api/admin/players', { name: n });
+    ctx.app.now = Date.parse('2026-11-13T01:15:00.000Z');
+    const id = (await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'zip89_bo3' })).data.id as string;
+    const tour = async () => (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament;
+    const games = (body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${id}/games`, body);
+    const fix = (g: any, a: number, b: number) => games({ action: 'result', num: g.num, a, b, seen: { winner: g.winner, scoreA: g.scoreA, scoreB: g.scoreB } });
+    return { ctx, tour, games, fix };
+  }
+  it('a team leaving during the series: the team still in wins the Final; End works and pays it', async () => {
+    const { tour, games } = await bo3();
+    const d = (await tour()).day;
+    // Third Shot Gang (Parker + Quinn, the Final's side b) leave during game 2.
+    const left = d.teams.find((x: any) => x.name === 'Third Shot Gang');
+    const r = await games({ action: 'left', playerId: left.players[0].id });
+    expect(r.status, r.text).toBe(200);
+    const t = await tour();
+    expect(t.end, 'the End card').toBeTruthy();
+    expect(t.end.standings[0]).toMatchObject({ name: 'Net Ninjas', medal: true });
+  });
+  it('a semifinal fixed after Final game 1 never moves games 2 and 3 to another team', async () => {
+    const { tour, fix } = await bo3();
+    let d = (await tour()).day;
+    const semi = d.games.find((g: any) => g.stage === 'semi' && g.court === 2);
+    // Flip the 2nd vs 3rd semifinal (Kitchen Crew wins it now).
+    expect((await fix(semi, 7, 11)).status).toBe(200);
+    d = (await tour()).day;
+    const names = (g: any) => `${g.a?.name} v ${g.b?.name}`;
+    const g1 = d.games.find((g: any) => g.finalGame === 1);
+    const g2 = d.games.find((g: any) => g.finalGame === 2);
+    expect(names(g2)).toBe(names(g1));
+    expect(names(g1)).toBe('Net Ninjas v Third Shot Gang');
   });
 });

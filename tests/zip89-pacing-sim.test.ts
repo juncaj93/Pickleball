@@ -75,6 +75,46 @@ describe('zip 89: Locked doubles nights at 12, 15, 20 and 25 minutes a game (2 c
     }, 600_000);
 });
 
+describe('zip 89: Dec 1 at Alex’s 13 minutes a game (10 players, 2 courts, 7:30 to 10 PM), every offer accepted', () => {
+  for (const format of ['americano', 'doubles'] as const)
+    it(format, async () => {
+      const ctx = await world(10, { format });
+      if (format === 'doubles') await draftAndPublish(ctx);
+      const r = await playPaced(ctx, 13);
+      const left = Math.round((END_MS - r.finish) / 60_000);
+      expect(r.finish).toBeLessThanOrEqual(END_MS);
+      expect(left).toBeGreaterThanOrEqual(10);
+      const each = [...r.games.values()];
+      const lines = [...r.played]
+        .sort((a, b) => a.start - b.start || a.num - b.num)
+        .map((g) => `  ${clock(g.start)}-${clock(g.end)} ${g.label.padEnd(9)} ${g.a.join(' + ')} v ${g.b.join(' + ')} ${g.score}`);
+      console.log(
+        `\n[zip89-dec1] ${format}: offers ${r.offers.map((o) => `${o.kind} after round ${o.afterRound} (${clock(o.at)})`).join(', ') || 'none'}; ${r.rounds} rounds; games each ${Math.min(...each)}-${Math.max(...each)}; last game ends ${clock(r.finish)} (${left} min before 10 PM)\n${lines.join('\n')}`,
+      );
+    }, 120_000);
+});
+
+describe('zip 89 (review): a night that starts fast, takes every bonus, then slows down (10 players, 2 courts, 2.5 hours)', () => {
+  // [style, fast minutes, for how many rounds, then]: the fresh reviewer's nights, every offer accepted, every Time check applied.
+  const cases: [('americano' | 'doubles'), number, number, number][] = [
+    ['doubles', 12, 2, 18],
+    ['doubles', 10, 2, 20],
+    ['doubles', 10, 3, 22],
+    ['americano', 12, 3, 20],
+    ['americano', 10, 3, 22],
+    ['americano', 9, 4, 24],
+  ];
+  for (const [format, fast, n, slow] of cases)
+    it(`${format}: ${fast} minutes for ${n} rounds, then ${slow}`, async () => {
+      const ctx = await world(10, { format });
+      if (format === 'doubles') await draftAndPublish(ctx);
+      const r = await playPaced(ctx, (round) => (round <= n ? fast : slow));
+      const left = Math.round((END_MS - r.finish) / 60_000);
+      rows.push(`SLOWS ${format === 'doubles' ? 'LD' : 'AM'} 10p ${fast} x${n} then ${slow}: offers ${r.offers.map((o) => `${o.kind}@R${o.afterRound}`).join(' ') || '-'}, ends ${clock(r.finish)} (${left} min before 10 PM), time check ${r.timeChecks}x`);
+      expect(r.finish, 'never past the booked end').toBeLessThanOrEqual(END_MS);
+    }, 120_000);
+});
+
 describe('zip 89: the table', () => {
   it('prints', () => {
     console.log(`\n[zip89-sim]\n${rows.join('\n')}\n[zip89-sim] more than 30 minutes early at 12 to 20 a game: ${misses.length}\n${misses.join('\n')}\n[zip89-sim] past the end at 25 a game: ${over.length}\n${over.join('\n')}`);

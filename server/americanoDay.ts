@@ -256,7 +256,9 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
       done,
       anyResult: list.some((g) => !!g.winner || !!g.claim),
       doneAt: done && times.length && t.final_date ? minuteOf(t, tz, Math.max(...times.map((x) => Date.parse(x)))) : undefined,
-      keep: r === rounds,
+      // Zip 89: the night's last round is never shortened, unless the night has bonus rounds (then every round may be: it was offered on the
+      // night's pace, and a night that slows down afterwards must still finish inside the courts' time).
+      keep: r === rounds && !(stored.length > 0 && rounds > Math.min(rounds, plan.rounds)),
     });
   }
   // Zip 89: the planned rounds are the plan's (a stored night beyond them has bonus rounds); the night's real start (Start now included) and its
@@ -269,7 +271,7 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
   const bonusIn = stored.length > 0 && rounds > plannedRounds;
   const check =
     started && !over && !t.paused_at && rounds && t.final_date
-      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done))
+      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done, measured.latest))
       : null;
   const lowered = games.filter((g) => !decided(g) && g.playTo < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.playTo)) as GameTo } : null;
@@ -279,7 +281,8 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
     startMin,
     endMin: real.start + real.minutes,
     nowMin,
-    kind: stored.length > 0 && inGames.filter((id) => !gone.has(id)).length >= 4 ? 'round' : null,
+    // (A night planned too tight, games to 7 from the start, is never offered more: review.)
+    kind: stored.length > 0 && plan.fits && inGames.filter((id) => !gone.has(id)).length >= 4 ? 'round' : null,
     bonusMinutes: ROUND_MINUTES[plan.gameTo],
     started,
     over,
@@ -755,7 +758,8 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
     const from = Number(body.fromRound);
     const to = Number(body.to);
     if (!Number.isInteger(from) || from < 1 || (to !== 9 && to !== 7)) throw new HttpError(400, 'invalid_apply', 'Pick a round and 9 or 7.');
-    const last = Math.max(...am.map((g) => g.round));
+    // The last round is never shortened, unless the night has bonus rounds (Zip 89: then every round may be).
+    const last = Math.max(...am.map((g) => g.round)) + (before.rounds > before.plannedRounds ? 1 : 0);
     const res = await ctx.db
       .prepare(
         `UPDATE tournament_games SET play_to = ?, updated_at = ? WHERE tournament_id = ? AND slot_a LIKE '%+%' AND round >= ? AND round < ? AND play_to > ?

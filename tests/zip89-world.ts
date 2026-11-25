@@ -38,7 +38,8 @@ export interface NightRun {
 /** Plays a whole night at `pace` minutes a game to 11. `accept`: Alex taps Add a round on every offer. */
 export async function playPaced(
   ctx: World,
-  pace: number,
+  /** Minutes a game to 11 takes: one number, or by the game's round (a night that starts fast and slows down). */
+  pace: number | ((round: number) => number),
   accept = true,
   stopWhen?: (s: { t: any; v: any; games: any[] }) => boolean,
   fresh = true,
@@ -91,7 +92,8 @@ export async function playPaced(
       if (ends.has(g.num)) continue;
       const to = g.playTo ?? 11;
       const entry = 1 + ((g.num * 7 + court) % 3);
-      ends.set(g.num, ctx.app.now + (Math.round((pace * to) / 11) + entry) * 60_000);
+      const p = typeof pace === 'number' ? pace : pace(g.round);
+      ends.set(g.num, ctx.app.now + (Math.round((p * to) / 11) + entry) * 60_000);
       starts.set(g.num, ctx.app.now);
     }
     const next = Math.min(...live.map(({ g }) => ends.get(g.num)!));

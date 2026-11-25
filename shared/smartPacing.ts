@@ -9,9 +9,10 @@
 //              over-promises.
 //   THE OFFER  after a round is fully scored, ONE bonus is offered when ALL of this holds:
 //                a. everything still to play (whole rounds; a round in progress counts as at most half done) plus the bonus, at the pace,
-//                   ends at least BONUS_SPARE (20) minutes before the booked end;
+//                   ends at least BONUS_SPARE (20) minutes before the booked end; rounds the Time check can never shorten (playoffs) and
+//                   the bonus itself count at the table's time at least (review: a night that slows down after a bonus can still finish);
 //                b. at least 2 PLANNED pool / round robin rounds are still to play (a bonus round is never counted as planned, so an offer
-//                   never comes near the end);
+//                   never comes near the end); a Locked doubles best of 3 Final (two playoff games the Time check can never shorten) needs 3;
 //                c. the night is on (started, not over), not paused, not behind (the Time check wins over bonuses: no offer while it asks
 //                   for shorter games or shorter games are in force), and nobody is mid "Player left".
 //              The organizer decides: nothing is ever added by itself. One offer at a time, at most one bonus per scored round (after a
@@ -38,6 +39,8 @@ export interface PaceRound {
   doneAt?: number;
   /** Its table minutes at the length it is played to (shared/tournamentPlan.ts ROUND_MINUTES; 20 when not given). */
   minutes?: number;
+  /** The Time check can never shorten it (a playoff round): the offer counts it at the table's time at least, never faster. */
+  fixed?: boolean;
 }
 
 /** What the bonus is ('round' Americano; 'semis' Locked doubles 4 and 5 teams; 'bestOf3' the Final). How many rounds it adds to the night. */
@@ -63,6 +66,8 @@ export interface PaceInput {
   leftOpen: boolean;
   /** When the last bonus was added (minutes after midnight), if any: ONE offer per round, so none until a round is fully scored after it. */
   lastBonusAt?: number | null;
+  /** The bonus adds playoff games, which the Time check never shortens (Locked doubles): it needs more planned rounds left. */
+  fixedBonus?: boolean;
 }
 
 export interface PaceResult {
@@ -81,19 +86,23 @@ export interface PaceResult {
 const tableOf = (r: PaceRound) => r.minutes ?? FULL;
 
 /** THE PACE alone: rounds fully scored from Round 1 on, when the last of them got its last result, and the pace (null before Round 1 is in). */
-export function measuredPace(rounds: readonly PaceRound[], startMin: number): { done: number; lastAt: number; pace: number | null } {
+export function measuredPace(rounds: readonly PaceRound[], startMin: number): { done: number; lastAt: number; pace: number | null; latest: number | null } {
   const list = [...rounds].sort((a, b) => a.round - b.round);
   let done = 0;
   let lastAt = -Infinity;
   let table = 0;
+  // The latest full round alone (minutes for a round to 11), so the Time check sees a night slowing down at once (review: the average lags).
+  let latest: number | null = null;
   for (const r of list) {
     if (!r.done || r.doneAt === undefined) break;
     done++;
     table += tableOf(r);
+    const from = Number.isFinite(lastAt) ? lastAt : startMin;
+    latest = (Math.max(0, r.doneAt - from) / tableOf(r)) * FULL;
     lastAt = Math.max(lastAt, r.doneAt);
   }
-  if (done === 0 || !Number.isFinite(lastAt) || table <= 0) return { done, lastAt, pace: null };
-  return { done, lastAt, pace: Math.max(PACE_FLOOR, ((lastAt - startMin) / table) * FULL) };
+  if (done === 0 || !Number.isFinite(lastAt) || table <= 0) return { done, lastAt, pace: null, latest: null };
+  return { done, lastAt, pace: Math.max(PACE_FLOOR, ((lastAt - startMin) / table) * FULL), latest };
 }
 
 /** THE PACE and THE OFFER. */
@@ -103,14 +112,21 @@ export function pacing(p: PaceInput): PaceResult {
   const plannedLeft = list.filter((r) => r.planned && !r.done).length;
   if (pace === null) return { done, pace: null, finishWithBonus: null, plannedLeft, offer: null };
   const scale = pace / FULL;
-  const left = list.filter((r) => !r.done).reduce((m, r) => m + tableOf(r), 0);
-  const extra = p.kind ? (p.bonusMinutes ?? BONUS_ROUNDS[p.kind] * FULL) : 0;
+  // Review: only rounds the Time check can still shorten get the fast pace's credit. A round it can never shorten (a playoff) and the bonus
+  // itself (playoff games; or the night's new last round, which is never shortened) count at the table's time at least: if the night slows
+  // down after a bonus, the shortenable pool rounds left are what brings it back inside the end.
+  const firm = Math.max(1, scale);
+  const left = list.filter((r) => !r.done).reduce((m, r) => m + tableOf(r) * (r.fixed ? firm : scale), 0);
+  const extra = p.kind ? (p.bonusMinutes ?? BONUS_ROUNDS[p.kind] * FULL) * firm : 0;
   // The round being played counts as at most half done: the clock starts at the last full round's end, or half a round ago if later.
   const from = Math.max(lastAt, p.nowMin - pace / 2);
-  const finishWithBonus = from + (left + extra) * scale;
+  const finishWithBonus = from + left + extra;
   const fresh = p.lastBonusAt === undefined || p.lastBonusAt === null || p.lastBonusAt < lastAt;
   const open = !!p.kind && fresh && p.started && !p.over && !p.paused && !p.behind && !p.leftOpen;
-  const ok = open && plannedLeft >= BONUS_MIN_LEFT && finishWithBonus <= p.endMin - BONUS_SPARE;
+  // A bonus that adds games the Time check can never shorten (Locked doubles' playoff games) needs that many more planned pool rounds still to
+  // play, so a night that slows down afterwards still has pool games to shorten (review): semifinals 2, a best of 3 Final 3.
+  const need = Math.max(BONUS_MIN_LEFT, p.fixedBonus ? BONUS_ROUNDS[p.kind!] + 1 : 0);
+  const ok = open && plannedLeft >= need && finishWithBonus <= p.endMin - BONUS_SPARE;
   return { done, pace, finishWithBonus, plannedLeft, offer: ok ? { kind: p.kind!, key: `${p.kind}:${done}:${list.length}` } : null };
 }
 
@@ -119,11 +135,14 @@ export function pacing(p: PaceInput): PaceResult {
  * before. Two cases: a night with a bonus round in it (it was judged by its pace when the bonus was added), and a night running SLOWER than the
  * table once 2 rounds are in (its real pace warns earlier, so the courts are not run past the booked end). A fast night with no bonus is checked exactly as before.
  */
-export function paceForCheck(bonusIn: boolean, pace: number | null, done = 2): number | undefined {
+export function paceForCheck(bonusIn: boolean, pace: number | null, done = 2, latest: number | null = null): number | undefined {
   if (pace === null) return undefined;
+  // With a bonus in the night: the slower of the night's average and its latest full round (review: a night that starts fast and then slows
+  // down must be caught at once, not when the average catches up), never under the floor.
+  if (bonusIn) return Math.max(pace, latest ?? 0, PACE_FLOOR);
   // A slow night is judged by its pace only once 2 rounds are in: one slow round (a late first round, people still arriving) never sets the
   // whole night's time by itself, as one fast round never offers a bonus by itself (the floor).
-  return bonusIn || (pace > FULL && done >= SLOW_ROUNDS) ? pace : undefined;
+  return pace > FULL && done >= SLOW_ROUNDS ? pace : undefined;
 }
 /** Rounds fully in before a slow pace counts for the Time check. */
 export const SLOW_ROUNDS = 2;
