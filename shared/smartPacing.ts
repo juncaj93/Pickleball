@@ -114,6 +114,25 @@ export function measuredPace(rounds: readonly PaceRound[], startMin: number): { 
   return { done, lastAt, pace: Math.max(PACE_FLOOR, (Math.max(0, lastAt - startMin - paused) / table) * FULL), latest };
 }
 
+/**
+ * Zip 92 (🎾91's dry run): THE PACE AS THE TIME CHECK READS IT, live. As measuredPace, and the round being played counts as finished NOW once it
+ * has run longer than its table time (from the end of the round before it, after its warm-up or break): so on a slow night the estimate rises
+ * minute by minute while a round runs long, and nothing jumps when that round's last score comes in (it then reads the same). A round still
+ * inside its table time changes nothing. The bonus offer keeps measuredPace (only rounds really scored).
+ */
+export function livePace(rounds: readonly PaceRound[], startMin: number, nowMin: number): ReturnType<typeof measuredPace> {
+  const list = [...rounds].sort((a, b) => a.round - b.round);
+  const m = measuredPace(list, startMin);
+  const cur = list.find((r) => !r.done || r.doneAt === undefined);
+  if (!cur) return m;
+  const from = (m.done ? m.lastAt : startMin) + (cur.pauseBefore ?? 0);
+  if (nowMin - from <= tableOf(cur)) return m;
+  return measuredPace(
+    list.map((r) => (r === cur ? { ...r, done: true, doneAt: nowMin } : r)),
+    startMin,
+  );
+}
+
 /** THE PACE and THE OFFER. */
 export function pacing(p: PaceInput): PaceResult {
   const list = [...p.rounds].sort((a, b) => a.round - b.round);
@@ -146,19 +165,21 @@ export function pacing(p: PaceInput): PaceResult {
 /**
  * Zip 89: the pace the Time check counts the rounds still to play at (shared/tournamentSchedule.ts timeCheck), or undefined for the table as
  * before. Two cases: a night with a bonus round in it (it was judged by its pace when the bonus was added), and a night running SLOWER than the
- * table once 2 rounds are in (its real pace warns earlier, so the courts are not run past the booked end). A fast night with no bonus is checked exactly as before.
+ * table (its real pace warns earlier, so the courts are not run past the booked end). A fast night with no bonus is checked exactly as before.
+ * Zip 92 (🎾91's dry run): a slow night EASES into its pace: after Round 1 a third of the way from the table to the measured pace, after Round 2
+ * two thirds, from Round 3 all of it (EASE_ROUNDS). It used to jump from the table to the whole pace once 2 rounds were in ("9 minutes behind",
+ * then a minute later "25 minutes behind"). One slow round still never sets the whole night's time by itself.
  */
 export function paceForCheck(bonusIn: boolean, pace: number | null, done = 2, latest: number | null = null): number | undefined {
   if (pace === null) return undefined;
   // With a bonus in the night: the slower of the night's average and its latest full round (review: a night that starts fast and then slows
   // down must be caught at once, not when the average catches up), never under the floor.
   if (bonusIn) return Math.max(pace, latest ?? 0, PACE_FLOOR);
-  // A slow night is judged by its pace only once 2 rounds are in: one slow round (a late first round, people still arriving) never sets the
-  // whole night's time by itself, as one fast round never offers a bonus by itself (the floor).
-  return pace > FULL && done >= SLOW_ROUNDS ? pace : undefined;
+  if (pace <= FULL || done < 1) return undefined;
+  return FULL + (pace - FULL) * Math.min(1, done / EASE_ROUNDS);
 }
-/** Rounds fully in before a slow pace counts for the Time check. */
-export const SLOW_ROUNDS = 2;
+/** Zip 92: rounds fully in before a slow night is counted at its whole measured pace (before that, part of the way, one step a round). */
+export const EASE_ROUNDS = 3;
 
 /**
  * Zip 89 (Alex): BREAKS when nobody sits (every player plays every round): 5 minutes after every 2nd round, never after the last. A round is a

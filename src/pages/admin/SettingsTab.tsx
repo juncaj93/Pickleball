@@ -1245,7 +1245,7 @@ function AdminR3Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Admin screens, round 3 <SaveMark state={auto.rows.adminR3All} />
           </span>
-          <span className="set-hint">{ctx.d.moneyRework === true ? "New Edit game, Add game, Settings, Players. Needs round 2" : <>New Edit game, Add game, Settings order and Players list. Needs round 2 on. Off: only phones opened with /admin?adminr3=on</>}</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "New Edit game, + Add, Settings, Players. Needs round 2" : <>New Edit game, + Add, Settings order and Players list. Needs round 2 on. Off: only phones opened with /admin?adminr3=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -1414,7 +1414,7 @@ function InstantAdminRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 /** Zip 24, "Booking hours" (BOOKING_HOURS, server/bookingHours.ts): tap-to-pick game times, and a game outside the venue hours is refused. Organizer only. Off: only /admin?bookinghours=on. */
 function BookingHoursRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="bookingHoursAll" path="/api/admin/booking-hours-switch" name="Booking hours" hint="Changes money for 2.5 and 3 hour games ($18 and $21 each). Tap-to-pick times on Add game and Edit game; a game outside the venue hours is blocked" flag={!!ctx.d.bookingHoursForAll} dataAttr="data-booking-hours-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="bookingHoursAll" path="/api/admin/booking-hours-switch" name="Booking hours" hint="Changes money for 2.5 and 3 hour games ($18 and $21 each). Tap-to-pick times on + Add and Edit game; a game outside the venue hours is blocked" flag={!!ctx.d.bookingHoursForAll} dataAttr="data-booking-hours-all" />;
 }
 /** Zip 34, "Check-in pay line" (CHECKIN_PAY_LINE, server/checkInPay.ts): a soft pay line in the night-before Check-in text while somebody signed up still owes. Words only. Off: only /admin?checkinpay=on. */
 function CheckInPayRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
@@ -1651,7 +1651,7 @@ function SecondChanceRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 /** Zip 14, "Game day card" (GAME_DAY_CARD, server/gameDay.ts): the player game day card and the Court row. Off: only ?gameday=on. */
 function GameDayRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="gameDayCardAll" path="/api/admin/game-day-card-switch" name="Game day card" hint="On game day: Court and Directions buttons, the court map. Adds the Court row to Add game and Edit game. Not on a game day the first time" flag={!!ctx.d.gameDayCardForAll} dataAttr="data-game-day-card-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="gameDayCardAll" path="/api/admin/game-day-card-switch" name="Game day card" hint="On game day: Court and Directions buttons, the court map. Adds the Court row to + Add and Edit game. Not on a game day the first time" flag={!!ctx.d.gameDayCardForAll} dataAttr="data-game-day-card-all" />;
 }
 /** Zip 13 rows (server/zip13.ts), newest first. All organizer only. Off: only /admin?adminundo=on, ?swapbutton=on, ?playersredo=on. */
 function Zip13Rows({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {

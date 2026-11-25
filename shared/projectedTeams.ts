@@ -2,7 +2,7 @@
 // night were Locked doubles with the players it would have now, worked out on the organizer's phone from what the page already holds (no server
 // call, no database trip): the same pairing as Draft teams' first draw (shared/tournamentSchedule.ts draftTeams: strongest with weakest), sorted
 // by team total, highest first. Organizer only: players never get a level or this list.
-import type { AdminTournamentView } from './tournament';
+import { type AdminTournamentView, playsAmericano } from './tournament';
 import { ticketOwed } from './tournamentTickets';
 import { type DraftPlayer, type Pair, pairTotal } from './tournamentSchedule';
 
@@ -34,14 +34,14 @@ export function projectedPlayers(t: Source): DraftPlayer[] {
 }
 
 /**
- * The projected teams, or null when the row does not apply: the night would be Americano (Americano picked, or an odd count), fewer than 2
+ * The projected teams, or null when the row does not apply: the night would be Americano (Americano picked, an odd count or 12), fewer than 2
  * players, a canceled tournament, or real teams already drafted (the Teams card shows those). Ties in level go by name, so the list never jumps
  * around between refreshes; Draft teams breaks the same ties at random, so its first draw can differ only between players of equal level.
  */
 export function projectedTeams(t: Source): ProjectedTeam[] | null {
   if (t.status === 'canceled' || t.format === 'americano' || (t.day && t.day.phase !== 'none')) return null;
   const players = projectedPlayers(t);
-  if (players.length < 2 || players.length % 2 === 1) return null;
+  if (players.length < 2 || playsAmericano(players.length)) return null;
   const sorted = [...players].sort((x, y) => y.level - x.level || x.name.localeCompare(y.name));
   const pairs: Pair[] = [];
   for (let i = 0; i < sorted.length / 2; i++) pairs.push([sorted[i], sorted[sorted.length - 1 - i]]);

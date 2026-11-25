@@ -95,8 +95,9 @@ html[data-game-day][data-tonight-glow] .schedule > .sched.gd .tile.day-tonight {
 html[data-game-day] .schedule > .sched.tier-this .tile-wrap > .tile-check {
   width: 26px;
   height: 26px;
-  top: -13px;
-  right: -13px;
+  /* Zip 92 (🎾91's audit): -17 (was -13, centered on the corner), so the badge clears the end of TOMORROW (it covered its W by about 4 px). */
+  top: -17px;
+  right: -17px;
   box-sizing: border-box;
   border: 3px solid var(--pc-card);
   z-index: 5;

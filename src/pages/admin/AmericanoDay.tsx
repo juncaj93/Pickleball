@@ -45,6 +45,35 @@ function useSave(ctx: AdminCtx) {
   return { busy, save };
 }
 
+
+/**
+ * Zip 92 (🎾91's dry run): AT MOST ONE Time check prompt per round. The server names each prompt by the round being played (`tc:<id>:r3`);
+ * once Alex taps Play to 9 or Not now, no other prompt shows until the next round, even when the suggestion changes. Remembered on this phone
+ * (a reload in the same round does not bring it back); nothing is stored on the server.
+ */
+export function useTimeCheckSeen(tournamentId: string): [(key: string) => boolean, (key: string) => void] {
+  const storeKey = `pb-tc-seen:${tournamentId}`;
+  const [seen, setSeen] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(storeKey) ?? '[]');
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+  const mark = (key: string) =>
+    setSeen((list) => {
+      const next = [...list.filter((x) => x !== key), key].slice(-12);
+      try {
+        localStorage.setItem(storeKey, JSON.stringify(next));
+      } catch {
+        /* a private window: remembered until the page closes */
+      }
+      return next;
+    });
+  return [(key: string) => seen.includes(key), mark];
+}
+
 const gamesCall = (t: AdminTournamentView, body: Record<string, unknown>) => api('POST', `/api/admin/tournament/${t.id}/games`, body);
 const pair = (names: string[]) => names.join(' + ');
 const where = (g: AdminRoundGame) => `Court ${g.courtNumber ?? g.court}`;
@@ -149,10 +178,10 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
   const [all, setAll] = useState<number | null>(null);
   const [standings, setStandings] = useState(false);
   const [left, setLeft] = useState(false);
-  const [skipTc, setSkipTc] = useState<string | null>(null);
+  const [tcSeen, markTc] = useTimeCheckSeen(t.id);
   const m = americanoNightModel(r);
   const round = r.round ?? (m.allIn ? Math.max(1, r.plan.rounds) : 1);
-  const tc = r.timeCheck && r.timeCheck.key !== skipTc ? r.timeCheck : null;
+  const tc = r.timeCheck && !tcSeen(r.timeCheck.key) ? r.timeCheck : null;
   return (
     <>
       {r.paused && <AlertCard as="section" tone="blue" icon="clock" label="Paused" title="Paused. Players see it." data={{ 'data-tm-paused': true }} />}
@@ -161,10 +190,10 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
           <p className="tm-gd-tc-title">{tc.text.split('. ')[0]}.</p>
           <p className="tm-gd-tc-sub">{tc.text.split('. ').slice(1).join('. ')}</p>
           <div className="tm-gd-tc-actions">
-            <button type="button" className="btn tm-gd-tc-go" disabled={busy} onClick={() => void save(() => gamesCall(t, { action: 'apply', fromRound: tc.fromRound, to: tc.to }), `Play to ${tc.to} from Round ${tc.fromRound}`)} data-tm-time-apply>
+            <button type="button" className="btn tm-gd-tc-go" disabled={busy} onClick={() => void save(async () => (await gamesCall(t, { action: 'apply', fromRound: tc.fromRound, to: tc.to }), markTc(tc.key)), `Play to ${tc.to} from Round ${tc.fromRound}`)} data-tm-time-apply>
               Play to {tc.to} from Round {tc.fromRound}
             </button>
-            <button type="button" className="btn secondary" onClick={() => setSkipTc(tc.key)} data-tm-time-later>
+            <button type="button" className="btn secondary" onClick={() => markTc(tc.key)} data-tm-time-later>
               Not now
             </button>
           </div>

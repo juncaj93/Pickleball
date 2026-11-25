@@ -283,7 +283,7 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       if (d.how === 'tie') return `No majority, so the tie rule made ${theTour(d)} ${fmt}${counts}`;
       if (d.how === 'vote_open') return `${who} let the players vote ${theTour(d)} format`;
       // Zip 64: the style rules once tickets close (an odd number locked in plays Americano; the organizer can switch back).
-      if (d.how === 'odd') return `${tourName(d)} switched to Americano (${num(d.lockedIn)} locked in, an odd number)`;
+      if (d.how === 'odd') return `${tourName(d)} switched to Americano (${num(d.lockedIn)} locked in${d.lockedIn === 12 ? '' : ', an odd number'})`;
       if (d.how === 'back') return `${who} switched ${theTour(d)} back to Locked doubles (${num(d.lockedIn)} locked in)`;
       return `${who} set ${theTour(d)} format to ${fmt}`;
     }

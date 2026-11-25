@@ -218,7 +218,9 @@ export function cardButtons(t: AdminTournamentView, nowIso: string, tz: string):
   const gameDay = isGameDay(t, nowIso, tz);
   const count = ticketCount(t);
   const all = count.total > 0 && count.locked >= count.total;
-  const out: CardButton[] = [{ key: 'tickets', title: 'Players', sub: ticketWords(count), tone: all ? 'solid' : 'soft', subTone: all ? 'white' : 'green' }];
+  // Zip 92 (DESIGN: one green button per card): while the card shows the solid green Start now, "All 8 locked in" takes its soft style.
+  const solid = all && !t.startNow;
+  const out: CardButton[] = [{ key: 'tickets', title: 'Players', sub: ticketWords(count), tone: solid ? 'solid' : 'soft', subTone: solid ? 'white' : 'green' }];
   const start = shortClock(t.start).replace(/ [AP]M$/, '');
   if (gameDay) {
     if (t.format === 'americano') {

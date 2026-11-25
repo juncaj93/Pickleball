@@ -233,16 +233,23 @@ export function formatAlertWords(name: string, dayKeyOfDate: string, format: Tou
 // 'back:<ISO time>' (the organizer switched back to Locked doubles). Code from before Zip 64 reads either as "the organizer's own" (sourceOf).
 // ---------------------------------------------------------------------------------------------------------------------
 
+/**
+ * Zip 92 (Alex): THE STYLE RULE at Pay by. Every odd count plays Americano (Locked doubles needs teams of two), and so does 12 (six teams make
+ * groups of three; Americano gives everyone more games). 8, 10, 14 and 16 keep the style picked. Used where tickets close (the switch, its
+ * guards, the money and fit lines before close); nightPlan stays the plain shape a count of teams can play.
+ */
+export const AMERICANO_TWELVE = 12;
+export const playsAmericano = (players: number): boolean => players % 2 === 1 || players === AMERICANO_TWELVE;
 /** The style was switched to Americano for an odd number locked in. */
 export const isOddSource = (v: string | null | undefined): boolean => typeof v === 'string' && v.startsWith('odd:');
 /** The organizer switched back to Locked doubles after an odd switch. */
 export const isBackSource = (v: string | null | undefined): boolean => typeof v === 'string' && v.startsWith('back:');
 /**
- * The style in play once tickets have closed: Americano when an odd number is locked in (whatever was picked); otherwise what is stored (the
- * winner, the organizer's pick, or an earlier odd switch that the organizer has not switched back).
+ * The style in play once tickets have closed: Americano when an odd number (or 12, Zip 92) is locked in (whatever was picked); otherwise what
+ * is stored (the winner, the organizer's pick, or an earlier switch that the organizer has not switched back).
  */
 export function styleAtClose(format: TournamentFormat, lockedIn: number): TournamentFormat {
-  return lockedIn % 2 === 1 ? 'americano' : format;
+  return playsAmericano(lockedIn) ? 'americano' : format;
 }
 /** The players' one short banner when the style changes after tickets close (Alex reviews the words in the preview). */
 export function styleBannerWords(source: string | null | undefined): string | null {
@@ -251,7 +258,14 @@ export function styleBannerWords(source: string | null | undefined): string | nu
   return null;
 }
 /** The organizer's Telegram alert and card when the style switches to Americano. */
-export const oddSwitchWords = (name: string): string => `${name} switched to Americano (odd number of players).`;
+export const oddSwitchWords = (name: string, lockedIn?: number): string =>
+  `${name} switched to Americano (${lockedIn === AMERICANO_TWELVE ? '12 players' : 'odd number of players'}).`;
+/** The card's second line under it ("9 locked in. Locked doubles needs an even number." / Zip 92: "12 locked in. 12 players play Americano."). */
+export const oddSwitchSub = (lockedIn: number): string =>
+  lockedIn === AMERICANO_TWELVE ? `${lockedIn} locked in. 12 players play Americano.` : `${lockedIn} locked in. Locked doubles needs an even number.`;
+/** Zip 92: why Locked doubles cannot be picked (or switched back to) for this many locked in, the same words as the odd count's. */
+export const doublesRefusal = (lockedIn: number): string =>
+  lockedIn === AMERICANO_TWELVE ? `12 players play Americano. ${lockedIn} are locked in.` : `Locked doubles needs an even number. ${lockedIn} are locked in.`;
 
 /** The most a ticket or the credit can be set to ($200), so a typo cannot store a silly number. */
 export const MAX_PRICE_CENTS = 20_000;

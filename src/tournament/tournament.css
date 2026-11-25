@@ -1760,6 +1760,17 @@ dialog.sheet.tc-tw-overlay {
 .tc-bar-row .tc-state-lime {
   color: var(--tc-lime);
 }
+/* Zip 92 (🎾91's audit: "Lock in · $18" lost its price at 125 and 150% text, "Locked in" was cut at 320): the lime button and the state's words
+   never shrink below their whole label; when the row cannot hold all three, Who's in and Drop out move to a second line under it. At the usual
+   text sizes the row fits as before and nothing moves. */
+.tc-bar-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.tc-bar-row .tc-lime,
+.tc-bar-row .tc-state {
+  min-width: min-content;
+}
 .tc-bar-row .tc-gray {
   flex: 0 0 auto;
   min-height: 44px;

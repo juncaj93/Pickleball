@@ -143,10 +143,11 @@ describe('zip 89: the pace and the offer (pure)', () => {
     expect(paceForCheck(false, null)).toBeUndefined();
     expect(paceForCheck(false, 15)).toBeUndefined();
     expect(paceForCheck(true, 15)).toBe(15);
-    expect(paceForCheck(false, 24)).toBe(24);
-    // One slow round alone never sets the night's time (a late first round): the table, as before.
-    expect(paceForCheck(false, 55, 1)).toBeUndefined();
-    expect(paceForCheck(false, 24, 2)).toBe(24);
+    // Zip 92: a slow night eases in (a third of the way after Round 1, two thirds after Round 2, all of it from Round 3).
+    expect(paceForCheck(false, 24, 3)).toBe(24);
+    expect(paceForCheck(false, 26, 1)).toBeCloseTo(22, 6);
+    expect(paceForCheck(false, 24, 2)).toBeCloseTo(20 + (4 * 2) / 3, 6);
+    expect(paceForCheck(false, 55, 0)).toBeUndefined();
   });
 });
 
@@ -294,20 +295,20 @@ describe('zip 89: Locked doubles on the real server', () => {
     expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
     allThree(ctx);
   }, 120_000);
-  it('8 players (4 teams) on 2.5 hours, the Dec 1 night: semifinals built in from the start, no offer needed; a single Final', async () => {
+  it('8 players (4 teams) on 2.5 hours, the Dec 1 night: semifinals built in from the start; a single Final; Zip 92: the only offer is one more round robin round', async () => {
     const ctx = await world(8, { format: 'doubles', minutes: 150 });
     await draftAndPublish(ctx);
     expect((await night(ctx)).v.games.filter((g: any) => g.stage === 'semi')).toHaveLength(2);
     const run = await playPaced(ctx, 12);
-    // A best of 3 needs 3 planned rounds still to play: never on 3 round robin rounds.
-    expect(run.offers).toEqual([]);
+    // A best of 3 needs 3 planned rounds still to play: never on 3 round robin rounds. Zip 92: one more round robin round instead.
+    expect(run.offers.map((o: any) => o.kind ?? o)).toEqual(['round']);
     const { v } = await night(ctx);
     expect(v.games.filter((g: any) => g.stage === 'semi')).toHaveLength(2);
     expect(v.bestOf3).toBeUndefined();
     allThree(ctx);
   }, 60_000);
-  it('12 players (groups of 3: 3 pool rounds): never a best of 3 (it needs 3 planned rounds still to play after a round is in)', async () => {
-    const ctx = await world(12, { format: 'doubles' });
+  it('14 players (groups of 4 and 3) on 2.5 hours: never a best of 3 (it needs 3 planned rounds still to play after a round is in); Zip 92: 12 plays Americano', async () => {
+    const ctx = await world(14, { format: 'doubles' });
     await draftAndPublish(ctx);
     const run = await playPaced(ctx, 10);
     expect(run.offers).toEqual([]);

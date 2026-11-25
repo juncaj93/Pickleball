@@ -12,7 +12,7 @@ import { AlertCard } from '../../AlertCard';
 import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import './tournament-day.css';
-import { AmericanoCards, Stepper } from './AmericanoDay';
+import { AmericanoCards, Stepper, useTimeCheckSeen } from './AmericanoDay';
 import { scoreHint } from '../../../shared/scores';
 import { AdminTieCards, EndCards } from './TournamentEnd';
 import { ScoreboardSheet } from './Scoreboard';
@@ -408,10 +408,10 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
   const [left, setLeft] = useState(false);
   const [standingsOpen, setStandingsOpen] = useState(false);
   const [teamsOpen, setTeamsOpen] = useState(false);
-  const [skipTc, setSkipTc] = useState<string | null>(null);
+  const [tcSeen, markTc] = useTimeCheckSeen(t.id);
   const rounds = Math.max(1, ...d.games.map((g) => g.round));
   const round = d.round ?? (d.games.every((g) => g.winner || g.skipped) ? rounds : 1);
-  const tc = d.timeCheck && d.timeCheck.key !== skipTc ? d.timeCheck : null;
+  const tc = d.timeCheck && !tcSeen(d.timeCheck.key) ? d.timeCheck : null;
   const m = doublesNightModel(d);
   return (
     <>
@@ -425,10 +425,10 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
           <p className="tm-gd-tc-title">{tc.text.split('. ')[0]}.</p>
           <p className="tm-gd-tc-sub">{tc.text.split('. ').slice(1).join('. ')}</p>
           <div className="tm-gd-tc-actions">
-            <button type="button" className="btn tm-gd-tc-go" disabled={busy} onClick={() => void save(() => gamesCall(t, { action: 'apply', fromRound: tc.fromRound, to: tc.to }), `Play to ${tc.to} from Round ${tc.fromRound}`)} data-tm-time-apply>
+            <button type="button" className="btn tm-gd-tc-go" disabled={busy} onClick={() => void save(async () => (await gamesCall(t, { action: 'apply', fromRound: tc.fromRound, to: tc.to }), markTc(tc.key)), `Play to ${tc.to} from Round ${tc.fromRound}`)} data-tm-time-apply>
               Play to {tc.to} from Round {tc.fromRound}
             </button>
-            <button type="button" className="btn secondary" onClick={() => setSkipTc(tc.key)} data-tm-time-later>
+            <button type="button" className="btn secondary" onClick={() => markTc(tc.key)} data-tm-time-later>
               Not now
             </button>
           </div>

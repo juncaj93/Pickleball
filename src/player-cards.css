@@ -334,6 +334,13 @@
   font-weight: 650;
   letter-spacing: -0.01em;
 }
+/* Zip 92 (🎾91's audit): in a LATER row's 52 px column the end time ("–10:30 PM" at the 11 px floor) ran past the column; it may now wrap at its
+   space ("–10:30" / "PM") and never runs wider than the column. */
+.schedule .tier-later .sched-time.range span + span {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: normal;
+}
 
 /* ---- Body: head (status + calendar), main (count, names), money line, links ---- */
 .schedule .sched-body {
@@ -717,6 +724,8 @@
 .filter-toggle {
   order: 2;
   position: relative;
+  /* Zip 92 (🎾91's audit): above the first card, so the bottom of its 44 px tap area is not under it. */
+  z-index: 1;
   flex: none;
   display: inline-flex;
   align-items: center;

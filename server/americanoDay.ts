@@ -24,7 +24,7 @@ import { MAX_SCORE } from '../shared/scores';
 import { americanoNight, bonusRound, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
 import { americanoPlan, BREAK_MINUTES, clockLabel, type GameTo, ROUND_MINUTES, WARM_UP } from '../shared/tournamentPlan';
 import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournamentSchedule';
-import { breakStarts, breakState, measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
+import { breakStarts, breakState, livePace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
 import { startMsOf } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
 import { breakView, courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds, skipBreakWrite } from './tournamentDay';
@@ -276,6 +276,8 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
       playTo: Math.max(...list.map((g) => g.playTo), 7) as GameTo,
       done,
       anyResult: list.some((g) => !!g.winner || !!g.claim),
+      // Zip 92: a round with a game on a court is never shortened.
+      onCourt: list.some((g) => g.started),
       doneAt: done && times.length && t.final_date ? minuteOf(t, tz, Math.max(...times.map((x) => Date.parse(x)))) : undefined,
       // Zip 89: the night's last round is never shortened, unless the night has bonus rounds (then every round may be: it was offered on the
       // night's pace, and a night that slows down afterwards must still finish inside the courts' time).
@@ -298,7 +300,8 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
     minutes: ROUND_MINUTES[s.playTo] ?? ROUND_MINUTES[11],
     ...(s.round === 1 ? { pauseBefore: WARM_UP } : s.gap ? { pauseBefore: s.gap } : {}),
   }));
-  const measured = measuredPace(paceRounds, startMin);
+  // Zip 92: the Time check reads the pace live (a round running long counts as it goes), eased in over the first rounds (paceForCheck).
+  const measured = livePace(paceRounds, startMin, nowMin);
   const bonusIn = stored.length > 0 && rounds > plannedRounds;
   const check =
     started && !over && !t.paused_at && rounds && t.final_date
@@ -560,7 +563,7 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
     over: f.over,
     paused: !!t.paused_at,
     anyResult: f.anyResult,
-    timeCheck: sug ? { text: timeCheckWords(f.check!.behind, sug.fromRound, sug.to, clockLabel(f.end), sug.stillOver), fromRound: sug.fromRound, to: sug.to, key: `tc:${t.id}:${sug.fromRound}:${sug.to}` } : null,
+    timeCheck: sug ? { text: timeCheckWords(f.check!.behind, sug.fromRound, sug.to, clockLabel(f.end), sug.stillOver), fromRound: sug.fromRound, to: sug.to, key: `tc:${t.id}:r${f.check!.current ?? 0}` } : null,
     ...(note ? { timeNote: note } : {}),
     ...(tied.length ? { tied } : {}),
     byPercent: gamesDiffer(table),
@@ -810,12 +813,14 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
     if (!Number.isInteger(from) || from < 1 || (to !== 9 && to !== 7)) throw new HttpError(400, 'invalid_apply', 'Pick a round and 9 or 7.');
     // The last round is never shortened, unless the night has bonus rounds (Zip 89: then every round may be).
     const last = Math.max(...am.map((g) => g.round)) + (before.rounds > before.plannedRounds ? 1 : 0);
+    // Zip 92: a game already on a court keeps its length (never shortened mid-game).
+    const onCourt = before.games.filter((g) => g.started && !decided(g)).map((g) => g.num);
     const res = await ctx.db
       .prepare(
         `UPDATE tournament_games SET play_to = ?, updated_at = ? WHERE tournament_id = ? AND slot_a LIKE '%+%' AND round >= ? AND round < ? AND play_to > ?
-           AND winner IS NULL AND claim IS NULL AND skipped = 0`,
+           AND winner IS NULL AND claim IS NULL AND skipped = 0 AND num NOT IN (${onCourt.map(() => '?').join(', ') || '-1'})`,
       )
-      .bind(to, nowIso, t.id, from, last, to)
+      .bind(to, nowIso, t.id, from, last, to, ...onCourt)
       .run();
     await audit(ctx.db, group.id, null, 'tournament_time_check', { tournament: t.name, round: from, to, games: res.meta?.changes ?? 0 }, nowIso);
     return { ok: true, games: res.meta?.changes ?? 0 };

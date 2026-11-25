@@ -755,7 +755,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     await audit(ctx.db, group.id, session.id, 'session_reopened', {}, ctx.nowIso);
     return { ok: true, changed: true };
   }
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   await ctx.db
     .prepare('UPDATE sessions SET admin_decision = ?, decision_at = ?, updated_at = ? WHERE id = ?')
     .bind(decision, ctx.nowIso, ctx.nowIso, session.id)
@@ -1118,7 +1118,7 @@ export async function clearLateFee(ctx: Ctx, body: Record<string, unknown>) {
  */
 export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   const reference = body.reservationReference === undefined ? session.reservation_reference : v.optionalText(body.reservationReference, 'reservationReference', 80);
   const cost = body.courtCostCents === undefined ? session.court_cost_cents : v.cents(body.courtCostCents, 'courtCostCents');
@@ -1134,7 +1134,7 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
     .bind(group.venue_name || DEFAULT_VENUE_NAME, reference, cost, defaultDeadline(session.starts_at, settingsOf(group)), ctx.nowIso, session.id)
     .run();
   // A cancel landed in between: a canceled game stays canceled (everyone's money is already credit).
-  if (booked.meta.changes !== 1) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (booked.meta.changes !== 1) throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   // Nobody's seat changes when the court does. Zip 86: no court Waitlist, so always "court booked" (an old waitlist row is cleared above).
   await audit(ctx.db, group.id, session.id, 'court_booked', { promoted: 0 }, ctx.nowIso);
   await recordCourtBooked(ctx.db, group.id, session.id, true, ctx.nowIso);
@@ -1150,7 +1150,7 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
   const booked = v.bool(body.booked, 'booked');
   if (booked) return markBooked(ctx, {});
   const { group, session } = await adminSession(ctx);
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   const r = await ctx.db
     .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ? WHERE id = ? AND status <> 'canceled'")
@@ -1172,7 +1172,7 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
 export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const to = v.oneOf(body.status, 'status', ['not_booked', 'booked'] as const);
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   const from = courtSwitchOf({ bookingStatus: session.booking_status });
   if (from === to && session.court_state !== 'waitlist' && session.booking_status !== 'unavailable') return { ok: true, changed: false, status: to };
@@ -1239,7 +1239,7 @@ export async function cardDone(ctx: Ctx, body: Record<string, unknown>) {
  */
 export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileCanceled = false, restoring = false) {
   const { group, session } = await adminSession(ctx);
-  if (session.status === 'canceled' && !whileCanceled) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled' && !whileCanceled) throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
   const startsAt = v.isoTime(body.startsAt, 'startsAt');
   const endsAt = v.isoTime(body.endsAt, 'endsAt');
@@ -1623,7 +1623,7 @@ export async function applyPayment(
   if (isClaim && (paid ? !self : true)) return answerClaimOn(ctx, group, session, playerId, paid);
 
   if (paid) {
-    if (session.status === 'canceled' && !fee) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    if (session.status === 'canceled' && !fee) throw new HttpError(409, 'session_canceled', 'This game was canceled.');
     if (row.status !== 'confirmed' && !fee) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
     const price = sharesFor(session, roster, settingsOf(group)).get(playerId);
     if (price === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
@@ -1887,7 +1887,7 @@ async function fitConfirmedClaim(ctx: Ctx, group: GroupRow, session: SessionRow,
 
 /** The organizer paid the venue (or took that back). No share, no credit, nothing counted as collected. */
 async function applyCourtPayment(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean) {
-  if (paid && session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (paid && session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   const amountCents = courtCostOf(session, settingsOf(group));
   // The organizer is found by name until their id is saved. A court payment ties money to that person, so their
   // id is saved now: a later rename can never turn this row into a player's.

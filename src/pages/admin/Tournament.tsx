@@ -15,6 +15,8 @@ import {
   dateCounts,
   heatColors,
   oddSwitchWords,
+  oddSwitchSub,
+  styleAtClose,
   dayLong,
   DEFAULT_TICKET_CENTS,
   levelOf,
@@ -760,7 +762,9 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
   const [payMin, setPayMin] = useState(payStart.minutes);
   const payDays = payOn && t.finalDate ? payByDays(t.finalDate, tz, Date.parse(ctx.d.now)) : [];
   const payTimes = PAY_TIMES.includes(payMin) ? PAY_TIMES : [...PAY_TIMES, payMin].sort((a, b) => a - b);
-  const fit = fitWords(nightPlan(n, courts, minutes, format === 'americano' ? 'americano' : t.format), timeOn ? start : t.start);
+  // Zip 92: before tickets close the fit line names the style the count will play (an odd count or 12 is Americano).
+  const fitStyle = format === 'americano' ? 'americano' : t.format;
+  const fit = fitWords(nightPlan(n, courts, minutes, t.closed || t.styleDecided ? fitStyle : styleAtClose(fitStyle, n)), timeOn ? start : t.start);
   const timeChanged = timeOn && (start !== t.start || end !== t.start + t.minutes);
   const planChanged = planOn && (n !== (t.expected ?? t.size) || courts !== t.courts);
   const payChanged = payOn && (payDay !== payStart.day || payMin !== payStart.minutes);
@@ -1375,8 +1379,8 @@ function TicketsCard({ ctx, t, scrollRef }: { ctx: AdminCtx; t: AdminTournamentV
   );
   return (
     <section className="tm-card" aria-label="Tickets" data-tm-card="tickets" ref={scrollRef}>
-      <div className="tm-card-head tm-head-line">
-        <h3 className="tm-label">Tickets</h3>
+      {/* Zip 92: no "Tickets" heading; the sheet's own title already says Players. The chip leads the card. */}
+      <div className="tm-card-head tm-head-line tm-head-start">
         {/* Zip 87: of everyone who can make the date (the organizer too), the balls players see. */}
         <span className={ticketCount(t).locked >= ticketCount(t).total ? 'tm-chip tm-chip-ok' : 'tm-chip'} data-tm-locked-chip>
           {ticketWords(ticketCount(t))}
@@ -2003,7 +2007,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
   // Zip 70: the count the Plan expects (Alex's saved Expect number, else who can make this date); the fit line names the style really played,
   // and the money line (THE money line) follows Time and Courts as they change (picture 4).
   const count = t.expectSaved && t.expected ? t.expected : view.players.length;
-  const plan = nightPlan(count, courts, end - start, picked === 'vote' ? autoFormat : picked);
+  const plan = nightPlan(count, courts, end - start, styleAtClose(picked === 'vote' ? autoFormat : picked, count));
   const fit = count >= 6 ? fitWords(plan, start) : { fits: false, text: `${view.players.length} can play. A tournament needs at least 6.` };
   // Zip 85: the same shared function as the Time and Plan boxes and the card (the style picked here, then the odd-count rule).
   const money = planMoney({
@@ -2044,7 +2048,7 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
         </div>
         {view.votes && (
           <p className="tm-fin-votes" data-tm-fin-counts>
-            Votes: Doubles {view.votes.locked} · Americano {view.votes.americano} · Either {view.votes.either}
+            Votes: Locked doubles {view.votes.locked} · Americano {view.votes.americano} · Either {view.votes.either}
           </p>
         )}
       </section>
@@ -2244,8 +2248,8 @@ function OddSwitchCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k
       tone="amber"
       icon="info"
       label="Style switched"
-      title={oddSwitchWords(t.name)}
-      sub={`${t.lockedIn ?? 0} locked in. Locked doubles needs an even number.`}
+      title={oddSwitchWords(t.name, t.lockedIn ?? 0)}
+      sub={oddSwitchSub(t.lockedIn ?? 0)}
       data={{ 'data-tm-odd-switch': true }}
       xLabel="Close"
       onX={hide}

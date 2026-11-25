@@ -56,6 +56,10 @@ dialog.sheet.tm-page {
   padding: 0 16px 12px;
   border-bottom: 1px solid var(--line);
 }
+/* Zip 92: a head with only the chip (the Players sheet's tickets card) starts at the left. */
+.tm-head-start {
+  justify-content: flex-start;
+}
 .tm-card-note {
   margin: 12px 0 0;
   font-size: 0.875rem;

@@ -443,13 +443,20 @@
 .tc-gd-tn > b {
   font-weight: 700;
   line-height: 1.2;
-  overflow-wrap: break-word;
 }
 .tc-gd-tn > span {
   font-size: 0.86rem;
   font-weight: 500;
   color: var(--ink-2);
-  overflow-wrap: break-word;
+}
+/* Zip 92 (🎾91's audit): a team or player name never breaks in the middle of a word at big text ("Kitch / en", "Christo / pher"). It wraps at
+   its spaces; a single word wider than its column ends in "…" instead of running past it. */
+.tc-gd-tn > b,
+.tc-gd-tn > span {
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tc-gd-tn-big > b {
   font-size: 1.5rem;

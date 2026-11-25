@@ -528,14 +528,27 @@ export function standings(games: readonly PlannedGame[], results: ReadonlyMap<nu
   const rec = record(games, results, seats);
   const { w, l, pf, pa } = rec;
   const done = groupDone(games, results, seats);
+  // Zip 92: when the teams do not all have the same number of pool games on the schedule (5 teams with an extra round robin round: the team
+  // that sits it has one game fewer), wins become the share of games won (as Americano does when game counts differ). Otherwise plain wins,
+  // exactly as before (a team that left keeps its games on the schedule, so it changes nothing there).
+  const scheduled = new Map(seats.map((s) => [s, 0]));
+  for (const g of games) {
+    if (g.stage !== 'pool') continue;
+    for (const side of [g.a, g.b]) {
+      const s = Number(side.slice(1));
+      if (side[0] === 'T' && scheduled.has(s)) scheduled.set(s, scheduled.get(s)! + 1);
+    }
+  }
+  const uneven = new Set(scheduled.values()).size > 1;
+  const level = (s: number) => (uneven ? (w.get(s)! + l.get(s)! > 0 ? w.get(s)! / (w.get(s)! + l.get(s)!) : 0) : w.get(s)!);
   // A team that left during the night goes below every team still playing (it cannot take a playoff place).
-  const byWins = [...seats].sort((x, y) => Number(out.has(x)) - Number(out.has(y)) || w.get(y)! - w.get(x)! || x - y);
+  const byWins = [...seats].sort((x, y) => Number(out.has(x)) - Number(out.has(y)) || level(y) - level(x) || x - y);
   const rows: StandingRow[] = [];
   let i = 0;
   let blockNo = 0;
   while (i < byWins.length) {
     let j = i;
-    while (j < byWins.length && w.get(byWins[j]) === w.get(byWins[i]) && out.has(byWins[j]) === out.has(byWins[i])) j++;
+    while (j < byWins.length && level(byWins[j]) === level(byWins[i]) && out.has(byWins[j]) === out.has(byWins[i])) j++;
     for (const level of settle(byWins.slice(i, j), rec)) {
       blockNo++;
       for (const s of level)
@@ -687,6 +700,8 @@ export interface RoundState {
   tiesEnd?: number;
   /** Zip 89: a break before it (minutes: 5 planned, or as taken once it started). */
   gap?: number;
+  /** Zip 92: a game of it is on a court (or was played): the Time check never shortens a round that is already being played. */
+  onCourt?: boolean;
 }
 
 /** Zip 80: how many tie games are played one after another (the most on any one court: a tie's Game A and Game B share a court). */
@@ -703,7 +718,8 @@ export interface TimeCheck {
   behind: number;
   /** When the last round should end now (minutes after midnight). */
   finish: number;
-  /** Shorter games are suggested from this round, to this length (null: none needed, or nothing left to shorten). */
+  /** Shorter games are suggested from this round, to this length (null: none needed, or nothing left to shorten). `stillOver`: Zip 92, the
+   *  minutes the night still runs past the BOOKED end with them (not past the 20 minute aim before it); 0 when it ends by the booked end. */
   suggest: { fromRound: number; to: GameTo; stillOver: number } | null;
 }
 
@@ -741,8 +757,9 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
       ? Math.max(planned.get(cur.round)!.start, prev?.doneAt !== undefined ? prev.doneAt + (cur.gap ?? 0) : planned.get(cur.round)!.start, cur.tiesEnd ?? -Infinity)
       : Math.max(prev?.doneAt !== undefined ? prev.doneAt + (cur.gap ?? 0) : startMin, cur.tiesEnd ?? -Infinity);
   const after = list.filter((r) => r.round > cur.round);
-  // Rounds that can still change: the ones after this one, and this one while none of its games has a result. Never the playoffs.
-  const open = [...(cur.pool && !cur.anyResult && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.keep)];
+  // Rounds that can still change: the ones after this one, and this one while none of its games has a result. Never the playoffs. Zip 92:
+  // never a round with a game already on a court (rolling courts start a round the moment a court frees up).
+  const open = [...(cur.pool && !cur.anyResult && !cur.onCourt && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.onCourt && !r.keep)];
   /** When the night ends if pool rounds from `from` on (that can still change) are played to `to`. */
   const ending = (to?: GameTo, from?: number) => {
     const lenAt = (r: RoundState) => len(r, to !== undefined && from !== undefined && r.pool && r.round >= from && open.includes(r) ? minLen(r.playTo, to) : undefined);
@@ -765,19 +782,20 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   // tie: without one, shorter games always save time, and the suggestion is exactly as before.)
   const tieAhead = [cur, ...after].some((r) => r.tiesEnd !== undefined);
   if (!first || (tieAhead && ending(7, first.round) >= finish)) return { current: cur.round, behind, finish, suggest: null };
-  return { current: cur.round, behind, finish, suggest: { fromRound: first.round, to: 7, stillOver: Math.max(0, Math.round(ending(7, first.round) - limit)) } };
+  // Zip 92: "still runs past 10 PM" only when it really runs past the booked end (not past the 9:40 aim).
+  return { current: cur.round, behind, finish, suggest: { fromRound: first.round, to: 7, stillOver: Math.max(0, Math.round(ending(7, first.round) - endMin)) } };
 }
 const minLen = (a: GameTo, b: GameTo): GameTo => (a < b ? a : b);
 
 /**
  * The Time check words (players and the organizer read the same): "Running about 8 minutes behind. From Round 5 on, play to 7 so we finish on
  * time." With nothing behind (a plan that was too tight from the start): "The courts close at 10:00 PM. From Round 3 on, ...". When even that is
- * not enough: "... play to 7. That still runs about 9 minutes over."
+ * not enough: "... play to 7. That still runs about 9 minutes past 10:00 PM." (Zip 92: only when it really runs past the booked end.)
  */
 export function timeCheckWords(behind: number, fromRound: number, to: GameTo, closeLabel: string, stillOver = 0): string {
   const lead = behind > 0 ? `Running about ${behind} ${behind === 1 ? 'minute' : 'minutes'} behind.` : `The courts close at ${closeLabel}.`;
   return stillOver > 0
-    ? `${lead} From Round ${fromRound} on, play to ${to}. That still runs about ${stillOver} ${stillOver === 1 ? 'minute' : 'minutes'} over.`
+    ? `${lead} From Round ${fromRound} on, play to ${to}. That still runs about ${stillOver} ${stillOver === 1 ? 'minute' : 'minutes'} past ${closeLabel}.`
     : `${lead} From Round ${fromRound} on, play to ${to} so we finish on time.`;
 }
 

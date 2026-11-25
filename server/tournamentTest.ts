@@ -261,6 +261,22 @@ export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'z
 //                 the first pick (or one after another stage) builds zip90_ld. View as Vic.
 //   zip90_counts  "Header: medal counts" (round 4): seven older finished tournaments (Everyone, banners long over, every prize claimed), so
 //                 Vic has 1 medal, Wren 2, Parker 3, Quinn 4 (one medal and "×4") and Sage 7: View as each. No money rows.
+/**
+ * Zip 92 (🎾92.dry run fixes):
+ *   zip92_twelve    "92: 12 players switch to Americano": the preview has only the 10 fixed names, so the real switch runs at 9 locked in (the
+ *                   style_odd night: Pay by an hour ago, Locked doubles by vote, the first read switches it; players see "Tournament style is
+ *                   now Americano."); the Tournament test page draws Alex's card as it reads at 12 with the same words the server uses. The
+ *                   switch itself at 11, 12 and 13 is checked on the real server in tests/zip92-fixes.test.ts.
+ *   zip92_ld_round  "92: Locked doubles one more round offer": the 4 teams tonight on 2.5 hours (the semifinals in the plan, written as Publish
+ *                   writes them), started about 25 minutes ago, Round 1 in at 13 and 14 minutes after the warm-up: "Ahead of time", Add a
+ *                   round asks "Add a round? Are you sure?"; Yes adds RD4 (Round 1's games again) before SEMIS.
+ *   zip92_slow      "92: slow night time check": Americano tonight, Rounds 1 and 2 in at 26 minutes each, Round 3 on both courts: the Time
+ *                   check asks for shorter games from Round 4 (Round 3 is on the courts and keeps its length); "Not now" or Play to 9 hides
+ *                   it until Round 4 is the round being played.
+ */
+export const ZIP92_STAGES = ['zip92_twelve', 'zip92_ld_round', 'zip92_slow'] as const;
+type Zip92Stage = (typeof ZIP92_STAGES)[number];
+const isZip92Stage = (s: string): s is Zip92Stage => (ZIP92_STAGES as readonly string[]).includes(s);
 export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header', 'zip90_replay', 'zip90_counts'] as const;
 type Zip90Stage = (typeof ZIP90_STAGES)[number];
 const isZip90Stage = (s: string): s is Zip90Stage => (ZIP90_STAGES as readonly string[]).includes(s);
@@ -286,7 +302,7 @@ const isZip86Stage = (s: string): s is Zip86Stage => (ZIP86_STAGES as readonly s
 export const ZIP87_STAGES = ['zip87_early', 'zip87_payday', 'zip87_past', 'zip87_paid', 'zip87_gameday', 'zip87_allset', 'zip87_prizes'] as const;
 type Zip87Stage = (typeof ZIP87_STAGES)[number];
 const isZip87Stage = (s: string): s is Zip87Stage => (ZIP87_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP90_STAGES, ...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP92_STAGES, ...ZIP90_STAGES, ...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -424,9 +440,11 @@ const TICKET_STAGES: Partial<Record<Stage, { name: string; place: 'spot' | 'line
 
 const TEST_CREDIT = 'adjusted:Ticket stage credit';
 
-export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown>) {
+export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown>): Promise<unknown> {
   const group = await requireAdmin(ctx);
   if (!previewSiteFor(ctx)) throw new HttpError(404, 'not_found', 'Not found.');
+  // Zip 92: the 12-player switch runs as style_odd on the preview's 10 names (see ZIP92_STAGES).
+  if (body.stage === 'zip92_twelve') return { ...((await tournamentTestStage(ctx, { ...body, stage: 'style_odd' })) as Record<string, unknown>), stage: 'zip92_twelve' };
   const stage = v.oneOf(body.stage, 'stage', TEST_STAGES);
   // Either format at each stage (left out: Doubles). Americano has its own name and the 2nd place credit.
   const format = body.format === undefined ? 'doubles' : v.oneOf(body.format, 'format', FORMATS);
@@ -453,6 +471,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%' OR task LIKE 'tournament_start:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip92Stage(stage)) return zip92Stage(ctx, group, stage);
   if (isZip90Stage(stage)) return zip90Stage(ctx, group, stage);
   if (isZip89Stage(stage)) return zip89Stage(ctx, group, stage);
   if (isZip88Stage(stage)) return zip88Stage(ctx, group, stage);
@@ -1072,6 +1091,49 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
     });
   await ctx.db.batch([...rows, ...scores]);
   return { ok: true, stage, id, date, signedUp: n };
+}
+
+/** Zip 92's night stages (ZIP92_STAGES above; zip92_twelve is style_odd, picked before this). */
+async function zip92Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip92Stage) {
+  const tz = group.timezone;
+  const now = localParts(ctx.nowMs, tz);
+  const nowMin = now.hour * 60 + now.minute;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  if (stage === 'zip92_ld_round') {
+    // zip 57's game1 night (4 teams), on 2.5 hours with the semifinals the plan builds in (written by the same code an offer uses, before the
+    // night: nothing is a bonus), started about 25 minutes ago; Round 1's two games in at 13 and 14 minutes after the warm-up.
+    const made = await dayStage(ctx, group, 'game1');
+    const id = made.id!;
+    const start = Math.max(0, Math.floor((nowMin - 25) / 5) * 5);
+    const startMs = startMsOf(made.date!, start, tz);
+    await ctx.db.prepare('UPDATE tournaments SET start_minutes = ?, minutes = 150, updated_at = ? WHERE id = ?').bind(start, ctx.nowIso, id).run();
+    const t = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<TournamentRow>())!;
+    if (!(await writeSemis(ctx.db, t, await loadDay(ctx.db, id), iso(startMs - 60 * 60_000)))) throw new HttpError(500, 'stage_failed', 'The semifinal rows were not written.');
+    const { results } = await ctx.db.prepare('SELECT num, court, slot_a, slot_b FROM tournament_games WHERE tournament_id = ? AND round = 1').bind(id).all<{ num: number; court: number; slot_a: string; slot_b: string }>();
+    await ctx.db.batch(
+      results.map((g) => {
+        const when = iso(startMs + (10 + 12 + g.court) * 60_000);
+        return ctx.db
+          .prepare("UPDATE tournament_games SET winner = 'a', score_a = 11, score_b = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
+          .bind(5 + g.court * 2, when, Number(g.slot_a.slice(1)), Number(g.slot_b.slice(1)), when, id, g.num);
+      }),
+    );
+    return { ...made, stage };
+  }
+  // zip92_slow: Zip 61's night (Rounds 1 and 2 in), moved so it started about 72 minutes ago and each round took 26 minutes after the warm-up
+  // (Court 2 a minute after Court 1); Round 3 went on both courts when Round 2 ended.
+  const made = await americanoStage(ctx, group, 'am_round3');
+  const start = Math.max(0, Math.floor((nowMin - 72) / 5) * 5);
+  const startMs = startMsOf(made.date!, start, tz);
+  const { results } = await ctx.db.prepare('SELECT num, round, court FROM tournament_games WHERE tournament_id = ? AND round <= 2').bind(made.id).all<{ num: number; round: number; court: number }>();
+  await ctx.db.batch([
+    ctx.db.prepare('UPDATE tournaments SET start_minutes = ?, updated_at = ? WHERE id = ?').bind(start, ctx.nowIso, made.id),
+    ...results.map((g) => {
+      const when = iso(startMs + (10 + g.round * 26 - 2 + g.court) * 60_000);
+      return ctx.db.prepare('UPDATE tournament_games SET claim_at = ?, result_at = ?, updated_at = ? WHERE tournament_id = ? AND num = ?').bind(when, when, when, made.id, g.num);
+    }),
+  ]);
+  return { ...made, stage };
 }
 
 /** Zip 89: the pacing stages (ZIP89_STAGES above). */

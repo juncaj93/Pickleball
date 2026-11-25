@@ -33,6 +33,9 @@ import {
   formatName,
   isOddSource,
   oddSwitchWords,
+  doublesRefusal,
+  playsAmericano,
+  AMERICANO_TWELVE,
   styleAtClose,
   styleBannerWords,
   planFit,
@@ -726,14 +729,15 @@ export const styleDecided = (t: TournamentRow, nowMs: number): boolean => status
 async function settleStyle(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets: readonly TicketWithName[], upkeep?: Upkeep): Promise<TournamentRow> {
   if (!styleDecided(t, ctx.nowMs) || salesClosed(t, group.timezone, ctx.nowMs)) return t;
   const n = lockedInCount(tickets);
-  if (n % 2 === 0 || formatOf(t) !== 'doubles') return t;
+  // Zip 92 (Alex): an odd count or 12 plays Americano (playsAmericano); 8, 10, 14 and 16 keep Locked doubles.
+  if (!playsAmericano(n) || formatOf(t) !== 'doubles') return t;
   if (upkeep) upkeep.tried = true;
   const source = `odd:${ctx.nowIso}`;
   try {
     const res = await ctx.db
 .prepare(
         `UPDATE tournaments SET format = 'americano', format_source = ?, updated_at = ? WHERE id = ? AND status = 'tickets' AND format = 'doubles' AND format_source IS ? AND pay_by = ?
-           AND ${lockedInSql('tournaments.id')} % 2 = 1`,
+           AND (${lockedInSql('tournaments.id')} % 2 = 1 OR ${lockedInSql('tournaments.id')} = ${AMERICANO_TWELVE})`,
       )
       .bind(source, ctx.nowIso, t.id, t.format_source ?? null, t.pay_by)
       .run();
@@ -742,7 +746,7 @@ async function settleStyle(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets:
     return t;
   }
   await audit(ctx.db, group.id, null, 'tournament_format', { tournament: t.name, format: 'americano', how: 'odd', lockedIn: n }, ctx.nowIso).catch(() => undefined);
-  await notifyTournament(ctx, group, `${oddSwitchWords(t.name)} ${n} are locked in.`);
+  await notifyTournament(ctx, group, `${oddSwitchWords(t.name, n)} ${n} are locked in.`);
   return { ...t, format: 'americano', format_source: source, updated_at: ctx.nowIso };
 }
 
@@ -1356,8 +1360,8 @@ export async function adminTournamentFor(
     startSet: !!real,
     styleDecided: decided,
     lockedIn: nIn,
-    oddSwitch: oddNow && nIn % 2 === 1 ? { key: `odd:${t.id}:${ts.format_source}` } : null,
-    switchBack: oddNow && nIn % 2 === 0 && !salesClosed(t, tz, ctx.nowMs) ? { key: `back:${t.id}:${ts.format_source}:${nIn}` } : null,
+    oddSwitch: oddNow && playsAmericano(nIn) ? { key: `odd:${t.id}:${ts.format_source}` } : null,
+    switchBack: oddNow && !playsAmericano(nIn) && !salesClosed(t, tz, ctx.nowMs) ? { key: `back:${t.id}:${ts.format_source}:${nIn}` } : null,
     // Zip 60: the vote, with the counts (organizer only): while the date is not locked every player on the list, then the players who can make the picked date.
     ...(pending ? { formatPending: true } : {}),
     ...(votesSent ? { formatSource: sourceOf(ts.format_source), votes: tallyVotes(voters.map((r) => r.format_vote)) } : {}),
@@ -1689,7 +1693,7 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
     if (salesClosed(t, group.timezone, ctx.nowMs)) throw new HttpError(409, 'format_locked', 'The tournament has started. The style stays.');
     if (styleDecided(t, ctx.nowMs) && nextFormat !== formatOf(t)) {
       const n = lockedInCount(await loadTickets(ctx.db, t.id));
-      if (nextFormat === 'doubles' && n % 2 === 1) throw new HttpError(409, 'odd_count', `Locked doubles needs an even number. ${n} are locked in.`);
+      if (nextFormat === 'doubles' && playsAmericano(n)) throw new HttpError(409, 'odd_count', doublesRefusal(n));
       nextSource = nextFormat === 'doubles' && isOddSource(wasSource) ? `back:${ctx.nowIso}` : 'admin';
     }
   }
@@ -1791,10 +1795,10 @@ export async function switchBackStyle(ctx: Ctx) {
   // Zip 61: a score is in for the Americano night (results open 15 minutes before the start): the rounds have started, the style stays.
   if (await americanoStarted(ctx.db, t.id)) throw new HttpError(409, 'format_locked', 'The rounds have started. The style stays Americano.');
   const n = lockedInCount(await loadTickets(ctx.db, t.id));
-  if (n % 2 === 1) throw new HttpError(409, 'odd_count', `Locked doubles needs an even number. ${n} are locked in.`);
+  if (playsAmericano(n)) throw new HttpError(409, 'odd_count', doublesRefusal(n));
   changedOrLookAgain(
     await ctx.db
-      .prepare(`UPDATE tournaments SET format = 'doubles', format_source = ?, updated_at = ? WHERE id = ? AND format = 'americano' AND format_source = ? ${OPEN_GUARD} AND ${lockedInSql('tournaments.id')} % 2 = 0`)
+      .prepare(`UPDATE tournaments SET format = 'doubles', format_source = ?, updated_at = ? WHERE id = ? AND format = 'americano' AND format_source = ? ${OPEN_GUARD} AND ${lockedInSql('tournaments.id')} % 2 = 0 AND ${lockedInSql('tournaments.id')} <> ${AMERICANO_TWELVE}`)
       .bind(`back:${ctx.nowIso}`, ctx.nowIso, t.id, t.format_source)
       .run(),
   );

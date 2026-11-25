@@ -6,7 +6,8 @@ import { useState } from 'react';
 import { api } from '../../lib';
 import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
-import { dayLong } from '../../../shared/tournament';
+import { dayLong, oddSwitchSub, oddSwitchWords } from '../../../shared/tournament';
+import { AlertCard } from '../../AlertCard';
 import './tournament-admin.css';
 import { NightCard } from './NightCard';
 import type { NightModel } from './nightCardData';
@@ -17,7 +18,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip90_replay', 'zip90_counts', 'zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header'];
+const THIS_ZIP: readonly string[] = ['zip92_twelve', 'zip92_ld_round', 'zip92_slow'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -38,6 +39,22 @@ const EARLY_LOOK: NightModel = {
 };
 
 const STAGES = [
+  // Zip 92 (🎾92.dry run fixes): the 12-player switch, the Locked doubles extra round, the slow night's Time check.
+  {
+    stage: 'zip92_twelve',
+    label: '92: 12 players switch to Americano',
+    line: 'The preview has 10 names, so the real switch runs at 9 here (Pay by an hour ago, Locked doubles by vote): Home shows the switched card; View as Parker: “Tournament style is now Americano.” Your card at 12 is drawn above with the same words the site sends (the Telegram alert too). 8, 10, 14 and 16 stay Locked doubles.',
+  },
+  {
+    stage: 'zip92_ld_round',
+    label: '92: Locked doubles one more round offer',
+    line: '4 teams tonight on 2.5 hours, the semifinals already in the plan, Round 1 in at 13 minutes. The night card: “Ahead of time”, Add a round asks “Add a round? Are you sure?”. Yes adds RD4 (Round 1’s games again) before SEMIS. Only one round per offer.',
+  },
+  {
+    stage: 'zip92_slow',
+    label: '92: slow night time check',
+    line: 'Americano tonight, Rounds 1 and 2 took 26 minutes each, Round 3 is on both courts. The Time check suggests shorter games from Round 4 (never the round on the courts). Tap Not now: nothing else asks until Round 4 is being played.',
+  },
   // Zip 90 (🎾90.prize reveal): the prize cards and the header.
   { stage: 'zip90_replay', label: 'Replay: medal and credit slam (start here)', line: 'View as Vic: two face-down cards, no medal by the name, no credit yet. Tap the left card: watch the medal fly in next to “Vic” and land (then the cup glows); tap the right: $14 lands in the credit spot between light/dark and the date. Come back here and pick this again to replay: it only turns the cards back face down (same night, same money).' },
   { stage: 'zip90_counts', label: 'Header: medal counts', line: 'Older finished tournaments only: Vic has 1 gold medal, Wren 2, Parker 3, Quinn 4 (one medal and “×4”), Sage 7 (“×7”). View as each: the medals by the name at the top (about 3 px after the name, bottoms lined up) and after their names on the game cards. The gold cup is on every header.' },
@@ -259,6 +276,14 @@ function TestBody({ ctx }: { ctx: AdminCtx }) {
   const names = ctx.d.players.filter((p) => p.isActive).map((p) => p.name);
   const stageRow = (s: (typeof STAGES)[number]) => (
     <div key={s.stage} className="tm-test-stage">
+      {s.stage === 'zip92_twelve' && (
+        <div className="stack" data-tm92-look>
+          <p className="tm-card-note">
+            <b>Look only.</b> Your card at 12 locked in; nothing here saves.
+          </p>
+          <AlertCard as="section" tone="amber" icon="info" label="Style switched" title={oddSwitchWords('The Cold Open', 12)} sub={oddSwitchSub(12)} />
+        </div>
+      )}
       {s.stage === 'zip88_early' && look && (
         <div className="stack" data-tm88-look>
           <p className="tm-card-note">

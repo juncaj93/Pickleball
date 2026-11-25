@@ -307,7 +307,12 @@
     font-size: 0.86rem;
   }
 }
-/* "END TOURNAMENT" and "EDIT AWARDS" on one line at every width (320 included). */
+/* Zip 92 (🎾91's audit): at 125 and 150% text the two no longer fit one line: EDIT AWARDS goes under END TOURNAMENT instead of being cut. */
+.tm-end .tm-card-head {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+/* "END TOURNAMENT" and "EDIT AWARDS" on one line at every width (320 included) at the usual text size. */
 .tm-end .tm-card-head .tm-label,
 .tm-end-edit {
   white-space: nowrap;

@@ -29,11 +29,12 @@ import {
   type PlayoffRow,
   type TournamentFormat,
   MAX_SPOTS,
+  playsAmericano,
   shortAlertOf,
 } from '../shared/tournament';
 import { firstAnswer, saidTeamScore, saidWon } from '../shared/partnerTaps';
 import { about, BREAK_MINUTES, clockLabel, doublesNoSit, doublesStructure, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES, WARM_UP } from '../shared/tournamentPlan';
-import { BONUS_ROUNDS, type BonusKind, breakStarts, breakState, measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
+import { BONUS_ROUNDS, type BonusKind, breakStarts, breakState, livePace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
 import {
   draftNote,
   draftTeams,
@@ -479,6 +480,8 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
       playTo: Math.max(...list.map((g) => g.play_to)) as GameTo,
       done: all.every(decided),
       anyResult: list.some((g) => !!g.winner || !!g.claim || (!!g.skipped && g.result_by !== null)),
+      // Zip 92: a round with a game on a court is never shortened.
+      onCourt: list.some((g) => startedNums.has(g.num)),
       doneAt: all.every(decided) && times.length ? minuteOf(t, tz, Math.max(...times.map((x) => Date.parse(x)))) : undefined,
       ...(tiesEnd !== undefined ? { tiesEnd } : {}),
       // Zip 89: a break before it (5 planned, or as taken).
@@ -498,44 +501,73 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const planned0 = nightPlan(teams.length * 2, courtsOf(t), real0.minutes, 'doubles');
   const semisBonus = shape.shape === 'rr' && semisIn && !planned0.builtIn.semis;
   const bo3Bonus = series.bestOf3 && !planned0.builtIn.bestOf3;
-  const bonusIn = semisBonus || bo3Bonus;
-  const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size || !plan.fits ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : 'bestOf3';
+  // Zip 92 (🎾91 change 1): one more round robin round (a pool round after the planned ones) is a bonus too.
+  const extraPool = games.filter((g) => g.stage === 'pool' && g.round > shape.poolRounds);
+  const bonusIn = semisBonus || bo3Bonus || extraPool.length > 0;
+  // The bonuses the night could get next, in order: semifinals (4 or 5 teams on 2 courts), a best of 3 Final, then (Zip 92) ONE MORE ROUND
+  // ROBIN ROUND, the offer when the semifinals and the best of 3 are already in the night (the plan's or an earlier offer's) or cannot be
+  // offered now (a best of 3 needs 3 planned rounds left; it costs two games). Round robin nights only (4 or 5 teams); none while a team is out.
+  const canBonus = !!series.nums.length && !gone.size && plan.fits;
+  const kinds: BonusKind[] = !canBonus
+    ? []
+    : [
+        ...(shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? (['semis'] as const) : []),
+        ...(!series.bestOf3 ? (['bestOf3'] as const) : []),
+        ...(shape.shape === 'rr' && !games.some((g) => g.stage === 'tie') ? (['round'] as const) : []),
+      ];
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
   // Zip 89: Round 1 is measured from the start + the warm-up; a round after a break from the break's end (the pace never counts either).
   const paceRounds: PaceRound[] = states.map((r) => ({
     round: r.round,
-    planned: r.pool,
+    // Zip 92: an extra round robin round (a bonus) is never a planned round.
+    planned: r.pool && r.round <= shape.poolRounds,
     done: r.done,
     doneAt: r.doneAt,
     minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO],
     ...(r.pool ? {} : { fixed: true }),
     ...(r.round === 1 ? { pauseBefore: WARM_UP } : r.gap ? { pauseBefore: r.gap } : {}),
   }));
-  const measured = measuredPace(paceRounds, startMin);
+  // Zip 92: the Time check reads the pace live (a round running long counts as it goes), eased in over the first rounds (paceForCheck).
+  const measured = livePace(paceRounds, startMin, nowMin);
   const check =
     started && !over && !t.paused_at && games.length && t.final_date
       ? timeCheck(states, real.start + WARM_UP, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done, measured.latest))
       : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
-  const pace = pacing({
-    rounds: paceRounds,
-    startMin,
-    endMin: real.start + real.minutes,
-    nowMin,
-    kind: t.teams_at ? kind : null,
-    fixedBonus: true,
-    breaks: noSit,
-    onBreak: brk.now ? Math.max(0.1, (brk.now.until - nowMs) / 60_000) : 0,
-    bonusMinutes: kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
-    started,
-    over,
-    paused: !!t.paused_at,
-    behind: !!check?.suggest || !!shorter || (check?.behind ?? 0) > 0,
-    leftOpen: false,
-    // When the last bonus was added: the semifinals' rows on a round robin night, the Final's games 2 and 3.
-    lastBonusAt: lastAddedAt(t, tz, [...(semisBonus ? stored.filter((g) => g.stage === 'semi') : []), ...(bo3Bonus ? stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0]) : [])].map((g) => g.created_at)),
-  });
+  // Zip 92: the extra round is played at the length the last pool round is played to now (the Time check may have shortened it).
+  const poolTo = (Math.min(...games.filter((g) => g.stage === 'pool').map((g) => g.play_to), plan.gameTo) || plan.gameTo) as GameTo;
+  const paceFor = (kind: BonusKind | null) =>
+    pacing({
+      rounds: paceRounds,
+      startMin,
+      endMin: real.start + real.minutes,
+      nowMin,
+      kind: t.teams_at ? kind : null,
+      // Semifinals and a best of 3 are playoff games (never shortened); the extra round robin round can be shortened like any pool round.
+      fixedBonus: kind !== 'round',
+      breaks: noSit,
+      onBreak: brk.now ? Math.max(0.1, (brk.now.until - nowMs) / 60_000) : 0,
+      bonusMinutes: kind === 'round' ? ROUND_MINUTES[poolTo] : kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
+      started,
+      over,
+      paused: !!t.paused_at,
+      behind: !!check?.suggest || !!shorter || (check?.behind ?? 0) > 0,
+      leftOpen: false,
+      // When the last bonus was added: the semifinals' rows on a round robin night, the Final's games 2 and 3, an extra round robin round.
+      lastBonusAt: lastAddedAt(
+        t,
+        tz,
+        [...(semisBonus ? stored.filter((g) => g.stage === 'semi') : []), ...(bo3Bonus ? stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0]) : []), ...extraPool].map((g) => g.created_at),
+      ),
+    });
+  // The first bonus (in the order above) that can be offered now; ONE offer at a time, one round per offer.
+  let pace = paceFor(kinds[0] ?? null);
+  for (const k of kinds.slice(1)) {
+    if (pace.offer) break;
+    const next = paceFor(k);
+    if (next.offer) pace = next;
+  }
   const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
   // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
   const tiesEnd = new Map(states.filter((r) => r.tiesEnd !== undefined).map((r) => [r.round, r.tiesEnd!]));
@@ -771,7 +803,7 @@ export function adminDayView(
     over: f.over,
     paused: !!t.paused_at,
     timeCheck: sug
-      ? { text: timeCheckWords(f.check!.behind, sug.fromRound, sug.to, clockLabel(f.end), sug.stillOver), fromRound: sug.fromRound, to: sug.to, key: `tc:${t.id}:${sug.fromRound}:${sug.to}` }
+      ? { text: timeCheckWords(f.check!.behind, sug.fromRound, sug.to, clockLabel(f.end), sug.stillOver), fromRound: sug.fromRound, to: sug.to, key: `tc:${t.id}:r${f.check!.current ?? 0}` }
       : null,
     ...(shorterNote(f) ? { timeNote: shorterNote(f) } : {}),
     fix,
@@ -1128,10 +1160,10 @@ async function readAll(ctx: Ctx, t: TournamentRow) {
   return { signups: s.results as unknown as SignupRow[], tickets: k.results as unknown as TicketWithName[], ...day };
 }
 
-/** The style as the screens show it (an odd count after Pay by plays Americano). */
+/** The style as the screens show it (an odd count, or 12 (Zip 92), after Pay by plays Americano). */
 function shownFormat(t: TournamentRow, tickets: readonly TicketWithName[], nowMs: number, tz: string): TournamentFormat {
   const f: TournamentFormat = t.format === 'americano' ? 'americano' : 'doubles';
-  if (styleDecided(t, nowMs) && !salesClosed(t, tz, nowMs) && lockedInIds(tickets as TicketWithName[]).length % 2 === 1) return 'americano';
+  if (styleDecided(t, nowMs) && !salesClosed(t, tz, nowMs) && playsAmericano(lockedInIds(tickets as TicketWithName[]).length)) return 'americano';
   return f;
 }
 
@@ -1434,11 +1466,15 @@ async function doublesGamesAction(
     const from = Number(body.fromRound);
     const to = Number(body.to);
     if (!Number.isInteger(from) || from < 1 || (to !== 9 && to !== 7)) throw new HttpError(400, 'invalid_apply', 'Pick a round and 9 or 7.');
+    // Zip 92: a game already on a court keeps its length (never shortened mid-game).
+    const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
+    const onCourt = [...f.startedNums];
     const res = await ctx.db
       .prepare(
-        `UPDATE tournament_games SET play_to = ?, updated_at = ? WHERE tournament_id = ? AND stage = 'pool' AND round >= ? AND play_to > ? AND winner IS NULL AND claim IS NULL AND skipped = 0`,
+        `UPDATE tournament_games SET play_to = ?, updated_at = ? WHERE tournament_id = ? AND stage = 'pool' AND round >= ? AND play_to > ? AND winner IS NULL AND claim IS NULL AND skipped = 0
+           AND num NOT IN (${onCourt.map(() => '?').join(', ') || '-1'})`,
       )
-      .bind(to, nowIso, t.id, from, to)
+      .bind(to, nowIso, t.id, from, to, ...onCourt)
       .run();
     await audit(ctx.db, group.id, null, 'tournament_time_check', { tournament: t.name, round: from, to, games: res.meta?.changes ?? 0 }, nowIso);
     return { ok: true, games: res.meta?.changes ?? 0 };
@@ -1588,9 +1624,17 @@ async function addDoublesBonus(ctx: Ctx, group: { id: string; timezone: string }
   const key = typeof body.key === 'string' ? body.key : '';
   const offer = f.pace.offer;
   if (!offer || offer.key !== key) bad('tournament_changed', 'This just changed. Look again.');
-  const ok = offer!.kind === 'semis' ? await writeSemis(ctx.db, t, day, ctx.nowIso) : await writeBestOf3(ctx.db, t, day, ctx.nowIso);
+  const ok =
+    offer!.kind === 'semis' ? await writeSemis(ctx.db, t, day, ctx.nowIso) : offer!.kind === 'round' ? await writePoolRound(ctx.db, t, day, ctx.nowIso) : await writeBestOf3(ctx.db, t, day, ctx.nowIso);
   if (!ok) bad('tournament_changed', 'This just changed. Look again.');
-  await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: offer!.kind === 'semis' ? 'semifinals' : 'best of 3 final', pace: Math.round(f.pace.pace ?? 0) }, ctx.nowIso);
+  await audit(
+    ctx.db,
+    group.id,
+    null,
+    'tournament_bonus_round',
+    { tournament: t.name, bonus: offer!.kind === 'semis' ? 'semifinals' : offer!.kind === 'round' ? 'round robin round' : 'best of 3 final', pace: Math.round(f.pace.pace ?? 0) },
+    ctx.nowIso,
+  );
   return { ok: true, bonus: offer!.kind };
 }
 
@@ -1659,6 +1703,63 @@ export async function writeSemis(db: D1Database, t: TournamentRow, day: DayRows,
       db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'semi' AND created_at = ?`).bind(t.id, nowIso),
       db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(fin.num, fin.round, fin.slot_a, fin.slot_b, fin.id, nowIso),
       db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(third.num, third.round, third.slot_a, third.slot_b, third.id, nowIso),
+    ])
+    .catch(() => undefined);
+  return false;
+}
+
+/**
+ * Zip 92 (🎾91 change 1): ONE MORE ROUND ROBIN ROUND (4 or 5 teams). It goes after the last pool round: the next round of the round robin played
+ * again (round (R mod K) + 1 of the K planned rounds, so the rematches come in the round robin's own order and no pair meets a third time before
+ * every pair has met twice; with 5 teams the team that sat that round sits again, never the one that sat the round just before). The playoff
+ * rows (semifinals, Final, 3rd place; none started) move one round later and as many numbers on as the new games, their "winner / loser of game
+ * N" slots following. Played to the length the last pool round is played to now. One batch, each step only if nothing changed in between (no
+ * other extra round written meanwhile, every moved row still untouched); anything off: put back, false.
+ */
+export async function writePoolRound(db: D1Database, t: TournamentRow, day: DayRows, nowIso: string): Promise<boolean> {
+  const shape = doublesStructure(day.teams.length, courtsOf(t));
+  const pool = day.games.filter((g) => g.stage === 'pool');
+  const rest = day.games.filter((g) => g.stage !== 'pool');
+  if (shape.shape !== 'rr' || !pool.length || rest.some((g) => g.stage === 'tie' || !(g.winner === null && g.claim === null && g.skipped === 0 && !(g.claim_at ?? '').startsWith('on:'))))
+    return false;
+  const R = Math.max(...pool.map((g) => g.round));
+  const tmpl = pool.filter((g) => g.round === (R % shape.poolRounds) + 1).sort((a, b) => a.num - b.num);
+  if (!tmpl.length) return false;
+  const lastTo = Math.min(...pool.filter((g) => g.round === R).map((g) => g.play_to));
+  const P = rest.length ? Math.min(...rest.map((g) => g.num)) : Math.max(...pool.map((g) => g.num)) + 1;
+  if (pool.some((g) => g.num >= P)) return false;
+  const m = tmpl.length;
+  const shift = (slot: string) => (/^[WL]\d+$/.test(slot) && Number(slot.slice(1)) >= P ? `${slot[0]}${Number(slot.slice(1)) + m}` : slot);
+  // No other extra round was written in between (two taps at once: the second finds the first's rows).
+  const noOther = `NOT EXISTS (SELECT 1 FROM tournament_games o WHERE o.tournament_id = ? AND o.stage = 'pool' AND o.round > ? AND o.created_at <> ?)`;
+  // Highest number first, so no two rows ever share a number on the way.
+  const moved = [...rest].sort((a, b) => b.num - a.num);
+  const res = await db
+    .batch([
+      ...moved.map((g) =>
+        db
+          .prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND updated_at = ? AND ${freshGame('tournament_games')} AND ${noOther}`)
+          .bind(g.num + m, g.round + 1, shift(g.slot_a), shift(g.slot_b), nowIso, g.id, g.num, g.updated_at, t.id, R, nowIso),
+      ),
+      ...tmpl.map((g, i) =>
+        db
+          .prepare(
+            `${INSERT_GAME} SELECT ?, ?, ?, ?, ?, 'pool', ?, ?, ?, ?, 0, ?, ?
+               WHERE NOT EXISTS (SELECT 1 FROM tournament_games x WHERE x.tournament_id = ? AND x.num = ?) AND ${noOther}
+                 AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
+          )
+          .bind(newId(), t.id, P + i, R + 1, g.court, g.pool, g.slot_a, g.slot_b, lastTo, nowIso, nowIso, t.id, P + i, t.id, R, nowIso, t.id),
+      ),
+    ])
+    .catch((e) => (console.error('writePoolRound', e), null));
+  if (res && res.every((r) => (r.meta?.changes ?? 0) === 1)) return true;
+  // A step did not happen: take out this tap's new games and put every moved row back exactly as it was.
+  await db
+    .batch([
+      db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'pool' AND round = ? AND created_at = ?`).bind(t.id, R + 1, nowIso),
+      ...[...rest]
+        .sort((a, b) => a.num - b.num)
+        .map((g) => db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND updated_at = ?`).bind(g.num, g.round, g.slot_a, g.slot_b, g.updated_at, g.id, nowIso)),
     ])
     .catch(() => undefined);
   return false;
