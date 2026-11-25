@@ -21,9 +21,9 @@
 import { BREAK_MINUTES, END_BUFFER, PLAYOFF_TO, ROUND_MINUTES } from './tournamentPlan';
 
 /** The slowest a round to 11 is ever assumed to be, whatever the measured pace (minutes). */
-export const PACE_FLOOR = 14;
+export const PACE_FLOOR = Number(process.env.DRY_FLOOR ?? 14);
 /** Minutes of court time that must still be free after the night with the bonus in it (the base plan keeps the same). */
-export const BONUS_SPARE = END_BUFFER;
+export const BONUS_SPARE = Number(process.env.DRY_SPARE ?? END_BUFFER);
 /** Planned pool / round robin rounds that must still be left to play for an offer. */
 export const BONUS_MIN_LEFT = 2;
 /** The table's minutes for a round to 11: the pace is told in these. */
@@ -126,7 +126,7 @@ export function pacing(p: PaceInput): PaceResult {
   // down after a bonus, the shortenable pool rounds left are what brings it back inside the end.
   const firm = Math.max(1, scale);
   const left = list.filter((r) => !r.done).reduce((m, r) => m + tableOf(r) * (r.fixed ? firm : scale), 0);
-  const extra = p.kind ? (p.bonusMinutes ?? BONUS_ROUNDS[p.kind] * FULL) * firm : 0;
+  const extra = p.kind ? (p.bonusMinutes ?? BONUS_ROUNDS[p.kind] * FULL) * (process.env.DRY_AMSCALE && !p.fixedBonus ? scale : firm) : 0;
   // The round being played counts as at most half done: the clock starts at the last full round's end, or half a round ago if later.
   const from = Math.max(lastAt, p.nowMin - pace / 2);
   // Zip 89: breaks still to come (after every 2nd round, never after the last, the bonus counted), and the one on now.

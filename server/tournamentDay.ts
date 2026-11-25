@@ -498,13 +498,16 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const planned0 = nightPlan(teams.length * 2, courtsOf(t), real0.minutes, 'doubles');
   const semisBonus = shape.shape === 'rr' && semisIn && !planned0.builtIn.semis;
   const bo3Bonus = series.bestOf3 && !planned0.builtIn.bestOf3;
-  const bonusIn = semisBonus || bo3Bonus;
-  const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size || !plan.fits ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : 'bestOf3';
+  // 🎾91 dry run PROTOTYPE (DRY_LDROUND, never merged): Locked doubles' shortenable bonus, one more pool / round robin round (a rematch round).
+  const LDR = !!process.env.DRY_LDROUND;
+  const extraPool = LDR ? games.filter((g) => g.stage === 'pool' && g.round > shape.poolRounds) : [];
+  const bonusIn = semisBonus || bo3Bonus || extraPool.length > 0;
+  const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size || !plan.fits ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : LDR && !games.some((g) => g.stage === 'tie') ? 'round' : 'bestOf3';
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
   // Zip 89: Round 1 is measured from the start + the warm-up; a round after a break from the break's end (the pace never counts either).
   const paceRounds: PaceRound[] = states.map((r) => ({
     round: r.round,
-    planned: r.pool,
+    planned: r.pool && (!LDR || r.round <= shape.poolRounds),
     done: r.done,
     doneAt: r.doneAt,
     minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO],
@@ -518,24 +521,34 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
       : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
-  const pace = pacing({
+  // 🎾91 PROTOTYPE: on a 'round' offer, as many rounds (1 to 3) as fit at the pace (DRY_LDMULTI), offered at once.
+  const paceFor = (k: number) => pacing({
     rounds: paceRounds,
     startMin,
     endMin: real.start + real.minutes,
     nowMin,
     kind: t.teams_at ? kind : null,
-    fixedBonus: true,
+    fixedBonus: kind !== 'round',
     breaks: noSit,
     onBreak: brk.now ? Math.max(0.1, (brk.now.until - nowMs) / 60_000) : 0,
-    bonusMinutes: kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
+    bonusMinutes: kind === 'round' ? k * ROUND_MINUTES[plan.gameTo] * (process.env.DRY_LDSCALE && measured.pace ? Math.min(1, measured.pace / ROUND_MINUTES[PLAYOFF_TO]) : 1) : kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
     started,
     over,
     paused: !!t.paused_at,
     behind: !!check?.suggest || !!shorter || (check?.behind ?? 0) > 0,
     leftOpen: false,
     // When the last bonus was added: the semifinals' rows on a round robin night, the Final's games 2 and 3.
-    lastBonusAt: lastAddedAt(t, tz, [...(semisBonus ? stored.filter((g) => g.stage === 'semi') : []), ...(bo3Bonus ? stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0]) : [])].map((g) => g.created_at)),
+    lastBonusAt: lastAddedAt(t, tz, [...extraPool.map((g) => g.created_at), ...[...(semisBonus ? stored.filter((g) => g.stage === 'semi') : []), ...(bo3Bonus ? stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0]) : [])].map((g) => g.created_at)]),
   });
+  let pace = paceFor(1);
+  if (kind === 'round' && process.env.DRY_LDMULTI && pace.offer)
+    for (const k of [3, 2]) {
+      const p = paceFor(k);
+      if (p.offer) {
+        pace = { ...p, offer: { ...p.offer, key: `${p.offer.key}:x${k}` } };
+        break;
+      }
+    }
   const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
   // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
   const tiesEnd = new Map(states.filter((r) => r.tiesEnd !== undefined).map((r) => [r.round, r.tiesEnd!]));
@@ -1588,7 +1601,12 @@ async function addDoublesBonus(ctx: Ctx, group: { id: string; timezone: string }
   const key = typeof body.key === 'string' ? body.key : '';
   const offer = f.pace.offer;
   if (!offer || offer.key !== key) bad('tournament_changed', 'This just changed. Look again.');
-  const ok = offer!.kind === 'semis' ? await writeSemis(ctx.db, t, day, ctx.nowIso) : await writeBestOf3(ctx.db, t, day, ctx.nowIso);
+  let ok = false;
+  if (offer!.kind === 'round') {
+    const k = Number(/:x(\d)$/.exec(offer!.key)?.[1] ?? 1);
+    ok = true;
+    for (let i = 0; i < k && ok; i++) ok = await writePoolRound(ctx.db, t, i === 0 ? day : await loadDay(ctx.db, t.id), ctx.nowIso);
+  } else ok = offer!.kind === 'semis' ? await writeSemis(ctx.db, t, day, ctx.nowIso) : await writeBestOf3(ctx.db, t, day, ctx.nowIso);
   if (!ok) bad('tournament_changed', 'This just changed. Look again.');
   await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: offer!.kind === 'semis' ? 'semifinals' : 'best of 3 final', pace: Math.round(f.pace.pace ?? 0) }, ctx.nowIso);
   return { ok: true, bonus: offer!.kind };
@@ -1662,6 +1680,29 @@ export async function writeSemis(db: D1Database, t: TournamentRow, day: DayRows,
     ])
     .catch(() => undefined);
   return false;
+}
+
+/** 🎾91 dry run PROTOTYPE: one more pool / round robin round (a rematch of round ((R mod K) + 1)), before the playoffs; every playoff row moves one
+ *  round later and m numbers on (its W/L slots follow). Not guarded like the real writers: a prototype for the simulation only. */
+export async function writePoolRound(db: D1Database, t: TournamentRow, day: DayRows, nowIso: string): Promise<boolean> {
+  const pool = day.games.filter((g) => g.stage === 'pool');
+  const rest = day.games.filter((g) => g.stage !== 'pool');
+  if (!pool.length || rest.some((g) => g.stage === 'tie' || !(g.winner === null && g.claim === null && g.skipped === 0))) return false;
+  const shape = doublesStructure(day.teams.length, courtsOf(t));
+  const R = Math.max(...pool.map((g) => g.round));
+  const tmpl = pool.filter((g) => g.round === (R % shape.poolRounds) + 1).sort((a, b) => a.num - b.num);
+  const lastTo = Math.min(...pool.filter((g) => g.round === R).map((g) => g.play_to));
+  const P = rest.length ? Math.min(...rest.map((g) => g.num)) : Math.max(...pool.map((g) => g.num)) + 1;
+  const m = tmpl.length;
+  const shift = (slot: string | null) => (slot && /^[WL]\d+$/.test(slot) && Number(slot.slice(1)) >= P ? `${slot[0]}${Number(slot.slice(1)) + m}` : slot);
+  const steps = [...rest].sort((a, b) => b.num - a.num).map((g) =>
+    db.prepare('UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ?').bind(g.num + m, g.round + 1, shift(g.slot_a), shift(g.slot_b), nowIso, g.id),
+  );
+  const adds = tmpl.map((g, i) =>
+    db.prepare(`${INSERT_GAME} VALUES (?, ?, ?, ?, ?, 'pool', ?, ?, ?, ?, 0, ?, ?)`).bind(newId(), t.id, P + i, R + 1, g.court, g.pool, g.slot_a, g.slot_b, lastTo, nowIso, nowIso),
+  );
+  const res = await db.batch([...steps, ...adds]).catch((e) => (console.error('writePoolRound', e), null));
+  return !!res;
 }
 
 /**
