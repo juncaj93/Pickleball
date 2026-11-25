@@ -681,8 +681,12 @@ const lenOf = (r: RoundState, to?: GameTo) => (r.pool ? ROUND_MINUTES[to ?? r.pl
  * it suggests shorter pool games: games to 9 from the latest round that is enough, else to 7 from the latest round that is enough, else to 7 from
  * the first round that can change (and says how far over it still runs). A round with a result in it is never changed; playoffs never are.
  */
-export function timeCheck(rounds: readonly RoundState[], startMin: number, endMin: number, nowMin: number): TimeCheck {
+export function timeCheck(rounds: readonly RoundState[], startMin: number, endMin: number, nowMin: number, pace?: number): TimeCheck {
   const list = [...rounds].sort((a, b) => a.round - b.round);
+  // Zip 89: a night with a bonus round in it was judged by its measured pace when the bonus was added, so from then on the rounds still to play
+  // count at that pace (minutes for a round to 11, scaled to the round's length), and a round starts when the one before it ended (not at a
+  // planned time). Without `pace` (no bonus), everything is exactly as before.
+  const len = pace === undefined ? lenOf : (r: RoundState, to?: GameTo) => (lenOf(r, to) * pace) / ROUND_MINUTES[PLAYOFF_TO];
   const cur = list.find((r) => !r.done) ?? null;
   // Planned (as the plan stands now) back to back from the start.
   const planned = new Map<number, { start: number; end: number }>();
@@ -697,15 +701,18 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   // When the current round really started: the end of the round before it (when its last result came in), or the planned start.
   const prev = list.filter((r) => r.round < cur.round).pop();
   // Zip 80: a round that waits for tie games starts once they are over too.
-  const startedAt = Math.max(planned.get(cur.round)!.start, prev?.doneAt ?? planned.get(cur.round)!.start, cur.tiesEnd ?? -Infinity);
+  const startedAt =
+    pace === undefined
+      ? Math.max(planned.get(cur.round)!.start, prev?.doneAt ?? planned.get(cur.round)!.start, cur.tiesEnd ?? -Infinity)
+      : Math.max(prev?.doneAt ?? startMin, cur.tiesEnd ?? -Infinity);
   const after = list.filter((r) => r.round > cur.round);
   // Rounds that can still change: the ones after this one, and this one while none of its games has a result. Never the playoffs.
   const open = [...(cur.pool && !cur.anyResult && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.keep)];
   /** When the night ends if pool rounds from `from` on (that can still change) are played to `to`. */
   const ending = (to?: GameTo, from?: number) => {
-    const len = (r: RoundState) => lenOf(r, to !== undefined && from !== undefined && r.pool && r.round >= from && open.includes(r) ? minLen(r.playTo, to) : undefined);
+    const lenAt = (r: RoundState) => len(r, to !== undefined && from !== undefined && r.pool && r.round >= from && open.includes(r) ? minLen(r.playTo, to) : undefined);
     // Each later round starts when the one before ends, or (Zip 80) when the tie games it waits for end, whichever is later.
-    return after.reduce((at, r) => Math.max(at, r.tiesEnd ?? -Infinity) + len(r), Math.max(startedAt + len(cur), nowMin));
+    return after.reduce((at, r) => Math.max(at, r.tiesEnd ?? -Infinity) + lenAt(r), Math.max(startedAt + lenAt(cur), nowMin));
   };
   const finish = ending();
   const behind = Math.max(0, Math.round(finish - plannedFinish));

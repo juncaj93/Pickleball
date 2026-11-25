@@ -35,6 +35,8 @@ export interface NightBox {
   scoreA: number | null;
   scoreB: number | null;
   winner: 'a' | 'b' | null;
+  /** Zip 89: a best of 3 Final's box: each game's score so far, side a first ("G1 11–7 · G2 9–11"). */
+  series?: string;
 }
 
 export interface NightModel {
@@ -135,7 +137,15 @@ export function doublesNightModel(d: AdminDayView): NightModel {
   const boxes: NightBox[] = shownOn(d.courtsNow).map(({ court, num }) => {
     const g = d.games.find((x) => x.num === num)!;
     const barIndex = groups.findIndex((x) => x.games.includes(g));
-    const text = g.tieLabel ?? (g.stage === 'pool' ? `RD${g.round}` : (PLAYOFF_PILL[g.stage] ?? 'Playoff'));
+    const text = g.tieLabel ?? (g.stage === 'pool' ? `RD${g.round}` : g.finalGame ? `Final · G${g.finalGame}` : (PLAYOFF_PILL[g.stage] ?? 'Playoff'));
+    // Zip 89: a best of 3 Final shows every game's score so far in its box.
+    const series = g.finalGame
+      ? d.games
+          .filter((x) => x.finalGame)
+          .sort((x, y) => x.finalGame! - y.finalGame!)
+          .map((x) => `G${x.finalGame} ${x.scoreA !== null && x.scoreB !== null ? `${x.scoreA}–${x.scoreB}` : '–'}`)
+          .join(' · ')
+      : undefined;
     return {
       num,
       court,
@@ -148,6 +158,7 @@ export function doublesNightModel(d: AdminDayView): NightModel {
       scoreA: g.skipped ? null : g.scoreA,
       scoreB: g.skipped ? null : g.scoreB,
       winner: g.skipped ? null : g.winner,
+      ...(series ? { series } : {}),
     };
   });
   const teams = d.teams.filter((x) => !x.out).length;

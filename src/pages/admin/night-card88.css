@@ -371,6 +371,89 @@
   font-weight: 800;
 }
 
+/* Zip 89: a best of 3 Final's box: every game's score so far, one quiet line under the two sides. */
+.nc-series {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+
+/* Zip 89 (🎾89.smart pacing): "Ahead of time" and Add a round, one slim green line above All rounds / Standings; its "Are you sure?" in place,
+   two equal buttons (Yes the site green, No a red outline). Wraps at large text; every button 44 px. */
+.nc-ahead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 5px 5px 5px 14px;
+  border: 1px solid var(--ok-edge);
+  border-radius: 14px;
+  background: var(--ok-bg);
+}
+.nc-ahead-word,
+.nc-ahead-q {
+  color: var(--ok-fg);
+  font-weight: 800;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+.nc-ahead-add,
+.nc-ahead-yes,
+.nc-ahead-no {
+  min-height: var(--btn-h-sm);
+  padding: 0 16px;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--fast) var(--ease);
+}
+.nc-ahead-add {
+  border: 1.5px solid var(--ok-edge);
+  background: var(--surface);
+  color: var(--ok-fg);
+}
+.nc-ahead-ask {
+  padding: 8px;
+}
+.nc-ahead-ask .nc-ahead-q {
+  flex: 1 1 100%;
+  padding: 0 6px;
+}
+.nc-ahead-btns {
+  flex: 1 1 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.nc-ahead-yes {
+  border: 1.5px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.nc-ahead-no {
+  border: 1.5px solid var(--danger-edge);
+  background: var(--surface);
+  color: var(--danger-fg);
+}
+.nc-ahead-add:active,
+.nc-ahead-yes:active,
+.nc-ahead-no:active {
+  transform: scale(0.97);
+}
+.nc-ahead-add:focus-visible,
+.nc-ahead-yes:focus-visible,
+.nc-ahead-no:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* Narrow phones: the boxes' header wraps between its two sides; the names keep their room. */
 @media (max-width: 359px) {
   .nc-head {

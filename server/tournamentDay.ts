@@ -32,7 +32,8 @@ import {
   shortAlertOf,
 } from '../shared/tournament';
 import { firstAnswer, saidTeamScore, saidWon } from '../shared/partnerTaps';
-import { about, clockLabel, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES } from '../shared/tournamentPlan';
+import { about, clockLabel, doublesStructure, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES } from '../shared/tournamentPlan';
+import { BONUS_ROUNDS, type BonusKind, measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
 import {
   draftNote,
   draftTeams,
@@ -69,7 +70,7 @@ import { claimTime, isPinText, pinOf, pinText, rollCourts, type RollResult } fro
 import { diffLabel } from '../shared/scores';
 import type { CourtNow } from '../shared/tournament';
 import type { TicketWithName } from './tournamentMoney';
-import { americanoGameAction, americanoGamesAction, NOT_ON_COURT, readPair, saveAmericanoCourts } from './americanoDay';
+import { americanoGameAction, americanoGamesAction, lastAddedAt, NOT_ON_COURT, readPair, saveAmericanoCourts } from './americanoDay';
 import {
   firstName,
   logPlayer,
@@ -334,6 +335,17 @@ interface DayFacts {
   /** Games that reached a court (on one now, or played), and the ones on a court right now. */
   startedNums: Set<number>;
   liveNums: Set<number>;
+  /** Zip 89: the Final's games (one, or a best of 3: game 3 only once it is 1-1) and who leads; the live pace and the bonus offer. */
+  series: FinalSeries;
+  pace: PaceResult;
+}
+
+/** Zip 89: the Final as a series. One game (as always), or best of 3: the games so far, the wins of side a and side b, and the winner's side. */
+export interface FinalSeries {
+  nums: number[];
+  bestOf3: boolean;
+  wins: [number, number];
+  winner: 'a' | 'b' | null;
 }
 
 function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, nowMs: number, tieRows: readonly TieRow[] = []): DayFacts {
@@ -360,7 +372,16 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     new Map(resolveGames(teams.length, list.map(asPlanned), new Map(list.map((g) => [g.num, resultOf(g)])), out, frozen, gone, records).map((r) => [r.num, r]));
   // A playoff game one side of which can never be filled is not played (counted as skipped): the team there goes on (a walkover).
   const first = resolve(stored);
-  const planned = stored.map((g) => (first.get(g.num)?.never && !g.winner && !g.skipped ? { ...g, skipped: 1, claim: null, result_by: 'skipped' } : g));
+  let planned = stored.map((g) => (first.get(g.num)?.never && !g.winner && !g.skipped ? { ...g, skipped: 1, claim: null, result_by: 'skipped' } : g));
+  // Zip 89: a best of 3 Final (a bonus): its game 3 is part of the night only once the series is 1-1 (or it was already played or put on a court).
+  const finals = planned.filter((g) => g.stage === 'final').sort((x, y) => x.num - y.num);
+  if (finals.length >= 3) {
+    const [g1, g2, g3] = finals;
+    const w1 = resultOf(g1).winner;
+    const w2 = resultOf(g2).winner;
+    const needed = !!w1 && !!w2 && w1 !== w2;
+    if (!needed && !decided(g3) && !g3.result_at && !pinOf(g3.claim_at, g3.court)) planned = planned.filter((g) => g.num !== g3.num);
+  }
   const results = new Map(planned.map((g) => [g.num, resultOf(g)]));
   const resolved = resolve(planned);
   // Zip 88: ROLLING COURTS (shared/rollingCourts.ts), replayed from the moments games finished (result_at, kept when a score is fixed or
@@ -426,13 +447,60 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
       ...(tiesEnd !== undefined ? { tiesEnd } : {}),
     };
   });
-  const check = started && !over && !t.paused_at && games.length && t.final_date ? timeCheck(states, real.start, real.start + real.minutes, nowMin) : null;
+  // Zip 89: the night's real start (Start now included) and its measured pace; the bonus the night would get next: Locked doubles 4 or 5 teams on
+  // 2 courts first get SEMIFINALS (1 vs 4, 2 vs 3), then a best of 3 Final; every other night (semis already, or 1 court) only the best of 3
+  // Final. None once the Final is best of 3, or while a team is out of the night. With a bonus in the night, the Time check counts the rounds
+  // still to play at the measured pace (shared/tournamentSchedule.ts).
+  const series = finalSeries(games, results);
+  const shape = doublesStructure(teams.length, courtsOf(t));
+  const semisIn = games.some((g) => g.stage === 'semi');
+  const bonusIn = (shape.shape === 'rr' && semisIn) || series.bestOf3;
+  const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : 'bestOf3';
+  const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
+  const paceRounds: PaceRound[] = states.map((r) => ({ round: r.round, planned: r.pool, done: r.done, doneAt: r.doneAt, minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO] }));
+  const measured = measuredPace(paceRounds, startMin);
+  const check =
+    started && !over && !t.paused_at && games.length && t.final_date
+      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace))
+      : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
+  const pace = pacing({
+    rounds: paceRounds,
+    startMin,
+    endMin: real.start + real.minutes,
+    nowMin,
+    kind: t.teams_at ? kind : null,
+    bonusMinutes: kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
+    started,
+    over,
+    paused: !!t.paused_at,
+    behind: !!check?.suggest || !!shorter || (check?.behind ?? 0) > 0,
+    leftOpen: false,
+    // When the last bonus was added: the semifinals' rows on a round robin night, the Final's games 2 and 3.
+    lastBonusAt: lastAddedAt(t, tz, [...(shape.shape === 'rr' ? stored.filter((g) => g.stage === 'semi') : []), ...stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0])].map((g) => g.created_at)),
+  });
   const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
   // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
   const tiesEnd = new Map(states.filter((r) => r.tiesEnd !== undefined).map((r) => [r.round, r.tiesEnd!]));
-  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes, roll, startedNums, liveNums };
+  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes, roll, startedNums, liveNums, series, pace };
+}
+
+/** Zip 89: the Final's series from the night's games (in number order: game 1 is the Final the schedule made, games 2 and 3 the bonus's). */
+export function finalSeries(games: readonly GameRow[], results: ReadonlyMap<number, GameResult>): FinalSeries {
+  const nums = games
+    .filter((g) => g.stage === 'final')
+    .map((g) => g.num)
+    .sort((a, b) => a - b);
+  const wins: [number, number] = [0, 0];
+  for (const n of nums) {
+    const w = results.get(n)?.winner;
+    if (w === 'a') wins[0]++;
+    if (w === 'b') wins[1]++;
+  }
+  const bestOf3 = nums.length > 1;
+  const need = bestOf3 ? 2 : 1;
+  return { nums, bestOf3, wins, winner: wins[0] >= need ? 'a' : wins[1] >= need ? 'b' : null };
 }
 
 /** Zip 88: a game of this team (seat) has a score (its pool games by slot; a playoff by the seats frozen with its result). */
@@ -580,6 +648,7 @@ export function adminDayView(
       ...(g.claim_by && g.result_by === 'players' ? { by: names.get(g.claim_by) ?? 'A player' } : {}),
       ...(f.tieLabel.get(g.num) ? { tieLabel: f.tieLabel.get(g.num) } : {}),
       started: f.startedNums.has(g.num),
+      ...(f.series.bestOf3 && g.stage === 'final' ? { finalGame: f.series.nums.indexOf(g.num) + 1 } : {}),
     };
   });
   // Zip 58: the ties still being settled (the wheel not spun, its games still being played, or the organizer's picks).
@@ -646,6 +715,8 @@ export function adminDayView(
     spares,
     ...(ties.length ? { ties } : {}),
     ...(phase === 'published' && f.games.length ? { courtsNow: courtsNowOf(f), sittingNow: sittingNowOf(f, names), standings: standingsNowOf(f, names) } : {}),
+    ...(phase === 'published' && f.pace.offer ? { bonus: f.pace.offer } : {}),
+    ...(f.series.bestOf3 ? { bestOf3: { wins: f.series.wins, winner: f.series.winner } } : {}),
   };
 }
 
@@ -710,6 +781,8 @@ const list = (names: string[]) => (names.length <= 1 ? (names[0] ?? '') : `${nam
 
 /** "Game 1", "Semifinal", "Final", "3rd place". */
 const stageLabel = (stage: string) => (stage === 'semi' ? 'Semifinal' : stage === 'final' ? 'Final' : stage === 'third' ? '3rd place' : 'Game');
+/** Zip 89: a best of 3 Final's games are "Final · Game 1", "Final · Game 2", "Final · Game 3". */
+const finalLabel = (f: DayFacts, g: GameRow) => (g.stage === 'final' && f.series.bestOf3 ? `Final · Game ${f.series.nums.indexOf(g.num) + 1}` : stageLabel(g.stage));
 
 export function playerDayView(
   t: TournamentRow,
@@ -751,7 +824,7 @@ export function playerDayView(
     const opp = other ? f.bySeat.get(other) : null;
     const entry: PlayerDayGame = {
       num: g.num,
-      label: g.stage === 'pool' ? `Game ${++poolNo}` : g.stage === 'tie' ? (f.tieLabel.get(g.num) ?? 'Playoff') : stageLabel(g.stage),
+      label: g.stage === 'pool' ? `Game ${++poolNo}` : g.stage === 'tie' ? (f.tieLabel.get(g.num) ?? 'Playoff') : finalLabel(f, g),
       stage: g.stage as PlayerDayGame['stage'],
       round: g.round,
       // Zip 88: a game's court is known once it is on one (rolling courts).
@@ -820,7 +893,7 @@ export function playerDayView(
       const r = f.resolved.get(g.num)!;
       const team = (seat: number) => ({ name: f.bySeat.get(seat)!.name, players: playersOf(f.bySeat.get(seat)!) });
       // Zip 70 (dry run fix 6): a playoff game is named for what it is ("Final", "3rd place", "Semifinal", "Game A"), a pool game by its round.
-      const label = g.stage === 'pool' ? `Round ${g.round}` : g.stage === 'tie' ? (f.tieLabel.get(g.num) ?? 'Playoff') : stageLabel(g.stage);
+      const label = g.stage === 'pool' ? `Round ${g.round}` : g.stage === 'tie' ? (f.tieLabel.get(g.num) ?? 'Playoff') : finalLabel(f, g);
       return r.a && r.b ? { round: g.round, label, court: courtNo(t, g.court), a: team(r.a), b: team(r.b) } : null;
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
@@ -905,11 +978,18 @@ export function playerDayView(
   const note = shorterNote(f);
   // Zip 74 (pictures pair-3 and pair-5): the night's two alerts at the top of a player's Home, the night only.
   const shortAlert = today && f.started && !f.over ? shortAlertOf(t.id, f.games.map((g) => ({ round: g.round, playTo: g.play_to, pool: g.stage === 'pool', decided: decided(g) })), f.plan.gameTo) : undefined;
-  const finGame = f.games.find((g) => g.stage === 'final');
+  // Zip 89: a best of 3 Final: one alert for the series (its first game's key), while the series is still open; the court of the game on now.
+  const finFirst = f.games.find((g) => g.stage === 'final');
+  const finGame = f.series.bestOf3 ? (f.games.find((g) => g.stage === 'final' && !decided(g)) ?? finFirst) : finFirst;
   const finR = finGame ? f.resolved.get(finGame.num) : undefined;
+  const finOpenNow = f.series.bestOf3 ? f.series.winner === null : !!finGame && !decided(finGame);
   const finalAlert =
-    today && !f.over && seat !== null && mine && !mine.out_at && finGame && finR?.a && finR?.b && (finR.a === seat || finR.b === seat) && !decided(finGame)
-      ? { key: `final:${t.id}:${finGame.num}:${finR.a}-${finR.b}`, title: `You’re in the Final! It goes to ${PLAYOFF_TO} points.`, sub: `Head to Court ${courtNo(t, finGame.court)}.` }
+    today && !f.over && seat !== null && mine && !mine.out_at && finGame && finFirst && finR?.a && finR?.b && (finR.a === seat || finR.b === seat) && finOpenNow
+      ? {
+          key: `final:${t.id}:${finFirst.num}:${finR.a}-${finR.b}`,
+          title: f.series.bestOf3 ? `You’re in the Final! Best of 3 games to ${PLAYOFF_TO}.` : `You’re in the Final! It goes to ${PLAYOFF_TO} points.`,
+          sub: f.startedNums.has(finGame.num) || !f.series.bestOf3 ? `Head to Court ${courtNo(t, finGame.court)}.` : 'Your court shows when it frees up.',
+        }
       : undefined;
   // Zip 58: while a tie is settled the bar says so (picture 20: "Tied for the final"; picture 21: "Playoff").
   if (tie && today) {
@@ -1235,7 +1315,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   // Zip 61: an Americano night has its own controls (scores, not who won), server/americanoDay.ts.
   if (t.format === 'americano') return americanoGamesAction(ctx, body);
   if (!t.teams_at) bad('tournament_changed', 'The teams are not published.');
-  const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left', 'spin', 'pick'] as const);
+  const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left', 'spin', 'pick', 'bonus'] as const);
   if (action === 'pause' || action === 'resume' || action === 'apply') return doublesGamesAction(ctx, body, group, t, action);
   // Zip 88: the courts as they are, saved before this tap changes anything, and again after it (a result, a team leaving, the wheel's games).
   await saveDoublesCourts(ctx, t, group.timezone);
@@ -1249,10 +1329,12 @@ async function doublesGamesAction(
   body: Record<string, unknown>,
   group: Awaited<ReturnType<typeof organizerOn>>,
   t: TournamentRow,
-  action: 'result' | 'apply' | 'pause' | 'resume' | 'left' | 'spin' | 'pick',
+  action: 'result' | 'apply' | 'pause' | 'resume' | 'left' | 'spin' | 'pick' | 'bonus',
 ) {
   const nowIso = ctx.nowIso;
   const day = await loadDay(ctx.db, t.id);
+  // Zip 89: Add a round (the offer the screen showed, by its key).
+  if (action === 'bonus') return addDoublesBonus(ctx, group, t, day, body);
 
   // Zip 58: the organizer spins the wheel (always allowed: the team that spins may not be looking), or picks for four or more tied.
   if (action === 'spin') return spinTie(ctx, group, t, day, v.text(body.key, 'key', { max: 80 }), 'organizer');
@@ -1411,6 +1493,96 @@ async function doublesGamesAction(
  * Locked doubles, the courts' numbers set). Writes one task_log row (START_TASK) with this moment; a second tap (two phones) changes nothing.
  * Money never moves: the planned start and end, the court cost, the tickets and the prizes stay as they are.
  */
+/**
+ * Zip 89: ADD A ROUND on a Locked doubles night (the organizer's tap on "Ahead of time"), only the offer the screen showed while it still stands:
+ *   SEMIFINALS (4 or 5 teams on 2 courts, the first bonus): 1st vs 4th and 2nd vs 3rd of the round robin, both courts at once, to 11; then the
+ *     Final (the semifinal winners) and the 3rd place game (the semifinal losers). The schedule's Final and 3rd place rows (never started) are
+ *     renumbered after the two new semifinals, so the game numbers stay in play order exactly as a groups night's schedule has them. A 5th team's
+ *     night ends after the round robin (its record stays).
+ *   BEST OF 3 FINAL (the next bonus; the first one on nights that already have semifinals, or on 1 court): the Final's games 2 and 3, the same
+ *     two teams, to 11, each after the one before (game 3 is part of the night only at 1-1). The 3rd place game stays one game.
+ * Every write is guarded on the rows as read (nothing started or scored in the playoffs), in one batch, each step only if the step before it
+ * happened. No money moves.
+ */
+async function addDoublesBonus(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow, day: DayRows, body: Record<string, unknown>) {
+  const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
+  const key = typeof body.key === 'string' ? body.key : '';
+  const offer = f.pace.offer;
+  if (!offer || offer.key !== key) bad('tournament_changed', 'This just changed. Look again.');
+  const nowIso = ctx.nowIso;
+  const fresh = (alias: string) => `${alias}.winner IS NULL AND ${alias}.claim IS NULL AND ${alias}.skipped = 0 AND (${alias}.claim_at IS NULL OR ${alias}.claim_at NOT LIKE 'on:%')`;
+  const fin = day.games.find((g) => g.stage === 'final');
+  if (!fin) bad('tournament_changed', 'This just changed. Look again.');
+  const insert = `INSERT INTO tournament_games (id, tournament_id, num, round, court, stage, pool, slot_a, slot_b, play_to, skipped, created_at, updated_at)`;
+  if (offer!.kind === 'semis') {
+    const third = day.games.find((g) => g.stage === 'third');
+    if (!third || day.games.some((g) => g.stage === 'semi' || g.stage === 'tie') || third.num !== fin!.num + 1 || Math.max(...day.games.map((g) => g.num)) !== third.num)
+      bad('tournament_changed', 'This just changed. Look again.');
+    const F = fin!.num;
+    const R = fin!.round;
+    const noSemi = `NOT EXISTS (SELECT 1 FROM tournament_games s WHERE s.tournament_id = ? AND s.stage = 'semi' AND s.created_at <> ?)`;
+    const res = await ctx.db.batch([
+      ctx.db
+        .prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND stage = 'third' AND ${fresh('tournament_games')} AND ${noSemi}`)
+        .bind(F + 3, R + 1, `L${F}`, `L${F + 1}`, nowIso, third!.id, third!.num, t.id, nowIso),
+      ctx.db
+        .prepare(
+          `UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND stage = 'final' AND ${fresh('tournament_games')} AND ${noSemi}
+             AND EXISTS (SELECT 1 FROM tournament_games x WHERE x.id = ? AND x.num = ?)`,
+        )
+        .bind(F + 2, R + 1, `W${F}`, `W${F + 1}`, nowIso, fin!.id, F, t.id, nowIso, third!.id, F + 3),
+      ...[
+        { num: F, court: 1, a: 'P1', b: 'P4' },
+        { num: F + 1, court: 2, a: 'P2', b: 'P3' },
+      ].map((g) =>
+        ctx.db
+          .prepare(
+            `${insert} SELECT ?, ?, ?, ?, ?, 'semi', NULL, ?, ?, ?, 0, ?, ?
+               WHERE EXISTS (SELECT 1 FROM tournament_games x WHERE x.id = ? AND x.num = ?) AND ${noSemi}
+                 AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
+          )
+          .bind(newId(), t.id, g.num, R, g.court, g.a, g.b, PLAYOFF_TO, nowIso, nowIso, fin!.id, F + 2, t.id, nowIso, t.id),
+      ),
+    ]);
+    if (res.some((r) => (r.meta?.changes ?? 0) !== 1)) {
+      // A step did not happen (something changed in between): put the two rows back exactly as they were, if they moved.
+      await ctx.db
+        .batch([
+          ctx.db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'semi' AND created_at = ?`).bind(t.id, nowIso),
+          ctx.db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(fin!.num, fin!.round, fin!.slot_a, fin!.slot_b, fin!.id, nowIso),
+          ctx.db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ? WHERE id = ? AND updated_at = ?`).bind(third!.num, third!.round, third!.slot_a, third!.slot_b, third!.id, nowIso),
+        ])
+        .catch(() => undefined);
+      bad('tournament_changed', 'This just changed. Look again.');
+    }
+    await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: 'semifinals', round: R, pace: Math.round(f.pace.pace ?? 0) }, nowIso);
+    return { ok: true, bonus: 'semis' };
+  }
+  // Best of 3: games 2 and 3 of the Final, after the Final's own round.
+  if (day.games.filter((g) => g.stage === 'final').length !== 1) bad('tournament_changed', 'This just changed. Look again.');
+  const next = Math.max(...day.games.map((g) => g.num)) + 1;
+  const oneFinal = `(SELECT COUNT(*) FROM tournament_games x WHERE x.tournament_id = ? AND x.stage = 'final' AND x.created_at <> ?) = 1`;
+  const notStarted = `EXISTS (SELECT 1 FROM tournament_games x WHERE x.id = ? AND ${fresh('x')})`;
+  const res = await ctx.db
+    .batch(
+      [1, 2].map((i) =>
+        ctx.db
+          .prepare(
+            `${insert} SELECT ?, ?, ?, ?, 1, 'final', NULL, ?, ?, ?, 0, ?, ? WHERE ${oneFinal} AND ${notStarted}
+               AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
+          )
+          .bind(newId(), t.id, next + i - 1, fin!.round + i, fin!.slot_a, fin!.slot_b, PLAYOFF_TO, nowIso, nowIso, t.id, nowIso, fin!.id, t.id),
+      ),
+    )
+    .catch(() => null);
+  if (!res || res.some((r) => (r.meta?.changes ?? 0) !== 1)) {
+    await ctx.db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'final' AND created_at = ? AND id <> ?`).bind(t.id, nowIso, fin!.id).run().catch(() => undefined);
+    bad('tournament_changed', 'This just changed. Look again.');
+  }
+  await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: 'best of 3 final', pace: Math.round(f.pace.pace ?? 0) }, nowIso);
+  return { ok: true, bonus: 'bestOf3' };
+}
+
 async function startNow(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow) {
   const tz = group.timezone;
   if (t.started_early && Date.parse(t.started_early) <= ctx.nowMs) return { ok: true, started: t.started_early, already: true };
@@ -1458,8 +1630,10 @@ export function doublesOutcome(t: TournamentRow, rows: DayRows, tz: string, nowM
   const fres = fin ? f.results.get(fin.num) : undefined;
   let champion: number | null = null;
   let runnerUp: number | null = null;
-  if (fin && fres?.winner && fr?.a && fr?.b) {
-    champion = fres.winner === 'a' ? fr.a : fr.b;
+  // Zip 89: a best of 3 Final: the team with 2 game wins is the Final's winner (champion, medals, credit); the other is the runner-up.
+  const won = f.series.bestOf3 ? f.series.winner : (fres?.winner ?? null);
+  if (fin && won && fr?.a && fr?.b) {
+    champion = won === 'a' ? fr.a : fr.b;
     runnerUp = champion === fr.a ? fr.b : fr.a;
   } else if (fin && fres?.skipped && fr) {
     // A walkover: the one team still there wins it.

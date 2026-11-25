@@ -21,9 +21,10 @@ import { type AdminRoundGame, type AdminRoundsView, type CourtNow, type PlayerRo
 import { claimTime, isPinText, pinOf, pinText, rollCourts } from '../shared/rollingCourts';
 import { firstAnswer, saidScore } from '../shared/partnerTaps';
 import { MAX_SCORE } from '../shared/scores';
-import { americanoNight, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
+import { americanoNight, bonusRound, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
 import { americanoPlan, clockLabel, type GameTo, ROUND_MINUTES } from '../shared/tournamentPlan';
 import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournamentSchedule';
+import { measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
 import { startMsOf } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
 import { courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds } from './tournamentDay';
@@ -154,6 +155,9 @@ export interface AmFacts {
   roundStart: Map<number, number>;
   /** Zip 88: each court now (the game on it, the last it finished). */
   courtsNow: CourtNow[];
+  /** Zip 89: the planned rounds (the rest are bonus rounds the organizer added), the live pace and the bonus offer. */
+  plannedRounds: number;
+  pace: PaceResult;
 }
 
 export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets: readonly TicketWithName[], rows: readonly GameRow[], tz: string, nowMs: number): AmFacts {
@@ -255,9 +259,36 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
       keep: r === rounds,
     });
   }
-  const check = started && !over && !t.paused_at && rounds && t.final_date ? timeCheck(states, real.start, real.start + real.minutes, minuteOf(t, tz, nowMs)) : null;
+  // Zip 89: the planned rounds are the plan's (a stored night beyond them has bonus rounds); the night's real start (Start now included) and its
+  // measured pace. With a bonus round in the night, the Time check counts the rounds still to play at that pace (shared/tournamentSchedule.ts).
+  const plannedRounds = Math.min(rounds, plan.rounds);
+  const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
+  const nowMin = t.final_date ? minuteOf(t, tz, nowMs) : real.start;
+  const paceRounds: PaceRound[] = states.map((s) => ({ round: s.round, planned: s.round <= plannedRounds, done: s.done, doneAt: s.doneAt, minutes: ROUND_MINUTES[s.playTo] ?? ROUND_MINUTES[11] }));
+  const measured = measuredPace(paceRounds, startMin);
+  const bonusIn = stored.length > 0 && rounds > plannedRounds;
+  const check =
+    started && !over && !t.paused_at && rounds && t.final_date
+      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace))
+      : null;
   const lowered = games.filter((g) => !decided(g) && g.playTo < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.playTo)) as GameTo } : null;
+  // Zip 89: THE OFFER (shared/smartPacing.ts): one more round, only once the rows are written (a round is in) and while 4 or more are still in.
+  const pace = pacing({
+    rounds: paceRounds,
+    startMin,
+    endMin: real.start + real.minutes,
+    nowMin,
+    kind: stored.length > 0 && inGames.filter((id) => !gone.has(id)).length >= 4 ? 'round' : null,
+    bonusMinutes: ROUND_MINUTES[plan.gameTo],
+    started,
+    over,
+    paused: !!t.paused_at,
+    behind: !!check?.suggest || !!shorter || (check?.behind ?? 0) > 0,
+    leftOpen: false,
+    // When the last bonus round was added (its rows' save time).
+    lastBonusAt: lastAddedAt(t, tz, games.filter((g) => g.round > plannedRounds && g.row).map((g) => g.row!.created_at)),
+  });
   const roundStart = new Map<number, number>();
   let at = real.start;
   for (const s of states) {
@@ -266,7 +297,13 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
     roundStart.set(s.round, begin);
     at = begin + ROUND_MINUTES[s.playTo];
   }
-  return { stored: stored.length > 0, games, rounds, roster, names, gone, sits, plan, started, over, roundNow, anyResult, check, shorter, start: real.start, end: real.start + real.minutes, roundStart, courtsNow };
+  return { stored: stored.length > 0, games, rounds, roster, names, gone, sits, plan, started, over, roundNow, anyResult, check, shorter, start: real.start, end: real.start + real.minutes, roundStart, courtsNow, plannedRounds, pace };
+}
+
+/** Zip 89: the latest of these save times, in minutes after midnight of the night (null: none). */
+export function lastAddedAt(t: TournamentRow, tz: string, times: readonly string[]): number | null {
+  const ms = times.map((x) => Date.parse(x)).filter((x) => Number.isFinite(x));
+  return ms.length && t.final_date ? minuteOf(t, tz, Math.max(...ms)) : null;
 }
 
 /** The points table rows (names in name order; ties keep that order). */
@@ -491,6 +528,8 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
     standings: standingsOf(f, null, table),
     courtsNow: f.courtsNow,
     sittingNow: sittingNow(f),
+    ...(f.pace.offer ? { bonus: f.pace.offer } : {}),
+    plannedRounds: f.plannedRounds,
   };
 }
 
@@ -680,11 +719,12 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
  *   apply { fromRound, to }       the Time check: games from that round on are played to 9 or 7 (never the last round)
  *   pause / resume
  *   left { playerId }             a player left: their games still to play are skipped (the others in them get a note)
+ *   bonus { key }                 Zip 89: Add a round (the offer the screen showed, by its key): one more round at the end of the night
  */
 export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
-  const action = v.oneOf(body.action, 'action', ['score', 'clear', 'apply', 'pause', 'resume', 'left'] as const);
+  const action = v.oneOf(body.action, 'action', ['score', 'clear', 'apply', 'pause', 'resume', 'left', 'bonus'] as const);
   const nowIso = ctx.nowIso;
   if (action === 'pause' || action === 'resume') {
     await ctx.db.prepare(`UPDATE tournaments SET paused_at = ${action === 'pause' ? '?' : 'NULL'}, updated_at = ? WHERE id = ?`).bind(...(action === 'pause' ? [nowIso] : []), nowIso, t.id).run();
@@ -705,6 +745,7 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
     if (!Number.isInteger(from) || from < 1 || (body.to !== 9 && body.to !== 7)) throw new HttpError(400, 'invalid_apply', 'Pick a round and 9 or 7.');
   }
   if (action === 'left' && !before.roster.includes(v.id(body.playerId, 'playerId'))) bad('tournament_changed', 'They are not in the night.');
+  if (action === 'bonus') return addBonusRound(ctx, group, t, before, body);
   const rows = await ensureRows(ctx, t, night, nowIso);
   // Zip 88: the courts as they are, saved before this tap changes anything (Player left, a cleared score never moves a started game).
   await saveAmericanoCourts(ctx, t, group.timezone);
@@ -780,6 +821,43 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   await audit(ctx.db, group.id, null, 'tournament_result', { tournament: t.name, game: num, round: g!.round, ...details, by: 'organizer' }, nowIso);
   await saveAmericanoCourts(ctx, t, group.timezone);
   return { ok: true };
+}
+
+/**
+ * Zip 89: ADD A ROUND (the organizer's tap on "Ahead of time"). Only the offer the screen showed (its key) while it still stands (the same checks,
+ * now): one more round after the last one, new partners (shared/americanoSchedule.ts bonusRound), played to the plan's length. Written once:
+ * the next game numbers are unique, and a round added by anyone else since the read stops this one. It is then a normal round (the bars, All
+ * rounds, the phones and the standings include it); it is never taken away by itself. No money moves.
+ */
+async function addBonusRound(ctx: Ctx, group: { id: string; timezone: string }, t: TournamentRow, before: AmFacts, body: Record<string, unknown>) {
+  const key = typeof body.key === 'string' ? body.key : '';
+  if (!before.stored || !before.pace.offer || before.pace.offer.key !== key) bad('tournament_changed', 'This just changed. Look again.');
+  const played = before.games.map((g) => ({ round: g.round, court: g.court, a: g.a, b: g.b, skipped: g.skipped }));
+  const round = bonusRound(played, before.roster, before.gone, courtsOf(t), t.id);
+  if (!round || !round.length) bad('few_players', 'Needs at least 4 players still in.');
+  const last = Math.max(...before.games.map((g) => g.round));
+  const first = Math.max(...before.games.map((g) => g.num)) + 1;
+  const nowIso = ctx.nowIso;
+  // Guarded: no round after `last` written by anyone else (this batch's own rows carry its own time); the unique game numbers refuse a copy too.
+  const none = 'NOT EXISTS (SELECT 1 FROM tournament_games WHERE tournament_id = ? AND round > ? AND created_at <> ?)';
+  const ok = await ctx.db
+    .batch(
+      round!.map((g, i) =>
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_games (id, tournament_id, num, round, court, stage, pool, slot_a, slot_b, play_to, skipped, created_at, updated_at)
+             SELECT ?, ?, ?, ?, ?, 'pool', NULL, ?, ?, ?, 0, ?, ? WHERE ${none}
+               AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
+          )
+          .bind(newId(), t.id, first + i, last + 1, g.court, pairSlot(g.a), pairSlot(g.b), before.plan.gameTo, nowIso, nowIso, t.id, last, nowIso, t.id),
+      ),
+    )
+    .then((r) => r.reduce((n, x) => n + (x.meta?.changes ?? 0), 0))
+    .catch(() => 0);
+  if (ok !== round!.length) bad('tournament_changed', 'This just changed. Look again.');
+  await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, round: last + 1, games: round!.length, pace: Math.round(before.pace.pace ?? 0) }, nowIso);
+  await saveAmericanoCourts(ctx, t, group.timezone);
+  return { ok: true, round: last + 1 };
 }
 
 /** Zip 61: the night has Americano rows (switching back to Locked doubles then stops: the rounds have started). */

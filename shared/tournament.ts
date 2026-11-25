@@ -876,6 +876,14 @@ export interface AdminDayGame {
   tieLabel?: string;
   /** Zip 88: on a court (now, or it was: a score that was cleared): it can be scored. Its `court` is then the court it is really on. */
   started?: boolean;
+  /** Zip 89: a best of 3 Final: which game of it this is (1, 2 or 3; game 3 shows only at 1-1). */
+  finalGame?: number;
+}
+
+/** Zip 89 (🎾89.smart pacing): the bonus offer on the organizer's night card (shared/smartPacing.ts). `key` goes back with the tap. */
+export interface BonusOffer {
+  kind: 'round' | 'semis' | 'bestOf3';
+  key: string;
 }
 
 /** Zip 58: a tie the organizer sees (the first card on game night until it is settled). */
@@ -934,6 +942,10 @@ export interface AdminDayView {
   sittingNow?: string[];
   /** Zip 88: the night card's Standings sheet (organizer): each group's table as players see it (THE TIE RULE), the point difference chip. */
   standings?: { pool: 'A' | 'B' | null; rows: EndStanding[] }[];
+  /** Zip 89: "Ahead of time" + Add a round (organizer only; absent when there is no offer). */
+  bonus?: BonusOffer;
+  /** Zip 89: the Final is best of 3 (its games carry finalGame); the series so far ("1-0"), from the first team's side. */
+  bestOf3?: { wins: [number, number]; winner: 'a' | 'b' | null };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1047,6 +1059,9 @@ export interface AdminRoundsView {
   byPercent: boolean;
   /** Zip 82: the standings as they stand (the reveal board's rows, server/americanoDay.ts standingsOf). Organizer only. */
   standings: PlayerRoundsView['standings'];
+  /** Zip 89: "Ahead of time" + Add a round (organizer only; absent when there is no offer), and the rounds the plan had (later ones are bonus). */
+  bonus?: BonusOffer;
+  plannedRounds?: number;
   /** Zip 88: each court now (rolling courts) and who is not on a court now (names). */
   courtsNow: CourtNow[];
   sittingNow: string[];

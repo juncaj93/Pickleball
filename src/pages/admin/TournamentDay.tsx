@@ -391,7 +391,7 @@ function PublishedCard({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
 
 const sideName = (g: AdminDayGame, s: 'a' | 'b') => (s === 'a' ? (g.a?.name ?? g.waitA ?? 'Not decided') : (g.b?.name ?? g.waitB ?? 'Not decided'));
 const where = (g: AdminDayGame) => (g.courtNumber ? `Court ${g.courtNumber}` : `Court ${g.court}`);
-const stageName = (g: AdminDayGame) => (g.tieLabel ? g.tieLabel : g.stage === 'semi' ? 'Semifinal' : g.stage === 'final' ? 'Final' : g.stage === 'third' ? '3rd place' : `Game ${g.num}`);
+const stageName = (g: AdminDayGame) => (g.tieLabel ? g.tieLabel : g.stage === 'semi' ? 'Semifinal' : g.stage === 'final' ? (g.finalGame ? `Final · Game ${g.finalGame}` : 'Final') : g.stage === 'third' ? '3rd place' : `Game ${g.num}`);
 
 /** What the organizer's screen showed for a game (sent back with Fix and Clear, so a change in between is caught). */
 const seenOf = (g: AdminDayGame) => ({ winner: g.skipped ? null : g.winner, scoreA: g.scoreA, scoreB: g.scoreB });
@@ -450,6 +450,9 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
         onStandings={() => setStandingsOpen(true)}
         onPause={() => void save(() => gamesCall(t, { action: d.paused ? 'resume' : 'pause' }), d.paused ? 'Back on' : 'Paused')}
         onLeft={() => setLeft(true)}
+        bonus={d.bonus}
+        holdBonus={left || !!d.fix}
+        onBonus={(key) => void save(() => gamesCall(t, { action: 'bonus', key }), d.bonus?.kind === 'semis' ? 'Semifinals added' : d.bonus?.kind === 'bestOf3' ? 'The Final is best of 3' : 'Round added')}
       />
       <FixSheet ctx={ctx} t={t} g={fix} onClose={() => setFix(null)} />
       {/* Zip 82 (picture 3): every game as a scoreboard; Enter score and Fix open the same score sheet. Zip 88: "All rounds" on both styles. */}

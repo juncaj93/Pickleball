@@ -1,0 +1,47 @@
+// Zip 89 (🎾89.smart pacing): the base plan BEFORE (rounds 23/19/16 minutes, 10 minutes kept free) and AFTER (20/16/13, 20 kept free) for every
+// size 6 to 16, 1 and 2 courts, 2 / 2.5 / 3 hours, both styles. Run: npx vite-node scripts/zip89-plan-table.ts [-- --md]
+// The AFTER numbers are the live functions (shared/tournamentPlan.ts nightPlan); BEFORE is the same rules with the old numbers.
+import { doublesStructure, nightPlan, styleFor, type GameTo } from '../shared/tournamentPlan';
+
+const OLD = { 11: 23, 9: 19, 7: 16 } as Record<GameTo, number>;
+const OLD_BUFFER = 10;
+const LENGTHS: GameTo[] = [11, 9, 7];
+
+function oldPlan(players: number, courts: number, minutes: number, style: 'doubles' | 'americano') {
+  const budget = minutes - OLD_BUFFER;
+  if (styleFor(style, players) === 'doubles') {
+    const s = doublesStructure(Math.floor(players / 2), courts);
+    const used = (l: GameTo) => s.poolRounds * OLD[l] + s.playoffRounds * OLD[11];
+    const len = LENGTHS.find((l) => used(l) <= budget) ?? 7;
+    return { rounds: s.poolRounds + s.playoffRounds, gameTo: len, used: used(len) };
+  }
+  const onCourt = 4 * Math.max(1, Math.min(courts, Math.floor(players / 4)));
+  const at = (l: GameTo) => {
+    const rounds = Math.max(0, Math.floor(budget / OLD[l]));
+    return { rounds, each: (rounds * onCourt) / players };
+  };
+  const len = LENGTHS.find((l) => at(l).each >= 4) ?? 7;
+  return { rounds: at(len).rounds, gameTo: len, used: at(len).rounds * OLD[len] };
+}
+
+const clock = (m: number) => {
+  const h = Math.floor(m / 60);
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(Math.round(m % 60)).padStart(2, '0')}`;
+};
+const START = 19 * 60 + 30;
+const rows: string[] = [];
+const shorter: string[] = [];
+for (const style of ['doubles', 'americano'] as const)
+  for (const courts of [1, 2])
+    for (const minutes of [120, 150, 180])
+      for (let n = 6; n <= 16; n++) {
+        if (style === 'doubles' && n % 2) continue;
+        const b = oldPlan(n, courts, minutes, style);
+        const a = nightPlan(n, courts, minutes, style);
+        const line = `${style === 'doubles' ? 'LD' : 'AM'} ${String(n).padStart(2)}p ${courts}c ${(minutes / 60).toFixed(1)}h | before ${String(b.rounds).padStart(2)} rd to ${String(b.gameTo).padStart(2)} ${String(b.used).padStart(3)} min ends ${clock(START + b.used)} | after ${String(a.rounds).padStart(2)} rd to ${String(a.gameTo).padStart(2)} ${String(a.minutesUsed).padStart(3)} min ends ${clock(START + a.minutesUsed)}${a.fits ? '' : ' (too tight)'}`;
+        rows.push(line);
+        if (a.rounds < b.rounds || a.gameTo < b.gameTo) shorter.push(line);
+      }
+console.log(rows.join('\n'));
+console.log(`\nSHORTER AFTER (fewer rounds or shorter games): ${shorter.length}`);
+console.log(shorter.join('\n'));

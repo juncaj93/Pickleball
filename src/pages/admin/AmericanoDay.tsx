@@ -186,6 +186,9 @@ function NightCard({ ctx, t, r }: { ctx: AdminCtx; t: AdminTournamentView; r: Ad
         onStandings={() => setStandings(true)}
         onPause={() => void save(() => gamesCall(t, { action: r.paused ? 'resume' : 'pause' }), r.paused ? 'Back on' : 'Paused')}
         onLeft={() => setLeft(true)}
+        bonus={r.bonus}
+        holdBonus={left}
+        onBonus={(key) => void save(() => gamesCall(t, { action: 'bonus', key }), `Round ${Math.max(0, ...r.games.map((g) => g.round)) + 1} added`)}
       />
       <FixSheet ctx={ctx} t={t} g={fix} onClose={() => setFix(null)} />
       <AllRoundsSheet r={r} open={all !== null} focusRound={all || undefined} onClose={() => setAll(null)} busy={busy} onFix={(g) => setFix(g)} />

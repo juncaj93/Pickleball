@@ -7,21 +7,25 @@
 // Its own file on purpose: the player download reads shared/tournament.ts, so this stays out of it (only the organizer file, the player's
 // tournament file and the server import it).
 
-/** One round, changeover included, by the points a game is played to (the table's RULES). */
-export const ROUND_MINUTES = { 11: 23, 9: 19, 7: 16 } as const;
+/**
+ * One round, changeover included, by the points a game is played to (the table's RULES). Zip 89 (Alex, Nov 24: his group played 9 games to 11 in
+ * 2 hours, about 13 minutes a game; rec doubles to 11 runs 18 to 25): an honest 20 minutes a round to 11 (was 23), 16 to 9 (was 19), 13 to 7
+ * (was 16). A night that runs faster gets bonus rounds early (shared/smartPacing.ts), never a surprise round at the end.
+ */
+export const ROUND_MINUTES = { 11: 20, 9: 16, 7: 13 } as const;
 export type GameTo = keyof typeof ROUND_MINUTES;
 /** Longest first: the plan uses the longest game that fits. */
 export const GAME_LENGTHS: readonly GameTo[] = [11, 9, 7];
-/** Minutes kept free at the end of the night (awards, overrun). */
-export const END_BUFFER = 10;
+/** Minutes of court time kept free after the planned last game (awards, overrun; Zip 89: 20, was 10). */
+export const END_BUFFER = 20;
 /** Semifinals, the Final and the 3rd place game are always to 11. */
 export const PLAYOFF_TO: GameTo = 11;
 /**
- * Zip 80: minutes one tie game takes (Game A or Game B, played to 5; the wheel's games). ROUND_MINUTES's steps (16 at 7, 19 at 9, 23 at 11)
- * carried down to 5. A tie is not in the plan made before the night (nobody knows there will be one); once its games exist the Time check and
- * the night's times count them.
+ * Zip 80: minutes one tie game takes (Game A or Game B, played to 5; the wheel's games). ROUND_MINUTES's step from 9 to 7 carried down to 5 (Zip
+ * 89: 13 at 7, 16 at 9, so 10 at 5; it was 13 with the old table). A tie is not in the plan made before the night (nobody knows there will be
+ * one); once its games exist the Time check and the night's times count them.
  */
-export const TIE_MINUTES = 13;
+export const TIE_MINUTES = ROUND_MINUTES[7] - (ROUND_MINUTES[9] - ROUND_MINUTES[7]);
 /** Americano: every player gets at least this many games. */
 export const AMERICANO_MIN_GAMES = 4;
 /** The sizes a tournament night is planned for. */

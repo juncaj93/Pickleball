@@ -2,9 +2,16 @@
 // scores box and the folded tournament card under them. Header (the name, "Americano · 10 players", the "1 of 2 in" pill), the round bars (tap
 // one: All rounds at that round), one box per court (Score while playing, the score once in: tap it to fix), who sits now, All rounds and
 // Standings, then the quiet Pause and Player left (each asks "Are you sure?" first). Both styles draw it from src/pages/admin/nightCardData.ts.
+// Zip 89 (🎾89.smart pacing): when the server offers a bonus (shared/smartPacing.ts), a slim green line above All rounds / Standings: "Ahead of
+// time" and Add a round (44 px). A tap asks "Are you sure?" in place (two equal buttons: Yes green, No red outline); Yes adds it at once. Ignored,
+// nothing changes; the line goes when the offer does. Hidden while Pause or Player left is asking, or the Player left sheet is open.
 import { useState } from 'react';
+import type { BonusOffer } from '../../../shared/tournament';
 import { Pickleball } from '../../ui';
 import type { NightBox, NightModel } from './nightCardData';
+
+/** The question for each bonus (the button always says Add a round). */
+const BONUS_ASK: Record<BonusOffer['kind'], string> = { round: 'Add a round?', semis: 'Add semifinals?', bestOf3: 'Make the Final best of 3?' };
 import './night-card88.css';
 
 export function NightCard({
@@ -18,6 +25,9 @@ export function NightCard({
   onStandings,
   onPause,
   onLeft,
+  bonus,
+  onBonus,
+  holdBonus,
 }: {
   name: string;
   m: NightModel;
@@ -31,8 +41,14 @@ export function NightCard({
   onStandings: () => void;
   onPause: () => void;
   onLeft: () => void;
+  /** Zip 89: the bonus offer (absent: no line), its tap (with the offer's key), and a sheet open that hides it (Player left). */
+  bonus?: BonusOffer | null;
+  onBonus?: (key: string) => void;
+  holdBonus?: boolean;
 }) {
   const [ask, setAsk] = useState<null | 'pause' | 'left'>(null);
+  const [askBonus, setAskBonus] = useState<string | null>(null);
+  const offer = bonus && onBonus && !ask && !holdBonus ? bonus : null;
   return (
     <section
       className="nc"
@@ -91,6 +107,38 @@ export function NightCard({
             </p>
           )}
         </>
+        {offer &&
+          (askBonus === offer.key ? (
+            <div className="nc-ahead nc-ahead-ask" role="group" aria-label={`${BONUS_ASK[offer.kind]} Are you sure?`} data-nc-bonus-ask={offer.kind}>
+              <span className="nc-ahead-q">
+                {BONUS_ASK[offer.kind]} Are you sure?
+              </span>
+              <span className="nc-ahead-btns">
+                <button
+                  type="button"
+                  className="nc-ahead-yes"
+                  disabled={busy}
+                  onClick={() => {
+                    setAskBonus(null);
+                    onBonus!(offer.key);
+                  }}
+                  data-nc-bonus-yes
+                >
+                  Yes
+                </button>
+                <button type="button" className="nc-ahead-no" onClick={() => setAskBonus(null)} data-nc-bonus-no>
+                  No
+                </button>
+              </span>
+            </div>
+          ) : (
+            <div className="nc-ahead" data-nc-bonus={offer.kind}>
+              <span className="nc-ahead-word">Ahead of time</span>
+              <button type="button" className="nc-ahead-add" disabled={busy} onClick={() => setAskBonus(offer.key)} data-nc-bonus-add>
+                Add a round
+              </button>
+            </div>
+          ))}
         <div className="nc-btns">
           <button type="button" className="nc-btn" onClick={onAll} data-nc-all data-tm-am-all>
             All rounds
@@ -192,6 +240,11 @@ function CourtBox({ b, busy, onScore }: { b: NightBox; busy: boolean; onScore: (
         )}
         <span className={`${side('b')} nc-side-b`}>{b.b}</span>
       </div>
+      {b.series && (
+        <p className="nc-series" data-nc-series>
+          Best of 3 · {b.series}
+        </p>
+      )}
     </article>
   );
 }

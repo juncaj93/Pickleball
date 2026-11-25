@@ -575,3 +575,88 @@ export const winLoss = (r: Pick<PointsRow, 'wins' | 'losses'>): string => `${r.w
 
 /** Players have played different numbers of games (the table then ranks by win percentage). */
 export const gamesDiffer = (rows: readonly Pick<PointsRow, 'played'>[]): boolean => new Set(rows.map((r) => r.played)).size > 1;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 89 (🎾89.smart pacing): one more round (a bonus round the organizer added)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** One stored game as the bonus round reads it: the round, the court, the two pairs, and whether it was not played. */
+export interface PlayedGame {
+  round: number;
+  court: number;
+  a: readonly [string, string];
+  b: readonly [string, string];
+  skipped: boolean;
+}
+
+const gameText = (g: { court: number; a: readonly string[]; b: readonly string[] }) =>
+  `${g.court}:${[[...g.a].sort().join('+'), [...g.b].sort().join('+')].sort().join('|')}`;
+
+/**
+ * Zip 89: THE BONUS ROUND for an Americano night: one more round with new partners, chosen so partners repeat as little as possible and sit-outs
+ * stay as even as possible (nobody sits twice before everyone has sat once, when the count allows), with the same rules as the night itself.
+ *   - Nobody left and the night is the saved pattern (it always is, when the rows came from americanoNight): the pattern's NEXT round. The
+ *     saved patterns are searched for the whole length up to 16 rounds (and carried on past it with the same rules), so the bonus round is the
+ *     round a longer night would have had; tests/zip61 and zip80 check every one against the partner, sit and sit-in-a-row rules.
+ *   - Otherwise (someone left, or rows from another schedule): one round worked out from the night as played: the players still in, the
+ *     least-sat sit (never one who already sat the limit in a row while another least-sat player can sit instead), then the split with the
+ *     fewest partner repeats and the most even opponents and courts (nextRound).
+ * `players`: everyone in the stored games; `gone`: who left. Returns the round's games (court 1 first), or null when fewer than 4 are left.
+ */
+export function bonusRound(
+  played: readonly PlayedGame[],
+  players: readonly string[],
+  gone: ReadonlySet<string>,
+  courts: number,
+  key: string,
+): { court: 1 | 2; a: [string, string]; b: [string, string] }[] | null {
+  const rounds = Math.max(0, ...played.map((g) => g.round));
+  const seats = seatOrder(players, key);
+  const n = seats.length;
+  if (!gone.size && n >= 4) {
+    const onCourt = onCourtFor(n, courts);
+    const pattern = seatRounds(n, onCourt, rounds + 1);
+    const mapped = (r: SeatRound) => r.games.map((g) => ({ court: g.court, a: [seats[g.a[0]], seats[g.a[1]]] as [string, string], b: [seats[g.b[0]], seats[g.b[1]]] as [string, string] }));
+    const same = pattern.slice(0, rounds).every((r, i) => {
+      const stored = played.filter((g) => g.round === i + 1).map(gameText).sort();
+      return stored.join(' ') === mapped(r).map(gameText).sort().join(' ');
+    });
+    if (same && pattern[rounds]) return mapped(pattern[rounds]).sort((x, y) => x.court - y.court);
+  }
+  const still = seats.filter((id) => !gone.has(id));
+  const m = still.length;
+  if (m < 4) return null;
+  const onCourt = onCourtFor(m, courts);
+  const index = new Map(still.map((id, i) => [id, i]));
+  const t = emptyTally(m);
+  const run = new Array<number>(m).fill(0);
+  for (let r = 1; r <= rounds; r++) {
+    const list = played.filter((g) => g.round === r && !g.skipped);
+    const on = new Set<number>();
+    for (const g of list) {
+      const a = g.a.map((id) => index.get(id));
+      const b = g.b.map((id) => index.get(id));
+      for (const x of [...a, ...b]) if (x !== undefined) on.add(x);
+      if (a.some((x) => x === undefined) || b.some((x) => x === undefined)) continue;
+      addRound(t, { games: [{ court: (g.court === 2 ? 2 : 1) as 1 | 2, a: a as [number, number], b: b as [number, number] }], sit: [] });
+    }
+    for (let x = 0; x < m; x++) {
+      if (on.has(x)) run[x] = 0;
+      else {
+        t.sits[x]++;
+        run[x]++;
+      }
+    }
+  }
+  const rnd = seeded(hashOf(`${key}:bonus:${rounds + 1}`));
+  const limit = sitLimit(m, onCourt);
+  const sit = [...Array(m).keys()]
+    .map((s) => ({ s, k: t.sits[s], must: run[s] >= limit ? 1 : 0, r: rnd() }))
+    .sort((a, b) => a.k - b.k || a.must - b.must || a.r - b.r)
+    .slice(0, m - onCourt)
+    .map((x) => x.s);
+  const round = nextRound(t, onCourt, rnd, 2, sit);
+  return round.games
+    .map((g) => ({ court: g.court, a: [still[g.a[0]], still[g.a[1]]] as [string, string], b: [still[g.b[0]], still[g.b[1]]] as [string, string] }))
+    .sort((x, y) => x.court - y.court);
+}
