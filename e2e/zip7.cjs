@@ -526,7 +526,7 @@ async function main() {
   }
   await check("C: with the switch OFF the cards still say Court booked / Court not booked, with the dot", async () => {
     const p = await openPlayer('Jordan');
-    await p.page.getByRole('button', { name: /^More sessions/ }).click();
+    await p.page.getByRole('button', { name: /^More games/ }).click();
     await p.page.waitForTimeout(400);
     const rows = await wordsOnCards(p.page);
     assert(rows.some((r) => /Court booked/.test(r.text)) && rows.some((r) => /Court not booked/.test(r.text)), `court words (${rows.length} rows: ${rows.map((r) => r.text.slice(0, 40)).join(' | ')})`);
@@ -603,7 +603,7 @@ async function main() {
     assert((await toggle.innerText()).trim() === 'Show fewer', 'the link opened the list');
     await toggle.click();
     await p.page.waitForTimeout(500);
-    assert((await toggle.innerText()).trim() === 'More sessions', 'Show fewer folded it');
+    assert((await toggle.innerText()).trim() === 'More games', 'Show fewer folded it');
     assert((await p.page.locator(`#row-${later.id}`).count()) === 0, 'the later game is hidden');
     await toggle.click();
     await p.page.waitForTimeout(400);

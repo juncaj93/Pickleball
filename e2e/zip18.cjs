@@ -433,6 +433,18 @@ async function main() {
     { name: 'Safari text 150%', css: 'html { zoom: 1.5 }' },
     { name: 'text 150%', css: 'html { font-size: 150% !important; } body { font-size: 25.5px !important; }' },
   ];
+  // Two later looks bring a word closer to its tile's edge than the 2 px rule, on purpose (the word still sits inside the tile):
+  //  - Zip 86 (picture 8): the organizer card's TONIGHT / TOMORROW is 11 px with no letter spacing, the tile held to 56 px;
+  //  - Zip 78 (one look): no text under 11 px, so the folded row's TONIGHT and the Money screen's small date tile's weekday are 11 px at least.
+  //  - Zip 79: History's four tabs (Activity, Games, Tournaments, Skills) slide sideways when they cannot fit (a scrolling row, by design).
+  const laterLook = (p) => {
+    if (/^text outside its box: .* outside div\.segmented\.tm-hist-seg\b/.test(p)) return true;
+    const m = /^text touches its tile edge: "([A-Z]+)" only (-?[\d.]+) px from the inside edge of (\S+)/.exec(p);
+    if (!m) return false;
+    if (/^div\.tile\b/.test(m[3]) && /^(TONIGHT|TOMORROW|TOM)$/.test(m[1])) return Number(m[2]) >= 0;
+    if (/^span\.r2m-tile/.test(m[3])) return Number(m[2]) >= 1.5;
+    return false;
+  };
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])
       for (const size of SIZES) {
@@ -444,7 +456,7 @@ async function main() {
           const found = [];
           const look = async (where) => {
             await page.waitForTimeout(350);
-            for (const p of await page.evaluate(findClipping, { root: 'main' })) found.push(`${where}: ${p}`);
+            for (const p of await page.evaluate(findClipping, { root: 'main' })) if (!laterLook(p)) found.push(`${where}: ${p}`);
           };
           if (await page.locator('.dn-more').count()) await page.locator('.dn-more').click();
           await look('Home');
@@ -536,7 +548,8 @@ async function main() {
         if (!reduce && scheme === 'dark') await page.locator('dialog.cm[open]').screenshot({ path: path.join(SHOTS, 'zip18-courtmap-dark.png') });
         await ctx.close();
         assert(m.after === 'none' && m.before === 'none', `something is drawn over the court (a sweep): ${JSON.stringify(m)}`);
-        if (reduce) assert(m.name === 'none' && /rgba?\(60, 200, 130/.test(m.shadow), `Reduce Motion: ${JSON.stringify(m)}`);
+        // Retired in Zip 92: the exact glow color rgb(60, 200, 130) was removed in Zip 78 (the one-look color tokens); a steady glow is still checked.
+        if (reduce) assert(m.name === 'none' && / 0px 0px [1-9]\d*px/.test(m.shadow), `Reduce Motion: ${JSON.stringify(m)}`);
         else assert(m.name === 'cm-glow' && m.dur === '2.4s', `glow: ${JSON.stringify(m)}`);
         // The TONIGHT tile: its own pulse and sweep with motion, still with Reduce Motion (not changed by this zip).
         if (reduce) assert(tile.every((x) => x === 'none'), `tile ${tile}`);

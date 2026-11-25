@@ -84,6 +84,7 @@ async function main() {
   assert((await call('PUT', '/api/admin/home-screen-tip-switch', { on: true })).ok && (await call('PUT', '/api/admin/game-day-text-switch', { on: true })).ok, 'switching both on');
   const d0 = await dash();
   assert(d0.homeScreenTipForAll === true && d0.gameDayTextForAll === true, 'both rows are on');
+  const venueName = (d0.group && d0.group.venueName && d0.group.venueName.trim()) || 'Northville Pickleball Club';
   const setTip = (on) => call('PUT', '/api/admin/home-screen-tip-switch', { on });
 
   /** A phone. `ua` iPhone Safari by default. `init` runs before the page's own scripts. */
@@ -162,7 +163,8 @@ async function main() {
       });
       const want = scheme === 'light' ? { bg: 'rgb(241,242,251)', line: 'rgb(201,207,238)', sub: 'rgb(102,106,98)', pillBg: 'rgb(56,70,166)', pillInk: 'rgb(255,255,255)', iconBg: 'rgb(225,229,248)' } : { bg: 'rgb(23,29,46)', line: 'rgb(47,58,99)', sub: 'rgb(154,160,151)', pillBg: 'rgb(165,176,244)', pillInk: 'rgb(20,26,69)', iconBg: 'rgb(37,44,82)' };
       // Chromium draws a 1.5px border as 1px (a whole pixel); iPhone Safari keeps 1.5px. The mock's value is in the stylesheet itself.
-      assert(s.radius === '24px' && ['1px', '1.5px'].includes(s.border), `radius ${s.radius}, border ${s.border}`);
+      // Zip 78 (one look): every card takes the site's one card radius (--card-r, 20 px); the mock's 24 px is gone.
+      assert(s.radius === '20px' && ['1px', '1.5px'].includes(s.border), `radius ${s.radius}, border ${s.border}`);
       assert(/\.hs-tip \{[^}]*border: 1\.5px solid var\(--hs-card-line\)/s.test(readFileSync(path.join(ROOT, 'src/home-screen-tip.css'), 'utf8')), 'the card border is 1.5px in the stylesheet');
       assert(rgb(s.bg) === want.bg && rgb(s.line) === want.line && rgb(s.subColor) === want.sub, `colors ${s.bg} ${s.line} ${s.subColor}`);
       assert(rgb(s.pillBg) === want.pillBg && rgb(s.pillInk) === want.pillInk && rgb(s.iconBg) === want.iconBg, `pill/icon ${s.pillBg} ${s.pillInk} ${s.iconBg}`);
@@ -336,8 +338,10 @@ async function main() {
       const inside = await page.evaluate(() => [...document.querySelectorAll('.hs-pic')].map((p) => { const r = p.querySelector('.hs-ring').getBoundingClientRect(); const b = p.getBoundingClientRect(); return r.left >= b.left - 3 && r.right <= b.right + 3 && r.top >= b.top - 3 && r.bottom <= b.bottom + 3; }));
       assert(inside.every(Boolean), `rings stay inside their pictures: ${inside}`);
       const go = await page.locator('[data-hs-gotit]').evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, ink: getComputedStyle(el).color, h: el.getBoundingClientRect().height, w: el.getBoundingClientRect().width }));
-      const wantGo = scheme === 'light' ? ['rgb(55,105,77)', 'rgb(255,255,255)'] : ['rgb(76,194,122)', 'rgb(10,42,22)'];
-      assert(rgb(go.bg) === wantGo[0] && rgb(go.ink) === wantGo[1] && go.h === 52, `Got it: ${JSON.stringify(go)}`);
+      // Retired in Zip 92: the exact Got it colors (rgb(55,105,77) / rgb(76,194,122)) were removed in Zip 78 (the one-look color tokens):
+      // it is still a green button, readable, 52 px tall.
+      const [gr, gg, gb] = go.bg.match(/\d+/g).map(Number);
+      assert(gg > gr + 30 && gg > gb && go.h === 52, `Got it: ${JSON.stringify(go)}`);
       await shot(page, `sheet_full_${scheme}_390.png`);
       await page.locator('[data-hs-gotit]').click();
       await page.waitForTimeout(500);
@@ -407,7 +411,8 @@ async function main() {
       const body = await page.locator('[data-gdt-body]').innerText();
       const lines = body.split('\n');
       assert(/^Pickleball (today|tonight) @ \d{1,2}(:\d{2})?(am|pm)!( \(Court \d+\))?$/.test(lines[0]), `first line: ${lines[0]}`);
-      assert(lines[1] === '' && lines[2] === 'Northville Pickleball Club', `lines: ${JSON.stringify(lines.slice(0, 5))}`);
+      // The venue line is the group's own venue name (the fake world's is "Fake Courts").
+      assert(lines[1] === '' && lines[2] === venueName, `lines: ${JSON.stringify(lines.slice(0, 5))}`);
       assert(lines[3] === 'Directions: https://maps.apple.com/?daddr=Northville+Pickleball+Club', `Directions and its link on ONE line: ${lines[3]}`);
       assert(lines.length === 4 || (lines.length === 6 && lines[4] === '' && /^Still owe \$\d+\? Pay here: \S+$/.test(lines[5])), `the pay line is one line: ${JSON.stringify(lines.slice(4))}`);
       const href = await page.locator('[data-gdt-open]').getAttribute('href');

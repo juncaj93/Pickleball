@@ -4,7 +4,7 @@
  *
  * The world is built as of Sun Nov 15 2026, 8:00 PM Eastern; the clock is Mon Nov 16, 10:00 AM. "Drop test" (7:00 PM: Parker paid $14, Quinn,
  * Sage, Christopher Vanderberg) and "Back in test" (8:00 PM: Rowan, Reese, Sage, Christopher Vanderberg) are inside their 12 hours.
- *   D1  F-16, the dialog checks at the tap (390, 360, 320; light and dark): Parker's Drop out says "you still owe $14"; with it open, Rowan is put
+ *   D1  F-16, the dialog checks at the tap (390, 360, 320; light and dark): Parker's Drop out says "Your $14 stays on this game" (Zip 76; he paid); with it open, Rowan is put
  *       in (5 in); Drop out: nothing is dropped, the dialog stays with "This just changed." and "your $14 comes back as credit"; Stay in closes it.
  *   D2  F-16, the server checks at the send: Drop out matches, then Rowan comes in during the 5-second Undo: the drop is refused, the dialog
  *       opens again with the real words; Drop out then: "You dropped out. $14 back as credit."
@@ -142,6 +142,8 @@ async function main() {
     return dlg;
   };
   const OWES = 'If no one takes your spot, you still owe $14.';
+  // Zip 76 (MUST 2): Parker already paid his $14, so his late Drop out says it stays on the game (never "you still owe"); Quinn (not paid) keeps OWES.
+  const STAYS = 'Your $14 stays on this game unless someone takes your spot.';
   const BACK = 'Enough players are still in, so your $14 comes back as credit.';
 
   // ---------------------------------------------------------------- D1: the dialog checks at the tap
@@ -151,13 +153,13 @@ async function main() {
         const { ctx, page } = await playerPage('Parker', { width, scheme });
         const dlg = await openDrop(page);
         const before = flat(await dlg.innerText());
-        assert(before.includes(OWES) && !before.includes('This just changed'), `before: ${before}`);
+        assert(before.includes(STAYS) && !before.includes('This just changed'), `before: ${before}`);
         await rowan('confirm'); // another phone: Rowan is in, 5 in
         await dlg.locator('.btn-row button', { hasText: 'Drop out' }).click();
         await page.locator('dialog.sheet[open] [data-drop-changed]').waitFor({ timeout: 8000 });
         await page.waitForTimeout(400);
         const after = flat(await page.locator('dialog.sheet[open]').first().innerText());
-        assert(after.includes('This just changed.') && after.includes(BACK) && !after.includes(OWES), `after: ${after}`);
+        assert(after.includes('This just changed.') && after.includes(BACK) && !after.includes(STAYS), `after: ${after}`);
         assert((await page.locator('.toast, [role="status"]').filter({ hasText: "You’re out" }).count()) === 0, 'no "You\'re out" toast');
         const weight = await page.locator('dialog.sheet[open] [data-drop-changed]').evaluate((el) => Number(getComputedStyle(el).fontWeight));
         assert(weight >= 600, `"This just changed." is bold (${weight})`);
@@ -252,7 +254,7 @@ async function main() {
   await check('D2 the money changed during the 5-second Undo: the server drops nothing, the dialog comes back with the real words; then the drop', async () => {
     const { ctx, page } = await playerPage('Parker');
     const dlg = await openDrop(page);
-    assert(flat(await dlg.innerText()).includes(OWES), 'starts at "you still owe $14"');
+    assert(flat(await dlg.innerText()).includes(STAYS), 'starts at "Your $14 stays on this game"');
     await dlg.locator('.btn-row button', { hasText: 'Drop out' }).click();
     await page.locator('.toast').filter({ hasText: "You’re out" }).first().waitFor({ timeout: 8000 }).catch(async () => {
       throw new Error(`no first toast: ${JSON.stringify(await page.locator('.toast').allInnerTexts())} dialogs ${await page.locator('dialog.sheet[open]').count()}`);

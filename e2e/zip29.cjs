@@ -460,7 +460,9 @@ async function main() {
             assert(X && X.badge, `${label}: no badge`);
             const cx = X.badge.x + X.badge.w / 2;
             const cy = X.badge.y + X.badge.h / 2;
-            assert(Math.abs(cx - X.tile.r) <= 3 && Math.abs(cy - X.tile.y) <= 3, `${label}: badge center ${cx.toFixed(1)},${cy.toFixed(1)} vs corner ${X.tile.r.toFixed(1)},${X.tile.y.toFixed(1)}`);
+            // Zip 92 (🎾91's audit): on game day the badge moved 4 px out (top/right -17, was -13) so it clears the end of TOMORROW.
+            const off = Math.abs(cx - X.tile.r) <= 3 && Math.abs(cy - X.tile.y) <= 3 ? 0 : 4;
+            assert(Math.abs(cx - X.tile.r - off) <= 3 && Math.abs(cy - X.tile.y + off) <= 3, `${label}: badge center ${cx.toFixed(1)},${cy.toFixed(1)} vs corner ${X.tile.r.toFixed(1)},${X.tile.y.toFixed(1)}`);
             assert(X.hit.every(Boolean), `${label}: something sits on top of the badge: ${X.hit}`);
             assert(X.badgeClippers.length === 0, `${label}: clipped by ${X.badgeClippers.join(' | ')}`);
             assert(parseFloat(X.badgeBorder) >= 2.5, `${label}: the ring is ${X.badgeBorder}`);
@@ -585,24 +587,25 @@ async function main() {
             const len = c.querySelector('[data-card-length]');
             const time = c.querySelector('[data-card-time]');
             const paid = c.querySelector('[data-paid-cell]');
-            const dol = c.querySelector('.r2-dol');
-            const txt = c.querySelector('.r2-paid-text');
+            // Zip 86: the money cell is the foot's "x of y paid" button (.r86-paid): a check mark when all paid, else "$".
+            const dol = c.querySelector('.r86-paid-mark');
+            const txt = c.querySelector('.r86-paid-text');
             const cj = c.querySelector('[data-court-joined]');
             const dir = c.querySelector('[data-court-directions]');
             const cancel = c.querySelector('[data-cancel-by]');
             const foot = c.querySelector('[data-r2-foot]');
-            const half = cj && cj.querySelector('[data-court-num]');
+            // Zip 86: the court button and the Directions button are two buttons in the card's foot (no more "Court 13 | arrow" in one).
             return {
               id,
-              btnLook: cj ? { border: getComputedStyle(cj).borderTopColor, width: getComputedStyle(cj).borderTopWidth, h: R(cj).h, dividerColor: getComputedStyle(dir).borderLeftColor, dividerWidth: getComputedStyle(dir).borderLeftWidth, color: getComputedStyle(half).color, arrow: getComputedStyle(dir).color } : null,
+              btnLook: cj && dir ? { bg: getComputedStyle(cj).backgroundColor, color: getComputedStyle(cj).color, h: R(cj).h, dirBg: getComputedStyle(dir).backgroundColor, arrow: getComputedStyle(dir).color, dirH: R(dir).h } : null,
               stacked: getComputedStyle(c.querySelector('.scard-tilecol')).flexDirection === 'row',
               cardW: R(c).w - 24,
               len: len ? { text: len.textContent, size: parseFloat(rgb(len, 'fontSize')), weight: rgb(len, 'fontWeight'), color: rgb(len, 'color'), r: R(len) } : null,
               time: time ? { size: parseFloat(rgb(time, 'fontSize')), weight: rgb(time, 'fontWeight'), color: rgb(time, 'color') } : null,
               paid: paid
-                ? { state: paid.getAttribute('data-paid-state'), text: txt.textContent, hasCheck: !!dol.querySelector('svg'), dolText: dol.textContent, dolBg: rgb(dol, 'backgroundColor'), dolW: R(dol).w, dolH: R(dol).h, txtColor: rgb(txt, 'color'), txtSize: parseFloat(rgb(txt, 'fontSize')), rem: parseFloat(root.fontSize), ink: rgb(txt, 'color') }
+                ? { state: paid.getAttribute('data-paid-state'), text: txt.textContent, hasCheck: !!dol.querySelector('svg'), dolText: dol.textContent, dolBg: rgb(dol, 'backgroundColor'), dolW: R(dol).w, dolH: R(dol).h, txtColor: rgb(txt, 'color'), txtSize: parseFloat(rgb(txt, 'fontSize')), rem: parseFloat(root.fontSize), ink: rgb(txt, 'color'), cardBg: rgb(c, 'backgroundColor') }
                 : null,
-              court: cj ? { text: cj.querySelector('[data-court-num]').textContent.trim(), href: dir.getAttribute('href'), target: dir.getAttribute('target'), r: R(cj), cell: R(cj.closest('.r2-cell')) } : null,
+              court: cj ? { text: cj.textContent.trim(), href: dir && dir.getAttribute('href'), target: dir && dir.getAttribute('target'), r: R(cj), cell: R(cj.closest('[data-r2-foot]')) } : null,
               cancelBy: !!cancel,
               foot: foot ? R(foot) : null,
               primary: root.getPropertyValue('--primary').trim(),
@@ -628,38 +631,39 @@ async function main() {
           assert(tonight.court.href === playerDirections && tonight.court.target === '_blank', `directions ${tonight.court.href} vs player ${playerDirections}`);
           assert(tonight.court.r.x >= tonight.court.cell.x - 0.5 && tonight.court.r.r <= tonight.court.cell.r + 0.5, `the button runs out of its cell: ${JSON.stringify(tonight.court.r)} cell ${JSON.stringify(tonight.court.cell)}`);
           assert(!tonight.cancelBy, 'a clock next to the court button');
-          // Zip 29 (Alex): the soft periwinkle outline of the player card's buttons (same color and 1 px), the deep blue words, the same 32 px height.
-          const pl = playerBtnLook[scheme];
+          // Zip 86 (picture 10): the court button and the Directions button are two soft blue 44 px buttons side by side (was one 32 px
+          // periwinkle-outlined "Court 13 | arrow" button like the player card's).
           const bl = tonight.btnLook;
-          assert(bl.border === pl.border && bl.width === pl.width, `outline ${bl.border} ${bl.width} vs the player's ${pl.border} ${pl.width}`);
-          assert(bl.dividerColor === pl.border && bl.dividerWidth === pl.width, `divider ${bl.dividerColor} ${bl.dividerWidth}`);
-          assert(bl.color === pl.color && bl.arrow === pl.color, `words ${bl.color}, arrow ${bl.arrow} vs the player's ${pl.color}`);
-          assert(Math.abs(bl.h - 32) <= 0.6, `height ${bl.h}`);
+          assert(bl, 'no Court and Directions buttons');
+          assert(bl.bg === bl.dirBg && bl.color === bl.arrow && bl.bg !== 'rgba(0, 0, 0, 0)', `court ${bl.bg} ${bl.color} vs directions ${bl.dirBg} ${bl.arrow}`);
+          assert(bl.h >= 43.5 && bl.dirH >= 43.5, `heights ${bl.h} / ${bl.dirH}`);
           for (const c of cards) {
             const s = sessions.find((x) => x.id === c.id);
             if (s.courtNum !== undefined) assert(c.court && c.court.text === `Court ${s.courtNum}`, `${c.id.slice(0, 8)}: court ${s.courtNum} but button ${c.court && c.court.text}`);
-            else assert(!c.court, `${c.id.slice(0, 8)}: a court button on a game with no court number`);
+            // (Zip 86 round 2: a game with no court number may show the gray "Court ?" picker button; it never says a court number.)
+          else assert(!c.court, `${c.id.slice(0, 8)}: a court button on a game with no court number`);
           }
           assert(cards.every((c) => !(c.cancelBy && c.court)), 'a clock and a court button in one cell');
         });
-        await check(`item 4a (${tag}): a game with no court number keeps its footer cell exactly as before (empty after the cancel-by time, Book where a court is needed)`, async () => {
+        // Zip 86: the foot is one row (x of y paid, then Book or the court button, then Directions); the cancel-by time is a line in the card.
+        await check(`item 4a (${tag}): a game with no court number has no court number in its foot (Book where a court is needed)`, async () => {
           const cell = await page.evaluate(
             ([quiet, needs]) => {
               const one = (id) => {
                 const c = document.getElementById(`session-${id}`);
-                const end = c && c.querySelector('.r2-endcell');
-                return end ? { joined: !!end.querySelector('[data-court-joined]'), clock: !!end.querySelector('[data-cancel-by]'), book: !!end.querySelector('[data-court-need]'), text: end.textContent.trim() } : null;
+                const end = c && c.querySelector('[data-r2-foot]');
+                return end ? { joined: !!end.querySelector('[data-court-joined]'), clock: !!c.querySelector('[data-cancel-by]'), book: !!end.querySelector('[data-court-need]'), text: [...end.querySelectorAll('.r86-court')].map((b) => b.textContent.trim()).join('') } : null;
               };
               return { quiet: one(quiet), needs: one(needs) };
             },
             [world.paidAllId, world.needsCourtId],
           );
           // The 9:30 PM game: its cancel-by time (9:30 AM today) has passed and it has no court number: nothing in the cell, as on main.
-          assert(cell.quiet && !cell.quiet.joined && !cell.quiet.clock && !cell.quiet.book && cell.quiet.text === '', `no-court game cell: ${JSON.stringify(cell.quiet)}`);
+          assert(cell.quiet && !cell.quiet.joined && !cell.quiet.clock && !cell.quiet.book && !/\d/.test(cell.quiet.text), `no-court game cell: ${JSON.stringify(cell.quiet)}`);
           // Thu 12's game still needs its court booked: the Book button stays, no court button.
           assert(cell.needs && !cell.needs.joined && cell.needs.book, `court-needed game cell: ${JSON.stringify(cell.needs)}`);
         });
-        await check(`item 4b (${tag}): money cell: all paid is a green check with plain text, anyone owing is an amber $ with amber text, same size as before`, async () => {
+        await check(`item 4b (${tag}): money cell: all paid is a green check, anyone owing is a gray $ (Zip 86), the 24 px mark`, async () => {
           const withPaid = cards.filter((c) => c.paid);
           const owed = withPaid.filter((c) => c.paid.state === 'owed');
           const all = withPaid.filter((c) => c.paid.state === 'all');
@@ -677,20 +681,14 @@ async function main() {
             const [a, b] = p.text.split(' of ').map(Number);
             assert(a < b, `owed but ${p.text}`);
           }
-          // Amber vs green are different hues: red above blue and green clearly above blue for amber; green circle: green well above red.
+          // Zip 86 (picture 10): the owed mark is a soft gray "$" (was amber), the all-paid mark a green check; the words are plain ink on both.
           const dolOwed = parseRgb(owed[0].paid.dolBg);
           const dolAll = parseRgb(all[0].paid.dolBg);
-          assert(dolOwed[0] > dolOwed[2] + 60 && dolOwed[1] > dolOwed[2] + 30, `owed circle is not amber: ${owed[0].paid.dolBg}`);
+          assert(Math.max(...dolOwed) - Math.min(...dolOwed) <= 40, `owed circle is not gray: ${owed[0].paid.dolBg}`);
           assert(dolAll[1] > dolAll[0] + 30, `all-paid circle is not green: ${all[0].paid.dolBg}`);
-          const txtOwed = parseRgb(owed[0].paid.txtColor);
-          assert(contrast(txtOwed, parseRgb('rgb(255,255,255)')) !== 0 && txtOwed[0] > txtOwed[2], `owed text is not amber/brown: ${owed[0].paid.txtColor}`);
-          assert(all[0].paid.txtColor !== owed[0].paid.txtColor, 'all-paid text is amber too');
-          // Same size as before: circle 1.3125rem (21 px at 100%), text 0.86rem.
-          const rem = owed[0].paid.rem;
-          for (const c of withPaid) {
-            assert(Math.abs(c.paid.dolW - 1.3125 * rem) <= 0.6 && Math.abs(c.paid.dolH - 1.3125 * rem) <= 0.6, `circle ${c.paid.dolW}x${c.paid.dolH} vs ${1.3125 * rem}`);
-            assert(Math.abs(c.paid.txtSize - 0.86 * rem) <= 0.4, `text ${c.paid.txtSize} vs ${0.86 * rem}`);
-          }
+          // Retired in Zip 92: the amber "owed" words were removed in Zip 86 (both states use the ink color now).
+          // The mark is 24 px (Zip 86; was 1.3125rem).
+          for (const c of withPaid) assert(Math.abs(c.paid.dolW - 24) <= 0.6 && Math.abs(c.paid.dolH - 24) <= 0.6, `circle ${c.paid.dolW}x${c.paid.dolH} vs 24`);
         });
         await check(`money cards (${tag}): one card, "Who hasn't paid": Mark paid next to Request or Text on every row, Remind on every game, the second card is gone, nothing cut off`, async () => {
           const m = await page.evaluate(() => ({
@@ -756,7 +754,7 @@ async function main() {
     await page.locator('[data-r2-card]').first().waitFor({ timeout: 20000 });
     // Games from an earlier day live in History: tap the row to open its card in the sheet.
     await page.locator('.tabbar button, .tabbar a', { hasText: /^History$/ }).first().click();
-    await page.locator('main button', { hasText: /^Sessions$/ }).first().click();
+    await page.locator('main button', { hasText: /^Games$/ }).first().click(); // History's "Sessions" tab is "Games" now
     let row = page.locator(`li[data-session="${world.pastCourtId}"] .history-row`);
     if ((await row.count()) === 0) await page.locator('main button', { hasText: /^Show older$/ }).first().click().catch(() => {});
     row = page.locator(`li[data-session="${world.pastCourtId}"] .history-row`);

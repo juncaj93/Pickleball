@@ -524,8 +524,8 @@ async function main() {
   for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [320, 'light'], [320, 'dark']]) {
     await check(`a canceled game under LATER is a flat row like the others (${width} px, ${scheme}): no box, thin line, same margins, label unchanged`, async () => {
       const p = await openPlayer('Jordan', { width, scheme, filter: 'all' });
-      // Today's Home lists the first six games and keeps the rest behind "More sessions (N)": open it.
-      await p.page.locator('main button.btn.ghost.block', { hasText: /More sessions/ }).first().click();
+      // Today's Home lists the first six games and keeps the rest behind "More games (N)": open it.
+      await p.page.locator('main button.btn.ghost.block', { hasText: /More games/ }).first().click();
       await p.page.waitForTimeout(500);
       if (await p.page.evaluate(() => document.documentElement.hasAttribute('data-card-cleanup'))) {
         // Zip 10 "Card cleanup" (on in the fake world): every LATER game is a small tinted card, the canceled one too, lined up with the others.
@@ -573,25 +573,25 @@ async function main() {
 
   // ---------------------------------------------------------------- HOME_COLLAPSE
   const laterIds = (d) => d.sessions.filter((s) => s.startsAt > '2026-11-16').map((s) => s.id);
-  await check('switch off: Home still shows its LATER list and "More sessions (N)" with a number', async () => {
+  await check('switch off: Home still shows its LATER list and "More games (N)" with a number', async () => {
     const p = await openPlayer('Jordan', { filter: 'all' });
-    const label = (await p.page.locator('main button.btn.ghost.block', { hasText: /More sessions/ }).first().innerText()).trim();
-    assert(/^More sessions \(\d+\)$/.test(label), `label: ${label}`);
-    await p.page.locator('main button.btn.ghost.block', { hasText: /More sessions/ }).first().click();
+    const label = (await p.page.locator('main button.btn.ghost.block', { hasText: /More games/ }).first().innerText()).trim();
+    assert(/^More games \(\d+\)$/.test(label), `label: ${label}`);
+    await p.page.locator('main button.btn.ghost.block', { hasText: /More games/ }).first().click();
     await p.page.waitForTimeout(400);
     assert((await p.page.locator('.schedule > .sched[data-tier="later"]').count()) > 0, 'later rows show after the old button is tapped');
     assert((await p.page.locator('[data-later-toggle]').count()) === 0, 'no new button');
     await p.ctx.close();
   });
   for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [320, 'light'], [320, 'dark']]) {
-    await check(`HOME_COLLAPSE on (${width} px, ${scheme}): only this and next week; one "More sessions" button with no number; collapsed again after a reload`, async () => {
+    await check(`HOME_COLLAPSE on (${width} px, ${scheme}): only this and next week; one "More games" button with no number; collapsed again after a reload`, async () => {
       const p = await openPlayer('Jordan', { width, scheme, filter: 'all', query: '?homecollapse=on' });
       const tiers = await p.page.locator('.schedule > .sched').evaluateAll((els) => els.map((e) => e.getAttribute('data-tier')));
       assert(tiers.length > 0 && tiers.every((t) => t === 'this' || t === 'next'), `only this and next week: ${tiers}`);
       assert((await p.page.locator('.week-break.tier-later').count()) === 0, 'no LATER header');
       const btn = p.page.locator('[data-later-toggle]');
       assert((await btn.count()) === 1, 'exactly one button');
-      assert((await btn.innerText()).trim() === 'More sessions', `label: ${await btn.innerText()}`);
+      assert((await btn.innerText()).trim() === 'More games', `label: ${await btn.innerText()}`);
       assert((await btn.getAttribute('aria-expanded')) === 'false', 'starts collapsed');
       await btn.scrollIntoViewIfNeeded();
       await shot(p.page, `collapse-closed-${width}-${scheme}`);
@@ -606,7 +606,7 @@ async function main() {
       await btn.click();
       await p.page.waitForTimeout(400);
       assert((await p.page.locator('.schedule > .sched[data-tier="later"]').count()) === 0, 'Show fewer folds them again');
-      assert((await btn.innerText()).trim() === 'More sessions', 'label back');
+      assert((await btn.innerText()).trim() === 'More games', 'label back');
       await btn.click();
       await p.page.reload();
       await p.page.locator('.schedule article').first().waitFor();

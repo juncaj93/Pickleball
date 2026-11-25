@@ -70,7 +70,7 @@ async function main() {
     const page = await ctx.newPage();
     await page.goto(BASE + query);
     await page.locator('.schedule article, .empty-mine').first().waitFor();
-    const more = page.getByRole('button', { name: /^More sessions/ });
+    const more = page.getByRole('button', { name: /^More games/ }); // "More sessions" is "More games" now
     if (await more.count()) {
       await more.click();
       await page.waitForTimeout(200);
@@ -406,6 +406,12 @@ async function main() {
     }
     return gear.first();
   }
+  /** Open a game's sheet from its card: Zip 87 took the Players row off the gear menu (the card's "x of y paid" pill opens it). */
+  async function openSheet(page, gear, rowName) {
+    if (rowName === 'Players') return gear.locator('xpath=ancestor::article[1]').locator('[data-paid-cell]').first().click();
+    await gear.click();
+    await page.locator('.menu-pop').getByRole('menuitem', { name: new RegExp(`^${rowName}`) }).first().click();
+  }
   const goTab = async (page, label) => {
     await page.locator('nav.tabbar').getByRole('button', { name: new RegExp(`^${label}`) }).click();
     await page.waitForTimeout(450);
@@ -455,8 +461,7 @@ async function main() {
         const a = await openAdmin(l.width, l.scheme, l.pct);
         const gear = (await gearBtn(a.page));
         await gear.scrollIntoViewIfNeeded();
-        await gear.click();
-        await a.page.locator('.menu-pop').getByRole('menuitem', { name: new RegExp(`^${rowName}`) }).first().click();
+        await openSheet(a.page, gear, rowName);
         await a.page.locator('dialog[open]').waitFor();
         await a.page.waitForTimeout(500);
         const probs = [...(await a.page.evaluate(audit, { scope: 'dialog[open]', allowEllipsis: ELLIPSIS_OK })), ...(await a.page.evaluate(sheetReach)), ...(await a.page.evaluate(midWordBreaks, { sel: 'dialog[open] h2, dialog[open] button, dialog[open] label, dialog[open] p', skipWordsLongerThan: 18 }))];
@@ -495,8 +500,7 @@ async function main() {
           const o = await openAdmin(ctxOpts.width, 'light', pct, ctxOpts.extra);
           const gear = (await gearBtn(o.page));
           await gear.scrollIntoViewIfNeeded();
-          await gear.click();
-          await o.page.locator('.menu-pop').getByRole('menuitem', { name: new RegExp(`^${rowName}`) }).first().click();
+          await openSheet(o.page, gear, rowName);
           await o.page.locator('dialog[open]').waitFor();
           await o.page.waitForTimeout(450);
           bad.push(...(await o.page.evaluate(sheetReach)).map((x) => `${rowName}: ${x}`));

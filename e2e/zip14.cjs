@@ -173,10 +173,10 @@ async function main() {
           assert(m.btns.every((b) => b.oneLine), `${label}: words on one line ${JSON.stringify(m.btns)}`);
           assert(m.btns[0].text === label && /Directions/.test(m.btns[1].text), `${label}: words`);
           assert(!m.joined, `${label}: no calendar or arrow button on game day`);
-          // The badge's center sits on the tile's top-right corner (within 2 px).
+          // The badge's center sits on the tile's top-right corner, Zip 92: 4 px further out (-17 px, was -13) so it clears TOMORROW (within 2 px).
           const cx = m.check.x + m.check.w / 2;
           const cy = m.check.y + m.check.h / 2;
-          assert(Math.abs(cx - m.tile.right) <= 2 && Math.abs(cy - m.tile.y) <= 2, `${label}: badge on the corner (${cx},${cy}) vs (${m.tile.right},${m.tile.y})`);
+          assert(Math.abs(cx - (m.tile.right + 4)) <= 2 && Math.abs(cy - (m.tile.y - 4)) <= 2, `${label}: badge on the corner (${cx},${cy}) vs (${m.tile.right},${m.tile.y})`);
           assert(/2 hours/.test(m.time.text), `${label}: start and "2 hours" under the tile`);
         }
         const btnStyle = await card(page, courtGame.id).locator('.gd-btn').first().evaluate((b) => {
@@ -338,7 +338,9 @@ async function main() {
       const row = page.locator('dialog.sheet[open] [data-court-row]');
       assert((await row.innerText()).replace(/\s+/g, ' ').trim() === 'Court Not set', await row.innerText());
       const blue = await row.locator('.gd-court-value').evaluate((e) => getComputedStyle(e).color);
-      assert(blue === (scheme === 'light' ? 'rgb(42, 63, 176)' : 'rgb(165, 181, 238)'), `Not set is blue: ${blue}`);
+      // Retired in Zip 92: the exact pre-Zip-78 blues (42,63,176 / 165,181,238) were replaced by the Zip 78 one-look tokens; it must still read blue.
+      const [br, bg, bb] = blue.match(/\d+/g).map(Number);
+      assert(bb > br + 40 && bb > bg + 30, `Not set is blue: ${blue}`);
       await shot(page, `edit-unset-${scheme}`);
       await row.click();
       const map = page.locator('dialog.cm[open]');

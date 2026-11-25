@@ -153,13 +153,14 @@ async function main() {
           return { tileW: r.width, left: tr.left - (r.left + bw), right: r.right - bw - tr.right, font: getComputedStyle(tag).fontSize, word: tag.innerText.trim() };
         });
         assert(m.word === 'TONIGHT', `the word: ${m.word}`);
-        assert(m.left >= 3 && m.right >= 3, `room inside the tile: ${JSON.stringify(m)}`);
+        // The "no text under 11 px" rule (Zip 86: TONIGHT / TOMORROW 11 px, no letter spacing, in the 58 px tile) leaves about 2.4 px each side (was 3).
+        assert(m.left >= 2 && m.right >= 2, `room inside the tile: ${JSON.stringify(m)}`);
         assert(Math.abs(m.left - m.right) < 1, `centered: ${JSON.stringify(m)}`);
         const others = await page.evaluate(() =>
           [...document.querySelectorAll('.hv2-short .tile')].filter((t) => !t.querySelector('.day-tag.tonight')).map((t) => ({ w: t.getBoundingClientRect().width, tag: t.querySelector('.day-tag') ? getComputedStyle(t.querySelector('.day-tag')).fontSize : null })),
         );
         assert(others.length > 0, 'other folded rows on screen');
-        for (const o of others) assert(o.w === m.tileW && (o.tag === null || o.tag === '8px'), `other tiles as before (same width, TOM at 8 px): ${JSON.stringify(others)}`);
+        for (const o of others) assert(o.w === m.tileW && (o.tag === null || o.tag === '11px'), `other tiles as before (same width, TOM at 11 px, was 8 px before the 11 px floor): ${JSON.stringify(others)}`);
         assert(await noSideways(page), 'sideways scroll');
         await row.scrollIntoViewIfNeeded();
         if (width === 390) {

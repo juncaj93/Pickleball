@@ -142,8 +142,8 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 4));
-    // (Zip 35's Tap guard fix, Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit on top of it.)
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'tournamentsAll' && k !== 'moneyNoteAll' && k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 4));
+    // (Zip 35's Tap guard fix, Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit on top of it. The Tournaments and Money change note rows are newer still.)
     assert(first[0] === 'tapGuardFixAll' && first[1] === 'extendedTimeAll' && first[2] === 'checkInPayAll' && first[3] === 'playersSheetRedoAll', `newest first: ${first}`);
     const r = page.locator('[data-row="playersSheetRedoAll"]');
     assert(/Players sheet redo/.test(await r.innerText()), 'row label');
@@ -518,7 +518,7 @@ async function main() {
     for (const scheme of ['light', 'dark']) {
       const { ctx, page } = await openAdmin({ scheme });
       await page.getByRole('button', { name: 'History' }).click();
-      await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+      await page.getByRole('button', { name: 'Games', exact: true }).click(); // History's "Sessions" tab is "Games" now
       const rows = page.locator('ul.history-list button.history-row');
       const texts = [];
       for (let i = 0; i < (await rows.count()); i++) texts.push(await rows.nth(i).innerText());

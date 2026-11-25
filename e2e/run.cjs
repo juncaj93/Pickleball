@@ -1687,7 +1687,7 @@ async function main() {
       const p = players.Casey;
       await p.reload();
       await p.locator('.schedule article').first().waitFor();
-      const more = p.getByRole('button', { name: /^More sessions/ });
+      const more = p.getByRole('button', { name: /^More games/ });
       if (await more.count()) await more.click();
       const rows = p.locator('.schedule article').filter({ has: p.locator('.sched-status[data-court="later"], .sched-status[data-court="needs"]') });
       const pick = rows.filter({ has: p.getByRole('button', { name: "I’m in", exact: true }) }).last();
@@ -2302,7 +2302,7 @@ async function main() {
       await tab(admin, 'Players').click();
       await admin.context().route('https://venmo.com/**', (r) => r.abort());
       const refund = admin.locator(`[data-credit-refund="${payer}"]`);
-      assert(/amount=14&note=Pickleball%20credit%20refund$/.test(await refund.getAttribute('href')), `refund link ${await refund.getAttribute('href')}`);
+      assert(/amount=14&note=Pickleball%20cash%20out$/.test(await refund.getAttribute('href')), `refund link ${await refund.getAttribute('href')}`);
       await refund.click();
       await admin.locator(`[data-credit-mark="${payer}"]`).click();
       await admin.locator('.toast', { hasText: 'Credit cashed out' }).waitFor();
@@ -2513,7 +2513,7 @@ async function main() {
         await admin.locator('li.player-row[data-player="Frankie"]').getByText('Credit $14').waitFor();
         await admin.context().route('https://venmo.com/**', (r) => r.abort());
         const refund = admin.locator('[data-credit-refund="Frankie"]');
-        assert(/amount=14&note=Pickleball%20credit%20refund$/.test(await refund.getAttribute('href')), `refund link ${await refund.getAttribute('href')}`);
+        assert(/amount=14&note=Pickleball%20cash%20out$/.test(await refund.getAttribute('href')), `refund link ${await refund.getAttribute('href')}`);
         assert((await admin.locator('[data-credit-mark="Frankie"]').count()) === 0, 'Mark refunded only after Venmo was opened');
         await refund.click();
         await admin.locator('[data-credit-mark="Frankie"]').click();
@@ -3487,7 +3487,7 @@ async function main() {
       const pl = players.Alex;
       await pl.reload();
       await pl.locator('.schedule article').first().waitFor();
-      const more2 = pl.getByRole('button', { name: /^More sessions/ });
+      const more2 = pl.getByRole('button', { name: /^More games/ });
       if (await more2.count()) await more2.click();
       const prow = pl.locator('.schedule article[data-extra="yes"]');
       await prow.waitFor();
@@ -3687,7 +3687,7 @@ async function main() {
         await pl.goto(playerLink);
         await pl.getByRole('button', { name: 'Alex', exact: true }).click();
         await pl.locator('.schedule article').first().waitFor();
-        const more = pl.getByRole('button', { name: /^More sessions/ });
+        const more = pl.getByRole('button', { name: /^More games/ });
         if (await more.count()) await more.click();
         // Sign up for a plain later session (no holiday), so there's a calm signed-in card to measure.
         const joinable = pl.locator('.schedule article:not([data-extra]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I’m in" }) });
@@ -4312,15 +4312,15 @@ async function main() {
       assert(!/Blair.*(credit|refund)/i.test(html.replace(/\s+/g, ' ')), "Blair's credit leaked");
     });
 
-    await check('organizer Home: the refund request card first, with a green Refund that opens Venmo for $3 with the note "Pickleball credit refund"; Not now gives the credit back', async () => {
+    await check('organizer Home: the refund request card first, with a green Refund that opens Venmo for $3 with the note "Pickleball cash out"; Not now gives the credit back', async () => {
       await admin.reload();
       const card = admin.locator('[data-refund-request="Blair"]');
       await card.waitFor();
       assert(squash(await card.locator('h3').innerText()) === 'Blair asked to cash out $3', `title was "${await card.locator('h3').innerText()}"`);
       assert((await card.boundingBox()).y < (await admin.locator('[data-finalize]').first().boundingBox()).y, 'refund requests come before the Finalize cards');
       const link = card.locator('[data-refund-venmo]');
-      assert((await link.getAttribute('href')) === 'https://venmo.com/?txn=pay&amount=3&note=Pickleball%20credit%20refund', `web link ${await link.getAttribute('href')}`);
-      assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&amount=3&note=Pickleball%20credit%20refund', `app link ${await link.getAttribute('data-app-href')}`);
+      assert((await link.getAttribute('href')) === 'https://venmo.com/?txn=pay&amount=3&note=Pickleball%20cash%20out', `web link ${await link.getAttribute('href')}`);
+      assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&amount=3&note=Pickleball%20cash%20out', `app link ${await link.getAttribute('data-app-href')}`);
       assert((await link.getAttribute('aria-label')) === 'Pay Blair $3 with Venmo', 'Refund label');
       await card.getByText('No Venmo saved for Blair: pick them in Venmo.').waitFor();
       assert((await card.locator('[data-mark-refunded]').count()) === 0, 'Mark refunded only after Venmo was opened');

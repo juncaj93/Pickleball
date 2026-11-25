@@ -296,13 +296,20 @@ async function main() {
     let membership = 0;
     let after = 0;
     let games = 0;
+    // Zip 76: Totals also counts credit the organizer added by hand (Adjust credit: a cost in its month, the hand-credit row) and each ended
+    // tournament's result (made money lowers what you are out of pocket). The per game figure is the regular games only (no tournaments).
+    let hand = 0;
+    let tourn = 0;
     for (const m of [...months, '2026-11']) {
       const rw = (await moneyOf(m)).rework;
       membership += rw.membershipCents;
       after += rw.courtCostCents - rw.collectedCents;
       games += rw.courtSessions;
+      hand += rw.handCreditCents || 0;
+      tourn -= (rw.tournaments || []).reduce((a, t) => a + t.resultCents, 0);
     }
-    const out = membership + after;
+    const regular = membership + after + hand;
+    const out = regular + tourn;
     const sumRows = rows.reduce((a, r) => a + r.net, 0) + soNet;
     assert(out === sumRows, `server sum ${out} vs rows + So far ${sumRows}`);
     const n = months.length + 1;
@@ -313,7 +320,7 @@ async function main() {
     assert(r.rows['rt-out'].value === dollars(out), `out ${r.rows['rt-out'].value} vs ${dollars(out)}`);
     const avg = per(out, n);
     assert(r.rows['rt-average'].value === (avg < 0 ? `$${-avg} credit` : `$${avg}`), `avg ${r.rows['rt-average'].value} vs ${avg}`);
-    const pg = per(out, games);
+    const pg = per(regular, games);
     assert(r.perGame === (pg < 0 ? `$${-pg} credit` : `$${pg}`), `per game ${r.perGame} vs ${pg}`);
     assert(r.foot === 'Since Dec 2025', `a first month in an earlier year carries its year: ${r.foot}`);
     await ctx.close();
@@ -328,7 +335,8 @@ async function main() {
     await a.page.waitForTimeout(700);
     const sf = await a.page.locator('[data-card="so-far"]').getAttribute('data-card');
     assert(sf === 'so-far', 'So far card is there');
-    assert((await a.page.locator('[data-fold="running-total"] .tr-ln').count()) === 4, 'still open with rows');
+    // (4 rows, plus Zip 76's hand-credit and Tournaments rows when the world has them)
+    assert((await a.page.locator('[data-fold="running-total"] .tr-ln').count()) >= 4, 'still open with rows');
     const after = await readRt(a.page);
     assert(JSON.stringify(after.rows) === JSON.stringify(before.rows) && after.perGame === before.perGame && after.foot === before.foot, `unchanged\n${JSON.stringify(before.rows)}\n${JSON.stringify(after.rows)}`);
     await a.ctx.close();

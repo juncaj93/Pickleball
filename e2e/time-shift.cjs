@@ -217,7 +217,7 @@ async function main() {
       assert(info.times.every((t) => !t.startsWith('~')), `times ${info.times}`);
       assert(info.timeColors[1] === info.timeColors[2] && info.timeColors[0] !== info.timeColors[1], `muted vs bright ${info.timeColors}`);
       assert(new Set(info.outlines).size === 1 && /^solid /.test(info.outlines[0]), `booked, ~time and no-court tiles share one solid outline ${info.outlines}`);
-      if (scheme === 'dark') assert(/rgb\(139, 217, 163\)$|rgb\(142, 152, 143\)$/.test(info.outlines[0]), `dark outline is the row's mint (this week) or charcoal (next week, later) ${info.outlines[0]}`);
+      // Retired in Zip 92: the exact dark outline pixels (mint 139,217,163 / charcoal 142,152,143) were removed in Zip 78 (one-look tokens).
       assert(info.layers.every((n) => n === 0), `no status layers on player tiles ${info.layers}`);
       await page.screenshot({ path: path.join(SHOTS, `time-shift-player-${width}-${scheme}.png`), fullPage: true });
       // The 5-second refresh and a reload keep it.

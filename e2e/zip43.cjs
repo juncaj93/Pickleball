@@ -138,8 +138,10 @@ async function main() {
   const d0 = await dash();
   assert(d0.venueAlert === true && d0.venueAlerts.length === 2, `the preview world should have two cards, has ${JSON.stringify(d0.venueAlerts)}`);
 
+  // The cards name the group's own venue (Settings > Venue name, shared/venueAlert.ts); the fake world's venue is "Fake Courts".
+  const VENUE = (d0.group && d0.group.venueName && d0.group.venueName.trim()) || 'Northville Pickleball Club';
   const MEMBERSHIP = 'Membership should have been charged: $30';
-  const COURTS = 'Northville Pickleball Club should have charged you $96';
+  const COURTS = `${VENUE} should have charged you $96`;
 
   for (const scheme of ['light', 'dark']) {
     await check(`H1 (${scheme}, 390): the two amber cards are first on Home, with the mock's words, one button each, no Dismiss`, async () => {
@@ -151,7 +153,7 @@ async function main() {
       assert(first && first.y < 140, `the first card is not at the top: ${JSON.stringify(first)}`);
       const t0 = (await cards.nth(0).innerText()).replace(/\s+/g, ' ').trim();
       const t1 = (await cards.nth(1).innerText()).replace(/\s+/g, ' ').trim();
-      assert(t0 === `${MEMBERSHIP} Monthly membership, Northville Pickleball Mark paid`, `membership card: ${t0}`);
+      assert(t0 === `${MEMBERSHIP} Monthly membership, ${VENUE} Mark paid`, `membership card: ${t0}`);
       assert(t1 === `${COURTS} 2 games x $48 = $96 Mark paid`, `courts card: ${t1}`);
       for (let i = 0; i < 2; i++) {
         assert((await cards.nth(i).locator('button').count()) === 1, 'exactly one button');
@@ -210,7 +212,7 @@ async function main() {
     await call('POST', '/api/admin/venue-alert/paid', { keys: ['court:2026-10'], cents: 9600 });
     await page.reload();
     await page.locator('[data-venue-alerts]').waitFor();
-    assert((await text()) === `${MEMBERSHIP} Monthly membership, Northville Pickleball Mark paid`, `membership: ${await text()}`);
+    assert((await text()) === `${MEMBERSHIP} Monthly membership, ${VENUE} Mark paid`, `membership: ${await text()}`);
     // both on one day: membership on the last day too
     const d2 = new DatabaseSync(dbFile);
     d2.prepare("DELETE FROM task_log WHERE task LIKE 'venue_paid:%'").run();
@@ -218,7 +220,7 @@ async function main() {
     setDaysDirect(31, 0);
     await page.reload();
     await page.locator('[data-venue-alerts]').waitFor();
-    assert((await text()) === 'Northville Pickleball Club should have charged you $126 2 games x $48 = $96, plus membership $30 Mark paid', `combined: ${await text()}`);
+    assert((await text()) === `${VENUE} should have charged you $126 2 games x $48 = $96, plus membership $30 Mark paid`, `combined: ${await text()}`);
     assert((await page.locator('[data-venue-alerts] [data-alert-card="amber"]').count()) === 1, 'one combined card');
     await ctx.close();
   });

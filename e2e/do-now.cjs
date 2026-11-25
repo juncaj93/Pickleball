@@ -3,7 +3,7 @@
  *   - fits 360 to 430 px wide in light and dark, buttons at least 44 px tall, no sideways scroll
  *   - the cancel checklist updates as taps are made (Court canceled, Cancel the session)
  *   - the night-before text opens Messages with NO recipients, and the tap is saved on the server
- *   - Settings > Alerts has the Smart alerts switch and the TEST button
+ *   - Settings > Alerts has the Smart alerts switch and its test button (one "Send test" with round 3 on)
  * Fake group, fake clock: Mon Nov 2, 10:15 PM Eastern; Tue Nov 3 has 3 in and a booked court.
  *
  *   node e2e/do-now.cjs      (also run by npm run test:e2e)
@@ -189,13 +189,22 @@ async function main() {
     await ctx.close();
   });
 
-  await check('Settings > Alerts: the Smart alerts switch and a TEST button', async () => {
+  await check('Settings > Alerts: the Smart alerts switch and one "Send test" button', async () => {
     const { ctx, page } = await openHome();
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByText('Alerts', { exact: true }).first().click();
     await page.getByText(/Smart alerts/).first().waitFor();
-    assert(await page.locator('[data-smart-test]').isVisible(), 'TEST button');
-    assert(/TEST/.test(await page.locator('[data-smart-test]').innerText()), 'labeled TEST');
+    assert(await page.locator('[data-smart-test]').isVisible(), 'smart test button');
+    // With round 3 off the smart test button reads "Send smart test" (it said TEST); with round 3 on the test alert is ONE "Send test" button.
+    assert((await page.locator('[data-smart-test]').textContent()).trim() === 'Send smart test', `labeled ${await page.locator('[data-smart-test]').innerText()}`);
+    await page.goto(`${BASE}/admin?adminr2=on&adminr3=on`);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.locator('[data-smart-test]').waitFor({ state: 'attached' });
+    // The Alerts group may still be open from before: open it only if it is shut.
+    if (!(await page.locator('[data-smart-test]').isVisible())) await page.getByText('Alerts', { exact: true }).first().click();
+    await page.locator('[data-smart-test]').waitFor();
+    assert((await page.locator('[data-smart-test]').textContent()).trim() === 'Send test', `round 3 label ${await page.locator('[data-smart-test]').innerText()}`);
+    assert((await page.getByRole('button', { name: /test/i }).count()) === 1, 'round 3: one test button');
     await ctx.close();
   });
 

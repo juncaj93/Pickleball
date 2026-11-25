@@ -169,7 +169,8 @@ async function main() {
     assert((await page.locator('[data-row="timeShiftAll"]').count()) === 1, 'Moved-game notice in Schedule');
     assert((await page.locator('details[data-section="access"]').count()) === 1 && (await page.locator('details[data-section="pin"]').count()) === 1, 'Access and Change PIN sections');
     await page.locator('details[data-section="alerts"] summary').click();
-    assert((await page.getByText('Send test', { exact: true }).count()) === 1 && (await page.getByText('Send smart test', { exact: true }).count()) === 1, 'two test buttons');
+    // (The later Error alerts row has its own "Send test" [data-error-alert-test]; it is not the alerts test.)
+    assert((await page.locator('button:not([data-error-alert-test])', { hasText: /^Send test$/ }).count()) === 1 && (await page.getByText('Send smart test', { exact: true }).count()) === 1, 'two test buttons');
     await ctx.close();
   });
 
@@ -359,7 +360,7 @@ async function main() {
     assert((await page.locator('[data-row="firstSessionDate"]').count()) === 0, 'no First session date');
     assert((await page.locator('[data-row="venmoUrl"]').count()) === 1, 'exactly one Venmo link');
     assert((await page.locator('details[data-section="money"] [data-row="venmoUrl"]').count()) === 1, 'the Venmo link is in Money');
-    assert((await page.getByRole('button', { name: 'Send test', exact: true }).count()) === 1, 'one Send test button');
+    assert((await page.locator('button:not([data-error-alert-test])', { hasText: /^Send test$/ }).count()) === 1, 'one Send test button');
     assert((await page.getByText(/Send test alert/).count()) === 0 && (await page.getByText(/TEST smart alert/).count()) === 0, 'old buttons gone');
     assert((await page.locator('details[data-section="alerts"]').getByText('Only you get these').count()) === 0, 'small print deleted');
     await ctx.close();

@@ -251,11 +251,10 @@ async function main() {
     const a = await adminPage();
     await a.page.locator('[data-tm-tickets]').waitFor({ timeout: 15000 });
     assert((await a.page.locator('[data-tm-open-tickets]').count()) === 0, 'no Open tickets button');
-    // Zip 66 (mock 02): the open card's Plan row.
-    // Zip 70: the Plan's expected players (the 8 who can make the date), and THE money line: 7 x $16 - $120 - $28 credits = -$36.
-    assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()) === '8 players · 2 courts · 2.5 hrs', 'the plan line');
-    assert(flat(await a.page.locator('[data-tm-money-label]').innerText()) === 'Your cost if it fills', 'the money label');
-    assert(flat(await a.page.locator('[data-tm-row-money]').innerText()) === '$36', 'your cost if it fills');
+    // Zip 87 (picture 1): the gray plan line under the time is "2 courts · Locked doubles · $16" (the players count moved to the gear's
+    // Players you expect: still the 8 who can make the date); THE money line is the Money button: 7 x $16 - $120 - $28 credits = -$36.
+    assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()) === '2 courts · Locked doubles · $16', `the plan line: ${flat(await a.page.locator('[data-tm-home-plan]').innerText())}`);
+    assert(flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()) === '−$36 if all pay', `the money line: ${flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText())}`);
     assert((await a.page.locator('[data-tickets-card]').getAttribute('data-tickets-card')) === '0/10', 'the Home line');
     await shot(a.page, 'A-admin-29');
     assert(a.errors.length === 0, a.errors.join(' | '));
@@ -604,36 +603,33 @@ async function main() {
 
   // ---------------------------------------------------------------- K  Alex's changes after testing piece 1
   // Zip 64: once the date is finalized the hours are the real ones (Plays, 7:30 to 10:00 PM = 2.5 hours) on the plan's courts.
-  await check('K the smart plan on the tournament page: 8 players, 2 courts, 2.5 hours (the real hours); your cost if it fills $36, with 6 paid now $52; the Booking hours note when Booking hours is off', async () => {
+  // Zip 87 round 2: no tournament page (its Plan card and the Booking hours note went with it). The same money now: the card's Money button
+  // (if all pay) and the Money sheet's So far (paid now); the plan is the card's plan line and the gear's Players you expect.
+  // Retired in Zip 92: the plan card's "Turn on Booking hours" note was removed in Zip 87 (with the tournament page).
+  await check('K the smart plan: 9 expected, 2 courts, 2.5 hours (the real hours); Money: -$20 if all pay, So far -$52 with 6 paid; all locked in: -$4 / -$4', async () => {
     await stage('tickets_open');
     const a = await adminPage();
-    await a.page.locator('[data-tm-tickets]').click(); // Zip 66: the name opens and closes the card; Tickets opens the page
-    const card = a.page.locator('dialog[open] [data-tm-card="plan"]');
-    await card.waitFor({ timeout: 10000 });
-    const words = flat(await card.innerText());
-    // Zip 64 part 8: 9 can make the date: a 12 player plan. $120 - 11 x $16 + $28 = -$28; 6 paid now: $120 - $96 + $28 = $52.
-    // Zip 66 (mock 03): the plan as pills ("12 players", "2 courts", "2.5 hrs") and one cost line "-$28 ($52 with 6 paid)".
-    // Zip 70: the Plan expects the 9 who can make the date: 8 x $16 - $120 - $28 = -$20 ("Your cost if it fills $20", red, no minus).
-    assert(words.includes('9 players') && (await card.locator('[data-tm-plan]').getAttribute('data-tm-plan')) === '2 courts · 2.5 hours' && words.includes('Your cost if it fills $20 ($52 with 6 paid)'), words);
+    // Zip 64 part 8 / Zip 70: the Plan expects the 9 who can make the date: 8 x $16 - $120 - $28 = -$20; 6 paid now: $96 - $120 - $28 = -$52.
+    assert(flat(await a.page.locator('[data-tm-home-plan]').innerText()).startsWith('2 courts · '), 'the plan line');
+    assert(flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()) === '−$20 if all pay', flat(await a.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()));
+    await a.page.waitForTimeout(600);
+    await a.page.locator('[data-tm86-money]').click();
+    const sheet = a.page.locator('dialog[open] [data-tm86-money-sheet]');
+    await sheet.waitFor({ timeout: 10000 });
+    assert((await sheet.locator('[data-tm86-so-far]').getAttribute('data-tm86-so-far')) === '-5200', `So far with 6 paid: ${await sheet.locator('[data-tm86-so-far]').getAttribute('data-tm86-so-far')}`);
+    assert(flat(await sheet.innerText()).includes('Courts (2 · 2.5'), `the real 2.5 hours on 2 courts: ${flat(await sheet.innerText())}`);
     await shot(a.page, 'K-plan-8');
     await a.ctx.close();
-    // 10 locked in: 12 players, 2 courts, 3 hours. With Booking hours off the plan says to turn it on.
+    // 10 locked in: 10 expected, the real 2.5 hours. 9 x $16 - $120 - $28 = -$4; 9 paid now: $144 - $120 - $28 = -$4.
     await stage('all_locked');
-    await call('PUT', '/api/admin/booking-hours-switch', { on: false });
-    try {
-      const b = await adminPage();
-      await b.page.locator('[data-tm-tickets]').click(); // Zip 66: Tickets opens the page
-      await b.page.locator('dialog[open] [data-tm-card="plan"]').waitFor({ timeout: 10000 });
-      const w2 = flat(await b.page.locator('dialog[open] [data-tm-card="plan"]').innerText());
-      // 10 locked in: 12 spots, 2 courts, the real 2.5 hours. $120 - 11 x $16 + $28 = -$28; 9 paid now: $120 - $144 + $28 = $4.
-      // Zip 70: 10 expected (all locked in): 9 x $16 - $120 - $28 = -$4.
-      assert(w2.includes('10 players') && w2.includes('2.5 hrs') && w2.includes('Turn on Booking hours'), w2);
-      assert(w2.includes('Your cost if it fills $4 ($4 with 9 paid)'), w2);
-      await shot(b.page, 'K-plan-12-booking-off');
-      await b.ctx.close();
-    } finally {
-      await call('PUT', '/api/admin/booking-hours-switch', { on: true });
-    }
+    const b = await adminPage();
+    assert(flat(await b.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()) === '−$4 if all pay', flat(await b.page.locator('[data-tm86-money] .tm86-btn-sub').innerText()));
+    await b.page.waitForTimeout(600);
+    await b.page.locator('[data-tm86-money]').click();
+    await b.page.locator('dialog[open] [data-tm86-money-sheet]').waitFor({ timeout: 10000 });
+    assert((await b.page.locator('dialog[open] [data-tm86-so-far]').getAttribute('data-tm86-so-far')) === '-400', 'So far with 9 paid');
+    await shot(b.page, 'K-plan-12');
+    await b.ctx.close();
   });
   for (const format of ['doubles', 'americano'])
     for (const scheme of SCHEMES)
@@ -656,10 +652,10 @@ async function main() {
           await shot(v.page, `K-format-${format}-${width}-${scheme}`);
           await v.ctx.close();
           const a = await adminPage({ width, scheme });
-          // Zip 66: the organizer's open card names the format on its Style row (mock 02): "Americano" or "Locked doubles".
-          const al = a.page.locator('[data-tm-home-format]');
+          // Zip 86: the organizer's open card names the format in its gray plan line ("2 courts · Americano · $16"), no Style row before the night.
+          const al = a.page.locator('[data-tm-home-plan]');
           await al.waitFor({ timeout: 15000 });
-          assert(flat(await al.innerText()) === want.replace(/ \(.*$/, '') && (await a.page.locator('.tm-home-rule').count()) === 0, flat(await al.innerText()));
+          assert(flat(await al.innerText()).includes(` · ${want.replace(/ \(.*$/, '')} · `) && (await a.page.locator('.tm-home-rule').count()) === 0, flat(await al.innerText()));
           await fits(a.page, '[data-tm-home]');
           await a.ctx.close();
           assert(/rgb/.test(color), color);
@@ -792,10 +788,10 @@ async function main() {
         await shot(p.page, `K-ticket-format-${format}-${width}-${scheme}`);
         await p.ctx.close();
         const a = await adminPage({ width, scheme });
-        // Zip 66: the open card's Style row names the style (mock 02).
-        const al = a.page.locator('[data-tm-home="tickets"] [data-tm-home-format]');
+        // Zip 86: the open card's gray plan line names the style ("2 courts · Americano · $16"), on one line.
+        const al = a.page.locator('[data-tm-home="tickets"] [data-tm-home-plan]');
         await al.waitFor({ timeout: 15000 });
-        assert(flat(await al.innerText()) === want.replace(/ \(.*$/, '') && (await oneLine(al)) === 1, 'organizer card');
+        assert(flat(await al.innerText()).includes(` · ${want.replace(/ \(.*$/, '')} · `) && (await oneLine(al)) === 1, `organizer card: ${flat(await al.innerText())}`);
         await fits(a.page, '[data-tm-home]');
         await a.ctx.close();
       });

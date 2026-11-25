@@ -278,7 +278,8 @@ async function main() {
     assert((await row.count()) === 1, 'the row is there');
     assert((await row.locator('.set-name').textContent()).includes('After-game cards'), 'its name');
     // Newest first: Zip 23's Totals refresh, Zip 21's Error alerts, then Zip 17's Unpaid nudge sit above it now.
-    const firstTwo = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 10));
+    const firstTwo = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll' && k !== 'tournamentsAll' && k !== 'moneyNoteAll').slice(0, 10));
+    // (Zip 51b's Money change note and the Tournaments switch are newer still and sit on top.)
     // (Zip 30's Acting for others is newer still and sits on top.)
     // (Zip 32's Players sheet redo is newer still, and Zip 34's Check-in pay line newer again; Zip 31's Extended time sits on top of all.)
     assert(firstTwo.join('|') === 'tapGuardFixAll|extendedTimeAll|checkInPayAll|playersSheetRedoAll|actingOthersAll|spentTotalsAll|bookingHoursAll|totalsRefreshAll|errorAlertsAll|unpaidNudgeAll', `newest first: ${firstTwo}`);
@@ -419,7 +420,8 @@ async function main() {
     for (const who of ['Casey', 'Jordan', 'Blake', 'Parker', 'Quinn']) {
       const { ctx, page } = await openPlayer(who, 390, 'light', { storage: { pb_alerts: 'all' }, url: '/?alerts=all', dpr: 2 });
       for (const c of await look(page)) {
-        assert(c.bw === '1px' && c.bg === 'rgb(255, 255, 255)' && c.border === 'rgb(218, 217, 207)', `${who} "${c.title}": ${c.bw} ${c.bg} ${c.border}`);
+        // Retired in Zip 92: the exact border pixel rgb(218, 217, 207) was removed in Zip 78 (one-look tokens); 1 px and the white card stay.
+        assert(c.bw === '1px' && c.bg === 'rgb(255, 255, 255)', `${who} "${c.title}": ${c.bw} ${c.bg} ${c.border}`);
         assert(!/color\(srgb/.test(c.icon), `${who} badge ${c.icon}`);
       }
       await ctx.close();

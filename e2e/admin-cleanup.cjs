@@ -793,7 +793,7 @@ async function main() {
     const page = await ctx.newPage();
     await page.goto(BASE);
     await page.locator('.schedule article.sched').first().waitFor();
-    const more = page.getByRole('button', { name: /^More sessions/ });
+    const more = page.getByRole('button', { name: /^More games/ });
     if (await more.count()) await more.click();
     const text = await page.locator('.schedule').innerText();
     assert(!/waitlist|standby|waiting|not available|unavailable/i.test(text), `player screen shows a waiting word: ${text.match(/.{20}(waitlist|standby|waiting|not available|unavailable).{20}/i)}`);

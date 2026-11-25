@@ -157,7 +157,7 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 8));
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll' && k !== 'tournamentsAll' && k !== 'moneyNoteAll').slice(0, 8)); // (Money change note and Tournaments are newer still)
     // (Zip 35's Tap guard fix, Zip 24's Booking hours row, Zip 27's Spent matches Totals row, Zip 30's Acting for others row Zip 32's Players sheet redo row, Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit above it.)
     assert(first[0] === 'tapGuardFixAll' && first[1] === 'extendedTimeAll' && first[2] === 'checkInPayAll' && first[3] === 'playersSheetRedoAll' && first[4] === 'actingOthersAll' && first[5] === 'spentTotalsAll' && first[6] === 'bookingHoursAll' && first[7] === 'totalsRefreshAll', `newest first: ${first}`);
     const row = page.locator('[data-row="totalsRefreshAll"]');
@@ -179,10 +179,12 @@ async function main() {
   const MONTH = '2026-11';
   const money = await moneyOf(MONTH);
   const rw = money.rework;
-  const so = { membership: rw.membershipCents, court: rw.courtCostCents, games: rw.courtSessions, owed: rw.owedToVenueCents, players: rw.collectedCents };
-  so.net = so.owed - so.players;
-  const pj = { membership: rw.projected.membershipCents, court: rw.projected.courtCostCents, games: rw.projected.courtCount, owed: rw.projected.totalCents, players: rw.projected.playersPayCents };
-  pj.net = pj.owed - pj.players;
+  // Zip 76: credit the organizer added by hand this month is a cost row on both cards ("Credit you added by hand"), in the total.
+  const hand = rw.handCreditCents ?? 0;
+  const so = { membership: rw.membershipCents, court: rw.courtCostCents, games: rw.courtSessions, owed: rw.owedToVenueCents, players: rw.collectedCents, hand };
+  so.net = so.owed - so.players + hand;
+  const pj = { membership: rw.projected.membershipCents, court: rw.projected.courtCostCents, games: rw.projected.courtCount, owed: rw.projected.totalCents, players: rw.projected.playersPayCents, hand };
+  pj.net = pj.owed - pj.players + hand;
   const per = (net, games) => (games > 0 ? (net < 0 ? -1 : 1) * Math.round(Math.abs(net) / games / 100) : null);
 
   // ---------------------------------------------------------------- the numbers
@@ -211,10 +213,11 @@ async function main() {
     assert(a.membership === fp(so.membership) && a.court === fp(so.court) && a.owed === fp(so.owed) && a.players === minus(so.players), `so far rows ${JSON.stringify(a)} vs ${JSON.stringify(so)}`);
     assert(a.courtNote === plural(so.games), `court note ${a.courtNote}`);
     assert(a.total === fp(so.net), `so far total ${a.total} vs ${fp(so.net)}`);
-    assert(so.net === rw.yourCostCents, 'the total is "Your cost so far"');
+    assert(so.net === rw.yourCostCents, `the total is "Your cost so far": ${so.net} vs ${rw.yourCostCents}`);
     assert(a.perCourt === `$${per(so.net, so.games)}/court`, `so far per court ${a.perCourt}`);
     assert(a.playersLabel === 'Players paid' && b.playersLabel === 'Players pay', `labels ${a.playersLabel} / ${b.playersLabel}`);
-    assert(JSON.stringify(a.rows) === JSON.stringify(['Membership monthly', `Court costs ${plural(so.games)}`, 'Owed to venue', 'Players paid']), `rows ${a.rows}`);
+    assert(JSON.stringify(a.rows) === JSON.stringify(['Membership monthly', `Court costs ${plural(so.games)}`, 'Owed to venue', 'Players paid', ...(hand ? ['Credit you added by hand'] : [])]), `rows ${a.rows}`);
+    if (hand) assert((await page.locator('[data-card="so-far"] [data-row="hand-credit"] dd').getAttribute('data-hand-credit')) === String(hand), 'hand credit row amount');
     assert(b.membership === fp(pj.membership) && b.court === fp(pj.court) && b.owed === fp(pj.owed) && b.players === minus(pj.players), `projected rows ${JSON.stringify(b)} vs ${JSON.stringify(pj)}`);
     assert(b.courtNote === plural(pj.games), `projected court note ${b.courtNote}`);
     assert(b.total === fp(pj.net) && pj.net === rw.projected.yourCostCents, `projected total ${b.total}`);
@@ -262,6 +265,7 @@ async function main() {
         r.owedToVenueCents = net;
         r.collectedCents = 0;
         r.yourCostCents = net;
+        r.handCreditCents = 0; // (Zip 76's hand-credit row is not part of this scenario)
       };
       const { ctx, page } = await openTotals({ mutate });
       const got = await page.locator('[data-card="so-far"] [data-per-court]').innerText();
@@ -279,6 +283,7 @@ async function main() {
       r.owedToVenueCents = 9600;
       r.collectedCents = 10400; // $8 more than the venue is owed
       r.yourCostCents = 0;
+      r.handCreditCents = 0; // (Zip 76's hand-credit row is not part of this scenario)
     };
     const { ctx, page } = await openTotals({ mutate });
     const t = await page.evaluate(() => {
@@ -305,6 +310,7 @@ async function main() {
       r.owedToVenueCents = 4800;
       r.collectedCents = 4849;
       r.yourCostCents = 0;
+      r.handCreditCents = 0; // (Zip 76's hand-credit row is not part of this scenario)
     };
     const { ctx, page } = await openTotals({ mutate });
     const t = await page.evaluate(() => ({ total: document.querySelector('[data-card="so-far"] [data-total]').textContent, per: document.querySelector('[data-card="so-far"] [data-per-court]').textContent }));

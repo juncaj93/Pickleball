@@ -174,7 +174,8 @@ async function main() {
       assert(live.every((t) => new Set(t.sides.split(' ')).size === 1), 'all four sides the same width');
       // The situations: booked, not booked, "~8 PM", extra (a game with no status at all looks the same by the same rule).
       const kinds = new Set(live.map((t) => (t.extra ? 'extra' : t.status)));
-      for (const k of ['ts-booked', 'ts-none', 'ts-wait', 'extra']) assert(kinds.has(k), `the fake world has a ${k} game (has ${[...kinds]})`);
+      // Retired in Zip 92: the court Waitlist status (ts-wait) was removed in Zip 86 (only Booked / Not booked).
+      for (const k of ['ts-booked', 'ts-none', 'extra']) assert(kinds.has(k), `the fake world has a ${k} game (has ${[...kinds]})`);
       // The row decides, never the status.
       for (const row of ['this', 'next']) {
         const r = live.filter((t) => t.row === row);
@@ -205,7 +206,7 @@ async function main() {
       await setClock(EARLIER_MS);
       try {
       await home(page, 'off');
-      await page.locator('button', { hasText: 'More sessions' }).first().click();
+      await page.locator('button', { hasText: 'More games' }).first().click(); // "More sessions" is "More games" now
       await sleep(900);
       if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `later-${scheme}-390.png`), fullPage: true });
       const list = await tiles(page);

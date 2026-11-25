@@ -284,8 +284,8 @@ async function main() {
         assert(/Credit \$14/.test(squash(await row.innerText())), squash(await row.innerText()));
         const refund = row.getByRole('link', { name: /^Cash out Mitchel \$14 with Venmo/ });
         await refund.waitFor();
-        assert((await refund.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', `href ${await refund.getAttribute('href')}`);
-        assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', 'app link');
+        assert((await refund.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20cash%20out', `href ${await refund.getAttribute('href')}`);
+        assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20cash%20out', 'app link');
         assert((await row.getByRole('button', { name: 'Mark refunded' }).count()) === 0, 'Mark refunded before Venmo was opened');
         assert((await page.locator('li.player-row[data-player="Ryan"]').getByText(/credit/i).count()) === 0, "credit shows on someone else's row");
         await tidy(row, 'player row');
@@ -417,8 +417,8 @@ async function main() {
         const first = await page.locator('main article').first().getAttribute('data-refund-request');
         assert(first === 'Mitchel', 'the refund request comes first on Home');
         const link = card.locator('[data-refund-venmo]');
-        assert((await link.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', `web link ${await link.getAttribute('href')}`);
-        assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', `app link ${await link.getAttribute('data-app-href')}`);
+        assert((await link.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20cash%20out', `web link ${await link.getAttribute('href')}`);
+        assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20cash%20out', `app link ${await link.getAttribute('data-app-href')}`);
         assert((await card.getByText(/No Venmo saved/).count()) === 0, 'his Venmo is saved');
         assert((await card.locator('[data-mark-refunded]').count()) === 0, 'Mark refunded only after Venmo was opened');
         await card.locator('[data-not-now]').waitFor();

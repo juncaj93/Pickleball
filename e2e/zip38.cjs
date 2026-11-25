@@ -517,7 +517,7 @@ async function main() {
       await page.locator('.tabbar button', { hasText: 'Settings' }).click();
       await sleep(500);
       for (const sm of await page.locator('details > summary').all()) await sm.click().catch(() => {});
-      const first = (await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')))).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll')[0]; // (Zip 43's Venue charge alert is newer and sits on top)
+      const first = (await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')))).filter((k) => k !== 'tournamentsAll' && k !== 'moneyNoteAll' && k !== 'guestSpotAll' && k !== 'venueAlertAll')[0]; // (Zip 43's Venue charge alert is newer and sits on top; the Tournaments and Money change note rows are newer still)
       assert(first === 'christmasSkinAll', `newest first: ${first}`);
       const row = page.locator('[data-row="christmasSkinAll"]');
       assert((await row.locator('.set-name').innerText()).includes('Christmas skin'), 'its name');

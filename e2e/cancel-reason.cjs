@@ -37,6 +37,16 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 const squash = (t) => t.replace(/\s+/g, ' ').trim();
+// Closing a confirm box gives its Back entry back with history.go(-1) (Zip 77), a moment later: a reload sent in that moment is
+// aborted, so let it settle and try once more.
+async function reload(page) {
+  await page.waitForTimeout(300);
+  await page.reload().catch(async (e) => {
+    if (!/ERR_ABORTED/.test(String(e))) throw e;
+    await page.waitForTimeout(300);
+    await reload(page);
+  });
+}
 
 async function main() {
   const dbFile = path.join(ROOT, '.data', 'cancel-reason.sqlite');
@@ -130,7 +140,7 @@ async function main() {
       await page.keyboard.press('Escape');
       await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       assert((await adminSession()).cancelReason === 'Thanksgiving week', 'stored');
-      await page.reload();
+      await reload(page);
       const c = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: DATE }).first();
       await c.waitFor();
       assert(squash(await c.locator('.court-line .court-status').first().innerText()) === 'Canceled - Thanksgiving week', `card: ${squash(await c.locator('.court-line .court-status').first().innerText())}`);
@@ -175,7 +185,7 @@ async function main() {
       await page.keyboard.press('Escape');
       await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       assert((await adminSession()).cancelReason === null, 'should be null');
-      await page.reload();
+      await reload(page);
       const c = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: DATE }).first();
       await c.waitFor();
       assert(squash(await c.locator('.court-line .court-status').first().innerText()) === 'Canceled', 'organizer card');
@@ -185,7 +195,7 @@ async function main() {
       assert(t === 'Canceled', `player status: ${t}`);
     });
     await check('reopen again, then cancel with an HTML-looking reason', async () => {
-      await page.reload();
+      await reload(page);
       const c = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: DATE }).first();
       await pick(c, 'Reopen game');
       await page.locator('dialog[open]').getByRole('button', { name: 'Reopen game' }).click();
@@ -205,7 +215,7 @@ async function main() {
         dialogs.push(d.message());
         d.dismiss().catch(() => {});
       });
-      await page.reload();
+      await reload(page);
       const c = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: DATE }).first();
       await c.waitFor();
       assert(squash(await c.locator('.court-line .court-status').first().innerText()) === `Canceled - ${HTML_REASON}`, `card: ${squash(await c.locator('.court-line .court-status').first().innerText())}`);
@@ -223,7 +233,7 @@ async function main() {
         dialogs.push(d.message());
         d.dismiss().catch(() => {});
       });
-      await page.reload();
+      await reload(page);
       await card.waitFor();
       const t = squash(await page.locator(`#row-${thu.id}`).locator('.sched-status').innerText());
       assert(t === `Canceled - ${HTML_REASON}`, `status: ${t}`);

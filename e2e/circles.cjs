@@ -165,7 +165,7 @@ async function main() {
         const page = await ctx.newPage();
         await page.goto(BASE);
         await page.locator('.schedule article').first().waitFor();
-        const more = page.getByRole('button', { name: /^More sessions/ });
+        const more = page.getByRole('button', { name: /^More games/ });
         if (await more.count()) await more.click();
         const rows = await rowsOf(page, '.schedule .in-line', '.in-count');
         const seen = rows.map((r, i) => expectRow(r, `card ${i + 1}`));

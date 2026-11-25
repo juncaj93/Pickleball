@@ -497,12 +497,15 @@ async function main() {
     started: await addGame('2026-11-03T09:30:00-05:00', '2026-11-03T11:00:00-05:00'),
     note: await addGame('2026-11-04T18:30:00-05:00', '2026-11-04T20:30:00-05:00', NOTE),
     sat: await addGame('2026-11-07T10:30:00-05:00', '2026-11-07T12:30:00-05:00'),
+    // Owner's standing rule: audit data has games this week, NEXT week and 2+ weeks out (LATER), so "next Wednesday" words are seen.
+    nextWed: await addGame('2026-11-11T20:00:00-05:00', '2026-11-11T22:00:00-05:00'),
+    laterWed: await addGame('2026-11-18T20:00:00-05:00', '2026-11-18T22:00:00-05:00'),
   };
   d = await dash();
   const regular = d.sessions.filter((s) => !s.extra && !s.isExtra && !Object.values(E).includes(s.id)).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const S = {};
   regular.forEach((s, i) => (S[i + 1] = s.id));
-  const LABEL = { [E.fin]: 'Mon Nov 2 7 AM (finished)', [E.started]: 'Tue Nov 3 9:30 AM (started)', [E.note]: 'Wed Nov 4 extra with note', [E.sat]: 'Sat Nov 7 10:30 AM extra' };
+  const LABEL = { [E.fin]: 'Mon Nov 2 7 AM (finished)', [E.started]: 'Tue Nov 3 9:30 AM (started)', [E.note]: 'Wed Nov 4 extra with note', [E.sat]: 'Sat Nov 7 10:30 AM extra', [E.nextWed]: 'Wed Nov 11 8 PM extra (next week)', [E.laterWed]: 'Wed Nov 18 8 PM extra (later)' };
   regular.forEach((s, i) => (LABEL[s.id] = `${new Date(s.startsAt).toLocaleDateString('en-US', { timeZone: 'America/Detroit', weekday: 'short', month: 'short', day: 'numeric' })} (S${i + 1})`));
   const lab = (id) => LABEL[id] || id.slice(0, 8);
   const idOf = (n) => d.players.find((p) => p.name === n).id;
@@ -590,7 +593,7 @@ async function main() {
   }
 
   const phone = (w, scheme, extra = {}) => ({ viewport: { width: w, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA, colorScheme: scheme, ...extra });
-  /** One player's phone, the schedule fully open ("More sessions"), no one-time banners in the way. */
+  /** One player's phone, the schedule fully open ("More games", was "More sessions"), no one-time banners in the way. */
   async function open(name, w, scheme, extra = {}, { more = true, filter = 'all' } = {}) {
     const ctx = await browser.newContext(phone(w, scheme, extra));
     await ctx.route('https://venmo.com/**', (r) => r.abort());
@@ -607,12 +610,16 @@ async function main() {
     const page = await ctx.newPage();
     await page.goto(BASE);
     await page.locator('.schedule article, .empty-mine, .schedule .filter-toggle').first().waitFor();
-    const m = page.getByRole('button', { name: /^More sessions/ });
+    const m = page.getByRole('button', { name: /^More games/ });
     if (more && (await m.count())) {
       await m.click();
       await page.waitForTimeout(300);
     }
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+    // The cards' load fade-in (opacity) must be over before contrast is measured (a busy machine runs it late).
+    await page
+      .waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || !Number.isFinite(a.effect?.getComputedTiming().endTime)), null, { timeout: 6000 })
+      .catch(() => {});
     return { ctx, page };
   }
   const shot = async (page, file, full = true) => {
@@ -807,24 +814,24 @@ async function main() {
   /* ---------------- states, at 390 light unless said ---------------- */
   const L = all['390px light'];
   const fact = (name, id, tag = '390px light') => cardOf(all[tag][name].facts, id);
-  await check('THIS WEEK has many games (tonight, started, extra with note, Thu, Saturday), NEXT WEEK 2, LATER many (All games)', async () => {
+  await check('THIS WEEK has many games (tonight, started, extra with note, Thu, Saturday), NEXT WEEK 3 (Tue, Wed extra, Thu), LATER many (All games)', async () => {
     const c = L.Ryan.facts.cards;
     const n = (t) => c.filter((x) => x.tier === t).length;
-    assert(n('this') === 5 && n('next') === 2 && n('later') >= 7, `this ${n('this')}, next ${n('next')}, later ${n('later')}`);
+    assert(n('this') === 5 && n('next') === 3 && n('later') >= 7, `this ${n('this')}, next ${n('next')}, later ${n('later')}`);
   });
-  await check('"More sessions (N)" button: right count, 44 px, opens the rest, then reads "Show fewer"', async () => {
+  await check('"More games (N)" button (was "More sessions"): right count, 44 px, opens the rest, then reads "Show fewer"', async () => {
     const { ctx, page } = await open('Ryan', 320, 'light', {}, { more: false });
-    const m = page.getByRole('button', { name: /^More sessions \(\d+\)$/ });
-    assert((await m.count()) === 1, 'no More sessions button');
+    const m = page.getByRole('button', { name: /^More games \(\d+\)$/ });
+    assert((await m.count()) === 1, 'no More games button');
     const total = (await groupOf('Ryan')).sessions.length;
     const label = await m.innerText();
-    assert(label === `More sessions (${total - 6})`, `${label} with ${total} games`);
+    assert(label === `More games (${total - 6})`, `${label} with ${total} games`);
     const box = await m.boundingBox();
     assert(box.height >= 44 && box.width <= 320 - 28 + 1, `button ${JSON.stringify(box)}`);
     assert((await page.locator('.schedule article').count()) === 6, 'first look shows 6');
     await m.click();
     await page.getByRole('button', { name: 'Show fewer' }).waitFor();
-    assert((await page.locator('.schedule article').count()) === total, 'all games after More sessions');
+    assert((await page.locator('.schedule article').count()) === total, 'all games after More games');
     await ctx.close();
   });
   await check('My games, one game in one tier: Dana sees only NEXT WEEK (1 game), the switch on that line', async () => {
@@ -1337,6 +1344,28 @@ async function main() {
     assert(n('this') === 1 && f.tiers.map((t) => t.label).join('|') === 'This week|Next week|Later', `${n('this')} ${JSON.stringify(f.tiers)}`);
     assert(f.sw <= f.vw && f.offScreen.length === 0, f.offScreen.join(' | '));
     await ctx.close();
+  });
+
+  /* ---------------- Zip 92 live bug: the green alert card names a next-week game by its short weekday ---------------- */
+  await check('Alert cards on: the green "needs players" card names next week\'s game by its short weekday ("Wed 8 PM needs 4 more"), never "Nex..."', async () => {
+    // Quinn answers No to Saturday and to Tuesday Nov 10, so the soonest game that needs players is next Wednesday's (0 in).
+    for (const id of [E.sat, S[3]]) await ok(await post(who.Quinn, `/api/sessions/${id}/decline`, {}), `Quinn No to ${lab(id)}`);
+    await ok(await areq.put(BASE + '/api/admin/alert-cards-switch', { data: { on: true }, headers: { Origin: BASE } }), 'alert cards on');
+    try {
+      const sug = (await groupOf('Quinn')).suggestion;
+      assert(sug && sug.sessionId === E.nextWed, `suggestion ${sug && lab(sug.sessionId)}`);
+      for (const [w, scheme] of [[320, 'light'], [390, 'dark']]) {
+        const { ctx, page } = await open('Quinn', w, scheme, {}, { more: false });
+        const card = page.locator('[data-suggest-card]');
+        await card.waitFor({ timeout: 10000 });
+        const title = squash(await card.locator('#suggest-title').innerText());
+        assert(!/^Nex/i.test(title), `${w} ${scheme}: title "${title}"`);
+        assert(/^Wed 8 PM needs 4 more$/.test(title), `${w} ${scheme}: title "${title}"`);
+        await ctx.close();
+      }
+    } finally {
+      await areq.put(BASE + '/api/admin/alert-cards-switch', { data: { on: false }, headers: { Origin: BASE } });
+    }
   });
 
   await browser.close();

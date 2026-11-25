@@ -394,7 +394,26 @@ async function main() {
           else assert(mine && mine.tag === 'Locked in' && mine.gold, `Parker's row: ${JSON.stringify(mine)}`);
           const words = flat(await list.innerText());
           assert(!/Open spot|\d+ of \d+|\b16\b|locked in\b.*locked in/i.test(words.replace(/^WHO’S IN/i, '')), words);
-          await oneLine(v.page, 'dialog[open] [data-tw-in] li');
+          // The number and the tag stay on one line; a long name may wrap at a space at 320 (the site's name rule, Zip 92: wrap at spaces, never
+          // mid-word), so each WORD of a name stays on one line.
+          await oneLine(v.page, 'dialog[open] [data-tw-in] li .tc-tw-n, dialog[open] [data-tw-in] li .tc-tw-tag');
+          const broken = await v.page.evaluate(() => {
+            const out = [];
+            for (const el of document.querySelectorAll('dialog[open] [data-tw-in] li .tc-tw-name')) {
+              const t = el.firstChild;
+              if (!t || t.nodeType !== 3) continue;
+              let at = 0;
+              for (const w of t.textContent.split(' ')) {
+                const r = document.createRange();
+                r.setStart(t, at);
+                r.setEnd(t, at + w.length);
+                at += w.length + 1;
+                if (new Set([...r.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top))).size > 1) out.push(w);
+              }
+            }
+            return out;
+          });
+          assert(broken.length === 0, `a name broke mid-word: ${broken.join(', ')}`);
           await fits(v.page, 'dialog[open] .tc-tw');
           await shot(v.page, `D2-who-${who}-${width}-${scheme}`);
           await v.ctx.close();
@@ -580,21 +599,21 @@ async function main() {
   // ---------------------------------------------------------------- G  Remind all unpaid (Zip 66b: folded into the tournament card, picture A4)
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`G Remind all unpaid (66b): the pill 3 unpaid, Not paid yet 3, the names, Messages with the numbers (${width} ${scheme})`, async () => {
+      // Zip 86: the card's "Not paid yet" tap row and its box became the big Remind button ("3 haven't paid"), which opens Messages itself;
+      // Pay by is on the card's status line ("Payments · pay by Mon 7 PM"), no Ticket row.
+      await check(`G Remind all unpaid (66b): the pill 3 unpaid, the Remind button says 3, Pay by on the status line, Messages with the numbers (${width} ${scheme})`, async () => {
         await stage('tickets_open');
         const a = await adminPage({ width, scheme });
         assert((await a.page.locator('.tm-remind').count()) === 0, 'no separate tickets card');
         assert(flat(await a.page.locator('[data-tm-stage]').innerText()) === '3 unpaid', await a.page.locator('[data-tm-stage]').innerText());
-        assert(flat(await a.page.locator('[data-tm-row-unpaid]').innerText()) === '3', 'Not paid yet 3');
-        assert(/pay by (Mon|Tue|Wed|Thu|Fri|Sat|Sun) 7:00\sPM$/.test(flat(await a.page.locator('[data-tm-row="ticket"]').innerText())), 'Pay by on the Ticket row');
-        await a.page.locator('[data-tm-unpaid-toggle]').click();
-        const box = a.page.locator('[data-tm-unpaid-box]');
-        await box.waitFor({ timeout: 10000 });
+        assert((await a.page.locator('[data-tm-remind]').getAttribute('data-tm-remind')) === '3' && /^3 /.test(flat(await a.page.locator('[data-tm-row-unpaid]').innerText())), `Remind: ${await a.page.locator('[data-tm-row-unpaid]').innerText()}`);
+        assert(/pay by (Mon|Tue|Wed|Thu|Fri|Sat|Sun|today) 7(:00)?\s?PM$/i.test(flat(await a.page.locator('[data-tm86-status]').innerText())), `Pay by on the status line: ${await a.page.locator('[data-tm86-status]').innerText()}`);
+        const box = a.page.locator('[data-tm-home]');
         const href = await box.locator('[data-tm-remind-btn]').getAttribute('href');
         assert(/^sms:/.test(href), href);
         const body = decodeURIComponent(href.split('body=')[1] || '');
         assert(/^Hey, please pay for Winter Classic by \w+ so the courts are locked in for \w+/.test(body), body);
-        await oneLine(a.page, '[data-tm-home-body] .tm-row, [data-tm-remind-btn]');
+        await oneLine(a.page, '[data-tm-remind-btn] .tm86-btn-title');
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `G-remind-${width}-${scheme}`);
         await a.ctx.close();
@@ -603,7 +622,7 @@ async function main() {
     await stage('all_locked');
     const a = await adminPage({});
     await a.page.locator('[data-tm-home]').first().waitFor({ timeout: 15000 });
-    assert((await a.page.locator('[data-tm-unpaid-toggle]').count()) === 0, 'no Not paid yet row');
+    assert((await a.page.locator('[data-tm-remind]').count()) === 0, 'no Remind for unpaid tickets'); // (Zip 86: the Remind button took the Not paid yet row's place)
     assert(/^\d+ locked in$/.test(flat(await a.page.locator('[data-tm-stage]').innerText())), 'the pill');
     await a.ctx.close();
   });

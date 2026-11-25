@@ -98,7 +98,7 @@ async function main() {
   async function home(page, query) {
     await page.goto(`${BASE}/?as=Alex${query ? '&' + query : ''}`);
     await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    const more = page.getByRole('button', { name: /More sessions/ });
+    const more = page.getByRole('button', { name: /More games/ }); // "More sessions" is "More games" now
     if (await more.count()) await more.first().click();
     await page.evaluate(() => document.fonts.ready);
     await sleep(900);

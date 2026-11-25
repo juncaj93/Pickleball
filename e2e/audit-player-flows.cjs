@@ -115,6 +115,9 @@ async function main() {
     X7: '2026-11-08T12:00:00-05:00',
     X8: '2026-11-08T14:00:00-05:00',
     X9: '2026-11-08T16:00:00-05:00',
+    // Owner's standing rule: audit data has games this week, NEXT week and 2+ weeks out (LATER), so "next Wednesday" words are seen.
+    NW: '2026-11-11T20:00:00-05:00',
+    LW: '2026-11-18T20:00:00-05:00',
   };
   for (const at of Object.values(extras)) {
     const r = await post(areq, '/api/admin/sessions', { startsAt: new Date(et(at)).toISOString(), endsAt: new Date(et(at) + 2 * 3600_000).toISOString() });
@@ -197,7 +200,7 @@ async function main() {
     if (name) {
       await page.locator('.schedule article').first().waitFor();
       if (more) {
-        const m = page.getByRole('button', { name: /^More sessions/ });
+        const m = page.getByRole('button', { name: /^More games/ });
         if (await m.count()) await m.click();
       }
     }
@@ -724,7 +727,7 @@ async function main() {
       await page.locator('dialog[open]').getByRole('button', { name: 'Vic Viewas', exact: true }).click();
       await page.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
       await page.locator('.schedule article').first().waitFor();
-      const more = page.getByRole('button', { name: /^More sessions/ });
+      const more = page.getByRole('button', { name: /^More games/ });
       if (await more.count()) await more.click();
       await card(page, G[7]).waitFor();
       await tapDrop(page, G[7]);
@@ -752,7 +755,7 @@ async function main() {
       await page.locator('dialog[open]').getByRole('button', { name: 'Wes Viewas', exact: true }).click();
       await page.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
       await page.locator('.schedule article').first().waitFor();
-      const more = page.getByRole('button', { name: /^More sessions/ });
+      const more = page.getByRole('button', { name: /^More games/ });
       if (await more.count()) await more.click();
       await card(page, G[7]).waitFor();
       await tapDrop(page, G[7]);
@@ -783,7 +786,7 @@ async function main() {
       const page = await ctx.newPage();
       await page.goto(BASE);
       await page.locator('.schedule article').first().waitFor();
-      const more = page.getByRole('button', { name: /^More sessions/ });
+      const more = page.getByRole('button', { name: /^More games/ });
       if (await more.count()) await more.click();
       await card(page, G[7]).waitFor();
       await tapDrop(page, G[7]);
@@ -824,7 +827,7 @@ async function main() {
       const page = await ctx.newPage();
       await page.goto(BASE);
       await page.locator('.schedule article').first().waitFor();
-      const more = page.getByRole('button', { name: /^More sessions/ });
+      const more = page.getByRole('button', { name: /^More games/ });
       if (await more.count()) await more.click();
       await card(page, G[9]).waitFor();
       await tapDrop(page, G[7]);
@@ -1640,6 +1643,32 @@ async function main() {
       await ctx.close();
     });
   }
+
+  /* Zip 92 live bug: the green alert card names a next-week game by its short weekday ("Wed 8 PM"), never "Nex..." */
+  await check('Alert cards on: the green "needs players" card names next week\'s game by its short weekday ("Wed 8 PM needs 4 more"), never "Nex..."', async () => {
+    await setClock(et('2026-11-05T10:00:00-05:00'));
+    // (The group is at its player limit by now, so Sky, who is in no game yet, plays the part.)
+    const ctx = await browser.newContext(phone(390, 'light'));
+    await post(ctx.request, '/api/me', { playerId: idOf('Sky') });
+    // Sky answers No to every game before next Wednesday's, so the soonest game that needs players is that one (0 in).
+    const g = await (await ctx.request.get(`${BASE}/api/group`)).json();
+    for (const s of g.sessions.filter((x) => Date.parse(x.startsAt) < et(extras.NW) && !x.started)) await post(ctx.request, `/api/sessions/${s.id}/decline`, {});
+    await areq.put(`${BASE}/api/admin/alert-cards-switch`, { data: { on: true }, headers: { Origin: BASE } });
+    try {
+      const sug = (await (await ctx.request.get(`${BASE}/api/group`)).json()).suggestion;
+      assert(sug && sug.sessionId === X.NW.id, `suggestion ${JSON.stringify(sug)}`);
+      const page = await ctx.newPage();
+      await page.clock.install({ time: et('2026-11-05T10:00:00-05:00') });
+      await page.goto(BASE);
+      const c = page.locator('[data-suggest-card]');
+      await c.waitFor({ timeout: 10000 });
+      const title = squash(await c.locator('#suggest-title').innerText());
+      assert(!/^Nex/i.test(title) && /^Wed 8 PM needs 4 more$/.test(title), `title "${title}"`);
+    } finally {
+      await areq.put(`${BASE}/api/admin/alert-cards-switch`, { data: { on: false }, headers: { Origin: BASE } });
+      await ctx.close();
+    }
+  });
 
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -132,7 +132,7 @@ async function main() {
     const errors = watch(page);
     await page.goto(BASE + '/' + query);
     await page.locator('.schedule article').first().waitFor();
-    const more = page.getByRole('button', { name: /^More sessions/ });
+    const more = page.getByRole('button', { name: /^More games/ });
     if (await more.count()) await more.click();
     await page.waitForTimeout(700);
     return { ctx, page, errors };

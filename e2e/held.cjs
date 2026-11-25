@@ -272,8 +272,8 @@ async function main() {
       const row = page.locator('li.player-row[data-player="Mitchel"]');
       const refund = row.locator('[data-credit-refund="Mitchel"]');
       await refund.waitFor();
-      assert((await refund.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', `href ${await refund.getAttribute('href')}`);
-      assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', 'app link');
+      assert((await refund.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20cash%20out', `href ${await refund.getAttribute('href')}`);
+      assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20cash%20out', 'app link');
       assert((await row.locator('[data-credit-mark="Mitchel"]').count()) === 0, 'Mark refunded shown before tapping Refund');
       await refund.click();
       await row.locator('[data-credit-mark="Mitchel"]').waitFor();

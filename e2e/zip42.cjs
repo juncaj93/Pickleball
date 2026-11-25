@@ -538,7 +538,8 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row'))[0]);
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'tournamentsAll' && k !== 'moneyNoteAll')[0]);
+    // (Zip 51b's Money change note and the later Tournaments row are newer and sit on top of it.)
     assert(first === 'guestSpotAll', `top row: ${first}`);
     assert(/Guest spot/.test(await page.locator('[data-row="guestSpotAll"]').innerText()), 'label');
     await ctx.close();

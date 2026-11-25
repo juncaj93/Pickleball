@@ -126,7 +126,7 @@ async function main() {
       await check(`Settings at ${width} ${scheme}: "Spent matches Totals" sits right under Zip 31's Extended time, Zip 34's Check-in pay line, Zip 32's Players sheet redo and Zip 30's Acting for others at the top of Feature switches, fits, and is on`, async () => {
         const { ctx, page, errors } = await openTab({ width, scheme }, 'Settings');
         for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 8));
+        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'guestSpotAll' && k !== 'venueAlertAll' && k !== 'christmasSkinAll' && k !== 'cheaperFixAll' && k !== 'homeScreenTipAll' && k !== 'gameDayTextAll' && k !== 'tournamentsAll' && k !== 'moneyNoteAll').slice(0, 8)); // (Money change note and Tournaments are newer still)
         assert(first.join('|') === 'tapGuardFixAll|extendedTimeAll|checkInPayAll|playersSheetRedoAll|actingOthersAll|spentTotalsAll|bookingHoursAll|totalsRefreshAll', `newest first: ${first}`);
         const row = page.locator('[data-row="spentTotalsAll"]');
         assert((await row.locator('.set-name').innerText()).includes('Spent matches Totals'), 'its name');
@@ -177,7 +177,9 @@ async function main() {
     const on = await (await api.get(`${BASE}/api/admin/players/${alex}/summary`)).json();
     const month = new Date(NOW_MS).toLocaleDateString('en-CA', { timeZone: TZ }).slice(0, 7);
     const t = (await (await api.get(`${BASE}/api/admin/money?month=${month}`)).json()).rework;
-    assert(on.month.spentCents === t.owedToVenueCents - t.collectedCents, `on: ${on.month.spentCents} vs ${t.owedToVenueCents - t.collectedCents}`);
+    // Zip 76: the Totals "So far" figure also counts the credit added by hand (a cost) and the month's ended tournaments' results.
+    const soFar = t.owedToVenueCents - t.collectedCents + (t.handCreditCents ?? 0) - (t.tournaments ?? []).reduce((a, x) => a + x.resultCents, 0);
+    assert(on.month.spentCents === soFar, `on: ${on.month.spentCents} vs ${soFar}`);
   });
 
   await check('Remove on a player who is still in a game: the server says why and the name stays', async () => {

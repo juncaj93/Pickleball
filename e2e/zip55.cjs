@@ -576,14 +576,16 @@ async function main() {
   await stage('signup');
   for (const scheme of SCHEMES)
     for (const width of SIZES)
-      await check(`M no date yet: the admin card has one row, Pick date and Edit (no Levels) (${width} ${scheme})`, async () => {
+      // Zip 86 (picture 1): the sign-up card's one row "Pick date | Edit" became four big buttons two by two (Who's signed up, Remind, Dates,
+      // Money or Prizes); the style sits in the gray plan line under the time ("2 courts · Locked doubles · $18"), no Style row.
+      await check(`M no date yet: the admin card has four big buttons two by two, Dates says Pick the date, no Levels (${width} ${scheme})`, async () => {
         const a = await adminPage({ width, scheme });
         await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
-        const b = await a.page.locator('.tm-home-actions .btn').evaluateAll((els) => els.map((e) => ({ t: e.innerText.trim(), top: Math.round(e.getBoundingClientRect().top), h: e.getBoundingClientRect().height })));
-        assert(b.map((x) => x.t).join('|') === 'Pick date|Edit', JSON.stringify(b));
-        // Zip 66: the open card's Style row names the format (mock 02).
-        assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Locked doubles' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin Style row');
-        assert(b[0].top === b[1].top && b.every((x) => x.h < 60), `one row, one line each: ${JSON.stringify(b)}`);
+        const b = await a.page.locator('.tm86-grid .tm86-btn').evaluateAll((els) => els.map((e) => ({ t: e.querySelector('.tm86-btn-title').innerText.trim(), sub: e.querySelector('.tm86-btn-sub').innerText.trim(), top: Math.round(e.getBoundingClientRect().top), left: Math.round(e.getBoundingClientRect().left) })));
+        assert(b.length === 4 && b.slice(0, 3).map((x) => x.t).join('|') === 'Who’s signed up|Remind|Dates' && /^(Money|Prizes)$/.test(b[3].t), JSON.stringify(b));
+        assert(b[2].sub === 'Pick the date', `Dates: ${b[2].sub}`);
+        assert(/ · Locked doubles · /.test(flat(await a.page.locator('[data-tm-home-plan]').innerText())) && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin plan line');
+        assert(b[0].top === b[1].top && b[2].top === b[3].top && b[2].top > b[0].top && b[0].left === b[2].left, `two by two: ${JSON.stringify(b)}`);
         await fits(a.page, '[data-tm-home]');
         await shot(a.page, `M-admin-card-${width}-${scheme}`);
         await a.ctx.close();
@@ -632,8 +634,8 @@ async function main() {
           const a = await adminPage({ width, scheme });
           await a.page.locator('[data-tm-home]').waitFor({ timeout: 15000 });
           if (st === 'signup') {
-            // Zip 66: the open card's Style row names the format (mock 02).
-            assert(flat(await a.page.locator('[data-tm-home-format]').innerText()) === 'Americano' && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin Style row');
+            // Zip 86: the style is in the card's gray plan line under the time (no Style row before the night).
+            assert(/ · Americano · /.test(flat(await a.page.locator('[data-tm-home-plan]').innerText())) && (await a.page.locator('.tm-home-rule').count()) === 0, 'admin plan line');
           } else {
             // Zip 56: once the date is picked the organizer's card is picture 29's (no format line, as drawn; a question for Alex).
             assert((await a.page.locator('[data-tm-home="tickets"] [data-tm-tickets]').count()) === 1, 'picture 29\'s card, tickets open');

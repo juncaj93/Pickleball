@@ -153,7 +153,8 @@ async function main() {
     const { ctx, page } = await open('Ryan', { query: '?latefees=on' });
     await row(page, A).getByRole('button', { name: 'Drop out' }).click();
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
-    const toast = squash(await page.locator('.toast-msg').first().innerText());
+    // (A one-time "Game on! 4 in" moment can show on load on a new phone: the drop's own banner is the one that is not it.)
+    const toast = squash(await page.locator('.toast-msg').filter({ hasNotText: /^Game on!/ }).first().innerText());
     assert(toast === "You’re out. You owe $14 unless someone takes your spot.", `banner: ${toast}`);
     // The held drop goes out after the 5-second Undo.
     await page.waitForTimeout(6500);

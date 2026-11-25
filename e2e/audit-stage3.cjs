@@ -127,7 +127,7 @@ async function main() {
       await card.waitFor();
       assert(squash(await card.locator('h3').innerText()) === 'Mitchel asked to cash out $5', await card.locator('h3').innerText());
       const link = card.locator('[data-refund-venmo]');
-      assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=5&note=Pickleball%20credit%20refund', await link.getAttribute('data-app-href'));
+      assert((await link.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=5&note=Pickleball%20cash%20out', await link.getAttribute('data-app-href'));
       assert((await card.locator('[data-mark-refunded]').count()) === 0, 'Mark refunded before Venmo was opened');
       const before = (await dash()).creditLedger.find((l) => l.playerId === id.Mitchel);
       // Opening Venmo marks nothing.

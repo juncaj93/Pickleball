@@ -116,8 +116,8 @@ async function main() {
     for (const n of ['Alex', 'Ryan', 'Julian', 'Nathan']) await post(phones[n], `/api/sessions/${g.id}/join`, {});
     for (const n of ['Alex', 'Ryan']) await post(areq, `/api/admin/sessions/${g.id}/payment`, { playerId: idOf(n), paid: true });
   }
-  // Played was on the venue Waitlist, Cancel was never booked: both "never marked Booked".
-  await court(gPlayed.id, 'waitlist');
+  // Both "never marked Booked" (Zip 86: the court Waitlist was removed, so Played is simply Not booked too).
+  await court(gPlayed.id, 'not_booked');
   await court(gCancel.id, 'not_booked');
 
   // The clock: 10:00 AM the day after the second game. Sign in again on the new day.
@@ -126,11 +126,11 @@ async function main() {
   areq = (await browser.newContext()).request;
   await post(areq, '/api/admin/login', { pin: PIN });
   d = await dash();
-  // The next game: tomorrow 7 PM, on Waitlist, with 2 in (a "Need players" text card and the court card).
+  // The next game: tomorrow 7 PM, Not booked (was Waitlist before Zip 86), with 2 in (a "Need players" text card and the court card).
   const tomorrow7 = nextDayTenAm(new Date(nowMs).toISOString()) + 9 * HOUR;
   const mv = await put(areq, `/api/admin/sessions/${gNext.id}/time`, { startsAt: new Date(tomorrow7).toISOString(), endsAt: new Date(tomorrow7 + 2 * HOUR).toISOString() });
   if (!mv.ok() && mv.status() !== 409) throw new Error(`move failed: ${await mv.text()}`);
-  await court(gNext.id, 'waitlist');
+  await court(gNext.id, 'not_booked');
   for (const n of ['Mitchel', 'Brandon']) await post(phones[n], `/api/sessions/${gNext.id}/join`, {});
   // A second game within 48 hours with 1 in: a second "Need players" card, for the double-tap check.
   const gSecond = d.sessions.filter((x) => Date.parse(x.startsAt) > nowMs && x.id !== gNext.id)[0];
@@ -163,7 +163,7 @@ async function main() {
     [320, 'light'],
     [320, 'dark'],
   ]) {
-    await check(`16 at ${width} px ${scheme}: past games ask "Did you guys play?", the waitlisted game says "Court still needs to be booked"; no old court buttons; fits`, async () => {
+    await check(`16 at ${width} px ${scheme}: past games ask "Did you guys play?", the not-booked game (was Waitlist before Zip 86) says "Court still needs to be booked"; no old court buttons; fits`, async () => {
       const { ctx, page } = await openAdmin(width, scheme);
       for (const g of [gPlayed, gCancel]) {
         const c = playedCard(page, g.id);
@@ -272,7 +272,8 @@ async function main() {
     await page.locator(`#session-${gNext.id}`).getByRole('button', { name: 'Booked', exact: true }).click();
     await bookCard(page, gNext.id).waitFor({ state: 'detached' });
     assert((await moneyOf(gNext.id)) === before, 'money or seats moved');
-    await page.locator(`#session-${gNext.id}`).getByRole('button', { name: 'Waitlist', exact: true }).click();
+    // Zip 86: a 2-way Not booked | Booked switch (the Waitlist segment was removed).
+    await page.locator(`#session-${gNext.id}`).getByRole('button', { name: 'Not booked', exact: true }).click();
     await bookCard(page, gNext.id).waitFor();
     assert((await moneyOf(gNext.id)) === before, 'money or seats moved back');
     await ctx.close();

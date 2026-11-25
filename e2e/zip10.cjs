@@ -121,7 +121,7 @@ async function main() {
     const picker = page.locator('button', { hasText: new RegExp(`^${name}$`) });
     if (await picker.count()) await picker.first().click().catch(() => {});
     await page.locator('.schedule article').first().waitFor({ timeout: 8000 });
-    const more = page.getByRole('button', { name: /More sessions/ });
+    const more = page.getByRole('button', { name: /More games/ });
     if (await more.count()) await more.first().click();
     await page.waitForTimeout(700);
     return { ctx, page, errors };

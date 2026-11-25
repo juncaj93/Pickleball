@@ -126,7 +126,8 @@ async function main() {
     assert((await ctx.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } })).ok(), 'admin login');
     const page = await ctx.newPage();
     await page.goto(BASE + url);
-    await page.locator('article[data-r2-card]').first().waitFor({ timeout: 30000 });
+    // (After the last game ends, Home may hold only the Finalize card: the site makes fewer games ahead now.)
+    await page.locator('article[data-r2-card], [data-finalize]').first().waitFor({ timeout: 30000 });
     await page.waitForTimeout(600);
     return { ctx, page };
   }
@@ -161,9 +162,10 @@ async function main() {
   };
 
   // ---------------------------------------------------------------- L1: the two drop dialogs
+  // Zip 76 (MUST 2): a seat already paid (an I paid waiting too) says "Your $14 stays on this game unless ...", never "you still owe".
   const words = [
-    [g1, "Your guest Sam drops out too. If no one takes your spot, you still owe $14. Your guest’s spot isn’t needed."],
-    [g2, 'Your guest Sam drops out too. If no one takes your 2 spots, you still owe $28.'],
+    [g1, "Your guest Sam drops out too. Your $14 stays on this game unless someone takes your spot. Your guest’s spot isn’t needed."],
+    [g2, 'Your guest Sam drops out too. Your $28 stays on this game unless someone takes your 2 spots.'],
   ];
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])

@@ -139,7 +139,7 @@ async function main() {
   };
 
   // ---- 1. The owe card words ----
-  const expected = { Vic: ['You owe $14', 'For Tue, Nov 3'], Wren: ['You owe $28', '$14 each: Nov 3 and Nov 4'], Zoe: ['You owe $42', '$14 each: Nov 3, 4 and 5'] };
+  const expected = { Vic: ['You owe $14', 'For Tue, Nov 3'], Wren: ['You owe $28', '$14 each, 2 games: Nov 3 and Nov 4'], Zoe: ['You owe $42', '$14 each, 3 games: Nov 3, 4 and 5'] }; // Zip 85: "N games" added
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])
       await check(`owe card, ${width} px, ${scheme}: Vic, Wren and Zoe in the approved words, one line, Pay, no X, nothing sideways`, async () => {

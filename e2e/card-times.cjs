@@ -160,7 +160,7 @@ async function main() {
     const page = await ctx.newPage();
     await page.goto(BASE);
     await page.locator('.schedule article.sched').first().waitFor();
-    const more = page.getByRole('button', { name: /^More sessions/ });
+    const more = page.getByRole('button', { name: /^More games/ });
     if (await more.count()) await more.click();
     await page.waitForFunction((n) => document.querySelectorAll('.schedule article.sched').length >= n, PLAN.length);
     return { ctx, page };

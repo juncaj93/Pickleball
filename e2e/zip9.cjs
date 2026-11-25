@@ -118,8 +118,8 @@ async function main() {
     const picker = page.locator('button', { hasText: new RegExp(`^${name}$`) });
     if (await picker.count()) await picker.first().click().catch(() => {});
     await page.locator('.schedule article').first().waitFor({ timeout: 8000 });
-    // Later games sit behind "More sessions" (Home collapse): open it so every tier shows.
-    const more = page.getByRole('button', { name: /More sessions/ });
+    // Later games sit behind "More games" (Home collapse): open it so every tier shows.
+    const more = page.getByRole('button', { name: /More games/ });
     if (await more.count()) await more.first().click();
     await page.waitForTimeout(600);
     return { ctx, page, errors };
