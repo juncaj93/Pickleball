@@ -8424,3 +8424,16 @@ the card, its week row "6 of 10 locked in", two slim games).
   (the players' Add to calendar and the .ics route are unchanged). The rows that apply only to a canceled game, Hide from list and a holiday's
   Undo hours confirmed stay where they apply.
 - Merged 🎾86 round 2 (main `ba76d4a`, live deployment 25c9ec98) into the branch; one notes conflict (both kept).
+- Round 2 review (a fresh reviewer): fixed (1) one Save moving the start and Pay by earlier together always failed (time sent first): a Pay by
+  moved earlier now goes first (browser check G2); (2) a later call failing left the earlier ones saved without saying so: the toast names what
+  saved and what did not, the screen reads the server again, and the venue card still follows a saved time; (3) a venue-hours problem blocked
+  every setting: it blocks only a time change; (4) a canceled game lost its only way to its Players (the card has no pill): the menu keeps
+  Players on a canceled game. Notes kept: the gear sheet scrolls on a phone (every setting); at 320 px "Players you expect" and "7 to 7:30 PM,
+  by players" wrap between words (nothing cut); the Auto choice no longer shows "The vote's winner" under it.
+- Older browser scripts (Alex: fix what 🎾87 broke, leave what already fails on live). Each was run on 🎾86 round 2 as live (`07e0378`,
+  the same code as deployment 25c9ec98) and on this branch, and compared check by check. Updated so their failing sets equal live's:
+  zip55 79/12, zip56 43/14, zip58 22/2, zip60 11/18, zip66 67/17, zip71 11/0, zip86 8/0, admin-cleanup 31/4, admin-r2 27/0, zip32 48/2,
+  run 193/36 (passed/failed, every failure also on live). Unchanged and equal to live: zip9 13/2, zip61, zip63 56/8, zip64 55/28, zip70 32/42,
+  zip72 7/1, zip82 4/2, zip84-night 1/4; zip32-off crashes on live too. The checks rewritten follow the moves: the tournament page and the Edit
+  page to the Players sheet, the Dates sheet and the gear's sheet; Create without prize boxes; Edit awards' prize boxes; Players from the paid
+  pill; the organizer's menu without Add to calendar.
