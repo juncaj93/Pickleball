@@ -432,7 +432,7 @@ async function main() {
     // A card keeps everything it had.
     const c = page.locator(`article#session-${A.id}`);
     assert((await c.locator('.court-switch').count()) === 1 && (await c.locator('button.icon-round').count()) === 1 && (await c.locator('.paid-pill').count()) === 1, 'switch, gear, paid pill');
-    assert((await page.getByText('+ Add game').count()) === 1 && (await page.getByText('Book a court').count()) >= 1, 'Add game and Book a court stay in the header');
+    assert((await page.getByText('+ Add', { exact: true }).count()) === 1 && (await page.getByText('Book a court').count()) >= 1, 'Add game and Book a court stay in the header');
     assert((await page.locator('.week-break').count()) >= 3, 'week labels stay');
     await shot(page, 'home-390-light');
     await ctx.close();

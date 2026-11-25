@@ -39,8 +39,9 @@ clear type, quick to scan. All of it lives in `src/styles.css`, tokens first.
 - **Type (Zip 78).** One font everywhere: the phone's own system font (`-apple-system`, `var(--body)`), for titles too (heavier, never
   a second face). The rounded display font is gone from the site: never on names, levels, numbers, money or sheet titles. Buttons and fields
   take the page font (the browser's default is Arial). Nothing on screen is under 11 px (`font-size: max(11px, ...)` where a size shrinks).
-- **Names are never cut.** A name wraps between words (two lines in the header if it needs them), never "…". The only "…" left are a
-  settings link, a text preview, the small label over the name and the gray "2 played · Tue Thu" line on the Players tab.
+- **Names are never cut.** A name wraps between words, never "…". The only "…" left are a settings link, a text preview, the small label
+  over the name and the gray "2 played · Tue Thu" line on the Players tab, and (Zip 90, Alex) the player Home header's name: that header is
+  always one row, "not you?" moves under the name first, and only a name that alone can't fit ends in "…", the medal right after it.
 - **No carets.** No chevron, caret or "›" anywhere. A detail row or a folded card may open in place on a tap and close on a second tap; a
   card never hides its only action: every action is a visible button.
 - **Colors come only from the tokens** at the top of `src/styles.css` (`var(--...)`): one green, one red, one blue, one amber, one purple,

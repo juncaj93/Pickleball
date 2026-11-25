@@ -147,7 +147,7 @@ async function main() {
   await check('OFF: Add game 7:30 to 9:00 PM shows no heads-up; no tag on the organizer Home', async () => {
     const { ctx, page, errors } = await openAdmin();
     assert((await page.locator('[data-short-tag]').count()) === 0, 'no tag');
-    await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
     await page.waitForTimeout(400);
     const selects = page.locator('.add-game select');
     if ((await selects.count()) === 2) {
@@ -168,7 +168,7 @@ async function main() {
   for (const scheme of ['light', 'dark']) {
     await check(`ON ${scheme}: Add game, 7:30 to 9:00 PM: the heads-up under the times; it goes away at 9:30 PM`, async () => {
       const { ctx, page, errors } = await openAdmin({ scheme });
-      await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+      await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
       await page.waitForTimeout(400);
       const selects = page.locator('.add-game select');
       const setTimes = async (a, b) => {

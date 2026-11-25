@@ -14,6 +14,7 @@ import { localParts, zonedTimeToUtc } from '../shared/time';
 import { defaultPayBy, tourReason } from '../shared/tournamentTickets';
 import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 import { endPlan, type EndRow, readNight, writeEnd } from './tournamentEnd';
+import { withPrizes } from '../shared/tournamentPrizes';
 
 // Zip 55, PREVIEW ONLY: the "Tournament test" page's server half. POST /api/admin/tournament-test { stage } puts the fake tournament back to a
 // stage, using only the preview's fixed fake names (docs/PREVIEW_FAKE_DB.md), and turns the Tournaments row on (a re-seed from another branch
@@ -244,6 +245,20 @@ export const ZIP88_STAGES = ['zip88_soon', 'zip88_ready', 'zip88_early', 'zip88_
 //   zip89_break     "Pacing: 5 min break": the 4 teams tonight (nobody sits), Rounds 1 and 2 in, Round 2 a minute ago: the night card's "5 min
 //                   break" with "Round 3 in 3:59" and Skip break; the phones show the same card.
 export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'zip89_break'] as const;
+/**
+ * Zip 90 (🎾90.prize reveal), the night ended by the real End (endPlan and writeEnd) with the prizes the stage names:
+ *   zip90_ld      "Prize: Locked doubles champs": Net Ninjas (Vic and Wren) won the Final, $14 each (Locked doubles 1st $14, 2nd $0): View as
+ *                 Vic: two face-down cards (picture 1); the medal and the $14 held back from the header until each card is flipped.
+ *   zip90_am      "Prize: Americano champion, no credit": Americano, every round in, Vic won, the prizes $0 (medals only), the reveal over: View
+ *                 as Vic: one card, the medal (picture 4).
+ *   zip90_second  "Prize: runner-up": as zip90_ld with Locked doubles 2nd $7 each: View as Parker (Third Shot Gang lost the Final): one
+ *                 card, $7 credit, no medal (pictures 5 and 6).
+ *   zip90_header  "Header: long names": zip90_ld with every card already claimed, plus an older win for Christopher Vanderberg and $14 of
+ *                 test credit: the header with medals, the cup and credit (View as Vic, Christopher Vanderberg).
+ */
+export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header'] as const;
+type Zip90Stage = (typeof ZIP90_STAGES)[number];
+const isZip90Stage = (s: string): s is Zip90Stage => (ZIP90_STAGES as readonly string[]).includes(s);
 type Zip89Stage = (typeof ZIP89_STAGES)[number];
 const isZip89Stage = (s: string): s is Zip89Stage => (ZIP89_STAGES as readonly string[]).includes(s);
 type Zip88Stage = (typeof ZIP88_STAGES)[number];
@@ -266,7 +281,7 @@ const isZip86Stage = (s: string): s is Zip86Stage => (ZIP86_STAGES as readonly s
 export const ZIP87_STAGES = ['zip87_early', 'zip87_payday', 'zip87_past', 'zip87_paid', 'zip87_gameday', 'zip87_allset', 'zip87_prizes'] as const;
 type Zip87Stage = (typeof ZIP87_STAGES)[number];
 const isZip87Stage = (s: string): s is Zip87Stage => (ZIP87_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP90_STAGES, ...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -421,6 +436,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%' OR task LIKE 'tournament_start:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip90Stage(stage)) return zip90Stage(ctx, group, stage);
   if (isZip89Stage(stage)) return zip89Stage(ctx, group, stage);
   if (isZip88Stage(stage)) return zip88Stage(ctx, group, stage);
   if (isZip87Stage(stage)) return zip87Stage(ctx, group, stage);
@@ -1251,6 +1267,58 @@ async function zip58Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
           .bind(newId(), tid, pid, i + 1, Math.max(0, 5 - i), Math.min(5, i), 60 - i * 4, i === 0 ? 1 : 0, i === 0 ? 'champion' : i === 1 ? 'second' : null, at, at),
       );
     });
+  }
+  await ctx.db.batch(statements);
+  return { ...made, stage };
+}
+
+/** Zip 90's stages (see ZIP90_STAGES): the night as the stage left it, the prize boxes written in (both styles), then End by the real code. */
+async function zip90Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip90Stage) {
+  const am = stage === 'zip90_am';
+  const made = am ? await americanoStage(ctx, group, 'am_done') : await zip58Stage(ctx, group, 'final_done');
+  const id = made.id!;
+  const boxes = am
+    ? { doubles: { first: 0, second: 0 }, americano: { first: 0, second: 0 } }
+    : { doubles: { first: 1400, second: stage === 'zip90_second' ? 700 : 0 }, americano: { first: 1400, second: 700 } };
+  const row = (await ctx.db.prepare('SELECT award_pick FROM tournaments WHERE id = ?').bind(id).first<{ award_pick: string | null }>())!;
+  await ctx.db
+    .prepare('UPDATE tournaments SET award_pick = ?, champion_credit_cents = ?, second_credit_cents = ? WHERE id = ?')
+    .bind(withPrizes(row.award_pick, boxes), am ? 0 : 1400, am ? 0 : boxes.doubles.second, id)
+    .run();
+  const t = (await ctx.db.prepare('SELECT * FROM tournaments WHERE id = ?').bind(id).first<EndRow>())!;
+  const night = await readNight(ctx, t);
+  const plan = endPlan(t, am ? 'americano' : 'doubles', night.signups, night.tickets, night.day, group.timezone, ctx.nowMs, await organizerIdOf(ctx.db, group));
+  if (!plan) throw new HttpError(500, 'stage_failed', 'The night is not over.');
+  await writeEnd(ctx, group, t, night, plan);
+  // Americano: the reveal's hold is over (Reveal tapped 10 minutes ago), so the card is there at once.
+  if (am) await ctx.db.prepare('UPDATE tournaments SET ended_at = ? WHERE id = ?').bind(new Date(ctx.nowMs - 10 * 60_000).toISOString(), id).run();
+  if (stage !== 'zip90_header') return { ...made, stage };
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const chris = idOf.get('Christopher Vanderberg');
+  const date = todayKeyMinus(ctx.nowMs, group.timezone, 60);
+  const at = `${date}T23:00:00.000Z`;
+  const tid = newId();
+  const statements = [ctx.db.prepare('UPDATE tournament_results SET seen_at = ? WHERE tournament_id = ? AND award IS NOT NULL').bind(ctx.nowIso, id)];
+  if (chris) {
+    statements.push(
+      ctx.db
+        .prepare(
+          `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date, status,
+             visibility, created_at, updated_at, format, second_credit_cents, ended_at, end_key, banner_until)
+           VALUES (?, ?, 'Pumpkin Smash', ${STORED_PLAN.size}, 2, 150, 1170, 1600, 1400, ?, ?, 'ended', 'all', ?, ?, 'americano', 700, ?, ?, ?)`,
+        )
+        .bind(tid, group.id, JSON.stringify([date]), date, at, at, at, newId(), at),
+      ctx.db
+        .prepare(
+          `INSERT INTO tournament_results (id, tournament_id, player_id, finish, wins, losses, points, picked_level, approved_level, medal, award, credit_cents, seen_at, created_at)
+           VALUES (?, ?, ?, 1, 5, 0, 60, 300, NULL, 1, 'champion', 0, ?, ?)`,
+        )
+        .bind(newId(), tid, chris, at, at),
+      ctx.db
+        .prepare("INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, five_cents, session_id, created_at, reason) VALUES (?, ?, ?, 'kept', 1400, 0, NULL, ?, ?)")
+        .bind(newId(), group.id, chris, at, TEST_CREDIT),
+    );
   }
   await ctx.db.batch(statements);
   return { ...made, stage };

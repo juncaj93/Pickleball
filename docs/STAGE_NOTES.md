@@ -8630,3 +8630,24 @@ and scenario times only). Browser: e2e/zip89.cjs 4 of 4 (320/390/420, light and 
 - Before the deploy on the merged code: unit 242 files, 4,492 passed, 2 skipped, 0 failed (one test fixed after the full run, rerun alone);
   e2e/zip89.cjs 5 of 5; e2e/zip88.cjs 9 of 9 (I: its countdown check fails at some wall-clock seconds, passes on rerun, as on 🎾88's branch);
   admin Home 4 trips / 63 statements, the 5 second check 2 / 16.
+
+## 🎾90.prize reveal (Wed Nov 25, 2026; branch `claude/new-session-2bc3od`, from main `404aa16` (🎾89 live))
+
+### What changed (the code is the truth; SITE_RULES "The prize reveal, the player header, "+ Add" (Zip 90)")
+1. THE PRIZE REVEAL (pictures 1 to 6) replaces the congratulations card: src/TourAwards.tsx PrizeReveal (the lazy TourAwards file, so the
+   player's first download barely grows), src/tour-awards.css `.pz`, shared/prizeReveal.ts (words and cards). Flip (CSS 3D, 0.52 s), the dot
+   burst, the count-up, the flight (a fixed copy on the page body, accelerating, 0.52 s), the header piece opening as it arrives (Web
+   Animations on the piece's width), the bump and shake, the cup glow (`.cup-btn.rv-glow`). Reduced motion: flip and header update only.
+2. MASKING (src/pages/PlayerHome.tsx, "Zip 90"): `prize` state per congrats key: masked / arriving / landed per piece. The header shows
+   medals - 1 (when the medal counts by the name) and balance - award (no chip at $0 unless a cash out waits) until the piece lands. A new
+   piece is drawn closed (`[data-rv-slot]`, width 0, hidden) while its copy flies. CreditChip `hold` (src/pages/CreditSheet.tsx) keeps the chip
+   the same element, so its number rolls from the held amount to the real one. Nothing is stored: a reload starts masked again until Nice.
+3. SERVER (no migration): the congrats view (shared/tournament.ts CongratsView) adds award, format, tournament, partner (Locked doubles
+   champions), creditCents, medal, medalCounted. Who: a champion, or a 2nd place with credit (Locked doubles too); a 2nd place at $0 has
+   no card any more (it had a words-only card). title and sub stay for a page still open from before the deploy.
+4. THE PLAYER HEADER (pictures 7 and 8; `TopBar playerHead`, src/styles.css `.ph-head`): one row always; "not you?" beside, then under,
+   then the name ends in "…"; medal right after the name; tighter buttons and credit. Big text: the date and the credit stop growing a
+   little past 125%. The organizer's header is unchanged. tests/zip78-look.test.ts allows the "…" on `.ph-head .title-line h1` (Alex).
+5. ADMIN: "+ Add game" is "+ Add" (src/pages/Admin.tsx); the e2e files that looked for the old words updated.
+6. STAGES (THIS_ZIP): zip90_ld "Prize: Locked doubles champs", zip90_am "Prize: Americano champion, no credit", zip90_second "Prize:
+   runner-up", zip90_header "Header: long names" (server/tournamentTest.ts zip90Stage, ended by the real End).

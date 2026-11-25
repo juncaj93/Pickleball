@@ -279,7 +279,7 @@ async function main() {
       await page.locator('dialog[open]').waitFor();
       await snap(page, 'organizer', '16-edit-game', 'Edit game sheet', t);
       await page.keyboard.press('Escape');
-      await page.getByRole('button', { name: '+ Add game' }).click();
+      await page.getByRole('button', { name: '+ Add', exact: true }).click();
       await page.locator('dialog[open]').waitFor();
       await snap(page, 'organizer', '17-add-game', 'Add game sheet', t);
       await page.keyboard.press('Escape');

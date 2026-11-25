@@ -68,6 +68,7 @@ import { hasChampions } from '../../shared/champions';
 import { REVEAL_HOLD_MS } from '../../shared/reveal';
 // Zip 58: the ticker and the congratulations card are their own small file, fetched only when a tournament has winners to show.
 const TourAwards = lazy(() => import('../TourAwards'));
+import type { PrizeKind, PrizePhase } from '../../shared/prizeReveal';
 
 /** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
 function flatOfGame(g: GroupView | null | undefined, sessionId: string): number {
@@ -344,6 +345,9 @@ export function PlayerHome({
   const scrolled = useRef(false);
   // The credit the last screen showed, so a chip that appears later can count up from it.
   const lastBalance = useRef<number | null>(null);
+  // Zip 90 (the prize reveal): where each prize card's medal and credit stand on this phone ('masked' until its card is flipped). Kept here so
+  // the header can hold them back; a new visit starts masked again (nothing is saved until Nice).
+  const [prize, setPrize] = useState<{ key: string; medal: PrizePhase; credit: PrizePhase }>({ key: '', medal: 'masked', credit: 'masked' });
 
   useEffect(() => {
     if (load.data && groupKey && !viewAs) storageSet('pb_group_key', groupKey);
@@ -691,16 +695,34 @@ export function PlayerHome({
 
   // The header chip and the credit sheet read the screen's data, so a held drop's credit shows with its banner.
   const credit = view?.credit ?? g?.credit;
-  const balance = g && (switching || (!viewAs && !g.me)) ? null : (credit?.balanceCents ?? null);
+  const choosing = !!g && (switching || (!viewAs && !g.me));
+  // Zip 90: this player's unclaimed prize card. Until its card is flipped, the header shows the medals without its medal and the credit
+  // without its credit (on this phone only, only on screen: no amount or count changes anywhere). With no credit left that way, no chip.
+  const prizeCard = g && !choosing ? (view?.tourAwards?.congrats ?? null) : null;
+  const pz = prizeCard && prize.key === prizeCard.key ? prize : { key: prizeCard?.key ?? '', medal: 'masked' as PrizePhase, credit: 'masked' as PrizePhase };
+  const setPrizePhase = useCallback(
+    (key: string, k: PrizeKind, p: PrizePhase) => setPrize((x) => ({ ...(x.key === key ? x : { key, medal: 'masked' as PrizePhase, credit: 'masked' as PrizePhase }), [k]: p })),
+    [],
+  );
+  const realBalance = credit?.balanceCents ?? 0;
+  const creditHeld = !!prizeCard && prizeCard.creditCents > 0 && pz.credit !== 'landed';
+  const heldBalance = creditHeld ? Math.max(0, realBalance - prizeCard!.creditCents) : realBalance;
+  // The chip as it was before the prize (or a cash out waiting); while the credit flies in, a new chip opens for it (closed until it lands).
+  const chipBefore = heldBalance > 0 || !!credit?.pending;
+  const creditSlot = creditHeld && pz.credit === 'arriving' && !chipBefore && realBalance > 0;
+  const myMedals = g?.me ? (g.tourAwards?.medals?.[g.me.name] ?? 0) : 0;
+  const medalHeld = !!prizeCard?.medalCounted && pz.medal !== 'landed' && myMedals >= 1;
+  const medalSlot = medalHeld && pz.medal === 'arriving' && myMedals === 1;
+  const topMedals = medalHeld && !medalSlot ? myMedals - 1 : myMedals;
+  const balance = g && (switching || (!viewAs && !g.me)) ? null : credit ? heldBalance : null;
   useEffect(() => {
     if (balance !== null) lastBalance.current = balance;
   }, [balance]);
   // Scroll to a shared session once the schedule shows (after picking a name).
   const focusIndex = g && focusId ? g.sessions.findIndex((s) => s.id === focusId) : -1;
-  const choosing = !!g && (switching || (!viewAs && !g.me));
   // The CREDIT chip pops in when it first appears and fades out at $0 (motion).
-  const chipOn = !!g && !!credit && !choosing && (credit.balanceCents > 0 || !!credit.pending);
-  const chipEnter = useJustChanged(chipOn, 600) && chipOn && live;
+  const chipOn = !!g && !!credit && !choosing && (chipBefore || creditSlot);
+  const chipEnter = useJustChanged(chipOn, 600) && chipOn && live && !creditSlot && !creditHeld;
   const chipShown = useLingering(chipOn ? credit : null, 220);
   usePullToRefresh({ enabled: motion && canMove() && !!g && !choosing, onRefresh: load.quiet, ball: ptrBall, shift: mainRef });
   const mineOnly = filter === 'mine';
@@ -757,7 +779,7 @@ export function PlayerHome({
   // The first fresh screen after the saved copy: each card is told how the copy drew it, so only what changed fades in (for 2.5 seconds).
   if (g && swapRef.current === undefined) swapRef.current = savedShownRef.current && saved ? new Map(saved.view.sessions.map((s) => [s.id, s])) : null;
   const swapFrom = swapOver ? null : (swapRef.current ?? null);
-  const showChip = !!g && !!credit && !pickName && (credit.balanceCents > 0 || !!credit.pending);
+  const showChip = chipOn;
   const chipStart = lastBalance.current;
 
 
@@ -812,7 +834,19 @@ export function PlayerHome({
         title={!g ? (showSaved ? saved!.view.me!.name : SITE_NAME) : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
         // Zip 58: a tournament winner's medals right after their name at the top, like an emoji typed after it. Zip 82: a tap opens the wins,
         // except on the organizer's own phone where the name itself is the Go to Admin button (a button never sits inside a button).
-        titleBadge={g?.me && !pickName && g.tourAwards?.medals?.[g.me.name] ? <Medals n={g.tourAwards.medals[g.me.name]} size="top" name={g.goToAdmin === true && !viewAs ? undefined : g.me.name} /> : undefined}
+        // Zip 90: while a prize card is unclaimed, its medal is held back (medalSlot: closed, opening as the medal flies in).
+        titleBadge={
+          g?.me && !pickName && topMedals > 0 ? (
+            medalSlot ? (
+              <span className="rv-slot" data-rv-slot="medal">
+                <Medals n={1} size="top" />
+              </span>
+            ) : (
+              <Medals n={topMedals} size="top" name={g.goToAdmin === true && !viewAs ? undefined : g.me.name} />
+            )
+          ) : undefined
+        }
+        playerHead
         titleExtra={
           g?.me && !pickName ? (
             <>
@@ -832,7 +866,11 @@ export function PlayerHome({
         }
         chip={
           showChip ? (
-            <CreditChip credit={credit!} startFrom={chipStart} enter={chipEnter} onOpen={() => setCreditOpen(true)} />
+            // Zip 90: one steady wrapper (it draws nothing), so the chip is the same element from held back to landed and its number rolls up
+            // (a chip that opens for the prize already says the new total: the flying amount lands on it).
+            <span className={creditSlot ? 'rv-chip rv-slot' : 'rv-chip'} data-rv-slot={creditSlot ? 'credit' : undefined}>
+              <CreditChip credit={credit!} startFrom={chipStart} enter={chipEnter} hold={creditHeld ? (creditSlot ? realBalance : heldBalance) : undefined} onOpen={() => setCreditOpen(true)} />
+            </span>
           ) : chipShown.value ? (
             <CreditChip credit={chipShown.value} leave={chipShown.leaving} onOpen={() => {}} />
           ) : undefined
@@ -891,10 +929,15 @@ export function PlayerHome({
           <>
             {/* Zip 51b "Money change note" (server/moneyNote.ts): first on the screen, and shown on a calm preview too (it is that zip's card). */}
             {view!.moneyNotes && view!.moneyNotes.length > 0 && <MoneyNotes notes={view!.moneyNotes} />}
-            {/* Zip 58: the one-time congratulations card for a tournament's winners (and Americano's runner-up), until Nice. */}
+            {/* Zip 58: the one-time congratulations card for a tournament's winners (and Americano's runner-up), until Nice. Zip 90: the prize reveal. */}
             {view!.tourAwards?.congrats && (
               <Suspense fallback={null}>
-                <TourAwards key={view!.tourAwards.congrats.key} c={view!.tourAwards.congrats} onChanged={load.reload} />
+                <TourAwards
+                  key={view!.tourAwards.congrats.key}
+                  c={view!.tourAwards.congrats}
+                  onChanged={load.reload}
+                  onPhase={(k: PrizeKind, p: PrizePhase) => setPrizePhase(view!.tourAwards!.congrats!.key, k, p)}
+                />
               </Suspense>
             )}
             {/* Zip 55 "Tournaments": the pinned ticket card (and the Only me strip), only when the server sent one for this phone. Shown on a calm preview too (it is that zip's card). */}

@@ -371,7 +371,7 @@ async function main() {
 
   await check('Add game: the Court row picks a court and the new game has it; the note is never touched', async () => {
     const { ctx, page } = await openAdmin(390, 'light');
-    await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
     const sheet = page.locator('dialog.sheet[open]');
     await sheet.locator('[data-court-row]').waitFor();
     await sheet.locator('input[type="date"]').fill('2026-11-21');

@@ -25,16 +25,36 @@ const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia
  * `startFrom` is what the screen showed before this chip appeared (a chip
  * that was not there fades in and counts up from it).
  */
-export function CreditChip({ credit, onOpen, startFrom, enter, leave }: { credit: CreditView; onOpen: () => void; startFrom?: number | null; enter?: boolean; leave?: boolean }) {
+export function CreditChip({
+  credit,
+  onOpen,
+  startFrom,
+  enter,
+  leave,
+  hold,
+}: {
+  credit: CreditView;
+  onOpen: () => void;
+  startFrom?: number | null;
+  enter?: boolean;
+  leave?: boolean;
+  /** Zip 90 (the prize reveal): the amount to show for now (the balance without the prize not yet claimed). The width is the real balance's
+   *  already, so nothing moves when it goes; left out, the chip counts up (or rolls) from it to the real balance. */
+  hold?: number;
+}) {
   const motion = useMotion();
   const pending = !!credit.pending;
   const target = credit.balanceCents;
-  const [shown, setShown] = useState(() => (startFrom != null && startFrom < target && !reducedMotion() ? startFrom : target));
-  const [fresh] = useState(() => startFrom != null && startFrom < target && !reducedMotion());
+  const [shown, setShown] = useState(() => (hold !== undefined ? hold : startFrom != null && startFrom < target && !reducedMotion() ? startFrom : target));
+  const [fresh] = useState(() => hold === undefined && startFrom != null && startFrom < target && !reducedMotion());
   const [pulse, setPulse] = useState(false);
   const shownRef = useRef(shown);
   shownRef.current = shown;
   useEffect(() => {
+    if (hold !== undefined) {
+      setShown(hold);
+      return;
+    }
     const from = shownRef.current;
     if (from === target) return;
     // With the motion on the number rolls (RollText below) instead of counting up.
@@ -63,14 +83,15 @@ export function CreditChip({ credit, onOpen, startFrom, enter, leave }: { credit
       clearTimeout(pulseTimer);
       setPulse(false);
     };
-  }, [target]);
+  }, [target, hold]);
   const text = formatPrice(shown);
+  const said = hold !== undefined ? hold : target;
   return (
     <button
       type="button"
       className={`credit-chip${pending ? ' pending' : ''}${pulse ? ' pulse' : ''}${fresh ? ' fresh' : ''}${enter ? ' m-in' : ''}${leave ? ' m-out' : ''}`}
       data-credit-chip
-      aria-label={`${formatPrice(target)} credit${pending ? ', cash out requested' : ''}. Open your credit`}
+      aria-label={`${formatPrice(said)} credit${pending ? ', cash out requested' : ''}. Open your credit`}
       onClick={onOpen}
     >
       <span className="cc-label" aria-hidden="true">
@@ -79,7 +100,7 @@ export function CreditChip({ credit, onOpen, startFrom, enter, leave }: { credit
       <span className="cc-amount" aria-hidden="true">
         {/* The finished number, invisible, holds the width so counting up never moves the chip. */}
         <span className="cc-ghost">{formatPrice(target)}</span>
-        <span className="cc-now">{motion ? <RollText text={formatPrice(target)} /> : text}</span>
+        <span className="cc-now">{motion ? <RollText text={formatPrice(said)} /> : text}</span>
       </span>
     </button>
   );

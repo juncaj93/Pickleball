@@ -566,14 +566,31 @@ export async function playerAwardsFor(ctx: Ctx, group: GroupRow, playerId: strin
     out.ticker = ticker;
   }
   // The congratulations card: this player's own award, from any tournament whose banner is still up, until they tap Nice.
-  const mine = a.winners.find((w) => w.player_id === playerId && !w.seen_at && banners.some((x) => x.id === w.tournament_id));
+  // Zip 90: a champion (either style; the medal), or a 2nd place (either style, Locked doubles too since Zip 87) only when they got credit: a
+  // 2nd place with $0 has no prize to reveal, so no card.
+  const mine = a.winners.find(
+    (w) => w.player_id === playerId && !w.seen_at && (w.award === 'champion' || (w.award === 'second' && Number(w.credit_cents) > 0)) && banners.some((x) => x.id === w.tournament_id),
+  );
   if (mine) {
     const t = banners.find((x) => x.id === mine.tournament_id)!;
-    const money = mine.credit_cents > 0 ? `${formatPrice(mine.credit_cents)} credit toward your next game` : '';
-    out.congrats =
-      mine.award === 'champion'
+    const cents = Number(mine.credit_cents) || 0;
+    const money = cents > 0 ? `${formatPrice(cents)} credit toward your next game` : '';
+    const champion = mine.award === 'champion';
+    const format: TournamentFormat = t.format === 'americano' ? 'americano' : 'doubles';
+    const partner =
+      champion && format === 'doubles' ? a.winners.find((w) => w.tournament_id === t.id && w.award === 'champion' && w.player_id !== playerId)?.display_name : undefined;
+    out.congrats = {
+      ...(champion
         ? { key: `won:${t.id}`, tournamentId: t.id, title: `You won ${t.name}`, sub: money ? `${money}, plus a medal next to your name.` : 'A medal next to your name.' }
-        : { key: `second:${t.id}`, tournamentId: t.id, title: `Second place, ${t.name}`, sub: money ? `${money}.` : '' };
+        : { key: `second:${t.id}`, tournamentId: t.id, title: `Second place, ${t.name}`, sub: money ? `${money}.` : '' }),
+      award: champion ? 'champion' : 'second',
+      format,
+      tournament: t.name,
+      ...(partner ? { partner } : {}),
+      creditCents: cents,
+      medal: champion,
+      medalCounted: champion && Number(mine.medal) === 1 && t.visibility === 'all',
+    };
   }
   if (Object.keys(medals).length) out.medals = medals;
   return Object.keys(out).length ? out : null;

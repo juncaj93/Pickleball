@@ -115,7 +115,7 @@ async function main() {
     await page.waitForTimeout(400);
   };
   const openAdd = async (page) => {
-    await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
     await page.locator('dialog.sheet[open] form.add-game').waitFor();
     await page.waitForTimeout(300);
   };

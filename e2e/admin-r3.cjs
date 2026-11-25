@@ -152,7 +152,7 @@ async function main() {
     assert((await page.locator('form.edit-game-r3').count()) === 0, 'no round 3 class');
     await page.locator('dialog.sheet[open] .icon-btn').first().click();
     await page.waitForTimeout(300);
-    await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
     assert((await page.locator('dialog.sheet[open] .chip-btn').count()) === 3, 'suggested-day chips are back');
     assert((await page.locator('dialog.sheet[open] input[type="time"]').count()) === 2, 'plain time boxes');
     await page.locator('dialog.sheet[open] .icon-btn').first().click();
@@ -318,7 +318,7 @@ async function main() {
   // ---------------------------------------------------------------- Add game
   await check('2 Add game: calendar date only (no chips), start and end in 30-minute steps', async () => {
     const { ctx, page } = await openAdmin();
-    await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
     const sheet = page.locator('dialog.sheet[open]');
     assert((await sheet.locator('.chip-btn').count()) === 0, 'no suggested-day chips');
     assert((await sheet.locator('input[type="date"]').count()) === 1, 'one calendar date picker');
@@ -333,7 +333,7 @@ async function main() {
 
   await check('2 Add game: adding a 7:30 PM to 9:30 PM game on a free date works and the game is saved at that time', async () => {
     const { ctx, page } = await openAdmin();
-    await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
     const sheet = page.locator('dialog.sheet[open]');
     const day = new Date(Date.now() + 40 * 86400_000);
     const iso = `${day.getUTCFullYear()}-${String(day.getUTCMonth() + 1).padStart(2, '0')}-${String(day.getUTCDate()).padStart(2, '0')}`;

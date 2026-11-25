@@ -763,7 +763,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const pills = (
     <>
       <button className="btn pill add-pill" onClick={() => setAdding(true)}>
-        + Add game
+        + Add
       </button>
       <CourtReserveLink href={COURTRESERVE_BOOKING_URL} pill>
         {r2 ? 'Book' : 'Book a court'}

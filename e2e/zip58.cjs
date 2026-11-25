@@ -412,8 +412,11 @@ async function main() {
       assert(text.startsWith('THE COLD OPEN CHAMPIONS NET NINJAS VIC') && text.includes('WREN'), text);
       const anim = await v.page.locator('.tw-track').evaluate((el) => getComputedStyle(el).animationName);
       assert(anim === 'tw-run', `runs: ${anim}`);
-      const c = flat(await v.page.locator('[data-tour-congrats]').innerText());
-      assert(c === 'You won The Cold Open $14 credit toward your next game, plus a medal next to your name. Nice', c);
+      // Zip 90: the prize reveal replaced the words card; the medal by the name lands when its card is flipped (e2e/zip90.cjs has the rest).
+      const c = flat(await v.page.locator('[data-tour-congrats] .pz-title').innerText());
+      assert(c === 'Congrats, you and Wren won!', c);
+      for (const k of ['medal', 'credit']) await v.page.locator(`[data-pz-card="${k}"] .pz-front`).click();
+      await v.page.waitForFunction(() => !document.querySelector('.pz-ghost') && !document.querySelector('.topbar [data-rv-slot]') && document.querySelector('[data-tour-nice]') && document.querySelector('.topbar .h1-badge [data-medals="1"]'), null, { timeout: 6000 });
       assert((await v.page.locator('header [data-medals="1"], .topbar [data-medals="1"]').count()) >= 1, 'a medal by the name at the top');
       assert((await v.page.locator('[data-tc-day-hero], [data-future-toggle]').count()) === 0, 'no live view, no Show future games');
       for (const w of SIZES) {

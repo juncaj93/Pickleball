@@ -151,7 +151,7 @@ async function main() {
     return String(await page.locator('[data-court-row]').count());
   };
   const addGame = async (page) => {
-    await page.getByRole('button', { name: /\+ Add game/ }).first().click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).first().click();
     await page.locator('dialog.sheet[open] form.add-game').waitFor();
     return String(await page.locator('[data-court-row]').count());
   };

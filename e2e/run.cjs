@@ -3427,7 +3427,7 @@ async function main() {
       await tab(admin, 'Home').click();
       await sessionCards(admin).first().waitFor();
       const line = admin.locator('.week-break').first();
-      const pill = line.getByRole('button', { name: '+ Add game' });
+      const pill = line.getByRole('button', { name: '+ Add', exact: true });
       const lb = await line.boundingBox();
       const plain = await admin.locator('.week-break').nth(1).boundingBox();
       assert(Math.abs(lb.height - plain.height) <= 1, 'the pills add no height to the line');
@@ -3474,7 +3474,7 @@ async function main() {
       const shownStarts = starts.map((id) => all.find((x) => `session-${x.id}` === id).startsAt);
       assert(shownStarts.every((x, i) => i === 0 || x >= shownStarts[i - 1]), 'Home in date order');
       // Duplicate: warned, not made.
-      await admin.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+      await admin.locator('.week-break').first().getByRole('button', { name: '+ Add', exact: true }).click();
       await sheet.getByLabel('Pick a date').fill(iso);
       await sheet.getByLabel('Start').fill('10:00');
       await sheet.getByLabel('End').fill('12:00');
@@ -3514,7 +3514,7 @@ async function main() {
         await sessionCards(p).first().waitFor();
         await showAll(p);
         // The sheet fits, nothing overlaps.
-        await p.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+        await p.locator('.week-break').first().getByRole('button', { name: '+ Add', exact: true }).click();
         const sheet = p.locator('dialog[open]');
         await sheet.getByRole('button', { name: 'Add game', exact: true }).waitFor();
         const sr = await p.evaluate(layoutReport, { roots: 'dialog[open] .sheet-body', items: 'button, input, .chip-btn' });
@@ -3992,7 +3992,7 @@ async function main() {
           await first.getByRole('menuitem', { name: 'Text the group', exact: true }).click();
           await look('Home, gear pop-up and Text the group open', true);
           await closeOptions(first);
-          await p.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+          await p.locator('.week-break').first().getByRole('button', { name: '+ Add', exact: true }).click();
           await p.locator('dialog[open]').waitFor();
           await look('Add game sheet');
           await p.keyboard.press('Escape');

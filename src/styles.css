@@ -4757,3 +4757,120 @@ dialog.sheet[open]::backdrop {
   margin-left: 0.25em;
   line-height: 1;
 }
+
+/* ---------- Zip 90 (🎾90.prize reveal, pictures 7 and 8): the player Home header (.ph-head; the organizer's header is not changed) ----------
+   One row, always: the logo, the name (and medals), the buttons, the credit, the date; the buttons never take a second row. "not you?" sits
+   beside the name when the name, its medals and "not you?" fit; under the name (lined up with its first letter) when they don't; only when the
+   name alone can't fit does it end in "…". The medal sits right after the name or the "…", no gap. Pure layout (flex wrap), nothing measured. */
+.ph-head .topbar-row {
+  flex-wrap: nowrap;
+  column-gap: 8px;
+}
+.ph-head .topbar-text {
+  flex: 1 1 auto;
+}
+.ph-head .topbar-end {
+  flex: none;
+  flex-basis: auto;
+  flex-wrap: nowrap;
+  column-gap: 6px;
+}
+.ph-head .title-line {
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 7px;
+  row-gap: 0;
+  min-width: 0;
+}
+.ph-head .title-line h1,
+.ph-head .title-swap {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.ph-head .title-line h1 {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-head .title-line h1.has-badge {
+  display: flex;
+  align-items: baseline;
+  overflow: visible;
+}
+.ph-head .title-line h1.has-badge .h1-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-head .title-line h1.has-badge .h1-badge {
+  margin-left: 0.04em;
+}
+.ph-head .title-swap {
+  overflow: hidden;
+}
+.ph-head .not-you {
+  font-size: max(11px, min(0.68rem, 12.5px));
+  text-decoration-color: color-mix(in srgb, var(--line-strong) 55%, transparent);
+}
+/* The name's column is never narrower than "not you?" (the name itself may end in "…"), and with very big text the date and the credit stop
+   growing a little past 125%, so one row still leaves the name room on a 320 px phone. */
+.ph-head .topbar-text {
+  min-width: 50px;
+}
+.ph-head .today .dow,
+.ph-head .credit-chip .cc-label {
+  font-size: min(0.7rem, 13px);
+}
+.ph-head .today .day {
+  font-size: min(1.32rem, 25px);
+}
+.ph-head .credit-chip .cc-amount {
+  font-size: min(1.15rem, 22px);
+}
+/* The cup and light/dark: about 4 px between the circles (each tap area stays 44 x 44); the credit with about 8 px of room each side. */
+.ph-head .topbar-tools {
+  gap: 0;
+  margin-right: -2px;
+}
+.ph-head .topbar-tools .mode-btn + .mode-btn,
+.ph-head .topbar-tools .cup-btn ~ .mode-btn {
+  margin-left: -4px;
+}
+.ph-head .credit-chip {
+  margin-left: -2px;
+}
+.ph-head .rv-chip {
+  display: contents;
+}
+/* Zip 90: a header piece the prize reveal is about to fill (the medal after the name, a new credit chip): closed and hidden until its prize
+   flies in (src/TourAwards.tsx opens it as it arrives). */
+.ph-head .rv-slot,
+.ph-head .rv-chip.rv-slot {
+  display: inline-flex;
+  flex: none;
+  width: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.ph-head .rv-chip.rv-slot {
+  margin-inline-start: -6px;
+}
+/* About 1 second after the medal lands: the cup glows gold for about a second, then fades. */
+.ph-head .cup-btn.rv-glow::after {
+  animation: rv-cup-glow 1.3s ease-in-out both;
+}
+@keyframes rv-cup-glow {
+  0% {
+    box-shadow: var(--shadow);
+  }
+  30%,
+  60% {
+    border-color: var(--gold-deep);
+    box-shadow: 0 0 0 2px var(--gold), 0 0 18px 4px color-mix(in srgb, var(--gold) 55%, transparent);
+  }
+  100% {
+    box-shadow: var(--shadow);
+  }
+}

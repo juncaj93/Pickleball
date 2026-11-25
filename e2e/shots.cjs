@@ -127,7 +127,7 @@ async function main() {
       await snap('02-organizer-gear-panel');
       await page.keyboard.press('Escape');
       // Add game sheet.
-      await page.getByRole('button', { name: '+ Add game' }).click();
+      await page.getByRole('button', { name: '+ Add', exact: true }).click();
       await page.locator('dialog[open]').waitFor();
       await snap('03-add-game-sheet');
       await page.keyboard.press('Escape');

@@ -34,6 +34,7 @@ export function TopBar({
   chip,
   onTitle,
   skinLogo,
+  playerHead,
 }: {
   /** The small label over the title. Empty: no label at all (the organizer header with Swap to Alex on). */
   eyebrow: string;
@@ -52,6 +53,9 @@ export function TopBar({
   onTitle?: { onClick: () => void; label: string };
   /** Zip 38, Christmas skin: the tappable Christmas logo (player Home only, inside the window). Left out: the usual logo, exactly as before. */
   skinLogo?: ReactNode;
+  /** Zip 90 (pictures 7 and 8): the player Home header: always one row; "not you?" beside the name, under it when they don't fit, and the
+   *  name ends in "…" only when it alone can't fit (src/styles.css .ph-head). Left out: the header exactly as before (the organizer's). */
+  playerHead?: boolean;
 }) {
   // The tab says the group's name from Settings (src/siteName.ts); "Pickleball" until a screen has it.
   const siteName = useSiteName();
@@ -59,7 +63,7 @@ export function TopBar({
     document.title = title === SITE_NAME || title === siteName ? siteName : `${title} · ${siteName}`;
   }, [title, siteName]);
   return (
-    <header className="topbar">
+    <header className={playerHead ? 'topbar ph-head' : 'topbar'}>
       <div className="topbar-inner topbar-row">
         {/* The logo on a rounded tile with an outline (green in dark mode, black in light). public/logo-xmas.png is staged for later, unused. */}
         {skinLogo ?? (

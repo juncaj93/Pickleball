@@ -1166,11 +1166,33 @@ export interface TickerView {
   runnerUp?: { name: string; medals: number };
 }
 
+/** Zip 90: what the prize reveal needs (the player's own award, from the row End saved; nothing new is stored). */
+export interface CongratsView {
+  key: string;
+  tournamentId: string;
+  title: string;
+  sub: string;
+  award: 'champion' | 'second';
+  format: TournamentFormat;
+  /** The tournament's name ("The Cold Open"). */
+  tournament: string;
+  /** Locked doubles: the partner's name ("Congrats, you and Wren won!"). */
+  partner?: string;
+  /** The award's credit (paid at End; 0: no credit card). */
+  creditCents: number;
+  /** 1st place: the gold medal card. */
+  medal: boolean;
+  /** The medal counts in the medals by name (a tournament everyone could see), so the header holds it back until the slam. */
+  medalCounted: boolean;
+}
+
 /** Zip 58: what a player's Home gets after a tournament ends (GET /api/group `tourAwards`). Left out when there is nothing. */
 export interface TourAwardsView {
   ticker?: TickerView;
-  /** The one-time congratulations card (a winner, or the Americano runner-up), until Nice. */
-  congrats?: { key: string; tournamentId: string; title: string; sub: string };
+  /** The one-time congratulations card (a winner, or the Americano runner-up), until Nice. Zip 90: the prize reveal (src/TourAwards.tsx
+   *  PrizeReveal): a champion (either style), or a 2nd place (either style) who got credit; `title` and `sub` stay for a page still open
+   *  from before the deploy. */
+  congrats?: CongratsView;
   /** Gold medals per player name (only players with at least one), for the name at the top and the game cards. */
   medals?: Record<string, number>;
 }

@@ -17,7 +17,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'zip89_break'];
+const THIS_ZIP: readonly string[] = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -38,6 +38,11 @@ const EARLY_LOOK: NightModel = {
 };
 
 const STAGES = [
+  // Zip 90 (🎾90.prize reveal): the prize cards and the header.
+  { stage: 'zip90_ld', label: 'Prize: Locked doubles champs', line: 'Net Ninjas (Vic and Wren) won, $14 each. View as Vic: “Congrats, you and Wren won!” with two face-down cards; no medal by the name and no credit yet. Tap the left card: the medal slams onto the name, the cup glows. Tap the right: $14 slams into the credit. Nice ends it. Leave before Nice: the cards come back face down.' },
+  { stage: 'zip90_am', label: 'Prize: Americano champion, no credit', line: 'Americano, Vic won, prizes $0 (medals only). View as Vic: “Congrats, you won!”, one card: the gold medal.' },
+  { stage: 'zip90_second', label: 'Prize: runner-up', line: 'Locked doubles 2nd place pays $7 each. View as Parker (Third Shot Gang lost the Final): “Congrats on 2nd place!”, one card: $7 credit, no medal.' },
+  { stage: 'zip90_header', label: 'Header: long names', line: 'Every prize already claimed; Christopher Vanderberg has a medal and $14 credit. View as Vic (not you? beside the name) and Christopher Vanderberg (not you? under it; on a small phone the name ends in “…” right before the medal).' },
   // Zip 89 (🎾89.smart pacing): the bonus offer and what it adds.
   { stage: 'zip89_am_ahead', label: 'Pacing: Americano ahead (offer showing)', line: 'Americano tonight, Rounds 1 and 2 in at 14 minutes a round. Home: the night card’s green “Ahead of time” line with Add a round, above All rounds. Tap it: “Add a round? Are you sure?”, Yes: RD7 joins the bars, All rounds and every phone (View as Vic).' },
   { stage: 'zip89_ld_semis', label: 'Pacing: Locked doubles ahead (semis offer)', line: '4 teams tonight, Round 1 in at 14 minutes. “Ahead of time”, Add a round asks “Add semifinals?”. Yes: SEMIS joins the bars between RD3 and FINAL (1st vs 4th, 2nd vs 3rd after the round robin; the Final and 3rd place after them).' },
