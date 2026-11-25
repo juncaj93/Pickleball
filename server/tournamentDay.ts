@@ -432,7 +432,12 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
         players: r?.a && r?.b ? [`T${r.a}`, `T${r.b}`] : [],
         doneAt: finished ? (at ? Date.parse(at) : -1e15) : g.skipped && pin ? nowMs : null,
         ...(g.skipped && !at && !pin ? { gone: true } : {}),
-        ...(g.stage === 'tie' ? { from: Date.parse(g.created_at) } : breaks.has(g.round) ? { from: breaks.get(g.round)! } : {}),
+        // Zip 92 (review): an extra round robin round's games exist from the tap that added them (never placed on a court before it).
+        ...(g.stage === 'tie' || (g.stage === 'pool' && g.round > doublesStructure(teams.length, courtsOf(t)).poolRounds)
+          ? { from: Math.max(Date.parse(g.created_at), breaks.get(g.round) ?? -Infinity) }
+          : breaks.has(g.round)
+            ? { from: breaks.get(g.round)! }
+            : {}),
         ...(pin ? { pin } : {}),
       };
     }),
@@ -513,7 +518,8 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     : [
         ...(shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? (['semis'] as const) : []),
         ...(!series.bestOf3 ? (['bestOf3'] as const) : []),
-        ...(shape.shape === 'rr' && !games.some((g) => g.stage === 'tie') ? (['round'] as const) : []),
+        // (Review: not on 1 court, where a "round" is one game and would leave two teams a game ahead.)
+        ...(shape.shape === 'rr' && shape.courtsUsed === 2 && !games.some((g) => g.stage === 'tie') ? (['round'] as const) : []),
       ];
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
   // Zip 89: Round 1 is measured from the start + the warm-up; a round after a break from the break's end (the pace never counts either).
@@ -1734,34 +1740,38 @@ export async function writePoolRound(db: D1Database, t: TournamentRow, day: DayR
   const noOther = `NOT EXISTS (SELECT 1 FROM tournament_games o WHERE o.tournament_id = ? AND o.stage = 'pool' AND o.round > ? AND o.created_at <> ?)`;
   // Highest number first, so no two rows ever share a number on the way.
   const moved = [...rest].sort((a, b) => b.num - a.num);
-  const res = await db
-    .batch([
-      ...moved.map((g) =>
-        db
-          .prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND updated_at = ? AND ${freshGame('tournament_games')} AND ${noOther}`)
-          .bind(g.num + m, g.round + 1, shift(g.slot_a), shift(g.slot_b), nowIso, g.id, g.num, g.updated_at, t.id, R, nowIso),
-      ),
-      ...tmpl.map((g, i) =>
-        db
-          .prepare(
-            `${INSERT_GAME} SELECT ?, ?, ?, ?, ?, 'pool', ?, ?, ?, ?, 0, ?, ?
-               WHERE NOT EXISTS (SELECT 1 FROM tournament_games x WHERE x.tournament_id = ? AND x.num = ?) AND ${noOther}
-                 AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
-          )
-          .bind(newId(), t.id, P + i, R + 1, g.court, g.pool, g.slot_a, g.slot_b, lastTo, nowIso, nowIso, t.id, P + i, t.id, R, nowIso, t.id),
-      ),
-    ])
-    .catch((e) => (console.error('writePoolRound', e), null));
+  const ids = tmpl.map(() => newId());
+  const steps = [
+    ...moved.map((g) =>
+      db
+        .prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND num = ? AND updated_at = ? AND ${freshGame('tournament_games')} AND ${noOther}`)
+        .bind(g.num + m, g.round + 1, shift(g.slot_a), shift(g.slot_b), nowIso, g.id, g.num, g.updated_at, t.id, R, nowIso),
+    ),
+    ...tmpl.map((g, i) =>
+      db
+        .prepare(
+          `${INSERT_GAME} SELECT ?, ?, ?, ?, ?, 'pool', ?, ?, ?, ?, 0, ?, ?
+             WHERE NOT EXISTS (SELECT 1 FROM tournament_games x WHERE x.tournament_id = ? AND x.num = ?) AND ${noOther}
+               AND EXISTS (SELECT 1 FROM tournaments tt WHERE tt.id = ? AND tt.status = 'tickets')`,
+        )
+        .bind(ids[i], t.id, P + i, R + 1, g.court, g.pool, g.slot_a, g.slot_b, lastTo, nowIso, nowIso, t.id, P + i, t.id, R, nowIso, t.id),
+    ),
+  ];
+  const res = await db.batch(steps).catch((e) => (console.error('writePoolRound', e), null));
   if (res && res.every((r) => (r.meta?.changes ?? 0) === 1)) return true;
-  // A step did not happen: take out this tap's new games and put every moved row back exactly as it was.
-  await db
-    .batch([
-      db.prepare(`DELETE FROM tournament_games WHERE tournament_id = ? AND stage = 'pool' AND round = ? AND created_at = ?`).bind(t.id, R + 1, nowIso),
-      ...[...rest]
-        .sort((a, b) => a.num - b.num)
-        .map((g) => db.prepare(`UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ? AND updated_at = ?`).bind(g.num, g.round, g.slot_a, g.slot_b, g.updated_at, g.id, nowIso)),
-    ])
-    .catch(() => undefined);
+  // A step did not happen: undo exactly what THIS tap did (review: by its own new ids and the moves that took, never by the time, which a
+  // second tap in the same millisecond shares), the moved rows back as they were.
+  if (res) {
+    const undo = [
+      ...ids.filter((_, i) => (res[moved.length + i]?.meta?.changes ?? 0) === 1).map((id) => db.prepare('DELETE FROM tournament_games WHERE id = ?').bind(id)),
+      ...moved
+        .map((g, i) => ({ g, took: (res[i]?.meta?.changes ?? 0) === 1 }))
+        .filter((x) => x.took)
+        .sort((a, b) => a.g.num - b.g.num)
+        .map(({ g }) => db.prepare('UPDATE tournament_games SET num = ?, round = ?, slot_a = ?, slot_b = ?, updated_at = ? WHERE id = ?').bind(g.num, g.round, g.slot_a, g.slot_b, g.updated_at, g.id)),
+    ];
+    if (undo.length) await db.batch(undo).catch(() => undefined);
+  }
   return false;
 }
 

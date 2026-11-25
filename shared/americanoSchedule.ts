@@ -414,11 +414,29 @@ export function endsFair(n: number, onCourt: number, rounds: readonly SeatRound[
   if (inLap.size < n) return false;
   const limit = sitLimit(n, onCourt);
   const run = new Array<number>(n).fill(0);
-  for (const r of rounds)
+  const sits = new Array<number>(n).fill(0);
+  const partner = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (const r of rounds) {
     for (let x = 0; x < n; x++) {
       run[x] = r.sit.includes(x) ? run[x] + 1 : 0;
       if (run[x] > limit) return false;
+      if (r.sit.includes(x)) sits[x]++;
     }
+    // The fair sit-out rule (Zip 80): after every round, sit-outs never differ by more than 1.
+    if (Math.max(...sits) - Math.min(...sits) > 1) return false;
+    // Partners never repeat before every possible partner has been used, at the moment of each game (Zip 61).
+    for (const g of r.games)
+      for (const [x, y] of [g.a, g.b]) {
+        const minX = Math.min(...partner[x].filter((_, o) => o !== x));
+        const minY = Math.min(...partner[y].filter((_, o) => o !== y));
+        if (partner[x][y] > minX || partner[y][x] > minY) return false;
+      }
+    for (const g of r.games)
+      for (const [x, y] of [g.a, g.b]) {
+        partner[x][y]++;
+        partner[y][x]++;
+      }
+  }
   return true;
 }
 export function fairEnd(n: number, onCourt: number, rounds: readonly SeatRound[]): SeatRound[] {
@@ -440,11 +458,16 @@ export function fairEnd(n: number, onCourt: number, rounds: readonly SeatRound[]
         const next = [...list.filter((_, k) => k !== i && k !== j), list[i], list[j]];
         if (endsFair(n, onCourt, next)) return next;
       }
-  // Still none (16 on 2 courts: half sit every round, and no two rounds sit opposite halves): the last round is made again with the same rules,
-  // its sitters the players of the round before it, kept only when the game counts stay within one of each other.
+  // Still none (15 and 16 on 2 courts: about half sit every round): the last round is made again with the same rules, its sitters from the
+  // players of the round before it, kept only when every rule above still holds.
   if (lap === 2) {
     const t = tallyOf(n, list.slice(0, R - 1));
-    const sit = [...Array(n).keys()].filter((x) => !list[R - 2].sit.includes(x)).slice(0, n - onCourt);
+    // The least-sat of the round before's players sit (ties by seat), so the sit counts stay within one.
+    const sit = [...Array(n).keys()]
+      .filter((x) => !list[R - 2].sit.includes(x))
+      .sort((a, b) => t.sits[a] - t.sits[b] || a - b)
+      .slice(0, n - onCourt)
+      .sort((a, b) => a - b);
     if (sit.length === n - onCourt) {
       const next = [...list.slice(0, R - 1), nextRound(t, onCourt, seeded(n * 1000 + R), 2, sit)];
       const sits = tallyOf(n, next).sits;
@@ -681,8 +704,9 @@ export function bonusRound(
       });
     // The night as written: the pattern in its order, or (Zip 92) its first k rounds in fairEnd's order and the bonus rounds after them.
     const head = pattern.slice(0, rounds);
-    const same = matches(head) || Array.from({ length: rounds }, (_, i) => rounds - i).some((k) => matches([...fairEnd(n, onCourt, head.slice(0, k)), ...head.slice(k)]));
-    if (same && pattern[rounds]) return mapped(pattern[rounds]).sort((x, y) => x.court - y.court);
+    // Zip 92: only a night written in the pattern's own order continues it; a night fairEnd reordered gets the round worked out from the night
+    // as played below (the next saved round was made to follow the original order, so its sits could break the sit rules: review).
+    if (matches(head) && pattern[rounds]) return mapped(pattern[rounds]).sort((x, y) => x.court - y.court);
   }
   const still = seats.filter((id) => !gone.has(id));
   const m = still.length;

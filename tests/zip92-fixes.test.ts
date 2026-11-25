@@ -139,7 +139,9 @@ describe('fix 10: Locked doubles one more round robin round', () => {
     const t = ctx.app.db.raw.prepare('SELECT * FROM tournaments WHERE id = ?').get(ctx.tid) as unknown as TournamentRow;
     const day = await loadDay(ctx.app.db as never, ctx.tid);
     const before = rows(ctx);
-    expect(await writePoolRound(ctx.app.db as never, t, day, '2026-12-02T01:00:00.000Z')).toBe(true);
+    // Two taps in the same millisecond (review): one adds the round, the other changes nothing and undoes nothing of the first.
+    const both = await Promise.all([writePoolRound(ctx.app.db as never, t, day, '2026-12-02T01:00:00.000Z'), writePoolRound(ctx.app.db as never, t, day, '2026-12-02T01:00:00.000Z')]);
+    expect(both.filter(Boolean)).toHaveLength(1);
     // The same tap again, from what was read before the first one: refused, nothing changed.
     expect(await writePoolRound(ctx.app.db as never, t, day, '2026-12-02T01:00:01.000Z')).toBe(false);
     const g = rows(ctx);

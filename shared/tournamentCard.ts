@@ -308,10 +308,10 @@ export function courtTimeLine(t: Pick<AdminTournamentView, 'finalDate' | 'signup
   for (let add = 30; add <= 90 && t.minutes + add <= 240; add += 30) {
     const f = full(t.minutes + add);
     if (!f.ok) continue;
-    // The venue closes at 10 PM most nights: past it, the start moves earlier instead.
-    const later = end + add <= 22 * 60;
-    const from = later ? t.start : t.start - add;
-    const to = later ? end + add : end;
+    // The venue closes at 10 PM most nights: the end moves later up to 10 PM, the rest of the time goes before the start (review).
+    const toEnd = Math.max(0, Math.min(add, 22 * 60 - end));
+    const from = t.start - (add - toEnd);
+    const to = end + toEnd;
     return `${head} add ${add} min so everyone plays ${f.each}${shorter ? ' to 11' : ''} (${clock(from)} to ${clock(to)}).`;
   }
   return null;
