@@ -40,6 +40,9 @@ function assignPorts(names, basePort) {
   return ports;
 }
 
+/** Zip 92 (🎾91's list): the four long scripts get 40 minutes each (the default is 20); they ran 10 to 20+ minutes with 3 lanes busy. */
+const LONG_SCRIPTS = { 'audit-player-flows': 2400_000, 'layout-polish': 2400_000, run: 2400_000, zip18: 2400_000 };
+
 /** Run one script in its own process group. Resolves with { name, status: 'pass' | 'fail' | 'timeout', passed, failed, exit, seconds, log }. */
 function runScript({ dir, name, port, timeoutMs, logDir, env = {}, node = process.execPath }) {
   return new Promise((resolve) => {
@@ -108,7 +111,7 @@ async function pool(items, lanes, worker, onDone = () => {}) {
  */
 async function runAll({ dir, names, lanes = 3, basePort = 5600, timeoutMs = 20 * 60_000, logDir, rerun = true, env = {}, log = () => {} }) {
   const ports = assignPorts(names, basePort);
-  const one = (name) => runScript({ dir, name, port: ports.get(name), timeoutMs, logDir, env });
+  const one = (name) => runScript({ dir, name, port: ports.get(name), timeoutMs: Math.max(timeoutMs, LONG_SCRIPTS[name] ?? 0), logDir, env });
   log(`Running ${names.length} scripts, ${Math.min(lanes, names.length)} at a time, ports ${basePort} to ${basePort + (names.length - 1) * 2}.`);
   const first = await pool(names, lanes, (n) => (log(`  start  ${n} (port ${ports.get(n)})`), one(n)), (r) => log(`  ${r.status === 'pass' ? 'ok    ' : 'FAILED'} ${r.name}: ${r.passed} passed, ${r.failed} failed, ${r.seconds}s${r.status === 'timeout' ? ' (timed out)' : ''}`));
   const failedNames = first.filter((r) => r.status !== 'pass').map((r) => r.name);
@@ -161,4 +164,5 @@ function summaryJson(result, extra = {}) {
   return JSON.stringify({ ...extra, ok: result.ok, scripts: result.final.map((r) => ({ name: r.name, status: r.status, firstStatus: r.firstStatus, passed: r.passed, failed: r.failed, seconds: r.seconds, rerun: r.rerun })) }, null, 2);
 }
 
-module.exports = { assignPorts, countChecks, failureLines, pool, runAll, runScript, summary, summaryJson, writeFileSync };
+module.exports = {
+  LONG_SCRIPTS, assignPorts, countChecks, failureLines, pool, runAll, runScript, summary, summaryJson, writeFileSync };

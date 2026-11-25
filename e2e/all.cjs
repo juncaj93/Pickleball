@@ -5,7 +5,8 @@
  *   npm run test:e2e -- --lanes=2         fewer at once (default 3, at most 4: each lane is a dev server plus a browser, and more ran the
  *                                         machine out of memory)
  *   npm run test:e2e -- --no-rerun        skip the "failures again, alone" step
- *   npm run test:e2e -- --timeout=15      minutes one script may take before it is stopped (default 20)
+ *   npm run test:e2e -- --timeout=15      minutes one script may take before it is stopped (default 20; the four long scripts in
+ *                                         e2e/all-lib.cjs LONG_SCRIPTS get 40)
  *   npm run test:e2e -- --base-port=5600  the first E2E_PORT; script number n gets base + 2n
  *   npm run test:e2e -- --list            print the script names and their ports, run nothing
  *
