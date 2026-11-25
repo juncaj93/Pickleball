@@ -264,12 +264,15 @@ async function main() {
   await check("the organizer's own Spent (month and All time) equals Money Totals \"Your cost so far\" (one source)", async () => {
     const d = await dash();
     const sum = await (await real.get(`${BASE}/api/admin/players/${d.me.id}/summary`)).json();
+    // Money > Totals' "So far" card total (shared/totalsRefresh.ts soFarCard): owed to the venue minus what players paid, PLUS the credit added
+    // by hand that month (Zip 76: Totals has a hand-credit row), minus ended tournaments. The bare rework.yourCostCents leaves the hand credit out.
+    const soFar = (r) => r.owedToVenueCents - r.collectedCents + (r.handCreditCents ?? 0) - (r.tournaments ?? []).reduce((a, t) => a + t.resultCents, 0);
     const nov = await (await real.get(`${BASE}/api/admin/money?month=2026-11`)).json();
-    assert(sum.organizer === true && sum.month.spentCents === nov.rework.yourCostCents, `month ${sum.month.spentCents} vs Money ${nov.rework.yourCostCents}`);
+    assert(sum.organizer === true && sum.month.spentCents === soFar(nov.rework), `month ${sum.month.spentCents} vs Money ${soFar(nov.rework)} (yourCostCents ${nov.rework.yourCostCents}, hand credit ${nov.rework.handCreditCents ?? 0})`);
     let all = 0;
     for (let y = 2025, m = 1; y < 2026 || (y === 2026 && m <= 11); m === 12 ? ((m = 1), y++) : m++) {
       const mm = await (await real.get(`${BASE}/api/admin/money?month=${y}-${String(m).padStart(2, '0')}`)).json();
-      all += mm.rework.yourCostCents;
+      all += mm.rework ? soFar(mm.rework) : 0;
     }
     assert(sum.allTime.spentCents === all, `all time ${sum.allTime.spentCents} vs the months ${all}`);
     assert(sum.month.played === 2, `the organizer played 2 games this month (${sum.month.played})`);
@@ -278,7 +281,7 @@ async function main() {
     await page.locator(`[data-pr-row="${d.players.find((p) => p.id === d.me.id).name}"]`).click();
     await page.locator('[data-pr-kv="month-spent"] b').filter({ hasText: '$' }).waitFor();
     const shown = await page.locator('[data-pr-kv="month-spent"] b').innerText();
-    assert(shown === `$${nov.rework.yourCostCents / 100}`, `sheet says ${shown}`);
+    assert(shown === `$${soFar(nov.rework) / 100}`, `sheet says ${shown}`);
     await ctx.close();
   });
 

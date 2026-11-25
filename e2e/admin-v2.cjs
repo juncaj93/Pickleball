@@ -308,7 +308,8 @@ async function main() {
     assert((await g.locator('[data-summary]').count()) === 0 || !(await g.locator('[data-price-each]').count()), 'no separate "Each player pays" line');
     assert(/^\d of \d paid · \$14 each$/.test((await g.locator('.mv2-sub').innerText()).trim()), `header "${await g.locator('.mv2-sub').innerText()}"`);
     const hs = await g.locator('.mv2-row').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
-    assert(hs.every((h) => h === hs[0]), `rows are the same height ${hs}`);
+    const why = await g.locator('.mv2-row').evaluateAll((els) => els.map((e) => `${e.className}: ${e.innerText.replace(/\s+/g, ' ')} [${[...e.children].map((c) => Math.round(c.getBoundingClientRect().height)).join('/')}]`));
+    assert(hs.every((h) => h === hs[0]), `rows are the same height ${hs} ${why.join(' | ')}`);
     await shot(page, 'money-who-390-light');
     await ctx.close();
   });
@@ -428,7 +429,8 @@ async function main() {
     const r = rows.first();
     const t = (await r.innerText()).replace(/\s+/g, ' ');
     assert(/\d+ (of 4 )?in · \d/.test(t) && /(Booked|Not booked)/.test(t), `row text "${t}"`);
-    assert((await r.locator('.tile').count()) === 1 && (await r.locator('.hv2-chev').count()) === 1, 'tile and chevron');
+    // Retired in Zip 92: the chevron (.hv2-chev) was removed in Zip 78 (every chevron, caret and › gone); the tile stays.
+    assert((await r.locator('.tile').count()) === 1, 'tile');
     // A card keeps everything it had.
     const c = page.locator(`article#session-${A.id}`);
     assert((await c.locator('.court-switch').count()) === 1 && (await c.locator('button.icon-round').count()) === 1 && (await c.locator('.paid-pill').count()) === 1, 'switch, gear, paid pill');
@@ -492,7 +494,9 @@ async function main() {
     await ctx.close();
   });
 
-  await check('3 Home: every folded row has the same height and shows at most two lines (cut off, never wrapped)', async () => {
+  // Zip 78: names on a folded row wrap between words (no "…" cut), and Zip 18 round 2 lets a row grow past 3.4rem when it needs to, so rows
+  // are no longer one fixed height of two single lines.
+  await check('3 Home: every folded row has a count line and a names line, at least the plain row height, nothing cut off', async () => {
     for (const scheme of ['light', 'dark']) {
       const { ctx, page } = await openAdmin({ scheme });
       await page.getByRole('button', { name: /Show all/ }).click();
@@ -501,13 +505,14 @@ async function main() {
           const r = e.getBoundingClientRect();
           const lines = [...e.querySelectorAll('.hv2-count, .hv2-names')].map((l) => ({ h: l.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(l).lineHeight) }));
           const card = document.querySelector('article.scard') ? document.querySelector('article.scard').getBoundingClientRect() : null;
-          return { h: Math.round(r.height * 10) / 10, w: Math.round(r.width), left: Math.round(r.left), lines, cardW: card ? Math.round(card.width) : null, cardLeft: card ? Math.round(card.left) : null };
+          const cut = [...e.querySelectorAll('.hv2-count, .hv2-names')].some((l) => l.scrollWidth > l.clientWidth + 1);
+          return { h: Math.round(r.height * 10) / 10, minH: parseFloat(getComputedStyle(e).minHeight), cut, text: e.innerText.replace(/\s+/g, ' '), w: Math.round(r.width), left: Math.round(r.left), lines, cardW: card ? Math.round(card.width) : null, cardLeft: card ? Math.round(card.left) : null };
         }),
       );
       assert(rows.length >= 6, `rows ${rows.length}`);
-      assert(rows.every((r) => r.h === rows[0].h), `same height ${rows.map((r) => r.h)}`);
+      assert(rows.every((r) => r.h >= r.minH - 0.5), `at least the plain row height ${rows.map((r) => `${r.h} (${r.text})`)}`);
       assert(rows.every((r) => r.w === rows[0].w && r.left === rows[0].left), 'same width and left edge');
-      assert(rows.every((r) => r.lines.length === 2 && r.lines.every((l) => l.h <= l.lh + 1)), 'two single lines');
+      assert(rows.every((r) => r.lines.length === 2 && !r.cut), `a count line and a names line, nothing cut off ${rows.filter((r) => r.cut).map((r) => r.text)}`);
       assert(rows[0].w === rows[0].cardW && rows[0].left === rows[0].cardLeft, `same width and edge as the full cards (${rows[0].w} vs ${rows[0].cardW})`);
       if (scheme === 'light') await shot(page, 'home-rows-390-light');
       else await shot(page, 'home-rows-390-dark');

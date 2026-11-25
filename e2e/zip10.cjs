@@ -20,7 +20,8 @@ const NOW_ISO = '2026-11-06T15:00:00.000Z';
 const NOW_MS = Date.parse(NOW_ISO);
 const SHOTS = process.env.E2E_SHOTS || path.join(__dirname, 'screenshots');
 const PIN = /PIN `(\d{6})`/.exec(readFileSync(path.join(ROOT, 'docs/PREVIEW_FAKE_DB.md'), 'utf8'))[1];
-const LIMIT = /DB_LIMIT_MESSAGE = `\$\{NO_CAP_MAX\} (.*?)`;/.exec(readFileSync(path.join(ROOT, 'shared/zip10.ts'), 'utf8'))[1];
+// The refusal's words after the number (the message is built by dbLimitMessage now, with " Ask <organizer>." after it when a name is saved).
+const LIMIT = /dbLimitMessage = .*?`\$\{NO_CAP_MAX\} (.*?)\$\{/.exec(readFileSync(path.join(ROOT, 'shared/zip10.ts'), 'utf8'))[1];
 
 let passed = 0;
 let failed = 0;

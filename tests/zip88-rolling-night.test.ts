@@ -130,7 +130,8 @@ describe('zip 88: Americano nights with rolling courts on the real server', () =
 });
 
 describe('zip 88: Locked doubles nights with rolling courts on the real server', () => {
-  for (const n of [8, 10, 12, 14, 16]) {
+  // Zip 92: 12 and 14 play Americano now (shared/tournament.ts playsAmericano: their pools have a group of three); they are checked below.
+  for (const n of [8, 10, 16]) {
     it(`${n} players: pools roll, playoffs wait for their teams, Final and 3rd side by side, End credits once`, async () => {
       const ctx = await world(n, { format: 'doubles' });
       await draftAndPublish(ctx);
@@ -141,7 +142,7 @@ describe('zip 88: Locked doubles nights with rolling courts on the real server',
           for (const g of games) if ((g.stage === 'final' || g.stage === 'third') && g.started && !(g.stage in finalAt)) finalAt[g.stage] = ctx.app.now;
         },
       });
-      // Groups nights (12): each group plays at its own pace, so a court starts its next round early.
+      // Groups nights (16): each group plays at its own pace, so a court starts its next round early.
       if (n >= 12) expect(early).toBeGreaterThan(0);
       const { games } = await night(ctx);
       if (finalAt.third !== undefined) expect(finalAt.third).toBe(finalAt.final);
@@ -150,6 +151,21 @@ describe('zip 88: Locked doubles nights with rolling courts on the real server',
       // Locked doubles pays the winning team only: $14 each.
       expect(after.n - before.n).toBe(2);
       expect(after.c - before.c).toBe(2 * 1400);
+    }, 120_000);
+  }
+  for (const n of [12, 14]) {
+    it(`${n} players on a Locked doubles vote: Zip 92: Americano (no teams to draft); the rolling night plays to its reveal, credits once`, async () => {
+      const ctx = await world(n, { format: 'doubles' });
+      expect((await adminTour(ctx)).format).toBe('americano');
+      const d = await ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/teams`, { action: 'draft' });
+      expect([d.status, d.data.message]).toEqual([409, 'Americano night: no teams.']);
+      const { started } = await playNight(ctx);
+      const sched = (await adminTour(ctx)).rounds.games.map((g: any) => g.num);
+      expect([...started].sort((a, b) => a - b)).toEqual([...sched].sort((a: number, b: number) => a - b));
+      const { before, after } = await endNight(ctx);
+      // Americano's 1st (one player) gets $14, once; the Locked doubles night was saved with $0 for 2nd (the world's prizes).
+      expect(after.n - before.n).toBe(1);
+      expect(after.c - before.c).toBe(1400);
     }, 120_000);
   }
 });
@@ -236,8 +252,9 @@ describe('zip 88: Fix, Clear, Player left and Pause keep working with rolling co
     await endNight(ctx);
   }, 120_000);
 
+  // Zip 92: 16 players (two groups of 4), not 12 (12 plays Americano now).
   it('Player left on Locked doubles: Remove (the team sits out) mid pool play; the night ends', async () => {
-    const ctx = await world(12, { format: 'doubles' });
+    const ctx = await world(16, { format: 'doubles' });
     await draftAndPublish(ctx);
     let done = false;
     await playNight(ctx, {
@@ -289,7 +306,8 @@ describe('zip 88: the night card model on real nights (src/pages/admin/nightCard
 
   it('Locked doubles: pool rounds then FINAL (wide) without groups; SEMIS then FINAL with groups; playoff pills by name', async () => {
     const { doublesNightModel } = await import('../src/pages/admin/nightCardData');
-    for (const n of [10, 12]) {
+    // Zip 92: the groups night is 16 (12 plays Americano now).
+    for (const n of [10, 16]) {
       const ctx = await world(n, { format: 'doubles' });
       await draftAndPublish(ctx);
       const seen = new Set<string>();
@@ -308,7 +326,7 @@ describe('zip 88: the night card model on real nights (src/pages/admin/nightCard
       });
       expect(seen.has('Final')).toBe(true);
       expect(seen.has('3rd place')).toBe(true);
-      if (n === 12) expect(seen.has('Semifinal')).toBe(true);
+      if (n === 16) expect(seen.has('Semifinal')).toBe(true);
     }
   }, 180_000);
 });
@@ -401,7 +419,10 @@ describe('zip 88 (Alex): once a game has started on a court, its court never cha
       expect(did).toBe(1);
       await endNight(ctx);
     }, 180_000);
+  }
 
+  // Zip 92: Locked doubles at 10 and 16 (12 plays Americano now; 16 is the groups night).
+  for (const n of [10, 16]) {
     it(`Locked doubles ${n}: a team removed mid pool play, then a pool score cleared during the playoffs: no started game moves; the night ends`, async () => {
       const ctx = await world(n, { format: 'doubles' });
       await draftAndPublish(ctx);

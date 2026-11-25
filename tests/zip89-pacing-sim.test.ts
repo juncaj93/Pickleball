@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adminTour, awards, draftAndPublish, world } from './zip58-world';
+import { adminTour, awards, draftAndPublish, teams, world, type World } from './zip58-world';
 import { allThree, clock, END_MS, night, type NightRun, playPaced } from './zip89-world';
 
 // Zip 89 (🎾89.smart pacing): THE PROOF. Whole nights on the REAL server (2 courts, 7:30 to 10 PM, the plan's own length for each size), every
@@ -62,8 +62,18 @@ describe('zip 89: Americano nights at 12, 15, 20 and 25 minutes a game (2 courts
     }, 600_000);
 });
 
+/** Zip 92: 12 and 14 locked in play Americano at Pay by whatever the vote (shared/tournament.ts playsAmericano, the fairness rule): the first
+ *  read switches the night, and Draft is refused. */
+async function switchedToAmericano(ctx: World, n: number) {
+  expect((await adminTour(ctx)).format, `${n} locked in`).toBe('americano');
+  const d = await teams(ctx, { action: 'draft' });
+  expect(d.status).toBe(409);
+  expect(d.data.message).toBe('Americano night: no teams.');
+}
+
 describe('zip 89: Locked doubles nights at 12, 15, 20 and 25 minutes a game (2 courts, 2.5 hours), Alex accepts every offer', () => {
-  for (const n of [8, 10, 12, 14, 16])
+  // Zip 92: 12 and 14 are no Locked doubles nights any more (pools with a group of three); a Locked doubles vote there plays Americano, below.
+  for (const n of [8, 10, 16])
     it(`${n} players`, async () => {
       for (const pace of PACES) {
         const ctx = await world(n, { format: 'doubles', minutes: 150 });
@@ -77,10 +87,26 @@ describe('zip 89: Locked doubles nights at 12, 15, 20 and 25 minutes a game (2 c
         allThree(ctx);
       }
     }, 600_000);
+  for (const n of [12, 14])
+    it(`${n} players (Zip 92: a Locked doubles vote plays Americano)`, async () => {
+      for (const pace of PACES) {
+        const ctx = await world(n, { format: 'doubles', minutes: 150 });
+        await switchedToAmericano(ctx, n);
+        const r = await playPaced(ctx, pace);
+        const games = (await night(ctx)).games;
+        const last = Math.max(...games.map((g) => g.round));
+        checks(r, pace, line('AM', n, pace, r), `AM ${n}p pace ${pace} (voted Locked doubles)`, () => games.every((g) => g.round <= 2 || g.round === last || g.playTo === 7));
+        const t = await adminTour(ctx);
+        expect(t.end, 'the End card').toBeTruthy();
+        expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
+        allThree(ctx);
+      }
+    }, 600_000);
 });
 
 describe('zip 89: Dec 1 at Alex’s 13 minutes a game (7:30 to 10 PM, 2 courts, 8 to 12 locked in), every offer accepted', () => {
-  // Odd counts play Americano; even counts Locked doubles, and Americano too (in case Alex switches).
+  // Odd counts play Americano; even counts Locked doubles, and Americano too (in case Alex switches). Zip 92: 12 plays Americano whatever the
+  // vote (the "12 doubles" night is switched at Pay by and plays as Americano).
   const cases: [number, 'americano' | 'doubles'][] = [
     [8, 'doubles'],
     [8, 'americano'],
@@ -94,7 +120,8 @@ describe('zip 89: Dec 1 at Alex’s 13 minutes a game (7:30 to 10 PM, 2 courts, 
   for (const [n, format] of cases)
     it(`${n} ${format}`, async () => {
       const ctx = await world(n, { format, minutes: 150 });
-      if (format === 'doubles') await draftAndPublish(ctx);
+      if (format === 'doubles' && n === 12) await switchedToAmericano(ctx, n);
+      else if (format === 'doubles') await draftAndPublish(ctx);
       const r = await playPaced(ctx, 13);
       const left = Math.round((END_MS - r.finish) / 60_000);
       expect(r.finish).toBeLessThanOrEqual(END_MS);

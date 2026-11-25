@@ -408,7 +408,11 @@ async function main() {
   }
   /** Open a game's sheet from its card: Zip 87 took the Players row off the gear menu (the card's "x of y paid" pill opens it). */
   async function openSheet(page, gear, rowName) {
-    if (rowName === 'Players') return gear.locator('xpath=ancestor::article[1]').locator('[data-paid-cell]').first().click();
+    if (rowName === 'Players') {
+      const cell = page.locator('article.scard:not(.court-off) [data-paid-cell]').first();
+      await cell.scrollIntoViewIfNeeded();
+      return cell.click();
+    }
     await gear.click();
     await page.locator('.menu-pop').getByRole('menuitem', { name: new RegExp(`^${rowName}`) }).first().click();
   }

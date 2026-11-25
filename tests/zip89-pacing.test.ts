@@ -307,16 +307,20 @@ describe('zip 89: Locked doubles on the real server', () => {
     expect(v.bestOf3).toBeUndefined();
     allThree(ctx);
   }, 60_000);
-  it('14 players (groups of 4 and 3) on 2.5 hours: never a best of 3 (it needs 3 planned rounds still to play after a round is in); Zip 92: 12 plays Americano', async () => {
-    const ctx = await world(14, { format: 'doubles' });
+  // Zip 92: 12 and 14 play Americano now (shared/tournament.ts playsAmericano: their pools have a group of three), so the groups nights here
+  // are 16 players (two groups of 4: 6 pool rounds, then the semifinals, then the Final and 3rd place).
+  it('16 players (groups of 4) on 2.5 hours: never a best of 3 (it needs 3 planned rounds still to play after a round is in); Zip 92: 12 and 14 play Americano', async () => {
+    const ctx = await world(16, { format: 'doubles' });
     await draftAndPublish(ctx);
     const run = await playPaced(ctx, 10);
     expect(run.offers).toEqual([]);
   }, 60_000);
-  it('14 players (groups) on 3.5 hours: the best of 3 Final fits the plan, so it is built in from the start (no offer)', async () => {
-    const ctx = await world(14, { format: 'doubles', minutes: 210 });
+  // Zip 92: 16, not 14; at 16 the best of 3 Final fits from 4 hours (3.5 hours plays the pools to 11 with a single Final).
+  it('16 players (groups) on 4 hours: the best of 3 Final fits the plan, so it is built in from the start (no offer)', async () => {
+    const ctx = await world(16, { format: 'doubles', minutes: 240 });
     await draftAndPublish(ctx);
-    expect(nightPlan(14, 2, 210, 'doubles').builtIn).toEqual({ semis: false, bestOf3: true });
+    expect(nightPlan(16, 2, 210, 'doubles').builtIn).toEqual({ semis: false, bestOf3: false });
+    expect(nightPlan(16, 2, 240, 'doubles').builtIn).toEqual({ semis: false, bestOf3: true });
     const run = await playPaced(ctx, 12);
     expect(run.offers).toEqual([]);
     const { v, t } = await night(ctx);

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { playerPhone, setupGroup } from './harness';
 import { asScore, withScore } from './zip72-taps';
+import { nightPlan } from '../shared/tournamentPlan';
 
 // Zip 57 (🎾57.tourney3): teams, the schedule and game day on the real server code (the test harness). The clock starts Monday Oct 26, 2026,
 // 12 PM Eastern. The tournament is Thu Nov 12, 7:30 to 10:00 PM; Pay by is Wed Nov 11, 7:00 PM (the night before).
@@ -93,7 +94,8 @@ describe('zip 57: Finalize has Courts, saved in the courts field; the plan line 
   });
   it('when tickets close: too tight (12 on 1 court, 2 hours), a court no longer needed (6 on 2 courts), under 6', async () => {
     const tight = await world(12, { courts: 1, start: 19 * 60 + 30, minutes: 120 });
-    expect((await dash(tight)).closeCheck).toEqual({ kind: 'tight', text: 'Locked doubles for 12: too tight on 1 court. Use 2 courts or add court time.' });
+    // Zip 92: 12 locked in plays Americano (shared/tournament.ts playsAmericano), so the check names the style really played.
+    expect((await dash(tight)).closeCheck).toEqual({ kind: 'tight', text: 'Americano for 12: too tight on 1 court. Use 2 courts or add court time.' });
     const extra = await world(6, { courts: 2 });
     expect((await dash(extra)).closeCheck).toEqual({ kind: 'extra_court', text: '6 locked in: 1 court is enough. Call the venue to cancel court 2.' });
     const few = await world(4, { courts: 1 });
@@ -162,20 +164,30 @@ describe('zip 57: every size 6 to 16, odd and even, with back outs', () => {
     it(`${n} locked in`, async () => {
       const ctx = await world(n, { courts: n <= 7 ? 1 : 2, start: n >= 12 ? 19 * 60 : 19 * 60 + 30, minutes: n >= 12 ? 180 : 150 });
       const d = await dash(ctx);
-      if (n % 2 === 1) {
+      // Zip 92: 12 and 14 play Americano too, exactly like an odd count (pools with a group of three gave those teams 2 regular games).
+      if (n % 2 === 1 || n === 12 || n === 14) {
         expect(d.format).toBe('americano');
         expect(d.day.canDraft).toBe(false);
         // The players hear it from zip 64's banner; no teams reach them. Zip 61: their Americano rounds do (on purpose).
-        const day = (await card(ctx, 'Blair')).day;
+        const c = await card(ctx, 'Blair');
+        const day = c.day;
         expect(day.kind).toBe('americano');
         expect(day.team).toBeUndefined();
+        if (n % 2 === 0) {
+          // Zip 92: switched at the first read after Pay by: the organizer's switched card, the players' banner, Draft refused, the Americano plan.
+          expect(d.oddSwitch).toBeTruthy();
+          expect(d.day.why).toBe('Americano night: no teams.');
+          expect(c.styleNote?.text).toBe('Tournament style is now Americano.');
+          expect((await teams(ctx, { action: 'draft' })).status).toBe(409);
+          expect(Math.max(...d.rounds.games.map((g: any) => g.round))).toBe(nightPlan(n, 2, 180, 'americano').rounds);
+        }
         return;
       }
       await draftAndPublish(ctx);
       const day = (await dash(ctx)).day;
       expect(day.teams).toHaveLength(n / 2);
       expect(day.teams.flatMap((x: any) => x.players.map((p: any) => p.name)).sort()).toEqual(ALL.slice(0, n).sort());
-      // Pools from 12: Pool A first, each a pool.
+      // Pools from 12 (Zip 92: on a real night only 16 now): Pool A first, each a pool.
       if (n >= 12) expect(new Set(day.teams.map((x: any) => x.pool))).toEqual(new Set(['A', 'B']));
       // Every player sees their own team and only games with their team in them.
       for (const name of ALL.slice(0, n)) {
@@ -278,23 +290,27 @@ describe('zip 57: game night', () => {
     expect((await play(ctx, name, d.games[0].num, 'won')).status).toBe(409);
   });
   it('the Time check: late, it suggests shorter pool games; Apply plays them to 9 or 7; players see the words', async () => {
-    const ctx = await world(12, { start: 19 * 60 + 30, minutes: 150 }); // 12 on 2 courts for 2.5 hours: pools to 11, 10 warm-up + 100 minutes
+    // Zip 92: 16 players (12 plays Americano now), 7:00 to 10:30 PM on 2 courts: two groups of 4, 6 pool rounds to 11, the semifinals, then the
+    // Final and 3rd place: 10 warm-up + 160 minutes, done 9:50 PM, the limit 10:10 PM.
+    const ctx = await world(16, { start: 19 * 60, minutes: 210 });
+    const start = START_MS - 30 * 60_000;
     await draftAndPublish(ctx);
-    // Round 1 ends 25 minutes late (Zip 89: the rounds start after the 10 minute warm-up and a round to 11 is 20 minutes, so Round 1 was due at
-    // 8:00 PM; one late round alone never switches the Time check to the pace). The night ends 9:45 PM, 5 past the 9:40 limit: to 9 from Round
-    // 3 saves 4 (not enough), from Round 2 saves 8.
-    ctx.app.now = START_MS + (10 + 20 + 25) * 60_000;
+    // Round 1 ends 10 minutes late (due at 7:30 PM after the warm-up). Zip 92: a slow night eases into its pace, a third of the way after
+    // Round 1 (20 + 10 / 3 minutes a round): 10 late + 7 rounds x 3.3 = about 33 behind, the night ends about 10:23 PM, 13 past the limit. Round 2
+    // is already on the courts (never shortened); to 9 from Round 5 saves about 9 (not enough), from Round 4 about 14.
+    ctx.app.now = start + (10 + 20 + 10) * 60_000;
     const d = (await dash(ctx)).day;
     for (const g of d.games.filter((x: any) => x.round === 1)) expect((await games(ctx, { action: 'result', num: g.num, winner: 'a' })).status).toBe(200);
     const tc = (await dash(ctx)).day.timeCheck;
-    expect(tc).toMatchObject({ fromRound: 2, to: 9 });
-    expect(tc.text).toBe('Running about 25 minutes behind. From Round 2 on, play to 9 so we finish on time.');
+    expect(tc).toMatchObject({ fromRound: 4, to: 9 });
+    expect(tc.text).toBe('Running about 33 minutes behind. From Round 4 on, play to 9 so we finish on time.');
     expect((await games(ctx, { action: 'apply', fromRound: tc.fromRound, to: tc.to })).status).toBe(200);
     const after = (await dash(ctx)).day;
-    expect(after.games.filter((g: any) => g.stage === 'pool' && g.round >= 2).every((g: any) => g.playTo === 9)).toBe(true);
+    expect(after.games.filter((g: any) => g.stage === 'pool' && g.round >= 4).every((g: any) => g.playTo === 9)).toBe(true);
+    expect(after.games.filter((g: any) => g.stage === 'pool' && g.round < 4).every((g: any) => g.playTo === 11)).toBe(true);
     expect(after.games.filter((g: any) => g.stage !== 'pool').every((g: any) => g.playTo === 11)).toBe(true);
     const anyone = after.teams[0].players[0].name;
-    expect((await card(ctx, anyone)).day.timeNote).toMatch(/From Round 2 on, play to 9/);
+    expect((await card(ctx, anyone)).day.timeNote).toMatch(/From Round 4 on, play to 9/);
   });
   it('Pause shows the players; Player left: swap in, or the team sits out (its later games skipped)', async () => {
     const { ctx } = await night();
@@ -341,9 +357,9 @@ describe('zip 57: who may see it', () => {
 });
 
 describe('zip 57: the review fixes (playoffs after a team leaves or a result changes, stale taps)', () => {
-  /** 12 locked in, published, the night on, every pool game won by the lower seat. */
+  /** 16 locked in (Zip 92: 12 plays Americano now), published, the night on, every pool game won by the lower seat. */
   async function poolsDone() {
-    const ctx = await world(12, { start: 19 * 60 + 30, minutes: 150 });
+    const ctx = await world(16, { start: 19 * 60 + 30, minutes: 150 });
     await draftAndPublish(ctx);
     ctx.app.now = START_MS + 60_000;
     const d = (await dash(ctx)).day;
