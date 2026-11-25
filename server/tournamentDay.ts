@@ -91,6 +91,8 @@ import {
   type TournamentActor,
   type TournamentRow,
 } from './tournament';
+// 🎾91 dry run only: test switches. Safe in the browser, where `process` does not exist.
+const dryEnv = (): Record<string, string | undefined> => (typeof process !== 'undefined' && process.env) || {};
 
 export interface TeamRow {
   id: string;
@@ -499,7 +501,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const semisBonus = shape.shape === 'rr' && semisIn && !planned0.builtIn.semis;
   const bo3Bonus = series.bestOf3 && !planned0.builtIn.bestOf3;
   // 🎾91 dry run PROTOTYPE (DRY_LDROUND, never merged): Locked doubles' shortenable bonus, one more pool / round robin round (a rematch round).
-  const LDR = !!process.env.DRY_LDROUND;
+  const LDR = !!dryEnv().DRY_LDROUND;
   const extraPool = LDR ? games.filter((g) => g.stage === 'pool' && g.round > shape.poolRounds) : [];
   const bonusIn = semisBonus || bo3Bonus || extraPool.length > 0;
   const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size || !plan.fits ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : LDR && !games.some((g) => g.stage === 'tie') ? 'round' : 'bestOf3';
@@ -531,7 +533,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     fixedBonus: kind !== 'round',
     breaks: noSit,
     onBreak: brk.now ? Math.max(0.1, (brk.now.until - nowMs) / 60_000) : 0,
-    bonusMinutes: kind === 'round' ? k * ROUND_MINUTES[plan.gameTo] * (process.env.DRY_LDSCALE && measured.pace ? Math.min(1, measured.pace / ROUND_MINUTES[PLAYOFF_TO]) : 1) : kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
+    bonusMinutes: kind === 'round' ? k * ROUND_MINUTES[plan.gameTo] * (dryEnv().DRY_LDSCALE && measured.pace ? Math.min(1, measured.pace / ROUND_MINUTES[PLAYOFF_TO]) : 1) : kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
     started,
     over,
     paused: !!t.paused_at,
@@ -541,7 +543,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     lastBonusAt: lastAddedAt(t, tz, [...extraPool.map((g) => g.created_at), ...[...(semisBonus ? stored.filter((g) => g.stage === 'semi') : []), ...(bo3Bonus ? stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0]) : [])].map((g) => g.created_at)]),
   });
   let pace = paceFor(1);
-  if (kind === 'round' && process.env.DRY_LDMULTI && pace.offer)
+  if (kind === 'round' && dryEnv().DRY_LDMULTI && pace.offer)
     for (const k of [3, 2]) {
       const p = paceFor(k);
       if (p.offer) {
