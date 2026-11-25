@@ -8695,3 +8695,18 @@ Zip 83's own stages; F's cup mid-reveal). e2e/zip58.cjs F fails at "no live view
    edge about 0.17 of the name's size under the baseline). 1 medal, 2 medals and after the slam all measure the same as the ticker in
    Chromium (no WebKit browser in this sandbox: Alex's phone is the real check).
 Browser: e2e/zip90.cjs I (new) passes; A to H pass; zip83 A, C, H pass. Unit: zip78-look, zip48-split, zip90 pass.
+
+### Round 3 (Alex on his iPhone, Wed Nov 25; still held for his OK)
+1. THE CARD JUMPED ~3 s after load on the organizer's phone: the organizer's Prizes boxes (src/pages/admin/prize-boxes.css) also use the class
+   `.pz` (`display: flex; gap: 14px`), and the organizer file is fetched a few seconds after Home on the organizer's own phone
+   (preloadAdminSoon). Fixed by giving the reveal its own prefix (`rvl-`); tests/zip90-prize.test.ts checks no other style file uses any of
+   its class names. Proof on the deployed preview, organizer cookie, View as Vic: gaps 2 px / 11 px and pixel-identical card at 0.2, 1, 3
+   and 5 s with the admin style file loaded; the round 2 build: 2 / 11 at 0.2 and 1 s, then 16 / 25 at 3 s.
+2. THE FLIP: transform only. The burst's 16 dots and the credit's count (an odometer strip, every amount drawn ahead, slid by a stepped
+   transform) are drawn with the card; the tap only starts their animations. The glow is its own layer pulsing by opacity (was a box-shadow
+   animation), stopped on the turning and turned card; no filter on press; Nice appears after the turn. Chromium on the preview, during the
+   0.5 s turn: 34 frames, longest 16.8 ms, none dropped; layouts 18 -> 2 and script 15.6 -> 9.4 ms against round 2 (both in the tap itself).
+3. THE MEDAL BY THE NAME: laid out exactly like the medal after a name on the game cards (an inline-flex button 0.12 em under the line, the
+   medal 0.78 x 1.02 em). Measured (Chromium; no WebKit in this sandbox): game card medal bottom 9.9% of the font size under the name's
+   baseline, 101.9% tall; header 10.0% and 102.0% (1 medal, 2 medals, after the slam). No gap after the name.
+Browser: e2e/zip90.cjs A to I pass (I compares with the game card now); zip83 A, C, H pass. Unit: zip78-look, zip48-split, zip90 pass.
