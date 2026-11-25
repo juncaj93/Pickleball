@@ -18,7 +18,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip92_twelve', 'zip92_ld_round', 'zip92_slow'];
+const THIS_ZIP: readonly string[] = ['zip92_court_time', 'zip92_twelve', 'zip92_ld_round', 'zip92_slow'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -41,9 +41,14 @@ const EARLY_LOOK: NightModel = {
 const STAGES = [
   // Zip 92 (🎾92.dry run fixes): the 12-player switch, the Locked doubles extra round, the slow night's Time check.
   {
+    stage: 'zip92_court_time',
+    label: '92: court time line',
+    line: 'The Cold Open tomorrow, 7:30 to 10 PM on 2 courts, 8 of 10 locked in. Tap the card open: under the “2 courts · Locked doubles” line, the gray line “8 locked in: 9:30 is enough, you could cancel 30 min.” At 10 it says “10 locked in: 2 courts, 7:30 to 10 fits.” A suggestion only: nothing is booked or charged.',
+  },
+  {
     stage: 'zip92_twelve',
-    label: '92: 12 players switch to Americano',
-    line: 'The preview has 10 names, so the real switch runs at 9 here (Pay by an hour ago, Locked doubles by vote): Home shows the switched card; View as Parker: “Tournament style is now Americano.” Your card at 12 is drawn above with the same words the site sends (the Telegram alert too). 8, 10, 14 and 16 stay Locked doubles.',
+    label: '92: 12 and 14 players switch to Americano',
+    line: 'The preview has 10 names, so the real switch runs at 9 here (Pay by an hour ago, Locked doubles by vote): Home shows the switched card; View as Parker: “Tournament style is now Americano.” Your card at 12 is drawn above with the same words the site sends (the Telegram alert too). 14 switches the same way (groups of three get only 2 games). 8, 10 and 16 stay Locked doubles.',
   },
   {
     stage: 'zip92_ld_round',

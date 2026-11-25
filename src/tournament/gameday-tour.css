@@ -948,7 +948,7 @@
 }
 /* Currently playing (Americano): two names a side wrap between words only (picture 35), never inside a name. */
 .tc-gd-liverow .tc-gd-tn > b {
-  overflow-wrap: break-word;
+  overflow-wrap: normal; /* Zip 92: never inside a word (see .tc-gd-tn above) */
   font-size: 1rem;
 }
 

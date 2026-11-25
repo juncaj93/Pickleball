@@ -46,7 +46,7 @@ import { evensWarning, payByAt, payByDays, payByLabel, payByParts, salesCutoffMs
 import { siteAddress, smsHref } from '../../../shared/messages';
 import { signupCloseDefault, signupReminderText } from '../../../shared/tournamentNudge';
 import { nightOnAt } from './nightCardData';
-import { type ButtonTone, cardButtons, clockShort, dueOf, isGameDay, moneySheet, pillOf, plannedStyle, prizesOf, STEPS, statusWords, stepOf, styleShort, type SubTone, ticketCount, ticketWords } from '../../../shared/tournamentCard';
+import { type ButtonTone, cardButtons, clockShort, courtTimeLine, dueOf, isGameDay, moneySheet, pillOf, plannedStyle, prizesOf, STEPS, statusWords, stepOf, styleShort, type SubTone, ticketCount, ticketWords } from '../../../shared/tournamentCard';
 import { DateTile } from '../PlayerHome';
 import { tileDay } from '../../../shared/zip7';
 import { type BoxesDraft, draftOf, PrizeBoxes, sendOf } from './PrizeBoxes';
@@ -366,6 +366,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
   const datesPassed = !ticketsStage && !t.finalDate && !t.offeredDates.some((d) => d >= today);
   const ns = t.notSignedUp && t.notSignedUp.players.length > 0 ? t.notSignedUp : null;
   const evens = evensOf(t, ctx.d.now);
+  const courtLine = courtTimeLine(t);
   const bodyId = `tm-hc-body-${t.id}`;
   // Zip 87: who still has to pay (before Pay by: unpaid; after it: past due), for the pill, the status line and Remind.
   const due = dueOf(t);
@@ -496,6 +497,12 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
                     {t.courts} {t.courts === 1 ? 'court' : 'courts'} · {styleShort(t)} · {formatPrice(t.ticketCents)}
                   </p>
                   {t.votes && (t.formatPending || step === 0) && votesLine(t.votes)}
+                  {/* Zip 92 (Alex): the court time line, a suggestion only, from what the card already has. */}
+                  {t.status === 'tickets' && courtLine && (
+                    <p className="tm86-when-sub tm92-court-time" data-tm92-court-time>
+                      {courtLine}
+                    </p>
+                  )}
                 </div>
                 {gear && (
                   <button type="button" className="tm87-gear" aria-label={`Settings for ${t.name}`} onClick={() => setSheet('change')} data-tm86-change>

@@ -398,6 +398,62 @@ export function extendRounds(n: number, onCourt: number, start: readonly SeatRou
   return out;
 }
 
+/**
+ * Zip 92 (Alex's fairness rule 3): nobody's night ends early while others keep playing. The last regular rounds are a "lap" (two rounds, or as
+ * many as it takes for everyone to get on a court once: ceil(players / on court)); everyone plays at least once in it. When the night's rounds
+ * (the saved pattern cut to the plan) do not, the fewest round swaps that do (one round from the lap swapped with an earlier one, the latest
+ * first), keeping the sit rule (sitLimit). The rounds themselves never change: the same games, partners, sits and game counts, only their
+ * order. Nothing found: the order as it was.
+ */
+export const lapOf = (n: number, onCourt: number): number => Math.max(2, Math.ceil(n / onCourt));
+export function endsFair(n: number, onCourt: number, rounds: readonly SeatRound[]): boolean {
+  const R = rounds.length;
+  const lap = lapOf(n, onCourt);
+  if (R <= lap) return true;
+  const inLap = new Set(rounds.slice(R - lap).flatMap((r) => r.games.flatMap((g) => [...g.a, ...g.b])));
+  if (inLap.size < n) return false;
+  const limit = sitLimit(n, onCourt);
+  const run = new Array<number>(n).fill(0);
+  for (const r of rounds)
+    for (let x = 0; x < n; x++) {
+      run[x] = r.sit.includes(x) ? run[x] + 1 : 0;
+      if (run[x] > limit) return false;
+    }
+  return true;
+}
+export function fairEnd(n: number, onCourt: number, rounds: readonly SeatRound[]): SeatRound[] {
+  const list = [...rounds];
+  const R = list.length;
+  const lap = lapOf(n, onCourt);
+  if (endsFair(n, onCourt, list) || R <= lap || 2 * (n - onCourt) > n * (lap - 1)) return list;
+  for (let j = R - 1; j >= R - lap; j--)
+    for (let i = R - lap - 1; i >= 0; i--) {
+      const next = [...list];
+      [next[i], next[j]] = [next[j], next[i]];
+      if (endsFair(n, onCourt, next)) return next;
+    }
+  // A lap of two: any two rounds whose sitters differ, moved to the end (the latest rounds first), the rest in their order.
+  if (lap === 2)
+    for (let j = R - 1; j >= 0; j--)
+      for (let i = R - 1; i >= 0; i--) {
+        if (i === j || list[i].sit.some((x) => list[j].sit.includes(x))) continue;
+        const next = [...list.filter((_, k) => k !== i && k !== j), list[i], list[j]];
+        if (endsFair(n, onCourt, next)) return next;
+      }
+  // Still none (16 on 2 courts: half sit every round, and no two rounds sit opposite halves): the last round is made again with the same rules,
+  // its sitters the players of the round before it, kept only when the game counts stay within one of each other.
+  if (lap === 2) {
+    const t = tallyOf(n, list.slice(0, R - 1));
+    const sit = [...Array(n).keys()].filter((x) => !list[R - 2].sit.includes(x)).slice(0, n - onCourt);
+    if (sit.length === n - onCourt) {
+      const next = [...list.slice(0, R - 1), nextRound(t, onCourt, seeded(n * 1000 + R), 2, sit)];
+      const sits = tallyOf(n, next).sits;
+      if (endsFair(n, onCourt, next) && Math.max(...sits) - Math.min(...sits) <= 1) return next;
+    }
+  }
+  return list;
+}
+
 /** "8:4" (players and players on court): a saved pattern's key. */
 export const patternKey = (n: number, onCourt: number): string => `${n}:${onCourt}`;
 
@@ -474,7 +530,8 @@ export function americanoNight(players: readonly string[], courts: number, minut
   const plan = americanoPlan(Math.max(n, 4), courts >= 2 ? 2 : 1, minutes);
   if (n < 4) return { plan, games: [], sits: new Map(), rounds: 0 };
   const onCourt = onCourtFor(n, courts);
-  const pattern = seatRounds(n, onCourt, plan.rounds);
+  // Zip 92: everyone plays in the night's last lap (fairEnd: only the order of the rounds may change).
+  const pattern = fairEnd(n, onCourt, seatRounds(n, onCourt, plan.rounds));
   const games: AmericanoGame[] = [];
   const sits = new Map<number, string[]>();
   pattern.forEach((r, i) => {
@@ -617,10 +674,14 @@ export function bonusRound(
     const onCourt = onCourtFor(n, courts);
     const pattern = seatRounds(n, onCourt, rounds + 1);
     const mapped = (r: SeatRound) => r.games.map((g) => ({ court: g.court, a: [seats[g.a[0]], seats[g.a[1]]] as [string, string], b: [seats[g.b[0]], seats[g.b[1]]] as [string, string] }));
-    const same = pattern.slice(0, rounds).every((r, i) => {
-      const stored = played.filter((g) => g.round === i + 1).map(gameText).sort();
-      return stored.join(' ') === mapped(r).map(gameText).sort().join(' ');
-    });
+    const matches = (list: readonly SeatRound[]) =>
+      list.every((r, i) => {
+        const stored = played.filter((g) => g.round === i + 1).map(gameText).sort();
+        return stored.join(' ') === mapped(r).map(gameText).sort().join(' ');
+      });
+    // The night as written: the pattern in its order, or (Zip 92) its first k rounds in fairEnd's order and the bonus rounds after them.
+    const head = pattern.slice(0, rounds);
+    const same = matches(head) || Array.from({ length: rounds }, (_, i) => rounds - i).some((k) => matches([...fairEnd(n, onCourt, head.slice(0, k)), ...head.slice(k)]));
     if (same && pattern[rounds]) return mapped(pattern[rounds]).sort((x, y) => x.court - y.court);
   }
   const still = seats.filter((id) => !gone.has(id));

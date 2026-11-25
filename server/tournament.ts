@@ -35,7 +35,7 @@ import {
   oddSwitchWords,
   doublesRefusal,
   playsAmericano,
-  AMERICANO_TWELVE,
+  AMERICANO_EVEN,
   styleAtClose,
   styleBannerWords,
   planFit,
@@ -729,7 +729,7 @@ export const styleDecided = (t: TournamentRow, nowMs: number): boolean => status
 async function settleStyle(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets: readonly TicketWithName[], upkeep?: Upkeep): Promise<TournamentRow> {
   if (!styleDecided(t, ctx.nowMs) || salesClosed(t, group.timezone, ctx.nowMs)) return t;
   const n = lockedInCount(tickets);
-  // Zip 92 (Alex): an odd count or 12 plays Americano (playsAmericano); 8, 10, 14 and 16 keep Locked doubles.
+  // Zip 92 (Alex): an odd count, 12 or 14 plays Americano (playsAmericano, the fairness rule); 8, 10 and 16 keep Locked doubles.
   if (!playsAmericano(n) || formatOf(t) !== 'doubles') return t;
   if (upkeep) upkeep.tried = true;
   const source = `odd:${ctx.nowIso}`;
@@ -737,7 +737,7 @@ async function settleStyle(ctx: Ctx, group: GroupRow, t: TournamentRow, tickets:
     const res = await ctx.db
 .prepare(
         `UPDATE tournaments SET format = 'americano', format_source = ?, updated_at = ? WHERE id = ? AND status = 'tickets' AND format = 'doubles' AND format_source IS ? AND pay_by = ?
-           AND (${lockedInSql('tournaments.id')} % 2 = 1 OR ${lockedInSql('tournaments.id')} = ${AMERICANO_TWELVE})`,
+           AND (${lockedInSql('tournaments.id')} % 2 = 1 OR ${lockedInSql('tournaments.id')} IN (${AMERICANO_EVEN.join(', ')}))`,
       )
       .bind(source, ctx.nowIso, t.id, t.format_source ?? null, t.pay_by)
       .run();
@@ -1798,7 +1798,7 @@ export async function switchBackStyle(ctx: Ctx) {
   if (playsAmericano(n)) throw new HttpError(409, 'odd_count', doublesRefusal(n));
   changedOrLookAgain(
     await ctx.db
-      .prepare(`UPDATE tournaments SET format = 'doubles', format_source = ?, updated_at = ? WHERE id = ? AND format = 'americano' AND format_source = ? ${OPEN_GUARD} AND ${lockedInSql('tournaments.id')} % 2 = 0 AND ${lockedInSql('tournaments.id')} <> ${AMERICANO_TWELVE}`)
+      .prepare(`UPDATE tournaments SET format = 'doubles', format_source = ?, updated_at = ? WHERE id = ? AND format = 'americano' AND format_source = ? ${OPEN_GUARD} AND ${lockedInSql('tournaments.id')} % 2 = 0 AND ${lockedInSql('tournaments.id')} NOT IN (${AMERICANO_EVEN.join(', ')})`)
       .bind(`back:${ctx.nowIso}`, ctx.nowIso, t.id, t.format_source)
       .run(),
   );

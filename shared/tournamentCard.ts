@@ -1,7 +1,8 @@
 // Zip 86 (🎾86.clean admin): the organizer's tournament card on Home, the pure parts (src/pages/admin/Tournament.tsx draws them): the 4 steps,
 // the gray status line under the name, the prize words, and the Money sheet's numbers. Its own file so the unit tests read the very numbers
 // the screen shows. Organizer only (the player download never imports it).
-import { type AdminTournamentView, formatName, MAX_SPOTS, shortClock } from './tournament';
+import { type AdminTournamentView, formatName, MAX_SPOTS, shortClock, styleAtClose } from './tournament';
+import { AMERICANO_MIN_GAMES, MIN_PLAYERS, nightPlan, type NightPlan } from './tournamentPlan';
 import { suggestionWords, tierCostCents, topTier } from './tournamentMoney';
 import { payByLabel } from './tournamentTickets';
 import { boxCostCents, boxWords, prizesOfRow, type StylePrizes } from './tournamentPrizes';
@@ -269,4 +270,57 @@ export function cardButtons(t: AdminTournamentView, nowIso: string, tz: string):
 export function pillOf(t: AdminTournamentView): { words: string; unpaid: boolean } {
   const due = t.status === 'tickets' ? dueOf(t).length : 0;
   return due > 0 ? { words: `${due} unpaid`, unpaid: true } : { words: `${lockedNumOf(t)} locked in`, unpaid: false };
+}
+
+/**
+ * Zip 92 (Alex): THE COURT TIME LINE on the organizer's tournament card before the night, one quiet gray line that follows the count locked in:
+ *   "10 locked in: 2 courts, 7:30 to 10 fits."                      the booked time gives everyone a full night
+ *   "8 locked in: 9:30 is enough, you could cancel 30 min."          30 minutes or more of the booking are not needed
+ *   "14 locked in: add 30 min so everyone plays 4 to 11 (7 to 10)." more time would give everyone a full night (the end moves later, or the
+ *                                                                     start earlier when the end is already 10 PM); "to 11" when the booked time
+ *                                                                     already gives the minimum with shorter games
+ * A full night: the plan (shared/tournamentPlan.ts nightPlan, the same 10 minute warm-up and 20 minutes kept free) fits with games to 11 and
+ * everyone at the fairness rule's minimum of regular games (Locked doubles 3, Americano 4), in the style the count plays (the style rule).
+ * Bookings are tried in 30 minute steps, 1.5 to 4 hours. A suggestion only: nothing is booked, moved or charged. Null below 6 locked in.
+ * Drawn from what the card already has (no server call).
+ */
+export function courtTimeLine(t: Pick<AdminTournamentView, 'finalDate' | 'signups' | 'tickets' | 'lockedIn' | 'courts' | 'start' | 'minutes' | 'format'>): string | null {
+  const n = ticketCount(t).locked;
+  if (!t.finalDate || n < MIN_PLAYERS) return null;
+  const style = styleAtClose(t.format === 'americano' ? 'americano' : 'doubles', n);
+  const full = (minutes: number) => {
+    const plan = nightPlan(n, t.courts, minutes, style);
+    const each = plan.style === 'americano' ? Math.floor((plan.rounds * (plan.onCourt ?? 4)) / Math.min(n, MAX_SPOTS)) : regularGames(plan);
+    const min = plan.style === 'americano' ? AMERICANO_MIN_GAMES : 3;
+    return { ok: plan.fits && plan.gameTo === 11 && each >= min, each, shorter: plan.fits && plan.gameTo < 11 && each >= min };
+  };
+  const clock = (m: number) => shortClock(((m % 1440) + 1440) % 1440).replace(/ [AP]M$/, '');
+  const end = t.start + t.minutes;
+  const head = `${n} locked in:`;
+  if (full(t.minutes).ok) {
+    let least = t.minutes;
+    while (least - 30 >= 90 && full(least - 30).ok) least -= 30;
+    if (least < t.minutes) return `${head} ${clock(t.start + least)} is enough, you could cancel ${t.minutes - least} min.`;
+    return `${head} ${t.courts} ${t.courts === 1 ? 'court' : 'courts'}, ${clock(t.start)} to ${clock(end)} fits.`;
+  }
+  // Booked as is, the night already gives everyone the minimum with shorter games: say what the time buys ("4 to 11").
+  const shorter = full(t.minutes).shorter;
+  for (let add = 30; add <= 90 && t.minutes + add <= 240; add += 30) {
+    const f = full(t.minutes + add);
+    if (!f.ok) continue;
+    // The venue closes at 10 PM most nights: past it, the start moves earlier instead.
+    const later = end + add <= 22 * 60;
+    const from = later ? t.start : t.start - add;
+    const to = later ? end + add : end;
+    return `${head} add ${add} min so everyone plays ${f.each}${shorter ? ' to 11' : ''} (${clock(from)} to ${clock(to)}).`;
+  }
+  return null;
+}
+
+/** Locked doubles: the fewest regular games a team gets (round robin: every other team; pools: the smaller pool's other teams). */
+function regularGames(plan: NightPlan): number {
+  const s = plan.doubles;
+  if (!s) return 0;
+  if (s.shape !== 'pools') return s.teams - 1;
+  return Math.floor(s.teams / 2) - 1;
 }

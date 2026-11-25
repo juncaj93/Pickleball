@@ -6,7 +6,7 @@
 //   11  The Time check eases into a slow night's pace, never shortens a round on a court, says "past 10:00 PM" only past the booked end, and
 //       names each prompt by its round (at most one per round on Alex's phone).
 import { describe, expect, it } from 'vitest';
-import { AMERICANO_TWELVE, doublesRefusal, oddSwitchWords, playsAmericano, styleAtClose } from '../shared/tournament';
+import { AMERICANO_EVEN, doublesRefusal, oddSwitchWords, playsAmericano, styleAtClose } from '../shared/tournament';
 import { activityText } from '../shared/activity';
 import { EASE_ROUNDS, livePace, measuredPace, paceForCheck, pacing, type PaceRound } from '../shared/smartPacing';
 import { standings, timeCheck, timeCheckWords, type PlannedGame, type RoundState } from '../shared/tournamentSchedule';
@@ -18,21 +18,24 @@ const group = async (ctx: Awaited<ReturnType<typeof coldOpen>>['ctx'], name: str
 const activity = async (ctx: Awaited<ReturnType<typeof coldOpen>>['ctx']) =>
   (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries as { action: string; details: Record<string, unknown> }[];
 
-describe('fix 9: 12 players play Americano', () => {
-  it('the rule: every odd count and 12; 8, 10, 14 and 16 keep the style', () => {
-    expect([7, 9, 11, 12, 13, 15].every(playsAmericano)).toBe(true);
-    expect([6, 8, 10, 14, 16].some(playsAmericano)).toBe(false);
+describe('fix 9 and the fairness rule: 12 and 14 players play Americano', () => {
+  it('the rule: every odd count, 12 and 14; 8, 10 and 16 keep the style', () => {
+    expect([7, 9, 11, 12, 13, 14, 15].every(playsAmericano)).toBe(true);
+    expect([6, 8, 10, 16].some(playsAmericano)).toBe(false);
     expect(styleAtClose('doubles', 12)).toBe('americano');
     expect(styleAtClose('doubles', 10)).toBe('doubles');
-    expect(styleAtClose('doubles', 14)).toBe('doubles');
+    expect(styleAtClose('doubles', 14)).toBe('americano');
+    expect(styleAtClose('doubles', 16)).toBe('doubles');
     expect(oddSwitchWords('The Cold Open', 12)).toBe('The Cold Open switched to Americano (12 players).');
     expect(oddSwitchWords('The Cold Open', 11)).toBe('The Cold Open switched to Americano (odd number of players).');
     expect(oddSwitchWords('The Cold Open')).toBe('The Cold Open switched to Americano (odd number of players).');
-    expect(doublesRefusal(AMERICANO_TWELVE)).toBe('12 players play Americano. 12 are locked in.');
+    expect(AMERICANO_EVEN).toEqual([12, 14]);
+    expect(doublesRefusal(12)).toBe('12 players play Americano. 12 are locked in.');
+    expect(doublesRefusal(14)).toBe('14 players play Americano. 14 are locked in.');
     expect(doublesRefusal(9)).toBe('Locked doubles needs an even number. 9 are locked in.');
   });
 
-  for (const n of [10, 11, 12, 13, 14]) {
+  for (const n of [10, 11, 12, 13, 14, 16]) {
     it(`${n} locked in on a Locked doubles vote at Pay by`, async () => {
       const sent: string[] = [];
       const { ctx } = await coldOpen({ n, style: 'vote', courts: 2, log: [], stopAfterPay: true, sent });
@@ -40,18 +43,18 @@ describe('fix 9: 12 players play Americano', () => {
       const [a, b] = await Promise.all([dash(ctx), group(ctx, 'Casey')]);
       await ctx.app.settle();
       const t = a.tournament;
-      const switched = n === 11 || n === 12 || n === 13;
+      const switched = playsAmericano(n);
       expect(t.lockedIn).toBe(n);
       expect(t.format).toBe(switched ? 'americano' : 'doubles');
       expect(b.format).toBe(switched ? 'americano' : 'doubles');
       // One switch, one Telegram alert, one History line, the organizer's card and the players' banner, the same as an odd count.
       await dash(ctx);
       await ctx.app.settle();
-      expect(sent).toEqual(switched ? [`The Cold Open switched to Americano (${n === 12 ? '12 players' : 'odd number of players'}). ${n} are locked in.`] : []);
+      expect(sent).toEqual(switched ? [`The Cold Open switched to Americano (${n % 2 === 0 ? `${n} players` : 'odd number of players'}). ${n} are locked in.`] : []);
       const lines = (await activity(ctx)).filter((e) => e.action === 'tournament_format' && e.details.how === 'odd');
       expect(lines).toHaveLength(switched ? 1 : 0);
       if (switched) {
-        expect(activityText(lines[0] as never, 'America/Detroit', 'Alex')).toBe(`The Cold Open switched to Americano (${n} locked in${n === 12 ? '' : ', an odd number'})`);
+        expect(activityText(lines[0] as never, 'America/Detroit', 'Alex')).toBe(`The Cold Open switched to Americano (${n} locked in${n % 2 === 0 ? '' : ', an odd number'})`);
         expect(t.oddSwitch).toBeTruthy();
         expect(t.switchBack).toBeNull();
         expect((await group(ctx, 'Devon')).styleNote?.text).toBe('Tournament style is now Americano.');

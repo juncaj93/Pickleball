@@ -274,7 +274,9 @@ export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'z
  *                   check asks for shorter games from Round 4 (Round 3 is on the courts and keeps its length); "Not now" or Play to 9 hides
  *                   it until Round 4 is the round being played.
  */
-export const ZIP92_STAGES = ['zip92_twelve', 'zip92_ld_round', 'zip92_slow'] as const;
+//   zip92_court_time "92: court time line": Zip 87's Pay by day (8 of 10 locked in, 7:30 to 10 PM, 2 courts): the card's gray line "8 locked in:
+//                   9:30 is enough, you could cancel 30 min."; it follows the count as people lock in (a suggestion only).
+export const ZIP92_STAGES = ['zip92_twelve', 'zip92_ld_round', 'zip92_slow', 'zip92_court_time'] as const;
 type Zip92Stage = (typeof ZIP92_STAGES)[number];
 const isZip92Stage = (s: string): s is Zip92Stage => (ZIP92_STAGES as readonly string[]).includes(s);
 export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header', 'zip90_replay', 'zip90_counts'] as const;
@@ -444,6 +446,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
   const group = await requireAdmin(ctx);
   if (!previewSiteFor(ctx)) throw new HttpError(404, 'not_found', 'Not found.');
   // Zip 92: the 12-player switch runs as style_odd on the preview's 10 names (see ZIP92_STAGES).
+  if (body.stage === 'zip92_court_time') return { ...((await tournamentTestStage(ctx, { ...body, stage: 'zip87_payday' })) as Record<string, unknown>), stage: 'zip92_court_time' };
   if (body.stage === 'zip92_twelve') return { ...((await tournamentTestStage(ctx, { ...body, stage: 'style_odd' })) as Record<string, unknown>), stage: 'zip92_twelve' };
   const stage = v.oneOf(body.stage, 'stage', TEST_STAGES);
   // Either format at each stage (left out: Doubles). Americano has its own name and the 2nd place credit.
