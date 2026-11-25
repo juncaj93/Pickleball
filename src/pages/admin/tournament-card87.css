@@ -89,6 +89,17 @@
   overflow: hidden;
   text-overflow: clip;
 }
+/* Zip 92 (Alex: "TOMORRO" was cut at 390): the tile grows to its whole word (54 px at least), so TOMORROW reads in full at every width and
+   text size, light and dark; the word keeps its 11 px and a 3 px side margin. */
+:root[data-tonight-glow] .tm87-tile {
+  width: auto;
+  min-width: 54px;
+}
+:root[data-tonight-glow] .tm87-tile .tile .day-tag {
+  overflow: visible;
+  padding-left: 3px;
+  padding-right: 3px;
+}
 /* Round 2 (Alex): the gear is the bottom Settings tab's own gear (src/ui.tsx GearIcon), centered in a 44 px round button, the same gray as the
    other round buttons (the sheets' close button: --fill, ink-2 words). */
 .tm87-gear {
