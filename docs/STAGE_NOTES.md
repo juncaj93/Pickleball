@@ -8724,3 +8724,18 @@ Browser: e2e/zip90.cjs A to I pass (I compares with the game card now); zip83 A,
 3. "Header: medal counts" (zip90_counts): seven older finished tournaments; Vic 1, Wren 2, Parker 3, Quinn 4 (one medal and ×4), Sage 7.
    375/420/440, light and dark: every count's bottom the same, 3 px after the name, never touching "not you?". Game cards: a name and its
    medals now stay together (Quinn's ×4 had started the next line alone): src/ui.tsx `.nm-pair`, src/medals.css.
+
+### Live (Wed Nov 25, 2026, about 1:15 PM Eastern; quiet hours, no game; Alex's OK after rounds 1 to 4)
+- Before: unit 243 files, 4,502 passed, 2 skipped, 0 failed; e2e/zip90.cjs 10 of 10; admin Home 4 trips / 63 statements, the 5 second
+  check 2 / 16 (unchanged).
+- Restore point first (`npm run backup:before-deploy`, no rate limit): export `export-20261125180644` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00002012-00000000-0000512e-d24aaa4950d6ba24abb0770442711a6f`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `404aa16` (🎾89 live) to `496af6c`, pushed; `npm run deploy` (no override): deployment
+  **aecef6d8-8844-4131-9e81-ebaba9aa28e5** (bundle `index-DBhwEcTS.js`). No migration, no Worker or Error box deploy, no live data
+  touched; The Cold Open's settings unchanged.
+- Rollback: deployment **67ccdd95-d107-4bdd-aef1-7d178763df31** (🎾89), Cloudflare Deployments > Rollback. No database undo needed (nothing
+  new is stored; a winner's seen_at is written only by Nice, as before).
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390
+  light and dark: the new bundle, no page errors, nothing wider than the screen, no write requests. Organizer screens not opened on live
+  (no read-only PIN in this session). Nobody has won on live yet, so no prize card or medal shows there until The Cold Open ends.
