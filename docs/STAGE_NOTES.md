@@ -8441,3 +8441,16 @@ the card, its week row "6 of 10 locked in", two slim games).
   passed, 2 skipped, 0 failed (🎾86 round 2 folded 9 court-state tests); e2e/zip87.cjs 11 of 11 (A to J and G2); admin speed: dashboard 4
   trips / 63 statements, the 5 second check 2 / 16, unchanged (none, all_locked, mid, am_round3, zip87_early, zip87_allset; 6.9 to 7.9 ms
   local). Preview redeployed (6df5f2c9, https://claude-new-session-9215zh.pickleball-club-9h0.pages.dev), calm start "Card: early payments".
+
+### Live (Tue Nov 24, 2026, about 10:15 PM Eastern; after the game, Alex cleared it at 10:09 PM; loud hours overridden as agreed)
+- Restore point first (`npm run backup:before-deploy`, no rate limit): export `export-20261125031033` saved in `pickleball-backups` (checked
+  against the file); Time Travel bookmark `00001f56-00000006-0000512e-01b93b8ae9b75eac05a003ef2527fc3e`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `ba76d4a` to `9046c8b`, pushed; `npm run deploy -- --override-loud-hours`: deployment
+  **37dfc0be-0210-47f3-871f-43d1ff85aa98** (bundle `index-DhxshNJa.js`). No migration, no Worker or Error box deploy, no live data touched; The
+  Cold Open's settings unchanged (prize boxes stay unsaved until Alex saves the Prizes sheet; its columns read as before).
+- Rollback: deployment **25c9ec98-959c-4adb-8865-a094301e9547** (🎾86 round 2), Cloudflare Deployments > Rollback. No database undo needed
+  (older code reads only the columns; a Prizes sheet saved after this deploy keeps the planned box in the columns).
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home and /admin
+  at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN
+  in this session). 🎾88 told it can deploy next.
