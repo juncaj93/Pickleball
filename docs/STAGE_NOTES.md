@@ -8739,3 +8739,49 @@ Browser: e2e/zip90.cjs A to I pass (I compares with the game card now); zip83 A,
 - Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390
   light and dark: the new bundle, no page errors, nothing wider than the screen, no write requests. Organizer screens not opened on live
   (no read-only PIN in this session). Nobody has won on live yet, so no prize card or medal shows there until The Cold Open ends.
+
+## 🎾92.dry run fixes (Wed Nov 25, 2026; branch `claude/new-session-g2eayf`, from main `0b41da3` (🎾90 live); NOT live: held for Alex's OK)
+
+### What changed (the code is the truth; SITE_RULES "The dry run fixes before The Cold Open (Zip 92)")
+1. Words: Finalize "Votes: Locked doubles"; "This game was canceled." (server/admin.ts, all 8); Settings hints "+ Add"; the Players sheet's
+   tickets card has no "Tickets" heading (the chip leads).
+2. Fits: the All / My games switch above the first card (z-index; its 44 px tap area was covered at the bottom); the game-day check badge at
+   -17 px (it covered TOMORROW's W by 4 px); a LATER row's end time wraps in its column; the ticket bar wraps ("Lock in · $16" and "Locked in"
+   never cut at 125 / 150%); night card court boxes stack Score under the names from 21rem (375 / 390 px); the End card head wraps (EDIT
+   AWARDS); players' night names wrap at spaces or end in "…" (gameday-tour.css, the liverow rule too); Start now makes Players soft.
+3. 12 AND 14 PLAY AMERICANO (shared/tournament.ts playsAmericano, AMERICANO_EVEN; settleStyle's SQL guard, switch back, the edit guard,
+   shownFormat, styleAtClose, projected teams, fit lines). Words: "(12 players)", "12 players play Americano.".
+4. LOCKED DOUBLES ONE MORE ROUND (server/tournamentDay.ts facts kinds: semis, bestOf3, then 'round'; writePoolRound; 2 courts only):
+   standings rank by the share won when scheduled game counts differ (shared/tournamentSchedule.ts standings).
+5. TIME CHECK: livePace + paceForCheck easing (EASE_ROUNDS 3), RoundState.onCourt, stillOver from the booked end, words "past 10:00 PM",
+   prompt key `tc:<id>:r<round>` with the phone's memory (src/pages/admin/AmericanoDay.tsx useTimeCheckSeen), Apply skips games on a court.
+6. FAIRNESS RULE (Alex; shared/tournamentFairness.ts, scripts/zip92-fairness.ts): Americano rounds reordered by fairEnd so everyone plays
+   in the last lap (sit spread, sit limit and partner rules checked after every round; 15 and 16 on 2 courts remake the last round);
+   bonusRound continues the saved pattern only for a night in its own order.
+7. COURT TIME LINE (Alex; shared/tournamentCard.ts courtTimeLine, the card's when block).
+8. LIVE BUG: the alert card's day (shared/time.ts shortDayWord): "Nex 8 PM" is "Wed 8 PM".
+9. STAGES (THIS_ZIP): zip92_court_time, zip92_twelve (style_odd + a look at 12), zip92_ld_round, zip92_slow.
+10. OLD TESTS: e2e/all-lib.cjs LONG_SCRIPTS (run, layout-polish, audit-player-flows, zip18: 40 min); the old scripts updated / retired
+    (see the fix 12 notes below).
+
+### Dry run (tests/zip92-dryrun.test.ts, ZIP92_DRYRUN=1; 🎾91's harness rebuilt in tests/zip92-world.ts, no test switches)
+72 nights (7 on 1 court, 8 / 10 Locked doubles, 9 / 11 Americano, 12 by vote, 8 / 10 / 12 Americano; fast, normal, slow, mixed; offers
+taken and declined): nothing past 10 PM (latest 9:50), money 0 every night (all three integrity files), End 200, at most one Time check
+prompt a round, no game shortened on a court. 8 LD minutes left: fast 55 (the extra round taken) / 66, normal 34 / 35, slow 13 / 12, mixed
+13 / 27. 10 LD: fast 52 (semis taken) / 64, normal 24 / 24, slow 15 / 10, mixed 37 / 28. The Time check's old jump ("10 behind", a minute
+later "31") is now "11", then "15" a minute later, rising with the pace.
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: fairEnd broke the sit spread and partner rules (zip61 31 failures) and a bonus round after a reordered night broke the sit limit;
+writePoolRound's rollback keyed on the time (two taps in one millisecond); one more round on 1 court (one game); an extra round's games
+placed before they existed; the court time line now splits added time around 10 PM. Kept: more than one extra round over a night (one per
+offer, as asked); settleStyle switching after teams are published (as odd counts always did); the line follows today's locked-in count
+(Alex: "updates as people lock in").
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 63 statements, the 5 second check 2 / 16, before (main) and after, at all_locked, mid, am_round3, zip88_final,
+zip92_ld_round, zip92_slow (7.4 to 9.1 ms after, 8.3 to 12.0 before, a busy machine).
+
+### Preview
+https://claude-new-session-g2eayf.pickleball-club-9h0.pages.dev (PIN 739514; the fake `pickleball-preview` database, no re-seed). Built from
+a clean checkout of the pushed branch. All four stages tried on the preview; left on "92: court time line".
