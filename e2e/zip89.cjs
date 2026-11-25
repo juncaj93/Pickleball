@@ -10,6 +10,8 @@
  *   C   Locked doubles ahead (zip89_ld_semis): "Add semifinals? Are you sure?", Yes: SEMIS between RD3 and FINAL.
  *   D   Best of 3 in play (zip89_bo3) at 320/390, light and dark: the "Final · G2" pill, "Best of 3 · G1 11–8 · G2 –" under the box; the
  *       finalist's phone lists "Final · Game 2".
+ *   E   The 5 min break (zip89_break) at 320/390, light and dark: "5 min break", "Round 3 in 3:59" ticking each second, Skip break (44 px) puts
+ *       Round 3 on both courts; the phone's break card; Round 1's warm-up line on the card and the phone (game1).
  * Screenshots: .data/zip89-shots (not in git).
  */
 const path = require('node:path');
@@ -178,6 +180,50 @@ const box = (loc) => loc.evaluate((x) => { const r = x.getBoundingClientRect(); 
       assert(text.includes('Final · Game 2'), 'the phone lists Final · Game 2');
       await p.page.screenshot({ path: path.join(SHOTS, 'D-vic-390.png') });
       await p.ctx.close();
+    });
+    await check('E the 5 min break and the warm-up line (320/390, light and dark), Skip break, and a phone', async () => {
+      for (const [width, scheme] of [[320, 'light'], [390, 'light'], [390, 'dark']]) {
+        await b.stage('zip89_break');
+        const { page, ctx, errors } = await b.adminHome({ width, scheme });
+        const brk = page.locator('[data-nc-break]');
+        await brk.waitFor({ timeout: 15000 });
+        assert(flat(await brk.locator('.nc-break-title').textContent()) === '5 min break', 'the title');
+        const t1 = Number(await brk.locator('[data-break-left]').getAttribute('data-break-left'));
+        assert(t1 > 180 && t1 <= 240, `about 4 minutes left: ${t1}`);
+        assert(/^Round 3 in [0-4]:\d\d$/.test(flat(await brk.locator('.break-left').textContent())), 'Round 3 in m:ss');
+        await page.waitForTimeout(2100);
+        const t2 = Number(await brk.locator('[data-break-left]').getAttribute('data-break-left'));
+        assert(t2 < t1, `it ticks: ${t1} then ${t2}`);
+        const skip = brk.locator('[data-nc-skip-break]');
+        assert((await box(skip)).h >= 44, 'Skip break 44 px');
+        await b.noWider(page, `break ${width} ${scheme}`);
+        assert(!(await cutOrBroken(page, '[data-nc]')).length, 'nothing cut');
+        await page.locator('[data-nc]').screenshot({ path: path.join(SHOTS, `E-break-${width}-${scheme}.png`) });
+        if (width === 390 && scheme === 'dark') {
+          await skip.click();
+          await brk.waitFor({ state: 'detached', timeout: 8000 });
+          const pills = await page.locator('[data-nc-pill]').evaluateAll((xs) => xs.map((x) => x.textContent.trim()));
+          assert(pills.join(',') === 'RD3,RD3', `Round 3 on both courts: ${pills}`);
+        }
+        assert(!errors.length, errors.join('; '));
+        await ctx.close();
+      }
+      await b.stage('zip89_break');
+      const p = await b.playerPage('Vic', { width: 390 });
+      await p.page.locator('[data-tc-day-break]').waitFor({ timeout: 15000 });
+      assert(flat(await p.page.locator('[data-tc-day-break] .tc-gd-break-title').textContent()) === '5 min break', 'the phone');
+      await p.page.screenshot({ path: path.join(SHOTS, 'E-vic-break-390.png') });
+      await p.ctx.close();
+      // Round 1: the gray warm-up line on the card and the phone.
+      await b.stage('game1');
+      const a = await b.adminHome({ width: 390 });
+      await a.page.locator('[data-nc-warmup]').waitFor({ timeout: 15000 });
+      assert(flat(await a.page.locator('[data-nc-warmup]').textContent()) === 'Warm up 5 to 10 min, then play.', 'the warm-up line');
+      await a.page.locator('[data-nc]').screenshot({ path: path.join(SHOTS, 'E-warmup-390.png') });
+      await a.ctx.close();
+      const v = await b.playerPage('Vic', { width: 390 });
+      await v.page.locator('[data-tc-day-warmup]').waitFor({ timeout: 15000 });
+      await v.ctx.close();
     });
   } finally {
     console.log(`\nzip89: ${passed} passed, ${failed} failed`);

@@ -45,6 +45,11 @@ async function playNight(ctx: World, opts: { onStep?: (step: number) => Promise<
       continue;
     }
     const live = courts.filter((c) => c.num !== null).map((c) => ({ court: c.court, g: games.find((x) => x.num === c.num) }));
+    // Zip 89 (Alex): on a night where nobody sits, a 5 minute break after every 2nd round: the courts wait, then the clock runs to its end.
+    if (!live.length && v.breakNow) {
+      ctx.app.now = Date.parse(v.breakNow.until) + 1000;
+      continue;
+    }
     expect(live.length, `step ${step}: something is on a court`).toBeGreaterThan(0);
     // Nobody on two courts.
     const on = live.flatMap(({ g }) => [...sc(g).a, ...sc(g).b]);

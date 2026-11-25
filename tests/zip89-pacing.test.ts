@@ -33,12 +33,36 @@ describe('zip 89: the base plan (one place for the numbers)', () => {
     expect(TIE_MINUTES).toBe(10);
   });
   it('Dec 1 (10 players, 2 courts, 2.5 hours): Locked doubles 5 round robin rounds to 11 + Final and 3rd place; Americano 6 rounds to 11', () => {
+    // Zip 89 (Alex): 10 minutes of warm-up, then the rounds: done 9:40 PM, 20 minutes before the end. Someone sits every round: no breaks.
     const ld = nightPlan(10, 2, 150, 'doubles');
-    expect([ld.doubles!.poolRounds, ld.doubles!.playoffRounds, ld.doubles!.third, ld.gameTo, ld.rounds, ld.minutesUsed, ld.fits]).toEqual([5, 1, true, 11, 6, 120, true]);
+    expect([ld.doubles!.poolRounds, ld.doubles!.playoffRounds, ld.doubles!.third, ld.gameTo, ld.rounds, ld.minutesUsed, ld.fits, ld.breaks]).toEqual([5, 1, true, 11, 6, 130, true, 0]);
     const am = nightPlan(10, 2, 150, 'americano');
-    expect([am.rounds, am.gameTo, am.minutesUsed, am.fits]).toEqual([6, 11, 120, true]);
+    expect([am.rounds, am.gameTo, am.minutesUsed, am.fits, am.breaks]).toEqual([6, 11, 130, true, 0]);
   });
-  it('no size 6 to 16 (1 and 2 courts, 2 / 2.5 / 3 hours, both styles) plays fewer rounds or shorter games than with the old numbers', () => {
+  it('Dec 1 for 8 to 12 locked in: every plan done at least 20 minutes before 10 PM with the warm-up; breaks only when nobody sits', () => {
+    // [players, style, rounds, to, breaks, minutes from 7:30 to the planned end]
+    const want: [number, 'doubles' | 'americano', number, number, number, number][] = [
+      [8, 'doubles', 4, 11, 1, 95],
+      [8, 'americano', 5, 11, 2, 120],
+      [9, 'americano', 6, 11, 0, 130],
+      [10, 'doubles', 6, 11, 0, 130],
+      [10, 'americano', 6, 11, 0, 130],
+      [11, 'americano', 6, 11, 0, 130],
+      [12, 'doubles', 5, 11, 0, 110],
+      [12, 'americano', 6, 11, 0, 130],
+    ];
+    for (const [n, style, rounds, to, breaks, used] of want) {
+      const p = nightPlan(n, 2, 150, style);
+      expect([p.rounds, p.gameTo, p.breaks, p.minutesUsed], `${n} ${style}`).toEqual([rounds, to, breaks, used]);
+      expect(150 - p.minutesUsed).toBeGreaterThanOrEqual(20);
+    }
+    // Nobody sits: 8 Americano on 2 courts and 4 teams on 2 courts; 9 or 10 on 2 courts and 6 on 1 court sit.
+    expect([8, 9, 10].map((n) => nightPlan(n, 2, 150, 'americano').noSit)).toEqual([true, false, false]);
+    expect(nightPlan(8, 2, 150, 'doubles').noSit).toBe(true);
+    expect(nightPlan(6, 1, 150, 'americano').noSit).toBe(false);
+  });
+  it('only three sizes (all Americano: 8 on 2 courts for 2.5 and 3 hours, 9 on 1 court for 3 hours) play fewer rounds or shorter games than today (the warm-up and breaks)', () => {
+    const shorter: string[] = [];
     const old = { 11: 23, 9: 19, 7: 16 } as const;
     for (const style of ['doubles', 'americano'] as const)
       for (const c of [1, 2])
@@ -46,7 +70,7 @@ describe('zip 89: the base plan (one place for the numbers)', () => {
           for (let n = 6; n <= 16; n++) {
             const now = nightPlan(n, c, m, style);
             // The old plan, the same rules with 23 / 19 / 16 and 10 minutes kept free.
-            const budget = m - 10;
+            const budget = m - 10; // the old plan: 10 minutes kept free, no warm-up
             let was: { rounds: number; gameTo: number };
             if (now.doubles) {
               const s = now.doubles;
@@ -58,9 +82,9 @@ describe('zip 89: the base plan (one place for the numbers)', () => {
               const len = ([11, 9, 7] as const).find((l) => (at(l) * on) / n >= 4) ?? 7;
               was = { rounds: at(len), gameTo: len };
             }
-            expect(now.rounds, `${style} ${n} ${c} ${m}`).toBeGreaterThanOrEqual(was.rounds);
-            expect(now.gameTo, `${style} ${n} ${c} ${m}`).toBeGreaterThanOrEqual(was.gameTo);
+            if (now.rounds < was.rounds || now.gameTo < was.gameTo) shorter.push(`${now.style} ${n} ${c} ${m}`);
           }
+    expect([...new Set(shorter)].sort()).toEqual(['americano 8 2 150', 'americano 8 2 180', 'americano 9 1 180']);
   });
 });
 
@@ -278,8 +302,8 @@ describe('zip 89: Locked doubles on the real server', () => {
     const run = await playPaced(ctx, 10);
     expect(run.offers).toEqual([]);
   }, 60_000);
-  it('14 players (groups, semifinals already; 3 hours): the first bonus is the best of 3 Final', async () => {
-    const ctx = await world(14, { format: 'doubles', minutes: 180 });
+  it('14 players (groups, semifinals already; 3.5 hours): the first bonus is the best of 3 Final', async () => {
+    const ctx = await world(14, { format: 'doubles', minutes: 210 });
     await draftAndPublish(ctx);
     const run = await playPaced(ctx, 12);
     expect(run.offers.map((o) => o.kind)).toEqual(['bestOf3']);
@@ -392,5 +416,85 @@ describe('zip 89 (review): a best of 3 Final stays one series between the same t
     const g2 = d.games.find((g: any) => g.finalGame === 2);
     expect(names(g2)).toBe(names(g1));
     expect(names(g1)).toBe('Net Ninjas v Third Shot Gang');
+  });
+});
+
+describe('zip 89 (Alex): the warm-up and breaks when nobody sits', () => {
+  it('the pace never counts the warm-up or a break', () => {
+    // Round 1 done 24 minutes after the start (10 of them warm-up), Round 2 14 minutes later: 14 a round, not 19.
+    const r = [
+      { round: 1, planned: true, done: true, doneAt: START + 24, pauseBefore: 10 },
+      { round: 2, planned: true, done: true, doneAt: START + 38 },
+      { round: 3, planned: true, done: true, doneAt: START + 57, pauseBefore: 5 },
+    ];
+    expect(measuredPace(r, START).pace).toBeCloseTo((57 - 15) / 3);
+    expect(measuredPace(r, START).latest).toBeCloseTo(14);
+  });
+  it('8 Americano on 2 courts: the warm-up line in Round 1; a 5 minute break after Round 2 (no offer during it); Skip break starts Round 3', async () => {
+    const ctx = await world(8, { format: 'americano' });
+    ctx.app.now = START_MS + 60_000;
+    let { v } = await night(ctx);
+    expect(v.warmUp).toBe(true);
+    expect((await card(ctx, 'Blair')).day.warmUp).toBe(true);
+    // Rounds 1 and 2 at 13 minutes a game (Round 1 after the warm-up).
+    await playPaced(ctx, 13, false, ({ v }) => v.games.filter((g: any) => g.round <= 2).every((g: any) => g.status === 'done'));
+    ({ v } = await night(ctx));
+    expect(v.warmUp).toBeUndefined();
+    expect(v.breakNow.round).toBe(3);
+    expect(Date.parse(v.breakNow.until) - ctx.app.now).toBeGreaterThan(4 * 60_000);
+    expect(v.courtsNow.every((c: any) => c.num === null)).toBe(true);
+    expect(v.bonus).toBeUndefined();
+    const phone = (await card(ctx, 'Blair')).day;
+    expect(phone.breakNow.round).toBe(3);
+    // Skip break: Round 3 on both courts at once.
+    expect((await call(ctx, { action: 'skipBreak' })).status).toBe(200);
+    ({ v } = await night(ctx));
+    expect(v.breakNow).toBeUndefined();
+    expect(v.courtsNow.map((c: any) => v.games.find((g: any) => g.num === c.num)?.round)).toEqual([3, 3]);
+    expect((await call(ctx, { action: 'skipBreak' })).status).toBe(409);
+    // The rest of the night: the break after Round 4 ends by itself after 5 minutes; every game once; money to the cent.
+    const run = await playPaced(ctx, 13, true, undefined, false);
+    expect(run.breaks).toBeGreaterThanOrEqual(1);
+    const t = await adminTour(ctx);
+    expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
+    allThree(ctx);
+  }, 60_000);
+  it('10 Americano on 2 courts (two sit each round): no breaks', async () => {
+    const ctx = await world(10, { format: 'americano' });
+    const run = await playPaced(ctx, 13, false);
+    expect(run.breaks).toBe(0);
+  }, 60_000);
+  it('8 Locked doubles (4 teams on 2 courts): a break after Round 2, then Round 3 by itself after 5 minutes', async () => {
+    const ctx = await world(8, { format: 'doubles' });
+    await draftAndPublish(ctx);
+    await playPaced(ctx, 13, false, ({ v }) => !!v.breakNow);
+    const { v } = await night(ctx);
+    expect(v.breakNow.round).toBe(3);
+    ctx.app.now = Date.parse(v.breakNow.until) + 1000;
+    const after = (await night(ctx)).v;
+    expect(after.breakNow).toBeUndefined();
+    expect(after.courtsNow.filter((c: any) => c.num !== null)).toHaveLength(2);
+  }, 60_000);
+});
+
+describe('zip 89: the break stage', () => {
+  it('Pacing: 5 min break: the break on, about 4 minutes left, Skip break puts Round 3 on both courts', async () => {
+    const { setupGroup } = await import('./harness');
+    const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex' });
+    ctx.app.env.PREVIEW_CALM = 'on';
+    for (const n of ['Alex', 'Parker', 'Rowan', 'Sage', 'Christopher Vanderberg', 'Vic', 'Wren', 'Zoe', 'Quinn', 'Reese']) await ctx.organizer.call('POST', '/api/admin/players', { name: n });
+    ctx.app.now = Date.parse('2026-11-13T01:15:00.000Z');
+    const r = await ctx.organizer.call('POST', '/api/admin/tournament-test', { stage: 'zip89_break' });
+    expect(r.status, r.text).toBe(200);
+    const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament.day;
+    expect(d.breakNow.round).toBe(3);
+    const left = Date.parse(d.breakNow.until) - ctx.app.now;
+    expect(left).toBeGreaterThan(3 * 60_000);
+    expect(left).toBeLessThanOrEqual(4 * 60_000);
+    expect((await ctx.organizer.call('POST', `/api/admin/tournament/${r.data.id}/games`, { action: 'skipBreak' })).status).toBe(200);
+    const after = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.tournament.day;
+    expect(after.breakNow).toBeUndefined();
+    expect(after.courtsNow.map((c: any) => after.games.find((g: any) => g.num === c.num)?.round)).toEqual([3, 3]);
   });
 });

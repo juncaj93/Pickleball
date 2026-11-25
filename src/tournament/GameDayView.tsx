@@ -7,6 +7,7 @@
 //   counts), "Net Ninjas won 11 to 7" with Undo, the Time check, Your games ("Won 11–7"), Standings ("+4 pts") or the pools, Currently playing.
 // No clock times except "Game 1 begins at" (and The night's times with pools, as mock 51 draws them). Names only.
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { BreakLeft } from './parts';
 import type { PlayerDayGame, PlayerDayView, PlayerTournamentView } from '../../shared/tournament';
 import { api, ApiError, storageGet, storageSet, VIEW_ONLY_MESSAGE } from '../lib';
 import { CourtMap } from '../GameDay';
@@ -635,6 +636,19 @@ export function DayBody({ t, day: real, org, onChanged }: { t: PlayerTournamentV
         <p className="tc-gd-paused" role="status" data-tc-day-paused>
           Paused.
         </p>
+      )}
+      {/* Zip 89 (Alex): the 5 minute break (nobody sits) with its countdown; Round 1's gray warm-up line. */}
+      {day.breakNow ? (
+        <section className="tc-gd-break" role="status" data-tc-day-break={day.breakNow.round}>
+          <b className="tc-gd-break-title">5 min break</b>
+          <BreakLeft b={day.breakNow} />
+        </section>
+      ) : (
+        day.warmUp && (
+          <p className="tc-gd-warm" data-tc-day-warmup>
+            Warm up 5 to 10 min, then play.
+          </p>
+        )
       )}
       {tiePhase === 'tie' && tie && (
         <>

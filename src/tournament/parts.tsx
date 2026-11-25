@@ -1,7 +1,8 @@
 // Zip 55 "Tournaments": the pieces the player sheets (src/tournament/TournamentHome.tsx, loaded only when a tournament is on a player's Home)
 // and the organizer screens (src/pages/admin/Tournament.tsx) share: the month calendar and the level list. Styles: src/tournament/tournament.css.
-import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
-import { type CalMonth, type FormatVote, LEVELS, monthTitle, VOTE_ROWS } from '../../shared/tournament';
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { type BreakNow, type CalMonth, type FormatVote, LEVELS, monthTitle, VOTE_ROWS } from '../../shared/tournament';
+import { countdownText } from '../../shared/reveal';
 import './tournament.css';
 
 const WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -328,5 +329,34 @@ export function Wheel({ names, result, spinKey, small, onDone }: { names: string
         <path d="M-11 -113 L11 -113 L0 -88 Z" className="tc-wh-arrow" />
       </svg>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 89 (🎾89.smart pacing): the break's countdown ("Round 3 in 3:42"), the same on the organizer's night card and the players' phones. It ticks
+// once a second from the server's clock as the view sent it (`serverNow`), so a phone with a wrong clock still shows the right time; at 0:00
+// the next check moves the night on (the round goes on its courts). Here because this file is the piece both sides already share.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Milliseconds left in the break, ticking once a second. */
+export function useBreakLeft(b: BreakNow): number {
+  const offset = useMemo(() => Date.parse(b.serverNow) - Date.now(), [b.serverNow]);
+  const until = Date.parse(b.until);
+  const [now, setNow] = useState(() => Date.now() + offset);
+  useEffect(() => {
+    setNow(Date.now() + offset);
+    const id = window.setInterval(() => setNow(Date.now() + offset), 1000);
+    return () => window.clearInterval(id);
+  }, [offset, until]);
+  return Math.max(0, until - now);
+}
+
+/** "Round 3 in 3:42". */
+export function BreakLeft({ b }: { b: BreakNow }) {
+  const left = useBreakLeft(b);
+  return (
+    <span className="break-left" data-break-left={Math.ceil(left / 1000)}>
+      Round {b.round} in <b>{countdownText(left)}</b>
+    </span>
   );
 }

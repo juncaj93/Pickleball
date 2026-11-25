@@ -827,6 +827,10 @@ export interface PlayerDayView {
   finalAlert?: DayAlert;
   /** The organizer paused game day. */
   paused?: true;
+  /** Zip 89: Round 1 is being played: one gray line "Warm up 5 to 10 min, then play." */
+  warmUp?: true;
+  /** Zip 89: a 5 minute break is on (nobody sits): the round after it, when it ends, the server's clock (the countdown). */
+  breakNow?: BreakNow;
   /** A partner changed after the teams were published: a one-time note ("Your new partner is Rowan."). */
   partnerNote?: { key: string; text: string };
 }
@@ -881,6 +885,13 @@ export interface AdminDayGame {
 }
 
 /** Zip 89 (🎾89.smart pacing): the bonus offer on the organizer's night card (shared/smartPacing.ts). `key` goes back with the tap. */
+/** Zip 89: a break on now. */
+export interface BreakNow {
+  round: number;
+  until: string;
+  serverNow: string;
+}
+
 export interface BonusOffer {
   kind: 'round' | 'semis' | 'bestOf3';
   key: string;
@@ -946,6 +957,10 @@ export interface AdminDayView {
   bonus?: BonusOffer;
   /** Zip 89: the Final is best of 3 (its games carry finalGame); the series so far ("1-0"), from the first team's side. */
   bestOf3?: { wins: [number, number]; winner: 'a' | 'b' | null };
+  /** Zip 89: Round 1 is being played: one gray line "Warm up 5 to 10 min, then play." */
+  warmUp?: true;
+  /** Zip 89: a 5 minute break is on (nobody sits): the round after it, when it ends, the server's clock (the countdown). */
+  breakNow?: BreakNow;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1008,6 +1023,10 @@ export interface PlayerRoundsView {
   /** Zip 74: shorter games are in force (as PlayerDayView.shortAlert). */
   shortAlert?: DayAlert;
   paused?: true;
+  /** Zip 89: Round 1 is being played: one gray line "Warm up 5 to 10 min, then play." */
+  warmUp?: true;
+  /** Zip 89: a 5 minute break is on (nobody sits): the round after it, when it ends, the server's clock (the countdown). */
+  breakNow?: BreakNow;
   /** Someone left: a plain note for each player whose later game is off ("Zoe left. Your Round 5 game is off."). */
   leftNote?: { key: string; text: string };
 }
@@ -1062,6 +1081,10 @@ export interface AdminRoundsView {
   /** Zip 89: "Ahead of time" + Add a round (organizer only; absent when there is no offer), and the rounds the plan had (later ones are bonus). */
   bonus?: BonusOffer;
   plannedRounds?: number;
+  /** Zip 89: Round 1 is being played: one gray line "Warm up 5 to 10 min, then play." */
+  warmUp?: true;
+  /** Zip 89: a 5 minute break is on (nobody sits): the round after it, when it ends, the server's clock (the countdown). */
+  breakNow?: BreakNow;
   /** Zip 88: each court now (rolling courts) and who is not on a court now (names). */
   courtsNow: CourtNow[];
   sittingNow: string[];

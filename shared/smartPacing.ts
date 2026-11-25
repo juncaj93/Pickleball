@@ -18,7 +18,7 @@
 //              The organizer decides: nothing is ever added by itself. One offer at a time, at most one bonus per scored round (after a
 //              bonus is added, the next offer waits for another round to be fully scored); it goes away when (b) closes and can come back
 //              after a later round while the pace still allows.
-import { END_BUFFER, PLAYOFF_TO, ROUND_MINUTES } from './tournamentPlan';
+import { BREAK_MINUTES, END_BUFFER, PLAYOFF_TO, ROUND_MINUTES } from './tournamentPlan';
 
 /** The slowest a round to 11 is ever assumed to be, whatever the measured pace (minutes). */
 export const PACE_FLOOR = 14;
@@ -41,6 +41,8 @@ export interface PaceRound {
   minutes?: number;
   /** The Time check can never shorten it (a playoff round): the offer counts it at the table's time at least, never faster. */
   fixed?: boolean;
+  /** Zip 89: minutes before it that were not play (Round 1: the warm-up; after a break: the break as taken). The pace never counts them. */
+  pauseBefore?: number;
 }
 
 /** What the bonus is ('round' Americano; 'semis' Locked doubles 4 and 5 teams; 'bestOf3' the Final). How many rounds it adds to the night. */
@@ -68,6 +70,10 @@ export interface PaceInput {
   lastBonusAt?: number | null;
   /** The bonus adds playoff games, which the Time check never shortens (Locked doubles): it needs more planned rounds left. */
   fixedBonus?: boolean;
+  /** Zip 89: a night where nobody sits has a 5 minute break after every 2nd round (the estimate counts the ones still to come). */
+  breaks?: boolean;
+  /** Zip 89: a break is on now (no offer during a break), and the minutes of it still to run. */
+  onBreak?: number;
 }
 
 export interface PaceResult {
@@ -93,16 +99,19 @@ export function measuredPace(rounds: readonly PaceRound[], startMin: number): { 
   let table = 0;
   // The latest full round alone (minutes for a round to 11), so the Time check sees a night slowing down at once (review: the average lags).
   let latest: number | null = null;
+  let paused = 0;
   for (const r of list) {
     if (!r.done || r.doneAt === undefined) break;
     done++;
     table += tableOf(r);
-    const from = Number.isFinite(lastAt) ? lastAt : startMin;
+    paused += r.pauseBefore ?? 0;
+    const from = (Number.isFinite(lastAt) ? lastAt : startMin) + (r.pauseBefore ?? 0);
     latest = (Math.max(0, r.doneAt - from) / tableOf(r)) * FULL;
     lastAt = Math.max(lastAt, r.doneAt);
   }
   if (done === 0 || !Number.isFinite(lastAt) || table <= 0) return { done, lastAt, pace: null, latest: null };
-  return { done, lastAt, pace: Math.max(PACE_FLOOR, ((lastAt - startMin) / table) * FULL), latest };
+  // Zip 89: the warm-up and the breaks are not play: the pace is the play time only.
+  return { done, lastAt, pace: Math.max(PACE_FLOOR, (Math.max(0, lastAt - startMin - paused) / table) * FULL), latest };
 }
 
 /** THE PACE and THE OFFER. */
@@ -120,9 +129,13 @@ export function pacing(p: PaceInput): PaceResult {
   const extra = p.kind ? (p.bonusMinutes ?? BONUS_ROUNDS[p.kind] * FULL) * firm : 0;
   // The round being played counts as at most half done: the clock starts at the last full round's end, or half a round ago if later.
   const from = Math.max(lastAt, p.nowMin - pace / 2);
-  const finishWithBonus = from + left + extra;
+  // Zip 89: breaks still to come (after every 2nd round, never after the last, the bonus counted), and the one on now.
+  const total = list.length + (p.kind ? BONUS_ROUNDS[p.kind] : 0);
+  let breaksLeft = 0;
+  if (p.breaks) for (let r = done + 1; r < total; r++) if (r % 2 === 0) breaksLeft++;
+  const finishWithBonus = from + left + extra + breaksLeft * BREAK_MINUTES + (p.onBreak ?? 0);
   const fresh = p.lastBonusAt === undefined || p.lastBonusAt === null || p.lastBonusAt < lastAt;
-  const open = !!p.kind && fresh && p.started && !p.over && !p.paused && !p.behind && !p.leftOpen;
+  const open = !!p.kind && fresh && !p.onBreak && p.started && !p.over && !p.paused && !p.behind && !p.leftOpen;
   // A bonus that adds games the Time check can never shorten (Locked doubles' playoff games) needs that many more planned pool rounds still to
   // play, so a night that slows down afterwards still has pool games to shorten (review): semifinals 2, a best of 3 Final 3.
   const need = Math.max(BONUS_MIN_LEFT, p.fixedBonus ? BONUS_ROUNDS[p.kind!] + 1 : 0);
@@ -146,3 +159,41 @@ export function paceForCheck(bonusIn: boolean, pace: number | null, done = 2, la
 }
 /** Rounds fully in before a slow pace counts for the Time check. */
 export const SLOW_ROUNDS = 2;
+
+/**
+ * Zip 89 (Alex): BREAKS when nobody sits (every player plays every round): 5 minutes after every 2nd round, never after the last. A round is a
+ * full round when it has a game on every court. `rounds`: each round's game count and when its last game got its result (ms, or null). Returns,
+ * for each round that follows a break, the moment it may start (the round before it fully scored + 5 minutes). Skip break puts that round's games
+ * on their courts at once (saved courts), so nothing else is stored.
+ */
+export function breakStarts(rounds: ReadonlyMap<number, { games: number; doneMs: number | null }>, courts: number, noSit: boolean): Map<number, number> {
+  const out = new Map<number, number>();
+  if (!noSit) return out;
+  const last = Math.max(0, ...rounds.keys());
+  for (const [r, x] of rounds) {
+    if (r % 2 !== 0 || r >= last || x.doneMs === null) continue;
+    const next = rounds.get(r + 1);
+    if (x.games !== courts || !next || next.games !== courts) continue;
+    out.set(r + 1, x.doneMs + BREAK_MINUTES * 60_000);
+  }
+  return out;
+}
+
+/** Zip 89: the break on now (the round after it has not started and its moment is still to come), and each round's break as taken (minutes). */
+export function breakState(
+  starts: ReadonlyMap<number, number>,
+  roundStartMs: ReadonlyMap<number, number>,
+  nowMs: number,
+): { now: { round: number; until: number } | null; taken: Map<number, number> } {
+  let now: { round: number; until: number } | null = null;
+  const taken = new Map<number, number>();
+  for (const [round, until] of starts) {
+    const began = roundStartMs.get(round);
+    const doneMs = until - BREAK_MINUTES * 60_000;
+    if (began === undefined) {
+      if (until > nowMs) now = { round, until };
+      taken.set(round, Math.max(0, Math.min(BREAK_MINUTES, (Math.max(nowMs, until) - doneMs) / 60_000)));
+    } else taken.set(round, Math.max(0, Math.min(BREAK_MINUTES, (began - doneMs) / 60_000)));
+  }
+  return { now, taken };
+}

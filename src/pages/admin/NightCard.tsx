@@ -6,7 +6,8 @@
 // time" and Add a round (44 px). A tap asks "Are you sure?" in place (two equal buttons: Yes green, No red outline); Yes adds it at once. Ignored,
 // nothing changes; the line goes when the offer does. Hidden while Pause or Player left is asking, or the Player left sheet is open.
 import { useState } from 'react';
-import type { BonusOffer } from '../../../shared/tournament';
+import type { BonusOffer, BreakNow } from '../../../shared/tournament';
+import { BreakLeft } from '../../tournament/parts';
 import { Pickleball } from '../../ui';
 import type { NightBox, NightModel } from './nightCardData';
 
@@ -28,6 +29,9 @@ export function NightCard({
   bonus,
   onBonus,
   holdBonus,
+  warmUp,
+  breakNow,
+  onSkipBreak,
 }: {
   name: string;
   m: NightModel;
@@ -45,6 +49,10 @@ export function NightCard({
   bonus?: BonusOffer | null;
   onBonus?: (key: string) => void;
   holdBonus?: boolean;
+  /** Zip 89 (Alex): Round 1's gray warm-up line, and the 5 minute break (countdown, Skip break). */
+  warmUp?: boolean;
+  breakNow?: BreakNow | null;
+  onSkipBreak?: () => void;
 }) {
   const [ask, setAsk] = useState<null | 'pause' | 'left'>(null);
   const [askBonus, setAskBonus] = useState<string | null>(null);
@@ -91,6 +99,25 @@ export function NightCard({
             </li>
           ))}
         </ol>
+        {breakNow ? (
+          <div className="nc-break" role="status" data-nc-break={breakNow.round}>
+            <span className="nc-break-words">
+              <b className="nc-break-title">5 min break</b>
+              <BreakLeft b={breakNow} />
+            </span>
+            {onSkipBreak && (
+              <button type="button" className="nc-quiet nc-break-skip" disabled={busy} onClick={onSkipBreak} data-nc-skip-break>
+                Skip break
+              </button>
+            )}
+          </div>
+        ) : (
+          warmUp && (
+            <p className="nc-warm" data-nc-warmup>
+              Warm up 5 to 10 min, then play.
+            </p>
+          )
+        )}
         <>
           {m.boxes.map((b) => (
             <CourtBox key={b.court} b={b} busy={busy} onScore={() => onScore(b.num)} />

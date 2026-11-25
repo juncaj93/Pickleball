@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { expect } from 'vitest';
 import { playerPhone } from './harness';
 import { adminTour, START_MS, type World } from './zip58-world';
+import { WARM_UP } from '../shared/tournamentPlan';
 
 export const sc = (o: { a: { names?: string[]; players?: string[] } | null; b: { names?: string[]; players?: string[] } | null }) => ({
   a: o.a?.names ?? o.a?.players ?? [],
@@ -34,6 +35,8 @@ export interface NightRun {
   games: Map<string, number>;
   rounds: number;
   timeChecks: number;
+  /** Zip 89: breaks the night had. */
+  breaks: number;
   played: { num: number; label: string; a: string[]; b: string[]; start: number; end: number; score: string }[];
 }
 
@@ -45,7 +48,9 @@ export async function playPaced(
   accept = true,
   stopWhen?: (s: { t: any; v: any; games: any[] }) => boolean,
   fresh = true,
+  skipBreaks = false,
 ): Promise<NightRun> {
+  let breaks = 0;
   if (fresh) ctx.app.now = START_MS;
   const ends = new Map<number, number>();
   const starts = new Map<number, number>();
@@ -85,6 +90,17 @@ export async function playPaced(
       continue;
     }
     const live = courts.filter((c) => c.num !== null).map((c) => ({ court: c.court, g: games.find((x) => x.num === c.num) }));
+    // Zip 89: a break on (nobody sits): nothing on the courts until it ends (or Alex skips it: `skipBreaks`).
+    if (!live.length && v.breakNow) {
+      breaks++;
+      if (skipBreaks) {
+        expect((await call(ctx, { action: 'skipBreak' })).status).toBe(200);
+        continue;
+      }
+      expect(v.bonus, 'no offer during a break').toBeUndefined();
+      ctx.app.now = Date.parse(v.breakNow.until) + 1000;
+      continue;
+    }
     if (!live.length) {
       // Americano: every game in (the reveal is next).
       if (t.format === 'americano' && games.every((g) => g.status === 'done' || g.status === 'skipped')) break;
@@ -95,7 +111,8 @@ export async function playPaced(
       const to = g.playTo ?? 11;
       const entry = 1 + ((g.num * 7 + court) % 3);
       const p = typeof pace === 'number' ? pace : pace(g.round);
-      ends.set(g.num, ctx.app.now + (Math.round((p * to) / 11) + entry) * 60_000);
+      // Zip 89: Round 1's games start with the 10 minute warm-up on court.
+      ends.set(g.num, ctx.app.now + (Math.round((p * to) / 11) + entry + (g.round === 1 ? WARM_UP : 0)) * 60_000);
       starts.set(g.num, ctx.app.now);
     }
     const next = Math.min(...live.map(({ g }) => ends.get(g.num)!));
@@ -120,7 +137,7 @@ export async function playPaced(
     const label = g.stage ? (g.finalGame ? `Final G${g.finalGame}` : g.stage === 'pool' ? `RD${g.round}` : g.stage) : `RD${g.round}`;
     played.push({ num: g.num, label, a: sc(g).a, b: sc(g).b, start: starts.get(g.num) ?? 0, end: ends.get(g.num) ?? 0, score: `${g.scoreA}-${g.scoreB}` });
   }
-  return { offers, finish, games: count, rounds: Math.max(...games.map((g) => g.round)), timeChecks, played };
+  return { offers, finish, games: count, rounds: Math.max(...games.map((g) => g.round)), timeChecks, played, breaks };
 }
 
 

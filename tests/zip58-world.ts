@@ -82,9 +82,26 @@ export const adminTour = async (ctx: World) => (await dash(ctx)).tournament;
 export const group = async (ctx: World, name: string) => (await (await playerPhone(ctx, name)).call('GET', '/api/group')).data;
 export const card = async (ctx: World, name: string) => (await group(ctx, name)).tournament;
 export const teams = (ctx: World, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/teams`, body);
-export const games = (ctx: World, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, withScore(body));
+/**
+ * Zip 89 (Alex): on a night where nobody sits (8 players: 4 teams, or 8 Americano on 2 courts) the round after every 2nd round waits a 5 minute
+ * break. A score these tests send at once for that round is refused ("not on a court yet"); on a real night the clock runs on: when, and only
+ * when, a break is on, the clock moves to its end and the same call is sent again. Any other refusal is returned as it was.
+ */
+async function afterBreak<T extends { status: number; data: any }>(ctx: World, send: () => Promise<T>): Promise<T> {
+  const r = await send();
+  if (r.status !== 409 || r.data?.error !== 'not_yet') return r;
+  const t = await adminTour(ctx);
+  const b = (t?.day ?? t?.rounds)?.breakNow;
+  if (!b) return r;
+  ctx.app.now = Math.max(ctx.app.now, Date.parse(b.until) + 1000);
+  return send();
+}
+export const games = (ctx: World, body: Record<string, unknown>) => afterBreak(ctx, () => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/games`, withScore(body)));
 export const awards = (ctx: World, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${ctx.tid}/awards`, body);
-export const play = async (ctx: World, name: string, num: number, action: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, ...asScore(action) });
+export const play = async (ctx: World, name: string, num: number, action: string) => {
+  const phone = await playerPhone(ctx, name);
+  return afterBreak(ctx, () => phone.call('POST', '/api/tournament/game', { tournamentId: ctx.tid, num, ...asScore(action) }));
+};
 export const spin = async (ctx: World, name: string, key: string) => (await playerPhone(ctx, name)).call('POST', '/api/tournament/spin', { tournamentId: ctx.tid, key });
 
 /** Every money check of the site and of tournaments reads zero. */

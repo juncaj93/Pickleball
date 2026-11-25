@@ -451,6 +451,9 @@ function NightControls({ ctx, t, d }: { ctx: AdminCtx; t: AdminTournamentView; d
         onPause={() => void save(() => gamesCall(t, { action: d.paused ? 'resume' : 'pause' }), d.paused ? 'Back on' : 'Paused')}
         onLeft={() => setLeft(true)}
         bonus={d.bonus}
+        warmUp={!!d.warmUp}
+        breakNow={d.breakNow ?? null}
+        onSkipBreak={() => void save(() => gamesCall(t, { action: 'skipBreak' }), 'Break skipped')}
         holdBonus={left || !!d.fix}
         onBonus={(key) => void save(() => gamesCall(t, { action: 'bonus', key }), d.bonus?.kind === 'semis' ? 'Semifinals added' : d.bonus?.kind === 'bestOf3' ? 'The Final is best of 3' : 'Round added')}
       />

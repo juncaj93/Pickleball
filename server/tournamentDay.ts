@@ -32,8 +32,8 @@ import {
   shortAlertOf,
 } from '../shared/tournament';
 import { firstAnswer, saidTeamScore, saidWon } from '../shared/partnerTaps';
-import { about, clockLabel, doublesStructure, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES } from '../shared/tournamentPlan';
-import { BONUS_ROUNDS, type BonusKind, measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
+import { about, BREAK_MINUTES, clockLabel, doublesNoSit, doublesStructure, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES, WARM_UP } from '../shared/tournamentPlan';
+import { BONUS_ROUNDS, type BonusKind, breakStarts, breakState, measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
 import {
   draftNote,
   draftTeams,
@@ -338,6 +338,9 @@ interface DayFacts {
   /** Zip 89: the Final's games (one, or a best of 3: game 3 only once it is 1-1) and who leads; the live pace and the bonus offer. */
   series: FinalSeries;
   pace: PaceResult;
+  /** Zip 89: Round 1 is being played ("Warm up 5 to 10 min, then play."), and the break on now (the round after it, until when: ms). */
+  warmUp: boolean;
+  breakNow: { round: number; until: number } | null;
 }
 
 /** Zip 89: the Final as a series. One game (as always), or best of 3: the games so far, the wins of side a and side b, and the winner's side. */
@@ -398,6 +401,21 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   // cleared; a team leaving: its skip time). Pool games roll; a tie's games exist from the wheel's spin; the playoffs start only when every game
   // of the stage before is in and their teams are known (the Final and 3rd place side by side). A game called off by a rule with no time (a
   // walkover) is not part of the replay.
+  // Zip 89 (Alex): BREAKS when nobody sits (4 teams on 2 courts): the round after every 2nd round waits 5 minutes from the moment the round
+  // before it is fully scored (a round with a game on both courts); Skip break puts it on its courts at once (saved courts).
+  const noSit = doublesNoSit(doublesStructure(teams.length, courtsOf(t))) && !gone.size;
+  const plannedRounds = new Map<number, GameRow[]>();
+  for (const g of planned) plannedRounds.set(g.round, [...(plannedRounds.get(g.round) ?? []), g]);
+  const breaks = breakStarts(
+    new Map(
+      [...plannedRounds].map(([r, list]) => {
+        const times = list.map((g) => g.result_at ?? claimTime(g.claim_at)).filter((x): x is string => !!x);
+        return [r, { games: list.length, doneMs: list.every(decided) && times.length ? Math.max(...times.map((x) => Date.parse(x))) : null }];
+      }),
+    ),
+    courtsOf(t),
+    noSit,
+  );
   const roll = rollCourts(
     planned.map((g) => {
       const r = resolved.get(g.num);
@@ -412,12 +430,19 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
         players: r?.a && r?.b ? [`T${r.a}`, `T${r.b}`] : [],
         doneAt: finished ? (at ? Date.parse(at) : -1e15) : g.skipped && pin ? nowMs : null,
         ...(g.skipped && !at && !pin ? { gone: true } : {}),
-        ...(g.stage === 'tie' ? { from: Date.parse(g.created_at) } : {}),
+        ...(g.stage === 'tie' ? { from: Date.parse(g.created_at) } : breaks.has(g.round) ? { from: breaks.get(g.round)! } : {}),
         ...(pin ? { pin } : {}),
       };
     }),
     courtsOf(t),
+    nowMs,
   );
+  const roundBegan = new Map<number, number>();
+  for (const [num, ms] of roll.startAt) {
+    const r = planned.find((g) => g.num === num)?.round;
+    if (r !== undefined && Number.isFinite(ms)) roundBegan.set(r, Math.min(roundBegan.get(r) ?? Infinity, ms));
+  }
+  const brk = breakState(breaks, roundBegan, nowMs);
   const games = planned.map((g) => (roll.court.has(g.num) ? { ...g, court: roll.court.get(g.num)! } : g));
   const startedNums = new Set(roll.court.keys());
   const liveNums = new Set(roll.onCourt.filter((x): x is number => x !== null));
@@ -455,6 +480,8 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
       anyResult: list.some((g) => !!g.winner || !!g.claim || (!!g.skipped && g.result_by !== null)),
       doneAt: all.every(decided) && times.length ? minuteOf(t, tz, Math.max(...times.map((x) => Date.parse(x)))) : undefined,
       ...(tiesEnd !== undefined ? { tiesEnd } : {}),
+      // Zip 89: a break before it (5 planned, or as taken).
+      ...(noSit && round > 1 && (round - 1) % 2 === 0 && round <= Math.max(...plannedRounds.keys()) ? { gap: brk.taken.get(round) ?? BREAK_MINUTES } : {}),
     };
   });
   if (hiddenRound !== null && !states.some((r) => r.round === hiddenRound)) states.push({ round: hiddenRound, pool: false, playTo: PLAYOFF_TO, done: false, anyResult: false });
@@ -468,11 +495,20 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const bonusIn = (shape.shape === 'rr' && semisIn) || series.bestOf3;
   const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size || !plan.fits ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : 'bestOf3';
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
-  const paceRounds: PaceRound[] = states.map((r) => ({ round: r.round, planned: r.pool, done: r.done, doneAt: r.doneAt, minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO], ...(r.pool ? {} : { fixed: true }) }));
+  // Zip 89: Round 1 is measured from the start + the warm-up; a round after a break from the break's end (the pace never counts either).
+  const paceRounds: PaceRound[] = states.map((r) => ({
+    round: r.round,
+    planned: r.pool,
+    done: r.done,
+    doneAt: r.doneAt,
+    minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO],
+    ...(r.pool ? {} : { fixed: true }),
+    ...(r.round === 1 ? { pauseBefore: WARM_UP } : r.gap ? { pauseBefore: r.gap } : {}),
+  }));
   const measured = measuredPace(paceRounds, startMin);
   const check =
     started && !over && !t.paused_at && games.length && t.final_date
-      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done, measured.latest))
+      ? timeCheck(states, real.start + WARM_UP, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done, measured.latest))
       : null;
   const lowered = games.filter((g) => g.stage === 'pool' && !decided(g) && g.play_to < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.play_to)) as GameTo } : null;
@@ -483,6 +519,8 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     nowMin,
     kind: t.teams_at ? kind : null,
     fixedBonus: true,
+    breaks: noSit,
+    onBreak: brk.now ? Math.max(0.1, (brk.now.until - nowMs) / 60_000) : 0,
     bonusMinutes: kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
     started,
     over,
@@ -495,8 +533,15 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
   // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
   const tiesEnd = new Map(states.filter((r) => r.tiesEnd !== undefined).map((r) => [r.round, r.tiesEnd!]));
-  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes, roll, startedNums, liveNums, series, pace };
+  // Zip 89: Round 1's warm-up line, and the break on now.
+  const firstOpen = Math.min(...games.filter((g) => !decided(g)).map((g) => g.round));
+  const warmUp = started && !over && firstOpen === 1;
+  const breakNow = started && !over && !t.paused_at ? brk.now : null;
+  return { teams, games, blocks, records, tieLabel, spunAt, bySeat, gone, results, resolved, out, plan, anyResult, started, over, check, shorter, tiesEnd, start: real.start, end: real.start + real.minutes, roll, startedNums, liveNums, series, pace, warmUp, breakNow };
 }
+
+/** Zip 89: the break on now as the screens get it (the round after it, when it ends, and the server's clock for the countdown). */
+export const breakView = (b: { round: number; until: number }, nowMs: number) => ({ round: b.round, until: new Date(b.until).toISOString(), serverNow: new Date(nowMs).toISOString() });
 
 /** Zip 89: the Final's series from the night's games (in number order: game 1 is the Final the schedule made, games 2 and 3 the bonus's). */
 export function finalSeries(games: readonly GameRow[], results: ReadonlyMap<number, GameResult>): FinalSeries {
@@ -728,6 +773,8 @@ export function adminDayView(
     ...(ties.length ? { ties } : {}),
     ...(phase === 'published' && f.games.length ? { courtsNow: courtsNowOf(f), sittingNow: sittingNowOf(f, names), standings: standingsNowOf(f, names) } : {}),
     ...(phase === 'published' && f.pace.offer ? { bonus: f.pace.offer } : {}),
+    ...(phase === 'published' && f.warmUp ? { warmUp: true as const } : {}),
+    ...(phase === 'published' && f.breakNow ? { breakNow: breakView(f.breakNow, nowMs) } : {}),
     ...(f.series.bestOf3 ? { bestOf3: { wins: f.series.wins, winner: f.series.winner } } : {}),
   };
 }
@@ -979,7 +1026,8 @@ export function playerDayView(
   if (pools) {
     const byRound = new Map<number, GameRow[]>();
     for (const g of f.games) byRound.set(g.round, [...(byRound.get(g.round) ?? []), g]);
-    let at = real.start;
+    // Zip 89: play starts after the warm-up.
+    let at = real.start + WARM_UP;
     let semiAt: number | null = null;
     let finalAt: number | null = null;
     for (const [round, all] of [...byRound.entries()].sort((a, b) => a[0] - b[0])) {
@@ -1035,6 +1083,8 @@ export function playerDayView(
     ...(shortAlert ? { shortAlert } : {}),
     ...(finalAlert ? { finalAlert } : {}),
     ...(t.paused_at ? { paused: true as const } : {}),
+    ...(today && seat !== null && f.warmUp ? { warmUp: true as const } : {}),
+    ...(today && seat !== null && f.breakNow ? { breakNow: breakView(f.breakNow, nowMs) } : {}),
     ...(tie ? { tie } : {}),
     ...(playoff && playoff.length ? { playoff } : {}),
     ...(alsoNow ? { alsoNow } : {}),
@@ -1334,7 +1384,7 @@ export async function gamesAction(ctx: Ctx, body: Record<string, unknown>) {
   // Zip 61: an Americano night has its own controls (scores, not who won), server/americanoDay.ts.
   if (t.format === 'americano') return americanoGamesAction(ctx, body);
   if (!t.teams_at) bad('tournament_changed', 'The teams are not published.');
-  const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left', 'spin', 'pick', 'bonus'] as const);
+  const action = v.oneOf(body.action, 'action', ['result', 'apply', 'pause', 'resume', 'left', 'spin', 'pick', 'bonus', 'skipBreak'] as const);
   if (action === 'pause' || action === 'resume' || action === 'apply') return doublesGamesAction(ctx, body, group, t, action);
   // Zip 88: the courts as they are, saved before this tap changes anything, and again after it (a result, a team leaving, the wheel's games).
   await saveDoublesCourts(ctx, t, group.timezone);
@@ -1348,12 +1398,20 @@ async function doublesGamesAction(
   body: Record<string, unknown>,
   group: Awaited<ReturnType<typeof organizerOn>>,
   t: TournamentRow,
-  action: 'result' | 'apply' | 'pause' | 'resume' | 'left' | 'spin' | 'pick' | 'bonus',
+  action: 'result' | 'apply' | 'pause' | 'resume' | 'left' | 'spin' | 'pick' | 'bonus' | 'skipBreak',
 ) {
   const nowIso = ctx.nowIso;
   const day = await loadDay(ctx.db, t.id);
   // Zip 89: Add a round (the offer the screen showed, by its key).
   if (action === 'bonus') return addDoublesBonus(ctx, group, t, day, body);
+  // Zip 89: Skip break: the round after the break goes on its courts now.
+  if (action === 'skipBreak') {
+    const f = facts(t, day.teams, day.games, group.timezone, ctx.nowMs, day.ties ?? []);
+    if (!f.breakNow) bad('tournament_changed', 'The break is over.');
+    const n = await skipBreakWrite(ctx, day.games.filter((g) => g.round === f.breakNow!.round && !f.startedNums.has(g.num)));
+    await audit(ctx.db, group.id, null, 'tournament_break_skipped', { tournament: t.name, round: f.breakNow!.round }, nowIso);
+    return { ok: true, games: n };
+  }
 
   // Zip 58: the organizer spins the wheel (always allowed: the team that spins may not be looking), or picks for four or more tied.
   if (action === 'spin') return spinTie(ctx, group, t, day, v.text(body.key, 'key', { max: 80 }), 'organizer');
@@ -1527,6 +1585,22 @@ async function addDoublesBonus(ctx: Ctx, group: { id: string; timezone: string }
   if (!ok) bad('tournament_changed', 'This just changed. Look again.');
   await audit(ctx.db, group.id, null, 'tournament_bonus_round', { tournament: t.name, bonus: offer!.kind === 'semis' ? 'semifinals' : 'best of 3 final', pace: Math.round(f.pace.pace ?? 0) }, ctx.nowIso);
   return { ok: true, bonus: offer!.kind };
+}
+
+/**
+ * Zip 89: SKIP BREAK (both styles): the round after the break goes on its planned courts at this moment, written as saved courts (court and
+ * claim_at "on:<now>"), which rolling courts place at once; nothing else is stored. Only games nothing has happened to yet.
+ */
+export async function skipBreakWrite(ctx: Ctx, rows: readonly GameRow[]): Promise<number> {
+  if (!rows.length) return 0;
+  const res = await ctx.db.batch(
+    rows.map((g) =>
+      ctx.db
+        .prepare("UPDATE tournament_games SET claim_at = ? WHERE id = ? AND winner IS NULL AND claim IS NULL AND skipped = 0 AND (claim_at IS NULL OR claim_at NOT LIKE 'on:%')")
+        .bind(pinText(ctx.nowMs), g.id),
+    ),
+  );
+  return res.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
 }
 
 /** A game row nothing has happened to yet (no result, not skipped, never put on a court). SQL on the given table alias. */

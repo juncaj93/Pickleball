@@ -18,6 +18,15 @@ export type GameTo = keyof typeof ROUND_MINUTES;
 export const GAME_LENGTHS: readonly GameTo[] = [11, 9, 7];
 /** Minutes of court time kept free after the planned last game (awards, overrun; Zip 89: 20, was 10). */
 export const END_BUFFER = 20;
+/** Zip 89 (Alex): minutes at the start of every night for people arriving and warming up (Start now gets it too). Round 1 shows "Warm up 5 to
+ *  10 min, then play."; the live pace never counts it. */
+export const WARM_UP = 10;
+/** Zip 89 (Alex): a break after every 2nd round on a night where nobody sits (every player plays every round), minutes. */
+export const BREAK_MINUTES = 5;
+/** Plan budget: the booked minutes less the warm-up and the end buffer (Zip 89). */
+export const planBudget = (minutes: number): number => minutes - WARM_UP - END_BUFFER;
+/** Breaks a night of `rounds` rounds takes when nobody sits: one after every 2nd round, never after the last. */
+export const breaksFor = (rounds: number, noSit: boolean): number => (noSit ? Math.max(0, Math.floor((rounds - 1) / 2)) : 0);
 /** Semifinals, the Final and the 3rd place game are always to 11. */
 export const PLAYOFF_TO: GameTo = 11;
 /**
@@ -89,8 +98,12 @@ export interface NightPlan {
   rounds: number;
   /** Rounds at `gameTo` (the rest are playoff rounds to 11). */
   shortRounds: number;
-  /** Minutes the rounds take (no buffer). */
+  /** Minutes from the start to the planned last game's end: the warm-up, the rounds and the breaks (Zip 89; no end buffer). */
   minutesUsed: number;
+  /** Zip 89: every player plays every round (8 on 2 courts, 4 teams on 2 courts, 4 on 1 court): a break after every 2nd round. */
+  noSit: boolean;
+  /** Zip 89: the breaks the plan budgets (5 minutes each). */
+  breaks: number;
   /** Locked doubles only: how the night is built. */
   doubles?: DoublesStructure;
   /** Americano only: players on court each round, and the average games per player. */
@@ -101,11 +114,16 @@ export interface NightPlan {
 /** Minutes for rounds at a length plus playoff rounds to 11. */
 const used = (short: number, len: GameTo, playoff: number) => short * ROUND_MINUTES[len] + playoff * ROUND_MINUTES[PLAYOFF_TO];
 
+/** Zip 89: a Locked doubles night where every team plays every round: 4 teams on 2 courts (2 games a round, all 4 teams on court). */
+export const doublesNoSit = (s: DoublesStructure): boolean => s.shape === 'rr' && s.courtsUsed === 2 && s.teams === 4;
+
 /** LOCKED DOUBLES (even counts; an odd count is Americano). Pool or round robin games use the longest length that fits; playoffs are to 11. */
 export function doublesPlan(players: number, courts: number, minutes: number): NightPlan {
   const s = doublesStructure(Math.floor(players / 2), courts);
-  const budget = minutes - END_BUFFER;
-  const len = GAME_LENGTHS.find((l) => used(s.poolRounds, l, s.playoffRounds) <= budget);
+  const budget = planBudget(minutes);
+  const noSit = doublesNoSit(s);
+  const breaks = breaksFor(s.poolRounds + s.playoffRounds, noSit);
+  const len = GAME_LENGTHS.find((l) => used(s.poolRounds, l, s.playoffRounds) + breaks * BREAK_MINUTES <= budget);
   const gameTo = len ?? 7;
   return {
     style: 'doubles',
@@ -116,7 +134,9 @@ export function doublesPlan(players: number, courts: number, minutes: number): N
     gameTo,
     rounds: s.poolRounds + s.playoffRounds,
     shortRounds: s.poolRounds,
-    minutesUsed: used(s.poolRounds, gameTo, s.playoffRounds),
+    minutesUsed: WARM_UP + used(s.poolRounds, gameTo, s.playoffRounds) + breaks * BREAK_MINUTES,
+    noSit,
+    breaks,
     doubles: s,
   };
 }
@@ -124,14 +144,18 @@ export function doublesPlan(players: number, courts: number, minutes: number): N
 /** AMERICANO (any count 6 to 16): 4 x the smaller of (courts, players / 4) on court; rounds = what fits; the longest length giving everyone 4 games. */
 export function americanoPlan(players: number, courts: number, minutes: number): NightPlan {
   const onCourt = 4 * Math.max(1, Math.min(courts, Math.floor(players / 4)));
-  const budget = minutes - END_BUFFER;
+  const budget = planBudget(minutes);
+  // Zip 89: nobody sits when everyone is on court every round (8 on 2 courts, 4 on 1): a break after every 2nd round, in the budget.
+  const noSit = onCourt >= players;
   const at = (l: GameTo) => {
-    const rounds = Math.max(0, Math.floor(budget / ROUND_MINUTES[l]));
+    let rounds = Math.max(0, Math.floor(budget / ROUND_MINUTES[l]));
+    while (rounds > 0 && rounds * ROUND_MINUTES[l] + breaksFor(rounds, noSit) * BREAK_MINUTES > budget) rounds--;
     return { rounds, gamesEach: (rounds * onCourt) / players };
   };
   const len = GAME_LENGTHS.find((l) => at(l).gamesEach >= AMERICANO_MIN_GAMES);
   const gameTo = len ?? 7;
   const r = at(gameTo);
+  const breaks = breaksFor(r.rounds, noSit);
   return {
     style: 'americano',
     players,
@@ -141,7 +165,9 @@ export function americanoPlan(players: number, courts: number, minutes: number):
     gameTo,
     rounds: r.rounds,
     shortRounds: r.rounds,
-    minutesUsed: r.rounds * ROUND_MINUTES[gameTo],
+    minutesUsed: WARM_UP + r.rounds * ROUND_MINUTES[gameTo] + breaks * BREAK_MINUTES,
+    noSit,
+    breaks,
     onCourt,
     gamesEach: Math.round(r.gamesEach * 10) / 10,
   };

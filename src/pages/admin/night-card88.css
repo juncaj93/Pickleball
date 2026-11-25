@@ -373,6 +373,41 @@
   font-weight: 800;
 }
 
+/* Zip 89 (Alex): Round 1's warm-up line (small, gray), and the 5 minute break with its countdown and Skip break (44 px). */
+.nc-warm {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+.nc-break {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 14px;
+  background: var(--info-bg);
+  color: var(--info-fg);
+}
+.nc-break-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.nc-break-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.nc-break .break-left {
+  font-variant-numeric: tabular-nums;
+}
+.nc-break-skip {
+  padding: 0 16px;
+}
+
 /* Zip 89: a best of 3 Final's box: every game's score so far, one quiet line under the two sides. */
 .nc-series {
   margin: 8px 0 0;

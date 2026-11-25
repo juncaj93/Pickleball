@@ -653,6 +653,8 @@ export interface RoundState {
    * spins, on a free court, so they can run beside a pool game; this round's own games start when both are over.
    */
   tiesEnd?: number;
+  /** Zip 89: a break before it (minutes: 5 planned, or as taken once it started). */
+  gap?: number;
 }
 
 /** Zip 80: how many tie games are played one after another (the most on any one court: a tie's Game A and Game B share a court). */
@@ -693,6 +695,7 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   let t = startMin;
   for (const r of list) {
     // Zip 80: the plan never has a tie in it (nobody knew there would be one), so the minutes a tie adds show as time behind.
+    t += r.gap ?? 0;
     planned.set(r.round, { start: t, end: t + lenOf(r) });
     t += lenOf(r);
   }
@@ -703,8 +706,8 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   // Zip 80: a round that waits for tie games starts once they are over too.
   const startedAt =
     pace === undefined
-      ? Math.max(planned.get(cur.round)!.start, prev?.doneAt ?? planned.get(cur.round)!.start, cur.tiesEnd ?? -Infinity)
-      : Math.max(prev?.doneAt ?? startMin, cur.tiesEnd ?? -Infinity);
+      ? Math.max(planned.get(cur.round)!.start, prev?.doneAt !== undefined ? prev.doneAt + (cur.gap ?? 0) : planned.get(cur.round)!.start, cur.tiesEnd ?? -Infinity)
+      : Math.max(prev?.doneAt !== undefined ? prev.doneAt + (cur.gap ?? 0) : startMin, cur.tiesEnd ?? -Infinity);
   const after = list.filter((r) => r.round > cur.round);
   // Rounds that can still change: the ones after this one, and this one while none of its games has a result. Never the playoffs.
   const open = [...(cur.pool && !cur.anyResult && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.keep)];
@@ -712,7 +715,7 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   const ending = (to?: GameTo, from?: number) => {
     const lenAt = (r: RoundState) => len(r, to !== undefined && from !== undefined && r.pool && r.round >= from && open.includes(r) ? minLen(r.playTo, to) : undefined);
     // Each later round starts when the one before ends, or (Zip 80) when the tie games it waits for end, whichever is later.
-    return after.reduce((at, r) => Math.max(at, r.tiesEnd ?? -Infinity) + lenAt(r), Math.max(startedAt + lenAt(cur), nowMin));
+    return after.reduce((at, r) => Math.max(at + (r.gap ?? 0), r.tiesEnd ?? -Infinity) + lenAt(r), Math.max(startedAt + lenAt(cur), nowMin));
   };
   const finish = ending();
   const behind = Math.max(0, Math.round(finish - plannedFinish));

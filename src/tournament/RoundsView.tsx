@@ -8,6 +8,7 @@
 //   the first score from any of the 4 players is the result.
 // Names only. No clock times except "Begins at" on Round 1.
 import { useState } from 'react';
+import { BreakLeft } from './parts';
 import type { PlayerRound, PlayerRoundsView, PlayerTournamentView } from '../../shared/tournament';
 import { resultTag } from '../../shared/scores';
 import { Court, DayHero, glue, type HeldScore, Matchup, PlayToPill, ScoreSheet, Slide, useHeldResult, useSeen } from './GameDayView';
@@ -217,6 +218,19 @@ export function RoundsBody({ t, day: real, onChanged }: { t: PlayerTournamentVie
         <p className="tc-gd-paused" role="status" data-tc-day-paused>
           Paused.
         </p>
+      )}
+      {/* Zip 89 (Alex): the 5 minute break (nobody sits) with its countdown; Round 1's gray warm-up line. */}
+      {shown.breakNow ? (
+        <section className="tc-gd-break" role="status" data-tc-day-break={shown.breakNow.round}>
+          <b className="tc-gd-break-title">5 min break</b>
+          <BreakLeft b={shown.breakNow} />
+        </section>
+      ) : (
+        shown.warmUp && (
+          <p className="tc-gd-warm" data-tc-day-warmup>
+            Warm up 5 to 10 min, then play.
+          </p>
+        )
       )}
       {shown.waiting && !next && <WaitingCard />}
       {next && (

@@ -27,7 +27,7 @@ export interface RollGame {
   doneAt: number | null;
   /** Not part of the night at all (no time to place it: a game called off by a rule, not by a tap). */
   gone?: boolean;
-  /** It exists only from this moment (a tie game made when the wheel spun): ms. */
+  /** It exists only from this moment (a tie game made when the wheel spun; Zip 89: the round after a break, from the break's end): ms. */
   from?: number;
   /**
    * Zip 88 (Alex): its court is SAVED (it went on this court at `at`, ms; 0 for the games the night opened with). A saved game stays on that court
@@ -53,7 +53,7 @@ export interface RollResult {
  * THE RULE, replayed. `games` in the schedule's play order (round, then court; Locked doubles: its play order). `courts`: 1 or 2.
  * A game that finished without ever reaching a court (called off while waiting) just leaves the list.
  */
-export function rollCourts(games: readonly RollGame[], courts: number): RollResult {
+export function rollCourts(games: readonly RollGame[], courts: number, nowMs = Infinity): RollResult {
   const n = Math.max(1, Math.min(2, courts));
   const list = games.filter((g) => !g.gone);
   const index = new Map(list.map((g, i) => [g.num, i]));
@@ -122,7 +122,8 @@ export function rollCourts(games: readonly RollGame[], courts: number): RollResu
   const moments = [
     ...new Set([
       ...list.filter((g) => g.doneAt !== null).map((g) => g.doneAt!),
-      ...list.filter((g) => g.from !== undefined).map((g) => g.from!),
+      // Zip 89: a game that may start only later (a break's end still to come) adds no moment before it comes.
+      ...list.filter((g) => g.from !== undefined && g.from <= nowMs).map((g) => g.from!),
       ...list.filter((g) => g.pin).map((g) => g.pin!.at),
     ]),
   ].sort((a, b) => a - b);

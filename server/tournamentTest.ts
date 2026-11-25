@@ -241,7 +241,9 @@ export const ZIP88_STAGES = ['zip88_soon', 'zip88_ready', 'zip88_early', 'zip88_
  *   zip89_bo3       "Pacing: best-of-3 Final in play": the round robin and the semifinals in (as the bonus wrote them), the Final best of 3:
  *                   Net Ninjas won Game 1 11 to 8, Game 2 on a court beside 3rd place: "Final · G2" and "Best of 3 · G1 11–8 · G2 –".
  */
-export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3'] as const;
+//   zip89_break     "Pacing: 5 min break": the 4 teams tonight (nobody sits), Rounds 1 and 2 in, Round 2 a minute ago: the night card's "5 min
+//                   break" with "Round 3 in 3:59" and Skip break; the phones show the same card.
+export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'zip89_break'] as const;
 type Zip89Stage = (typeof ZIP89_STAGES)[number];
 const isZip89Stage = (s: string): s is Zip89Stage => (ZIP89_STAGES as readonly string[]).includes(s);
 type Zip88Stage = (typeof ZIP88_STAGES)[number];
@@ -1068,6 +1070,23 @@ async function zip89Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
       ctx.db.prepare('UPDATE tournaments SET start_minutes = ?, updated_at = ? WHERE id = ?').bind(start, ctx.nowIso, made.id),
       ...results.map((g) => {
         const when = iso(startMs + (12 + g.court) * 60_000);
+        return ctx.db
+          .prepare("UPDATE tournament_games SET winner = 'a', score_a = 11, score_b = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
+          .bind(5 + g.court * 2, when, Number(g.slot_a.slice(1)), Number(g.slot_b.slice(1)), when, made.id, g.num);
+      }),
+    ]);
+    return { ...made, stage };
+  }
+  if (stage === 'zip89_break') {
+    const made = await dayStage(ctx, group, 'game1');
+    const start = Math.max(0, Math.floor((nowMin - 45) / 5) * 5);
+    const startMs = startMsOf(made.date!, start, tz);
+    const { results } = await ctx.db.prepare('SELECT num, round, court, slot_a, slot_b FROM tournament_games WHERE tournament_id = ? AND round <= 2').bind(made.id).all<{ num: number; round: number; court: number; slot_a: string; slot_b: string }>();
+    await ctx.db.batch([
+      ctx.db.prepare('UPDATE tournaments SET start_minutes = ?, updated_at = ? WHERE id = ?').bind(start, ctx.nowIso, made.id),
+      ...results.map((g) => {
+        // Round 1 after the warm-up (about 25 minutes in), Round 2 a minute ago (Court 1) and a minute and a half ago (Court 2).
+        const when = g.round === 1 ? iso(startMs + (23 + g.court) * 60_000) : iso(ctx.nowMs - (g.court === 1 ? 60_000 : 90_000));
         return ctx.db
           .prepare("UPDATE tournament_games SET winner = 'a', score_a = 11, score_b = ?, result_at = ?, result_by = 'players', seat_a = ?, seat_b = ?, updated_at = ? WHERE tournament_id = ? AND num = ?")
           .bind(5 + g.court * 2, when, Number(g.slot_a.slice(1)), Number(g.slot_b.slice(1)), when, made.id, g.num);

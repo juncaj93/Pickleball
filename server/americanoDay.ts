@@ -22,12 +22,12 @@ import { claimTime, isPinText, pinOf, pinText, rollCourts } from '../shared/roll
 import { firstAnswer, saidScore } from '../shared/partnerTaps';
 import { MAX_SCORE } from '../shared/scores';
 import { americanoNight, bonusRound, gamesDiffer, isAmericanoSlot, pairSlot, pointsTable, slotPair, winLoss } from '../shared/americanoSchedule';
-import { americanoPlan, clockLabel, type GameTo, ROUND_MINUTES } from '../shared/tournamentPlan';
+import { americanoPlan, BREAK_MINUTES, clockLabel, type GameTo, ROUND_MINUTES, WARM_UP } from '../shared/tournamentPlan';
 import { type RoundState, timeCheck, timeCheckWords } from '../shared/tournamentSchedule';
-import { measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
+import { breakStarts, breakState, measuredPace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
 import { startMsOf } from '../shared/tournamentTickets';
 import type { TicketWithName } from './tournamentMoney';
-import { courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds } from './tournamentDay';
+import { breakView, courtNumbersOf, type GameRow, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, lockedInIds, skipBreakWrite } from './tournamentDay';
 import { firstName, logPlayer, nightOver, nightStartMs, organizerOn, openById, realTimes, todayKey, type SignupRow, type TournamentActor, type TournamentRow } from './tournament';
 
 /** Zip 88: the answer to a score for a game still waiting for a court (it was "Finish Round N first" before rolling courts). */
@@ -158,6 +158,9 @@ export interface AmFacts {
   /** Zip 89: the planned rounds (the rest are bonus rounds the organizer added), the live pace and the bonus offer. */
   plannedRounds: number;
   pace: PaceResult;
+  /** Zip 89: Round 1 is being played ("Warm up 5 to 10 min, then play."), and the break on now (the round after it, until when: ms). */
+  warmUp: boolean;
+  breakNow: { round: number; until: number } | null;
 }
 
 export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets: readonly TicketWithName[], rows: readonly GameRow[], tz: string, nowMs: number): AmFacts {
@@ -206,6 +209,16 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
   // Zip 88: ROLLING COURTS (shared/rollingCourts.ts). Which game is on which court, replayed from the moments games finished: a result's
   // result_at (kept as it was when a score is fixed or cleared, so a cleared game still counts as played on its court), a Player left's skip
   // time. A game called off by a rule with no time (no longer locked in) is simply not part of the replay.
+  // Zip 89 (Alex): BREAKS when nobody sits (everyone on court every round): the round after every 2nd round waits 5 minutes from the moment the
+  // round before it is fully scored (shared/smartPacing.ts breakStarts); Skip break puts it on its courts at once (saved courts).
+  const doneMsOf = (list: AmGame[]) => {
+    const times = list.map((g) => g.resultAt ?? claimTime(g.claimAt)).filter((x): x is string => !!x);
+    return list.length && list.every(decided) && times.length ? Math.max(...times.map((x) => Date.parse(x))) : null;
+  };
+  const byRound = new Map<number, AmGame[]>();
+  for (const g of games) byRound.set(g.round, [...(byRound.get(g.round) ?? []), g]);
+  const noSit = americanoPlan(Math.max(4, (stored.length ? inGames : locked).length), courtsOf(t), real.minutes).noSit && !gone.size;
+  const breaks = breakStarts(new Map([...byRound].map(([r, list]) => [r, { games: list.length, doneMs: doneMsOf(list) }])), courtsOf(t), noSit);
   const roll = rollCourts(
     games.map((g) => {
       const at = g.resultAt ?? claimTime(g.claimAt);
@@ -221,10 +234,18 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
         doneAt: finished ? (at ? Date.parse(at) : -1e15) : g.skipped && pin ? nowMs : null,
         ...(g.skipped && !at && !pin ? { gone: true } : {}),
         ...(pin ? { pin } : {}),
+        ...(breaks.has(g.round) ? { from: breaks.get(g.round)! } : {}),
       };
     }),
     courtsOf(t),
+    nowMs,
   );
+  const roundBegan = new Map<number, number>();
+  for (const [num, ms] of roll.startAt) {
+    const r = games.find((g) => g.num === num)?.round;
+    if (r !== undefined && Number.isFinite(ms)) roundBegan.set(r, Math.min(roundBegan.get(r) ?? Infinity, ms));
+  }
+  const brk = breakState(breaks, roundBegan, nowMs);
   const liveNow = new Set(roll.onCourt.filter((x): x is number => x !== null));
   games = games.map((g) => (roll.court.has(g.num) ? { ...g, court: roll.court.get(g.num)!, started: true, live: liveNow.has(g.num), startMs: roll.startAt.get(g.num)! } : g));
   const courtsNow: CourtNow[] = roll.onCourt.map((num, i) => ({ court: i + 1, num, last: roll.lastOn[i] }));
@@ -259,6 +280,8 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
       // Zip 89: the night's last round is never shortened, unless the night has bonus rounds (then every round may be: it was offered on the
       // night's pace, and a night that slows down afterwards must still finish inside the courts' time).
       keep: r === rounds && !(stored.length > 0 && rounds > Math.min(rounds, plan.rounds)),
+      // Zip 89: a break before it (5 planned, or as taken).
+      ...(noSit && r > 1 && (r - 1) % 2 === 0 ? { gap: brk.taken.get(r) ?? BREAK_MINUTES } : {}),
     });
   }
   // Zip 89: the planned rounds are the plan's (a stored night beyond them has bonus rounds); the night's real start (Start now included) and its
@@ -266,12 +289,20 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
   const plannedRounds = Math.min(rounds, plan.rounds);
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
   const nowMin = t.final_date ? minuteOf(t, tz, nowMs) : real.start;
-  const paceRounds: PaceRound[] = states.map((s) => ({ round: s.round, planned: s.round <= plannedRounds, done: s.done, doneAt: s.doneAt, minutes: ROUND_MINUTES[s.playTo] ?? ROUND_MINUTES[11] }));
+  // Zip 89: Round 1 is measured from the start + the warm-up; a round after a break from the break's end (the pace never counts either).
+  const paceRounds: PaceRound[] = states.map((s) => ({
+    round: s.round,
+    planned: s.round <= plannedRounds,
+    done: s.done,
+    doneAt: s.doneAt,
+    minutes: ROUND_MINUTES[s.playTo] ?? ROUND_MINUTES[11],
+    ...(s.round === 1 ? { pauseBefore: WARM_UP } : s.gap ? { pauseBefore: s.gap } : {}),
+  }));
   const measured = measuredPace(paceRounds, startMin);
   const bonusIn = stored.length > 0 && rounds > plannedRounds;
   const check =
     started && !over && !t.paused_at && rounds && t.final_date
-      ? timeCheck(states, real.start, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done, measured.latest))
+      ? timeCheck(states, real.start + WARM_UP, real.start + real.minutes, nowMin, paceForCheck(bonusIn, measured.pace, measured.done, measured.latest))
       : null;
   const lowered = games.filter((g) => !decided(g) && g.playTo < plan.gameTo);
   const shorter = lowered.length ? { fromRound: Math.min(...lowered.map((g) => g.round)), to: Math.min(...lowered.map((g) => g.playTo)) as GameTo } : null;
@@ -289,18 +320,22 @@ export function amFacts(t: TournamentRow, signups: readonly SignupRow[], tickets
     paused: !!t.paused_at,
     behind: !!check?.suggest || !!shorter || (check?.behind ?? 0) > 0,
     leftOpen: false,
+    breaks: noSit,
+    onBreak: brk.now ? Math.max(0.1, (brk.now.until - nowMs) / 60_000) : 0,
     // When the last bonus round was added (its rows' save time).
     lastBonusAt: lastAddedAt(t, tz, games.filter((g) => g.round > plannedRounds && g.row).map((g) => g.row!.created_at)),
   });
   const roundStart = new Map<number, number>();
-  let at = real.start;
+  let at = real.start + WARM_UP;
   for (const s of states) {
     const prev = states.find((x) => x.round === s.round - 1);
-    const begin = Math.max(at, prev?.doneAt ?? at);
+    const begin = Math.max(at + (s.gap ?? 0), (prev?.doneAt ?? at) + (s.gap ?? 0));
     roundStart.set(s.round, begin);
     at = begin + ROUND_MINUTES[s.playTo];
   }
-  return { stored: stored.length > 0, games, rounds, roster, names, gone, sits, plan, started, over, roundNow, anyResult, check, shorter, start: real.start, end: real.start + real.minutes, roundStart, courtsNow, plannedRounds, pace };
+  // Zip 89: Round 1's warm-up line, and the break on now.
+  const warmUp = started && !over && roundNow === 1;
+  return { stored: stored.length > 0, games, rounds, roster, names, gone, sits, plan, started, over, roundNow, anyResult, check, shorter, start: real.start, end: real.start + real.minutes, roundStart, courtsNow, plannedRounds, pace, warmUp, breakNow: started && !over && !t.paused_at ? brk.now : null };
 }
 
 /** Zip 89: the latest of these save times, in minutes after midnight of the night (null: none). */
@@ -460,6 +495,8 @@ export function playerRoundsView(
     ...(note ? { timeNote: note } : {}),
     ...(shortAlert ? { shortAlert } : {}),
     ...(t.paused_at && mode !== 'final' ? { paused: true as const } : {}),
+    ...(mode !== 'final' && today && f.warmUp ? { warmUp: true as const } : {}),
+    ...(mode !== 'final' && today && f.breakNow ? { breakNow: breakView(f.breakNow, nowMs) } : {}),
     ...(leaver
       ? {
           leftNote: {
@@ -484,7 +521,8 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
     const status: AdminRoundGame['status'] = g.skipped ? 'skipped' : g.winner || g.claim ? 'done' : f.started && g.started ? 'playing' : 'later';
     let late: string | undefined;
     if (status === 'playing' && g.live) {
-      const began = g.startMs !== null && Number.isFinite(g.startMs) && t.final_date ? Math.max(f.start, minuteOf(t, tz, g.startMs)) : f.start;
+      // Zip 89: Round 1 plays after the warm-up.
+      const began = (g.startMs !== null && Number.isFinite(g.startMs) && t.final_date ? Math.max(f.start, minuteOf(t, tz, g.startMs)) : f.start) + (g.round === 1 ? WARM_UP : 0);
       const over = Math.floor(nowMin - (began + ROUND_MINUTES[g.playTo as GameTo]));
       if (over >= LATE_WAIT_MIN) late = `${over} min over`;
     }
@@ -533,6 +571,8 @@ export function adminRoundsView(t: TournamentRow, signups: readonly SignupRow[],
     sittingNow: sittingNow(f),
     ...(f.pace.offer ? { bonus: f.pace.offer } : {}),
     plannedRounds: f.plannedRounds,
+    ...(f.warmUp ? { warmUp: true as const } : {}),
+    ...(f.breakNow ? { breakNow: breakView(f.breakNow, nowMs) } : {}),
   };
 }
 
@@ -722,12 +762,13 @@ export async function americanoGameAction(ctx: Ctx, who: TournamentActor, t: Tou
  *   apply { fromRound, to }       the Time check: games from that round on are played to 9 or 7 (never the last round)
  *   pause / resume
  *   left { playerId }             a player left: their games still to play are skipped (the others in them get a note)
+ *   skipBreak                     Zip 89: the break on now ends at once (the next round goes on its courts)
  *   bonus { key }                 Zip 89: Add a round (the offer the screen showed, by its key): one more round at the end of the night
  */
 export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const t = await openById(ctx, group);
-  const action = v.oneOf(body.action, 'action', ['score', 'clear', 'apply', 'pause', 'resume', 'left', 'bonus'] as const);
+  const action = v.oneOf(body.action, 'action', ['score', 'clear', 'apply', 'pause', 'resume', 'left', 'bonus', 'skipBreak'] as const);
   const nowIso = ctx.nowIso;
   if (action === 'pause' || action === 'resume') {
     await ctx.db.prepare(`UPDATE tournaments SET paused_at = ${action === 'pause' ? '?' : 'NULL'}, updated_at = ? WHERE id = ?`).bind(...(action === 'pause' ? [nowIso] : []), nowIso, t.id).run();
@@ -749,6 +790,15 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
   }
   if (action === 'left' && !before.roster.includes(v.id(body.playerId, 'playerId'))) bad('tournament_changed', 'They are not in the night.');
   if (action === 'bonus') return addBonusRound(ctx, group, t, before, body);
+  // Zip 89: Skip break: the round after the break goes on its courts now (saved courts).
+  if (action === 'skipBreak') {
+    if (!before.breakNow) bad('tournament_changed', 'The break is over.');
+    const rows = before.games.filter((g) => g.round === before.breakNow!.round && !g.started && g.row).map((g) => g.row!);
+    const n = await skipBreakWrite(ctx, rows);
+    await audit(ctx.db, group.id, null, 'tournament_break_skipped', { tournament: t.name, round: before.breakNow!.round }, nowIso);
+    await saveAmericanoCourts(ctx, t, group.timezone);
+    return { ok: true, games: n };
+  }
   const rows = await ensureRows(ctx, t, night, nowIso);
   // Zip 88: the courts as they are, saved before this tap changes anything (Player left, a cleared score never moves a started game).
   await saveAmericanoCourts(ctx, t, group.timezone);
