@@ -8710,3 +8710,17 @@ Browser: e2e/zip90.cjs I (new) passes; A to H pass; zip83 A, C, H pass. Unit: zi
    medal 0.78 x 1.02 em). Measured (Chromium; no WebKit in this sandbox): game card medal bottom 9.9% of the font size under the name's
    baseline, 101.9% tall; header 10.0% and 102.0% (1 medal, 2 medals, after the slam). No gap after the name.
 Browser: e2e/zip90.cjs A to I pass (I compares with the game card now); zip83 A, C, H pass. Unit: zip78-look, zip48-split, zip90 pass.
+
+### Round 4 (Alex on his iPhone, Wed Nov 25; still held for his OK)
+1. THE FLIP: one CSS transition (transform 0.52 s, a curve that overshoots a touch) on `.rvl-flip` (preserve-3d, both -webkit- forms);
+   both faces always in the page, each `translateZ(0)` with its back hidden. Nothing starts, swaps or re-renders inside the card while it
+   turns: the class change is the tap itself; the glow (an opacity layer) leaves the tapped card at the tap; the dots start at the tap
+   (outside the turning layer); the credit's count runs right after the turn (380 ms), then its flight; Nice after the turn. No layer of its
+   own inside a face (no will-change inside). e2e/zip90.cjs J: a MutationObserver on the card from two frames after the tap to the end of
+   the turn records nothing. Preview (Chromium): 34 frames, none dropped, script 5.3 ms in the tap. The 2D fallback (scaleX) is not built:
+   only if the iPhone still hitches.
+2. THE MEDAL: 85% of the game cards' size (0.663 x 0.867 em), its bottom kept (the medal row's bottom is 0.12 em under the line whatever its
+   height): 10.3% of the font under the baseline (was 10.0%, 0.07 px at 23 px), 3 px after the name or its "…".
+3. "Header: medal counts" (zip90_counts): seven older finished tournaments; Vic 1, Wren 2, Parker 3, Quinn 4 (one medal and ×4), Sage 7.
+   375/420/440, light and dark: every count's bottom the same, 3 px after the name, never touching "not you?". Game cards: a name and its
+   medals now stay together (Quinn's ×4 had started the next line alone): src/ui.tsx `.nm-pair`, src/medals.css.
