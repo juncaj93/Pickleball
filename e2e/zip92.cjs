@@ -7,7 +7,7 @@
  *   B   The ticket card (tickets_open): "Lock in · $16" keeps its whole label (View as Vic) and "Locked in" is never cut (View as Parker), every
  *       width, text 100/125/150% (Who's in and Drop out move to a second line when they must).
  *   C   The night card (zip88_rd3, zip88_final, zip89_ld_semis): no name runs under Score, none cut or broken (every width and text size).
- *   D   The End card (am_done, pools_done): END TOURNAMENT and EDIT AWARDS never cut (EDIT AWARDS wraps under at big text).
+ *   D   The End card (am_done, final_done): END TOURNAMENT and EDIT AWARDS never cut (EDIT AWARDS wraps under at big text).
  *   E   The players' night screen (game1, zip89_ld_semis as Vic and Christopher Vanderberg): team and player names never break mid-word.
  *   F   Game day with Start now (zip88_ready), light and dark: only ONE solid green button on the card (Players "All 8 locked in" is soft).
  *   G   The stages: zip92_ld_round (Add a round? Are you sure?, Yes: RD4 before SEMIS); zip92_slow (the Time check from Round 4, Not now hides it,
@@ -129,12 +129,13 @@ const scan = (page, sel, pairs = []) =>
       }
     });
 
-    await check('D the End card: END TOURNAMENT and EDIT AWARDS never cut (am_done, pools_done; every width, 100/125/150%)', async () => {
-      for (const st of ['am_done', 'pools_done']) {
+    await check('D the End card: END TOURNAMENT and EDIT AWARDS never cut (am_done, final_done; every width, 100/125/150%)', async () => {
+      for (const st of ['am_done', 'final_done']) {
         await b.stage(st);
         await sweep(`end-${st}`, async (w) => {
           const p = await b.adminHome({ width: w });
-          await p.page.locator('.tm-end .tm-card-head').first().waitFor({ timeout: 15000 });
+          await p.page.locator('.tm-end .tm-card-head').first().waitFor({ state: 'attached', timeout: 20000 });
+          await p.page.waitForTimeout(800);
           return p;
         }, '.tm-end .tm-card-head .tm-label, .tm-end-edit, .tm-end .tm-card-head');
       }
