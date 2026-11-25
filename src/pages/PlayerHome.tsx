@@ -10,7 +10,7 @@ import { creditBackNote } from '../../shared/pricing';
 import { zonedTimeToUtc } from '../../shared/time';
 import { dayParts, planRange } from '../../shared/tournament';
 import { type TourRowAction, TourWeekRow } from '../TourWeekRow';
-import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
+import { formatTime, DEFAULT_TIMEZONE, playerDay, shortDayWord, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, dropMoneyLine, joinedCreditText } from '../../shared/credit';
 import { adjustedPlayerLine, latestAdjustment, signedPrice } from '../../shared/adjustCredit';
 import { feeClearedNotice, lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
@@ -2470,14 +2470,13 @@ function SuggestionCard({
   // Zip 11, Alert cards: "Tuesday needs 1 more" with the pickleball circles, or "Tuesday has 5 in" / "You'd make it 6", a green I'm in
   // (the same Yes) and an X (the same No). Never a cap: "You'd make it 6" says only what one more makes.
   if (g.alertCards === true) {
-    const word = suggestDay(s.startsAt, tz, Date.parse(g.now)).word;
-    const day = word.charAt(0).toUpperCase() + word.slice(1);
     const n = s.confirmedCount;
     const short = n < MIN_PLAYERS;
     // (A venue-waitlist game, "standby": no count, as before.)
     // Zip 76: the title says which game ("Tonight 9:30 PM needs 1 more"), so nobody commits to a game without seeing its time.
     // Compact so it stays short on a phone: "Tonight 9:30 PM", "Sun 6 PM".
-    const when = `${word === 'tonight' || word === 'tomorrow' ? day : day.slice(0, 3)} ${formatTime(s.startsAt, tz).replace(':00', '')}`;
+    // Zip 92: the game's own short weekday ("Wed 8 PM"), never the first letters of "next Wednesday" ("Nex").
+    const when = `${shortDayWord(s.startsAt, tz, Date.parse(g.now))} ${formatTime(s.startsAt, tz).replace(':00', '')}`;
     const title = short ? `${when} needs ${MIN_PLAYERS - n} more` : `${when} has ${n} in`;
     if (hidden) return null;
     const atLimit = cleanup && n >= g.group.maxPlayers;

@@ -349,6 +349,18 @@ export function suggestDay(iso: string, tz: string, nowMs: number): PlayerDay {
   return { word: formatShortDate(iso, tz), waitlistOf: `the ${formatMonthDay(iso, tz)}`, isDate: true };
 }
 
+/**
+ * Zip 92 (a live bug on Alex's phone: "Nex 8 PM needs 3 more"): the alert card's short day, "Tonight", "Tomorrow", else the game's own weekday,
+ * short ("Wed"), from the game's date. Never a cut-down word: the alert used to take the first 3 letters of suggestDay's word, which for a game
+ * next week is "next Wednesday".
+ */
+export function shortDayWord(iso: string, tz: string, nowMs: number): string {
+  const word = suggestDay(iso, tz, nowMs).word;
+  if (word === 'tonight') return 'Tonight';
+  if (word === 'tomorrow') return 'Tomorrow';
+  return formatWeekdayShort(iso, tz);
+}
+
 /** "Want in tonight?", "Want in Thursday?", "Want in next Tuesday?", "Want in on Thu, Nov 19?", "Want in on Thursday's waitlist?" */
 export function wantInTitle(iso: string, tz: string, nowMs: number, waitlist: boolean): string {
   const d = suggestDay(iso, tz, nowMs);
