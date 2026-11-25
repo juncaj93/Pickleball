@@ -49,7 +49,11 @@ export async function world(
     const r = await (await playerPhone(ctx, name)).call('POST', '/api/tournament/signup', { tournamentId: ctx.tid, level: LEVELS[i % LEVELS.length], dates: [DATE] });
     expect(r.status, r.text).toBe(200);
   }
-  const fin = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE, start: opts.start ?? 19 * 60 + 30, minutes: opts.minutes ?? 150, courts: opts.courts ?? 2 });
+  // Zip 89 (Alex, "build in what fits"): the 4 teams' night these tests were written for (round robin, then the Final) is a 2 hour night now; on
+  // 2.5 hours the plan builds in the semifinals. Any other size, or a length asked for, as before.
+  const isFourTeams = n === 8 && (opts.format ?? 'doubles') === 'doubles';
+  const minutes = opts.minutes ?? (isFourTeams ? 120 : 150);
+  const fin = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE, start: opts.start ?? 19 * 60 + 30, minutes, courts: opts.courts ?? 2 });
   expect(fin.status, fin.text).toBe(200);
   for (const name of names) await lockWithCredit(ctx, name, opts.organizer === name);
   ctx.app.now = PAY_BY_MS + 60_000;

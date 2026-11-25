@@ -95,12 +95,13 @@ describe('zip 57: the starting suggestion, the plan line and the words', () => {
   it('fit words: mocks 60 and 61', () => {
     // Zip 89 (20 a round to 11, 16 to 9, 13 to 7; 10 minutes of warm-up at the start, 20 kept free at the end, so 30 less to plan in; a 5
     // minute break after every 2nd round when nobody sits): "done about" is the start plus the warm-up, the rounds and the breaks.
-    // 12 on 2 courts: 5 rounds to 11 = 100 minutes + 10 warm-up, 7:00 + 110.
-    expect(fitWords(nightPlan(12, 2, 180, 'doubles'), 19 * 60)).toEqual({ fits: true, text: 'Locked doubles for 12: pool games to 11, done about 8:50 PM.' });
+    // 12 on 2 courts: 5 rounds to 11 = 100 minutes, and (Zip 89, build in what fits) a best of 3 Final fits in the 150: + 40, + 10 warm-up, 7:00 + 150.
+    expect(fitWords(nightPlan(12, 2, 180, 'doubles'), 19 * 60)).toEqual({ fits: true, text: 'Locked doubles for 12: pool games to 11, done about 9:30 PM.' });
     expect(fitWords(nightPlan(12, 1, 120, 'doubles'), 19 * 60 + 30)).toEqual({ fits: false, text: 'Locked doubles for 12: too tight on 1 court. Use 2 courts or add court time.' });
-    // 8 on 2 courts (4 teams, nobody sits): 4 rounds to 11 = 80 minutes + 1 break (after round 2) + 10 warm-up = 95 from 7:30. 9 (Americano,
+    // 8 on 2 courts (4 teams, nobody sits): the semifinals fit (Zip 89, build in what fits): 5 rounds to 11 = 100 minutes + 2 breaks + 10
+    // warm-up = 120 from 7:30. 9 (Americano,
     // one sits each round): 120 minutes to plan in = 6 rounds to 11 = 120 minutes + 10 warm-up.
-    expect(fitWords(nightPlan(8, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Locked doubles for 8: games to 11, done about 9:05 PM.');
+    expect(fitWords(nightPlan(8, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Locked doubles for 8: games to 11, done about 9:30 PM.');
     expect(fitWords(nightPlan(9, 2, 150, 'doubles'), 19 * 60 + 30).text).toBe('Americano for 9: games to 11, done about 9:40 PM.');
     // 14 and 16 (mocks 52 and 53; Zip 89 numbers, 150 minutes to plan in): 14 is 5 pool rounds + 2 playoff rounds, all to 11 (140 minutes + 10
     // warm-up): semifinals about 8:50 PM, done about 9:30. 16 is 6 + 2 rounds: all to 11 would be 160, too many, so pool games to 9 (6 x 16 + 2

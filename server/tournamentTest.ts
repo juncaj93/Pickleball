@@ -767,8 +767,10 @@ async function dayStage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>
   // The night: started 10 minutes ago (45 for mid, a minute for game1), on the 5 minutes; 7:30 PM two days from now for the later ones.
   const ago = stage === 'mid' ? 45 : stage === 'game1' ? 1 : stage === 'zip71_taps' || stage === 'zip72_scores' ? 20 : stage === 'pools_done' || stage === 'zip72_circle' ? 100 : 10;
   const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
-  // The whole plan (2.5 hours; 2 hours for mid, so the Time check shows), also when that runs past midnight (a late test).
-  const minutes = stage === 'mid' ? 120 : 150;
+  // The whole plan (2 hours, see below), also when that runs past midnight (a late test).
+  // Zip 89 (Alex, "build in what fits"): the 4 teams' stages show a 2 hour night (the round robin, then the Final, as the pictures): on 2.5 hours
+  // the plan would build in the semifinals.
+  const minutes = 120;
   const id = newId();
   const t0 = ctx.nowMs - 3 * 86_400_000;
   const at = (m: number) => new Date(t0 + m * 60_000).toISOString();

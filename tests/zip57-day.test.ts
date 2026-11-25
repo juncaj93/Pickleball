@@ -37,7 +37,9 @@ async function world(n: number, opts: { courts?: 1 | 2; start?: number; minutes?
     const r = await (await playerPhone(ctx, name)).call('POST', '/api/tournament/signup', { tournamentId: ctx.tid, level: LEVELS[i % LEVELS.length], dates: [DATE] });
     expect(r.status, r.text).toBe(200);
   }
-  const fin = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE, start: opts.start ?? 19 * 60 + 30, minutes: opts.minutes ?? 150, courts: opts.courts ?? 2 });
+  // Zip 89 (Alex, "build in what fits"): 8 players (4 teams: the round robin, then the Final, as these tests expect) is a 2 hour night here; on
+  // 2.5 hours the plan builds in the semifinals.
+  const fin = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE, start: opts.start ?? 19 * 60 + 30, minutes: opts.minutes ?? (n === 8 ? 120 : 150), courts: opts.courts ?? 2 });
   expect(fin.status, fin.text).toBe(200);
   for (const name of names) await lockWithCredit(ctx, name);
   if (opts.passPayBy !== false) ctx.app.now = PAY_BY_MS + 60_000;
@@ -184,7 +186,8 @@ describe('zip 57: every size 6 to 16, odd and even, with back outs', () => {
     });
   }
   it('back outs after publishing: a whole team leaving keeps Locked doubles with one fewer team; two left-over players are paired', async () => {
-    const ctx = await world(10);
+    // Zip 89: a 2 hour night, so the 3 teams left play 3 games and the Final (on 2.5 hours a best of 3 Final would be built in).
+    const ctx = await world(10, { minutes: 120 });
     await draftAndPublish(ctx);
     const t0 = (await dash(ctx)).day.teams;
     // One player of team 1 and one of team 2 back out (before the night): the count stays even.

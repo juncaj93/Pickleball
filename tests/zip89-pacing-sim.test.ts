@@ -49,7 +49,7 @@ describe('zip 89: Americano nights at 12, 15, 20 and 25 minutes a game (2 courts
   for (const n of [8, 9, 10, 11, 12, 13, 14, 15, 16])
     it(`${n} players`, async () => {
       for (const pace of PACES) {
-        const ctx = await world(n, { format: 'americano' });
+        const ctx = await world(n, { format: 'americano', minutes: 150 });
         const r = await playPaced(ctx, pace);
         const games = (await night(ctx)).games;
         const last = Math.max(...games.map((g) => g.round));
@@ -66,7 +66,7 @@ describe('zip 89: Locked doubles nights at 12, 15, 20 and 25 minutes a game (2 c
   for (const n of [8, 10, 12, 14, 16])
     it(`${n} players`, async () => {
       for (const pace of PACES) {
-        const ctx = await world(n, { format: 'doubles' });
+        const ctx = await world(n, { format: 'doubles', minutes: 150 });
         await draftAndPublish(ctx);
         const r = await playPaced(ctx, pace);
         const games = (await night(ctx)).games;
@@ -93,7 +93,7 @@ describe('zip 89: Dec 1 at Alex’s 13 minutes a game (7:30 to 10 PM, 2 courts, 
   ];
   for (const [n, format] of cases)
     it(`${n} ${format}`, async () => {
-      const ctx = await world(n, { format });
+      const ctx = await world(n, { format, minutes: 150 });
       if (format === 'doubles') await draftAndPublish(ctx);
       const r = await playPaced(ctx, 13);
       const left = Math.round((END_MS - r.finish) / 60_000);
@@ -124,7 +124,7 @@ describe('zip 89 (review): a night that starts fast, takes every bonus, then slo
   ];
   for (const [format, fast, n, slow] of cases)
     it(`${format}: ${fast} minutes for ${n} rounds, then ${slow}`, async () => {
-      const ctx = await world(10, { format });
+      const ctx = await world(10, { format, minutes: 150 });
       if (format === 'doubles') await draftAndPublish(ctx);
       const r = await playPaced(ctx, (round) => (round <= n ? fast : slow));
       const left = Math.round((END_MS - r.finish) / 60_000);

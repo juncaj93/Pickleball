@@ -14,6 +14,7 @@ import {
   standings,
   timeCheck,
   timeCheckWords,
+  withBuiltIn,
 } from '../shared/tournamentSchedule';
 
 // Zip 57: the schedule for every size 6 to 16 (3 to 8 teams), on 1 and 2 courts; the draft; standings (wins, head to head, Tied); who plays the
@@ -30,7 +31,11 @@ describe('zip 57: the schedule, every size, both court counts', () => {
         const rounds = Math.max(...games.map((g) => g.round));
         // The same rounds as the game plan table.
         expect(rounds).toBe(s.poolRounds + s.playoffRounds);
-        expect(rounds).toBe(nightPlan(teams * 2, courts, 180, 'doubles').rounds);
+        // Zip 89 (Alex, "build in what fits"): the plan's rounds also count the semifinals and a best of 3 Final it builds in; the schedule with
+        // them (withBuiltIn, what Publish writes) has exactly those rounds.
+        const p = nightPlan(teams * 2, courts, 180, 'doubles');
+        expect(rounds).toBe(p.rounds - (p.builtIn.semis ? 1 : 0) - (p.builtIn.bestOf3 ? 2 : 0));
+        expect(Math.max(...withBuiltIn(games, p.builtIn).map((g) => g.round))).toBe(p.rounds);
         // Game numbers in play order, courts within what is used.
         games.forEach((g, i) => expect(g.num).toBe(i + 1));
         for (let i = 1; i < games.length; i++) expect(games[i].round > games[i - 1].round || (games[i].round === games[i - 1].round && games[i].court > games[i - 1].court)).toBe(true);

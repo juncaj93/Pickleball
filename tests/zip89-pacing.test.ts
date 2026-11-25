@@ -42,7 +42,7 @@ describe('zip 89: the base plan (one place for the numbers)', () => {
   it('Dec 1 for 8 to 12 locked in: every plan done at least 20 minutes before 10 PM with the warm-up; breaks only when nobody sits', () => {
     // [players, style, rounds, to, breaks, minutes from 7:30 to the planned end]
     const want: [number, 'doubles' | 'americano', number, number, number, number][] = [
-      [8, 'doubles', 4, 11, 1, 95],
+      [8, 'doubles', 5, 11, 2, 120],
       [8, 'americano', 5, 11, 2, 120],
       [9, 'americano', 6, 11, 0, 130],
       [10, 'doubles', 6, 11, 0, 130],
@@ -51,6 +51,9 @@ describe('zip 89: the base plan (one place for the numbers)', () => {
       [12, 'doubles', 5, 11, 0, 110],
       [12, 'americano', 6, 11, 0, 130],
     ];
+    // Alex, "build in what fits": 8 Locked doubles gets its semifinals in the plan (3 round robin + semis + Final and 3rd place, done 9:30).
+    expect(nightPlan(8, 2, 150, 'doubles').builtIn).toEqual({ semis: true, bestOf3: false });
+    for (const n of [10, 12]) expect(nightPlan(n, 2, 150, 'doubles').builtIn).toEqual({ semis: false, bestOf3: false });
     for (const [n, style, rounds, to, breaks, used] of want) {
       const p = nightPlan(n, 2, 150, style);
       expect([p.rounds, p.gameTo, p.breaks, p.minutesUsed], `${n} ${style}`).toEqual([rounds, to, breaks, used]);
@@ -225,9 +228,8 @@ describe('zip 89: Americano on the real server (10 players, the Dec 1 night)', (
 });
 
 describe('zip 89: Locked doubles on the real server', () => {
-  it('10 players (5 teams, a 3 hour night): Semifinals first (1 vs 4, 2 vs 3, both courts after the round robin), then the Final best of 3', async () => {
-    // (On 2.5 hours a best of 3 never fits: its two games to 11 count at the table's 20 minutes each, as they can never be shortened.)
-    const ctx = await world(10, { format: 'doubles', minutes: 180 });
+  it('10 players (5 teams, 2.5 hours, the semis do not fit the plan): a fast night is offered Semifinals (1 vs 4, 2 vs 3, both courts after the round robin)', async () => {
+    const ctx = await world(10, { format: 'doubles', minutes: 150 });
     await draftAndPublish(ctx);
     await playPaced(ctx, 10, false, ({ v }) => !!v.bonus);
     let { v } = await night(ctx);
@@ -242,9 +244,15 @@ describe('zip 89: Locked doubles on the real server', () => {
       '13:final:7:1:Winner of game 11-Winner of game 12',
       '14:third:7:2:Loser of game 11-Loser of game 12',
     ]);
-    // The night card's bars: the round robin, then SEMIS, then FINAL.
-    // Next bonus after another round: the Final best of 3 (a very fast night: at Alex's 13 minutes a game it does not fit, see the simulations).
-    await playPaced(ctx, 10, false, ({ v }) => !!v.bonus, false);
+    allThree(ctx);
+  }, 120_000);
+  it('10 players on 3 hours: the semifinals are built in from the start; a fast night is offered the Final best of 3, played to 1-1 and game 3', async () => {
+    const ctx = await world(10, { format: 'doubles', minutes: 180 });
+    await draftAndPublish(ctx);
+    let { v } = await night(ctx);
+    // Alex: the semifinals fit at the table's pace, so they are part of the plan (published with the teams), not an offer.
+    expect(v.games.filter((g: any) => g.stage === 'semi')).toHaveLength(2);
+    await playPaced(ctx, 10, false, ({ v }) => !!v.bonus);
     ({ v } = await night(ctx));
     expect(v.bonus.kind).toBe('bestOf3');
     expect((await call(ctx, { action: 'bonus', key: v.bonus.key })).status).toBe(200);
@@ -286,11 +294,13 @@ describe('zip 89: Locked doubles on the real server', () => {
     expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
     allThree(ctx);
   }, 120_000);
-  it('8 players (4 teams): semifinals, and a Final won 2-0 never shows game 3', async () => {
-    const ctx = await world(8, { format: 'doubles' });
+  it('8 players (4 teams) on 2.5 hours, the Dec 1 night: semifinals built in from the start, no offer needed; a single Final', async () => {
+    const ctx = await world(8, { format: 'doubles', minutes: 150 });
     await draftAndPublish(ctx);
+    expect((await night(ctx)).v.games.filter((g: any) => g.stage === 'semi')).toHaveLength(2);
     const run = await playPaced(ctx, 12);
-    expect(run.offers.map((o) => o.kind)).toEqual(['semis']);
+    // A best of 3 needs 3 planned rounds still to play: never on 3 round robin rounds.
+    expect(run.offers).toEqual([]);
     const { v } = await night(ctx);
     expect(v.games.filter((g: any) => g.stage === 'semi')).toHaveLength(2);
     expect(v.bestOf3).toBeUndefined();
@@ -302,11 +312,12 @@ describe('zip 89: Locked doubles on the real server', () => {
     const run = await playPaced(ctx, 10);
     expect(run.offers).toEqual([]);
   }, 60_000);
-  it('14 players (groups, semifinals already; 3.5 hours): the first bonus is the best of 3 Final', async () => {
+  it('14 players (groups) on 3.5 hours: the best of 3 Final fits the plan, so it is built in from the start (no offer)', async () => {
     const ctx = await world(14, { format: 'doubles', minutes: 210 });
     await draftAndPublish(ctx);
+    expect(nightPlan(14, 2, 210, 'doubles').builtIn).toEqual({ semis: false, bestOf3: true });
     const run = await playPaced(ctx, 12);
-    expect(run.offers.map((o) => o.kind)).toEqual(['bestOf3']);
+    expect(run.offers).toEqual([]);
     const { v, t } = await night(ctx);
     const fin = v.games.filter((g: any) => g.stage === 'final');
     // The simulation's scores: side a wins games whose number is not a multiple of 3.
