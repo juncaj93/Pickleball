@@ -364,6 +364,38 @@ export function schedule(teams: number, courts: number): PlannedGame[] {
   return number(games);
 }
 
+/**
+ * Zip 89 (Alex, "build in what fits"): the schedule with the bonuses the plan builds in, the same games the offers add later on a fast night
+ * (server/tournamentDay.ts writeSemis / writeBestOf3), so a night looks the same either way:
+ *   semis    a round robin on 2 courts: the Final and 3rd place move a round on and two numbers on; the semifinals (1st vs 4th on Court 1, 2nd vs
+ *            3rd on Court 2) take their numbers; the Final is their winners, 3rd place their losers.
+ *   bestOf3  the Final's games 2 and 3 (the same slots), a round after the Final's round and one after that, the next numbers.
+ */
+export function withBuiltIn(games: readonly PlannedGame[], built: { semis: boolean; bestOf3: boolean }): PlannedGame[] {
+  let out = games.map((g) => ({ ...g }));
+  const fin = out.find((g) => g.stage === 'final');
+  if (built.semis && fin) {
+    const third = out.find((g) => g.stage === 'third');
+    const F = fin.num;
+    const R = fin.round;
+    if (third && third.num === F + 1 && !out.some((g) => g.stage === 'semi')) {
+      out = [
+        ...out.filter((g) => g.num < F),
+        { num: F, round: R, court: 1, stage: 'semi', pool: null, a: 'P1', b: 'P4' },
+        { num: F + 1, round: R, court: 2, stage: 'semi', pool: null, a: 'P2', b: 'P3' },
+        { ...fin, num: F + 2, round: R + 1, a: `W${F}`, b: `W${F + 1}` },
+        { ...third, num: F + 3, round: R + 1, a: `L${F}`, b: `L${F + 1}` },
+      ];
+    }
+  }
+  const f = out.find((g) => g.stage === 'final');
+  if (built.bestOf3 && f && out.filter((g) => g.stage === 'final').length === 1) {
+    const next = Math.max(...out.map((g) => g.num)) + 1;
+    out.push({ ...f, num: next, round: f.round + 1, court: 1 }, { ...f, num: next + 1, round: f.round + 2, court: 1 });
+  }
+  return out;
+}
+
 /** Game numbers in play order (round, then court). 'W'/'L' slots were written with 1-based positions, which are the numbers. */
 function number(games: Omit<PlannedGame, 'num'>[]): PlannedGame[] {
   return games.map((g, i) => ({ ...g, num: i + 1 }));

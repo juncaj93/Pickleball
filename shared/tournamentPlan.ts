@@ -104,6 +104,11 @@ export interface NightPlan {
   noSit: boolean;
   /** Zip 89: the breaks the plan budgets (5 minutes each). */
   breaks: number;
+  /**
+   * Zip 89 (Alex, "build in what fits"): Locked doubles' bonuses that fit the base budget at the table's pace are part of the plan from the
+   * start: semifinals for 4 or 5 teams on 2 courts (1st vs 4th, 2nd vs 3rd), then a best of 3 Final. Offers are only for nights running faster.
+   */
+  builtIn: { semis: boolean; bestOf3: boolean };
   /** Locked doubles only: how the night is built. */
   doubles?: DoublesStructure;
   /** Americano only: players on court each round, and the average games per player. */
@@ -117,14 +122,22 @@ const used = (short: number, len: GameTo, playoff: number) => short * ROUND_MINU
 /** Zip 89: a Locked doubles night where every team plays every round: 4 teams on 2 courts (2 games a round, all 4 teams on court). */
 export const doublesNoSit = (s: DoublesStructure): boolean => s.shape === 'rr' && s.courtsUsed === 2 && s.teams === 4;
 
-/** LOCKED DOUBLES (even counts; an odd count is Americano). Pool or round robin games use the longest length that fits; playoffs are to 11. */
+/** LOCKED DOUBLES (even counts; an odd count is Americano). Pool or round robin games use the longest length that fits; playoffs are to 11.
+ *  Zip 89 (Alex): then, at that length, the semifinals (4 or 5 teams on 2 courts) and a best of 3 Final are built in when they still fit. */
 export function doublesPlan(players: number, courts: number, minutes: number): NightPlan {
   const s = doublesStructure(Math.floor(players / 2), courts);
   const budget = planBudget(minutes);
   const noSit = doublesNoSit(s);
-  const breaks = breaksFor(s.poolRounds + s.playoffRounds, noSit);
-  const len = GAME_LENGTHS.find((l) => used(s.poolRounds, l, s.playoffRounds) + breaks * BREAK_MINUTES <= budget);
+  // Full rounds (a game on every court used) get the breaks; a best of 3 Final's games 2 and 3 are one game each (no break before them).
+  const total = (len: GameTo, semis: boolean, bo3: boolean) =>
+    used(s.poolRounds, len, s.playoffRounds + (semis ? 1 : 0) + (bo3 ? 2 : 0)) + breaksFor(s.poolRounds + s.playoffRounds + (semis ? 1 : 0), noSit) * BREAK_MINUTES;
+  const len = GAME_LENGTHS.find((l) => total(l, false, false) <= budget);
   const gameTo = len ?? 7;
+  const canSemis = s.shape === 'rr' && s.courtsUsed === 2;
+  const semis = !!len && canSemis && total(gameTo, true, false) <= budget;
+  // A best of 3 Final comes after the semifinals where the night can have them (as the offers go), else on its own.
+  const bestOf3 = !!len && (!canSemis || semis) && total(gameTo, semis, true) <= budget;
+  const extra = (semis ? 1 : 0) + (bestOf3 ? 2 : 0);
   return {
     style: 'doubles',
     players,
@@ -132,11 +145,12 @@ export function doublesPlan(players: number, courts: number, minutes: number): N
     minutes,
     fits: !!len,
     gameTo,
-    rounds: s.poolRounds + s.playoffRounds,
+    rounds: s.poolRounds + s.playoffRounds + extra,
     shortRounds: s.poolRounds,
-    minutesUsed: WARM_UP + used(s.poolRounds, gameTo, s.playoffRounds) + breaks * BREAK_MINUTES,
+    minutesUsed: WARM_UP + total(gameTo, semis, bestOf3),
     noSit,
-    breaks,
+    breaks: breaksFor(s.poolRounds + s.playoffRounds + (semis ? 1 : 0), noSit),
+    builtIn: { semis, bestOf3 },
     doubles: s,
   };
 }
@@ -168,6 +182,7 @@ export function americanoPlan(players: number, courts: number, minutes: number):
     minutesUsed: WARM_UP + r.rounds * ROUND_MINUTES[gameTo] + breaks * BREAK_MINUTES,
     noSit,
     breaks,
+    builtIn: { semis: false, bestOf3: false },
     onCourt,
     gamesEach: Math.round(r.gamesEach * 10) / 10,
   };

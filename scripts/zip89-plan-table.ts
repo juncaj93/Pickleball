@@ -40,7 +40,7 @@ for (const style of ['doubles', 'americano'] as const)
         if (style === 'doubles' && n % 2) continue;
         const b = oldPlan(n, courts, minutes, style);
         const a = nightPlan(n, courts, minutes, style);
-        const line = `${style === 'doubles' ? 'LD' : 'AM'} ${String(n).padStart(2)}p ${courts}c ${(minutes / 60).toFixed(1)}h | before ${String(b.rounds).padStart(2)} rd to ${String(b.gameTo).padStart(2)} ${String(b.used).padStart(3)} min ends ${clock(START + b.used)} | after ${String(a.rounds).padStart(2)} rd to ${String(a.gameTo).padStart(2)} +10 warm-up${a.breaks ? ` +${a.breaks} break${a.breaks > 1 ? 's' : ''}` : ''} ${String(a.minutesUsed).padStart(3)} min ends ${clock(START + a.minutesUsed)}${a.fits ? '' : ' (too tight)'}`;
+        const line = `${style === 'doubles' ? 'LD' : 'AM'} ${String(n).padStart(2)}p ${courts}c ${(minutes / 60).toFixed(1)}h | before ${String(b.rounds).padStart(2)} rd to ${String(b.gameTo).padStart(2)} ${String(b.used).padStart(3)} min ends ${clock(START + b.used)} | after ${String(a.rounds).padStart(2)} rd to ${String(a.gameTo).padStart(2)} +10 warm-up${a.breaks ? ` +${a.breaks} break${a.breaks > 1 ? 's' : ''}` : ''}${a.builtIn.semis ? ' +semis' : ''}${a.builtIn.bestOf3 ? ' +best of 3' : ''} ${String(a.minutesUsed).padStart(3)} min ends ${clock(START + a.minutesUsed)}${a.fits ? '' : ' (too tight)'}`;
         rows.push(line);
         if (a.rounds < b.rounds || a.gameTo < b.gameTo) shorter.push(line);
       }
@@ -52,9 +52,7 @@ console.log(shorter.join('\n'));
 // even counts too (in case Alex switches).
 const what = (p: NightPlan) =>
   p.doubles
-    ? p.doubles.shape === 'pools'
-      ? `${p.doubles.teams} teams in 2 groups: ${p.doubles.poolRounds} group rounds + semis + Final and 3rd place`
-      : `${p.doubles.teams} teams: ${p.doubles.poolRounds} round robin rounds + Final and 3rd place`
+    ? `${p.doubles.shape === 'pools' ? `${p.doubles.teams} teams in 2 groups: ${p.doubles.poolRounds} group rounds + semis` : `${p.doubles.teams} teams: ${p.doubles.poolRounds} round robin rounds${p.builtIn.semis ? ' + semis' : ''}`} + ${p.builtIn.bestOf3 ? 'best of 3 Final' : 'Final'} and 3rd place`
     : `${p.rounds} rounds, ${p.onCourt} on court, ${p.gamesEach} games each`;
 console.log('\nDEC 1 (7:30 to 10 PM, 2 courts, 10 min warm-up, finish at least 20 min before 10 PM):');
 for (let n = 8; n <= 12; n++)

@@ -61,6 +61,7 @@ import {
   type TieBlock,
   tieBlocks,
   tieGames,
+  withBuiltIn,
   tieGamesAhead,
   type TieRecord,
   TIE_TO,
@@ -492,7 +493,12 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   const series = finalSeries(games, results);
   const shape = doublesStructure(teams.length, courtsOf(t));
   const semisIn = games.some((g) => g.stage === 'semi');
-  const bonusIn = (shape.shape === 'rr' && semisIn) || series.bestOf3;
+  // Zip 89: a bonus is what the night has beyond its plan (semifinals or a best of 3 the plan built in are not bonuses).
+  const real0 = realTimes(t);
+  const planned0 = nightPlan(teams.length * 2, courtsOf(t), real0.minutes, 'doubles');
+  const semisBonus = shape.shape === 'rr' && semisIn && !planned0.builtIn.semis;
+  const bo3Bonus = series.bestOf3 && !planned0.builtIn.bestOf3;
+  const bonusIn = semisBonus || bo3Bonus;
   const kind: BonusKind | null = series.bestOf3 || !series.nums.length || gone.size || !plan.fits ? null : shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? 'semis' : 'bestOf3';
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
   // Zip 89: Round 1 is measured from the start + the warm-up; a round after a break from the break's end (the pace never counts either).
@@ -528,7 +534,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     behind: !!check?.suggest || !!shorter || (check?.behind ?? 0) > 0,
     leftOpen: false,
     // When the last bonus was added: the semifinals' rows on a round robin night, the Final's games 2 and 3.
-    lastBonusAt: lastAddedAt(t, tz, [...(shape.shape === 'rr' ? stored.filter((g) => g.stage === 'semi') : []), ...stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0])].map((g) => g.created_at)),
+    lastBonusAt: lastAddedAt(t, tz, [...(semisBonus ? stored.filter((g) => g.stage === 'semi') : []), ...(bo3Bonus ? stored.filter((g) => g.stage === 'final' && g.num !== series.nums[0]) : [])].map((g) => g.created_at)),
   });
   const spunAt = new Map(tieRows.filter((r) => r.spun_at).map((r) => [r.tie_key, r.spun_at!]));
   // Zip 80: when the tie games a round waits for end (the night's times below follow it too).
@@ -1170,7 +1176,8 @@ export function writeTeamsAndGames(
 /** The games of a set of teams (seats 1..n): the schedule and the plan's game length for this night's courts and hours. */
 export function gamesFor(t: TournamentRow, teamCount: number): { games: PlannedGame[]; playTo: GameTo } {
   const plan = nightPlan(teamCount * 2, courtsOf(t), realTimes(t).minutes, 'doubles');
-  return { games: schedule(teamCount, courtsOf(t)), playTo: plan.gameTo };
+  // Zip 89 (Alex): the semifinals and the best of 3 Final the plan builds in (they fit at the table's pace).
+  return { games: withBuiltIn(schedule(teamCount, courtsOf(t)), plan.builtIn), playTo: plan.gameTo };
 }
 
 /** Teams in pool order with their pools (6 teams and more): Pool A first. */
