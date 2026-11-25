@@ -8685,3 +8685,13 @@ e2e/zip83.cjs A, B, C, D, E, G, H, J pass (A and H follow the 4 px circles and t
 Zip 83's own stages; F's cup mid-reveal). e2e/zip58.cjs F fails at "no live view" exactly as on main (after its new prize steps pass).
 
 ### Ship: HELD for Alex's OK (he checks the medal landing and the header spacing on his phone first). Nothing deployed to live.
+
+### Round 2 (Alex's first look, Wed Nov 25; still held for his OK)
+1. Organizer header (src/admin-r2.css): the player header's spacing: about 4 px between the visible circles (cup, light/dark; tap areas
+   44 x 44, overlapping 4 px), about 4 px from View as to the first circle, about 8 px to the date. 375/420/440, light and dark: one line.
+2. Prize card: caps line to title 2 px (line height 1.1 / 1.12), title to cards 11 px (was 16); padding and the gap below unchanged.
+3. The medal by the name: plain inline layout down to the drawing (an inline picture sits on the text baseline by the rules; a flex or
+   button box's baseline is each browser's guess, the likely cause of "too high" on the iPhone), lowered to the ticker's measure (the disc's
+   edge about 0.17 of the name's size under the baseline). 1 medal, 2 medals and after the slam all measure the same as the ticker in
+   Chromium (no WebKit browser in this sandbox: Alex's phone is the real check).
+Browser: e2e/zip90.cjs I (new) passes; A to H pass; zip83 A, C, H pass. Unit: zip78-look, zip48-split, zip90 pass.

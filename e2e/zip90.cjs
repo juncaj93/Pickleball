@@ -407,6 +407,63 @@ const header = (page) =>
       }
     });
 
+    await check('I Round 2: the organizer header spacing, the card\'s condensed top, the medal on the baseline like the ticker', async () => {
+      await b.stage('zip90_header');
+      for (const width of [375, 420, 440])
+        for (const scheme of ['light', 'dark']) {
+          const a = await b.adminHome({ width, scheme });
+          await a.page.locator('[data-cup]').waitFor({ timeout: 15000 });
+          const r = await a.page.evaluate(() => {
+            const r = (e) => e.getBoundingClientRect();
+            const va = document.querySelector('.r2-hdr-actions .topbar-btn'), cup = document.querySelector('.r2-hdr-actions .cup-btn'), mode = document.querySelector('.r2-hdr-actions .mode-btn:not(.cup-btn)'), day = document.querySelector('.topbar .today'), h1 = document.querySelector('.topbar h1');
+            const mid = (x) => r(x).top + r(x).height / 2;
+            return { vaToCup: r(cup).left + 4 - r(va).right, circles: r(mode).left + 4 - (r(cup).right - 4), modeToDate: r(day).left - (r(mode).right - 4), oneLine: [va, cup, mode, day].every((x) => Math.abs(mid(x) - mid(h1)) <= 6), taps: [cup, mode].every((x) => r(x).width >= 44 && r(x).height >= 44), wide: document.documentElement.scrollWidth > innerWidth };
+          });
+          assert(Math.abs(r.circles - 4) <= 0.6 && Math.abs(r.vaToCup - 4) <= 0.6 && Math.abs(r.modeToDate - 8) <= 0.6 && r.oneLine && r.taps && !r.wide, `admin ${width} ${scheme}: ${JSON.stringify(r)}`);
+          if (scheme === 'light') await shot(a.page, `I-admin-${width}`);
+          await a.ctx.close();
+        }
+      // The medal: the disc's edge under the name's baseline by the ticker's measure (about 0.17 of the size), for 1 medal, after the slam, 2.
+      const drop = (page) =>
+        page.evaluate(() => {
+          const one = (nameEl) => {
+            const t = [...nameEl.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+            const w = document.createElement('span');
+            t.parentNode.insertBefore(w, t);
+            w.appendChild(t);
+            const p = document.createElement('span');
+            p.style.cssText = 'display:inline-block;width:0;height:0';
+            w.appendChild(p);
+            const base = p.getBoundingClientRect().bottom;
+            const ico = [...(nameEl.querySelector('.md-ico') ? [nameEl.querySelector('.md-ico')] : nameEl.parentElement.querySelectorAll('.h1-badge .md-ico'))];
+            return ico.map((i) => { const x = i.getBoundingClientRect(); return (x.top + (x.height * 25.5) / 26 - base) / parseFloat(getComputedStyle(nameEl).fontSize); });
+          };
+          const tick = [...document.querySelectorAll('.tw-run')[0].querySelectorAll('.tw-name')].find((e) => e.querySelector('.md-ico'));
+          return { ticker: one(tick)[0], header: one(document.querySelector('.topbar .h1-name')) };
+        });
+      const hid = (await b.stage('history')).id;
+      await (await b.phone('Vic')).post('/api/tournament/award-seen', { tournamentId: hid });
+      const two = await b.pickedPage('Vic', { width: 390 });
+      await two.page.addStyleTag({ content: '.tw-track{animation:none!important}' });
+      const d2 = await drop(two.page);
+      assert(d2.header.length === 2 && d2.header.every((x) => Math.abs(x - d2.ticker) <= 0.04), `2 medals like the ticker: ${JSON.stringify(d2)}`);
+      await two.ctx.close();
+      await b.stage('zip90_replay');
+      const { page, ctx } = await b.pickedPage('Vic', { width: 390, reducedMotion: 'no-preference' });
+      await page.locator('[data-pz-card="medal"] .pz-front').click();
+      await page.waitForFunction(() => document.querySelector('.pz-ghost') !== null);
+      await page.waitForFunction(() => !document.querySelector('.pz-ghost'));
+      await sleep(500);
+      await page.addStyleTag({ content: '.tw-track{animation:none!important}' });
+      const d1 = await drop(page);
+      assert(d1.header.length === 1 && Math.abs(d1.header[0] - d1.ticker) <= 0.04, `after the slam like the ticker: ${JSON.stringify(d1)}`);
+      // The card's top: the caps line, the title and the cards closer (2 px and 11 px), the padding as before (18 px).
+      const g = await page.evaluate(() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { pad: r('.pz-kicker').top - r('.pz').top, a: r('.pz-title').top - r('.pz-kicker').bottom, b: r('.pz-cards').top - r('.pz-title').bottom }; });
+      assert(Math.abs(g.pad - 18) <= 1 && g.a <= 3 && g.b <= 12, `card top: ${JSON.stringify(g)}`);
+      await shot(page, 'I-card');
+      await ctx.close();
+    });
+
     await check('G Admin: "+ Add" opens the Add game sheet', async () => {
       await b.stage('none');
       const { page, ctx } = await b.adminHome({ width: 390 });

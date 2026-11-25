@@ -618,8 +618,18 @@
 .r2-hdr-actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   flex: none;
+  margin-right: -2px;
+}
+/* Zip 90 (Alex): the player header's tight spacing here too: about 4 px between the visible circles (each 4 px inside its 44 x 44 tap area,
+   so the tap areas overlap by 4 px), about 4 px from View as to the first circle, about 8 px from light/dark to the date. */
+.r2-hdr-actions > .mode-btn + .mode-btn,
+.r2-hdr-actions > .cup-btn ~ .mode-btn {
+  margin-left: -4px;
+}
+.topbar-row:has(.r2-hdr-actions) .topbar-end {
+  column-gap: 6px;
 }
 /* Small phones: a little less padding so the logo, Admin, View as…, the button and the tile fit on one line. */
 @media (max-width: 340px) {

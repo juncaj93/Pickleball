@@ -4806,6 +4806,29 @@ dialog.sheet[open]::backdrop {
 }
 .ph-head .title-line h1.has-badge .h1-badge {
   margin-left: 0.04em;
+  line-height: inherit;
+}
+/* Zip 90 (Alex, round 2): the medal's bottom on the name's baseline (as in the winners ticker), in every browser: plain inline layout down to
+   the medal drawing (an inline picture sits on the text baseline by the rules; a flex or button box's baseline is each browser's guess,
+   which put it too high on the iPhone). The same after the slam lands and with 2 or more medals. */
+.ph-head .h1-badge .md-btn,
+.ph-head .h1-badge .rv-slot {
+  display: inline-block;
+  vertical-align: baseline;
+  line-height: inherit;
+}
+.ph-head .h1-badge .md {
+  display: inline;
+  vertical-align: baseline;
+}
+.ph-head .h1-badge .md-ico {
+  display: inline-block;
+  /* The winners ticker's placement (measured: the disc's edge 0.17 of the name's size under the text baseline), so the two read alike. */
+  vertical-align: -0.17em;
+}
+.ph-head .h1-badge .rv-slot {
+  overflow: visible;
+  white-space: nowrap;
 }
 .ph-head .title-swap {
   overflow: hidden;
