@@ -3,8 +3,8 @@ import { bonusRound, type PlayedGame } from '../shared/americanoSchedule';
 import { BONUS_SPARE, PACE_FLOOR, measuredPace, paceForCheck, pacing, type PaceInput } from '../shared/smartPacing';
 import { END_BUFFER, nightPlan, ROUND_MINUTES, TIE_MINUTES } from '../shared/tournamentPlan';
 import { playerPhone } from './harness';
-import { adminTour, awards, books, card, draftAndPublish, START_MS, world } from './zip58-world';
-import { call, night, playPaced, sc, score } from './zip89-world';
+import { adminTour, awards, card, draftAndPublish, START_MS, world } from './zip58-world';
+import { allThree, call, night, playPaced, sc, score } from './zip89-world';
 
 // Zip 89 (🎾89.smart pacing): the honest base plan, the live pace, the bonus offer and what a bonus is (both styles), on the pure rules and on the
 // real server. The whole-night simulations at 12, 15, 20 and 25 minutes a game are tests/zip89-pacing-sim.test.ts.
@@ -195,7 +195,7 @@ describe('zip 89: Americano on the real server (10 players, the Dec 1 night)', (
     await awards(ctx, { action: 'end', seen: t.end.seen });
     const after = ctx.app.db.raw.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE reason LIKE 'tour:%'").get() as any;
     expect([after.n - before.n, after.c - before.c]).toEqual([2, 1400 + 700]);
-    books(ctx);
+    allThree(ctx);
     expect(run.offers).toHaveLength(0);
   }, 60_000);
 });
@@ -260,7 +260,7 @@ describe('zip 89: Locked doubles on the real server', () => {
     expect(JSON.stringify(t.end.first)).toContain(g2.b.name);
     expect(t.end.second ? JSON.stringify(t.end.second) : g2.a.name).toContain(g2.a.name);
     expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
-    books(ctx);
+    allThree(ctx);
   }, 120_000);
   it('8 players (4 teams): semifinals, and a Final won 2-0 never shows game 3', async () => {
     const ctx = await world(8, { format: 'doubles' });
@@ -270,7 +270,7 @@ describe('zip 89: Locked doubles on the real server', () => {
     const { v } = await night(ctx);
     expect(v.games.filter((g: any) => g.stage === 'semi')).toHaveLength(2);
     expect(v.bestOf3).toBeUndefined();
-    books(ctx);
+    allThree(ctx);
   }, 60_000);
   it('12 players (groups of 3: 3 pool rounds): never a best of 3 (it needs 3 planned rounds still to play after a round is in)', async () => {
     const ctx = await world(12, { format: 'doubles' });
@@ -291,7 +291,7 @@ describe('zip 89: Locked doubles on the real server', () => {
     if (v.bestOf3.wins.includes(0)) expect(fin).toHaveLength(2);
     expect(t.end).toBeTruthy();
     expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
-    books(ctx);
+    allThree(ctx);
     // A player's phone never gets the offer.
     const phone = await playerPhone(ctx, 'Blair');
     expect(JSON.stringify((await phone.call('GET', '/api/group')).data)).not.toContain('"bonus"');

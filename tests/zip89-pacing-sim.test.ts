@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { adminTour, awards, books, draftAndPublish, world } from './zip58-world';
-import { clock, END_MS, night, type NightRun, playPaced } from './zip89-world';
+import { adminTour, awards, draftAndPublish, world } from './zip58-world';
+import { allThree, clock, END_MS, night, type NightRun, playPaced } from './zip89-world';
 
 // Zip 89 (🎾89.smart pacing): THE PROOF. Whole nights on the REAL server (2 courts, 7:30 to 10 PM, the plan's own length for each size), every
 // game lasting the night's pace (12, 15, 20 or 25 minutes for a game to 11, shorter games in proportion) plus 1 to 3 minutes of score entry and
@@ -53,7 +53,7 @@ describe('zip 89: Americano nights at 12, 15, 20 and 25 minutes a game (2 courts
         // The reveal credits once; the books read zero.
         const t = await adminTour(ctx);
         expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
-        books(ctx);
+        allThree(ctx);
       }
     }, 600_000);
 });
@@ -70,7 +70,7 @@ describe('zip 89: Locked doubles nights at 12, 15, 20 and 25 minutes a game (2 c
         const t = await adminTour(ctx);
         expect(t.end, 'the End card').toBeTruthy();
         expect((await awards(ctx, { action: 'end', seen: t.end.seen })).status).toBe(200);
-        books(ctx);
+        allThree(ctx);
       }
     }, 600_000);
 });

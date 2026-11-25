@@ -1,4 +1,6 @@
 // Zip 89 (🎾89.smart pacing): helpers for whole nights on the real server at a set pace (tests/zip89-pacing-sim.test.ts, zip89-pacing.test.ts).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect } from 'vitest';
 import { playerPhone } from './harness';
 import { adminTour, START_MS, type World } from './zip58-world';
@@ -121,3 +123,12 @@ export async function playPaced(
   return { offers, finish, games: count, rounds: Math.max(...games.map((g) => g.round)), timeChecks, played };
 }
 
+
+/** Money to the cent: all three integrity files (the ones run before and after every deploy) read 0, every column but info_ ones. */
+const THREE = ['integrity-checks.sql', 'integrity-checks-extension.sql', 'integrity-checks-tournament.sql'].map((f) => [f, readFileSync(join(process.cwd(), 'scripts', f), 'utf8')] as const);
+export function allThree(ctx: World) {
+  for (const [file, sql] of THREE) {
+    const r = ctx.app.db.raw.prepare(sql).get() as Record<string, number>;
+    for (const [k, v] of Object.entries(r)) if (!k.startsWith('info_')) expect(Number(v), `${file}: ${k} must be 0`).toBe(0);
+  }
+}

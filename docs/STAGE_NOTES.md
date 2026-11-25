@@ -8520,3 +8520,49 @@ since 🎾86, older flakes); zip61/zip57/zip58/zip72/zip77/zip82 updated to the 
 ### Preview
 `pickleball-preview` (fake) re-seeded; https://claude-new-session-57sajy.pickleball-club-9h0.pages.dev, calm start zip88_rd3 (Home: the night card
 first, one amber clash card under it).
+
+## 🎾89.smart pacing (Wed Nov 25, 2026; built on 🎾88's branch, preview up, NOT live: ships after 🎾88 is live and Alex says OK)
+
+### What changed (the code is the truth; SITE_RULES "Smart pacing (Zip 89)")
+1. BASE PLAN (shared/tournamentPlan.ts): ROUND_MINUTES { 11: 20, 9: 16, 7: 13 }, END_BUFFER 20, TIE_MINUTES 10 (derived). scripts/zip89-plan-table.ts
+   prints every size 6 to 16, 1 and 2 courts, 2 / 2.5 / 3 hours, both styles, before and after: 64 rows changed, none shorter (fewer rounds or
+   shorter games), and 11 rows that were "too tight" now fit. Dec 1 (10, 2 courts, 2.5 h): Locked doubles 5 RR rounds to 11 + Final and 3rd
+   place, Americano 6 rounds to 11, both 120 minutes (done about 9:30 PM; was 138, 9:48). tests/fixtures/GAME_PLAN_TABLE.md made again from the
+   same rules with the new numbers.
+2. PACE AND OFFER (shared/smartPacing.ts, pure): measuredPace, pacing (rules a, b, c; one bonus per scored round; playoff and bonus games
+   counted at the table's time at least; a best of 3 needs 3 planned rounds left; no offer on a too tight plan), paceForCheck (the Time check
+   gets the pace with a bonus in the night (the slower of average and latest round), or on a night slower than 20 min/round once 2 rounds are
+   in; else as before). amFacts / facts carry `pace` and `plannedRounds`; the admin views send `bonus` (organizer only) and `bestOf3`.
+3. ADD A ROUND: POST /api/admin/tournament/:id/games { action: 'bonus', key }. Americano: addBonusRound (shared/americanoSchedule.ts
+   bonusRound: the saved pattern's next round, or a fair round of the players still in). Locked doubles: writeSemis (the unstarted Final and
+   3rd place rows move two numbers and a round on; semis P1-P4 / P2-P3 take their numbers), writeBestOf3 (two more 'final' rows). Guarded,
+   one batch, put back if a step did not happen. Audit 'tournament_bonus_round'. A bonus last round may be shortened (Americano Apply too).
+4. BEST OF 3: finalSeries; game 3 hidden until 1-1 (but counted in the time while open); games 2 and 3 keep game 1's frozen teams;
+   doublesOutcome's champion is the series winner, a team leaving mid series is a walkover; labels "Final · Game N", one finalAlert per series.
+5. SCREENS: NightCard "Ahead of time" + Add a round, "Are you sure?" (Yes green, No red outline, equal); "Final · G2" pill and "Best of 3 · G1
+   11–8 · G2 –". Large text audit: the court box narrows, then puts Score under the names (also 320 and 360 px at 100%: 🎾88's layout let
+   "Christopher V." slide under Score there).
+6. STAGES (THIS_ZIP): zip89_am_ahead, zip89_ld_semis, zip89_bo3 (server/tournamentTest.ts zip89Stage).
+
+### Simulations (tests/zip89-pacing-sim.test.ts, real server, 2 courts, 2.5 h, every offer accepted, every Time check applied)
+- 12 to 20 min a game: every night ends 10 to 37 minutes before the end for Americano (8 rounds at Dec 1's 13 min: 9:35 PM); 18 nights end
+  more than 30 minutes early (Locked doubles has only two bonus kinds; a bonus needs 20 minutes to spare): free play.
+- 25 min a game: 8 to 12 Americano and 8 to 12 Locked doubles end before the end (Americano 8 to 11: 11 min early; today's code 2 min). 13 to
+  16 Americano and 14, 16 Locked doubles run 3 to 16 minutes over with every game the Time check may shorten at 7 (today's code: Americano 13
+  to 16 ended 0 to 3 early, Locked doubles 16 15 over): the honest table plans 13 to 16 Americano 8 rounds to 9 (was to 7).
+- The reviewer's fast-then-slow nights (10 players): all end 4 to 25 minutes before the end.
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: (1) a night fast then slow after bonuses ran up to 30 min over (Time check on the average only; game 3 not counted; playoff bonuses
+costed at the fast pace; two playoff bonuses by Round 2); (2) a team leaving during a best of 3 blocked End; (3) a semi fixed after Final game
+1 could move games 2 and 3 to another team; (4) players' "If you finish in the top 2" on a round robin night with semis; (6) offers on a too
+tight plan; (7) a misplaced comment. Kept: (5) game 3 already on a court when game 2 is fixed to 2-0 stays (it cannot change the winner).
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 63 statements before and after (all_locked, mid, am_round3, zip88_rd3, zip88_final; and the zip89 stages); 7.7 to 9.1 ms
+before, 7.3 to 9.0 after. The 5 second check 2 / 16 both.
+
+### Tests
+Unit: 242 files, 4,479 passed, 2 skipped, 0 failed (before the last three integrity additions; 🎾89 files 44 of 44 after). Changed on
+purpose for the new numbers: zip57-plan/day/schedule, zip58-end, zip61-americano/day, zip70-time, zip74-americano7, zip80-tie-time (values
+and scenario times only). Browser: e2e/zip89.cjs 4 of 4 (320/390/420, light and dark, 100/125/150%), e2e/zip88.cjs 9 of 9 (E opens All tests).
