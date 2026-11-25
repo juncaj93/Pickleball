@@ -8603,3 +8603,30 @@ and scenario times only). Browser: e2e/zip89.cjs 4 of 4 (320/390/420, light and 
 - Tests: unit 242 files, 4,491 passed, 2 skipped, 0 failed. Older tests that score an 8-player night at once wait out the real break
   (tests/zip58-world.ts games/play, zip72, zip61-day, zip58-end), plan numbers follow (fixture made again). Browser: zip89 5 of 5, zip88 9 of 9.
   Admin speed: 4 trips / 63 statements, refresh 2 / 16, unchanged (8.0 to 9.5 ms with the suite running).
+
+### Build in what fits (Alex's OK round)
+- shared/tournamentPlan.ts doublesPlan: at the length chosen, the semifinals (4 or 5 teams on 2 courts) and then a best of 3 Final are built in
+  when they fit at the table's pace (NightPlan.builtIn); shared/tournamentSchedule.ts withBuiltIn adds the same games an offer would (gamesFor,
+  so Publish writes them). Offers are only beyond the plan (facts: semisBonus / bo3Bonus). Dec 1 at 8 Locked doubles: 3 RR + semis + Final/3rd +
+  2 breaks, done 9:30 PM (30 spare). 10 on 3 h gets semis; 12 on 3 h and 14 on 3.5 h a best of 3.
+- 8 Americano stays 5 rounds (Alex: OK).
+- Tests never wait in real time: a break moves the fake clock (or taps Skip). Full suite 882 s (was 642 s before the breaks on a quieter
+  machine; 628 s right after them).
+- The 4 teams' older tests and preview stages (round robin, then the Final) run on a 2 hour night (tests/zip58-world.ts, zip57-day,
+  server/tournamentTest.ts dayStage), where nothing extra fits; 🎾89's tests ask for 2.5 hours where they mean Dec 1.
+
+### Live (Wed Nov 25, 2026, about 1:30 AM Eastern; no game; 🎾88 live since Tue 11:05 PM)
+- Restore point first: export `export-20261125062826` saved in `pickleball-backups` (checked against the file); Time Travel bookmark
+  `00001f83-00000000-0000512e-b8de4b618dd1e7383a2b7f6a571502c3`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `3fc9663` (🎾88 live) to `1ed285c`, pushed; `npm run deploy` (no override): deployment
+  **67ccdd95-d107-4bdd-aef1-7d178763df31** (bundle `index-Ba1wTk84.js`). No migration, no Worker or Error box deploy, no live data touched; The
+  Cold Open's settings unchanged.
+- Rollback: deployment **3b8774c9-8db3-42cd-8dc9-0718a52fafe4** (🎾88), Cloudflare Deployments > Rollback. No database undo needed (bonus rows,
+  break skips and saved courts are written only on a tournament night; older code reads them as ordinary games).
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390 light
+  and dark: the new bundle, no page errors, nothing wider than the screen. Organizer screens not opened on live (no read-only PIN in this
+  session).
+- Before the deploy on the merged code: unit 242 files, 4,492 passed, 2 skipped, 0 failed (one test fixed after the full run, rerun alone);
+  e2e/zip89.cjs 5 of 5; e2e/zip88.cjs 9 of 9 (I: its countdown check fails at some wall-clock seconds, passes on rerun, as on 🎾88's branch);
+  admin Home 4 trips / 63 statements, the 5 second check 2 / 16.
