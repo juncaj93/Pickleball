@@ -8566,3 +8566,25 @@ before, 7.3 to 9.0 after. The 5 second check 2 / 16 both.
 Unit: 242 files, 4,479 passed, 2 skipped, 0 failed (before the last three integrity additions; 🎾89 files 44 of 44 after). Changed on
 purpose for the new numbers: zip57-plan/day/schedule, zip58-end, zip61-americano/day, zip70-time, zip74-americano7, zip80-tie-time (values
 and scenario times only). Browser: e2e/zip89.cjs 4 of 4 (320/390/420, light and dark, 100/125/150%), e2e/zip88.cjs 9 of 9 (E opens All tests).
+
+### Alex's additions (warm-up, breaks, Dec 1 by headcount)
+- WARM_UP 10 (shared/tournamentPlan.ts planBudget = minutes - 30; minutesUsed counts it). Round 1: "Warm up 5 to 10 min, then play." (night
+  card, both phones; AmFacts / DayFacts warmUp). The pace measures Round 1 from start + 10 (PaceRound.pauseBefore); the Time check's plan
+  starts at start + 10; Americano's "late" flag too.
+- BREAKS: noSit (Americano: everyone on court; Locked doubles: 4 teams on 2 courts), BREAK_MINUTES 5 after every 2nd round, never the last
+  (breaksFor in the plan). Live: shared/smartPacing.ts breakStarts / breakState; the round after a break gets rollCourts `from` (rollCourts now
+  takes `now`, so a break end still to come adds no moment). breakNow on admin and player views (until, serverNow); src/tournament/parts.tsx
+  BreakLeft (the countdown, in the file both sides share so the build's chunks stay as they were). Skip break: POST games { action:
+  'skipBreak' } writes the next round's saved courts at this moment (skipBreakWrite), audit 'tournament_break_skipped'. No offer during a
+  break; the pace never counts it (as taken). A night where someone left has no more breaks. Stage zip89_break "Pacing: 5 min break".
+- Dec 1 (scripts/zip89-plan-table.ts): 8 LD 4 rounds + 1 break 9:05 PM (55 min spare, over 40); 8 AM 5 rounds + 2 breaks 9:30 PM (SHORTER
+  than live's 6 rounds); 9 / 10 / 11 AM and 10 LD 6 rounds 9:40 PM; 12 LD 5 rounds 9:20 PM (40 spare); 12 AM 6 rounds 9:40 PM. At 13 min a
+  game every count ends 9:08 to 9:30 PM (30 to 64 min spare): one bonus offered after Round 1 (7:56 PM) except 12 Locked doubles (groups of 3:
+  never 3 planned rounds left for a best of 3).
+- Now shorter than today (fewer rounds): Americano 8 on 2 courts (2.5 h: 6 -> 5; 3 h: 7 -> 6) and 9 on 1 court for 3 h (10 to 7 -> 9 to 9).
+- Simulations with the warm-up: 12 to 20 min every size 8 to 14 ends 14 to 69 min before the end; 15 and 16 players on 2.5 h at 20 min end
+  3 before to 2 over (every game already at 7, 4 games each needs 9 rounds); at 25 min 12 to 16 Americano and 14 and 16 Locked doubles run
+  2 to 29 over (nothing left to shorten). Fast-then-slow nights end 11 to 21 min before.
+- Tests: unit 242 files, 4,491 passed, 2 skipped, 0 failed. Older tests that score an 8-player night at once wait out the real break
+  (tests/zip58-world.ts games/play, zip72, zip61-day, zip58-end), plan numbers follow (fixture made again). Browser: zip89 5 of 5, zip88 9 of 9.
+  Admin speed: 4 trips / 63 statements, refresh 2 / 16, unchanged (8.0 to 9.5 ms with the suite running).
