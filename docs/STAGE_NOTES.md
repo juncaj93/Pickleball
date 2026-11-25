@@ -8437,3 +8437,7 @@ the card, its week row "6 of 10 locked in", two slim games).
   zip72 7/1, zip82 4/2, zip84-night 1/4; zip32-off crashes on live too. The checks rewritten follow the moves: the tournament page and the Edit
   page to the Players sheet, the Dates sheet and the gear's sheet; Create without prize boxes; Edit awards' prize boxes; Players from the paid
   pill; the organizer's menu without Add to calendar.
+- Final checks before the deploy (after merging 🎾86 round 2; a container restart lost one run, which was run again): unit 237 files, 4,383
+  passed, 2 skipped, 0 failed (🎾86 round 2 folded 9 court-state tests); e2e/zip87.cjs 11 of 11 (A to J and G2); admin speed: dashboard 4
+  trips / 63 statements, the 5 second check 2 / 16, unchanged (none, all_locked, mid, am_round3, zip87_early, zip87_allset; 6.9 to 7.9 ms
+  local). Preview redeployed (6df5f2c9, https://claude-new-session-9215zh.pickleball-club-9h0.pages.dev), calm start "Card: early payments".
