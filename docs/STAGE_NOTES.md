@@ -8456,7 +8456,7 @@ the card, its week row "6 of 10 locked in", two slim games).
   in this session). 🎾88 told it can deploy next.
 
 
-## 🎾88.rolling courts (Tue Nov 24, 2026; built, preview up, NOT live yet: ships after 🎾86 round 2 and 🎾87 are live)
+## 🎾88.rolling courts (Tue Nov 24, 2026; LIVE 11:05 PM Eastern, after 🎾86 round 2 and 🎾87)
 
 ### What changed (the code is the truth; SITE_RULES "Rolling courts and the night card (Zip 88)")
 1. THE RULE (shared/rollingCourts.ts `rollCourts`, pure): when a court frees up, the earliest game still to play whose players are all free and
@@ -8520,6 +8520,21 @@ since 🎾86, older flakes); zip61/zip57/zip58/zip72/zip77/zip82 updated to the 
 ### Preview
 `pickleball-preview` (fake) re-seeded; https://claude-new-session-57sajy.pickleball-club-9h0.pages.dev, calm start zip88_rd3 (Home: the night card
 first, one amber clash card under it).
+
+### Live (Tue Nov 24, 2026, about 11:05 PM Eastern; just after loud hours; no game running; 🎾87 said no deploy of theirs was running)
+- Restore point first (`npm run backup:before-deploy`): export `export-20261125040112` saved in `pickleball-backups` (checked against the file);
+  Time Travel bookmark `00001f63-00000000-0000512e-39f8a4581e6702d256cbd9373ea1ec20`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `f20d094` (🎾87 live) to `0c84954`, pushed; `npm run deploy` (no override): deployment
+  **3b8774c9-8db3-42cd-8dc9-0718a52fafe4** (bundle `index-B-g33M2m.js`). No migration, no Worker or Error box deploy, no live data touched; The
+  Cold Open's settings unchanged.
+- Rollback: deployment **37dfc0be-0210-47f3-871f-43d1ff85aa98** (🎾87), Cloudflare Deployments > Rollback. No database undo needed (the saved
+  courts and Start now rows are written only on a tournament night; old code ignores them).
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only; the custom domain is not reachable from this container): /, /admin, /api/status
+  200; the dashboard 401 without a PIN; Home at 390 light and dark: the new bundle, no page errors, nothing wider than the screen. Organizer
+  screens not opened on live (no read-only PIN in this session).
+- Before the deploy on the merged code: unit 240 files, 4,435 passed, 2 skipped, 0 failed; e2e/zip88.cjs 9 of 9; e2e/zip87.cjs 11 of 11; admin
+  Home 4 trips / 63 statements (6.8 to 7.3 ms), the 5 second check 2 / 16.
 
 ## 🎾89.smart pacing (Wed Nov 25, 2026; built on 🎾88's branch, preview up, NOT live: ships after 🎾88 is live and Alex says OK)
 
