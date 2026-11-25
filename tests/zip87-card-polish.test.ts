@@ -182,7 +182,8 @@ describe('zip 87: Locked doubles 2nd place is paid again, to the cent (money pro
 
 describe('zip 87: both boxes saved before the night; the night pays the box of the style played', () => {
   it('saved on the Prizes sheet (the Edit save): the columns hold the planned box, the money line prices it, Edit keeps the boxes', async () => {
-    const ctx = await world(8);
+    // Zip 89: 2.5 hours asked for (the 8-player world is 2 hours unless asked): the money line prices these courts.
+    const ctx = await world(8, { minutes: 150 });
     // Before the night (Pay by just passed in this world; the night not started).
     const r = await savePrizes(ctx, { doubles: { first: 1400, second: 700 }, americano: { first: 1000, second: 500 } });
     expect(r.status, r.text).toBe(200);
