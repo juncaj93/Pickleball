@@ -7,6 +7,8 @@ import { clock, coldOpen, END_MS, fmtLeft, playNight, span, START_MS, type PaceN
 
 const CASES: { n: number; style: 'vote' | 'americano'; courts: 1 | 2; tag: string }[] = [
   { n: 7, style: 'vote', courts: 1, tag: '7 AM 1c' },
+  // Zip 97: 6 locked in plays Americano at Pay by (AMERICANO_EVEN).
+  { n: 6, style: 'vote', courts: 2, tag: '6 vote' },
   { n: 8, style: 'vote', courts: 2, tag: '8 LD' },
   { n: 9, style: 'vote', courts: 2, tag: '9 AM' },
   { n: 10, style: 'vote', courts: 2, tag: '10 LD' },

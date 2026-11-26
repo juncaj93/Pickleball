@@ -18,16 +18,18 @@
 //              The organizer decides: nothing is ever added by itself. One offer at a time, at most one bonus per scored round (after a
 //              bonus is added, the next offer waits for another round to be fully scored); it goes away when (b) closes and can come back
 //              after a later round while the pace still allows.
-import { BREAK_MINUTES, END_BUFFER, PLAYOFF_TO, ROUND_MINUTES } from './tournamentPlan';
+import { BREAK_MINUTES, END_BUFFER, PLAYOFF_MINUTES, ROUND_MINUTES } from './tournamentPlan';
 
 /** The slowest a round to 11 is ever assumed to be, whatever the measured pace (minutes). */
 export const PACE_FLOOR = 14;
 /** Minutes of court time that must still be free after the night with the bonus in it (the base plan keeps the same). */
 export const BONUS_SPARE = END_BUFFER;
-/** Planned pool / round robin rounds that must still be left to play for an offer. */
+/** Planned pool / round robin rounds that must still be left to play for an offer (Americano; Locked doubles' semifinals and best of 3 need
+ *  more, below). Zip 97 (Alex): Locked doubles' ONE MORE ROUND ROBIN ROUND needs none: it can come after any fully scored pool round until the
+ *  playoffs start (PaceInput.minLeft 0; the server offers it only while no playoff game has started). */
 export const BONUS_MIN_LEFT = 2;
-/** The table's minutes for a round to 11: the pace is told in these. */
-const FULL = ROUND_MINUTES[PLAYOFF_TO];
+/** The table's minutes for a REGULAR round to 11: the pace is told in these (Zip 97: 17; playoff rounds are 20 at the table, PLAYOFF_MINUTES). */
+const FULL = ROUND_MINUTES[11];
 
 /** One round of the night as the pace sees it. */
 export interface PaceRound {
@@ -37,7 +39,8 @@ export interface PaceRound {
   done: boolean;
   /** Minutes after midnight (the night's day) of its last result, once done. */
   doneAt?: number;
-  /** Its table minutes at the length it is played to (shared/tournamentPlan.ts ROUND_MINUTES; 20 when not given). */
+  /** Its table minutes at the length it is played to (shared/tournamentPlan.ts ROUND_MINUTES, a playoff PLAYOFF_MINUTES; a regular round to 11
+   *  when not given). */
   minutes?: number;
   /** The Time check can never shorten it (a playoff round): the offer counts it at the table's time at least, never faster. */
   fixed?: boolean;
@@ -70,6 +73,8 @@ export interface PaceInput {
   lastBonusAt?: number | null;
   /** The bonus adds playoff games, which the Time check never shortens (Locked doubles): it needs more planned rounds left. */
   fixedBonus?: boolean;
+  /** Zip 97: planned pool rounds that must still be left for this offer, in place of the usual rule (Locked doubles' one more round: 0). */
+  minLeft?: number;
   /** Zip 89: a night where nobody sits has a 5 minute break after every 2nd round (the estimate counts the ones still to come). */
   breaks?: boolean;
   /** Zip 89: a break is on now (no offer during a break), and the minutes of it still to run. */
@@ -145,7 +150,7 @@ export function pacing(p: PaceInput): PaceResult {
   // down after a bonus, the shortenable pool rounds left are what brings it back inside the end.
   const firm = Math.max(1, scale);
   const left = list.filter((r) => !r.done).reduce((m, r) => m + tableOf(r) * (r.fixed ? firm : scale), 0);
-  const extra = p.kind ? (p.bonusMinutes ?? BONUS_ROUNDS[p.kind] * FULL) * firm : 0;
+  const extra = p.kind ? (p.bonusMinutes ?? BONUS_ROUNDS[p.kind] * (p.kind === 'round' ? FULL : PLAYOFF_MINUTES)) * firm : 0;
   // The round being played counts as at most half done: the clock starts at the last full round's end, or half a round ago if later.
   const from = Math.max(lastAt, p.nowMin - pace / 2);
   // Zip 89: breaks still to come (after every 2nd round, never after the last, the bonus counted), and the one on now.
@@ -157,7 +162,7 @@ export function pacing(p: PaceInput): PaceResult {
   const open = !!p.kind && fresh && !p.onBreak && p.started && !p.over && !p.paused && !p.behind && !p.leftOpen;
   // A bonus that adds games the Time check can never shorten (Locked doubles' playoff games) needs that many more planned pool rounds still to
   // play, so a night that slows down afterwards still has pool games to shorten (review): semifinals 2, a best of 3 Final 3.
-  const need = Math.max(BONUS_MIN_LEFT, p.fixedBonus ? BONUS_ROUNDS[p.kind!] + 1 : 0);
+  const need = p.minLeft ?? Math.max(BONUS_MIN_LEFT, p.fixedBonus ? BONUS_ROUNDS[p.kind!] + 1 : 0);
   const ok = open && plannedLeft >= need && finishWithBonus <= p.endMin - BONUS_SPARE;
   return { done, pace, finishWithBonus, plannedLeft, offer: ok ? { kind: p.kind!, key: `${p.kind}:${done}:${list.length}` } : null };
 }

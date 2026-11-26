@@ -811,8 +811,9 @@ export async function americanoGamesAction(ctx: Ctx, body: Record<string, unknow
     const from = Number(body.fromRound);
     const to = Number(body.to);
     if (!Number.isInteger(from) || from < 1 || (to !== 9 && to !== 7)) throw new HttpError(400, 'invalid_apply', 'Pick a round and 9 or 7.');
-    // The last round is never shortened, unless the night has bonus rounds (Zip 89: then every round may be).
-    const last = Math.max(...am.map((g) => g.round)) + (before.rounds > before.plannedRounds ? 1 : 0);
+    // The last round is never shortened, unless the night has bonus rounds (Zip 89: then every round may be), or (Zip 97) the Time check's
+    // suggestion right now is its last resort (nothing else left to shorten, or games to 7 still run past the booked end).
+    const last = Math.max(...am.map((g) => g.round)) + (before.rounds > before.plannedRounds || before.check?.suggest?.last ? 1 : 0);
     // Zip 92: a game already on a court keeps its length (never shortened mid-game).
     const onCourt = before.games.filter((g) => g.started && !decided(g)).map((g) => g.num);
     const res = await ctx.db

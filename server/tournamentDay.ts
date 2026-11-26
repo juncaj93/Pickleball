@@ -33,7 +33,7 @@ import {
   shortAlertOf,
 } from '../shared/tournament';
 import { firstAnswer, saidTeamScore, saidWon } from '../shared/partnerTaps';
-import { about, BREAK_MINUTES, clockLabel, doublesNoSit, doublesStructure, type GameTo, nightPlan, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES, WARM_UP } from '../shared/tournamentPlan';
+import { about, BREAK_MINUTES, clockLabel, doublesNoSit, doublesStructure, type GameTo, nightPlan, PLAYOFF_MINUTES, PLAYOFF_TO, ROUND_MINUTES, TIE_MINUTES, WARM_UP } from '../shared/tournamentPlan';
 import { BONUS_ROUNDS, type BonusKind, breakStarts, breakState, livePace, paceForCheck, pacing, type PaceResult, type PaceRound } from '../shared/smartPacing';
 import {
   draftNote,
@@ -513,13 +513,16 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
   // ROBIN ROUND, the offer when the semifinals and the best of 3 are already in the night (the plan's or an earlier offer's) or cannot be
   // offered now (a best of 3 needs 3 planned rounds left; it costs two games). Round robin nights only (4 or 5 teams); none while a team is out.
   const canBonus = !!series.nums.length && !gone.size && plan.fits;
+  // Zip 97: a playoff game has started (on a court, or anything happened to it): no more round robin rounds can go before the playoffs.
+  const playoffStarted = games.some((g) => g.stage !== 'pool' && (startedNums.has(g.num) || g.winner !== null || g.claim !== null || !!g.skipped || (g.claim_at ?? '').startsWith('on:')));
   const kinds: BonusKind[] = !canBonus
     ? []
     : [
         ...(shape.shape === 'rr' && shape.courtsUsed === 2 && !semisIn ? (['semis'] as const) : []),
         ...(!series.bestOf3 ? (['bestOf3'] as const) : []),
-        // (Review: not on 1 court, where a "round" is one game and would leave two teams a game ahead.)
-        ...(shape.shape === 'rr' && shape.courtsUsed === 2 && !games.some((g) => g.stage === 'tie') ? (['round'] as const) : []),
+        // (Review: not on 1 court, where a "round" is one game and would leave two teams a game ahead.) Zip 97: until the playoffs start (no
+        // playoff game on a court, scored or skipped: writePoolRound's own guard), a pool round fully scored before it.
+        ...(shape.shape === 'rr' && shape.courtsUsed === 2 && !games.some((g) => g.stage === 'tie') && !playoffStarted ? (['round'] as const) : []),
       ];
   const startMin = t.final_date ? minuteOf(t, tz, nightStartMs(t, tz)) : real.start;
   // Zip 89: Round 1 is measured from the start + the warm-up; a round after a break from the break's end (the pace never counts either).
@@ -529,7 +532,7 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
     planned: r.pool && r.round <= shape.poolRounds,
     done: r.done,
     doneAt: r.doneAt,
-    minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : ROUND_MINUTES[PLAYOFF_TO],
+    minutes: r.pool ? (ROUND_MINUTES[r.playTo] ?? TIE_MINUTES) : PLAYOFF_MINUTES,
     ...(r.pool ? {} : { fixed: true }),
     ...(r.round === 1 ? { pauseBefore: WARM_UP } : r.gap ? { pauseBefore: r.gap } : {}),
   }));
@@ -554,7 +557,10 @@ function facts(t: TournamentRow, teams: TeamRow[], all: GameRow[], tz: string, n
       fixedBonus: kind !== 'round',
       breaks: noSit,
       onBreak: brk.now ? Math.max(0.1, (brk.now.until - nowMs) / 60_000) : 0,
-      bonusMinutes: kind === 'round' ? ROUND_MINUTES[poolTo] : kind ? BONUS_ROUNDS[kind] * ROUND_MINUTES[PLAYOFF_TO] : 0,
+      bonusMinutes: kind === 'round' ? ROUND_MINUTES[poolTo] : kind ? BONUS_ROUNDS[kind] * PLAYOFF_MINUTES : 0,
+      // Zip 97 (Alex): one more round robin round can come after ANY fully scored pool round, right up until the playoffs start (the last
+      // planned pool round included); `kinds` holds it only while no playoff game has started.
+      ...(kind === 'round' ? { minLeft: 0 } : {}),
       started,
       over,
       paused: !!t.paused_at,
@@ -1080,7 +1086,7 @@ export function playerDayView(
       at = Math.max(at, f.tiesEnd.get(round) ?? -Infinity);
       if (list.some((g) => g.stage === 'semi') && semiAt === null) semiAt = at;
       if (list.some((g) => g.stage === 'final') && finalAt === null) finalAt = at;
-      at += list.every((g) => g.stage === 'pool') ? ROUND_MINUTES[Math.max(...list.map((g) => g.play_to)) as GameTo] : ROUND_MINUTES[PLAYOFF_TO];
+      at += list.every((g) => g.stage === 'pool') ? ROUND_MINUTES[Math.max(...list.map((g) => g.play_to)) as GameTo] : PLAYOFF_MINUTES;
     }
     night.push({ label: `Group play · ${poolRounds} rounds`, time: clockLabel(real.start) });
     if (semiAt !== null) night.push({ label: 'Semifinals', time: clockLabel(about(semiAt)) });

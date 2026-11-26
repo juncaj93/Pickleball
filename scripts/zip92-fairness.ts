@@ -1,4 +1,4 @@
-// Zip 92: THE FAIRNESS TABLE (shared/tournamentFairness.ts) for 8 to 16 players, 1 and 2 courts, 2 / 2.5 / 3 hours, both styles.
+// Zip 92: THE FAIRNESS TABLE (shared/tournamentFairness.ts) for 6 (Zip 97) to 16 players, 1 and 2 courts, 2 / 2.5 / 3 hours, both styles.
 //   npx vite-node scripts/zip92-fairness.ts            every row
 //   npx vite-node scripts/zip92-fairness.ts -- fails   only the rows that fail
 import { fairnessOf } from '../shared/tournamentFairness';
@@ -6,7 +6,7 @@ import { fairnessOf } from '../shared/tournamentFairness';
 const onlyFails = process.argv.includes('fails');
 console.log('players  style      courts hours  regular (min-max)  playoff  rounds  last-from  fits  result');
 for (const style of ['doubles', 'americano'] as const)
-  for (let n = 8; n <= 16; n++) {
+  for (let n = 6; n <= 16; n++) {
     if (style === 'doubles' && n % 2 === 1) continue;
     for (const courts of [2, 1])
       for (const minutes of [120, 150, 180]) {

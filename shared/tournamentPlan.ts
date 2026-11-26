@@ -11,8 +11,13 @@
  * One round, changeover included, by the points a game is played to (the table's RULES). Zip 89 (Alex, Nov 24: his group played 9 games to 11 in
  * 2 hours, about 13 minutes a game; rec doubles to 11 runs 18 to 25): an honest 20 minutes a round to 11 (was 23), 16 to 9 (was 19), 13 to 7
  * (was 16). A night that runs faster gets bonus rounds early (shared/smartPacing.ts), never a surprise round at the end.
+ * Zip 97 (Alex, Nov 26: "real pace"; his group plays about 13 minutes a game to 11 on regular nights): REGULAR games (pool / round robin rounds,
+ * Americano rounds) 17 to 11 (was 20), 14 to 9 (was 16), 11 to 7 (was 13). Playoff games keep PLAYOFF_MINUTES (20), never shortened.
  */
-export const ROUND_MINUTES = { 11: 20, 9: 16, 7: 13 } as const;
+export const ROUND_MINUTES = { 11: 17, 9: 14, 7: 11 } as const;
+/** Zip 97: one PLAYOFF game or round (semifinals, the Final, 3rd place, a best of 3's games), always to 11: still planned at 20 minutes (a playoff
+ *  game is closer and the night's last; the Time check never shortens it). */
+export const PLAYOFF_MINUTES = 20;
 export type GameTo = keyof typeof ROUND_MINUTES;
 /** Longest first: the plan uses the longest game that fits. */
 export const GAME_LENGTHS: readonly GameTo[] = [11, 9, 7];
@@ -32,7 +37,7 @@ export const PLAYOFF_TO: GameTo = 11;
 /**
  * Zip 80: minutes one tie game takes (Game A or Game B, played to 5; the wheel's games). ROUND_MINUTES's step from 9 to 7 carried down to 5 (Zip
  * 89: 13 at 7, 16 at 9, so 10 at 5; it was 13 with the old table). A tie is not in the plan made before the night (nobody knows there will be
- * one); once its games exist the Time check and the night's times count them.
+ * one); once its games exist the Time check and the night's times count them. Zip 97: with 17 / 14 / 11, 8 minutes.
  */
 export const TIE_MINUTES = ROUND_MINUTES[7] - (ROUND_MINUTES[9] - ROUND_MINUTES[7]);
 /** Americano: every player gets at least this many games. */
@@ -117,7 +122,7 @@ export interface NightPlan {
 }
 
 /** Minutes for rounds at a length plus playoff rounds to 11. */
-const used = (short: number, len: GameTo, playoff: number) => short * ROUND_MINUTES[len] + playoff * ROUND_MINUTES[PLAYOFF_TO];
+const used = (short: number, len: GameTo, playoff: number) => short * ROUND_MINUTES[len] + playoff * PLAYOFF_MINUTES;
 
 /** Zip 89: a Locked doubles night where every team plays every round: 4 teams on 2 courts (2 games a round, all 4 teams on court). */
 export const doublesNoSit = (s: DoublesStructure): boolean => s.shape === 'rr' && s.courtsUsed === 2 && s.teams === 4;

@@ -18,7 +18,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip94_three', 'zip94_last', 'zip94_over', 'zip94_mixed'];
+const THIS_ZIP: readonly string[] = ['zip97_ld_fast', 'zip97_six'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -39,6 +39,17 @@ const EARLY_LOOK: NightModel = {
 };
 
 const STAGES = [
+  // Zip 97 (🎾97.real pace): regular games planned at 17 minutes, the extra round robin round until the playoffs, 6 players play Americano.
+  {
+    stage: 'zip97_ld_fast',
+    label: '97: 8 Locked doubles, fast night, bonus until playoffs',
+    line: '4 teams tonight on 2.5 hours (semifinals in the plan). Rounds 1 and 2 took about 13 minutes each; Round 3, the last planned round, is on the courts. The night card: “Ahead of time”, Add a round asks “Add a round? Are you sure?”. Yes adds RD4 (Round 1’s games again) before SEMIS. Before this zip no offer came this late.',
+  },
+  {
+    stage: 'zip97_six',
+    label: '97: 6 players switch to Americano',
+    line: 'The Cold Open, 6 locked in, Pay by an hour ago, Locked doubles by vote. Your Home: the amber card “The Cold Open switched to Americano (6 players).” / “6 locked in. 6 players play Americano.” (the Telegram alert says the same). View as Parker: “Tournament style is now Americano.” on the date card.',
+  },
   // Zip 94 (🎾94.early bird): The Cold Open as an early bird night: $20 ticket, $18 early price, Early bird pricing on. View as Vic for the card.
   {
     stage: 'zip94_three',

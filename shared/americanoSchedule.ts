@@ -468,10 +468,29 @@ export function fairEnd(n: number, onCourt: number, rounds: readonly SeatRound[]
       .sort((a, b) => t.sits[a] - t.sits[b] || a - b)
       .slice(0, n - onCourt)
       .sort((a, b) => a - b);
-    if (sit.length === n - onCourt) {
-      const next = [...list.slice(0, R - 1), nextRound(t, onCourt, seeded(n * 1000 + R), 2, sit)];
+    const tryRemake = (who: readonly number[], seed: number): SeatRound[] | null => {
+      const next = [...list.slice(0, R - 1), nextRound(t, onCourt, seeded(seed), 2, who)];
       const sits = tallyOf(n, next).sits;
-      if (endsFair(n, onCourt, next) && Math.max(...sits) - Math.min(...sits) <= 1) return next;
+      return endsFair(n, onCourt, next) && Math.max(...sits) - Math.min(...sits) <= 1 ? next : null;
+    };
+    if (sit.length === n - onCourt) {
+      const first = tryRemake(sit, n * 1000 + R);
+      if (first) return first;
+      // Zip 97 (the faster pace gives 7 players an 8th round at 3 hours): when that one breaks a rule, every other choice of sitters from the
+      // round before's players (the least-sat first), a few seeds each, the first that keeps every rule. Deterministic.
+      const pool = [...Array(n).keys()].filter((x) => !list[R - 2].sit.includes(x)).sort((a, b) => t.sits[a] - t.sits[b] || a - b);
+      const k = n - onCourt;
+      const sets: number[][] = [];
+      const pick = (from: number, cur: number[]) => {
+        if (cur.length === k) return void sets.push([...cur].sort((a, b) => a - b));
+        for (let i = from; i < pool.length && sets.length < 64; i++) pick(i + 1, [...cur, pool[i]]);
+      };
+      pick(0, []);
+      for (const who of sets)
+        for (let s = 0; s < 8; s++) {
+          const next = tryRemake(who, n * 1000 + R + 1 + s);
+          if (next) return next;
+        }
     }
   }
   return list;

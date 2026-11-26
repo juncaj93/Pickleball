@@ -240,9 +240,10 @@ export function formatAlertWords(name: string, dayKeyOfDate: string, format: Tou
  * give or take 1, at least 3 in Locked doubles, and nobody's night ends early). Every odd count plays Americano (Locked doubles needs teams of
  * two), and so do 12 and 14: their Locked doubles nights are pools with a group of three (2 regular games for those teams, whatever the court
  * time). 8, 10 and 16 keep the style picked. Used where tickets close (the switch, its guards, the money and fit lines before close); nightPlan
- * stays the plain shape a count of teams can play.
+ * stays the plain shape a count of teams can play. Zip 97 (Alex): 6 too (3 teams get 2 regular games each, under the rule's 3), switched
+ * exactly like 12 and 14.
  */
-export const AMERICANO_EVEN: readonly number[] = [12, 14];
+export const AMERICANO_EVEN: readonly number[] = [6, 12, 14];
 export const playsAmericano = (players: number): boolean => players % 2 === 1 || AMERICANO_EVEN.includes(players);
 /** The style was switched to Americano for an odd number locked in. */
 export const isOddSource = (v: string | null | undefined): boolean => typeof v === 'string' && v.startsWith('odd:');
@@ -299,8 +300,9 @@ const plan = (courts: number, minutes: number, start: number, note: string, best
  */
 export const PLANS: Record<Size, readonly Plan[]> = {
   6: [
-    plan(1, 150, 19 * 60 + 30, 'Every team plays twice, then the top 2 play the final. With 3 teams, someone always plays back to back.', true),
-    plan(1, 120, 20 * 60, 'Tighter, no room for a tie.'),
+    // Zip 97: 6 players play Americano (AMERICANO_EVEN), 4 on the court each round.
+    plan(1, 150, 19 * 60 + 30, 'Americano: 4 play each round and 2 sit, new partners every round. Everyone plays 4 or more games.', true),
+    plan(1, 120, 20 * 60, 'Tighter: Americano games to 9.'),
   ],
   8: [
     plan(2, 120, 19 * 60 + 30, 'Everyone plays every round. Room to run over, then awards.', true),

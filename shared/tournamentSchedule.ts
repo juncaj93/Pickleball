@@ -8,7 +8,7 @@
 //   resolveGames   who is in each playoff game once the pool games are done
 //   timeCheck      is the night running late, and from which round shorter games finish it on time
 // The structure (how many rounds, which courts) is shared/tournamentPlan.ts's doublesStructure, the game plan table.
-import { doublesStructure, END_BUFFER, type GameTo, PLAYOFF_TO, ROUND_MINUTES } from './tournamentPlan';
+import { doublesStructure, END_BUFFER, type GameTo, PLAYOFF_MINUTES, ROUND_MINUTES } from './tournamentPlan';
 import { groupName } from './scores';
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -720,10 +720,11 @@ export interface TimeCheck {
   finish: number;
   /** Shorter games are suggested from this round, to this length (null: none needed, or nothing left to shorten). `stillOver`: Zip 92, the
    *  minutes the night still runs past the BOOKED end with them (not past the 20 minute aim before it); 0 when it ends by the booked end. */
-  suggest: { fromRound: number; to: GameTo; stillOver: number } | null;
+  suggest: { fromRound: number; to: GameTo; stillOver: number; last?: true } | null;
 }
 
-const lenOf = (r: RoundState, to?: GameTo) => (r.pool ? ROUND_MINUTES[to ?? r.playTo] : ROUND_MINUTES[PLAYOFF_TO]);
+// Zip 97: a pool round at its length (17 / 14 / 11), a playoff round PLAYOFF_MINUTES (20).
+const lenOf = (r: RoundState, to?: GameTo) => (r.pool ? ROUND_MINUTES[to ?? r.playTo] : PLAYOFF_MINUTES);
 
 /**
  * Smart timing. Each round is planned back to back from the start; a round that finished late pushes the rest. The current round ends at its
@@ -736,7 +737,8 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   // Zip 89: a night with a bonus round in it was judged by its measured pace when the bonus was added, so from then on the rounds still to play
   // count at that pace (minutes for a round to 11, scaled to the round's length), and a round starts when the one before it ended (not at a
   // planned time). Without `pace` (no bonus), everything is exactly as before.
-  const len = pace === undefined ? lenOf : (r: RoundState, to?: GameTo) => (lenOf(r, to) * pace) / ROUND_MINUTES[PLAYOFF_TO];
+  // Zip 97: the pace is minutes for a REGULAR round to 11 (17 at the table).
+  const len = pace === undefined ? lenOf : (r: RoundState, to?: GameTo) => (lenOf(r, to) * pace) / ROUND_MINUTES[11];
   const cur = list.find((r) => !r.done) ?? null;
   // Planned (as the plan stands now) back to back from the start.
   const planned = new Map<number, { start: number; end: number }>();
@@ -759,7 +761,8 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   const after = list.filter((r) => r.round > cur.round);
   // Rounds that can still change: the ones after this one, and this one while none of its games has a result. Never the playoffs. Zip 92:
   // never a round with a game already on a court (rolling courts start a round the moment a court frees up).
-  const open = [...(cur.pool && !cur.anyResult && !cur.onCourt && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.onCourt && !r.keep)];
+  // Zip 97: a kept round (Americano's last) joins only as the last resort, below.
+  let open = [...(cur.pool && !cur.anyResult && !cur.onCourt && !cur.keep ? [cur] : []), ...after.filter((r) => !r.anyResult && !r.onCourt && !r.keep)];
   /** When the night ends if pool rounds from `from` on (that can still change) are played to `to`. */
   const ending = (to?: GameTo, from?: number) => {
     const lenAt = (r: RoundState) => len(r, to !== undefined && from !== undefined && r.pool && r.round >= from && open.includes(r) ? minLen(r.playTo, to) : undefined);
@@ -770,20 +773,33 @@ export function timeCheck(rounds: readonly RoundState[], startMin: number, endMi
   const behind = Math.max(0, Math.round(finish - plannedFinish));
   const limit = endMin - END_BUFFER;
   if (finish <= limit) return { current: cur.round, behind, finish, suggest: null };
-  const pools = open.filter((r) => r.pool);
-  for (const to of [9, 7] as GameTo[]) {
-    // The latest round from which this length is enough.
-    for (let i = pools.length - 1; i >= 0; i--) {
-      if (ending(to, pools[i].round) <= limit && pools.slice(i).some((r) => r.playTo > to)) return { current: cur.round, behind, finish, suggest: { fromRound: pools[i].round, to, stillOver: 0 } };
+  const suggest = (): TimeCheck['suggest'] => {
+    const pools = open.filter((r) => r.pool);
+    for (const to of [9, 7] as GameTo[]) {
+      // The latest round from which this length is enough.
+      for (let i = pools.length - 1; i >= 0; i--) {
+        if (ending(to, pools[i].round) <= limit && pools.slice(i).some((r) => r.playTo > to)) return { fromRound: pools[i].round, to, stillOver: 0 };
+      }
     }
+    const first = pools.find((r) => r.playTo > 7);
+    // Zip 80: when the playoffs wait for tie games anyway, shorter pool games may save nothing: then there is nothing to suggest. (Only with a
+    // tie: without one, shorter games always save time, and the suggestion is exactly as before.)
+    const tieAhead = [cur, ...after].some((r) => r.tiesEnd !== undefined);
+    if (!first || (tieAhead && ending(7, first.round) >= finish)) return null;
+    // Zip 92: "still runs past 10 PM" only when it really runs past the booked end (not past the 9:40 aim).
+    return { fromRound: first.round, to: 7, stillOver: Math.max(0, Math.round(ending(7, first.round) - endMin)) };
+  };
+  let out = suggest();
+  // Zip 97 (the 17 minute table plans Americano one round more, so a night far slower than planned has less slack): THE LAST RESORT. When every
+  // round that may change is already as short as it goes (nothing to suggest) or even games to 7 still run past the booked end, the kept round
+  // (Americano's last) may be shortened too, as on a night with a bonus round (Zip 89). A night with slack never gets here: as before.
+  const kept = [...(cur.pool && !cur.anyResult && !cur.onCourt && cur.keep ? [cur] : []), ...after.filter((r) => r.keep && !r.anyResult && !r.onCourt)];
+  if (kept.length && (!out || out.stillOver > 0)) {
+    open = [...open, ...kept].sort((a, b) => a.round - b.round);
+    const last = suggest();
+    if (last && (!out || last.stillOver < out.stillOver)) out = { ...last, last: true };
   }
-  const first = pools.find((r) => r.playTo > 7);
-  // Zip 80: when the playoffs wait for tie games anyway, shorter pool games may save nothing: then there is nothing to suggest. (Only with a
-  // tie: without one, shorter games always save time, and the suggestion is exactly as before.)
-  const tieAhead = [cur, ...after].some((r) => r.tiesEnd !== undefined);
-  if (!first || (tieAhead && ending(7, first.round) >= finish)) return { current: cur.round, behind, finish, suggest: null };
-  // Zip 92: "still runs past 10 PM" only when it really runs past the booked end (not past the 9:40 aim).
-  return { current: cur.round, behind, finish, suggest: { fromRound: first.round, to: 7, stillOver: Math.max(0, Math.round(ending(7, first.round) - endMin)) } };
+  return { current: cur.round, behind, finish, suggest: out };
 }
 const minLen = (a: GameTo, b: GameTo): GameTo => (a < b ? a : b);
 
