@@ -8814,3 +8814,14 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
 - Main `754c2cd` to `96045b6`; `npm run deploy -- --override-loud-hours`: deployment **fc5e5867-6c49-4182-81cf-32e84542706d** (bundle
   `index-0cXvXhMl.js`). Rollback: **dbd47477-6983-4f18-b225-243430f6489e** (🎾92 round 1). No migration, no live data touched.
 - Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: no errors, nothing wider, no writes.
+
+### Round 3 live: the Players row fix (Thu Nov 26, 2026, about 9:30 AM Eastern; Alex's OK; tonight's game canceled for Thanksgiving)
+- The full 90-script run after round 2: 87 green, 3 red. zip13 caught round 2's Players row wrap at every width (53 px rows): now the chips go
+  under the name only on a list narrower than 17 em (src/players-redo.css, a pr-list container). banner and audit-player-flows: test timing
+  only (they wait for the drop's own banner). Each rerun alone: zip13 39/39, zip18 103/103, banner 11/11, audit-player-flows 94/94,
+  layout-polish 200/200. So all 90 are green. Known item left as is (Alex): the "You're in" banner sometimes redraws about 150 ms after the tap.
+- Restore point: export `export-20261126142654`; Time Travel bookmark `0000210c-00000000-0000512f-d4a6684db64e29fa433f6e60038ecf22`.
+  Integrity before and after: 22, 8, 14 columns, every problem column 0.
+- Main to `676e2d5`; `npm run deploy -- --override-loud-hours`: deployment **bd2e5dc4-5c65-4b0b-8eae-47be39b6be4e** (bundle
+  `index-BCw-MEQw.js`). Rollback: **fc5e5867-6c49-4182-81cf-32e84542706d**. Read-only live look: /, /admin, /api/status 200; dashboard 401;
+  Home 390 light and dark: no errors, nothing wider, no writes.
