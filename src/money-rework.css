@@ -675,6 +675,9 @@
   min-width: 0;
   color: var(--ink-2);
   font-size: 0.7rem;
+  /* Zip 92 (money-rework): "$30 + $129 (22 courts)" wraps between words inside its box when the row cannot hold it (360 and 390 px with
+     22 courts) instead of running toward the total. */
+  white-space: normal;
 }
 .mrw-yours-total {
   margin-left: auto;
@@ -712,9 +715,6 @@
   }
   .mrw-yours-eq {
     font-size: max(11px, 0.64rem);
-    /* Zip 92 (money-rework): on the narrowest phones "$30 + $129 (22 courts)" wraps between words inside its box instead of running toward
-       the total (at 390 px and wider it stays one line, as before). */
-    white-space: normal;
   }
   .mrw-yours-total {
     font-size: 1.3rem;

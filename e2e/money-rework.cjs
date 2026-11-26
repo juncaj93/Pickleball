@@ -557,7 +557,7 @@ async function main() {
     await ctx.close();
   });
 
-  await check('4 5 Totals: two cards, big amber total, three columns, footers one line at 390 (they may wrap at 360, never cut), numbers equal the server', async () => {
+  await check('4 5 Totals: two cards, big amber total, three columns, footers may wrap onto a second line, never cut, numbers equal the server', async () => {
     for (const width of [360, 390]) {
       const { ctx, page } = await openAdmin({ width });
       await money(page);
@@ -586,9 +586,9 @@ async function main() {
       assert(dom.titleSize > dom.labelSize, `card titles (${dom.titleSize}px) are larger than column labels (${dom.labelSize}px)`);
       const [r, g, b] = dom.bigColor.match(/\d+/g).map(Number);
       assert(r > b && g > b, `big total is amber: ${dom.bigColor}`);
-      // Zip 92 (Alex: wrap or shrink, never cut): the cost footer's "$30 + $129 (22 courts)" may wrap onto a second line at 360 px (it ran past its
-      // box before); every other line stays one line, and nothing is cut.
-      const two = (l) => /mrw-yours/.test(l.c) && width < 390;
+      // Zip 92 (Alex: wrap or shrink, never cut): the cost footer's "$30 + $129 (22 courts)" may wrap onto a second line when the row cannot
+      // hold it at the 11 px floor (it ran past its box at 360 and 390 before); every other line stays one line, and nothing is cut.
+      const two = (l) => /mrw-yours/.test(l.c);
       for (const l of dom.lines) assert(l.h <= Math.ceil(l.fs * 1.9) * (two(l) ? 2 : 1) + 14 && !l.over, `${l.c} wraps or is cut off at ${width}: ${l.h}px tall (${l.sw} in ${l.cw}: "${l.text}" in the ${l.rowW} px row "${l.row}")`);
       await noOverflow(page, `totals ${width}`);
       await shot(page, `totals-${width}`);
