@@ -11,7 +11,7 @@
  *   C   Edit awards: the Banner stays up buttons never overlap and are never cut (they wrap to a second line instead); 320/375/420/440,
  *       100/125/150%, light and dark.
  *   D   Standings: no name breaks mid-word (the End card's list, the players' Standings cards, the final board), every width and text size.
- *   E   "Credit adjusted by ...": the player's line never breaks mid-word (Home, every width and text size).
+ *   E   "adjusted by organizer": the player's credit sheet lines never break mid-word (every width and text size).
  *   F   History > Skills: dates read "AUG" (month in caps), or "AUG 3" when one list has two in the same month.
  * Screenshots: .data/zip93-shots (not in git).
  */
@@ -112,6 +112,31 @@ const measureMap = (page) =>
     return { cells: out, stolen, xOk, clearOk };
   });
 
+/** The largest colour difference between two same-size screenshots (0 to 255). The tilted plane's edges can differ by 1 step between two
+ *  draws (anti-aliasing of the 3D layer), which no eye sees; a visible change is far more. */
+const pixelDiff = (page, a, b) =>
+  page.evaluate(
+    async ([x, y]) => {
+      const load = async (b64) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0);
+        return g.getImageData(0, 0, c.width, c.height).data;
+      };
+      const [p, q] = [await load(x), await load(y)];
+      if (p.length !== q.length) return 255;
+      let max = 0;
+      for (let i = 0; i < p.length; i++) max = Math.max(max, Math.abs(p[i] - q[i]));
+      return max;
+    },
+    [a.toString('base64'), b.toString('base64')],
+  );
+
 (async () => {
   mkdirSync(SHOTS, { recursive: true });
   const port = Number(process.env.E2E_PORT) || 5493;
@@ -146,7 +171,8 @@ const measureMap = (page) =>
               const off = await page.addStyleTag({ content: '.cm-pick button.cm-cl::before { display: none !important; }' });
               await page.waitForTimeout(150);
               const after = await dlg.screenshot();
-              if (!before.equals(after)) bad.push(`${scheme} ${width}: the map looks different with the tap areas`);
+              const diff = before.equals(after) ? 0 : await pixelDiff(page, before, after);
+              if (diff > 2) bad.push(`${scheme} ${width}: the map looks different with the tap areas (up to ${diff} colour steps)`);
               await off.evaluate((el) => el.remove());
               if (width === 375) await dlg.screenshot({ path: path.join(SHOTS, `A-map-${scheme}.png`) });
             }
@@ -220,13 +246,9 @@ const measureMap = (page) =>
       const day = await notice('zip93_game_day');
       assert(day.length === 0, `game day: ${JSON.stringify(day)}`);
       // The Tournament test page lists only this zip's two stages above All tests.
-      const { page, ctx } = await b.adminHome({ width: 390 });
-      await page.goto(`${b.BASE}/admin?tab=settings`);
-      await page.waitForTimeout(800);
-      const res = await page.evaluate(async () => (await fetch('/src/pages/admin/TournamentTest.tsx')).text());
+      const res = require('node:fs').readFileSync(path.join(ROOT, 'src/pages/admin/TournamentTest.tsx'), 'utf8');
       assert(/THIS_ZIP: readonly string\[\] = \['zip93_day_before', 'zip93_game_day'\]/.test(res), 'THIS_ZIP is the two Zip 93 stages');
       assert(res.includes("label: '93: scheduled notice, day before'") && res.includes("label: '93: scheduled notice, game day'"), 'the two labels');
-      await ctx.close();
     });
 
     await check('C Edit awards: the Banner stays up buttons never overlap or cut (every width, 100/125/150%, light and dark)', async () => {
@@ -301,26 +323,27 @@ const measureMap = (page) =>
       assert(!bad.length, bad.slice(0, 12).join('\n        '));
     });
 
-    await check('E "Credit adjusted by ..." never breaks mid-word (player Home, every width, 100/125/150%)', async () => {
+    await check('E "adjusted by" never breaks mid-word (the credit sheet, every width, 100/125/150%)', async () => {
       await b.stage('none');
       await b.call('PUT', '/api/admin/adjust-credit-switch', { on: true });
       const d = await b.call('GET', '/api/admin/dashboard');
       const who = d.players.find((p) => p.name === 'Christopher Vanderberg');
-      const led = (d.creditLedger || []).find((l) => l.playerId === who.id);
-      await b.call('POST', `/api/admin/players/${who.id}/credit-adjust`, { direction: 'add', cents: 500, reason: 'Zip 93 check', seen: led ? led.balanceCents - (led.reservedCents || 0) : 0 }).catch(async () => {
-        // The pot the server compares is the usable credit; read it from the error-free path once more.
-        const again = (await b.call('GET', '/api/admin/dashboard')).creditLedger.find((l) => l.playerId === who.id);
-        await b.call('POST', `/api/admin/players/${who.id}/credit-adjust`, { direction: 'add', cents: 500, reason: 'Zip 93 check', seen: again ? again.balanceCents : 0 });
-      });
+      // The fake world gives him no credit after 'none', so the server's own check reads $0.
+      await b.call('POST', `/api/admin/players/${who.id}/credit-adjust`, { direction: 'add', cents: 500, reason: 'Zip 93 check', seen: 0 });
       const bad = [];
       let seen = 0;
       for (const width of WIDTHS)
         for (const pct of SIZES) {
-          const { page, ctx, errors } = await b.playerPage('Christopher Vanderberg', { width });
+          const { page, ctx, errors } = await b.pickedPage('Christopher Vanderberg', { width });
           if (pct !== 100) await zoom(page, pct);
           await page.waitForTimeout(300);
-          seen += await page.locator('[data-adjust-note]').count();
-          const found = await broken(page, '[data-adjust-note], [data-adjust-note] *');
+          // The credit sheet (the credit chip): "Credit adjusted by Alex: +$5" and the list's "+$5 adjusted by organizer".
+          await page.locator('[data-credit-chip]').first().click();
+          await page.locator('[data-credit-history]').first().waitFor({ timeout: 8000 });
+          await page.waitForTimeout(300);
+          seen += await page.locator('[data-adjust-note], [data-credit-history] li').filter({ hasText: /adjusted/i }).count();
+          if (width === 375 && pct === 100) await page.screenshot({ path: path.join(SHOTS, 'E-sheet-375.png') });
+          const found = await broken(page, '[data-adjust-note], [data-adjust-note] *, [data-credit-history] li, [data-credit-history] li *');
           if (found.length) bad.push(`${width} ${pct}%: ${found.join(' | ')}`);
           if (width === 320 && pct === 150) await page.screenshot({ path: path.join(SHOTS, 'E-adjusted-320-150.png') });
           assert(!errors.length, errors.join('; '));
