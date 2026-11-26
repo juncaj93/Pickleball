@@ -126,6 +126,8 @@ export interface Env {
   GUEST_SPOT_PREVIEW?: string;
   /** Zip 55 "Tournaments" (shared/tournament.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?tournaments=on. */
   TOURNAMENTS?: string;
+  /** Zip 94 "Early bird pricing": kill switch only (no wrangler.toml line, Zip 45: missing = allowed; "off" forbids it). */
+  EARLY_BIRD?: string;
   /** Zip 34 "Check-in pay line" (shared/checkInPay.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?checkinpay=on. Words only. */
   CHECKIN_PAY_LINE?: string;
   /** Zip 30 "Acting for others" (shared/actingForOthers.ts): the kill switch, allowed unless "off" ("off" also stops recording phone codes). Who sees it: Settings > Feature switches, /admin?actingothers=on. Organizer only, look only. */

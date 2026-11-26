@@ -708,6 +708,8 @@ export interface AdminDashboard {
   champions?: true;
   /** Zip 55: the Settings > Feature switches row is on (for everyone). Missing: off. */
   tournamentsForAll?: true;
+  /** Zip 94: Settings > Feature switches > Early bird pricing is on for everyone (server/earlyBird.ts). */
+  earlyBirdForAll?: true;
   /** Zip 55, PREVIEW ONLY: this is a preview where the Tournament test page works (PREVIEW_CALM is set). Never on live. */
   tournamentTest?: true;
   /** Zip 37 "Home Screen tip" and "Game day text" (shared/homeScreenTip.ts, shared/gameDayText.ts): their Settings rows, only while on. */

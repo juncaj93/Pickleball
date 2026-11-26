@@ -18,7 +18,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip92_court_time', 'zip92_twelve', 'zip92_ld_round', 'zip92_slow'];
+const THIS_ZIP: readonly string[] = ['zip94_three', 'zip94_last', 'zip94_over', 'zip94_mixed'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -39,6 +39,27 @@ const EARLY_LOOK: NightModel = {
 };
 
 const STAGES = [
+  // Zip 94 (🎾94.early bird): The Cold Open as an early bird night: $20 ticket, $18 early price, Early bird pricing on. View as Vic for the card.
+  {
+    stage: 'zip94_three',
+    label: '94: early price, 3 days left',
+    line: 'The Cold Open in 6 days, $20, early price $18 for 3 more days. View as Vic: “Lock in · $20 $18” (the $20 struck through) and “Save $2 for 3 more days” under the buttons. Tap Lock in: the Pay sheet asks $18. Your card’s gear: Early price $18, Early price until (fixed: players locked in).',
+  },
+  {
+    stage: 'zip94_last',
+    label: '94: early price, last day',
+    line: 'The early price ends in about 9 hours. View as Vic: the line under the buttons is gold, “Save $2 for 9 more hours” (under an hour it counts minutes).',
+  },
+  {
+    stage: 'zip94_over',
+    label: '94: early price over',
+    line: 'The early price ended 2 hours ago; Quinn locked in after it at $20. View as Vic: “Lock in · $20” and “Pay by <day> 7 PM”. The 5 who locked in early keep $18.',
+  },
+  {
+    stage: 'zip94_mixed',
+    label: '94: mixed $18 and $20 tickets (Money + Prizes)',
+    line: '5 locked in at $18, Quinn and Reese at $20, Alex free, Vic and Zoe still to pay ($20 now), 10 expected. Money: tickets $170 if all pay (5 × $18 + 4 × $20), paid now $130. Prizes: “Tickets $170 − courts …”, the suggestion from those real numbers.',
+  },
   // Zip 92 (🎾92.dry run fixes): the 12-player switch, the Locked doubles extra round, the slow night's Time check.
   {
     stage: 'zip92_court_time',

@@ -591,8 +591,11 @@ export interface PlayerTicketsView {
   size: number;
   /** Every spot is taken (16 locked in, Zip 63): standby is open. */
   full: boolean;
-  /** This player's ticket price: the tournament's flat price, $0 for the organizer (who pays the venue, not the group). */
+  /** This player's ticket price: the tournament's flat price, $0 for the organizer (who pays the venue, not the group). Zip 94: the price their
+   *  next tap locks in (early before the early deadline; a ticket with money on it keeps its own). */
   priceCents: number;
+  /** Zip 94: this tournament's early bird (Early bird pricing on, both set): the regular price, the early price and when it ends (ISO). */
+  early?: { regularCents: number; earlyCents: number; until: string };
   /** When ticket money is due (ISO), or null when tickets are not open right now (after a Reschedule). */
   payBy: string | null;
   /**
@@ -1300,7 +1303,12 @@ export interface AdminTournamentView {
   start: number;
   /** Zip 56 (Alex): the organizer's cost for that plan. `paidNow`: players who have paid (the organizer's own seat is not one). Zip 70: for the
    *  Plan's expected players (the money line, turned around: a cost is above 0). */
-  cost?: { courtCents: number; ifFillsCents: number; nowCents: number; paidNow: number };
+  cost?: { courtCents: number; ifFillsCents: number; nowCents: number; paidNow: number; /** Zip 94: what those tickets really cost (some early). */ paidNowCents?: number };
+  /** Zip 94: the price a new lock in pays right now (early before the deadline). Missing: ticketCents. */
+  priceNowCents?: number;
+  /** Zip 94: the gear sheet's Early price rows (Early bird pricing on, or this phone's private link): the saved early bird and whether anyone
+   *  has locked in (then it stays as it is). `cents` null: none set. */
+  early?: { cents: number | null; until: string | null; locked: boolean; on: boolean };
   /** Zip 70: the spots players see ("Locked in 6 of 8"), from the players locked in. */
   spots?: number;
   /** Zip 70: the Plan's expected players (the saved Expect number, else the suggestion, never fewer than locked in; 6 to 16). */

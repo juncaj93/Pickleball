@@ -276,6 +276,20 @@ export const ZIP89_STAGES = ['zip89_am_ahead', 'zip89_ld_semis', 'zip89_bo3', 'z
  */
 //   zip92_court_time "92: court time line": Zip 87's Pay by day (8 of 10 locked in, 7:30 to 10 PM, 2 courts): the card's gray line "8 locked in:
 //                   9:30 is enough, you could cancel 30 min."; it follows the count as people lock in (a suggestion only).
+/**
+ * Zip 94 (🎾94.early bird): Zip 86's The Cold Open payments card (5 players locked in at $18, Alex free; Vic, Zoe, Quinn and Reese to pay) as an
+ * early bird night: the ticket $20, the early price $18, Early bird pricing switched on. View as Vic for the player's card (picture 1, C2).
+ *   zip94_three   "94: early price, 3 days left": the night in 6 days, Pay by the night before at 7 PM; the early price ends 3 days and 3 hours from
+ *                 now: "Lock in · ~~$20~~ $18", "Save $2 for 3 more days".
+ *   zip94_last    "94: early price, last day": the night in 3 days; the early price ends in 9 hours and 20 minutes: gold "Save $2 for 9 more hours".
+ *   zip94_over    "94: early price over": the night in 3 days; the early price ended 2 hours ago, Quinn locked in after it at $20: "Lock in · $20",
+ *                 "Pay by <day> 7 PM".
+ *   zip94_mixed   "94: mixed $18 and $20 tickets (Money + Prizes)": zip94_over with Reese locked in at $20 too: 5 at $18, 2 at $20, Alex free, 10
+ *                 expected: Money and Prizes count each ticket's real price and the 2 still to pay at $20.
+ */
+export const ZIP94_STAGES = ['zip94_three', 'zip94_last', 'zip94_over', 'zip94_mixed'] as const;
+type Zip94Stage = (typeof ZIP94_STAGES)[number];
+const isZip94Stage = (s: string): s is Zip94Stage => (ZIP94_STAGES as readonly string[]).includes(s);
 export const ZIP92_STAGES = ['zip92_twelve', 'zip92_ld_round', 'zip92_slow', 'zip92_court_time'] as const;
 type Zip92Stage = (typeof ZIP92_STAGES)[number];
 const isZip92Stage = (s: string): s is Zip92Stage => (ZIP92_STAGES as readonly string[]).includes(s);
@@ -304,7 +318,7 @@ const isZip86Stage = (s: string): s is Zip86Stage => (ZIP86_STAGES as readonly s
 export const ZIP87_STAGES = ['zip87_early', 'zip87_payday', 'zip87_past', 'zip87_paid', 'zip87_gameday', 'zip87_allset', 'zip87_prizes'] as const;
 type Zip87Stage = (typeof ZIP87_STAGES)[number];
 const isZip87Stage = (s: string): s is Zip87Stage => (ZIP87_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP92_STAGES, ...ZIP90_STAGES, ...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP94_STAGES, ...ZIP92_STAGES, ...ZIP90_STAGES, ...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -474,6 +488,7 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%' OR task LIKE 'tournament_start:%')").bind(group.id),
   ]);
   if (stage === 'none') return { ok: true, stage };
+  if (isZip94Stage(stage)) return zip94Stage(ctx, group, stage);
   if (isZip92Stage(stage)) return zip92Stage(ctx, group, stage);
   if (isZip90Stage(stage)) return zip90Stage(ctx, group, stage);
   if (isZip89Stage(stage)) return zip89Stage(ctx, group, stage);
@@ -1761,6 +1776,50 @@ async function zip86Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
   }
   if (statements.length) await ctx.db.batch(statements);
   if (stage === 'zip86_home') await zip86Games(ctx, group, idOf);
+  return { ok: true, stage, id };
+}
+
+/** Zip 94's stages (see ZIP94_STAGES): Zip 86's payments card with a $20 ticket and an $18 early price, the switch on. */
+async function zip94Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip94Stage) {
+  const tz = group.timezone;
+  const made = await zip86Stage(ctx, group, 'zip86_payments');
+  const id = made.id;
+  const { setEarlyBirdForAll } = await import('./earlyBird');
+  await setEarlyBirdForAll(ctx.db, group.id, true, ctx.nowIso);
+  const today = dayParts(todayKey(ctx.nowMs, tz));
+  const plus = (n: number) => {
+    const d = new Date(Date.UTC(today.year, today.month - 1, today.day + n));
+    return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  };
+  const date = stage === 'zip94_three' ? plus(6) : plus(3);
+  const before = dayParts(stage === 'zip94_three' ? plus(5) : plus(2));
+  const payByIso = new Date(zonedTimeToUtc(before.year, before.month, before.day, 19, 0, tz)).toISOString();
+  // On the half hour: the line reads whole days or hours without a minute's drift.
+  const half = (ms: number) => Math.round(ms / 1_800_000) * 1_800_000;
+  const untilMs =
+    stage === 'zip94_three' ? half(ctx.nowMs + 3 * 86_400_000 + 3 * 3_600_000) : stage === 'zip94_last' ? ctx.nowMs + 9 * 3_600_000 + 20 * 60_000 : half(ctx.nowMs - 2 * 3_600_000);
+  const untilIso = new Date(untilMs).toISOString();
+  // The tickets locked in on Zip 86's card were sold at $18, before the early end: they stay $18 (each ticket keeps its own price).
+  const late = stage === 'zip94_over' ? ['Quinn'] : stage === 'zip94_mixed' ? ['Quinn', 'Reese'] : [];
+  const statements: ReturnType<Ctx['db']['prepare']>[] = [
+    ctx.db
+      .prepare('UPDATE tournaments SET final_date = ?, offered_dates = ?, pay_by = ?, ticket_cents = 2000, early_cents = 1800, early_until = ? WHERE id = ?')
+      .bind(date, JSON.stringify([date]), payByIso, untilIso, id),
+    ctx.db.prepare("UPDATE tournament_signups SET dates = ? WHERE tournament_id = ? AND status = 'in'").bind(JSON.stringify([date]), id),
+    ctx.db.prepare("UPDATE tournament_tickets SET price_cents = 1800, place_at = ?, paid_at = ? WHERE tournament_id = ? AND price_cents > 0 AND place = 'spot'").bind(new Date(untilMs - 86_400_000).toISOString(), new Date(untilMs - 86_400_000).toISOString(), id),
+  ];
+  late.forEach((name, i) => {
+    const paidAt = new Date(Math.min(ctx.nowMs, untilMs + (i + 1) * 20 * 60_000)).toISOString();
+    statements.push(
+      ctx.db
+        .prepare(
+          `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, credit_cents, paid_cents, paid_at, created_at, updated_at)
+           SELECT ?, ?, p.id, 'spot', ?, 2000, 0, 2000, ?, ?, ? FROM players p WHERE p.group_id = ? AND p.display_name = ?`,
+        )
+        .bind(newId(), id, paidAt, paidAt, paidAt, paidAt, group.id, name),
+    );
+  });
+  await ctx.db.batch(statements);
   return { ok: true, stage, id };
 }
 

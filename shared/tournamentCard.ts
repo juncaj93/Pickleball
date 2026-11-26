@@ -125,7 +125,8 @@ export function moneySheet(t: AdminTournamentView): MoneySheet | null {
   const prizeAllCents = set ? setCents : fullCents;
   return {
     paidCount: c.paidNow,
-    paidCents: c.paidNow * t.ticketCents,
+    // Zip 94: what those tickets really cost (some early); without an early bird exactly the count times the price, as before.
+    paidCents: c.paidNowCents ?? c.paidNow * t.ticketCents,
     courtCents: m.courtCents,
     prizesNowCents: set ? setCents : null,
     soFarCents: -c.nowCents,

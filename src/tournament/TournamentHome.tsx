@@ -11,7 +11,8 @@ import { theName } from '../../shared/credit';
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormatVote, PlayerTicketsView, PlayerTournamentView } from '../../shared/tournament';
 import { DEFAULT_FORMAT_VOTE, dayShort, formatLine, formatName, monthsBetween, monthSpan, shortClock, startLabel, stubParts } from '../../shared/tournament';
-import { payCountdown, placeWord } from '../../shared/tournamentTickets';
+import { payByLabel, payCountdown, placeWord } from '../../shared/tournamentTickets';
+import { earlyCardOf } from '../../shared/earlyBird';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { api, ApiError, useNow, VIEW_ONLY_MESSAGE } from '../lib';
 import { AlertCard } from '../AlertCard';
@@ -613,6 +614,7 @@ function CardShell({
   row,
   kicker = 'Tournament',
   muted,
+  foot,
 }: {
   t: PlayerTournamentView;
   data: string;
@@ -623,6 +625,8 @@ function CardShell({
   row?: boolean;
   kicker?: string;
   muted?: boolean;
+  /** Zip 94: one small centered line under the bar (the early bird's "Save $2 for 2 more days" or "Pay by Mon 7 PM"). */
+  foot?: ReactNode;
 }) {
   const b = ballsOf(t);
   return (
@@ -649,7 +653,24 @@ function CardShell({
       <div className={row ? 'tc-bar tc-bar-row' : 'tc-bar'} data-tc-bar>
         {bar}
       </div>
+      {foot}
     </section>
+  );
+}
+
+/**
+ * Zip 94 (picture 1, C2): the line under the card's buttons while a player can lock in a tournament with an early bird. Before the deadline:
+ * "Save $2 for 2 more days" (gray), on the last day gold and counting hours, then minutes; it re-draws on this phone's clock with no extra call.
+ * After the deadline: "Pay by Mon 7 PM". Nothing when there is nothing to say.
+ */
+function EarlyFoot({ k, tz, finalDate }: { k: PlayerTicketsView; tz: string; finalDate: string | null }) {
+  const now = useNow(15_000);
+  const c = earlyCardOf(k, (iso) => payByLabel(iso, tz, finalDate), now);
+  if (!c?.line) return null;
+  return (
+    <p className={c.line.gold ? 'tc-early-foot tc-early-gold' : 'tc-early-foot'} data-tc-early={c.strikeCents !== null ? (c.line.gold ? 'last' : 'save') : 'after'}>
+      {c.line.text}
+    </p>
   );
 }
 
@@ -671,9 +692,12 @@ export function TicketCard({
   onLock,
   onHold,
   onJoin,
+  tz = 'America/Detroit',
 }: {
   t: PlayerTournamentView;
   org: string;
+  /** Zip 94: the group's time zone (the early bird's "Pay by Mon 7 PM"). */
+  tz?: string;
   busy: boolean;
   /** Zip 59: the ticket punch is playing (sign-up just finished). */
   punch?: boolean;
@@ -722,13 +746,23 @@ export function TicketCard({
     const words = s === 'in' ? 'Locked in' : s === 'line' ? (held ? 'Spot held' : shortStandby(linePlace(k))) : k.started ? 'Started' : 'Tickets closed';
     // A longer label ("Lock in · $16.50", "Hold my spot · $16") is set a little smaller, so it is never cut on a narrow phone.
     const label = s === 'lock' ? `Lock in · ${formatPrice(due)}` : s === 'full' ? 'Join standby' : hold ? `Hold my spot · ${formatPrice(due)}` : words;
-    const long = Array.from(label).length > 13 ? (Array.from(label).length > 16 ? ' tc-long tc-longer' : ' tc-long') : '';
+    // Zip 94 (picture 1, C2): with an early bird, "Lock in · ~~$20~~ $18" and the line under the buttons. None set: exactly as before.
+    const early = s === 'lock' ? earlyCardOf(k, (iso) => payByLabel(iso, tz, t.finalDate), Date.now()) : null;
+    const strike = early?.strikeCents ?? null;
+    const shown = strike === null ? label : `Lock in · ${formatPrice(strike)} ${formatPrice(due)}`;
+    const long = Array.from(shown).length > 13 ? (Array.from(shown).length > 16 ? ' tc-long tc-longer' : ' tc-long') : '';
     const act = s === 'lock' ? onLock : s === 'full' ? onJoin : hold ? onHold : null;
     const actData = s === 'lock' ? 'data-tc-lock' : s === 'full' ? 'data-tc-join' : 'data-tc-hold';
     const main =
       act ? (
-        <button type="button" className={`tc-btn tc-lime${long}`} disabled={busy} onClick={act} {...{ [actData]: '' }}>
-          {label}
+        <button type="button" className={`tc-btn tc-lime${long}`} disabled={busy} onClick={act} {...{ [actData]: '' }} {...(strike !== null ? { 'aria-label': `Lock in for ${formatPrice(due)}, was ${formatPrice(strike)}` } : {})}>
+          {strike === null ? (
+            label
+          ) : (
+            <>
+              Lock in · <s className="tc-was" data-tc-was>{formatPrice(strike)}</s> {formatPrice(due)}
+            </>
+          )}
         </button>
       ) : (
         <span className={`${s === 'in' ? 'tc-state tc-state-lime' : 'tc-state'}${long}`} data-tc-sub>
@@ -748,7 +782,7 @@ export function TicketCard({
         )}
       </>
     );
-    return <CardShell t={t} data={s} punch={punch} balls bar={bar} row />;
+    return <CardShell t={t} data={s} punch={punch} balls bar={bar} row foot={early ? <EarlyFoot k={k} tz={tz} finalDate={t.finalDate} /> : undefined} />;
   }
 
   // ---- Piece 1's states (before you sign up, signed up, the date picked), and a Reschedule ----

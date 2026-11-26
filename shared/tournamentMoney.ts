@@ -42,9 +42,11 @@ export interface MoneyLine {
 }
 
 /** THE money line (Alex's rule): Courts, Tickets, and what the organizer makes (or pays) if the night fills to the expected players. */
-export function moneyLine(o: { expected: number; courts: number; minutes: number; ticketCents: number; prizeCents: number }): MoneyLine {
+export function moneyLine(o: { expected: number; courts: number; minutes: number; ticketCents: number; prizeCents: number; adjustCents?: number }): MoneyLine {
   const courtCents = courtCentsOf({ courts: o.courts, minutes: o.minutes });
-  const ticketsCents = Math.max(0, Math.round(o.expected) - 1) * o.ticketCents;
+  // Zip 94 (early bird): `adjustCents` is what the tickets locked in really cost beyond the price now (shared/earlyBird.ts lockedAdjustCents;
+  // some at $18, some at $20). 0 or left out: exactly as before.
+  const ticketsCents = Math.max(0, Math.max(0, Math.round(o.expected) - 1) * o.ticketCents + (o.adjustCents ?? 0));
   return { courtCents, ticketsCents, youCents: ticketsCents - courtCents - o.prizeCents };
 }
 
@@ -149,10 +151,12 @@ export function planMoney(o: {
   secondCents: number;
   /** Zip 87: both styles' boxes (shared/tournamentPrizes.ts); the style priced pays its own box (Locked doubles may have a 2nd place again). */
   prizes?: Omit<StylePrizes, 'saved'>;
+  /** Zip 94: the tickets locked in at another price than ticketCents (the price now): their real cost beyond it (moneyLine). */
+  adjustCents?: number;
 }): MoneyLine & { style: TournamentFormat; afterFullCents: number; closed: boolean; baseStyle: TournamentFormat } {
   const style = expectedStyle(o.format, o.expected, o.closed);
   const prizeCents = o.prizes ? boxCostCents(style, o.prizes[style]) : prizeCentsOf(style, o.championCents, o.secondCents);
-  const line = moneyLine({ expected: o.expected, courts: o.courts, minutes: o.minutes, ticketCents: o.ticketCents, prizeCents });
+  const line = moneyLine({ expected: o.expected, courts: o.courts, minutes: o.minutes, ticketCents: o.ticketCents, prizeCents, adjustCents: o.adjustCents });
   return { ...line, style, afterFullCents: afterFullCents(line.ticketsCents, line.courtCents, style), closed: o.closed, baseStyle: o.format };
 }
 
