@@ -1018,6 +1018,9 @@ function SignUpSheet({
   const locked = t.lockedLevel ?? null;
   // Zip 79: a player who played before starts on the level agreed at their last tournament ("PREVIOUS RATING"). First-timers: as before.
   const previous = locked === null ? (t.previousLevel ?? null) : null;
+  // Zip 95 (pictures 3 and 4): the level the organizer recommended after that tournament: a green "RECOMMENDED" tag on its row. The previous
+  // level stays picked; the player chooses (picking it plays the level up like any higher level).
+  const recommended = previous !== null && t.recommendedLevel !== undefined && t.recommendedLevel > previous ? t.recommendedLevel : null;
   const [step, setStep] = useState<1 | 2>(locked === null ? 1 : 2);
   const [level, setLevel] = useState<number | null>(locked ?? previous);
   // Zip 79: Next on a level HIGHER than the previous one plays the level up first (once per level reached in this sheet: going Back and Next
@@ -1048,7 +1051,7 @@ function SignUpSheet({
       {step === 1 ? (
         <div data-tm-step="1">
           <p className="tm-eyebrow">Step 1 of 2 · Your level</p>
-          <LevelList value={level} onPick={setLevel} previous={previous ?? undefined} />
+          <LevelList value={level} onPick={setLevel} previous={previous ?? undefined} recommended={recommended ?? undefined} />
           <p className="tm-help tm-level-note" data-tm-level-note>
             Not sure? Ask {org}.
           </p>

@@ -50,6 +50,17 @@ const STAGES = [
     label: '97: 6 players switch to Americano',
     line: 'The Cold Open, 6 locked in, Pay by an hour ago, Locked doubles by vote. Your Home: the amber card “The Cold Open switched to Americano (6 players).” / “6 locked in. 6 players play Americano.” (the Telegram alert says the same). View as Parker: “Tournament style is now Americano.” on the date card.',
   },
+  // Zip 95 (🎾95.level check): the Level check card after a tournament, and the next sign-up's RECOMMENDED level.
+  {
+    stage: 'zip95_check',
+    label: '95: level check after a tournament',
+    line: 'The Cold Open (Locked doubles) ended last night. Top of Home: “Level check · The Cold Open”, Vic “3.0 · won all 5 games” and Wren “3.2 · won 4 of 5, champion”. Rowan and Zoe went 3-2: not listed. Parker (3.6+) and you are never listed. Tap Yes on Vic: 3.2 is picked, then Save. Tap No on Wren. The card is gone.',
+  },
+  {
+    stage: 'zip95_signup',
+    label: '95: next sign-up with a recommendation',
+    line: 'You said Yes, 3.2 for Vic (and No for Wren) after The Cold Open; Winter Classic is open. View as Vic, Sign up: 3.0 stays picked (Previous rating), 3.2 says Recommended. Tap 3.2, then Next: the level up plays. View as Wren: no Recommended tag.',
+  },
   // Zip 94 (🎾94.early bird): The Cold Open as an early bird night: $20 ticket, $18 early price, Early bird pricing on. View as Vic for the card.
   {
     stage: 'zip94_three',

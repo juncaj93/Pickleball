@@ -1,0 +1,129 @@
+/* Zip 95 (🎾95.level check, pictures 1 and 2): the Level check card at the top of the organizer's Home. The site's own card, buttons and
+   tokens; one body font. Every tap area is 44 px. Names and lines wrap between words, never cut. */
+.lc-card {
+  padding: 16px 16px 4px;
+}
+.lc-kicker {
+  margin: 0;
+  font-size: max(11px, 0.72rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  overflow-wrap: break-word;
+}
+.lc-title {
+  margin: 4px 0 10px;
+  font-family: var(--body);
+  font-size: 1.06rem;
+  font-weight: 750;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.lc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.lc-who {
+  flex: 1 1 8em;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.lc-name {
+  font-size: 1.1rem;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+.lc-line {
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: var(--ink-2);
+  overflow-wrap: break-word;
+}
+.lc-acts {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.lc-acts .btn {
+  min-width: 64px;
+}
+/* Yes: the levels above theirs and Save, on their own line under the name. */
+.lc-row[data-picking='yes'] .lc-who {
+  flex-basis: 100%;
+}
+.lc-pick {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.lc-levels {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.lc-level {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--fast) var(--ease),
+    background-color var(--fast);
+}
+.lc-level:active {
+  transform: scale(0.97);
+}
+.lc-level-on {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+/* The real radio sits under the pill (a screen reader and the keyboard use it); the pill is what shows. */
+.lc-level-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.lc-level:has(.lc-level-input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.lc-save {
+  flex: none;
+  min-width: 64px;
+  margin-left: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-level {
+    transition: none;
+  }
+}

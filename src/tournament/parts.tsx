@@ -157,6 +157,7 @@ export function LevelList({
   theirPick,
   theirName,
   previous,
+  recommended,
 }: {
   value: number | null;
   onPick: (v: number) => void;
@@ -166,6 +167,9 @@ export function LevelList({
   /** Zip 79 (picture skills/01): the level agreed at the player's last tournament: a small gray "PREVIOUS RATING" over its words; grayed
    *  while another level is picked (the label stays). */
   previous?: number;
+  /** Zip 95 (pictures 3 and 4): the level the organizer recommended after their last tournament: a small green "RECOMMENDED" tag and
+   *  "Based on recent performance" over its words. Never picked by itself. */
+  recommended?: number;
 }) {
   return (
     <div className={flat ? 'tm-levels tm-levels-flat' : 'tm-levels'} role="radiogroup" aria-label="Level">
@@ -175,6 +179,7 @@ export function LevelList({
         // "YOUR PICK" names a different level the organizer chose.
         const theirs = !!flat && theirPick === l.value;
         const prev = !flat && previous === l.value;
+        const rec = !flat && !prev && recommended === l.value;
         return (
           <button
             key={l.value}
@@ -184,12 +189,19 @@ export function LevelList({
             className={`tm-level${on ? ' tm-level-on' : ''}${theirs ? ' tm-level-theirs' : ''}${prev ? ' tm-level-prev' : ''}${prev && !on ? ' tm-level-prev-off' : ''}`}
             data-level={l.value}
             data-tm-previous={prev ? '' : undefined}
+            data-tm-recommended={rec ? '' : undefined}
             onClick={() => onPick(l.value)}
           >
             <span className="tm-level-num">{l.label}</span>
             {prev ? (
               <span className="tm-level-text tm-level-prevwrap">
                 <span className="tm-level-prevtag">Previous rating</span>
+                {l.text}
+              </span>
+            ) : rec ? (
+              <span className="tm-level-text tm-level-recwrap">
+                <span className="tm-level-rectag">Recommended</span>
+                <span className="tm-level-recwhy">Based on recent performance</span>
                 {l.text}
               </span>
             ) : (

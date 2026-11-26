@@ -68,6 +68,7 @@ import {
   type Visibility,
   type OwedTicketView,
 } from '../shared/tournament';
+import { LEVEL_CHECK_TASK, savedLevel } from '../shared/levelCheck';
 import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, planMoney, savedExpect, timeMoveWords } from '../shared/tournamentMoney';
 import { columnsOf, prizesOfRow, readPrizes, withPrizes } from '../shared/tournamentPrizes';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
@@ -364,8 +365,21 @@ const ACTIVE_FOR_PLAYER_SQL = `SELECT t.*, ${tiesJsonSql('t')}, ${markDetailSql(
 const resultsSqlFor = (idSql: string) =>
   `SELECT r.player_id, r.finish, r.wins, r.losses, r.points, r.team_name, r.partner_id, p.display_name FROM tournament_results r JOIN players p ON p.id = r.player_id WHERE r.tournament_id = ${idSql} ORDER BY r.rowid`;
 
-/** Zip 79: a player's (?1) finalized level at their last ended tournament in the group (?2): the organizer's level if he changed it, else their pick. */
-const PREVIOUS_LEVEL_SQL = `SELECT COALESCE(r.approved_level, r.picked_level) AS level FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
+/**
+ * Zip 79: a player's (?1) finalized level at their last ended tournament in the group (?2): the organizer's level if he changed it, else their pick.
+ * Zip 95: in the same row, the level the organizer saved on that tournament's Level check card (`recommended`, task_log detail; 'no' or none:
+ * nothing), and whether the player is LOCKED IN for a later tournament that is not canceled (`since`: then the recommendation is used up). Alex:
+ * a canceled sign-up never uses it up, and a back out before being locked in brings it back next time. Locked in is lockedInSql's rule: a spot,
+ * or a whole-ticket I paid still waiting, on a sign-up still 'in'.
+ */
+const PREVIOUS_LEVEL_SQL = `SELECT COALESCE(r.approved_level, r.picked_level) AS level,
+         (SELECT h.detail FROM task_log h WHERE h.session_id IS NULL AND h.task = '${LEVEL_CHECK_TASK}' || t.id || ':' || r.player_id AND h.kind IN ('mark', 'sent') AND h.kind = 'mark' LIMIT 1) AS recommended,
+         (SELECT 1 FROM tournament_tickets k JOIN tournaments t2 ON t2.id = k.tournament_id
+            JOIN tournament_signups s2 ON s2.tournament_id = k.tournament_id AND s2.player_id = k.player_id AND s2.status = 'in'
+            WHERE k.player_id = r.player_id AND t2.group_id = t.group_id AND t2.id <> t.id AND t2.status <> 'canceled'
+              AND t2.created_at > COALESCE(t.ended_at, t.final_date)
+              AND (k.place = 'spot' OR (k.place <> 'line' AND k.claim_cents > 0 AND k.credit_cents + k.paid_cents + k.claim_cents >= k.price_cents)) LIMIT 1) AS since
+       FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
        WHERE r.player_id = ?1 AND t.group_id = ?2 AND t.status = 'ended' AND COALESCE(r.approved_level, r.picked_level) IS NOT NULL
        ORDER BY t.final_date DESC, t.ended_at DESC, t.id LIMIT 1`;
 
@@ -410,6 +424,8 @@ export interface TourPre<Row> {
   results?: ResultRead[];
   /** Zip 79: a player's screen: their level at their last ended tournament (null: never played one; missing: not read). */
   previousLevel?: number | null;
+  /** Zip 95: a player's screen: the level the organizer recommended after that tournament, still unused (null: none; missing: not read). */
+  recommendedLevel?: number | null;
   /** Zip 77: the phone's organizer cookie is a real organizer sign-in (read in the same trip; missing: no cookie, or not read). */
   orgSignedIn?: boolean;
   /** Zip 85: a player's screen: their tickets marked Didn't pay after the night started (missing: not read). */
@@ -525,7 +541,7 @@ export function playerTourReads(ctx: Ctx, group: GroupRow, playerId: string, adm
         day: { teams: rows(6), games: rows(7), ties: tiesFromJson((rows(0)[0] as { ties_json?: string } | undefined)?.ties_json) },
         awards: awardsFrom(res.slice(8, 11)),
         results: rows(11),
-        previousLevel: ((rows(12)[0] as { level?: number } | undefined)?.level ?? null) as number | null,
+        ...previousFrom(rows(12)[0] as PreviousRow | undefined),
         owed: owedFrom(rows(13)),
         ...(adminHash ? { orgSignedIn: (rows(14) as { id: string }[]).some((r) => !String(r.id).startsWith(VIEW_ONLY_SESSION_PREFIX)) } : {}),
       };
@@ -1065,18 +1081,30 @@ export async function playerTournamentFor(
   return { ...base, tickets: await playerTicketsView(ctx, t, tickets, playerId, group, orgOf, readTickets ? pre?.freed : undefined), ...(dayView ? { day: dayView } : {}) };
 }
 
-/** Zip 79: `previousLevel` for the view (from the screen's batch when it read it; else one read), left out for a first-timer. */
-async function previousLevelOf(ctx: Ctx, group: GroupRow, playerId: string, pre?: TourPre<ActiveRow>): Promise<{ previousLevel?: number }> {
-  const level =
+type PreviousRow = { level?: number | null; recommended?: string | null; since?: number | null };
+/** Zip 95: the previous level and, still unused and above it, the organizer's recommended one (PREVIOUS_LEVEL_SQL's row). */
+function previousFrom(row: PreviousRow | undefined): { previousLevel: number | null; recommendedLevel: number | null } {
+  const previous = typeof row?.level === 'number' && row.level > 0 ? row.level : null;
+  const saved = savedLevel(row?.recommended);
+  return { previousLevel: previous, recommendedLevel: previous !== null && saved !== null && saved > previous && !row?.since ? saved : null };
+}
+
+/**
+ * Zip 79: `previousLevel` for the view (from the screen's batch when it read it; else one read), left out for a first-timer. Zip 95: and
+ * `recommendedLevel` (the Level check card's Save), only when it is above the previous level and the player is not locked in for a later one.
+ */
+async function previousLevelOf(ctx: Ctx, group: GroupRow, playerId: string, pre?: TourPre<ActiveRow>): Promise<{ previousLevel?: number; recommendedLevel?: number }> {
+  const got =
     pre && pre.previousLevel !== undefined
-      ? pre.previousLevel
+      ? { previousLevel: pre.previousLevel, recommendedLevel: pre.recommendedLevel ?? null }
       : await ctx.db
           .prepare(PREVIOUS_LEVEL_SQL)
           .bind(playerId, group.id)
-          .first<{ level: number }>()
-          .then((r) => r?.level ?? null)
-          .catch(() => null);
-  return typeof level === 'number' && level > 0 ? { previousLevel: level } : {};
+          .first<PreviousRow>()
+          .then((r) => previousFrom(r ?? undefined))
+          .catch(() => ({ previousLevel: null, recommendedLevel: null }));
+  if (got.previousLevel === null) return {};
+  return { previousLevel: got.previousLevel, ...(got.recommendedLevel !== null ? { recommendedLevel: got.recommendedLevel } : {}) };
 }
 
 /**

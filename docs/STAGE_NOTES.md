@@ -8914,6 +8914,78 @@ Unit 246 files, 4,547 passed, 12 skipped, 0 failed. e2e/zip94 7 of 7, zip92 B, z
 - Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
   wider, no writes. Organizer screens not opened (no read-only PIN in this session).
 
+## 🎾95.level check (Thu Nov 26, 2026; branch `claude/new-session-2v5jzf`, from main `8ef2646` (🎾92 round 3 live); LIVE Thu Nov 26, deployment `163f45b2`)
+
+### What changed (the code is the truth; SITE_RULES "Level check after a tournament, the RECOMMENDED level (Zip 95)")
+1. LEVEL CHECK CARD (pictures 1 and 2; src/pages/admin/LevelCheck.tsx, level-check.css): the very top of the organizer's Home (calm preview
+   too), only while an Everyone tournament ended in the last 3 days has a player still to answer. No / Yes; Yes: the levels above theirs as
+   radio pills (the next step picked) and Save. Each row an <article> (one green button each, as the design check counts).
+2. WHO (shared/levelCheck.ts qualifies; server/levelCheck.ts levelCheckRead): 80% or more of at least 3 regular games (stage 'pool' only:
+   round robin, pools, an extra round, Americano rounds; never semi, final, third, tie or skipped), or the gold medal; below 3.6+; never the
+   organizer's player; approved_level else picked_level (tournament_results).
+3. NO MIGRATION: each answer is one task_log row (kind 'mark', session_id NULL, task 'level_check:<tournament>:<player>', detail '320' or
+   'no'), written once (INSERT ... WHERE NOT EXISTS). POST /api/admin/level-check { tournamentId, playerId, level | null }: refused (409) after
+   the 3 days, for a player the card does not ask about, or (400) for a level not above theirs. Activity line 'tournament_level_check'.
+   The answers are in backups already (task_log is in the backup file since Zip 50, and in Time Travel).
+4. RECOMMENDED (pictures 3 and 4; src/tournament/parts.tsx LevelList, TournamentHome.tsx SignupSheet): PREVIOUS_LEVEL_SQL (server/tournament.ts)
+   also brings the saved answer of that same last tournament and whether the player is LOCKED IN (lockedInSql's rule, sign-up still in) for
+   a later tournament that is not canceled (`since`; Alex's answer, Nov 26: a canceled sign-up never uses it up, a back out brings it back);
+   `recommendedLevel` only when it is a level above `previousLevel` and `since` is empty. A green pill "RECOMMENDED" and "Based on
+   recent performance" over the level's words; the previous level stays picked; the existing level up plays when picked.
+5. STAGES (THIS_ZIP): zip95_check (The Cold Open, 10 players Locked doubles, ended last night: Vic 5-0, Wren 4-1 champion, Rowan and Zoe
+   3-2; written row by row, no ticket, credit or money row) and zip95_signup (the same night 5 days back, Vic Yes 3.2, Wren No, Winter
+   Classic open). Five teams cannot give 5-0, 4-1 and 3-2 with a round robin alone (the wins would not add up), so the stage has the extra
+   round of 🎾92 (3 more games).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: a second answer (another phone, a page left open) now gets 409 "Vic was already answered. Look again." instead of a false saved
+toast; a request without `level` is refused (only an explicit null is No); answered rows are kept per tournament on a page left open;
+after Save or No the keyboard focus moves to the next row. Not changed: hidden tournaments (only a canceled tournament can be hidden, never
+an ended one); a partner changed during the night (the team's current players get the team's games, rare). Alex's answers (Nov 26): leave
+the organizer off, yes; at least 3 games, yes; a canceled sign-up must NOT use up the recommendation, only being locked in does (fixed).
+
+### Who qualifies (scripts/zip95-audit.ts: the three nights on the fake world)
+- 8 LD (the real End): Vic and Wren 3-0 champions (4-0 with the Final, never counted): both listed. Parker 3.6+; Quinn 2-1; the rest under.
+- 10 LD (zip95_check): Vic 5-0 (5-1 with the lost Final) and Wren 4-1 champion listed; Parker 3.6+, Alex organizer, Rowan and Zoe 3-2 (60%).
+- 9 Americano (Reese out, the real End): Vic 5-0 gold and Rowan 4-1 (80%) listed; Parker and Quinn 3-3, the rest under; Alex organizer.
+
+### Admin speed (scripts/zip82-speed.ts, tests/zip95-level-check.test.ts)
+Before (main): dashboard 4 trips / 63 statements, 8.9 to 12.1 ms; the 5 second check 2 / 16, 2.7 to 4.3 ms (all_locked, mid, am_done,
+ended). After: 4 trips / 64 statements (the card's read rides the same trip), 9.5 to 11.5 ms; the check 2 / 16, 2.4 to 6.1 ms (all_locked,
+mid, am_done, ended, zip95_check); every answer byte for byte the plain way's (none, all_locked, mid, zip95_check, zip95_signup).
+tests/zip62-speed.test.ts: with "Fewer database trips" OFF (not live) the dashboard may make one more read than before (4 instead of 3, the
+allowance Zips 83 and 85 raised the same way); on live (on) no trip is added.
+
+### Tests
+Unit (final code): 246 files passed, 2 skipped; 4,539 passed, 12 skipped, 0 failed. Browser, the full run (npm run test:e2e): 90 of 90 green,
+3,271 checks (circles, admin-audit, admin-motion, admin-v2, zip32 failed a check or two with 3 lanes busy, green alone). e2e/zip79.cjs
+(not in the full run): A to D and F green; E fails on its own stale words (it expects the History tab "Sessions", renamed "Games" in Zip 85;
+not this zip, left as is). Browser: e2e/zip95.cjs 3 of 3 (A the card
+and its taps, light and dark; B 320/375/390/420/440 x 100/125/150% x light/dark x both looks: nothing cut, no word broken, 44 px; C the
+sign-up tag and the level up, the same sweep).
+
+### Preview
+https://claude-new-session-2v5jzf.pickleball-club-9h0.pages.dev (the fake `pickleball-preview` database, no re-seed). Switches on: Tournaments
+(set by the stage), as live. Left on "95: level check after a tournament".
+
+### Live (Thu Nov 26, 2026, about 3:04 PM Eastern; Alex's go: ship today, game canceled for Thanksgiving, --override-loud-hours OKed)
+- Main merged with 🎾93 (live 86f85e98) and 🎾94 (live 28f4856f, migration 0030) as `9db151f`; conflicts in the stage lists, the stage
+  page, tournament.css and the docs, each kept both sides.
+- Unit on the merged code: 248 files passed, 2 skipped; 4,566 passed, 12 skipped, 0 failed; typecheck clean.
+- Browser, the full run on the merged code: 83 of 90 green first; the 7 others (zip27, 32, 34, 35, 38, 39, 42) checked that their own
+  Settings switch sits on top and now met 🎾94's newer Early bird switch there. Each skip list gained `earlyBirdAll` (the same fix every
+  newer switch got); the 7 rerun: 7 of 7 green, 145 checks. audit-player-flows green alone. e2e/zip93.cjs check B expected THIS_ZIP to be
+  93's; it now checks both 93 stages are still listed (6 of 6). e2e/zip94.cjs 7 of 7, e2e/zip95.cjs 3 of 3.
+- Restore point: export `export-20261126200337` saved in `pickleball-backups` (checked against the file); Time Travel bookmark
+  `0000215a-00000000-0000512f-b613886c74d2ec2b1bd035de508a27c5`.
+- Integrity before and after: 22, 8 and 14 columns, every problem column 0. No migration (none pending).
+- Main `cdcc178` to `cb74e78`; `npm run deploy -- --override-loud-hours`: deployment **163f45b2-2df4-4876-8016-a623756ee1f3** (bundle
+  `index-Ulzjrwwe.js`). Rollback: **28f4856f-c00a-4915-808e-a9e55806b12f** (🎾94). Nothing to undo in the data (no level_check rows yet).
+- The Cold Open before and after (status tickets, 7 tickets, 10 sign-ups, the money sums and every updated_at): identical.
+- No tournament has ended on live yet, so the card first shows after The Cold Open ends.
+- Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
+  wider, no writes. Organizer screens not opened (no read-only PIN in this session).
+
 ## 🎾97.real pace (Thu Nov 26, 2026; branch `claude/new-session-wfeker`, from main `cdcc178` (🎾94 live); NOT live: held for Alex's OK, deploys after 🎾95)
 
 ### What changed (the code is the truth; SITE_RULES "Real pace (Zip 97)")

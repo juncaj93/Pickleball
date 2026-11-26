@@ -13,6 +13,7 @@ import * as earlyBird from './earlyBird';
 import { poolsLook, tournamentTestStage } from './tournamentTest';
 import * as tournamentDay from './tournamentDay';
 import * as tournamentEnd from './tournamentEnd';
+import { saveLevelCheck } from './levelCheck';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
@@ -257,6 +258,8 @@ route('POST', '/api/admin/tournament/:id/awards', tournamentEnd.awardsAction);
 route('GET', '/api/admin/tournament-history', tournamentEnd.tournamentHistory);
 route('GET', '/api/admin/tournament-wins', tournamentEnd.adminWins);
 route('GET', '/api/admin/champions', tournamentEnd.adminChampions);
+// Zip 95 (server/levelCheck.ts): the Level check card's Save and No (one task_log row per answer, no migration).
+route('POST', '/api/admin/level-check', saveLevelCheck);
 // Zip 79: History > Skills (every finalized level per ended tournament; its own request, only when the tab opens).
 route('GET', '/api/admin/skills', tournamentEnd.skillsHistory);
 // Zip 55, PREVIEW ONLY (server/tournamentTest.ts): the Tournament test page's stage buttons. Not found wherever PREVIEW_CALM is not on (live),

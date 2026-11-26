@@ -273,6 +273,9 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} restored ${theTour(d)}`;
     case 'tournament_level':
       return `${who} set ${player}’s level to ${typeof d.level === 'string' ? d.level : '?'} for ${theTour(d)}`;
+    // Zip 95: the Level check card's Yes (Save) and No. Only the organizer sees Activity; the player never sees the No.
+    case 'tournament_level_check':
+      return typeof d.level === 'string' ? `${who} suggested ${d.level} for ${player} next time (after ${tourName(d)})` : `${who} kept ${player}’s level after ${tourName(d)}`;
     case 'tournament_date':
       return typeof d.date === 'string' ? `${who} picked ${d.date} for ${theTour(d)}` : `${who} took back the date for ${theTour(d)}`;
     // Zip 60: how the format was set. The players' vote (with the counts), the tie rule, or the organizer.

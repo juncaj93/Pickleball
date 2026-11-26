@@ -16,6 +16,7 @@ import { defaultPayBy, tourReason } from '../shared/tournamentTickets';
 import { ticketBackStatements, tournamentCanceled } from './tournamentMoney';
 import { endPlan, type EndRow, readNight, writeEnd } from './tournamentEnd';
 import { withPrizes } from '../shared/tournamentPrizes';
+import { LEVEL_CHECK_NO, LEVEL_CHECK_TASK, levelCheckTask } from '../shared/levelCheck';
 
 // Zip 55, PREVIEW ONLY: the "Tournament test" page's server half. POST /api/admin/tournament-test { stage } puts the fake tournament back to a
 // stage, using only the preview's fixed fake names (docs/PREVIEW_FAKE_DB.md), and turns the Tournaments row on (a re-seed from another branch
@@ -307,6 +308,17 @@ const isZip94Stage = (s: string): s is Zip94Stage => (ZIP94_STAGES as readonly s
 export const ZIP92_STAGES = ['zip92_twelve', 'zip92_ld_round', 'zip92_slow', 'zip92_court_time'] as const;
 type Zip92Stage = (typeof ZIP92_STAGES)[number];
 const isZip92Stage = (s: string): s is Zip92Stage => (ZIP92_STAGES as readonly string[]).includes(s);
+// Zip 95 (🎾95.level check), on the fake database only (no ticket, credit or money row is written):
+//   zip95_check    "95: level check after a tournament": The Cold Open, a Locked doubles night that ended last night (10 PM): Net Ninjas (Vic +
+//                  Parker) 5-0 in the round robin and its extra round, Third Shot Gang (Wren + Alex) 4-1 and the Final, Kitchen Crew (Rowan + Zoe)
+//                  3-2 and 3rd place. Home: the Level check card with Vic ("3.0 · won all 5 games") and Wren ("3.2 · won 4 of 5, champion").
+//                  Not on it: Parker (3.6+, the top), Alex (the organizer), Rowan and Zoe (3-2: 60%).
+//   zip95_signup   "95: next sign-up with a recommendation": the same night five days back, answered (Vic: Yes, 3.2; Wren: No), and Winter Classic
+//                  with sign-up open (Vic not on the list). View as Vic, Sign up: 3.0 picked (PREVIOUS RATING), 3.2 RECOMMENDED; pick 3.2 and
+//                  Next: the level up. View as Wren: no tag.
+export const ZIP95_STAGES = ['zip95_check', 'zip95_signup'] as const;
+type Zip95Stage = (typeof ZIP95_STAGES)[number];
+const isZip95Stage = (s: string): s is Zip95Stage => (ZIP95_STAGES as readonly string[]).includes(s);
 export const ZIP90_STAGES = ['zip90_ld', 'zip90_am', 'zip90_second', 'zip90_header', 'zip90_replay', 'zip90_counts'] as const;
 type Zip90Stage = (typeof ZIP90_STAGES)[number];
 const isZip90Stage = (s: string): s is Zip90Stage => (ZIP90_STAGES as readonly string[]).includes(s);
@@ -332,7 +344,7 @@ const isZip86Stage = (s: string): s is Zip86Stage => (ZIP86_STAGES as readonly s
 export const ZIP87_STAGES = ['zip87_early', 'zip87_payday', 'zip87_past', 'zip87_paid', 'zip87_gameday', 'zip87_allset', 'zip87_prizes'] as const;
 type Zip87Stage = (typeof ZIP87_STAGES)[number];
 const isZip87Stage = (s: string): s is Zip87Stage => (ZIP87_STAGES as readonly string[]).includes(s);
-export const TEST_STAGES = [...ZIP97_STAGES, ...ZIP94_STAGES, ...ZIP92_STAGES, ...ZIP90_STAGES, ...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
+export const TEST_STAGES = [...ZIP97_STAGES, ...ZIP95_STAGES, ...ZIP94_STAGES, ...ZIP92_STAGES, ...ZIP90_STAGES, ...ZIP89_STAGES, ...ZIP88_STAGES, ...ZIP87_STAGES, ...ZIP86_STAGES, ...ZIP85_STAGES, ...ZIP83_STAGES, ...VENUE_STAGES, ...ZIP79_STAGES, ...ZIP77_STAGES, ...ZIP74_STAGES, ...ZIP70_STAGES, ...ZIP58_STAGES, ...AM_STAGES, ...DAY_STAGES, 'none', 'signup', 'date_picked', 'tickets_open', 'all_locked', 'odd', 'canceled', 'rescheduled', 'closed', 'hidden', 'vote_open', 'vote_majority', 'vote_tie', 'vote_finalize', 'speed_check', ...COUNTDOWN_STAGES, ...STYLE_STAGES, ...ZIP66_STAGES, 'zip71_teams'] as const;
 const isStyleStage = (s: string): boolean => (STYLE_STAGES as readonly string[]).includes(s);
 type CountdownStage = (typeof COUNTDOWN_STAGES)[number];
 const isCountdown = (s: string): s is CountdownStage => (COUNTDOWN_STAGES as readonly string[]).includes(s);
@@ -514,9 +526,12 @@ export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE 'tournament_hidden:%'").bind(group.id),
     // Zip 70: the Plan's saved Expect number and the time card of the last stage's tournament.
     ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND (task LIKE 'tournament_expect:%' OR task LIKE 'tournament_time:%' OR task LIKE 'tournament_start:%')").bind(group.id),
+    // Zip 95: the Level check card's answers of the last stage's tournament.
+    ctx.db.prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'mark' AND task LIKE ?").bind(group.id, `${LEVEL_CHECK_TASK}%`),
   ]);
   if (stage === 'none') return { ok: true, stage };
   if (isZip97Stage(stage)) return zip97Stage(ctx, group, stage);
+  if (isZip95Stage(stage)) return zip95Stage(ctx, group, stage);
   if (isZip94Stage(stage)) return zip94Stage(ctx, group, stage);
   if (isZip92Stage(stage)) return zip92Stage(ctx, group, stage);
   if (isZip90Stage(stage)) return zip90Stage(ctx, group, stage);
@@ -1567,6 +1582,128 @@ async function zip79Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmi
     .bind(date, JSON.stringify([date]), new Date(tapMs).toISOString(), new Date(tapMs + 7 * 86_400_000).toISOString(), id)
     .run();
   return { ...made, stage };
+}
+
+/** Zip 95: the five teams of The Cold Open (Locked doubles), each player's level (hundredths), seat 1 to 5. */
+const ZIP95_TEAMS: { name: string; players: [string, number][] }[] = [
+  { name: 'Net Ninjas', players: [['Vic', 300], ['Parker', 360]] },
+  { name: 'Third Shot Gang', players: [['Wren', 320], ['Alex', 340]] },
+  { name: 'Kitchen Crew', players: [['Rowan', 350], ['Zoe', 275]] },
+  { name: 'Dill With It', players: [['Sage', 300], ['Quinn', 250]] },
+  { name: 'Dink Dynasty', players: [['Christopher Vanderberg', 300], ['Reese', 275]] },
+];
+/**
+ * The night's regular games (round, court, seats, winner side): the round robin in 5 rounds, then an extra round of 3 games, so the records are
+ * Net Ninjas 5-0, Third Shot Gang 4-1, Kitchen Crew 3-2, Dill With It 1-5, Dink Dynasty 0-5 (five teams cannot give 5-0, 4-1 and 3-2 with the
+ * round robin alone: the wins would not add up). Then the Final (Third Shot Gang beat Net Ninjas) and 3rd place (Kitchen Crew).
+ */
+const ZIP95_GAMES: { round: number; court: number; stage: 'pool' | 'final' | 'third'; a: number; b: number; win: 'a' | 'b' }[] = [
+  { round: 1, court: 1, stage: 'pool', a: 1, b: 2, win: 'a' },
+  { round: 1, court: 2, stage: 'pool', a: 3, b: 4, win: 'a' },
+  { round: 2, court: 1, stage: 'pool', a: 1, b: 3, win: 'a' },
+  { round: 2, court: 2, stage: 'pool', a: 2, b: 5, win: 'a' },
+  { round: 3, court: 1, stage: 'pool', a: 1, b: 4, win: 'a' },
+  { round: 3, court: 2, stage: 'pool', a: 3, b: 5, win: 'a' },
+  { round: 4, court: 1, stage: 'pool', a: 1, b: 5, win: 'a' },
+  { round: 4, court: 2, stage: 'pool', a: 2, b: 4, win: 'a' },
+  { round: 5, court: 1, stage: 'pool', a: 2, b: 3, win: 'a' },
+  { round: 5, court: 2, stage: 'pool', a: 4, b: 5, win: 'a' },
+  { round: 6, court: 1, stage: 'pool', a: 1, b: 4, win: 'a' },
+  { round: 6, court: 2, stage: 'pool', a: 2, b: 5, win: 'a' },
+  { round: 7, court: 1, stage: 'pool', a: 3, b: 4, win: 'a' },
+  { round: 8, court: 1, stage: 'final', a: 1, b: 2, win: 'b' },
+  { round: 8, court: 2, stage: 'third', a: 3, b: 4, win: 'a' },
+];
+
+/** Zip 95's stages (see ZIP95_STAGES): the ended night written row by row (no ticket, credit or money row), then, for the sign-up, Winter Classic. */
+async function zip95Stage(ctx: Ctx, group: Awaited<ReturnType<typeof requireAdmin>>, stage: Zip95Stage) {
+  const signup = stage === 'zip95_signup';
+  // Winter Classic first (its stage clears every tournament), then The Cold Open next to it.
+  const made = signup ? ((await tournamentTestStage(ctx, { stage: 'signup' })) as { id?: string }) : {};
+  const { results: players } = await ctx.db.prepare('SELECT id, display_name FROM players WHERE group_id = ? AND is_active = 1').bind(group.id).all<{ id: string; display_name: string }>();
+  const idOf = new Map(players.map((p) => [p.display_name, p.id]));
+  const tz = group.timezone;
+  // Last night (the sign-up stage: five nights back), ended at 10:05 PM Eastern (03:05 UTC the next day; near enough in summer time too).
+  const back = signup ? 5 : 1;
+  const date = todayKeyMinus(ctx.nowMs, tz, back);
+  const endedAt = `${todayKeyMinus(ctx.nowMs, tz, back - 1)}T03:05:00.000Z`;
+  const startAt = `${todayKeyMinus(ctx.nowMs, tz, back - 1)}T00:30:00.000Z`;
+  const id = newId();
+  const minute = (m: number) => new Date(Date.parse(startAt) + m * 60_000).toISOString();
+  const statements = [
+    ctx.db
+      .prepare(
+        `INSERT INTO tournaments (id, group_id, name, size, courts, minutes, start_minutes, ticket_cents, champion_credit_cents, offered_dates, final_date,
+           status, visibility, created_at, updated_at, date_picked_at, shown_at, format, second_credit_cents, format_source, teams_at, ended_at, end_key, banner_until)
+         VALUES (?, ?, 'The Cold Open', 10, 2, 150, 1170, 1800, 1400, ?, ?, 'ended', 'all', ?, ?, ?, ?, 'doubles', 0, NULL, ?, ?, ?, ?)`,
+      )
+      .bind(id, group.id, JSON.stringify([date]), date, minute(-30 * 24 * 60), endedAt, minute(-20 * 24 * 60), minute(-20 * 24 * 60), minute(-10), endedAt, newId(), new Date(Date.parse(endedAt) + 7 * 86_400_000).toISOString()),
+  ];
+  // The teams, each player's sign-up (the level they picked) and their saved result (End's rows: the record over every game, the medal).
+  const record = (seat: number) => {
+    const mine = ZIP95_GAMES.filter((g) => g.a === seat || g.b === seat);
+    const wins = mine.filter((g) => (g.win === 'a' ? g.a : g.b) === seat).length;
+    return { wins, losses: mine.length - wins };
+  };
+  const finish = [2, 1, 3, 4, 5];
+  for (const [i, team] of ZIP95_TEAMS.entries()) {
+    const seat = i + 1;
+    const [a, b] = team.players.map(([name]) => idOf.get(name) ?? null);
+    statements.push(
+      ctx.db
+        .prepare('INSERT INTO tournament_teams (id, tournament_id, seat, name, player_a, player_b, pool, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)')
+        .bind(newId(), id, seat, team.name, a, b, minute(-10), minute(-10)),
+    );
+    for (const [k, [name, level]] of team.players.entries()) {
+      const pid = idOf.get(name);
+      if (!pid) continue;
+      const partner = team.players[1 - k][0];
+      statements.push(
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_signups (id, tournament_id, player_id, status, picked_level, approved_level, dates, joined_at, created_at, updated_at)
+             VALUES (?, ?, ?, 'in', ?, NULL, ?, ?, ?, ?)`,
+          )
+          .bind(newId(), id, pid, level, JSON.stringify([date]), minute(-29 * 24 * 60), minute(-29 * 24 * 60), minute(-29 * 24 * 60)),
+        ctx.db
+          .prepare(
+            `INSERT INTO tournament_results (id, tournament_id, player_id, finish, wins, losses, points, team_name, partner_id, picked_level, approved_level, medal, award,
+               credit_cents, seen_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?, 0, ?, ?)`,
+          )
+          .bind(newId(), id, pid, finish[i], record(seat).wins, record(seat).losses, team.name, idOf.get(partner) ?? null, level, seat === 2 ? 1 : 0, seat === 2 ? 'champion' : null, endedAt, endedAt),
+      );
+    }
+  }
+  for (const [n, g] of ZIP95_GAMES.entries()) {
+    const slot = (seat: number, side: 0 | 1) => (g.stage === 'pool' ? `T${seat}` : g.stage === 'final' ? `P${side + 1}` : `P${side + 3}`);
+    const at = minute(20 * g.round);
+    statements.push(
+      ctx.db
+        .prepare(
+          `INSERT INTO tournament_games (id, tournament_id, num, round, court, stage, pool, slot_a, slot_b, play_to, winner, result_at, result_by, skipped, seat_a, seat_b,
+             created_at, updated_at, score_a, score_b)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 11, ?, ?, 'players', 0, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(newId(), id, n + 1, g.round, g.court, g.stage, slot(g.a, 0), slot(g.b, 1), g.win, at, g.a, g.b, minute(-10), at, g.win === 'a' ? 11 : 4 + (n % 5), g.win === 'b' ? 11 : 4 + (n % 5)),
+    );
+  }
+  await ctx.db.batch(statements);
+  if (signup) {
+    // Alex's answers on the card, saved the way the card saves them: Vic Yes at 3.2, Wren No.
+    await ctx.db.batch(
+      [
+        ['Vic', '320'],
+        ['Wren', LEVEL_CHECK_NO],
+      ].map(([name, detail]) =>
+        ctx.db
+          .prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, NULL, ?, 'mark', ?, ?)")
+          .bind(newId(), group.id, levelCheckTask(id, idOf.get(name) ?? ''), detail, new Date(Date.parse(endedAt) + 12 * 3_600_000).toISOString()),
+      ),
+    );
+    return { ...made, ok: true, stage };
+  }
+  return { ok: true, id, stage };
 }
 
 /** Zip 79: the five finished tournaments of the skills history, oldest first (days back) and each player's level (hundredths; null: missed it). */
