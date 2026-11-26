@@ -8869,7 +8869,10 @@ tests/zip62-speed.test.ts: with "Fewer database trips" OFF (not live) the dashbo
 allowance Zips 83 and 85 raised the same way); on live (on) no trip is added.
 
 ### Tests
-Unit: 248 files, 4,539 passed, 12 skipped, 0 failed (the full run, then the one allowance above). Browser: e2e/zip95.cjs 3 of 3 (A the card
+Unit (final code): 246 files passed, 2 skipped; 4,539 passed, 12 skipped, 0 failed. Browser, the full run (npm run test:e2e): 90 of 90 green,
+3,271 checks (circles, admin-audit, admin-motion, admin-v2, zip32 failed a check or two with 3 lanes busy, green alone). e2e/zip79.cjs
+(not in the full run): A to D and F green; E fails on its own stale words (it expects the History tab "Sessions", renamed "Games" in Zip 85;
+not this zip, left as is). Browser: e2e/zip95.cjs 3 of 3 (A the card
 and its taps, light and dark; B 320/375/390/420/440 x 100/125/150% x light/dark x both looks: nothing cut, no word broken, 44 px; C the
 sign-up tag and the level up, the same sweep).
 
