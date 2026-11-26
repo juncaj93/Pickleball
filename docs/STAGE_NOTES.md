@@ -8825,3 +8825,39 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
 - Main to `676e2d5`; `npm run deploy -- --override-loud-hours`: deployment **bd2e5dc4-5c65-4b0b-8eae-47be39b6be4e** (bundle
   `index-BCw-MEQw.js`). Rollback: **fc5e5867-6c49-4182-81cf-32e84542706d**. Read-only live look: /, /admin, /api/status 200; dashboard 401;
   Home 390 light and dark: no errors, nothing wider, no writes.
+
+## 🎾94.early bird (Thu Nov 26, 2026; branch `claude/new-session-616ec9`, from main `8ef2646` (🎾92 round 3 live); NOT live: held for Alex's OK)
+
+### What it is
+Pay early, pay less (Alex: $18 early, $20 after). Built OFF behind Settings > Feature switches > "Early bird pricing" (EARLY_BIRD). A
+tournament gets "Early price" and "Early price until" in its gear sheet; a player's own tap (Lock in with credit, Hold, I paid) before the
+deadline locks in the early price; each ticket keeps the price it was sold at. Rules in docs/SITE_RULES.md ("Early bird pricing").
+
+### Database (Alex OK'd, Thu Nov 26)
+`migrations/0030_early_bird.sql`: two NEW nullable columns on `tournaments`, `early_cents` and `early_until`. Every existing row NULL (no early
+bird). Nothing existing changed. Old code never reads them: a code rollback needs no database step. Applied to `pickleball-preview` Thu Nov 26
+(only pending file). NOT on live yet.
+
+### Decisions (Alex, Nov 26)
+- An empty ticket (no credit, no cash, no I paid) moves to the regular price after the deadline, with a 30 minute grace for an I paid on a
+  ticket priced early (a Venmo payment in progress).
+- The private link (`/admin?earlybird=on`) only shows the gear rows on that organizer phone; prices follow the Settings row alone.
+
+### Tests
+- tests/zip94-early-bird.test.ts (17): the rule and words; the gear rules (lower, before Pay by, fixed once locked in, Pay by never before it);
+  money to the cent: early $14 / late $16 lock ins, credit covering part, the 30 minute grace and the look-again after it, Mark paid, drop out
+  and refund, standby taking a freed early spot, the kept late drop, Money with a mix, End with mixed tickets (prize credit once); both
+  integrity files 0 after each. The Cold Open proof: a tournament with no early price gives the same organizer answer (but the gear row), the
+  same player cards and the same taps with the switch off and on, and can never get an early price once tickets are sold.
+- e2e/zip94.cjs (7): the card days before / last day / after at 320/375/390/420/440, text 100/125/150%, light and dark (never cut, nothing
+  wider than the screen); Lock in asks $18; the gear sheet fixed and edited; Money + Prizes "Tickets $170".
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 63 statements, the 5 second check 2 / 16, before (main) and after, at all_locked, mid, am_round3, zip92_ld_round (and the
+new zip94_three, zip94_mixed). The switch rides the tournament row's own read (no trip in any mode); a tournament with no early price never
+reads it.
+
+### Preview
+https://claude-new-session-616ec9.pickleball-club-9h0.pages.dev (PIN 739514; the fake `pickleball-preview` database, migration 0030 applied,
+no re-seed). Stages: "94: early price, 3 days left", "94: early price, last day", "94: early price over", "94: mixed $18 and $20 tickets
+(Money + Prizes)". Picking a stage turns Early bird pricing on (the preview only).
