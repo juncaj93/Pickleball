@@ -429,22 +429,27 @@ async function main() {
         const box = (sel) => document.querySelector(sel).getBoundingClientRect();
         out.gaps = [box('[data-card="projected"]').top - box('[data-card="so-far"]').bottom, box('[data-fold="running-total"]').top - box('[data-card="projected"]').bottom, mm.getBoundingClientRect().top - box('[data-fold="running-total"]').bottom];
         out.order = [...document.querySelector('.tr').children].map((c) => c.getAttribute('data-card') || c.getAttribute('data-fold'));
+        // Zip 78: the cards' accents are the site's tokens (So far the amber --warn-fg, Projected the blue --info-fg).
+        const tok = (n) => rgb(getComputedStyle(document.documentElement).getPropertyValue(n).trim());
+        out.acc = { sf: tok('--warn-fg'), pj: tok('--info-fg') };
         return out;
       });
-      if (process.env.ZIP23_DUMP) require('node:fs').writeFileSync(`${process.env.ZIP23_DUMP}-${scheme}.json`, JSON.stringify(m, null, 1));
       const eqc = (a, b, tol = 2) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
-      const acc = scheme === 'light' ? { sf: [0x8a, 0x6a, 0x00], pj: [0x4a, 0x5f, 0x8f] } : { sf: [0xf0, 0xcf, 0x55], pj: [0x9d, 0xb3, 0xe6] };
+      // Retired in Zip 92: the mock's exact accent pixels (#8a6a00 / #4a5f8f, dark #f0cf55 / #9db3e6) were removed in Zip 78 (one-look tokens).
+      const acc = m.acc;
       const mix = (a, b, pct) => a.map((v, i) => Math.round((v * pct + b[i] * (100 - pct)) / 100));
       assert(m.order.join() === 'so-far,projected,running-total,month-by-month', `order ${m.order} (Zip 54 put Running total between Projected and Month by month)`);
       assert(m.gaps.every((g) => Math.abs(g - 9) < 1), `9 px between the cards: ${m.gaps}`);
       for (const k of ['sf', 'pj']) {
         const x = m[k];
         const label = k === 'sf' ? 'So far' : 'Projected';
-        assert(x.radius === '18px' && x.borderW === '1px', `${label}: radius ${x.radius}, border ${x.borderW}`);
+        // Zip 78: one card corner, 20 px (was the mock's 18).
+        assert(x.radius === '20px' && x.borderW === '1px', `${label}: radius ${x.radius}, border ${x.borderW}`);
         assert(eqc(x.borderColor, mix(acc[k], x.lnBorderColor, 45), 3), `${label}: border is 45% accent mixed with the line color: ${x.borderColor} vs ${mix(acc[k], x.lnBorderColor, 45)}`);
         assert(x.rowsPad.join() === '6px,16px,2px,16px', `${label}: rows padding ${x.rowsPad}`);
         assert(x.lnFont === '14.5px' && x.lnPad.join() === '6px,6px', `${label}: row font ${x.lnFont}, padding ${x.lnPad}`);
-        assert(x.lnBorders.join() === 'none/0px,dashed/1px,solid/1px,dashed/1px', `${label}: row lines ${x.lnBorders}`);
+        // (Zip 76's "Credit you added by hand" row, when there is one, comes after Players paid with the same dashed line.)
+        assert(x.lnBorders.slice(0, 4).join() === 'none/0px,dashed/1px,solid/1px,dashed/1px' && x.lnBorders.slice(4).every((b) => b === 'dashed/1px'), `${label}: row lines ${x.lnBorders}`);
         assert(x.sumWeights.join() === '700,700' && x.ddWeight === '600', `${label}: weights ${x.sumWeights} ${x.ddWeight}`);
         assert(x.emSize === '11.5px' && x.emMargin === '4px' && x.emStyle === 'normal', `${label}: small word ${x.emSize} ${x.emMargin} ${x.emStyle}`);
         assert(eqc(x.emColor, m.mm.muted, 1), `${label}: small words are muted: ${x.emColor} vs ${m.mm.muted}`);
@@ -465,7 +470,7 @@ async function main() {
         assert(x.ynIsLast, `${label}: the total is the last thing on the right`);
       }
       assert(m.sf.dotW === m.pj.dotW && m.sf.dotH === m.pj.dotH, 'both dots are the same size');
-      assert(m.mm.radius === '18px' && eqc(m.mm.border, m.mm.line, 1), `Month by month card: radius ${m.mm.radius}, plain border ${m.mm.border}`);
+      assert(m.mm.radius === '20px' && eqc(m.mm.border, m.mm.line, 1), `Month by month card: radius ${m.mm.radius}, plain border ${m.mm.border}`);
       assert(m.mm.label === 'Month by month' && m.mm.labelTransform === 'uppercase' && m.mm.labelSize === '11px' && Math.abs(m.mm.labelSpacing - 1.54) < 0.02 && eqc(m.mm.labelColor, m.mm.muted, 1), `Month by month label: ${JSON.stringify(m.mm)}`);
       assert(m.mm.h >= 42 && m.mm.h <= 44, `Month by month row height 42 (the mock): ${m.mm.h}`);
       // Retired in Zip 92: the Month by month chevron was removed in Zip 78 (every chevron, caret and › gone).

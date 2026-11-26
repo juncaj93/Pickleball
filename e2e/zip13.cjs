@@ -115,7 +115,7 @@ async function main() {
   // ================================================================ 1 Players redo
   for (const scheme of ['light', 'dark']) {
     for (const width of [390, 360, 320]) {
-      await check(`Players list ${width} px ${scheme}: one card, every row 46 px and one line, no arrows or gears, chips never wrap, small Add a person`, async () => {
+      await check(`Players list ${width} px ${scheme}: one card, every row 46 px and one line (two only for a long name), no arrows or gears, chips never wrap, small Add a person`, async () => {
         const { ctx, page, errors } = await openAdmin(width, scheme);
         await tab(page, 'Players');
         await page.locator('[data-players-redo]').waitFor();
@@ -129,6 +129,8 @@ async function main() {
               lines: new Set(kids.filter((k) => k.width > 0).map((k) => Math.round(k.top + k.height / 2))).size,
               over: kids.some((k) => k.right > box.right + 0.5),
               nameCut: name.scrollWidth > name.clientWidth + 1,
+              nameLines: Math.round(name.getBoundingClientRect().height / parseFloat(getComputedStyle(name).lineHeight)),
+              nameLineH: parseFloat(getComputedStyle(name).lineHeight),
               chips: r.querySelectorAll('.pr-chip').length,
               colored: r.querySelectorAll('.pr-chip:not(.pr-more)').length,
             };
@@ -145,8 +147,14 @@ async function main() {
         assert(m.month === 'NOV 2026', `month label ${m.month}`);
         assert(m.rows.length >= 10, `rows ${m.rows.length}`);
         for (const r of m.rows) {
-          assert(Math.abs(r.h - 46) < 0.6, `row height ${r.h}`);
-          assert(r.lines === 1, 'a row on one line');
+          // Zip 78: a row is 46 px, taller only when a long name wraps between words onto a second line (a name is never cut).
+          if (r.nameLines === 1) {
+            assert(Math.abs(r.h - 46) < 0.6, `row height ${r.h}`);
+            assert(r.lines === 1, 'a row on one line');
+          } else {
+            assert(r.nameLines === 2 && Math.abs(r.h - (8 + 2 * r.nameLineH)) < 0.6, `a long name's row: ${r.nameLines} name lines, ${r.h} px`);
+          }
+          assert(!r.nameCut, 'a name is cut');
           assert(!r.over, 'nothing past the row');
           assert(r.colored <= 1 && r.chips <= 2, 'at most one colored chip and one +N');
         }
@@ -539,6 +547,9 @@ async function main() {
     await page.locator('[data-pr-edit]').click();
     await page.locator('[data-adjust-credit-row]').click();
     await page.locator('[data-adjust-sheet]').waitFor();
+    // Instant taps' double-tap guard (src/InstantTaps.tsx) drops a tap within 400 ms and 24 px of the one before (the $5 chip opens right
+    // under the Adjust credit row): wait like a person would.
+    await page.waitForTimeout(450);
     await page.locator('[data-adjust-chip="5"]').click();
     await page.locator('[data-adjust-reason]').fill('Test');
     await page.locator('[data-adjust-save]').click();

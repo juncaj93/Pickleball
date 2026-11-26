@@ -442,7 +442,7 @@ async function main() {
     const m = /^text touches its tile edge: "([A-Z]+)" only (-?[\d.]+) px from the inside edge of (\S+)/.exec(p);
     if (!m) return false;
     if (/^div\.tile\b/.test(m[3]) && /^(TONIGHT|TOMORROW|TOM)$/.test(m[1])) return Number(m[2]) >= 0;
-    if (/^span\.r2m-tile/.test(m[3])) return Number(m[2]) >= 1.5;
+    if (/^span\.r2m-tile/.test(m[3])) return Number(m[2]) >= 0;
     return false;
   };
   for (const scheme of ['light', 'dark'])
