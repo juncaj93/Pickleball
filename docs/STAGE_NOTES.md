@@ -8968,7 +8968,7 @@ sign-up tag and the level up, the same sweep).
 https://claude-new-session-2v5jzf.pickleball-club-9h0.pages.dev (the fake `pickleball-preview` database, no re-seed). Switches on: Tournaments
 (set by the stage), as live. Left on "95: level check after a tournament".
 
-### Live (Thu Nov 26, 2026, about 3:15 PM Eastern; Alex's go: ship today, game canceled for Thanksgiving, --override-loud-hours OKed)
+### Live (Thu Nov 26, 2026, about 3:04 PM Eastern; Alex's go: ship today, game canceled for Thanksgiving, --override-loud-hours OKed)
 - Main merged with 🎾93 (live 86f85e98) and 🎾94 (live 28f4856f, migration 0030) as `9db151f`; conflicts in the stage lists, the stage
   page, tournament.css and the docs, each kept both sides.
 - Unit on the merged code: 248 files passed, 2 skipped; 4,566 passed, 12 skipped, 0 failed; typecheck clean.
