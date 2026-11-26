@@ -290,9 +290,14 @@ async function main() {
         assert(bad.length === 0, `banner (${scheme}): ${bad.join('; ')}`);
         const badCheck = await checkProblems(p.page);
         assert(badCheck.length === 0, `TONIGHT tile check badge (${scheme}): ${badCheck.join('; ')}`);
-        // TOMORROW is the full word on a tile without the badge; with the badge it keeps 9 px and the word never runs under it.
+        // TOMORROW is the full word on a tile wide enough for it; with the badge it keeps 9 px and the word never runs under it. Zip 92: since
+        // Zip 78's 11 px floor the word is about 71 px, so a tile under 78 px (360 and 320 px phones) says TOM, whole and inside the tile.
         const tm = p.page.locator(`#row-${game.tomorrow.id} .day-tag.tomorrow`);
-        assert((await tm.innerText()).trim() === 'TOMORROW', `TOMORROW in full on the card (${await tm.innerText()})`);
+        const tileW = await p.page.locator(`#row-${game.tomorrow.id} .tile`).first().evaluate((x) => x.getBoundingClientRect().width);
+        const want = tileW < 78 ? 'TOM' : 'TOMORROW';
+        assert((await tm.innerText()).trim() === want, `${want} on the ${Math.round(tileW)} px tile (${await tm.innerText()})`);
+        const inside = await tm.evaluate((x) => { const r = document.createRange(); r.selectNodeContents(x); const t = r.getBoundingClientRect(); const b = x.closest('.tile').getBoundingClientRect(); return t.left >= b.left - 0.5 && t.right <= b.right + 0.5; });
+        assert(inside, `${want} stays inside its tile`);
         await noSideScroll(p.page, `player ${width} ${scheme}`);
         if (width === 320) await shot(p.page, `player-320-${scheme}`);
         await p.ctx.close();
