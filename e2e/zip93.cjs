@@ -245,9 +245,9 @@ const pixelDiff = (page, a, b) =>
       assert(before[0].includes(sub.slice(0, 20)), `the same second line: "${before[0]}" vs "${sub}"`);
       const day = await notice('zip93_game_day');
       assert(day.length === 0, `game day: ${JSON.stringify(day)}`);
-      // The Tournament test page lists only this zip's two stages above All tests.
+      // The Tournament test page keeps both Zip 93 stages (a newer zip holds the top "this zip" spot since Zip 94).
       const res = require('node:fs').readFileSync(path.join(ROOT, 'src/pages/admin/TournamentTest.tsx'), 'utf8');
-      assert(/THIS_ZIP: readonly string\[\] = \['zip93_day_before', 'zip93_game_day'\]/.test(res), 'THIS_ZIP is the two Zip 93 stages');
+      assert(res.includes("'zip93_day_before'") && res.includes("'zip93_game_day'"), 'both Zip 93 stages still listed');
       assert(res.includes("label: '93: scheduled notice, day before'") && res.includes("label: '93: scheduled notice, game day'"), 'the two labels');
     });
 
