@@ -750,6 +750,7 @@ export function TicketCard({
     const early = s === 'lock' ? earlyCardOf(k, (iso) => payByLabel(iso, tz, t.finalDate), Date.now()) : null;
     const strike = early?.strikeCents ?? null;
     const shown = strike === null ? label : `Lock in · ${formatPrice(strike)} ${formatPrice(due)}`;
+    // The struck label ("Lock in · $20 $18") is set like the longest labels, so Who's in and Drop out stay on the same row (picture 1).
     const long = Array.from(shown).length > 13 ? (Array.from(shown).length > 16 ? ' tc-long tc-longer' : ' tc-long') : '';
     const act = s === 'lock' ? onLock : s === 'full' ? onJoin : hold ? onHold : null;
     const actData = s === 'lock' ? 'data-tc-lock' : s === 'full' ? 'data-tc-join' : 'data-tc-hold';

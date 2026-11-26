@@ -1009,7 +1009,7 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
             )}
           </div>
           {(ebFixed ? eb.cents !== null && !!eb.until : ebCents !== null) && (
-            <div className="tm86-field tm87-stack" data-tm94-early-until>
+            <div className={ebFixed ? 'tm86-field' : 'tm86-field tm87-stack'} data-tm94-early-until>
               <span className="tm86-label">Early price until</span>
               {ebFixed ? (
                 <b className="tm86-fixed">{clockShort(payByLabel(eb.until!, tz, t.finalDate))}</b>
