@@ -9031,4 +9031,13 @@ zip97_six (9.8 to 11.3 ms after, 14.5 to 15.4 before on a busier machine).
 
 ### Preview
 https://claude-new-session-wfeker.pickleball-club-9h0.pages.dev (PIN in docs/PREVIEW_FAKE_DB.md; the fake `pickleball-preview` database, no
-re-seed, no migration). Built from a clean checkout of the pushed branch. Both stages tried there; left on "97: 6 players switch to Americano".
+re-seed, no migration). Built from a clean checkout of the pushed branch after main (🎾95 live) was merged in (deployment `3415e4a0`, commit `2841a0e`). Both stages tried there; left on "97: 6 players switch to Americano".
+
+### Tests (after merging main with 🎾95)
+- Unit: 249 files passed, 2 skipped; 4,579 tests passed, 13 skipped, 0 failed.
+- Browser, full suite (`node e2e/all.cjs`, 90 scripts): 83 green on the first run; the 7 red (zip27, 32, 34, 35, 38, 39, 42) were the Settings
+  checks 🎾95 already fixed on main (🎾94's Early bird switch on top); after the merge all 7 are green alone. zip93, zip95, zip97 (2/2), zip71, zip92 green.
+- Tournament scripts outside the suite, run on this branch AND on a clean main: zip88 and zip61 changed only to expect 7 Americano rounds (RD7,
+  "OF 7", 14 games); after that the failures left are exactly main's: zip88 I (the countdown, date dependent), zip89 B (the No on "Add a round?
+  Are you sure?" does not register in that script), zip61 G before the night (the All rounds sheet does not open), zip64 (28 vs main's 30, none new),
+  zip70 (the same 42 as main). Not touched here.
