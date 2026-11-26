@@ -320,19 +320,44 @@ describe('zip 61: game night, scores', () => {
 describe('zip 61: Time check, Pause, Player left, back outs', () => {
   it('the Time check counts in rounds and never shortens the last round', async () => {
     const ctx = await world(10, { minutes: 150 });
-    // 7:30 PM, 6 rounds to 11 (120 minutes; Zip 89: 20 a round). An hour in and nothing entered: well behind.
-    ctx.app.now = START_MS + 75 * 60_000;
+    // 7:30 PM, 7 rounds to 11 (Zip 97: 17 a round, 119 minutes after the warm-up). 45 minutes in and nothing entered: well behind, and
+    // shorter games before the last round are enough.
+    ctx.app.now = START_MS + 45 * 60_000;
     const d = (await dash(ctx)).rounds;
+    const last = Math.max(...d.games.map((g: any) => g.round));
+    expect(last).toBe(7);
     expect(d.timeCheck).toBeTruthy();
     expect(d.timeCheck.text).toMatch(/^Running about \d+ minutes behind\. From Round \d on, play to (9|7)/);
     const r = await admin(ctx, { action: 'apply', fromRound: d.timeCheck.fromRound, to: d.timeCheck.to });
     expect(r.status, r.text).toBe(200);
     const after = (await dash(ctx)).rounds;
-    expect(after.games.filter((g: any) => g.round === 6).every((g: any) => g.playTo === 11)).toBe(true);
-    expect(after.games.filter((g: any) => g.round >= d.timeCheck.fromRound && g.round < 6).every((g: any) => g.playTo === d.timeCheck.to)).toBe(true);
+    expect(after.games.filter((g: any) => g.round === last).every((g: any) => g.playTo === 11)).toBe(true);
+    expect(after.games.filter((g: any) => g.round >= d.timeCheck.fromRound && g.round < last).every((g: any) => g.playTo === d.timeCheck.to)).toBe(true);
     // Players see the words.
     const v = (await card(ctx, 'Blair')).day;
     expect(v.timeNote).toContain(`From Round ${d.timeCheck.fromRound} on, play to ${d.timeCheck.to}`);
+  });
+
+  it('Zip 97, the last resort: so late that even games to 7 before it are not enough: the last round may be shortened too, and only then', async () => {
+    const ctx = await world(10, { minutes: 150 });
+    // 75 minutes in and nothing entered: Round 1 alone has run an hour.
+    ctx.app.now = START_MS + 75 * 60_000;
+    const d = (await dash(ctx)).rounds;
+    const last = Math.max(...d.games.map((g: any) => g.round));
+    expect(d.timeCheck).toBeTruthy();
+    expect(d.timeCheck.to).toBe(7);
+    const r = await admin(ctx, { action: 'apply', fromRound: d.timeCheck.fromRound, to: 7 });
+    expect(r.status, r.text).toBe(200);
+    const after = (await dash(ctx)).rounds;
+    // Round 1 is on the courts (never shortened); every later round, the last included, is to 7.
+    expect(after.games.filter((g: any) => g.round === 1).every((g: any) => g.playTo === 11)).toBe(true);
+    expect(after.games.filter((g: any) => g.round >= d.timeCheck.fromRound && g.round <= last).every((g: any) => g.playTo === 7)).toBe(true);
+    // A stale tap (not the suggestion as it stands) never reaches the last round.
+    const ctx2 = await world(10, { minutes: 150 });
+    ctx2.app.now = START_MS + 75 * 60_000;
+    const d2 = (await dash(ctx2)).rounds;
+    expect((await admin(ctx2, { action: 'apply', fromRound: d2.timeCheck.fromRound, to: 9 })).status).toBe(200);
+    expect((await dash(ctx2)).rounds.games.filter((g: any) => g.round === last).every((g: any) => g.playTo === 11)).toBe(true);
   });
 
   it('Pause shows on every phone; Resume takes it off', async () => {

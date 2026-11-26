@@ -8913,3 +8913,50 @@ Unit 246 files, 4,547 passed, 12 skipped, 0 failed. e2e/zip94 7 of 7, zip92 B, z
   $108 in prices, $90 on them: unchanged.
 - Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
   wider, no writes. Organizer screens not opened (no read-only PIN in this session).
+
+## 🎾97.real pace (Thu Nov 26, 2026; branch `claude/new-session-wfeker`, from main `cdcc178` (🎾94 live); NOT live: held for Alex's OK, deploys after 🎾95)
+
+### What changed (the code is the truth; SITE_RULES "Real pace (Zip 97)")
+1. THE PACE (shared/tournamentPlan.ts): ROUND_MINUTES { 11: 17, 9: 14, 7: 11 } for regular games; PLAYOFF_MINUTES 20 for semifinals, the Final,
+   3rd place and a best of 3's games (the plan's `used`, the Time check's `lenOf`, the night times, the pace rounds, the bonus minutes). TIE_MINUTES
+   8 (derived). shared/smartPacing.ts: the pace is in minutes for a regular round to 11 (FULL = 17); PACE_FLOOR stays 14 (see below).
+2. BONUS UNTIL THE PLAYOFFS (Locked doubles): PaceInput.minLeft (0 for the 'round' kind); server/tournamentDay.ts facts offers 'round' only while
+   no playoff game has started (on a court, scored, skipped, or claim_at 'on:'), never looser than writePoolRound's guard. Americano and the
+   semis / best of 3 offers unchanged.
+3. 6 PLAYERS PLAY AMERICANO: AMERICANO_EVEN = [6, 12, 14]; PLANS[6] words describe Americano.
+4. Found on the way: shared/americanoSchedule.ts fairEnd tries every sitter choice from the round before (8 seeds each) when its first remake of
+   the last round breaks a rule (7 players now get an 8th round at 3 hours / 2 hours; they failed "ends early" without it). shared/tournamentSchedule.ts
+   timeCheck's LAST RESORT: Americano's last round (keep) may be suggested shorter only when nothing else can change or games to 7 still run past the
+   booked end (`suggest.last`); server/americanoDay.ts Apply includes the last round only when the tap is that very suggestion (review).
+5. Americano preview stages am_standings / am_done use the plan's round count (they hard-coded 6).
+6. STAGES (THIS_ZIP): zip97_ld_fast (8 Locked doubles, Rounds 1 and 2 at 13 minutes, Round 3 on the courts: Add a round), zip97_six (STYLE_STAGES,
+   6 locked in, the real switch).
+7. scripts/zip97-pace.ts (The Cold Open by headcount, the court time line); scripts/zip92-fairness.ts now 6 to 16.
+
+### Fairness table (scripts/zip92-fairness.ts), PASS/FAIL changed
+Now PASS: 8 Locked doubles 1 court 2 h; Americano 7 (2 courts 2 h, 1 court 2 h), 8 (1 court 2 / 2.5 / 3 h), 10 (1 court 2.5 h), 13 (2 courts 2 h,
+1 court 3 h), 14, 15, 16 (2 courts 2 h). Now FAIL: Americano 11 on 1 court 3 h ("ends early": 13 rounds, the 3-round lap has no fair reorder).
+Locked doubles: no count changes PASS/FAIL on 2 courts, so the style rule needs nothing beyond 6.
+
+### Dry run (tests/zip92-dryrun.test.ts, 6 added; 80 nights; minutes left before / after)
+Nothing past 10 PM (latest 9:58 PM, 7 on 1 court slow), money 0 every night, at most one Time check prompt a round, no game shortened on a court.
+Without the last resort, 7 slow Americano nights ran to 10:00 to 10:07 PM. 8 LD fast 55/55 (offers taken), 66/66 (declined); normal 34/34;
+slow 13/13; mixed 13/18. 10 LD fast 52/52, normal 24/28, slow 15/15. 10 AM fast 39/39, normal 24/22, slow 15/7, mixed 27/18.
+PACE_FLOOR 12 (tried, not shipped): fast nights end 12 to 18 minutes fuller (8 LD fast taken 55 -> 37 left), nothing past 9:46 PM.
+
+### Known
+tests/zip89-pacing-sim.test.ts: the reviewer's most extreme night (Americano 10, 9 minute games for 4 rounds, both bonuses taken, then about 26
+with score entry) ends 10:04 PM (allowed 5 minutes in that one case; told to Alex). Every other night there: by 10 PM.
+
+### Review (a fresh reviewer, no part in the build)
+No bug in units, playoffStarted, the one-offer rule, the last resort or money. Fixed: Apply's last round only for the suggestion as shown (a
+check that changed between the prompt and the tap could have added or skipped it); the new test's fast-night expectation (one offer at the
+14 floor; the declined night shows the new offer after Round 2).
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 63 statements, the 5 second check 2 / 16, before (main) and after, at all_locked, mid, am_round3, zip92_ld_round, zip97_ld_fast,
+zip97_six (9.8 to 11.3 ms after, 14.5 to 15.4 before on a busier machine).
+
+### Preview
+https://claude-new-session-wfeker.pickleball-club-9h0.pages.dev (PIN in docs/PREVIEW_FAKE_DB.md; the fake `pickleball-preview` database, no
+re-seed, no migration). Built from a clean checkout of the pushed branch. Both stages tried there; left on "97: 6 players switch to Americano".
