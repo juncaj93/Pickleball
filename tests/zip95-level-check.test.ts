@@ -108,7 +108,10 @@ describe('zip 95 part 1: the Level check card', () => {
     expect(yes.data.changed).toBe(true);
     expect((await w.card()).rows.map((r: any) => r.name)).toEqual(['Wren']);
     // A second tap (or another phone) changes nothing: the first answer stands.
-    expect((await w.save(id, 'Vic', 360)).data.changed).toBe(false);
+    const again = await w.save(id, 'Vic', 360);
+    expect(again.status).toBe(409);
+    expect(again.data.message).toBe('Vic was already answered. Look again.');
+    expect((await w.save(id, 'Wren', undefined as never)).status).toBe(400);
     expect((await w.save(id, 'Wren', null)).data.changed).toBe(true);
     expect(await w.card()).toBeUndefined();
     const rows = w.all("SELECT task, detail, session_id FROM task_log WHERE task LIKE 'level_check:%' ORDER BY detail");

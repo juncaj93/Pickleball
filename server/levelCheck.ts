@@ -107,14 +107,16 @@ export async function levelCheckAdmin(ctx: Ctx, group: GroupRow, organizerId: st
 
 /**
  * POST /api/admin/level-check { tournamentId, playerId, level }: the card's Save (`level`, a level above theirs) or No (`level: null`). One
- * task_log row, written once (a second tap, or a second phone, changes nothing: the first answer stands). Refused once the card is gone (3 days)
+ * task_log row, written once (a second tap, or a second phone, gets 409 "already answered": the first answer stands). Refused once the card is gone (3 days)
  * or for someone the card never asks about.
  */
 export async function saveLevelCheck(ctx: Ctx, body: Record<string, unknown>) {
   const group = await organizerOn(ctx);
   const tournamentId = v.id(body.tournamentId, 'tournamentId');
   const playerId = v.id(body.playerId, 'playerId');
-  const level = body.level === null || body.level === undefined ? null : body.level;
+  // Only an explicit null is No (a request without `level` is refused, never stored as a No).
+  if (!('level' in body)) throw new HttpError(400, 'invalid_level', 'Pick a level.');
+  const level = body.level === null ? null : body.level;
   if (level !== null && !isLevel(level)) throw new HttpError(400, 'invalid_level', 'Pick a level.');
   const row = await ctx.db
     .prepare(
@@ -126,7 +128,8 @@ export async function saveLevelCheck(ctx: Ctx, body: Record<string, unknown>) {
     .bind(tournamentId, group.id, playerId)
     .first<LevelCheckDbRow & { answer: string | null }>();
   if (!row || Date.parse(row.ended_at) + LEVEL_CHECK_DAYS * DAY_MS <= ctx.nowMs) throw new HttpError(409, 'level_check_gone', 'This just changed. Look again.');
-  if (row.answer !== null) return { ok: true, changed: false };
+  // Already answered (another phone, or a page left open): the first answer stands, and this tap is told so (never a false "saved").
+  if (row.answer !== null) throw new HttpError(409, 'level_check_answered', `${row.display_name} was already answered. Look again.`);
   const f = factsOf(row);
   if (!qualifies(f)) throw new HttpError(409, 'level_check_gone', 'This just changed. Look again.');
   if (level !== null && !levelsAbove(f.level!).includes(level as number)) throw new HttpError(400, 'invalid_level', 'Pick a level above theirs.');
@@ -139,7 +142,7 @@ export async function saveLevelCheck(ctx: Ctx, body: Record<string, unknown>) {
     )
     .bind(newId(), group.id, levelCheckTask(row.tid, playerId), detail, ctx.nowIso, levelCheckTask(row.tid, playerId))
     .run();
-  if (!res.meta?.changes) return { ok: true, changed: false };
+  if (!res.meta?.changes) throw new HttpError(409, 'level_check_answered', `${row.display_name} was already answered. Look again.`);
   await audit(ctx.db, group.id, null, 'tournament_level_check', { tournament: row.tname, player: row.display_name, playerId, ...(level === null ? {} : { level: levelLabel(level as number) }) }, ctx.nowIso);
   return { ok: true, changed: true };
 }

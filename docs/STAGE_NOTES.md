@@ -8847,3 +8847,23 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
    3-2; written row by row, no ticket, credit or money row) and zip95_signup (the same night 5 days back, Vic Yes 3.2, Wren No, Winter
    Classic open). Five teams cannot give 5-0, 4-1 and 3-2 with a round robin alone (the wins would not add up), so the stage has the extra
    round of 🎾92 (3 more games).
+
+### Review (a fresh reviewer, no part in the build)
+Fixed: a second answer (another phone, a page left open) now gets 409 "Vic was already answered. Look again." instead of a false saved
+toast; a request without `level` is refused (only an explicit null is No); answered rows are kept per tournament on a page left open;
+after Save or No the keyboard focus moves to the next row. Not changed: hidden tournaments (only a canceled tournament can be hidden, never
+an ended one); a partner changed during the night (the team's current players get the team's games, rare). Asked of Alex: the 3-game
+minimum, leaving out the organizer, and "next sign-up" counting a canceled or backed-out one.
+
+### Who qualifies (scripts/zip95-audit.ts: the three nights on the fake world)
+- 8 LD (the real End): Vic and Wren 3-0 champions (4-0 with the Final, never counted): both listed. Parker 3.6+; Quinn 2-1; the rest under.
+- 10 LD (zip95_check): Vic 5-0 (5-1 with the lost Final) and Wren 4-1 champion listed; Parker 3.6+, Alex organizer, Rowan and Zoe 3-2 (60%).
+- 9 Americano (Reese out, the real End): Vic 5-0 gold and Rowan 4-1 (80%) listed; Parker and Quinn 3-3, the rest under; Alex organizer.
+
+### Admin speed (scripts/zip82-speed.ts, tests/zip95-level-check.test.ts)
+Before (main): dashboard 4 trips / 63 statements, 8.9 to 12.1 ms; the 5 second check 2 / 16, 2.7 to 4.3 ms (all_locked, mid, am_done,
+ended). After: 4 trips, 2 on the check, every answer byte for byte the plain way's (none, all_locked, mid, zip95_check, zip95_signup).
+
+### Preview
+https://claude-new-session-2v5jzf.pickleball-club-9h0.pages.dev (the fake `pickleball-preview` database, no re-seed). Switches on: Tournaments
+(set by the stage), as live. Left on "95: level check after a tournament".

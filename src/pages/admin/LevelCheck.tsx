@@ -17,14 +17,19 @@ import './level-check.css';
 export function LevelCheckCard({ ctx }: { ctx: AdminCtx }) {
   const check = ctx.d.levelCheck;
   const nowMs = useServerNow(ctx.d.now);
-  // Rows answered on this phone, gone at once (the save runs behind; a failure puts the row back).
+  // Rows answered on this phone ('<tournament>:<player>'), gone at once (the save runs behind; a failure puts the row back).
   const [gone, setGone] = useState<Set<string>>(() => new Set());
+  const card = useRef<HTMLElement>(null);
   const toast = useToast();
   if (!check || Date.parse(check.until) <= nowMs) return null;
-  const rows = check.rows.filter((r) => !gone.has(r.playerId));
+  const keyOf = (r: LevelCheckRow) => `${check.tournamentId}:${r.playerId}`;
+  const rows = check.rows.filter((r) => !gone.has(keyOf(r)));
   if (!rows.length) return null;
   async function answer(r: LevelCheckRow, level: number | null) {
-    setGone((g) => new Set(g).add(r.playerId));
+    // The keyboard and screen reader move on to the next row's first button (never lost to the page).
+    const next = rows[rows.indexOf(r) + 1] ?? rows[rows.indexOf(r) - 1];
+    setGone((g) => new Set(g).add(keyOf(r)));
+    if (next) requestAnimationFrame(() => card.current?.querySelector<HTMLButtonElement>(`[data-level-check-row="${CSS.escape(next.name)}"] button`)?.focus());
     try {
       await api('POST', '/api/admin/level-check', { tournamentId: check!.tournamentId, playerId: r.playerId, level });
       toast(level === null ? `${r.name} stays at ${levelLabel(r.level)}` : `${r.name}: ${levelLabel(level)} suggested next time`);
@@ -32,7 +37,7 @@ export function LevelCheckCard({ ctx }: { ctx: AdminCtx }) {
     } catch (err) {
       setGone((g) => {
         const next = new Set(g);
-        next.delete(r.playerId);
+        next.delete(keyOf(r));
         return next;
       });
       toast(err instanceof ApiError || err instanceof Error ? err.message : 'Could not save. Try again.', 'error');
@@ -40,7 +45,7 @@ export function LevelCheckCard({ ctx }: { ctx: AdminCtx }) {
     }
   }
   return (
-    <section className="card lc-card" aria-labelledby="lc-title" data-level-check={rows.length}>
+    <section ref={card} className="card lc-card" aria-labelledby="lc-title" data-level-check={rows.length}>
       <p className="lc-kicker">
         Level check · <span className="lc-kicker-name">{check.name}</span>
       </p>
