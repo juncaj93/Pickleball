@@ -54,7 +54,8 @@ html[data-alert-cards] .mp-head .ac-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 50px;
+  /* Zip 92 (zip29): at least 50 px, taller when a long name wraps (it spilled out of a fixed 50 px row at 320 and 360 px). */
+  min-height: 50px;
   padding: 0 2px;
   border-top: 1px solid var(--ac-line, var(--line));
 }
@@ -63,13 +64,16 @@ html[data-alert-cards] .mp-head .ac-title {
   min-width: 0;
   white-space: normal;
   font-size: 16px;
-  overflow-wrap: break-word;
+  /* Zip 92: between words only (never "Christo / pher"). */
+  overflow-wrap: normal;
 }
 .mp-name strong {
   font-weight: 700;
 }
 .mp-price,
 .mp-when {
+  /* Zip 92: "$14" never breaks. */
+  white-space: nowrap;
   margin-left: 6px;
   font-size: 14px;
   font-weight: 600;

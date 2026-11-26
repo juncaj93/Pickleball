@@ -334,9 +334,9 @@
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-/* Zip 92 (🎾91's audit): in a LATER row's 52 px column the end time ("–10:30 PM" at the 11 px floor) ran past the column; it may now wrap at its
-   space ("–10:30" / "PM") and never runs wider than the column. */
-.schedule .tier-later .sched-time.range span + span {
+/* Zip 92 (🎾91's audit, card-times): in a LATER row's 52 to 56 px column the start and end times ("10:30 AM", "–10:30 PM" at the 11 px floor) ran
+   past the column; they may now wrap at their space ("10:30" / "AM") and never run wider than the column. */
+.schedule .tier-later .sched-time.range span {
   max-width: 100%;
   white-space: normal;
   overflow-wrap: normal;

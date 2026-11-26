@@ -96,8 +96,9 @@
   z-index: 3;
 }
 :root[data-tonight-glow] .schedule .tile-wrap > .tile-check {
-  top: -14px;
-  right: -14px;
+  /* Zip 92 (zip7): -17 (was -14), as with the Game day card (src/gameday.css): the badge clears the end of TOMORROW. */
+  top: -17px;
+  right: -17px;
 }
 :root[data-tonight-glow] .schedule .tier-next .tile-wrap > .tile-check {
   top: -12px;
@@ -287,7 +288,8 @@
 :root[data-tonight-glow] .hv2-short .tile .day-tag .dt-short {
   display: inline;
 }
-@container (max-width: 62px) {
+/* Zip 92 (zip18, zip31): since Zip 78's 11 px floor TOMORROW is about 71 px wide, so a tile under 78 px says TOM (was 62 px, for a 58 px word). */
+@container (max-width: 78px) {
   :root[data-tonight-glow] .tile .day-tag .dt-full {
     display: none;
   }

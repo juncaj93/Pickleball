@@ -492,7 +492,8 @@
   font-size: max(11px, 0.52rem);
   font-style: normal;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  /* Zip 92 (zip18): 0.02em (was 0.1em): at the 11 px floor "WED" ran about 1 px past the 36 px tile's inner edge. */
+  letter-spacing: 0.02em;
 }
 .r2m-tile b {
   color: var(--ink);

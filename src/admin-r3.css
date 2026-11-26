@@ -57,11 +57,12 @@
   font-variant-numeric: tabular-nums;
 }
 .r3-stats {
-  /* The pills never wrap to a third line (every row stays the same height): a long stats line gives way first. */
+  /* The pills never wrap to a third line: a long stats line gives way first. Zip 92 (admin-r3): it wraps between words only (never mid-word);
+     at 320 px with both pills the row is then a line taller (wrap, never cut). */
   flex: 0 1 auto;
   min-width: 0;
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: normal;
 }
 .r3-pill {
   font-size: 0.7rem;

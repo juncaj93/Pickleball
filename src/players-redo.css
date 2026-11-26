@@ -30,8 +30,11 @@
   align-items: center;
   gap: 5px;
   width: 100%;
-  /* Zip 78: at least 46 px, taller when a long name takes two lines (a name is never cut). */
+  /* Zip 78: at least 46 px, taller when a long name takes two lines (a name is never cut). Zip 92 (zip18): when the name and the chips cannot
+     share the line (320 px, big text), the chips go under the name instead of past the card's edge. */
   min-height: 46px;
+  flex-wrap: wrap;
+  row-gap: 2px;
   padding: 4px 10px 4px 16px;
   margin: 0;
   border: 0;
