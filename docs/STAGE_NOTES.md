@@ -8914,7 +8914,7 @@ Unit 246 files, 4,547 passed, 12 skipped, 0 failed. e2e/zip94 7 of 7, zip92 B, z
 - Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
   wider, no writes. Organizer screens not opened (no read-only PIN in this session).
 
-## 🎾95.level check (Thu Nov 26, 2026; branch `claude/new-session-2v5jzf`, from main `8ef2646` (🎾92 round 3 live); NOT live: held for Alex's OK)
+## 🎾95.level check (Thu Nov 26, 2026; branch `claude/new-session-2v5jzf`, from main `8ef2646` (🎾92 round 3 live); LIVE Thu Nov 26, deployment `163f45b2`)
 
 ### What changed (the code is the truth; SITE_RULES "Level check after a tournament, the RECOMMENDED level (Zip 95)")
 1. LEVEL CHECK CARD (pictures 1 and 2; src/pages/admin/LevelCheck.tsx, level-check.css): the very top of the organizer's Home (calm preview
@@ -8967,3 +8967,21 @@ sign-up tag and the level up, the same sweep).
 ### Preview
 https://claude-new-session-2v5jzf.pickleball-club-9h0.pages.dev (the fake `pickleball-preview` database, no re-seed). Switches on: Tournaments
 (set by the stage), as live. Left on "95: level check after a tournament".
+
+### Live (Thu Nov 26, 2026, about 3:15 PM Eastern; Alex's go: ship today, game canceled for Thanksgiving, --override-loud-hours OKed)
+- Main merged with 🎾93 (live 86f85e98) and 🎾94 (live 28f4856f, migration 0030) as `9db151f`; conflicts in the stage lists, the stage
+  page, tournament.css and the docs, each kept both sides.
+- Unit on the merged code: 248 files passed, 2 skipped; 4,566 passed, 12 skipped, 0 failed; typecheck clean.
+- Browser, the full run on the merged code: 83 of 90 green first; the 7 others (zip27, 32, 34, 35, 38, 39, 42) checked that their own
+  Settings switch sits on top and now met 🎾94's newer Early bird switch there. Each skip list gained `earlyBirdAll` (the same fix every
+  newer switch got); the 7 rerun: 7 of 7 green, 145 checks. audit-player-flows green alone. e2e/zip93.cjs check B expected THIS_ZIP to be
+  93's; it now checks both 93 stages are still listed (6 of 6). e2e/zip94.cjs 7 of 7, e2e/zip95.cjs 3 of 3.
+- Restore point: export `export-20261126200337` saved in `pickleball-backups` (checked against the file); Time Travel bookmark
+  `0000215a-00000000-0000512f-b613886c74d2ec2b1bd035de508a27c5`.
+- Integrity before and after: 22, 8 and 14 columns, every problem column 0. No migration (none pending).
+- Main `cdcc178` to `cb74e78`; `npm run deploy -- --override-loud-hours`: deployment **163f45b2-2df4-4876-8016-a623756ee1f3** (bundle
+  `index-Ulzjrwwe.js`). Rollback: **28f4856f-c00a-4915-808e-a9e55806b12f** (🎾94). Nothing to undo in the data (no level_check rows yet).
+- The Cold Open before and after (status tickets, 7 tickets, 10 sign-ups, the money sums and every updated_at): identical.
+- No tournament has ended on live yet, so the card first shows after The Cold Open ends.
+- Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
+  wider, no writes. Organizer screens not opened (no read-only PIN in this session).
