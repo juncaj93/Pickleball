@@ -8862,7 +8862,15 @@ minimum, leaving out the organizer, and "next sign-up" counting a canceled or ba
 
 ### Admin speed (scripts/zip82-speed.ts, tests/zip95-level-check.test.ts)
 Before (main): dashboard 4 trips / 63 statements, 8.9 to 12.1 ms; the 5 second check 2 / 16, 2.7 to 4.3 ms (all_locked, mid, am_done,
-ended). After: 4 trips, 2 on the check, every answer byte for byte the plain way's (none, all_locked, mid, zip95_check, zip95_signup).
+ended). After: 4 trips / 64 statements (the card's read rides the same trip), 9.5 to 11.5 ms; the check 2 / 16, 2.4 to 6.1 ms (all_locked,
+mid, am_done, ended, zip95_check); every answer byte for byte the plain way's (none, all_locked, mid, zip95_check, zip95_signup).
+tests/zip62-speed.test.ts: with "Fewer database trips" OFF (not live) the dashboard may make one more read than before (4 instead of 3, the
+allowance Zips 83 and 85 raised the same way); on live (on) no trip is added.
+
+### Tests
+Unit: 248 files, 4,539 passed, 12 skipped, 0 failed (the full run, then the one allowance above). Browser: e2e/zip95.cjs 3 of 3 (A the card
+and its taps, light and dark; B 320/375/390/420/440 x 100/125/150% x light/dark x both looks: nothing cut, no word broken, 44 px; C the
+sign-up tag and the level up, the same sweep).
 
 ### Preview
 https://claude-new-session-2v5jzf.pickleball-club-9h0.pages.dev (the fake `pickleball-preview` database, no re-seed). Switches on: Tournaments
