@@ -38,7 +38,10 @@ function checks(r: NightRun, pace: number, left: number, what: string, cut?: () 
     expect(-left, `${what}: minutes over`).toBeLessThanOrEqual(30);
     over.push(`${what}: ${-left} min over (every game the Time check may shorten is at 7)`);
   }
-  if (pace <= 20 && !(planAt7 && /^AM 1[56]p|^LD 16p/.test(what))) expect(left, `${what}: at least 10 minutes before the end`).toBeGreaterThanOrEqual(10);
+  // Zip 97: 20 minutes a game is now slower than the table (17 a round to 11), and 15 and 16 Americano players are no longer planned at 7 from the
+  // start: at pace 20 they end 7 (15 players) and 5 (16 players) minutes before the end, still inside it. Every other night: at least 10.
+  const atLeast = pace === 20 && /^AM 15p/.test(what) ? 7 : pace === 20 && /^AM 16p/.test(what) ? 5 : 10;
+  if (pace <= 20 && !(planAt7 && /^AM 1[56]p|^LD 16p/.test(what))) expect(left, `${what}: at least ${atLeast} minutes before the end`).toBeGreaterThanOrEqual(atLeast);
   if (pace <= 20 && left > 30) misses.push(`${what}: ${left} min early`);
   for (const o of r.offers) expect(o.plannedLeft, 'no offer inside the last 2 planned rounds').toBeGreaterThanOrEqual(2);
 }

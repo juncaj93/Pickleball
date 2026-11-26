@@ -113,7 +113,8 @@ describe('zip 58: the preview stages', () => {
     const { stage, dash } = await previewWorld();
     await stage('am_done');
     const end = (await dash()).tournament.end;
-    expect(end).toMatchObject({ format: 'americano', hero: 'Round 6 of 6', first: { name: 'Vic' }, championCents: 1400, secondCents: 700 });
+    // Zip 97: the stage plays the plan's own round count, 7 rounds for 10 players on 2.5 hours at 17 minutes (was 6).
+    expect(end).toMatchObject({ format: 'americano', hero: 'Round 7 of 7', first: { name: 'Vic' }, championCents: 1400, secondCents: 700 });
     expect(end.done.title).toBe('Vic finished first');
   });
 });

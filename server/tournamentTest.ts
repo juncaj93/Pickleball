@@ -239,7 +239,7 @@ export const ZIP88_STAGES = ['zip88_soon', 'zip88_ready', 'zip88_early', 'zip88_
 /**
  * Zip 89 (🎾89.smart pacing), on the real rows and the real pacing rules (shared/smartPacing.ts):
  *   zip89_am_ahead  "Pacing: Americano ahead (offer showing)": Americano tonight (10 names), started about 32 minutes ago, Rounds 1 and 2 in at
- *                   14 minutes a round: the night card's "Ahead of time" line with Add a round. Yes adds Round 7 at once.
+ *                   14 minutes a round: the night card's "Ahead of time" line with Add a round. Yes adds the next round (Round 8 since Zip 97) at once.
  *   zip89_ld_semis  "Pacing: Locked doubles ahead (semis offer)": the 4 teams tonight, started about 18 minutes ago, Round 1 in at 14 minutes:
  *                   "Ahead of time"; Add a round asks "Add semifinals?"; Yes: SEMIS between the round robin and the FINAL.
  *   zip89_bo3       "Pacing: best-of-3 Final in play": the round robin and the semifinals in (as the bonus wrote them), the Final best of 3:

@@ -19,9 +19,10 @@ const activity = async (ctx: Awaited<ReturnType<typeof coldOpen>>['ctx']) =>
   (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries as { action: string; details: Record<string, unknown> }[];
 
 describe('fix 9 and the fairness rule: 12 and 14 players play Americano', () => {
-  it('the rule: every odd count, 12 and 14; 8, 10 and 16 keep the style', () => {
-    expect([7, 9, 11, 12, 13, 14, 15].every(playsAmericano)).toBe(true);
-    expect([6, 8, 10, 16].some(playsAmericano)).toBe(false);
+  it('the rule: every odd count, 12 and 14 (Zip 97: and 6); 8, 10 and 16 keep the style', () => {
+    // Zip 97: 6 plays Americano too (AMERICANO_EVEN = 6, 12, 14).
+    expect([6, 7, 9, 11, 12, 13, 14, 15].every(playsAmericano)).toBe(true);
+    expect([8, 10, 16].some(playsAmericano)).toBe(false);
     expect(styleAtClose('doubles', 12)).toBe('americano');
     expect(styleAtClose('doubles', 10)).toBe('doubles');
     expect(styleAtClose('doubles', 14)).toBe('americano');
@@ -29,7 +30,7 @@ describe('fix 9 and the fairness rule: 12 and 14 players play Americano', () => 
     expect(oddSwitchWords('The Cold Open', 12)).toBe('The Cold Open switched to Americano (12 players).');
     expect(oddSwitchWords('The Cold Open', 11)).toBe('The Cold Open switched to Americano (odd number of players).');
     expect(oddSwitchWords('The Cold Open')).toBe('The Cold Open switched to Americano (odd number of players).');
-    expect(AMERICANO_EVEN).toEqual([12, 14]);
+    expect(AMERICANO_EVEN).toEqual([6, 12, 14]);
     expect(doublesRefusal(12)).toBe('12 players play Americano. 12 are locked in.');
     expect(doublesRefusal(14)).toBe('14 players play Americano. 14 are locked in.');
     expect(doublesRefusal(9)).toBe('Locked doubles needs an even number. 9 are locked in.');
@@ -129,7 +130,9 @@ describe('fix 10: Locked doubles one more round robin round', () => {
   it('declined: nothing is added', async () => {
     const { ctx } = await coldOpen({ n: 8, style: 'vote', courts: 2, log: [] });
     const run = await playNight(ctx, 'fast', 810, false);
-    expect(run.offers.map((o) => o.kind)).toEqual(['round']);
+    // Zip 97: one more round robin round may be offered with fewer than 2 planned rounds left (until the playoffs start): declined after Round
+    // 1, it is offered again after Round 2 (was once). Declined both times: nothing is added.
+    expect(run.offers.map((o) => o.kind)).toEqual(['round', 'round']);
     expect(Math.max(...rows(ctx).filter((x) => x.stage === 'pool').map((x) => x.round))).toBe(3);
     expect(run.money.startsWith('0')).toBe(true);
   }, 60_000);
@@ -186,11 +189,13 @@ describe('fix 10: Locked doubles one more round robin round', () => {
 describe('fix 11: the Time check', () => {
   it('a slow night eases into its pace: a third after Round 1, two thirds after Round 2, all of it from Round 3', () => {
     expect(EASE_ROUNDS).toBe(3);
-    expect(paceForCheck(false, 26, 1)).toBeCloseTo(22, 5);
-    expect(paceForCheck(false, 26, 2)).toBeCloseTo(24, 5);
+    // Zip 97: from the table's 17 (was 20): 26 is 17 + 9 / 3 = 20 after Round 1 (was 22), 17 + 9 x 2 / 3 = 23 after Round 2 (was 24).
+    expect(paceForCheck(false, 26, 1)).toBeCloseTo(20, 5);
+    expect(paceForCheck(false, 26, 2)).toBeCloseTo(23, 5);
     expect(paceForCheck(false, 26, 3)).toBe(26);
     expect(paceForCheck(false, 26, 0)).toBeUndefined();
-    expect(paceForCheck(false, 18, 2)).toBeUndefined();
+    // Not slower than the table: nothing (Zip 97: the table is 17, so the input is 17; 18 is now slower than the table).
+    expect(paceForCheck(false, 17, 2)).toBeUndefined();
     expect(paceForCheck(true, 15)).toBe(15);
   });
 

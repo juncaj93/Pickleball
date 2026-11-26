@@ -122,14 +122,16 @@ describe('zip 61: before the night', () => {
     expect((await dash(ctx)).rounds).toBeUndefined();
     ctx.app.now = PAY_BY_MS + 60_000;
     const d = (await dash(ctx)).rounds;
-    expect(d).toMatchObject({ kind: 'americano', lockedIn: 10, plan: { gameTo: 11, rounds: 6, fits: true, onCourt: 8 } });
-    expect(d.games).toHaveLength(12);
+    // Zip 97: 7 rounds to 11 at 17 minutes (was 6), 2 games each: 14 games (was 12).
+    expect(d).toMatchObject({ kind: 'americano', lockedIn: 10, plan: { gameTo: 11, rounds: 7, fits: true, onCourt: 8 } });
+    expect(d.games).toHaveLength(14);
     expect(d.sits.every((s: any) => s.names.length === 2)).toBe(true);
     for (const name of ALL.slice(0, 10)) {
       const v = (await card(ctx, name)).day;
       expect(v.kind).toBe('americano');
       expect(v.me).toBe(name);
-      expect(v.rounds).toHaveLength(6);
+      // Zip 97: 7 rounds (was 6).
+      expect(v.rounds).toHaveLength(7);
       expect(v.today).toBe(false);
       // Every round: a game with a partner and two opponents (never themselves), or a break.
       for (const r of v.rounds) {
@@ -149,7 +151,8 @@ describe('zip 61: before the night', () => {
 
   it('a back out before the night gives a new schedule for who is in (9 players: one sits each round)', async () => {
     const ctx = await world(10);
-    expect((await dash(ctx)).rounds.games).toHaveLength(12);
+    // Zip 97: 7 rounds of 2 games (was 6, 12 games).
+    expect((await dash(ctx)).rounds.games).toHaveLength(14);
     expect((await (await playerPhone(ctx, 'Jules')).call('POST', '/api/tournament/back-out', { tournamentId: ctx.tid })).status).toBe(200);
     const d = (await dash(ctx)).rounds;
     expect(d.lockedIn).toBe(9);
@@ -199,15 +202,17 @@ describe('zip 61: game night, scores', () => {
     ctx.app.now = START_MS + 60_000;
     const v0 = (await card(ctx, a)).day;
     expect(v0.today).toBe(true);
-    expect(v0.progress.label).toBe('Round 1 of 6');
+    // Zip 97: 7 rounds (was 6).
+    expect(v0.progress.label).toBe('Round 1 of 7');
     expect(myRound(v0, 1)).toMatchObject({ state: 'next', onNow: true, court: g.court });
     const before = moneyRows(ctx);
     const r = await play(ctx, a, { num: g.num, key, action: 'score', mine: 11, theirs: 8 });
     expect(r.status, r.text).toBe(200);
-    expect(rowCount(ctx)).toBe(12);
+    // Zip 97: the whole schedule is saved, 7 rounds of 2 games (was 12 rows).
+    expect(rowCount(ctx)).toBe(14);
     const mine = (await card(ctx, a2)).day;
     expect(myRound(mine, 1)).toMatchObject({ state: 'done', won: true, score: { mine: 11, theirs: 8 } });
-    expect(mine.progress.label).toBe('Round 2 of 6');
+    expect(mine.progress.label).toBe('Round 2 of 7');
     // Zip 77: a player's answer carries no table before the reveal (no names, records or points: the reveal shows them).
     expect(mine.standings).toEqual([]);
     expect(mine.standingsHidden).toBe(true);
@@ -282,10 +287,10 @@ describe('zip 61: game night, scores', () => {
     expect(d.games[0]).toMatchObject({ status: 'done' });
     expect(d.games[0].late).toBeUndefined();
     expect(d.games[1].late).toBeUndefined();
-    // Zip 89: Round 1 starts after the 10 minute warm-up and a round to 11 is 20 minutes (was 23), so 38 minutes in, the game still playing is
-    // 8 minutes past its round's time.
+    // Zip 89: Round 1 starts after the 10 minute warm-up. Zip 97: a round to 11 is 17 minutes (was 20), so 38 minutes in, the game still
+    // playing is 11 minutes past its round's time (was 8).
     ctx.app.now = START_MS + 38 * 60_000;
-    expect((await dash(ctx)).rounds.games[1].late).toBe('8 min over');
+    expect((await dash(ctx)).rounds.games[1].late).toBe('11 min over');
   });
 
   it('the whole night: every round in, the table ranks by wins then points, "Done", and a tie at the end says Tied', async () => {
@@ -421,11 +426,12 @@ describe('zip 61: the switch from Locked doubles, and back', () => {
     const ctx = await world(9, { format: 'doubles' });
     const d = await dash(ctx);
     expect(d.format).toBe('americano');
-    expect(d.rounds).toMatchObject({ kind: 'americano', lockedIn: 9, plan: { rounds: 6 } });
+    // Zip 97: 7 rounds at 17 minutes (was 6).
+    expect(d.rounds).toMatchObject({ kind: 'americano', lockedIn: 9, plan: { rounds: 7 } });
     const v = await card(ctx, 'Blair');
     expect(v.styleNote.text).toBe('Tournament style is now Americano.');
     expect(v.day.kind).toBe('americano');
-    expect(v.day.rounds).toHaveLength(6);
+    expect(v.day.rounds).toHaveLength(7);
   });
 
   it('a back out after the teams were published (odd) switches to Americano rounds; Switch back gives zip 57 teams again; no switch back once a score is in', async () => {
@@ -503,14 +509,15 @@ describe('zip 61: the preview test page, the Americano stages', () => {
     await stage('am_before');
     let v = (await card(c, 'Vic')).day;
     expect(v).toMatchObject({ kind: 'americano', today: false });
-    expect(v.rounds.map((r: any) => (r.num === null ? 'Break' : 'Game'))).toEqual(['Game', 'Game', 'Game', 'Break', 'Game', 'Game']);
+    // Zip 97: the stages follow the plan's own round count, 7 rounds for 10 players on 2.5 hours (was 6); Vic still sits Round 4 only.
+    expect(v.rounds.map((r: any) => (r.num === null ? 'Break' : 'Game'))).toEqual(['Game', 'Game', 'Game', 'Break', 'Game', 'Game', 'Game']);
     await stage('am_round1');
     v = (await card(c, 'Vic')).day;
-    expect(v).toMatchObject({ today: true, started: true, progress: { label: 'Round 1 of 6' } });
+    expect(v).toMatchObject({ today: true, started: true, progress: { label: 'Round 1 of 7' } });
     expect(v.rounds[0]).toMatchObject({ state: 'next', onNow: true });
     await stage('am_round3');
     v = (await card(c, 'Vic')).day;
-    expect(v.progress.label).toBe('Round 3 of 6');
+    expect(v.progress.label).toBe('Round 3 of 7');
     expect(v.rounds[2]).toMatchObject({ state: 'next', onNow: true });
     expect(v.rounds.slice(0, 2).every((r: any) => r.state === 'done' && r.score)).toBe(true);
     const d = (await dash(c)).rounds;
@@ -526,12 +533,13 @@ describe('zip 61: the preview test page, the Americano stages', () => {
     expect(opp.rounds.find((r: any) => r.round === 3)).toMatchObject({ state: 'done', won: false, score: { mine: 8, theirs: 11 } });
     await stage('am_break');
     v = (await card(c, 'Vic')).day;
-    expect(v.progress.label).toBe('Round 4 of 6');
+    expect(v.progress.label).toBe('Round 4 of 7');
     expect(v.rounds[3]).toMatchObject({ num: null, state: 'next' });
     expect(v.live).toHaveLength(2);
     await stage('am_standings');
     v = (await card(c, 'Vic')).day;
-    expect(v.progress.label).toBe('Round 6 of 6');
+    // Zip 97: all but the last of the plan's 7 rounds in (was Round 6 of 6).
+    expect(v.progress.label).toBe('Round 7 of 7');
     // Zip 77: the table stays on the server until Alex reveals it.
     expect(v.standings).toEqual([]);
     expect(v.standingsHidden).toBe(true);
@@ -539,7 +547,8 @@ describe('zip 61: the preview test page, the Americano stages', () => {
     const s = await card(c, 'Vic');
     expect(s.format).toBe('americano');
     expect(s.styleNote.text).toBe('Tournament style is now Americano.');
-    expect(s.day.rounds).toHaveLength(6);
+    // Zip 97: 7 rounds (was 6).
+    expect(s.day.rounds).toHaveLength(7);
     books(c);
   }, 60_000);
 });
@@ -595,7 +604,8 @@ describe('zip 61: the independent review, each finding', () => {
       for (const id of Object.values(ctx.byName)) expect(text).not.toContain(id);
     }
     const own = (await card(ctx, leaver.name)).day;
-    expect(own.progress).toEqual({ label: 'Round 2 of 6', done: 1, total: 6 });
+    // Zip 97: 7 rounds (was 6).
+    expect(own.progress).toEqual({ label: 'Round 2 of 7', done: 1, total: 7 });
   });
 
   it('Player left with nothing left to play changes nothing and says so; organizer taps wait for the night', async () => {

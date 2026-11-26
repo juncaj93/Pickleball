@@ -152,33 +152,34 @@ describe('zip 61: every size 6 to 16, every court count and court time', () => {
         expect(c.plan.onCourt).toBe(8);
         report.push(`${n} players ${minutes / 60}h: ${c.plan.rounds} rounds to ${c.plan.gameTo}, ${c.minGames === c.maxGames ? c.minGames : `${c.minGames} to ${c.maxGames}`} games each`);
       }
-    // Zip 89 (120 or 150 minutes to plan in: the court time less the 10 minute warm-up and the 20 minute buffer; 20 a round to 11, 16 to 9, 13
-    // to 7; somebody always sits, so no breaks). 14: 2.5h fits 7 rounds to 9 (6 to 11 is only 48 seats), 3h 7 rounds to 11; 7 x 8 = 56 = 4
-    // each. 16: 2.5h fits 9 rounds to 7 (7 to 9 is only 56 seats), 3h 9 rounds to 9 (7 to 11 is only 56); 9 x 8 = 72 = 4 each and 8 players
-    // get a 5th.
-    expect(report).toEqual(['14 players 2.5h: 7 rounds to 9, 4 games each', '14 players 3h: 7 rounds to 11, 4 games each', '16 players 2.5h: 9 rounds to 7, 4 to 5 games each', '16 players 3h: 9 rounds to 9, 4 to 5 games each']);
+    // Zip 97 (120 or 150 minutes to plan in: the court time less the 10 minute warm-up and the 20 minute buffer; 17 a round to 11, 14 to 9, 11
+    // to 7, were 20 / 16 / 13; somebody always sits, so no breaks). 14: 2.5h fits 7 rounds to 11 (119 minutes; 7 x 8 = 56 = 4 each), 3h 8 rounds
+    // to 11 (136; 64 seats, 4 to 5 each). 16: 2.5h fits 8 rounds to 9 (112; 8 to 11 would be 136), 3h 8 rounds to 11 (136); 8 x 8 = 64 = 4 each.
+    expect(report).toEqual(['14 players 2.5h: 7 rounds to 11, 4 games each', '14 players 3h: 8 rounds to 11, 4 to 5 games each', '16 players 2.5h: 8 rounds to 9, 4 games each', '16 players 3h: 8 rounds to 11, 4 games each']);
   });
 
-  it('the pictures: 10 players, 2 courts, 7:30 to 10 PM = 6 rounds to 11, 2 sit each round', () => {
+  it('the pictures: 10 players, 2 courts, 7:30 to 10 PM = 7 rounds to 11 (Zip 97, was 6), 2 sit each round', () => {
+    // Zip 97: 10 + 7 x 17 = 129 minutes (was 6 rounds of 20).
     const night = americanoNight(ids(10), 2, 150, 'cold-open');
-    expect([night.rounds, night.plan.gameTo]).toEqual([6, 11]);
-    for (let r = 1; r <= 6; r++) expect(night.sits.get(r)).toHaveLength(2);
+    expect([night.rounds, night.plan.gameTo]).toEqual([7, 11]);
+    for (let r = 1; r <= 7; r++) expect(night.sits.get(r)).toHaveLength(2);
   });
 
   it('6 and 7 players use one court only (a second court is never used under 8)', () => {
     for (const n of [6, 7]) expect(americanoNight(ids(n), 2, 180, 'x').games.every((g) => g.court === 1)).toBe(true);
   });
 
-  it('8 players on 2 courts: the pattern is a whist (7 rounds: every partner exactly once, every opponent exactly twice); a 3 hour night plays its first 6 rounds, no partner twice', () => {
+  it('8 players on 2 courts: the pattern is a whist (7 rounds: every partner exactly once, every opponent exactly twice); a 2.5 hour night (Zip 97, was 3 hours) plays its first 6 rounds, no partner twice', () => {
     // The pattern 8 players on 2 courts use: its first 7 rounds are the whole whist.
     const whist = tallyOf(8, seatRounds(8, 8, 7));
     expect(spreadOf(whist)).toMatchObject({ oppMin: 2, oppMax: 2 });
     for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) if (x !== y) expect(whist.partner[x][y]).toBe(1);
-    // Zip 89: 3 hours is 150 minutes to plan in (10 warm-up, 20 kept free); nobody sits, so a 5 minute break after every 2nd round: 6 rounds to
-    // 11 and 2 breaks (130 minutes; 7 rounds and 3 breaks would be 155). 6 rounds cannot be a whole whist (each player has 7 possible
-    // partners), so what the night proves is: its 6 rounds are the whist's first 6, everyone plays all 6, nobody partners anyone twice and
-    // nobody faces anyone more than twice.
-    const night = americanoNight(ids(8), 2, 180, 'w');
+    // Zip 97: at 17 a round, 3 hours now plays the whole whist (7 rounds and 3 breaks, 10 + 119 + 15 = 144), so this test's night (one cut short
+    // of the whist) is 2.5 hours: 120 minutes to plan in (10 warm-up, 20 kept free); nobody sits, so a 5 minute break after every 2nd round: 6
+    // rounds to 11 and 2 breaks (102 + 10 = 112 minutes; 7 rounds and 3 breaks would be 134). 6 rounds cannot be a whole whist (each player has
+    // 7 possible partners), so what the night proves is: its 6 rounds are the whist's first 6, everyone plays all 6, nobody partners anyone
+    // twice and nobody faces anyone more than twice.
+    const night = americanoNight(ids(8), 2, 150, 'w');
     expect([night.rounds, night.plan.gameTo, night.plan.breaks]).toEqual([6, 11, 2]);
     const played = seatRounds(8, 8, night.rounds);
     expect(played.map(encodeRound)).toEqual(seatRounds(8, 8, 7).slice(0, 6).map(encodeRound));

@@ -220,22 +220,24 @@ describe('the style rules once tickets close (b to e)', () => {
     expect((await card(pick, 'Blair')).styleNote).toBeUndefined();
   });
   it('a back out after close makes it odd: Americano; a late join makes it even: Switch back? (never by itself), then Switch', async () => {
-    const ctx = await world({ signUp: [...SIGNED.slice(0, 6), 'Harper'] });
-    await lockIn(ctx, SIGNED.slice(0, 6));
+    // Zip 97: 6 locked in plays Americano now (AMERICANO_EVEN), so this night is 8 (Indy and Jules too): 8 keeps Locked doubles, a back out
+    // makes 7, a late join 8 again (was 6, 5, 6).
+    const ctx = await world({ signUp: [...SIGNED.slice(0, 6), 'Indy', 'Jules', 'Harper'] });
+    await lockIn(ctx, [...SIGNED.slice(0, 6), 'Indy', 'Jules']);
     ctx.app.now = PAY_BY_MS + HOUR;
     expect((await dash(ctx)).format).toBe('doubles');
-    // Devon backs out: 5.
+    // Devon backs out: 7 (Zip 97, was 5).
     const t = await card(ctx, 'Devon');
     const out = await (await playerPhone(ctx, 'Devon')).call('POST', '/api/tournament/back-out', { tournamentId: ctx.tid, backCents: t.tickets.mine.creditCents });
     expect(out.status, out.text).toBe(200);
     expect((await dash(ctx)).format).toBe('americano');
-    // Harper (on the list, never paid) pays late while a spot is open: 6 again.
+    // Harper (on the list, never paid) pays late while a spot is open: 8 again (Zip 97, was 6).
     const late = await lockWithCredit(ctx, 'Harper');
     expect(late.status, late.text).toBe(200);
     expect(late.data.result).toBe('locked');
     const d = await dash(ctx);
     expect(d.format).toBe('americano');
-    expect(d.lockedIn).toBe(6);
+    expect(d.lockedIn).toBe(8);
     expect(d.switchBack).toBeTruthy();
     expect(d.oddSwitch).toBeNull();
     // Reading again changes nothing (never by itself).

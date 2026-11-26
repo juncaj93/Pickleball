@@ -27,9 +27,12 @@ describe('the fairness rule', () => {
         }
     for (const n of [8, 10, 16]) expect(fairnessOf(n, 2, 150, 'doubles').pass).toBe(true);
   });
-  it('2 hours on 2 courts is too tight for 13 to 16 (more court time fixes it: the card suggests it), never a style switch', () => {
+  it('1 hour 45 on 2 courts (Zip 97, was 2 hours) is too tight for 13 to 16 (more court time fixes it: the card suggests it), never a style switch', () => {
+    // Zip 97: at 11 minutes a round to 7, 2 hours now fits 13 to 16 (8 rounds to 7, 88 of the 90 minutes to plan in), so the booking that is too
+    // tight for them is 1 hour 45 (6 rounds to 7: 3 games for some); 2 hours and 2.5 hours pass.
     for (const n of [13, 14, 15, 16]) {
-      expect(fairnessOf(n, 2, 120, 'americano').pass).toBe(false);
+      expect(fairnessOf(n, 2, 105, 'americano').pass).toBe(false);
+      expect(fairnessOf(n, 2, 120, 'americano').pass).toBe(true);
       expect(fairnessOf(n, 2, 150, 'americano').pass).toBe(true);
     }
     expect(fairnessOf(16, 2, 120, 'doubles').fits).toBe(false);
@@ -62,11 +65,14 @@ describe('the court time line (Alex)', () => {
   it("Alex's three examples on The Cold Open (7:30 to 10 PM, 2 courts)", () => {
     expect(card(10)).toBe('10 locked in: 2 courts, 7:30 to 10 fits.');
     expect(card(8)).toBe('8 locked in: 9:30 is enough, you could cancel 30 min.');
-    expect(card(14)).toBe('14 locked in: add 30 min so everyone plays 4 to 11 (7 to 10).');
+    // Zip 97: 14 now fits 7:30 to 10 (7 rounds to 11 at 17 minutes; was "add 30 min"); 15 is Alex's "add 30 min" example now.
+    expect(card(14)).toBe('14 locked in: 2 courts, 7:30 to 10 fits.');
+    expect(card(15)).toBe('15 locked in: add 30 min so everyone plays 4 to 11 (7 to 10).');
   });
   it('the end moves later while it stays by 10 PM; a short booking; nothing below 6; no style switch of its own', () => {
     expect(card(10, { minutes: 120 })).toBe('10 locked in: add 30 min so everyone plays 4 to 11 (7:30 to 10).');
-    expect(card(9, { format: 'americano' })).toBe('9 locked in: 2 courts, 7:30 to 10 fits.');
+    // Zip 97: 9 Americano fits 2 hours now (5 rounds of 17, everyone 4 or more games), so 2.5 hours is more than enough (was "fits").
+    expect(card(9, { format: 'americano' })).toBe('9 locked in: 9:30 is enough, you could cancel 30 min.');
     expect(card(5)).toBeNull();
   });
 });

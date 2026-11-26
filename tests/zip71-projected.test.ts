@@ -55,7 +55,9 @@ describe('zip 71: Projected teams', () => {
 
   it('follows sign-ups and drops: an odd count hides it (the night would be Americano); one more makes it even again', () => {
     expect(projectedTeams(tour(PICTURE.slice(0, 7)))).toBeNull();
-    expect(projectedTeams(tour(PICTURE.slice(0, 6)))).toHaveLength(3);
+    // Zip 97: 6 plays Americano too (AMERICANO_EVEN), so no projected teams at 6; "one more makes it even again" is 7 to 8 now.
+    expect(projectedTeams(tour(PICTURE.slice(0, 6)))).toBeNull();
+    expect(projectedTeams(tour(PICTURE))).toHaveLength(4);
     expect(projectedTeams(tour([...PICTURE, ['Reese', 300], ['Avery', 280]]))).toHaveLength(5);
   });
 
@@ -69,11 +71,14 @@ describe('zip 71: Projected teams', () => {
   });
 
   it('who it uses: everyone before a date is picked; then who can make the picked date; after tickets close, who is locked in', () => {
+    // Zip 97: 6 plays Americano (no projected teams), so two more players sign up here: 8 can make the picked date, 4 projected teams (was the
+    // 6 of PICTURE, 3 teams).
     const dates = { Vic: ['2026-12-03'], Wren: ['2026-12-03'] };
-    expect(projectedPlayers(tour(PICTURE, {}, dates))).toHaveLength(8);
-    const picked = tour(PICTURE, { finalDate: '2026-12-01' }, dates);
-    expect(projectedPlayers(picked).map((p) => p.name)).toEqual(['Parker', 'Rowan', 'Sage', 'Christopher', 'Zoe', 'Quinn']);
-    expect(projectedTeams(picked)).toHaveLength(3);
+    const ten: [string, number][] = [...PICTURE, ['Reese', 300], ['Avery', 280]];
+    expect(projectedPlayers(tour(ten, {}, dates))).toHaveLength(10);
+    const picked = tour(ten, { finalDate: '2026-12-01' }, dates);
+    expect(projectedPlayers(picked).map((p) => p.name)).toEqual(['Parker', 'Rowan', 'Sage', 'Christopher', 'Zoe', 'Quinn', 'Reese', 'Avery']);
+    expect(projectedTeams(picked)).toHaveLength(4);
     // After Pay by: a spot, or a whole-ticket I paid waiting for the organizer; not the line, not someone who still owes, not an old ticket.
     const k = (i: number, more: Record<string, unknown> = {}) => ({ playerId: `p${i}`, name: PICTURE[i][0], place: 'spot', placeAt: null, priceCents: 1800, creditCents: 0, paidCents: 1800, claimCents: 0, claimAt: null, out: false, organizer: false, ...more });
     const closed = tour(PICTURE, {

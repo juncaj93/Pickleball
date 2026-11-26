@@ -26,30 +26,34 @@ const base = (over: Partial<PaceInput> = {}): PaceInput => ({
 const doneUpTo = (k: number, each: number) => [1, 2, 3, 4, 5, 6].map((round) => ({ round, planned: true, done: round <= k, ...(round <= k ? { doneAt: START + round * each } : {}) }));
 
 describe('zip 89: the base plan (one place for the numbers)', () => {
-  it('20 / 16 / 13 minutes a round, 20 minutes kept free, a tie game 10', () => {
-    expect(ROUND_MINUTES).toEqual({ 11: 20, 9: 16, 7: 13 });
+  it('17 / 14 / 11 minutes a round (Zip 97, were 20 / 16 / 13), 20 minutes kept free, a tie game 8 (Zip 97, was 10)', () => {
+    // Zip 97: regular rounds 17 to 11, 14 to 9, 11 to 7; a tie game 8.
+    expect(ROUND_MINUTES).toEqual({ 11: 17, 9: 14, 7: 11 });
     expect(END_BUFFER).toBe(20);
     expect(BONUS_SPARE).toBe(END_BUFFER);
-    expect(TIE_MINUTES).toBe(10);
+    expect(TIE_MINUTES).toBe(8);
   });
-  it('Dec 1 (10 players, 2 courts, 2.5 hours): Locked doubles 5 round robin rounds to 11 + Final and 3rd place; Americano 6 rounds to 11', () => {
-    // Zip 89 (Alex): 10 minutes of warm-up, then the rounds: done 9:40 PM, 20 minutes before the end. Someone sits every round: no breaks.
+  it('Dec 1 (10 players, 2 courts, 2.5 hours): Locked doubles 5 round robin rounds to 11 + Final and 3rd place; Americano 7 rounds to 11 (Zip 97, was 6)', () => {
+    // Zip 89 (Alex): 10 minutes of warm-up, then the rounds. Someone sits every round: no breaks. Zip 97: Locked doubles 10 + 5 x 17 + 20 = 115
+    // (done 9:25 PM, was 130); Americano 7 rounds, 10 + 7 x 17 = 129 (done 9:39 PM, was 6 rounds, 130).
     const ld = nightPlan(10, 2, 150, 'doubles');
-    expect([ld.doubles!.poolRounds, ld.doubles!.playoffRounds, ld.doubles!.third, ld.gameTo, ld.rounds, ld.minutesUsed, ld.fits, ld.breaks]).toEqual([5, 1, true, 11, 6, 130, true, 0]);
+    expect([ld.doubles!.poolRounds, ld.doubles!.playoffRounds, ld.doubles!.third, ld.gameTo, ld.rounds, ld.minutesUsed, ld.fits, ld.breaks]).toEqual([5, 1, true, 11, 6, 115, true, 0]);
     const am = nightPlan(10, 2, 150, 'americano');
-    expect([am.rounds, am.gameTo, am.minutesUsed, am.fits, am.breaks]).toEqual([6, 11, 130, true, 0]);
+    expect([am.rounds, am.gameTo, am.minutesUsed, am.fits, am.breaks]).toEqual([7, 11, 129, true, 0]);
   });
   it('Dec 1 for 8 to 12 locked in: every plan done at least 20 minutes before 10 PM with the warm-up; breaks only when nobody sits', () => {
-    // [players, style, rounds, to, breaks, minutes from 7:30 to the planned end]
+    // [players, style, rounds, to, breaks, minutes from 7:30 to the planned end]. Zip 97 (17 a regular round, 20 a playoff round): 8 Locked
+    // doubles 10 + 3 x 17 + 2 x 20 + 10 = 111 (was 120); Americano one round more (8: 6 rounds, 122; 9 to 12: 7 rounds, 129); 10 Locked doubles
+    // 115; 12 Locked doubles 10 + 3 x 17 + 2 x 20 = 101.
     const want: [number, 'doubles' | 'americano', number, number, number, number][] = [
-      [8, 'doubles', 5, 11, 2, 120],
-      [8, 'americano', 5, 11, 2, 120],
-      [9, 'americano', 6, 11, 0, 130],
-      [10, 'doubles', 6, 11, 0, 130],
-      [10, 'americano', 6, 11, 0, 130],
-      [11, 'americano', 6, 11, 0, 130],
-      [12, 'doubles', 5, 11, 0, 110],
-      [12, 'americano', 6, 11, 0, 130],
+      [8, 'doubles', 5, 11, 2, 111],
+      [8, 'americano', 6, 11, 2, 122],
+      [9, 'americano', 7, 11, 0, 129],
+      [10, 'doubles', 6, 11, 0, 115],
+      [10, 'americano', 7, 11, 0, 129],
+      [11, 'americano', 7, 11, 0, 129],
+      [12, 'doubles', 5, 11, 0, 101],
+      [12, 'americano', 7, 11, 0, 129],
     ];
     // Alex, "build in what fits": 8 Locked doubles gets its semifinals in the plan (3 round robin + semis + Final and 3rd place, done 9:30).
     expect(nightPlan(8, 2, 150, 'doubles').builtIn).toEqual({ semis: true, bestOf3: false });
@@ -87,7 +91,9 @@ describe('zip 89: the base plan (one place for the numbers)', () => {
             }
             if (now.rounds < was.rounds || now.gameTo < was.gameTo) shorter.push(`${now.style} ${n} ${c} ${m}`);
           }
-    expect([...new Set(shorter)].sort()).toEqual(['americano 8 2 150', 'americano 8 2 180', 'americano 9 1 180']);
+    // Zip 97: with 17 / 14 / 11 no size plays fewer rounds or shorter games than the old 23 / 19 / 16 plan any more (were 3: Americano 8 on 2
+    // courts for 2.5 and 3 hours, 9 on 1 court for 3 hours).
+    expect([...new Set(shorter)].sort()).toEqual([]);
   });
 });
 
@@ -96,30 +102,32 @@ describe('zip 89: the pace and the offer (pure)', () => {
     expect(measuredPace(doneUpTo(0, 15), START).pace).toBeNull();
     expect(measuredPace(doneUpTo(2, 15), START)).toMatchObject({ done: 2, pace: 15 });
     expect(measuredPace(doneUpTo(2, 10), START).pace).toBe(PACE_FLOOR);
-    // A round to 9 counts against its own table time (16): 12.8 minutes for it is a 16 minute pace for a round to 11.
-    expect(measuredPace([{ round: 1, planned: true, done: true, doneAt: START + 12.8, minutes: 16 }], START).pace).toBeCloseTo(16);
+    // A round to 9 counts against its own table time (Zip 97: 14, was 16): 14 minutes for it is a 17 minute pace for a round to 11 (Zip 97: the
+    // input is now 14 minutes at the new table's 14, since 12.8 at 14 would fall under the 14 minute floor).
+    expect(measuredPace([{ round: 1, planned: true, done: true, doneAt: START + 14, minutes: ROUND_MINUTES[9] }], START).pace).toBeCloseTo(17);
     // Rounds after a round still open do not count yet.
     const gap = [{ round: 1, planned: true, done: true, doneAt: START + 15 }, { round: 2, planned: true, done: false }, { round: 3, planned: true, done: true, doneAt: START + 30 }];
     expect(measuredPace(gap, START).done).toBe(1);
   });
   it('offers after a fast round when the rest + the bonus ends 20 minutes early; nothing when it would not', () => {
-    // 15 a round: Round 1 done at 7:45, 5 left x 15 = 75, the bonus round at the table's 20 at least (it can never be shortened as it is
-    // the night's new last round... and the review's rule): 9:20 PM, 40 minutes to spare.
+    // 15 a round: Round 1 done at 7:45, 5 left x 15 = 75, the bonus round at the table's 17 at least (Zip 97, was 20; it can never be shortened
+    // as it is the night's new last round... and the review's rule): 9:17 PM (Zip 97, was 9:20), 43 minutes to spare.
     const fast = pacing(base({ rounds: doneUpTo(1, 15), nowMin: START + 15 }));
     expect(fast.offer).toEqual({ kind: 'round', key: 'round:1:6' });
-    expect(fast.finishWithBonus).toBe(START + 110);
-    // 20 a round: 20 + 5 x 20 + 20 = 140 > 130: no offer.
+    expect(fast.finishWithBonus).toBe(START + 107);
+    // 20 a round: 20 + 5 x 20 + 17 = 137 > 130 (Zip 97: the bonus at 17): no offer.
     expect(pacing(base({ rounds: doneUpTo(1, 20), nowMin: START + 20 })).offer).toBeNull();
     // Exactly 20 to spare is enough; 19 is not.
     const edge = (each: number) => pacing(base({ rounds: doneUpTo(1, each), nowMin: START + each })).offer;
-    // each + 5 x each + 20 <= 130: each <= 18.33.
-    expect(edge(109.9 / 6)).not.toBeNull();
-    expect(edge(110.1 / 6)).toBeNull();
+    // Zip 97: the edge is now slower than the table's 17, so the bonus counts at the pace too (never faster than the table): each + 5 x each +
+    // each <= 130: each <= 18.57 (was each + 5 x each + 20 <= 130, 18.33).
+    expect(edge(129.9 / 7)).not.toBeNull();
+    expect(edge(130.1 / 7)).toBeNull();
   });
   it('a round in progress counts as at most half done', () => {
     const late = pacing(base({ rounds: doneUpTo(1, 15), nowMin: START + 50 }));
-    // From 50 - 7.5 = 42.5 minutes in: 42.5 + 75 + 20 = 137.5 > 130: no offer.
-    expect(late.finishWithBonus).toBe(START + 137.5);
+    // From 50 - 7.5 = 42.5 minutes in: 42.5 + 75 + 17 = 134.5 > 130 (Zip 97: the bonus at 17, was 20 and 137.5): no offer.
+    expect(late.finishWithBonus).toBe(START + 134.5);
     expect(late.offer).toBeNull();
   });
   it('never inside the last 2 planned rounds (a bonus round is never counted as planned)', () => {
@@ -143,10 +151,11 @@ describe('zip 89: the pace and the offer (pure)', () => {
     expect(paceForCheck(false, null)).toBeUndefined();
     expect(paceForCheck(false, 15)).toBeUndefined();
     expect(paceForCheck(true, 15)).toBe(15);
-    // Zip 92: a slow night eases in (a third of the way after Round 1, two thirds after Round 2, all of it from Round 3).
+    // Zip 92: a slow night eases in (a third of the way after Round 1, two thirds after Round 2, all of it from Round 3). Zip 97: from the
+    // table's 17 (was 20): 26 after Round 1 is 17 + 9 / 3 = 20 (was 22).
     expect(paceForCheck(false, 24, 3)).toBe(24);
-    expect(paceForCheck(false, 26, 1)).toBeCloseTo(22, 6);
-    expect(paceForCheck(false, 24, 2)).toBeCloseTo(20 + (4 * 2) / 3, 6);
+    expect(paceForCheck(false, 26, 1)).toBeCloseTo(20, 6);
+    expect(paceForCheck(false, 24, 2)).toBeCloseTo(17 + (7 * 2) / 3, 6);
     expect(paceForCheck(false, 55, 0)).toBeUndefined();
   });
 });
@@ -178,43 +187,48 @@ describe('zip 89: the Americano bonus round (pure)', () => {
 });
 
 describe('zip 89: Americano on the real server (10 players, the Dec 1 night)', () => {
-  it('a fast night offers Add a round after Round 1; a stale key is refused; Yes adds Round 7 at once; one bonus per scored round', async () => {
-    const ctx = await world(10, { format: 'americano' });
+  it('a fast night offers Add a round after Round 1; a stale key is refused; Yes adds Round 9 at once (Zip 97: on 3 hours); one bonus per scored round', async () => {
+    // Zip 97: the 17 minute table fills 2.5 hours with 7 rounds (10 + 7 x 17 = 129), so even at the 14 minute floor no bonus fits there any more
+    // (10 + 13 + 6 x 14 + 17 = 124, past 9:40). To keep this test's purpose (a fast night is offered a round), the night is 3 hours: 8 rounds
+    // planned (10 + 8 x 17 = 146), the bonus is Round 9.
+    const ctx = await world(10, { format: 'americano', minutes: 180 });
     // 13 minutes a game (Alex's night): stop as soon as the offer shows.
     await playPaced(ctx, 13, false, ({ v }) => !!v.bonus);
     let { v } = await night(ctx);
     expect(v.bonus).toMatchObject({ kind: 'round' });
-    expect(v.plannedRounds).toBe(6);
+    expect(v.plannedRounds).toBe(8);
     // Players never see an offer (it is the organizer's).
     const phone = await card(ctx, 'Blair');
     expect(JSON.stringify(phone)).not.toContain('"bonus"');
     expect((await call(ctx, { action: 'bonus', key: 'round:0:6' })).status).toBe(409);
     const ok = await call(ctx, { action: 'bonus', key: v.bonus.key });
     expect(ok.status, ok.text).toBe(200);
-    expect(ok.data.round).toBe(7);
+    // Zip 97: on 3 hours the bonus is Round 9 (8 planned).
+    expect(ok.data.round).toBe(9);
     // The same tap again (a second phone) is refused; no second offer before another round is in.
     expect((await call(ctx, { action: 'bonus', key: v.bonus.key })).status).toBe(409);
     ({ v } = await night(ctx));
     expect(v.bonus).toBeUndefined();
-    expect(Math.max(...v.games.map((g: any) => g.round))).toBe(7);
-    // Round 7: 8 on court, two sit; the bars and the players' phones include it.
-    const r7 = v.games.filter((g: any) => g.round === 7);
-    expect(r7).toHaveLength(2);
-    expect(v.sits.find((s: any) => s.round === 7).names).toHaveLength(2);
-    const mine = await card(ctx, r7[0].a.names[0]);
-    expect(mine.day.rounds.some((r: any) => r.round === 7)).toBe(true);
-    expect(mine.day.progress.total).toBe(7);
+    expect(Math.max(...v.games.map((g: any) => g.round))).toBe(9);
+    // Round 9 (Zip 97, was Round 7): 8 on court, two sit; the bars and the players' phones include it.
+    const r9 = v.games.filter((g: any) => g.round === 9);
+    expect(r9).toHaveLength(2);
+    expect(v.sits.find((s: any) => s.round === 9).names).toHaveLength(2);
+    const mine = await card(ctx, r9[0].a.names[0]);
+    expect(mine.day.rounds.some((r: any) => r.round === 9)).toBe(true);
+    expect(mine.day.progress.total).toBe(9);
   }, 60_000);
   it('the offer goes when the window closes; paused: none; a whole night with every offer taken: books zero, the reveal credits once', async () => {
-    const ctx = await world(10, { format: 'americano' });
+    // Zip 97: on 3 hours (8 rounds planned), as above: on 2.5 hours the 17 minute table leaves no room for a bonus at the 14 minute floor.
+    const ctx = await world(10, { format: 'americano', minutes: 180 });
     await playPaced(ctx, 13, false, ({ v }) => !!v.bonus);
     expect((await call(ctx, { action: 'pause' })).status).toBe(200);
     expect((await night(ctx)).v.bonus).toBeUndefined();
     expect((await call(ctx, { action: 'resume' })).status).toBe(200);
     expect((await night(ctx)).v.bonus).toBeTruthy();
-    // Ignored: Rounds 2 to 4 go by with the offer showing after each, then no offer with 2 planned rounds left... wait, 2 left still offers;
-    // with 1 left (after Round 5) none.
-    await playPaced(ctx, 13, false, ({ v }) => v.games.filter((g: any) => g.round <= 5).every((g: any) => g.status === 'done'), false);
+    // Ignored: Rounds 2 to 6 go by with the offer showing after each, then no offer with 2 planned rounds left... wait, 2 left still offers;
+    // with 1 left (Zip 97: after Round 7 of 8, was Round 5 of 6) none.
+    await playPaced(ctx, 13, false, ({ v }) => v.games.filter((g: any) => g.round <= 7).every((g: any) => g.status === 'done'), false);
     expect((await night(ctx)).v.bonus).toBeUndefined();
     const run = await playPaced(ctx, 13, true, undefined, false);
     const t = await adminTour(ctx);
@@ -358,14 +372,15 @@ describe('zip 89: the preview stages (the preview’s fixed names)', () => {
     const games = (id: string, body: Record<string, unknown>) => ctx.organizer.call('POST', `/api/admin/tournament/${id}/games`, body);
     return { ctx, stage, tour, games };
   }
-  it('Americano ahead: the offer shows; Yes adds Round 7', async () => {
+  it('Americano ahead: the offer shows; Yes adds Round 8 (Zip 97: 7 planned, was Round 7)', async () => {
     const { stage, tour, games } = await preview();
     const id = await stage('zip89_am_ahead');
     const t = await tour();
     expect(t.rounds.bonus).toMatchObject({ kind: 'round' });
     expect(t.rounds.timeCheck ?? null).toBeNull();
     expect((await games(id, { action: 'bonus', key: t.rounds.bonus.key })).status).toBe(200);
-    expect(Math.max(...(await tour()).rounds.games.map((g: any) => g.round))).toBe(7);
+    // Zip 97: the plan is 7 rounds at 17 minutes (was 6), so the bonus is Round 8.
+    expect(Math.max(...(await tour()).rounds.games.map((g: any) => g.round))).toBe(8);
   });
   it('Locked doubles ahead: the semis offer; Yes puts SEMIS before the FINAL', async () => {
     const { stage, tour, games } = await preview();

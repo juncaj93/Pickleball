@@ -58,7 +58,8 @@ describe('the shared rules (words from the pictures)', () => {
     expect(planRange(1170, 120)).toBe('7:30 to 9:30 PM');
     expect(planRange(1140, 180)).toBe('7 to 10 PM');
     expect(planLine(PLANS[8][0])).toBe('7:30 to 9:30 PM. Everyone plays every round. Room to run over, then awards.');
-    expect(planLine(PLANS[6][0])).toBe('7:30 to 10 PM. Every team plays twice, then the top 2 play the final. With 3 teams, someone always plays back to back.');
+    // Zip 97: 6 players play Americano (AMERICANO_EVEN), so the 6 player plan note describes Americano (was the 3 team Locked doubles night).
+    expect(planLine(PLANS[6][0])).toBe('7:30 to 10 PM. Americano: 4 play each round and 2 sit, new partners every round. Everyone plays 4 or more games.');
     for (const size of [6, 8, 10, 12] as const) expect(PLANS[size].filter((p) => p.best)).toHaveLength(1);
   });
 
