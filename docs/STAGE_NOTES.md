@@ -8785,3 +8785,21 @@ zip92_ld_round, zip92_slow (7.4 to 9.1 ms after, 8.3 to 12.0 before, a busy mach
 ### Preview
 https://claude-new-session-g2eayf.pickleball-club-9h0.pages.dev (PIN 739514; the fake `pickleball-preview` database, no re-seed). Built from
 a clean checkout of the pushed branch. All four stages tried on the preview; left on "92: court time line".
+
+### Live (Wed Nov 25, 2026, about 7:10 PM Eastern; Alex's OK after the preview; no game tonight, Thursday's game canceled for Thanksgiving)
+- Alex's last look: the tournament card's date tile read "TOMORRO" (cut). Fixed his way: the tile keeps its 54 px, its column is the container
+  (as the game cards' .sched-tilecol), so the site's own TOMORROW / TOM rule (src/zip7.css) says TOM there. 320/375/390/420/440, light and
+  dark, 100/125/150%: TOM or TONIGHT, never cut, 54 px.
+- Before: unit 245 files, 4,528 passed, 12 skipped, 0 failed; e2e/zip92.cjs 7 of 7. Old browser scripts: being updated (test files only).
+- Restore point first: export `export-20261126000339` saved in `pickleball-backups` (checked against the file); Time Travel bookmark
+  `0000205e-00000000-0000512f-a65743e1555c8c37a7c3ec2d1be36e74`.
+- Integrity checks, all three files, before and after: 22, 8 and 14 columns, every problem column 0.
+- Main fast-forwarded `0b41da3` to `35b8432`, pushed; `npm run deploy -- --override-loud-hours` (Wednesday 7 PM is the night before a
+  Thursday game, but Thursday Nov 26 is canceled for Thanksgiving; Alex: "Deploy NOW"): deployment **dbd47477-6983-4f18-b225-243430f6489e**
+  (bundle `index-CyW-WGdJ.js`). No migration, no Worker or Error box deploy, no live data touched.
+- Rollback: deployment **aecef6d8-8844-4131-9e81-ebaba9aa28e5** (🎾90), Cloudflare Deployments > Rollback. No database undo needed.
+- The Cold Open on live after the deploy: Locked doubles by vote, tickets, Pay by Mon Nov 30 7 PM: unchanged (the 12 / 14 rule acts only
+  at Pay by).
+- Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390
+  light and dark: the new bundle, no page errors, nothing wider than the screen, no write requests. Organizer screens not opened (no
+  read-only PIN in this session).
