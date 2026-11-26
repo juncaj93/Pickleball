@@ -683,7 +683,8 @@ export interface PlayerTournamentView {
   /**
    * Zip 95 (pictures 3 and 4): the level the organizer saved for this player on the Level check card after their last tournament, above
    * `previousLevel`. Its row shows a small green "RECOMMENDED" tag with "Based on recent performance"; `previousLevel` stays picked. Only for
-   * the NEXT tournament they sign up for (gone once they have signed up for any tournament since).
+   * the NEXT tournament they play: gone once they are locked in for a later tournament that is not canceled (a canceled one, or a back out
+   * before locking in, brings it back).
    */
   recommendedLevel?: number;
 }

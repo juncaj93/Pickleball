@@ -221,16 +221,15 @@ describe('zip 95 part 2: the next sign-up', () => {
     expect(await w.card()).toBeUndefined();
   });
 
-  it('only the NEXT tournament: once Vic has signed up for one (even if it was canceled), the tag is gone', async () => {
+  it('used up only by being LOCKED IN for a later tournament that is not canceled; a canceled sign-up or a back out brings it back', async () => {
     const w = await previewWorld();
     const winter = await w.stage('zip95_signup');
     const vic = await playerPhone(w.c, 'Vic');
     const t = (await vic.call('GET', '/api/group')).data.tournament;
     expect(t.recommendedLevel).toBe(320);
-    // He signs up for Winter Classic (picking 3.2: the level up, a screen thing only).
+    // He signs up for Winter Classic (picking 3.2: the level up, a screen thing only); then Winter Classic is canceled and Spring Fling opens.
     const up = await vic.call('POST', '/api/tournament/signup', { tournamentId: winter, level: 320, dates: [t.openDates[0]] });
     expect(up.status, up.text).toBe(200);
-    // Winter Classic is canceled; a new one opens: Vic starts on 3.0 again, no recommendation.
     expect((await w.ctx.organizer.call('POST', `/api/admin/tournament/${winter}/cancel`, {})).status).toBe(200);
     const made = await w.ctx.organizer.call('POST', '/api/admin/tournament', {
       name: 'Spring Fling',
@@ -244,10 +243,36 @@ describe('zip 95 part 2: the next sign-up', () => {
       visibility: 'all',
     });
     expect(made.status, made.text).toBe(200);
-    const next = (await vic.call('GET', '/api/group')).data.tournament;
-    expect(next.name).toBe('Spring Fling');
-    expect(next.previousLevel).toBe(300);
-    expect(next.recommendedLevel).toBeUndefined();
+    const view = async () => (await vic.call('GET', '/api/group')).data.tournament;
+    // A canceled sign-up never uses it up.
+    expect((await view()).name).toBe('Spring Fling');
+    expect((await view()).previousLevel).toBe(300);
+    expect((await view()).recommendedLevel).toBe(320);
+    // Signed up but never locked in (Winter Classic as if it went ahead and he did not pay): still there.
+    w.sql("UPDATE tournaments SET status = 'ended', ended_at = ?, canceled_at = NULL WHERE id = ?", new Date(MORNING - 3_600_000).toISOString(), winter);
+    w.sql("UPDATE tournament_signups SET status = 'in' WHERE tournament_id = ? AND player_id = ?", winter, w.byName.Vic);
+    expect((await view()).recommendedLevel).toBe(320);
+    // An I paid for the whole ticket still waiting counts as locked in (as everyone sees it): used up.
+    w.sql(
+      `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, credit_cents, paid_cents, claim_cents, claim_at, created_at, updated_at)
+       VALUES ('z95k', ?, ?, 'none', NULL, 1600, 0, 0, 1600, ?, ?, ?)`,
+      winter, w.byName.Vic, new Date(MORNING).toISOString(), new Date(MORNING).toISOString(), new Date(MORNING).toISOString(),
+    );
+    expect((await view()).recommendedLevel).toBeUndefined();
+    // A spot, paid: used up.
+    w.sql("UPDATE tournament_tickets SET place = 'spot', place_at = ?, claim_cents = 0, claim_at = NULL, paid_cents = 1600 WHERE id = 'z95k'", new Date(MORNING).toISOString());
+    expect((await view()).recommendedLevel).toBeUndefined();
+    expect((await view()).previousLevel).toBe(300);
+    // A back out (the sign-up 'out', the spot given back): it shows again.
+    w.sql("UPDATE tournament_tickets SET place = 'none', paid_cents = 0 WHERE id = 'z95k'");
+    w.sql("UPDATE tournament_signups SET status = 'out' WHERE tournament_id = ? AND player_id = ?", winter, w.byName.Vic);
+    expect((await view()).recommendedLevel).toBe(320);
+    // Locked in, but that tournament canceled: it shows again.
+    w.sql("UPDATE tournament_tickets SET place = 'spot', paid_cents = 1600 WHERE id = 'z95k'");
+    w.sql("UPDATE tournament_signups SET status = 'in' WHERE tournament_id = ? AND player_id = ?", winter, w.byName.Vic);
+    expect((await view()).recommendedLevel).toBeUndefined();
+    w.sql("UPDATE tournaments SET status = 'canceled', canceled_at = ? WHERE id = ?", new Date(MORNING).toISOString(), winter);
+    expect((await view()).recommendedLevel).toBe(320);
   });
 
   it('nothing new when the recommended level IS the previous one (Alex already raised him)', async () => {

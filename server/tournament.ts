@@ -357,13 +357,17 @@ const resultsSqlFor = (idSql: string) =>
 /**
  * Zip 79: a player's (?1) finalized level at their last ended tournament in the group (?2): the organizer's level if he changed it, else their pick.
  * Zip 95: in the same row, the level the organizer saved on that tournament's Level check card (`recommended`, task_log detail; 'no' or none:
- * nothing), and whether the player has signed up for a tournament since it ended (`since`: then the recommendation is used up, Alex: "the NEXT
- * tournament the player signs up for only").
+ * nothing), and whether the player is LOCKED IN for a later tournament that is not canceled (`since`: then the recommendation is used up). Alex:
+ * a canceled sign-up never uses it up, and a back out before being locked in brings it back next time. Locked in is lockedInSql's rule: a spot,
+ * or a whole-ticket I paid still waiting, on a sign-up still 'in'.
  */
 const PREVIOUS_LEVEL_SQL = `SELECT COALESCE(r.approved_level, r.picked_level) AS level,
          (SELECT h.detail FROM task_log h WHERE h.session_id IS NULL AND h.task = '${LEVEL_CHECK_TASK}' || t.id || ':' || r.player_id AND h.kind IN ('mark', 'sent') AND h.kind = 'mark' LIMIT 1) AS recommended,
-         (SELECT 1 FROM tournament_signups s2 JOIN tournaments t2 ON t2.id = s2.tournament_id
-            WHERE s2.player_id = r.player_id AND t2.group_id = t.group_id AND t2.id <> t.id AND t2.created_at > COALESCE(t.ended_at, t.final_date) LIMIT 1) AS since
+         (SELECT 1 FROM tournament_tickets k JOIN tournaments t2 ON t2.id = k.tournament_id
+            JOIN tournament_signups s2 ON s2.tournament_id = k.tournament_id AND s2.player_id = k.player_id AND s2.status = 'in'
+            WHERE k.player_id = r.player_id AND t2.group_id = t.group_id AND t2.id <> t.id AND t2.status <> 'canceled'
+              AND t2.created_at > COALESCE(t.ended_at, t.final_date)
+              AND (k.place = 'spot' OR (k.place <> 'line' AND k.claim_cents > 0 AND k.credit_cents + k.paid_cents + k.claim_cents >= k.price_cents)) LIMIT 1) AS since
        FROM tournament_results r JOIN tournaments t ON t.id = r.tournament_id
        WHERE r.player_id = ?1 AND t.group_id = ?2 AND t.status = 'ended' AND COALESCE(r.approved_level, r.picked_level) IS NOT NULL
        ORDER BY t.final_date DESC, t.ended_at DESC, t.id LIMIT 1`;
@@ -1073,7 +1077,7 @@ function previousFrom(row: PreviousRow | undefined): { previousLevel: number | n
 
 /**
  * Zip 79: `previousLevel` for the view (from the screen's batch when it read it; else one read), left out for a first-timer. Zip 95: and
- * `recommendedLevel` (the Level check card's Save), only when it is above the previous level and the player has not signed up for anything since.
+ * `recommendedLevel` (the Level check card's Save), only when it is above the previous level and the player is not locked in for a later one.
  */
 async function previousLevelOf(ctx: Ctx, group: GroupRow, playerId: string, pre?: TourPre<ActiveRow>): Promise<{ previousLevel?: number; recommendedLevel?: number }> {
   const got =

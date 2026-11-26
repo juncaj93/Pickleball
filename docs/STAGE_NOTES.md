@@ -8840,8 +8840,9 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
    the 3 days, for a player the card does not ask about, or (400) for a level not above theirs. Activity line 'tournament_level_check'.
    The answers are in backups already (task_log is in the backup file since Zip 50, and in Time Travel).
 4. RECOMMENDED (pictures 3 and 4; src/tournament/parts.tsx LevelList, TournamentHome.tsx SignupSheet): PREVIOUS_LEVEL_SQL (server/tournament.ts)
-   also brings the saved answer of that same last tournament and whether the player signed up for any tournament created after it ended
-   (`since`); `recommendedLevel` only when it is a level above `previousLevel` and `since` is empty. A green pill "RECOMMENDED" and "Based on
+   also brings the saved answer of that same last tournament and whether the player is LOCKED IN (lockedInSql's rule, sign-up still in) for
+   a later tournament that is not canceled (`since`; Alex's answer, Nov 26: a canceled sign-up never uses it up, a back out brings it back);
+   `recommendedLevel` only when it is a level above `previousLevel` and `since` is empty. A green pill "RECOMMENDED" and "Based on
    recent performance" over the level's words; the previous level stays picked; the existing level up plays when picked.
 5. STAGES (THIS_ZIP): zip95_check (The Cold Open, 10 players Locked doubles, ended last night: Vic 5-0, Wren 4-1 champion, Rowan and Zoe
    3-2; written row by row, no ticket, credit or money row) and zip95_signup (the same night 5 days back, Vic Yes 3.2, Wren No, Winter
@@ -8852,8 +8853,8 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
 Fixed: a second answer (another phone, a page left open) now gets 409 "Vic was already answered. Look again." instead of a false saved
 toast; a request without `level` is refused (only an explicit null is No); answered rows are kept per tournament on a page left open;
 after Save or No the keyboard focus moves to the next row. Not changed: hidden tournaments (only a canceled tournament can be hidden, never
-an ended one); a partner changed during the night (the team's current players get the team's games, rare). Asked of Alex: the 3-game
-minimum, leaving out the organizer, and "next sign-up" counting a canceled or backed-out one.
+an ended one); a partner changed during the night (the team's current players get the team's games, rare). Alex's answers (Nov 26): leave
+the organizer off, yes; at least 3 games, yes; a canceled sign-up must NOT use up the recommendation, only being locked in does (fixed).
 
 ### Who qualifies (scripts/zip95-audit.ts: the three nights on the fake world)
 - 8 LD (the real End): Vic and Wren 3-0 champions (4-0 with the Final, never counted): both listed. Parker 3.6+; Quinn 2-1; the rest under.
