@@ -6,7 +6,7 @@
  *   A  Vic before the night (picture 31): the one-row ticket (Americano line), then Your rounds with Round 4 a Break
  *   B  Vic at Round 3 (picture 32): the hero, the VS card with Enter score, Your rounds (Won / Lost tags), Standings with points, Currently
  *      playing, Show future games; light and dark at 390, 360, 320; no row wraps
- *   C  Enter score (picture 33) and the win motion (picture 36): lime "✓ Let's go!", the slide to the break card, Round 4 of 6, the Won tag,
+ *   C  Enter score (picture 33) and the win motion (picture 36): lime "✓ Let's go!", the slide to the break card, Round 4 of 7, the Won tag,
  *      the banner with Undo and its countdown circle (Zip 71: no drain line), sent after 5 seconds
  *   D  a losing score (picture 37): the white glow and "Onto the next!", the slide, the Lost tag; Undo sends nothing
  *   E  the other side (zip 71, no confirming): the score is in at once; no "Is this right?", no Enter score for that round
@@ -229,7 +229,7 @@ async function main() {
       const body = flat(await v.page.locator('.tc-wrap').innerText());
       assert(body.includes('Americano (new partner every round)'), 'the format line on the ticket');
       const rows = await v.page.locator('[data-tc-round]').count();
-      assert(rows === 6, `6 rounds: ${rows}`);
+      assert(rows === 7, `7 rounds (Zip 97): ${rows}`);
       assert(flat(await v.page.locator('[data-tc-round="4"]').innerText()) === 'Round 4 Break', await v.page.locator('[data-tc-round="4"]').innerText());
       assert(/^Round 1 Court \d With .+ vs .+ \+ .+$/.test(flat(await v.page.locator('[data-tc-round="1"]').innerText())), await v.page.locator('[data-tc-round="1"]').innerText());
       for (const w of SIZES) {
@@ -250,7 +250,7 @@ async function main() {
       await stage('am_round3');
       const v = await playerPage('Vic', { scheme });
       await v.page.locator('[data-tc-day-hero]').waitFor({ timeout: 20000 });
-      assert((await bar(v.page)) === 'ROUND 3 OF 6', await bar(v.page));
+      assert((await bar(v.page)) === 'ROUND 3 OF 7', await bar(v.page));
       const r3 = await vicRound(3);
       const kicker = flat(await v.page.locator('.tc-gd-next-kicker').innerText()).toUpperCase();
       assert(kicker === `ROUND 3 · COURT ${r3.court}`, kicker);
@@ -287,7 +287,7 @@ async function main() {
 
   // ---------------------------------------------------------------- C  Enter score and the win motion
   for (const scheme of SCHEMES)
-    await check(`C Enter score (${scheme}): the sheet, − and +, Submit: lime "✓ Let's go!", the slide to the break, Round 4 of 6, Won, the banner, sent at 5 seconds`, async () => {
+    await check(`C Enter score (${scheme}): the sheet, − and +, Submit: lime "✓ Let's go!", the slide to the break, Round 4 of 7, Won, the banner, sent at 5 seconds`, async () => {
       await stage('am_round3');
       const r3 = await vicRound(3);
       const v = await playerPage('Vic', { scheme, reducedMotion: 'no-preference' });
@@ -336,9 +336,9 @@ async function main() {
       await v.page.locator('.tc-gd-slide-out').waitFor({ timeout: 2500 });
       await SH(v.page, `C-slide-${scheme}`);
       await v.page.waitForTimeout(600);
-      // Vic sits Round 4: the break card slides in; the hero says Round 4 of 6; Round 3 has its Won tag; the highlight moved to Round 4.
+      // Vic sits Round 4: the break card slides in; the hero says Round 4 of 7 (7 rounds since Zip 97); Round 3 has its Won tag; the highlight moved to Round 4.
       assert((await v.page.locator('[data-tc-break="4"]').count()) === 1, 'the break card');
-      assert((await bar(v.page)) === 'ROUND 4 OF 6', await bar(v.page));
+      assert((await bar(v.page)) === 'ROUND 4 OF 7', await bar(v.page));
       const row3 = v.page.locator('[data-tc-round="3"]');
       assert((await row3.getAttribute('data-state')) === 'done' && /^Won \d+\u2013\d+$/.test(flat(await row3.locator('.tc-gd-tag-won').innerText())), 'Round 3 Won with the score');
       assert((await v.page.locator('[data-tc-round="4"]').getAttribute('data-state')) === 'next', 'the highlight on Round 4');
@@ -386,7 +386,7 @@ async function main() {
     await toastBox(v.page).locator('.toast-action').click();
     await v.page.waitForTimeout(700);
     assert((await v.page.locator('[data-tc-round-card="3"]').count()) === 1, 'Undo puts Round 3 back');
-    assert((await bar(v.page)) === 'ROUND 3 OF 6', 'the bar goes back');
+    assert((await bar(v.page)) === 'ROUND 3 OF 7', 'the bar goes back');
     await v.page.waitForTimeout(5200);
     assert(posted === 0, `Undo sends nothing: ${posted}`);
     assert(v.errors.length === 0, v.errors.join(' | '));
@@ -420,7 +420,7 @@ async function main() {
       const card = flat(await v.page.locator('[data-tc-break="4"]').innerText());
       assert(/^Round 4 · Your break On break until Round 5 \S.* is on break too\.$/i.test(card), card);
       assert((await v.page.locator('[data-tc-day-live] .tc-gd-row').count()) === 2, 'both courts');
-      assert((await bar(v.page)) === 'ROUND 4 OF 6', await bar(v.page));
+      assert((await bar(v.page)) === 'ROUND 4 OF 7', await bar(v.page));
       for (const w of SIZES) {
         await v.page.setViewportSize({ width: w, height: 844 });
         await fits(v.page, '.tc-gd');
@@ -437,10 +437,10 @@ async function main() {
       const a = await adminPage({ scheme });
       await a.page.locator('[data-tm-am-rounds]').waitFor({ timeout: 15000 });
       const plan = flat(await a.page.locator('[data-tm-am-plan]').innerText());
-      assert(plan === '10 locked in. 6 rounds to 11, 2 sit each round. New partner every round.', plan);
+      assert(plan === '10 locked in. 7 rounds to 11, 2 sit each round. New partner every round.', plan);
       await a.page.locator('[data-tm-am-all]').click();
       await a.page.locator('[data-tm-am-all-sheet]').waitFor();
-      assert((await a.page.locator('[data-tm-am-all-sheet] [data-tm-am-game]').count()) === 12, '12 games');
+      assert((await a.page.locator('[data-tm-am-all-sheet] [data-tm-am-game]').count()) === 14, '14 games');
       for (const w of SIZES) {
         await a.page.setViewportSize({ width: w, height: 844 });
         await fits(a.page, '[data-tm-am-all-sheet]');
@@ -450,13 +450,13 @@ async function main() {
       await a.ctx.close();
     });
   for (const scheme of SCHEMES)
-    await check(`G the organizer on the night (${scheme}): Round 6 scores, Fix with two numbers, Player left, Pause`, async () => {
+    await check(`G the organizer on the night (${scheme}): Round 7 scores, Fix with two numbers, Player left, Pause`, async () => {
       await stage('am_standings');
       const a = await adminPage({ scheme });
       await a.page.locator('[data-tm-am-night]').waitFor({ timeout: 15000 });
-      // Zip 88: the one night card: RD6 is the round in play, both courts on Round 6.
-      assert((await a.page.locator('[data-nc-bar="r6"][data-state="now"]').count()) === 1, 'RD6 in play');
-      assert((await a.page.locator('[data-nc-pill="RD6"]').count()) === 2, 'two games in Round 6');
+      // Zip 88: the one night card: the last round is in play, both courts on it (RD7 since Zip 97's 7 rounds).
+      assert((await a.page.locator('[data-nc-bar="r7"][data-state="now"]').count()) === 1, 'RD7 in play');
+      assert((await a.page.locator('[data-nc-pill="RD7"]').count()) === 2, 'two games in Round 7');
       for (const w of SIZES) {
         await a.page.setViewportSize({ width: w, height: 844 });
         await fits(a.page, '[data-nc]');
@@ -511,7 +511,7 @@ async function main() {
     await v.page.locator('[data-tc-rounds]').waitFor({ timeout: 20000 });
     const text = flat(await v.page.locator('body').innerText());
     assert(text.includes('Tournament style is now Americano.'), 'the style line');
-    assert((await v.page.locator('[data-tc-round]').count()) === 6, 'six rounds');
+    assert((await v.page.locator('[data-tc-round]').count()) === 7, 'seven rounds');
     await SH(v.page, 'H-switched');
     assert(v.errors.length === 0, v.errors.join(' | '));
     await v.ctx.close();

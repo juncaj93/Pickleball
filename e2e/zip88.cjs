@@ -84,7 +84,7 @@ const cutOrBroken = (page, sel) =>
           assert(flat(await page.locator('[data-nc-style]').textContent()) === 'Americano · 10 players', 'style line');
           assert(flat(await page.locator('[data-nc-in]').textContent()) === '1 of 2 in', 'the pill');
           const bars = await page.locator('[data-nc-bar]').evaluateAll((xs) => xs.map((x) => `${x.textContent.trim()}:${x.getAttribute('data-state')}`));
-          assert(bars.join(' ') === 'RD1:done RD2:done RD3:now RD4:later RD5:later RD6:later', `bars ${bars.join(' ')}`);
+          assert(bars.join(' ') === 'RD1:done RD2:done RD3:now RD4:later RD5:later RD6:later RD7:later', `bars ${bars.join(' ')}`);
           const c1 = page.locator('[data-nc-court="1"]');
           const c2 = page.locator('[data-nc-court="2"]');
           assert((await c1.getAttribute('data-status')) === 'done' && (await c2.getAttribute('data-status')) === 'playing', 'court 1 done, court 2 playing');
