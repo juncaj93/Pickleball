@@ -8803,3 +8803,14 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
 - Read-only live look (pickleball-club-9h0.pages.dev, GET only): /, /admin, /api/status 200; the dashboard 401 without a PIN; Home at 390
   light and dark: the new bundle, no page errors, nothing wider than the screen, no write requests. Organizer screens not opened (no
   read-only PIN in this session).
+
+### Round 2 live: the 7 display fixes (Wed Nov 25, 2026, about 10:40 PM Eastern; Alex's OK; no game tonight, Thursday canceled)
+- Fixes (CSS only, wrap or shrink, never cut): TOMORROW / TOM at the real 71 px word (src/zip7.css, 78 px); the check badge at -17 px without
+  the Game day card too; LATER times wrap in their column; Players chips wrap under a long name; Money tile weekday spacing; who hasn't
+  paid rows grow, prices never break; Totals cost line wraps; Players stats wrap between words. Scripts alone: card-times, zip7, zip18,
+  zip29, zip31, money-rework, admin-r3 and zip92 all green.
+- Restore point: export `export-20261126033726` (checked against the file); Time Travel bookmark
+  `0000208b-00000000-0000512f-d5c302811e79d6701bb79b73e7bcda76`. Integrity before and after: 22, 8, 14 columns, every problem column 0.
+- Main `754c2cd` to `96045b6`; `npm run deploy -- --override-loud-hours`: deployment **fc5e5867-6c49-4182-81cf-32e84542706d** (bundle
+  `index-0cXvXhMl.js`). Rollback: **dbd47477-6983-4f18-b225-243430f6489e** (🎾92 round 1). No migration, no live data touched.
+- Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: no errors, nothing wider, no writes.
