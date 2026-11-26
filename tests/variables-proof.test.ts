@@ -181,6 +181,7 @@ describe('Zip 45: Cloudflare variables (the reduced set)', () => {
     VENUE_ALERT: { missing: true, off: false }, // Zip 43, allowed unless "off"
     GUEST_SPOT_PREVIEW: { missing: false, off: false }, // Zip 42, preview only: on only when it says "on"
     TOURNAMENTS: { missing: true, off: false }, // Zip 55, allowed unless "off"
+    EARLY_BIRD: { missing: true, off: false }, // Zip 94, allowed unless "off"
   };
   const NOT_SETTINGS = ['DB', 'ERROR_BOX', 'SANDBOX', 'TELEGRAM_FETCH']; // the database, the error box binding, View as, a test hook
   it('every variable the code reads is known: in the Zip 45 lists, a newer switch (checked), or a binding (F-14)', () => {

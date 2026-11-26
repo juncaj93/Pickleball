@@ -22,7 +22,17 @@ export type World = Awaited<ReturnType<typeof setupGroup>> & { tid: string; byNa
 /** n players signed up and locked in (with credit), the date finalized, and the clock moved past Pay by. `organizerPlays`: Blair is the organizer. */
 export async function world(
   n: number,
-  opts: { courts?: 1 | 2; start?: number; minutes?: number; visibility?: 'me' | 'all'; format?: 'doubles' | 'americano'; organizer?: string; secondCents?: number } = {},
+  opts: {
+    courts?: 1 | 2;
+    start?: number;
+    minutes?: number;
+    visibility?: 'me' | 'all';
+    format?: 'doubles' | 'americano';
+    organizer?: string;
+    secondCents?: number;
+    /** Zip 94: an early price; the first `lateFrom` players lock in before its deadline (at `cents`), the rest after it (at the $16 ticket price). */
+    early?: { cents: number; lateFrom: number };
+  } = {},
 ): Promise<World> {
   const base = await setupGroup();
   await base.organizer.call('PUT', '/api/admin/group', { organizerName: opts.organizer ?? 'Alex' });
@@ -55,18 +65,26 @@ export async function world(
   const minutes = opts.minutes ?? (isFourTeams ? 120 : 150);
   const fin = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/date`, { date: DATE, start: opts.start ?? 19 * 60 + 30, minutes, courts: opts.courts ?? 2 });
   expect(fin.status, fin.text).toBe(200);
-  for (const name of names) await lockWithCredit(ctx, name, opts.organizer === name);
+  if (opts.early) {
+    expect((await ctx.organizer.call('PUT', '/api/admin/early-bird-switch', { on: true })).status).toBe(200);
+    const until = new Date(ctx.app.now + 2 * 86_400_000).toISOString();
+    const e = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}/early`, { earlyCents: opts.early.cents, until });
+    expect(e.status, e.text).toBe(200);
+    for (const name of names.slice(0, opts.early.lateFrom)) await lockWithCredit(ctx, name, opts.organizer === name, opts.early.cents);
+    ctx.app.now = Date.parse(until) + 3_600_000;
+    for (const name of names.slice(opts.early.lateFrom)) await lockWithCredit(ctx, name, opts.organizer === name);
+  } else for (const name of names) await lockWithCredit(ctx, name, opts.organizer === name);
   ctx.app.now = PAY_BY_MS + 60_000;
   return ctx;
 }
 
 /** Credit given by the organizer's Adjust credit, then Lock my spot (credit first). The organizer's own seat is $0 (nothing to give). */
-async function lockWithCredit(ctx: World, name: string, organizer: boolean) {
+async function lockWithCredit(ctx: World, name: string, organizer: boolean, cents = 1600) {
   if (!organizer) {
-    const give = await ctx.organizer.call('POST', `/api/admin/players/${ctx.byName[name]}/credit-adjust`, { direction: 'add', cents: 1600, reason: 'Test credit', seen: potOf(ctx, name) });
+    const give = await ctx.organizer.call('POST', `/api/admin/players/${ctx.byName[name]}/credit-adjust`, { direction: 'add', cents, reason: 'Test credit', seen: potOf(ctx, name) });
     expect(give.status, give.text).toBe(200);
   }
-  const r = await (await playerPhone(ctx, name)).call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: organizer ? 0 : 1600 });
+  const r = await (await playerPhone(ctx, name)).call('POST', '/api/tournament/lock', { tournamentId: ctx.tid, intent: 'lock', priceCents: organizer ? 0 : cents });
   expect(r.status, r.text).toBe(200);
 }
 

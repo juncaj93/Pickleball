@@ -8826,6 +8826,94 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
   `index-BCw-MEQw.js`). Rollback: **fc5e5867-6c49-4182-81cf-32e84542706d**. Read-only live look: /, /admin, /api/status 200; dashboard 401;
   Home 390 light and dark: no errors, nothing wider, no writes.
 
+## 🎾93.polish (Thu Nov 26, 2026; LIVE 12:00 PM Eastern, deployment 86f85e98, rollback bd2e5dc4; --override-loud-hours with Alex OK, Thanksgiving game canceled)
+Branch `claude/new-session-3pvs4c`, from main `8ef2646`. Backup export-20261126165954, Time Travel bookmark 00002131-00000000-0000512f-7b0b3b6697d9a5c26dabe625fbf81fb7. Integrity 0 before and after (22 / 8 / 14 columns).
+
+### What changed (the code is the truth)
+1. COURT TAP AREAS (src/gameday.css, `.cm-pick` only): an invisible ::before on every square of the organizer's court picker, sized in the
+   tilted plane so it measures at least 44 x 44 px on screen. Before: 41.5 to 63 wide, 28 to 41 tall. After: smallest 54.5 x 45 (rows 13 to 16
+   about 45.5 tall, 9 to 12 45, 5 to 8 46, 1 to 4 52 to 54). Neighbors split the side and walkway gaps evenly; the 16 px row gaps lean to the
+   front (an even split leaves rows 9 to 12 at 42). The look is unchanged (pixel diff at most 1 colour step on 22 anti-aliased pixels). The
+   players' map and the X have no ::before.
+2. SCHEDULED NOTICE (server/tournament.ts formatAlertFor, shared/tournament.ts formatAlertWords): the day before the final date (group
+   timezone) the title is "<name> is tomorrow." with the same second line and the same key (closed stays closed); from midnight on the day
+   it is gone. Any tournament.
+3. EDIT AWARDS buttons (tournament-end.css `.tm-awards-weeks`): flex with wrap instead of a 4 column grid; each button at least its words wide.
+4. STANDINGS NAMES (standings-list.css, gameday-tour.css `.tc-gd-pname > b`, reveal.css `.tc-rv-name`): never break inside a word; one line
+   ending in "…" when too long.
+5. "ADJUSTED BY ORGANIZER" (credit-player.css, adjust-credit.css, credit-admin.css + credit-history.css): break-word, never anywhere.
+6. SKILLS DATES (shared/skills.ts skillsDates, SkillsHistory.tsx): "AUG"; two different dates in one month for a player: "AUG 3", "AUG 24".
+7. WAITLIST LEFTOVERS (Alex: "Only the surely-dead bits"): the court standby result, "The court opened. You're in.", the standby toast
+   condition in Sessions.tsx and the old standby words in comments. The real waitlist (behind Card cleanup) and the tournament standby stay.
+8. STAGES (THIS_ZIP): zip93_day_before, zip93_game_day (wrappers over zip87_payday / zip87_gameday).
+9. OLD TEST: e2e/money-visible.cjs reads the banner's message and its Undo pill separately (Chrome's innerText of the flex row sometimes ran
+   them together, "You dropped out.Undo", on main too).
+
+Review (fresh reviewer): no bugs; fixed its one edge, Skills dates group by month AND year (Aug 2025 and Aug 2026 each "AUG").
+
+### Checks
+tests/zip93-polish.test.ts (8), e2e/zip93.cjs (6: tap areas, notice by day, banner buttons, standings, adjusted line, Skills dates; 320 /
+375 / 420 / 440, 100 / 125 / 150%, light and dark). Full browser suite 90 of 90. Admin Home 4 trips / 63 statements, refresh 2 / 16, before
+and after (9 to 11 ms). No database change.
+## 🎾94.early bird (Thu Nov 26, 2026; branch `claude/new-session-616ec9`, from main `8ef2646` (🎾92 round 3 live); NOT live: held for Alex's OK)
+
+### What it is
+Pay early, pay less (Alex: $18 early, $20 after). Built OFF behind Settings > Feature switches > "Early bird pricing" (EARLY_BIRD). A
+tournament gets "Early price" and "Early price until" in its gear sheet; a player's own tap (Lock in with credit, Hold, I paid) before the
+deadline locks in the early price; each ticket keeps the price it was sold at. Rules in docs/SITE_RULES.md ("Early bird pricing").
+
+### Database (Alex OK'd, Thu Nov 26)
+`migrations/0030_early_bird.sql`: two NEW nullable columns on `tournaments`, `early_cents` and `early_until`. Every existing row NULL (no early
+bird). Nothing existing changed. Old code never reads them: a code rollback needs no database step. Applied to `pickleball-preview` Thu Nov 26
+(only pending file). NOT on live yet.
+
+### Decisions (Alex, Nov 26)
+- An empty ticket (no credit, no cash, no I paid) moves to the regular price after the deadline, with a 30 minute grace for an I paid on a
+  ticket priced early (a Venmo payment in progress).
+- The private link (`/admin?earlybird=on`) only shows the gear rows on that organizer phone; prices follow the Settings row alone.
+
+### Tests
+- tests/zip94-early-bird.test.ts (19): the rule and words; the gear rules (lower, before Pay by, fixed once locked in, Pay by never before it);
+  money to the cent: early $14 / late $16 lock ins, credit covering part, the 30 minute grace and the look-again after it, Mark paid, drop out
+  and refund, standby taking a freed early spot, the kept late drop, Money with a mix, End with mixed tickets (prize credit once); both
+  integrity files 0 after each. The Cold Open proof: a tournament with no early price gives the same organizer answer (but the gear row), the
+  same player cards and the same taps with the switch off and on, and can never get an early price once tickets are sold.
+- e2e/zip94.cjs (7): the card days before / last day / after at 320/375/390/420/440, text 100/125/150%, light and dark (never cut, nothing
+  wider than the screen); Lock in asks $18; the gear sheet fixed and edited; Money + Prizes "Tickets $170".
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 63 statements, the 5 second check 2 / 16, before (main) and after, at all_locked, mid, am_round3, zip92_ld_round (and the
+new zip94_three, zip94_mixed). The switch rides the tournament row's own read (no trip in any mode); a tournament with no early price never
+reads it.
+
+### Preview
+https://claude-new-session-616ec9.pickleball-club-9h0.pages.dev (PIN 739514; the fake `pickleball-preview` database, migration 0030 applied,
+no re-seed). Stages: "94: early price, 3 days left", "94: early price, last day", "94: early price over", "94: mixed $18 and $20 tickets
+(Money + Prizes)". Picking a stage turns Early bird pricing on (the preview only).
+
+### Review (a fresh reviewer, no part in the build)
+Nothing charges more than shown, breaks a CHECK, counts twice or refunds wrong. Fixed: the 30 minute grace also reached Lock in and Mark
+paid (now an I paid only); an early end set before the date could land after the Pay by a date pick sets (now it must end before the
+earliest such Pay by, and the date pick and a ticket price edit refuse to leave it invalid); Finalize's money line used $20 before the
+deadline; a per-isolate cache of the switch row (removed). Left: edge cases after an organizer change in Settings (a $0 ticket).
+
+### Before shipping
+Unit 246 files, 4,547 passed, 12 skipped, 0 failed. e2e/zip94 7 of 7, zip92 B, zip86 8 of 8. zip87 A fails on main too (its selector meets
+🎾92's court time line; a test file, not this zip).
+
+### Live (Thu Nov 26, 2026, about 12:35 PM Eastern; Alex's OK and his loud-hours override: tonight's game canceled for Thanksgiving)
+- Main merged with 🎾93 (live 86f85e98) first; unit 247 files, 4,555 passed, 12 skipped, 0 failed on the merged code.
+- Restore point: export `export-20261126172746` saved in `pickleball-backups` (checked against the file); Time Travel bookmark
+  `00002138-00000000-0000512f-1fca6934571db45ae43d491990c0ff85`.
+- Integrity before and after: 22, 8 and 14 columns, every problem column 0.
+- Migration `0030_early_bird` (the only pending one) applied to live: `early_cents` and `early_until` on tournaments, NULL on every row.
+- Main `22033c4` to `1138df4`; `npm run deploy -- --override-loud-hours`: deployment **28f4856f-c00a-4915-808e-a9e55806b12f** (bundle
+  `index-Baa458Uk.js`). Rollback: **86f85e98-c83b-4e09-b03f-02edf0eb76ef** (🎾93); the two columns can stay (old code never reads them).
+- Early bird pricing OFF on live (no switch row). The Cold Open before and after: $18, Pay by Tue Dec 1 00:00 UTC (Mon 7 PM), 7 tickets,
+  $108 in prices, $90 on them: unchanged.
+- Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
+  wider, no writes. Organizer screens not opened (no read-only PIN in this session).
+
 ## 🎾95.level check (Thu Nov 26, 2026; branch `claude/new-session-2v5jzf`, from main `8ef2646` (🎾92 round 3 live); NOT live: held for Alex's OK)
 
 ### What changed (the code is the truth; SITE_RULES "Level check after a tournament, the RECOMMENDED level (Zip 95)")

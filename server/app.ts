@@ -9,6 +9,7 @@ import * as guest from './guestActions';
 import * as playersRedo from './playersRedo';
 import * as tournament from './tournament';
 import * as tickets from './tournamentTickets';
+import * as earlyBird from './earlyBird';
 import { poolsLook, tournamentTestStage } from './tournamentTest';
 import * as tournamentDay from './tournamentDay';
 import * as tournamentEnd from './tournamentEnd';
@@ -243,6 +244,9 @@ route('POST', '/api/admin/tournament/:id/hide', tournament.hideTournament);
 // Zip 56 (server/tournamentTickets.ts): Tournaments, piece 2. Pay by, the answers on one ticket, Reschedule. (Tickets open when the date is
 // picked: PUT .../date above. Alex: no Open tickets button.)
 route('PUT', '/api/admin/tournament/:id/pay-by', tickets.setPayBy);
+// Zip 94 (server/earlyBird.ts): Early bird pricing. The switch row and the gear sheet's Early price rows.
+route('PUT', '/api/admin/early-bird-switch', earlyBird.setEarlyBirdSwitch);
+route('PUT', '/api/admin/tournament/:id/early', earlyBird.setEarlyBird);
 route('POST', '/api/admin/tournament/:id/ticket', (ctx, body) => tickets.adminTicket(ctx, body));
 route('POST', '/api/admin/tournament/:id/reschedule', (ctx) => tickets.rescheduleTournament(ctx));
 // Zip 57 (server/tournamentDay.ts): Tournaments, piece 3. Draft, swap, name and publish teams, the courts' numbers; results, Time check, Pause,

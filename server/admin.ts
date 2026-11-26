@@ -10,6 +10,7 @@ import { MONEY_STATE, reopenBlockers, reopenBlockersRead, sqlText } from './fina
 import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenAdminFlags, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenAdminForAll, setLastScreenForAll } from './speed';
 import { pendingRequestViews, requestPlayersRead } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../shared/time';
+import { earlyBirdForAll } from './earlyBird';
 import { adminLogin, adminLogout, checkCurrentPinCounted, hashGroupWord, markKnownOrganizerPhone, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken } from './crypto';
@@ -546,6 +547,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(ticketsOwed.length ? { ticketsOwed } : {}),
     ...(levelCheck ? { levelCheck } : {}),
     ...(tour.forAll ? { tournamentsForAll: true as const } : {}),
+    // Zip 94 (server/earlyBird.ts): Early bird pricing's Settings row, only while on (the one read of every switch row, no trip).
+    ...((await earlyBirdForAll(ctx.db, group.id)) ? { earlyBirdForAll: true as const } : {}),
     // Preview only (PREVIEW_CALM exists only in [env.preview.vars]): the Tournament test page, while the switch is on. Never on live.
     ...(tour.on && previewSiteFor(ctx) ? { tournamentTest: true as const } : {}),
     ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),

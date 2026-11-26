@@ -50,6 +50,38 @@ const STAGES = [
     label: '95: next sign-up with a recommendation',
     line: 'You said Yes, 3.2 for Vic (and No for Wren) after The Cold Open; Winter Classic is open. View as Vic, Sign up: 3.0 stays picked (Previous rating), 3.2 says Recommended. Tap 3.2, then Next: the level up plays. View as Wren: no Recommended tag.',
   },
+  // Zip 94 (🎾94.early bird): The Cold Open as an early bird night: $20 ticket, $18 early price, Early bird pricing on. View as Vic for the card.
+  {
+    stage: 'zip94_three',
+    label: '94: early price, 3 days left',
+    line: 'The Cold Open in 6 days, $20, early price $18 for 3 more days. View as Vic: “Lock in · $20 $18” (the $20 struck through) and “Save $2 for 3 more days” under the buttons. Tap Lock in: the Pay sheet asks $18. Your card’s gear: Early price $18, Early price until (fixed: players locked in).',
+  },
+  {
+    stage: 'zip94_last',
+    label: '94: early price, last day',
+    line: 'The early price ends in about 9 hours. View as Vic: the line under the buttons is gold, “Save $2 for 9 more hours” (under an hour it counts minutes).',
+  },
+  {
+    stage: 'zip94_over',
+    label: '94: early price over',
+    line: 'The early price ended 2 hours ago; Quinn locked in after it at $20. View as Vic: “Lock in · $20” and “Pay by <day> 7 PM”. The 5 who locked in early keep $18.',
+  },
+  {
+    stage: 'zip94_mixed',
+    label: '94: mixed $18 and $20 tickets (Money + Prizes)',
+    line: '5 locked in at $18, Quinn and Reese at $20, Alex free, Vic and Zoe still to pay ($20 now), 10 expected. Money: tickets $170 if all pay (5 × $18 + 4 × $20), paid now $130. Prizes: “Tickets $170 − courts …”, the suggestion from those real numbers.',
+  },
+  // Zip 93 (🎾93.polish): the players' "scheduled" notice by day.
+  {
+    stage: 'zip93_day_before',
+    label: '93: scheduled notice, day before',
+    line: 'The Cold Open is tomorrow. View as Vic: the blue card at the top of Home says “The Cold Open is tomorrow.” with the same second line as before (earlier days still say “is scheduled for Tue Dec 1.”). If you closed it with its X on this phone before, it stays closed.',
+  },
+  {
+    stage: 'zip93_game_day',
+    label: '93: scheduled notice, game day',
+    line: 'The Cold Open is today. View as Vic: no “scheduled” or “tomorrow” card at all (from midnight Eastern on the day); the ticket card and everything else as before.',
+  },
   // Zip 92 (🎾92.dry run fixes): the 12-player switch, the Locked doubles extra round, the slow night's Time check.
   {
     stage: 'zip92_court_time',

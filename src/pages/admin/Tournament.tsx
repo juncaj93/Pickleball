@@ -494,7 +494,7 @@ function HomeCard({ ctx, t }: { ctx: AdminCtx; t: AdminTournamentView }) {
                     {t.finalDate ? (t.startSet ? planRange(t.start, t.minutes) : `About ${startLabel(t.start)}`) : `${t.offeredDates.length} ${t.offeredDates.length === 1 ? 'date' : 'dates'} offered`}
                   </p>
                   <p className="tm86-when-sub" data-tm-home-plan>
-                    {t.courts} {t.courts === 1 ? 'court' : 'courts'} · {styleShort(t)} · {formatPrice(t.ticketCents)}
+                    {t.courts} {t.courts === 1 ? 'court' : 'courts'} · {styleShort(t)} · {formatPrice(t.priceNowCents ?? t.ticketCents)}
                   </p>
                   {t.votes && (t.formatPending || step === 0) && votesLine(t.votes)}
                   {/* Zip 92 (Alex): the court time line, a suggestion only, from what the card already has. */}
@@ -659,7 +659,7 @@ function NightBody({ ctx, t, onTickets }: { ctx: AdminCtx; t: AdminTournamentVie
           <div className="tm-row">
             <span>Ticket</span>
             <b className="tm-hc-val tm-hc-fit" data-tm-row="ticket">
-              {formatPrice(t.ticketCents)}
+              {formatPrice(t.priceNowCents ?? t.ticketCents)}
               {t.payBy ? ` · pay by ${payByLabel(t.payBy, tz, t.finalDate)}` : ''}
             </b>
           </div>
@@ -775,6 +775,31 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
   const timeChanged = timeOn && (start !== t.start || end !== t.start + t.minutes);
   const planChanged = planOn && (n !== (t.expected ?? t.size) || courts !== t.courts);
   const payChanged = payOn && (payDay !== payStart.day || payMin !== payStart.minutes);
+  // Zip 94 (🎾94.early bird): "Early price" and "Early price until", under Ticket price (the switch on, or this phone's ?earlybird=on). Empty: no
+  // early bird. Fixed once anyone has locked in (the server checks it again in the save).
+  const eb = t.early && !t.closed && !t.over && t.status !== 'canceled' ? t.early : null;
+  const ebFixed = !!eb?.locked;
+  const ebStart = eb?.until ? payByParts(eb.until, tz) : null;
+  const [ebCents, setEbCents] = useState<number | null>(eb?.cents ?? null);
+  const [ebDay, setEbDay] = useState(ebStart?.day ?? '');
+  const [ebMin, setEbMin] = useState(ebStart?.minutes ?? 19 * 60);
+  const ebLastDay = payOn ? payDay : t.payBy ? payStart.day : (t.finalDate ?? [...t.offeredDates].sort().slice(-1)[0] ?? today);
+  const ebDays = eb && !ebFixed ? payByDays(ebLastDay, tz, Date.parse(ctx.d.now)) : [];
+  const ebTimes = PAY_TIMES.includes(ebMin) ? PAY_TIMES : [...PAY_TIMES, ebMin].sort((a, b) => a - b);
+  const ebIso = ebCents !== null && ebDay ? payByAt(ebDay, ebMin, tz) : null;
+  const ebChanged = !!eb && !ebFixed && ((eb.cents ?? null) !== ebCents || (eb.until ?? null) !== (ebCents === null ? null : ebIso));
+  const payNowIso = payOn ? payByAt(payDay, payMin, tz) : t.payBy;
+  const ebProblem = !ebChanged || ebCents === null
+    ? null
+    : ticket !== null && ebCents >= ticket
+      ? 'The early price must be lower than the ticket price.'
+      : !ebIso
+        ? 'Pick the day the early price ends.'
+        : Date.parse(ebIso) <= Date.parse(ctx.d.now)
+          ? 'Pick an early price end that has not passed.'
+          : payNowIso && Date.parse(ebIso) >= Date.parse(payNowIso)
+            ? 'The early price must end before Pay by.'
+            : null;
   const settingsChanged =
     name.trim() !== t.name || ticket !== t.ticketCents || visibility !== t.visibility || format !== startFormat || offer.join() !== t.offeredDates.join();
   const problem = !name.trim()
@@ -787,8 +812,8 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
           ? `Offer at most ${MAX_DATES} dates.`
           : ticket === null
             ? 'Type a ticket price.'
-            : null;
-  const changed = timeChanged || planChanged || payChanged || settingsChanged;
+            : ebProblem;
+  const changed = timeChanged || planChanged || payChanged || settingsChanged || ebChanged;
   async function go() {
     if (problem) return;
     // The prize boxes travel as they are (prizes live only in Prizes): saved boxes as saved, else the columns unchanged.
@@ -813,6 +838,13 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
     if (timeChanged) steps.push({ what: 'time', run: () => api('PUT', `/api/admin/tournament/${t.id}/time`, { start, minutes: end - start }) });
     if (planChanged) steps.push({ what: 'courts and players', run: () => api('PUT', `/api/admin/tournament/${t.id}/plan`, { expected: n, courts }) });
     if (payIso && !payFirst) steps.push({ what: 'Pay by', run: () => api('PUT', `/api/admin/tournament/${t.id}/pay-by`, { payBy: payIso }) });
+    // Zip 94: the early price after the ticket price and a later Pay by it is checked against; before an earlier Pay by (the server keeps Pay by
+    // after the early end).
+    if (ebChanged) {
+      const step = { what: 'early price', run: () => api('PUT', `/api/admin/tournament/${t.id}/early`, { earlyCents: ebCents, until: ebCents === null ? null : ebIso }) };
+      if (payIso && payFirst) steps.splice(steps.findIndex((x) => x.what === 'Pay by'), 0, step);
+      else steps.push(step);
+    }
     const done: string[] = [];
     const ok = await save(async () => {
       for (const step of steps) {
@@ -964,6 +996,46 @@ function ChangeBody({ ctx, t, plans, onDone, onDates }: { ctx: AdminCtx; t: Admi
           <MoneyBox id="tm87-ticket" cents={ticket} onChange={setTicket} label="Ticket price" />
         )}
       </div>
+      {eb && (
+        <>
+          <div className="tm86-field" data-tm94-early>
+            <span className="tm86-label">Early price{ebFixed ? ' (players locked in)' : ''}</span>
+            {ebFixed ? (
+              <b className="tm86-fixed" data-tm94-early-fixed>
+                {eb.cents === null ? 'None' : formatPrice(eb.cents)}
+              </b>
+            ) : (
+              <MoneyBox id="tm94-early" cents={ebCents} onChange={setEbCents} label="Early price (empty for none)" />
+            )}
+          </div>
+          {(ebFixed ? eb.cents !== null && !!eb.until : ebCents !== null) && (
+            <div className={ebFixed ? 'tm86-field' : 'tm86-field tm87-stack'} data-tm94-early-until>
+              <span className="tm86-label">Early price until</span>
+              {ebFixed ? (
+                <b className="tm86-fixed">{clockShort(payByLabel(eb.until!, tz, t.finalDate))}</b>
+              ) : (
+                <span className="tm87-pay">
+                  <select className="tm86-box tm86-select" aria-label="Early price until, day" value={ebDay} disabled={busy} onChange={(e) => setEbDay(e.target.value)} data-tm94-early-day>
+                    {!ebDay && <option value="">Pick a day</option>}
+                    {(ebDay && !ebDays.includes(ebDay) ? [ebDay, ...ebDays] : ebDays).map((d) => (
+                      <option key={d} value={d}>
+                        {dayLong(d)}
+                      </option>
+                    ))}
+                  </select>
+                  <select className="tm86-box tm86-select" aria-label="Early price until, time" value={ebMin} disabled={busy} onChange={(e) => setEbMin(Number(e.target.value))} data-tm94-early-time>
+                    {ebTimes.map((m) => (
+                      <option key={m} value={m}>
+                        {clockShort(timeWords(m))}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              )}
+            </div>
+          )}
+        </>
+      )}
       {payOn && (
         <div className="tm86-field tm87-stack" data-tm87-pay-by>
           <span className="tm86-label">Pay by</span>
@@ -1176,7 +1248,7 @@ function PrizesBody({ ctx, t, onDone }: { ctx: AdminCtx; t: AdminTournamentView;
   const m = t.money;
   const night = !!t.closed;
   // On the night: the tickets actually paid. Once End is ready, exactly Edit awards' numbers (the night's money as Totals counts it).
-  const tickets = t.end?.money ? t.end.money.ticketsCents : night ? (t.cost?.paidNow ?? 0) * t.ticketCents : (m?.ticketsCents ?? 0);
+  const tickets = t.end?.money ? t.end.money.ticketsCents : night ? (t.cost?.paidNowCents ?? (t.cost?.paidNow ?? 0) * t.ticketCents) : (m?.ticketsCents ?? 0);
   const courts = t.end?.money ? t.end.money.courtCents : (m?.courtCents ?? 0);
   const planned = plannedStyle(t);
   const sendable = sendOf(draft);
@@ -1418,7 +1490,7 @@ function TicketSheet({ ctx, t, playerId, onClose }: { ctx: AdminCtx; t: AdminTou
   const k = (t.tickets ?? []).find((x) => x.playerId === playerId) ?? null;
   const s = t.signups.find((x) => x.playerId === playerId) ?? null;
   const name = k?.name ?? s?.name ?? '';
-  const owed = k ? Math.max(0, k.priceCents - k.creditCents - k.paidCents - k.claimCents) : t.ticketCents;
+  const owed = k ? Math.max(0, k.priceCents - k.creditCents - k.paidCents - k.claimCents) : (t.priceNowCents ?? t.ticketCents);
   const backCents = k ? k.creditCents + k.paidCents : 0;
   const act = async (action: 'confirm' | 'reject' | 'mark_paid' | 'take_off', cents: number | undefined, done: string | ((answer: unknown) => string)) => {
     const ok = await save(() => api('POST', `/api/admin/tournament/${t.id}/ticket`, { playerId, action, ...(cents === undefined ? {} : { cents }) }), done);
@@ -2023,7 +2095,8 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
     expected: expectedPlayers({ saved: t.expectSaved ? (t.expected ?? null) : null, suggested: view.players.length, locked: 0 }),
     courts,
     minutes: end - start,
-    ticketCents: view.ticketCents,
+    // Zip 94: before an early deadline, the early price (what players lock in at now), as on the card's money line.
+    ticketCents: t.priceNowCents !== undefined && t.priceNowCents < view.ticketCents ? t.priceNowCents : view.ticketCents,
     championCents: t.championCreditCents,
     secondCents: t.secondCreditCents,
     // Zip 87: the box of the style the night would play.
@@ -2246,7 +2319,7 @@ function OddSwitchCard({ ctx, t, k }: { ctx: AdminCtx; t: AdminTournamentView; k
   const cutoff = cutoffMs !== null && Date.parse(ctx.d.now) < cutoffMs ? payByLabel(new Date(cutoffMs).toISOString(), tz, t.finalDate) : null;
   const text = [
     who ? `${who} dropped out of ${t.name}.` : `A spot opened in ${t.name}.`,
-    `One spot is open${t.finalDate ? ` on ${dayWords(t.finalDate)}` : ''}: ${formatPrice(t.ticketCents)}${cutoff ? `, pay by ${cutoff}` : ''}.`,
+    `One spot is open${t.finalDate ? ` on ${dayWords(t.finalDate)}` : ''}: ${formatPrice(t.priceNowCents ?? t.ticketCents)}${cutoff ? `, pay by ${cutoff}` : ''}.`,
     siteAddress(ctx.d.group.playerLink),
   ].join(' ');
   return (

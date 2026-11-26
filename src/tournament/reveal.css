@@ -256,7 +256,11 @@
   font-size: 1.02rem;
   font-weight: 800;
   line-height: 1.15;
-  overflow-wrap: break-word;
+  /* Zip 93 (Alex): never inside a word (was break-word): it wraps at spaces; a single word wider than the row ends in "…". */
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tc-rv-rec {
   flex: none;

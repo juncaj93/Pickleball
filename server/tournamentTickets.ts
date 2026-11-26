@@ -13,6 +13,7 @@
 // Every money statement is guarded by the rows as they were read, so a double tap, a refresh, a second phone or a retry never charges or
 // credits twice: the second one finds nothing to do and changes nothing (or is told to look again).
 import type { Ctx } from './context';
+import type { D1PreparedStatement } from './db';
 import { HttpError } from './http';
 import { newId } from './crypto';
 import * as v from './validate';
@@ -44,6 +45,8 @@ import {
   TOURNAMENT_COLS,
 } from './tournament';
 import { saveAmericanoCourts } from './americanoDay';
+import { earlyAsReadSql, earlyBirdOn } from './earlyBird';
+import { priceNow, ticketHasMoney, ticketPrice } from '../shared/earlyBird';
 import {
   fillSpotsStatements,
   keptOff,
@@ -66,7 +69,19 @@ const money = (k: TicketRow): TicketMoney => ({ priceCents: k.price_cents, credi
 
 /** SQL: the tournament is still taking tickets exactly as read (the same date and price). */
 const ticketsOpenSql = (t: TournamentRow) =>
-  `EXISTS (SELECT 1 FROM tournaments WHERE id = ${sqlText(t.id)} AND status = 'tickets' AND final_date = ${sqlText(t.final_date ?? 'none')} AND ticket_cents = ${Number(t.ticket_cents) | 0})`;
+  `EXISTS (SELECT 1 FROM tournaments WHERE id = ${sqlText(t.id)} AND status = 'tickets' AND final_date = ${sqlText(t.final_date ?? 'none')} AND ticket_cents = ${Number(t.ticket_cents) | 0}${earlyGuard(t)})`;
+
+/** Zip 94: the early bird exactly as read (one set or changed after the read: "look again"), so a tap never misses an early price set in between. */
+const earlyGuard = (t: TournamentRow) => ` AND ${earlyAsReadSql(t)}`;
+
+/**
+ * Zip 94: an empty ticket (nothing on it) moves to the price this tap uses (shared/earlyBird.ts ticketPrice), in the same batch, guarded on the
+ * ticket as read. Null when its price already is that price (every tournament without an early bird: nothing new runs).
+ */
+function repriceStatement(ctx: Ctx, t: TournamentRow, k: TicketRow, price: number): D1PreparedStatement | null {
+  if (k.price_cents === price || ticketHasMoney(k)) return null;
+  return ctx.db.prepare(`UPDATE tournament_tickets SET price_cents = ?1, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)}`).bind(price, ctx.nowIso, k.id);
+}
 
 /** SQL: this player is on the list. */
 const onListSql = (tournamentId: string, playerId: string) =>
@@ -136,11 +151,13 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   const claimOk = phase === 'after' || intent === 'lock' ? capOk : '';
   // The organizer pays the venue, never the group: their own seat is $0.
   const organizer = playerId === (await organizerIdOf(ctx.db, who.group));
-  const price = organizer ? 0 : t.ticket_cents;
+  const k = await ticketOf(ctx.db, t.id, playerId);
+  // Zip 94: the price this tap locks in (shared/earlyBird.ts): early before the deadline, the ticket price after, a ticket with money on it its
+  // own. With no early bird set (or the switch off) it is the ticket price, exactly as before.
+  const price = ticketPrice(t, k, organizer, await earlyBirdOn(ctx, who.group.id, t), ctx.nowMs);
   if (body.priceCents !== undefined && (v.cents(body.priceCents, 'priceCents') ?? -1) !== price) {
     throw new HttpError(409, 'amount_changed', `The ticket is ${formatPrice(price)}. Look again.`);
   }
-  const k = await ticketOf(ctx.db, t.id, playerId);
   // Locked in already, or paid and holding a place (a second tap, another phone): nothing to do. Zip 74 (review): a whole-ticket I paid
   // waiting outside the line counts as locked in too, so a repeat tap never reads as "Every spot just filled".
   if (k && (k.place === 'spot' || ticketPaid(money(k)) || (k.place !== 'line' && k.claim_cents > 0 && ticketOwed(money(k)) === 0))) return { ok: true, creditUsedCents: 0, ...answerOf(k) };
@@ -161,6 +178,10 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   const ticketId = k?.id ?? newId();
   const statements = [];
   let read: TicketRow;
+  // Zip 94: an empty ticket first moves to this tap's price (nothing else about it changes); the statements after it read it at that price.
+  const reprice = k ? repriceStatement(ctx, t, k, price) : null;
+  const base: TicketRow | null = k && reprice ? { ...k, price_cents: price } : k;
+  if (reprice) statements.push(reprice);
   if (!k) {
     read = { id: ticketId, tournament_id: t.id, player_id: playerId, place: intent === 'hold' ? 'line' : 'none', place_at: intent === 'hold' ? ctx.nowIso : null, price_cents: price, credit_cents: 0, paid_cents: 0, claim_cents: 0, claim_at: null, paid_at: null, created_at: ctx.nowIso, updated_at: ctx.nowIso };
     statements.push(
@@ -171,16 +192,16 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
         )
         .bind(ticketId, t.id, playerId, read.place, read.place_at, price, ctx.nowIso),
     );
-  } else if (intent === 'hold' && k.place === 'none') {
-    read = { ...k, place: 'line', place_at: k.claim_at ?? ctx.nowIso };
+  } else if (intent === 'hold' && base!.place === 'none') {
+    read = { ...base!, place: 'line', place_at: k.claim_at ?? ctx.nowIso };
     // Into the line only while tickets are open and they are on the list (a Cancel or their own Back out in between: nothing).
     statements.push(
       ctx.db
-        .prepare(`UPDATE tournament_tickets SET place = 'line', place_at = ?1, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}`)
+        .prepare(`UPDATE tournament_tickets SET place = 'line', place_at = ?1, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(base!)} AND ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}`)
         .bind(read.place_at, ctx.nowIso, k.id),
     );
   } else {
-    read = k;
+    read = base!;
   }
   // Lock: only while a spot is open at that very moment (a race for the last spot never spends credit on a spot that is gone).
   const guard = `${ticketAsRead(read)} AND ${ticketsOpenSql(t)}${claimOk} AND ${onListSql(t.id, playerId)}`;
@@ -189,6 +210,7 @@ export async function playerTicketLock(ctx: Ctx, who: TournamentActor, body: Rec
   const at = statements.length + pay.ticketStatement;
   statements.push(...pay.statements);
   const res = await ctx.db.batch(statements).catch(lookAgainOn);
+  if (reprice && (res[0].meta?.changes ?? 0) !== 1) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
   if ((res[at].meta?.changes ?? 0) !== 1) {
     if (phase === 'after') throw new HttpError(409, 'tickets_closed', 'Tickets are closed.');
     throw intent === 'lock' ? new HttpError(409, 'spots_full', 'Every spot just filled. Join standby.') : new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
@@ -237,7 +259,11 @@ export async function playerTicketPaid(ctx: Ctx, who: TournamentActor, body: Rec
   const cents = v.cents(body.cents, 'cents') ?? 0;
   const k = await ticketOf(ctx.db, t.id, playerId);
   if (!k) throw new HttpError(409, 'nothing_owed', 'There is nothing to pay. Look again.');
-  const owed = ticketOwed(money(k));
+  // Zip 94: the price this I paid locks in. A ticket with money on it keeps its own; an empty one takes the price that applies now (an early
+  // ticket keeps the early price for the 30 minute grace after the deadline). Without an early bird: the ticket's own price, as before.
+  // (The organizer's own ticket is $0: ticketPrice keeps it at $0, so no organizer read here.)
+  const price = ticketPrice(t, k, false, await earlyBirdOn(ctx, who.group.id, t), ctx.nowMs, true);
+  const owed = ticketOwed({ ...money(k), priceCents: price });
   // Already claimed or paid (a second tap, another phone): nothing new.
   if (owed === 0) return { ok: true, ...answerOf(k), claimCents: k.claim_cents };
   if (cents !== owed) throw new HttpError(409, 'amount_changed', `The amount changed to ${formatPrice(owed)}. Look again.`);
@@ -249,8 +275,8 @@ export async function playerTicketPaid(ctx: Ctx, who: TournamentActor, body: Rec
   if (adds && lockedInCount(await loadTickets(ctx.db, t.id)) >= MAX_SPOTS) throw full();
   const capOk = adds ? ` AND ${spotsSql(t.id)} < ${MAX_SPOTS} AND ${lockedInSql(sqlText(t.id))} < ${MAX_SPOTS}` : '';
   const res = await ctx.db
-    .prepare(`UPDATE tournament_tickets SET claim_cents = claim_cents + ?1, claim_at = ?2, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}${capOk}`)
-    .bind(owed, ctx.nowIso, k.id)
+    .prepare(`UPDATE tournament_tickets SET price_cents = ?4, claim_cents = claim_cents + ?1, claim_at = ?2, updated_at = ?2 WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}${capOk}`)
+    .bind(owed, ctx.nowIso, k.id, price)
     .run();
   if ((res.meta?.changes ?? 0) !== 1) {
     if (adds && lockedInCount(await loadTickets(ctx.db, t.id)) >= MAX_SPOTS) throw full();
@@ -282,7 +308,7 @@ export async function playerTicketWaitlist(ctx: Ctx, who: TournamentActor, body:
               `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, created_at, updated_at)
                SELECT ?1, ?2, ?3, 'line', ?4, ?5, ?4, ?4 WHERE ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}`,
             )
-            .bind(newId(), t.id, playerId, ctx.nowIso, t.ticket_cents),
+            .bind(newId(), t.id, playerId, ctx.nowIso, priceNow(t, await earlyBirdOn(ctx, who.group.id, t), ctx.nowMs)),
         ];
   const res = await ctx.db.batch([...statements, ...fillSpotsStatements(ctx.db, who.group.id, t.id, ctx.nowIso)]).catch(lookAgainOn);
   if ((res[0].meta?.changes ?? 0) === 0) throw new HttpError(409, 'tournament_changed', 'This just changed. Look again.');
@@ -306,10 +332,14 @@ export async function setPayBy(ctx: Ctx, body: Record<string, unknown>) {
   const t = await openById(ctx, group);
   if (statusOf(t) !== 'tickets') throw new HttpError(409, 'tickets_not_open', 'Tickets are not open. Look again.');
   const payBy = readPayByTime(body.payBy, ctx.nowMs, nightOf(t, group.timezone)!.start);
+  // Zip 94: the early price ends before Pay by (the gear sheet's rule), so Pay by never moves to or before it.
+  if (t.early_until && t.early_cents !== null && t.early_cents !== undefined && Date.parse(payBy) <= Date.parse(t.early_until)) {
+    throw new HttpError(409, 'early_after_pay_by', `Pick a Pay by after the early price ends (${payByLabel(t.early_until, group.timezone, t.final_date)}).`);
+  }
   // Zip 76 (the 🎾75 audit): moved past now, every drop kept under the old Pay by comes back as credit in the same batch (the new Pay by would
   // not have kept it), the same back-out statements and History line as a refill. Moved earlier, or still past: nothing kept moves.
   const res = await ctx.db.batch([
-    ctx.db.prepare("UPDATE tournaments SET pay_by = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'tickets'").bind(payBy, ctx.nowIso, t.id),
+    ctx.db.prepare("UPDATE tournaments SET pay_by = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'tickets' AND (early_until IS NULL OR early_cents IS NULL OR early_until < ?1)").bind(payBy, ctx.nowIso, t.id),
     ...releaseKeptStatements(ctx.db, group.id, t.id, ctx.nowIso, payByMovedLaterSql(t.id, ctx.nowIso)),
   ]);
   changedOrLookAgain(res[0]);
@@ -419,18 +449,20 @@ export async function adminTicket(ctx: Ctx, body: Record<string, unknown>, marke
     // can still work through the private link then). Everyone with tickets open never goes back to Only me.
     if (!isOrganizer && t.visibility !== 'all') throw new HttpError(409, 'only_me', 'Only you can see it. Show it to everyone first.');
     if (!isOrganizer && !(await tournamentsFlags(ctx, group.id)).forAll) throw new HttpError(409, 'switch_off', 'Tournaments are off for players. Turn the switch on first.');
-    const price = k ? k.price_cents : isOrganizer ? 0 : t.ticket_cents;
-    const owed = k ? ticketOwed(money(k)) : price;
+    // Zip 94: the price that applies now (Alex's own Mark paid never earns the early price after the deadline); a ticket with money on it
+    // keeps its own. Without an early bird: as before.
+    const price = ticketPrice(t, k, isOrganizer, await earlyBirdOn(ctx, group.id, t), ctx.nowMs);
+    const owed = k ? ticketOwed({ ...money(k), priceCents: price }) : price;
     if (owed === 0) return { ok: true, changed: false, ...answerOf(k) };
     if (shown !== null && shown !== owed) throw new HttpError(409, 'amount_changed', `${name} owes ${formatPrice(owed)} now. Look again.`);
     const write = k
       ? ctx.db
           .prepare(
-            `UPDATE tournament_tickets SET paid_cents = paid_cents + ?1, paid_at = ?2,
+            `UPDATE tournament_tickets SET price_cents = ?4, paid_cents = paid_cents + ?1, paid_at = ?2,
                place = CASE WHEN place = 'none' THEN 'line' ELSE place END, place_at = CASE WHEN place = 'none' THEN ?2 ELSE place_at END, updated_at = ?2
              WHERE id = ?3 AND ${ticketAsRead(k)} AND ${ticketsOpenSql(t)} AND ${onListSql(t.id, playerId)}`,
           )
-          .bind(owed, ctx.nowIso, k.id)
+          .bind(owed, ctx.nowIso, k.id, price)
       : ctx.db
           .prepare(
             `INSERT INTO tournament_tickets (id, tournament_id, player_id, place, place_at, price_cents, paid_cents, paid_at, created_at, updated_at)

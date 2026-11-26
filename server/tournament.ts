@@ -11,6 +11,7 @@ import { ADMIN_COOKIE } from './context';
 import { VIEW_ONLY_COOKIE_PREFIX, VIEW_ONLY_SESSION_PREFIX } from './viewOnly';
 import { audit, type GroupRow, organizerIdOf, organizerIdRead, playersRead, type ReadSpec } from './repo';
 import { localParts } from '../shared/time';
+import { addDays } from '../shared/venueAlert';
 import { boardRows, resultsShowing } from '../shared/results';
 import { revealHolding } from '../shared/reveal';
 import { formatPrice } from '../shared/money';
@@ -71,6 +72,8 @@ import { LEVEL_CHECK_TASK, savedLevel } from '../shared/levelCheck';
 import { EXPECT_MAX, EXPECT_MIN, expectedPlayers, planMoney, savedExpect, timeMoveWords } from '../shared/tournamentMoney';
 import { columnsOf, prizesOfRow, readPrizes, withPrizes } from '../shared/tournamentPrizes';
 import { defaultPayBy, payByLabel, salesCutoffMs, startMsOf, ticketOwed } from '../shared/tournamentTickets';
+import { EARLY_BIRD, earlyLive, lockedAdjustCents, priceNow, ticketPrice } from '../shared/earlyBird';
+import { earlyBirdFlags, earlyBirdOn, earlyLocked } from './earlyBird';
 import { notifyTournament } from './alerts';
 import { type NotSignedUpView, recentFrom } from '../shared/tournamentNudge';
 import { adminDayView, courtNumbersOf, type DayRows, gamesSqlFor, LIVE_AFTER_MS, LIVE_BEFORE_MS, loadDay, playerDayView, teamsSqlFor, tiesFromJson } from './tournamentDay';
@@ -162,6 +165,11 @@ export interface TournamentRow {
   time_moved?: string | null;
   /** Zip 88: when the organizer tapped Start now (task_log detail, an ISO time), when the read carried it. */
   started_early?: string | null;
+  /** Zip 94 (migration 0030): the early price and its deadline (shared/earlyBird.ts). NULL (or missing before 0030): no early bird. */
+  early_cents?: number | null;
+  early_until?: string | null;
+  /** Zip 94: the Early bird pricing switch row (1: on), when the read carried it (every read with START_COL does). */
+  early_on?: number | null;
 }
 
 /**
@@ -231,7 +239,10 @@ export const TIME_TASK = 'tournament_time:';
  * start; the planned start and end, the court cost, the tickets and the prizes stay exactly as they are.
  */
 export const START_TASK = 'tournament_start:';
-const START_COL = (idRef: string) => `${markDetailSql(START_TASK, idRef)} AS started_early`;
+const START_COL = (idRef: string) => `${markDetailSql(START_TASK, idRef)} AS started_early, ${EARLY_ON_COL(idRef)}`;
+/** Zip 94: the Early bird pricing switch row, read in the row's own statement (no trip of its own, in any mode): 1 on, NULL off. */
+const EARLY_ON_COL = (idRef: string) =>
+  `(SELECT 1 FROM task_log eb WHERE eb.group_id = (SELECT g.group_id FROM tournaments g WHERE g.id = ${idRef}) AND eb.session_id IS NULL AND eb.task = '${EARLY_BIRD.task}' AND eb.kind = 'mark' LIMIT 1) AS early_on`;
 const markDetailSql = (prefix: string, idRef: string) =>
   `(SELECT h.detail FROM task_log h WHERE h.session_id IS NULL AND h.task = '${prefix}' || ${idRef} AND h.kind IN ('mark', 'sent') AND h.kind = 'mark' LIMIT 1)`;
 /** Zip 88: every column of a tournament row and Start now's time, for a write's own read (`SELECT ${TOURNAMENT_COLS} FROM tournaments ...`). */
@@ -886,12 +897,15 @@ function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, now
   // creating it (no source), changed by hand, or decided by the tie rule shows the date and the format only.
   const source: FormatSource = sourceOf(t.format_source) ?? 'admin';
   if (!t.final_date || (statusOf(t) !== 'tickets' && statusOf(t) !== 'date_picked')) return null;
-  if (t.final_date < todayKey(nowMs, group.timezone)) return null;
+  // Zip 93 (Alex): never on the night's own day (from midnight Eastern); the day before it says "is tomorrow.".
+  const today = todayKey(nowMs, group.timezone);
+  if (t.final_date <= today) return null;
+  const tomorrow = t.final_date === addDays(today, 1);
   // Zip 80: the votes of those who can make the date (the same count Finalize used; from the sign-ups the card already read, no new trip):
   // "Most players voted" only for a real majority of them.
   const date = t.final_date;
   const counts = tallyVotes(signups.filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date)).map((r) => r.format_vote));
-  const words = formatAlertWords(t.name, t.final_date, formatOf(t), source, counts);
+  const words = formatAlertWords(t.name, t.final_date, formatOf(t), source, counts, tomorrow);
   // Zip 64: the style is not final until tickets close: the alert says the vote's result only when it was a real majority, else "TBD".
   // (A real majority's "Most players voted Americano." stays: it is a fact about the vote, not the final style.)
   if (styleTbd && !words.sub.startsWith('Most players')) words.sub = 'Tournament style TBD';
@@ -1193,6 +1207,13 @@ async function playerTicketsView(
   const me = (k: TicketWithName) => (k.player_id === playerId ? { me: true as const } : {});
   const money = (k: TicketWithName) => ({ priceCents: k.price_cents, creditCents: k.credit_cents, paidCents: k.paid_cents, claimCents: k.claim_cents });
   const own = tickets.find((k) => k.player_id === playerId) ?? null;
+  // The organizer's seat: their $0 ticket, or (no ticket yet) the organizer as the site finds them (read only then, as before).
+  const orgSeat = own ? own.price_cents === 0 : playerId === (await orgOf());
+  const ebOn = await earlyBirdOn(ctx, group.id, t);
+  const price = ticketPrice(t, own, orgSeat, ebOn, ctx.nowMs);
+  // Zip 94: the card's early bird words (picture 1, C2): the regular price and the deadline, while this tournament has one and the switch is on.
+  const eb = earlyLive(t, ebOn);
+  const early = eb && !orgSeat && statusOf(t) === 'tickets' ? { regularCents: t.ticket_cents, earlyCents: eb.cents, until: eb.untilIso } : null;
   const locked = lockedCount(tickets);
   const phase = statusOf(t) === 'tickets' ? ticketPhase(t, group.timezone, ctx.nowMs) : 'open';
   const freed = phase === 'after' ? (freedRead ?? (await freedSpots(ctx.db, group.id, t))) : 0;
@@ -1214,7 +1235,10 @@ async function playerTicketsView(
     // Zip 74: full once 16 are locked in as everyone sees it (spots and waiting whole-ticket I paids), the count the server's cap uses.
     full: Math.max(locked, lockedInCount(tickets)) >= MAX_SPOTS,
     // The organizer pays the venue, never the group: their own seat is $0 (the organizer found as the site always finds them, saved or by name).
-    priceCents: own ? own.price_cents : playerId === (await orgOf()) ? 0 : t.ticket_cents,
+    // Zip 94: the price this player's next tap locks in (shared/earlyBird.ts): early before the deadline, the ticket price after it; a ticket
+    // with money on it keeps its own. Without an early bird (or the switch off): exactly as before.
+    priceCents: price,
+    ...(early ? { early } : {}),
     payBy: statusOf(t) === 'tickets' ? (t.pay_by ?? null) : null,
     // Zip 59: closed for a player who is not locked in: the night has started, 3 hours before the start, or Pay by has passed with no freed spot
     // (a player already on the waitlist, or with an I paid waiting, can still finish what they started).
@@ -1234,7 +1258,7 @@ async function playerTicketsView(
     // Alex (ship answer 5): names only. Paid or Not paid is for the organizer's screen; a player's own ticket is in `mine`.
     line: listed.filter((k) => k.place === 'line').map((k) => ({ name: k.display_name, ...me(k) })),
     mine: own
-      ? { place: placeOf(own), creditCents: own.credit_cents, paidCents: own.paid_cents, claimCents: own.claim_cents, owedCents: ticketOwed(money(own)) }
+      ? { place: placeOf(own), creditCents: own.credit_cents, paidCents: own.paid_cents, claimCents: own.claim_cents, owedCents: ticketOwed({ ...money(own), priceCents: price }) }
       : null,
   };
 }
@@ -1342,6 +1366,14 @@ export async function adminTournamentFor(
   const courts = real || savedN !== null ? (t.courts === 1 ? 1 : 2) : sug.courts;
   const planMinutes = real ? real.minutes : sug.minutes;
   const prizes = prizesOfRow(t);
+  // Zip 94 (early bird): the price a new lock in pays now, and what the tickets locked in really cost (some early, some not). A tournament with
+  // no early bird set: the ticket price and 0, exactly as before.
+  const eb = await earlyBirdFlags(ctx, group.id, shown.early_on);
+  const nowPrice = priceNow(t, eb.on, ctx.nowMs);
+  const paying = tickets.filter((k) => k.signup_status === 'in' && k.player_id !== orgId && k.price_cents > 0 && (k.place === 'spot' || (k.place !== 'line' && k.claim_cents > 0 && k.credit_cents + k.paid_cents + k.claim_cents >= k.price_cents)));
+  const adjustCents = lockedAdjustCents(t, paying, nowPrice);
+  const early = t.early_cents === null || t.early_cents === undefined ? null : t;
+  const paidNowCents = early ? locked.filter((k) => k.player_id !== orgId && k.price_cents > 0).reduce((n, k) => n + k.price_cents, 0) : paidNow * t.ticket_cents;
   // Zip 70: THE money line for the expected players: the card, the Time and Plan boxes and the Plan card. Zip 85: the prizes (and the price
   // check) by the style the expected count really plays, the one shared function Finalize and the boxes call too (shared/tournamentMoney.ts).
   const money = planMoney({
@@ -1350,11 +1382,12 @@ export async function adminTournamentFor(
     expected,
     courts,
     minutes: planMinutes,
-    ticketCents: t.ticket_cents,
+    ticketCents: nowPrice,
     championCents: t.champion_credit_cents,
     secondCents: t.second_credit_cents ?? 0,
     // Zip 87: the box of the style priced (both styles are set on the Prizes sheet).
     prizes,
+    adjustCents,
   });
   const prize = money.ticketsCents - money.courtCents - money.youCents;
   // Zip 70: Time and Plan can change until the night starts: the teams are published, or the night window opens (30 minutes before the start).
@@ -1405,7 +1438,8 @@ export async function adminTournamentFor(
         name: k.display_name,
         place: placeOf(k),
         placeAt: k.place_at,
-        priceCents: k.price_cents,
+        // Zip 94: what this ticket costs at its next tap (an empty early ticket after the deadline: the ticket price); as stored otherwise.
+        priceCents: early ? ticketPrice(t, k, !!orgId && k.player_id === orgId, eb.on, ctx.nowMs) : k.price_cents,
         creditCents: k.credit_cents,
         paidCents: k.paid_cents,
         claimCents: k.claim_cents,
@@ -1431,7 +1465,7 @@ export async function adminTournamentFor(
     start: real ? real.start : sug.start,
     // Zip 64: once the date is finalized the court bill follows the real hours ("Plays"); Zip 57: on the courts chosen there. Zip 70 (dry run
     // fix 5): "if it fills" is the money line for the Plan's expected players, not the plan size.
-    cost: { courtCents: money.courtCents, ifFillsCents: -money.youCents, nowCents: money.courtCents - paidNow * t.ticket_cents + prize, paidNow },
+    cost: { courtCents: money.courtCents, ifFillsCents: -money.youCents, nowCents: money.courtCents - paidNowCents + prize, paidNow, ...(early ? { paidNowCents } : {}) },
     ...(real ? { chosenCourts: courts } : {}),
     closeCheck,
     ...(startNowOpen(ts, shownFormat, tz, ctx.nowMs) ? { startNow: true as const } : {}),
@@ -1445,6 +1479,9 @@ export async function adminTournamentFor(
       return end ? { end } : {};
     })(),
     ticketCents: t.ticket_cents,
+    ...(nowPrice !== t.ticket_cents ? { priceNowCents: nowPrice } : {}),
+    // Zip 94: the gear sheet's Early price rows (the switch on, or this phone's private link).
+    ...(eb.rows ? { early: { cents: t.early_cents ?? null, until: t.early_until ?? null, locked: earlyLocked(tickets), on: eb.on } } : {}),
     championCreditCents: t.champion_credit_cents,
     secondCreditCents: t.second_credit_cents ?? 0,
     prizes,
@@ -1725,6 +1762,10 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
       nextSource = nextFormat === 'doubles' && isOddSource(wasSource) ? `back:${ctx.nowIso}` : 'admin';
     }
   }
+  // Zip 94: the ticket price stays above the early price (clear the early price first to go lower).
+  if (t.early_cents !== null && t.early_cents !== undefined && s.ticketCents <= t.early_cents) {
+    throw new HttpError(409, 'early_not_lower', `The ticket price must stay above the early price (${formatPrice(t.early_cents)}).`);
+  }
   if (held) {
     if (s.ticketCents !== t.ticket_cents) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
     if (s.visibility !== 'all') throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
@@ -1766,7 +1807,8 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
            award_pick = ?
          WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))
            AND format_source IS ?
-           AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND ? = 'all'))`,
+           AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND ? = 'all'))
+           AND (early_cents IS NULL OR early_cents < ${Number(s.ticketCents) | 0})`,
       )
       .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, nextFormat, s.secondCreditCents, nextSource, awardPick, t.id, group.id, offer, wasSource, s.ticketCents, s.visibility),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
@@ -2162,15 +2204,23 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
       setSource = 'admin';
     }
   }
+  // Zip 94: an early price set before the date must still end before this Pay by and stay below the ticket price (the gear sheet's rules).
+  if (t.early_cents !== null && t.early_cents !== undefined && t.early_until) {
+    if (Date.parse(t.early_until) >= Date.parse(payBy)) {
+      throw new HttpError(409, 'early_after_pay_by', `The early price ends after Pay by (${payByLabel(payBy, group.timezone, date as string)}). Change Early price until first.`);
+    }
+    if (ticketCents <= t.early_cents) throw new HttpError(409, 'early_not_lower', `The ticket price must stay above the early price (${formatPrice(t.early_cents)}).`);
+  }
   const res = await ctx.db.batch([
     ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?,
            format = COALESCE(?, format), format_source = COALESCE(?, format_source), ticket_cents = ?, start_minutes = ${plays.start}, minutes = ${plays.minutes}, courts = ${courts}
          WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ? AND ticket_cents = ?
-           AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)`,
+           AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)
+           AND (early_cents IS NULL OR (early_until < ? AND early_cents < ?))`,
       )
-      .bind(date, ctx.nowIso, payBy, ctx.nowIso, setFormat, setSource, ticketCents, t.id, date, t.format_source ?? null, t.ticket_cents, decided?.stamp ?? null, decided?.stamp ?? null),
+      .bind(date, ctx.nowIso, payBy, ctx.nowIso, setFormat, setSource, ticketCents, t.id, date, t.format_source ?? null, t.ticket_cents, decided?.stamp ?? null, decided?.stamp ?? null, payBy, ticketCents),
     ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
     ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso),
   ]);

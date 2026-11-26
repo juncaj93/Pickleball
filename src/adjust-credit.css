@@ -158,7 +158,8 @@
 .adj-entry .adj-meta {
   color: var(--ink-2);
   font-size: 0.84rem;
-  overflow-wrap: anywhere;
+  /* Zip 93: "Adjusted by organizer, Tue 7:30 PM" wraps between words only (a word longer than the line, a pasted link, may still break). */
+  overflow-wrap: break-word;
 }
 
 .adj-reason {

@@ -169,9 +169,12 @@ async function main() {
   };
 
   const banner = page => page.locator('.pop').last();
+  // Zip 93: the banner's words piece by piece (the message, then the Undo pill), joined with a space the way a person reads them. Chrome's
+  // innerText of the whole flex row sometimes ran them together ("You dropped out.Undo") even on a banner that looked right, on main too.
+  const words = (p) => [...p.children].map((c) => c.innerText.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ') || p.innerText;
   const bannerSays = async (page, re, what) => {
-    await page.waitForFunction((src) => [...document.querySelectorAll('.pop')].some((p) => new RegExp(src).test(p.innerText.replace(/\s+/g, ' '))), re.source, { timeout: 6000 }).catch(() => {});
-    const t = squash(await banner(page).innerText());
+    await page.waitForFunction(({ src, w }) => { const words = new Function('return ' + w)(); return [...document.querySelectorAll('.pop')].some((p) => new RegExp(src).test(words(p).replace(/\s+/g, ' ').trim())); }, { src: re.source, w: words.toString() }, { timeout: 6000 }).catch(() => {});
+    const t = squash(await banner(page).evaluate((p, w) => new Function('return ' + w)()(p), words.toString()));
     assert(re.test(t), `${what}: banner said "${t}"`);
   };
   const fits = async (page, loc, width, what) => {
