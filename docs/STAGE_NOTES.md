@@ -8825,3 +8825,25 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
 - Main to `676e2d5`; `npm run deploy -- --override-loud-hours`: deployment **bd2e5dc4-5c65-4b0b-8eae-47be39b6be4e** (bundle
   `index-BCw-MEQw.js`). Rollback: **fc5e5867-6c49-4182-81cf-32e84542706d**. Read-only live look: /, /admin, /api/status 200; dashboard 401;
   Home 390 light and dark: no errors, nothing wider, no writes.
+
+## 🎾95.level check (Thu Nov 26, 2026; branch `claude/new-session-2v5jzf`, from main `8ef2646` (🎾92 round 3 live); NOT live: held for Alex's OK)
+
+### What changed (the code is the truth; SITE_RULES "Level check after a tournament, the RECOMMENDED level (Zip 95)")
+1. LEVEL CHECK CARD (pictures 1 and 2; src/pages/admin/LevelCheck.tsx, level-check.css): the very top of the organizer's Home (calm preview
+   too), only while an Everyone tournament ended in the last 3 days has a player still to answer. No / Yes; Yes: the levels above theirs as
+   radio pills (the next step picked) and Save. Each row an <article> (one green button each, as the design check counts).
+2. WHO (shared/levelCheck.ts qualifies; server/levelCheck.ts levelCheckRead): 80% or more of at least 3 regular games (stage 'pool' only:
+   round robin, pools, an extra round, Americano rounds; never semi, final, third, tie or skipped), or the gold medal; below 3.6+; never the
+   organizer's player; approved_level else picked_level (tournament_results).
+3. NO MIGRATION: each answer is one task_log row (kind 'mark', session_id NULL, task 'level_check:<tournament>:<player>', detail '320' or
+   'no'), written once (INSERT ... WHERE NOT EXISTS). POST /api/admin/level-check { tournamentId, playerId, level | null }: refused (409) after
+   the 3 days, for a player the card does not ask about, or (400) for a level not above theirs. Activity line 'tournament_level_check'.
+   The answers are in backups already (task_log is in the backup file since Zip 50, and in Time Travel).
+4. RECOMMENDED (pictures 3 and 4; src/tournament/parts.tsx LevelList, TournamentHome.tsx SignupSheet): PREVIOUS_LEVEL_SQL (server/tournament.ts)
+   also brings the saved answer of that same last tournament and whether the player signed up for any tournament created after it ended
+   (`since`); `recommendedLevel` only when it is a level above `previousLevel` and `since` is empty. A green pill "RECOMMENDED" and "Based on
+   recent performance" over the level's words; the previous level stays picked; the existing level up plays when picked.
+5. STAGES (THIS_ZIP): zip95_check (The Cold Open, 10 players Locked doubles, ended last night: Vic 5-0, Wren 4-1 champion, Rowan and Zoe
+   3-2; written row by row, no ticket, credit or money row) and zip95_signup (the same night 5 days back, Vic Yes 3.2, Wren No, Winter
+   Classic open). Five teams cannot give 5-0, 4-1 and 3-2 with a round robin alone (the wins would not add up), so the stage has the extra
+   round of 🎾92 (3 more games).
