@@ -1730,6 +1730,10 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
       nextSource = nextFormat === 'doubles' && isOddSource(wasSource) ? `back:${ctx.nowIso}` : 'admin';
     }
   }
+  // Zip 94: the ticket price stays above the early price (clear the early price first to go lower).
+  if (t.early_cents !== null && t.early_cents !== undefined && s.ticketCents <= t.early_cents) {
+    throw new HttpError(409, 'early_not_lower', `The ticket price must stay above the early price (${formatPrice(t.early_cents)}).`);
+  }
   if (held) {
     if (s.ticketCents !== t.ticket_cents) throw new HttpError(409, 'ticket_locked', `Tickets have been sold. The price stays ${formatPrice(t.ticket_cents)}.`);
     if (s.visibility !== 'all') throw new HttpError(409, 'visibility_locked', 'Players have tickets. It stays on Everyone.');
@@ -1771,7 +1775,8 @@ export async function updateTournament(ctx: Ctx, body: Record<string, unknown>) 
            award_pick = ?
          WHERE id = ? AND group_id = ? ${OPEN_GUARD} AND (final_date IS NULL OR final_date IN (SELECT value FROM json_each(?)))
            AND format_source IS ?
-           AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND ? = 'all'))`,
+           AND (NOT ${playersHoldTicketsSql(org)} OR (ticket_cents = ? AND ? = 'all'))
+           AND (early_cents IS NULL OR early_cents < ${Number(s.ticketCents) | 0})`,
       )
       .bind(s.name, s.ticketCents, s.creditCents, offer, s.visibility, s.visibility, ctx.nowIso, ctx.nowIso, nextFormat, s.secondCreditCents, nextSource, awardPick, t.id, group.id, offer, wasSource, s.ticketCents, s.visibility),
     // Every player's dates lose only the days taken off the offer, read from the row as it is now, and only when the save above landed (the
@@ -2167,15 +2172,23 @@ export async function lockDate(ctx: Ctx, group: GroupRow, t: TournamentRow, body
       setSource = 'admin';
     }
   }
+  // Zip 94: an early price set before the date must still end before this Pay by and stay below the ticket price (the gear sheet's rules).
+  if (t.early_cents !== null && t.early_cents !== undefined && t.early_until) {
+    if (Date.parse(t.early_until) >= Date.parse(payBy)) {
+      throw new HttpError(409, 'early_after_pay_by', `The early price ends after Pay by (${payByLabel(payBy, group.timezone, date as string)}). Change Early price until first.`);
+    }
+    if (ticketCents <= t.early_cents) throw new HttpError(409, 'early_not_lower', `The ticket price must stay above the early price (${formatPrice(t.early_cents)}).`);
+  }
   const res = await ctx.db.batch([
     ctx.db
       .prepare(
         `UPDATE tournaments SET status = 'tickets', final_date = ?, date_picked_at = ?, pay_by = ?, updated_at = ?,
            format = COALESCE(?, format), format_source = COALESCE(?, format_source), ticket_cents = ?, start_minutes = ${plays.start}, minutes = ${plays.minutes}, courts = ${courts}
          WHERE id = ? ${DATE_GUARD} AND EXISTS (SELECT 1 FROM json_each(tournaments.offered_dates) WHERE value = ?) AND format_source IS ? AND ticket_cents = ?
-           AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)`,
+           AND (? IS NULL OR (SELECT COALESCE(MAX(updated_at), '') FROM tournament_signups WHERE tournament_id = tournaments.id) = ?)
+           AND (early_cents IS NULL OR (early_until < ? AND early_cents < ?))`,
       )
-      .bind(date, ctx.nowIso, payBy, ctx.nowIso, setFormat, setSource, ticketCents, t.id, date, t.format_source ?? null, t.ticket_cents, decided?.stamp ?? null, decided?.stamp ?? null),
+      .bind(date, ctx.nowIso, payBy, ctx.nowIso, setFormat, setSource, ticketCents, t.id, date, t.format_source ?? null, t.ticket_cents, decided?.stamp ?? null, decided?.stamp ?? null, payBy, ticketCents),
     ...(org ? [organizerSeatStatement(ctx.db, t.id, org, ctx.nowIso)] : []),
     ...fillSpotsStatements(ctx.db, group.id, t.id, ctx.nowIso),
   ]);

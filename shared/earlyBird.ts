@@ -71,15 +71,16 @@ export interface EarlyTicket {
 export const ticketHasMoney = (k: EarlyTicket): boolean => k.credit_cents + k.paid_cents + k.claim_cents > 0;
 
 /**
- * THE price of one player's ticket at this moment: the organizer $0; a ticket with money on it its own price; otherwise the price that applies
- * now, except that a ticket priced early keeps it for the 30 minute grace after the deadline.
+ * THE price of one player's ticket at this moment: a ticket with money on it its own price; the organizer $0; otherwise the price that applies
+ * now, except that on the player's own I paid (`grace`) a ticket priced early keeps it for the 30 minute grace after the deadline.
  */
-export function ticketPrice(t: EarlyRow, own: EarlyTicket | null, organizer: boolean, on: boolean, nowMs: number): number {
+export function ticketPrice(t: EarlyRow, own: EarlyTicket | null, organizer: boolean, on: boolean, nowMs: number, grace = false): number {
+  if (own && ticketHasMoney(own)) return own.price_cents;
   if (organizer) return 0;
   if (own && own.price_cents === 0) return 0;
-  if (own && ticketHasMoney(own)) return own.price_cents;
   const now = priceNow(t, on, nowMs);
-  if (own && own.price_cents !== now) {
+  // The grace is only for the player's own I paid (`grace`): Lock in, Hold and Alex's Mark paid after the deadline are the price now.
+  if (grace && own && own.price_cents !== now) {
     const e = earlyLive(t, on);
     if (e && own.price_cents === e.cents && nowMs < e.untilMs + EARLY_GRACE_MS) return own.price_cents;
   }

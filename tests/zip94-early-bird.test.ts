@@ -104,8 +104,12 @@ describe('the shared rule (shared/earlyBird.ts)', () => {
   });
   it("a ticket's price: money on it keeps its own; an empty one follows the price now, with the 30 minute grace for an early one", () => {
     const empty = { price_cents: 1800, credit_cents: 0, paid_cents: 0, claim_cents: 0 };
-    expect(ticketPrice(t, empty, false, true, until + EARLY_GRACE_MS - 1)).toBe(1800);
-    expect(ticketPrice(t, empty, false, true, until + EARLY_GRACE_MS)).toBe(2000);
+    // The grace is the player's own I paid only (`grace`): Lock in and Alex's Mark paid after the deadline are the price now.
+    expect(ticketPrice(t, empty, false, true, until + EARLY_GRACE_MS - 1, true)).toBe(1800);
+    expect(ticketPrice(t, empty, false, true, until + EARLY_GRACE_MS, true)).toBe(2000);
+    expect(ticketPrice(t, empty, false, true, until + 60_000)).toBe(2000);
+    // The organizer's ticket with money on it (a changed organizer) keeps what it holds.
+    expect(ticketPrice(t, { ...empty, paid_cents: 500 }, true, true, until - 1)).toBe(1800);
     expect(ticketPrice(t, { ...empty, credit_cents: 100 }, false, true, until + 30 * 86_400_000)).toBe(1800);
     expect(ticketPrice(t, { ...empty, price_cents: 2000 }, false, true, until - 1)).toBe(1800);
     expect(ticketPrice(t, null, true, true, until - 1)).toBe(0);
@@ -158,6 +162,22 @@ describe('Alex sets it up (the gear sheet rows)', () => {
     const hist = (await ctx.organizer.call('GET', '/api/admin/activity')).data.entries as { action: string }[];
     expect(hist.filter((h) => h.action === 'tournament_early_set')).toHaveLength(2);
   });
+  it('set before the date is picked (fresh review): it must end before the Pay by any date pick would set; the ticket price stays above it', async () => {
+    const base = await world({ early: false });
+    // A fresh tournament, before any date: dates Nov 5, 12, 19; the earliest Pay by a pick could set is Wed Nov 4, 7 PM.
+    expect((await base.organizer.call('POST', `/api/admin/tournament/${base.tid}/cancel`, {})).status).toBe(200);
+    const created = await base.organizer.call('POST', '/api/admin/tournament', { ...BASE, name: 'Spring Open' });
+    expect(created.status, created.text).toBe(200);
+    const ctx = { ...base, tid: created.data.id };
+    expect((await setEarly(ctx, 1400, '2026-11-15T00:00:00.000Z')).status).toBe(400);
+    expect((await setEarly(ctx, 1400, '2026-11-05T00:00:00.000Z')).status).toBe(400);
+    expect((await setEarly(ctx, 1400, UNTIL)).status).toBe(200);
+    // The ticket price can't go down to the early price while one is set.
+    const edit = await ctx.organizer.call('PUT', `/api/admin/tournament/${ctx.tid}`, { ...BASE, name: 'Spring Open', ticketCents: 1400 });
+    expect(edit.status).toBe(409);
+    expect(edit.data.message).toBe('The ticket price must stay above the early price ($14).');
+  });
+
   it('cannot be added or changed once anyone has locked in (an empty ticket or the organizer’s own $0 seat does not count)', async () => {
     const ctx = await world({ early: false });
     // Blair taps Lock in with no credit: a ticket with nothing on it. Still free to set.
@@ -238,6 +258,20 @@ describe('the money to the cent (Alex: $18 early, $20 after; here $14 and $16)',
     expect(ticket(ctx, 'Gale')).toMatchObject({ price_cents: 1600, claim_cents: 1600 });
     expect((await answer(ctx, 'Gale', 'confirm')).status).toBe(200);
     expect(ticket(ctx, 'Gale')).toMatchObject({ place: 'spot', price_cents: 1600, paid_cents: 1600 });
+    books(ctx);
+  });
+
+  it('the grace is for an I paid only (fresh review): Lock in with credit and Mark paid 10 minutes after the deadline are $16', async () => {
+    const ctx = await world();
+    for (const n of ['Kit', 'Kai']) expect((await lock(ctx, n, 1400)).data.result).toBe('due');
+    ctx.app.now = UNTIL_MS + 10 * 60_000;
+    await give(ctx, 'Kit', 1600);
+    expect((await lock(ctx, 'Kit', 1400)).status).toBe(409);
+    const r = await lock(ctx, 'Kit', 1600);
+    expect(r.data).toMatchObject({ result: 'locked', creditUsedCents: 1600 });
+    expect(ticket(ctx, 'Kit')).toMatchObject({ place: 'spot', price_cents: 1600, credit_cents: 1600 });
+    expect((await answer(ctx, 'Kai', 'mark_paid', 1400)).status).toBe(409);
+    expect((await answer(ctx, 'Kai', 'mark_paid', 1600)).status).toBe(200);
     books(ctx);
   });
 

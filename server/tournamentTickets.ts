@@ -71,8 +71,8 @@ const money = (k: TicketRow): TicketMoney => ({ priceCents: k.price_cents, credi
 const ticketsOpenSql = (t: TournamentRow) =>
   `EXISTS (SELECT 1 FROM tournaments WHERE id = ${sqlText(t.id)} AND status = 'tickets' AND final_date = ${sqlText(t.final_date ?? 'none')} AND ticket_cents = ${Number(t.ticket_cents) | 0}${earlyGuard(t)})`;
 
-/** Zip 94: a tournament with an early bird set also has it exactly as read (one set after the read: "look again"). None set: as before. */
-const earlyGuard = (t: TournamentRow) => (t.early_cents === null || t.early_cents === undefined ? '' : ` AND ${earlyAsReadSql(t)}`);
+/** Zip 94: the early bird exactly as read (one set or changed after the read: "look again"), so a tap never misses an early price set in between. */
+const earlyGuard = (t: TournamentRow) => ` AND ${earlyAsReadSql(t)}`;
 
 /**
  * Zip 94: an empty ticket (nothing on it) moves to the price this tap uses (shared/earlyBird.ts ticketPrice), in the same batch, guarded on the
@@ -262,7 +262,7 @@ export async function playerTicketPaid(ctx: Ctx, who: TournamentActor, body: Rec
   // Zip 94: the price this I paid locks in. A ticket with money on it keeps its own; an empty one takes the price that applies now (an early
   // ticket keeps the early price for the 30 minute grace after the deadline). Without an early bird: the ticket's own price, as before.
   // (The organizer's own ticket is $0: ticketPrice keeps it at $0, so no organizer read here.)
-  const price = ticketPrice(t, k, false, await earlyBirdOn(ctx, who.group.id, t), ctx.nowMs);
+  const price = ticketPrice(t, k, false, await earlyBirdOn(ctx, who.group.id, t), ctx.nowMs, true);
   const owed = ticketOwed({ ...money(k), priceCents: price });
   // Already claimed or paid (a second tap, another phone): nothing new.
   if (owed === 0) return { ok: true, ...answerOf(k), claimCents: k.claim_cents };

@@ -15,7 +15,7 @@ import { audit } from './repo';
 import { requireAdmin } from './auth';
 import { EARLY_BIRD, earlyBirdAllowed } from '../shared/earlyBird';
 import { formatPrice } from '../shared/money';
-import { payByLabel, startMsOf } from '../shared/tournamentTickets';
+import { defaultPayBy, payByLabel } from '../shared/tournamentTickets';
 import { NIGHT_START_MINUTES } from '../shared/tournament';
 import { changedOrLookAgain, openById, organizerOn, OPEN_GUARD, statusOf, storedDays, type TournamentRow } from './tournament';
 import { sqlText } from './tournamentMoney';
@@ -23,23 +23,13 @@ import { sqlText } from './tournamentMoney';
 /** The one switch question (server/speed.ts answers it from the one read of every switch row). */
 const SWITCH_READ = "SELECT 1 AS x FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark' LIMIT 1";
 
-/** One read per request: the organizer's dashboard asks for the row twice (the Settings row and the tournament card). */
-const asked = new WeakMap<D1Database, Map<string, Promise<boolean>>>();
-
 /** The Settings row: on for everyone. */
-export function earlyBirdForAll(db: D1Database, groupId: string): Promise<boolean> {
-  let byGroup = asked.get(db);
-  if (!byGroup) asked.set(db, (byGroup = new Map()));
-  let p = byGroup.get(groupId);
-  if (!p) {
-    p = db.prepare(SWITCH_READ).bind(groupId, EARLY_BIRD.task).first().then((row) => !!row, () => false);
-    byGroup.set(groupId, p);
-  }
-  return p;
+export async function earlyBirdForAll(db: D1Database, groupId: string): Promise<boolean> {
+  const row = await db.prepare(SWITCH_READ).bind(groupId, EARLY_BIRD.task).first().catch(() => null);
+  return !!row;
 }
 
 export async function setEarlyBirdForAll(db: D1Database, groupId: string, on: boolean, nowIso: string): Promise<void> {
-  asked.delete(db);
   await db.batch([
     db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark'").bind(groupId, EARLY_BIRD.task),
     ...(on ? [db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)").bind(newId(), groupId, EARLY_BIRD.task, nowIso)] : []),
@@ -74,11 +64,14 @@ export const earlyLockedSql = (x = 'tournaments.id') =>
 export const earlyLocked = (tickets: readonly { price_cents: number; place: string; credit_cents: number; paid_cents: number; claim_cents: number }[]): boolean =>
   tickets.some((k) => k.price_cents > 0 && (k.place === 'spot' || k.credit_cents + k.paid_cents + k.claim_cents > 0));
 
-/** The latest an early deadline may be: before Pay by; before tickets open, before the night (the picked date, else the last date offered). */
-export function earlyLatestMs(t: TournamentRow, tz: string): number {
+/**
+ * The latest an early deadline may be: before Pay by. Before tickets open (no Pay by yet), before the Pay by that picking the date would set
+ * (the night before at 7 PM) for the picked date, else for the EARLIEST date offered, so no date pick can ever put Pay by before it.
+ */
+export function earlyLatestMs(t: TournamentRow, tz: string, nowMs: number): number {
   if (t.pay_by) return Date.parse(t.pay_by);
-  const day = t.final_date ?? storedDays(t.offered_dates).slice(-1)[0];
-  return day ? startMsOf(day, t.final_date ? t.start_minutes : NIGHT_START_MINUTES, tz) : Infinity;
+  const days = t.final_date ? [t.final_date] : storedDays(t.offered_dates);
+  return days.length ? Math.min(...days.map((d) => Date.parse(defaultPayBy(d, NIGHT_START_MINUTES, tz, nowMs)))) : Infinity;
 }
 
 /**
@@ -98,8 +91,8 @@ export async function setEarlyBird(ctx: Ctx, body: Record<string, unknown>) {
     if (cents <= 0 || cents >= t.ticket_cents) throw new HttpError(400, 'invalid_early', `The early price must be lower than the ticket price (${formatPrice(t.ticket_cents)}).`);
     const ms = Date.parse(until);
     if (ms <= ctx.nowMs) throw new HttpError(400, 'invalid_early', 'Pick an early price end that has not passed.');
-    if (ms >= earlyLatestMs(t, group.timezone)) {
-      throw new HttpError(400, 'invalid_early', t.pay_by ? `Pick an end before Pay by (${payByLabel(t.pay_by, group.timezone, t.final_date)}).` : 'Pick an end before the tournament night.');
+    if (ms >= earlyLatestMs(t, group.timezone, ctx.nowMs)) {
+      throw new HttpError(400, 'invalid_early', t.pay_by ? `Pick an end before Pay by (${payByLabel(t.pay_by, group.timezone, t.final_date)}).` : 'Pick an end before Pay by (the night before the tournament, 7 PM).');
     }
   }
   const same = (t.early_cents ?? null) === cents && (t.early_until ?? null) === until;

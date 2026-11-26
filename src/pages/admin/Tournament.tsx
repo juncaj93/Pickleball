@@ -2095,7 +2095,8 @@ function FinalizeBody({ ctx, t, day, onClose }: { ctx: AdminCtx; t: AdminTournam
     expected: expectedPlayers({ saved: t.expectSaved ? (t.expected ?? null) : null, suggested: view.players.length, locked: 0 }),
     courts,
     minutes: end - start,
-    ticketCents: view.ticketCents,
+    // Zip 94: before an early deadline, the early price (what players lock in at now), as on the card's money line.
+    ticketCents: t.priceNowCents !== undefined && t.priceNowCents < view.ticketCents ? t.priceNowCents : view.ticketCents,
     championCents: t.championCreditCents,
     secondCents: t.secondCreditCents,
     // Zip 87: the box of the style the night would play.
