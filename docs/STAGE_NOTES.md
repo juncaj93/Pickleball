@@ -8826,7 +8826,8 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
   `index-BCw-MEQw.js`). Rollback: **fc5e5867-6c49-4182-81cf-32e84542706d**. Read-only live look: /, /admin, /api/status 200; dashboard 401;
   Home 390 light and dark: no errors, nothing wider, no writes.
 
-## 🎾93.polish (Thu Nov 26, 2026; branch `claude/new-session-3pvs4c`, from main `8ef2646` (🎾92 round 3 live, bd2e5dc4))
+## 🎾93.polish (Thu Nov 26, 2026; LIVE 12:00 PM Eastern, deployment 86f85e98, rollback bd2e5dc4; --override-loud-hours with Alex OK, Thanksgiving game canceled)
+Branch `claude/new-session-3pvs4c`, from main `8ef2646`. Backup export-20261126165954, Time Travel bookmark 00002131-00000000-0000512f-7b0b3b6697d9a5c26dabe625fbf81fb7. Integrity 0 before and after (22 / 8 / 14 columns).
 
 ### What changed (the code is the truth)
 1. COURT TAP AREAS (src/gameday.css, `.cm-pick` only): an invisible ::before on every square of the organizer's court picker, sized in the
