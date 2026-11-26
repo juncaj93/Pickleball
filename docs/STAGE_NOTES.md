@@ -8900,3 +8900,16 @@ deadline; a per-isolate cache of the switch row (removed). Left: edge cases afte
 ### Before shipping
 Unit 246 files, 4,547 passed, 12 skipped, 0 failed. e2e/zip94 7 of 7, zip92 B, zip86 8 of 8. zip87 A fails on main too (its selector meets
 🎾92's court time line; a test file, not this zip).
+
+### Live (Thu Nov 26, 2026, about 12:35 PM Eastern; Alex's OK and his loud-hours override: tonight's game canceled for Thanksgiving)
+- Main merged with 🎾93 (live 86f85e98) first; unit 247 files, 4,555 passed, 12 skipped, 0 failed on the merged code.
+- Restore point: export `export-20261126172746` saved in `pickleball-backups` (checked against the file); Time Travel bookmark
+  `00002138-00000000-0000512f-1fca6934571db45ae43d491990c0ff85`.
+- Integrity before and after: 22, 8 and 14 columns, every problem column 0.
+- Migration `0030_early_bird` (the only pending one) applied to live: `early_cents` and `early_until` on tournaments, NULL on every row.
+- Main `22033c4` to `1138df4`; `npm run deploy -- --override-loud-hours`: deployment **28f4856f-c00a-4915-808e-a9e55806b12f** (bundle
+  `index-Baa458Uk.js`). Rollback: **86f85e98-c83b-4e09-b03f-02edf0eb76ef** (🎾93); the two columns can stay (old code never reads them).
+- Early bird pricing OFF on live (no switch row). The Cold Open before and after: $18, Pay by Tue Dec 1 00:00 UTC (Mon 7 PM), 7 tickets,
+  $108 in prices, $90 on them: unchanged.
+- Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
+  wider, no writes. Organizer screens not opened (no read-only PIN in this session).
