@@ -132,7 +132,8 @@ async function main() {
       await card.getByRole('button', { name: "I’m in" }).click();
       await page.locator('.pop').waitFor({ state: 'detached', timeout: 4000 });
       await dropOut(page, card);
-      const pop = page.locator('.pop');
+      // Zip 92: the "You're in" banner can be drawn again a moment after the tap (seen under load), so wait for the drop's own banner.
+      const pop = page.locator('.pop', { hasText: 'You dropped out' });
       await pop.waitFor();
       const t0 = Date.now();
       assert(/You dropped out\./.test(await pop.innerText()) && /Undo/.test(await pop.innerText()), `banner said "${await pop.innerText()}"`);

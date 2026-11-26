@@ -62,8 +62,9 @@
   overflow-wrap: break-word;
 }
 .pr-sub {
-  /* Zip 18 round 2: shrinks long before the name does (the name only gives way once the gray part is gone). */
-  flex: 0 1000 auto;
+  /* Zip 18 round 2: shrinks long before the name does (the name only gives way once the gray part is gone). Zip 92: from a 0 basis, growing
+     into the free space, so with the row's wrap (the chips under a long name) it never pushes the chips to a second line by itself. */
+  flex: 1000 1000 0;
   min-width: 0;
   margin-left: 6px;
   font-size: 13px;

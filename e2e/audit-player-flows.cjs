@@ -578,7 +578,7 @@ async function main() {
       assert(/\$14 due/.test(await card(page, G[0]).innerText()), 'no $14 due');
       await tapDrop(page, G[0]);
       const b = await waitBanner(page, /You dropped out/);
-      assert(/^You dropped out\.( Undo)?$/.test(b.replace(/^[^A-Za-z]+/, '')), b);
+      assert(/^You dropped out\.\s?(Undo)?$/.test(b.replace(/^[^A-Za-z]+/, '')), b);
       assert((await chipLabel(page)) === null, 'a chip appeared for an unpaid drop');
       await sleep(6500);
       assert((await statusOf('Frankie', G[0])) === 'withdrawn' && (await potOf('Frankie')) === 0, 'server');
