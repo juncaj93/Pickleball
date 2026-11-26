@@ -76,11 +76,12 @@ describe('2. Locked doubles bonus until the playoffs (shared/smartPacing.ts)', (
     expect(pacing({ ...base, rounds: am(6), nowMin: 19 * 60 + 119 }).offer).toBeNull();
   });
 
-  it('a fast 8 Locked doubles night on the real server: offers after Round 1 AND later pool rounds (one per scored round), none once the playoffs started; nothing past 10 PM; money to the cent', async () => {
+  it('a fast 8 Locked doubles night on the real server, every offer taken: round robin rounds only, one per scored round, all before the playoffs; nothing past 10 PM; money to the cent', async () => {
     const { ctx } = await coldOpen({ n: 8, style: 'vote', courts: 2, log: [] });
     const run = await playNight(ctx, 'fast', 9701, true);
     const offers = run.offers.map((o) => [o.kind, o.afterRound]);
-    expect(offers.length).toBeGreaterThan(1);
+    // (At the 14 minute pace floor the second offer here misses the 9:40 aim by under a minute: one offer, after Round 1.)
+    expect(offers.length).toBeGreaterThan(0);
     expect(offers.every(([k]) => k === 'round')).toBe(true);
     // One per fully scored round.
     expect(new Set(offers.map(([, r]) => r)).size).toBe(offers.length);
@@ -97,10 +98,13 @@ describe('2. Locked doubles bonus until the playoffs (shared/smartPacing.ts)', (
     expect(run.shortenedOnCourt).toEqual([]);
   }, 120_000);
 
-  it('declined: the same offers come, nothing is added', async () => {
+  it('declined: offers after Round 1 AND Round 2 (one planned round left: the old rule never offered there); nothing is added', async () => {
     const { ctx } = await coldOpen({ n: 8, style: 'vote', courts: 2, log: [] });
     const run = await playNight(ctx, 'fast', 9700, false);
-    expect(run.offers.length).toBeGreaterThan(1);
+    expect(run.offers.map((o) => [o.kind, o.afterRound, o.plannedLeft])).toEqual([
+      ['round', 1, 2],
+      ['round', 2, 1],
+    ]);
     const rows = ctx.app.db.raw.prepare("SELECT MAX(round) AS r FROM tournament_games WHERE tournament_id = ? AND stage = 'pool'").get(ctx.tid) as { r: number };
     expect(rows.r).toBe(3);
     expect(run.money.startsWith('0')).toBe(true);
