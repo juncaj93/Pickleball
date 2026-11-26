@@ -21,6 +21,17 @@
   border-radius: var(--card-r);
   overflow: hidden;
 }
+/* Zip 92 (zip18): on a list narrower than 17 em (320 px at 125% text, 360 and 390 px at 150%) the name and the chips cannot share one line:
+   the chips go under the name instead of past the card's edge. At the usual text sizes every row stays one line, as before. */
+.pr-list {
+  container: pr-list / inline-size;
+}
+@container pr-list (max-width: 17em) {
+  .pr-row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+}
 .pr-li + .pr-li {
   border-top: 1px solid var(--line);
 }
@@ -30,11 +41,8 @@
   align-items: center;
   gap: 5px;
   width: 100%;
-  /* Zip 78: at least 46 px, taller when a long name takes two lines (a name is never cut). Zip 92 (zip18): when the name and the chips cannot
-     share the line (320 px, big text), the chips go under the name instead of past the card's edge. */
+  /* Zip 78: at least 46 px, taller when a long name takes two lines (a name is never cut). */
   min-height: 46px;
-  flex-wrap: wrap;
-  row-gap: 2px;
   padding: 4px 10px 4px 16px;
   margin: 0;
   border: 0;
