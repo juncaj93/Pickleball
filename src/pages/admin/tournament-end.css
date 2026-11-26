@@ -281,14 +281,20 @@
   gap: 10px;
   padding: 12px 0 4px;
 }
+/* Zip 93 (Alex): the four buttons never overlap. Equal widths while they fit on one line (each grows from 0); a button never gets narrower
+   than its words, so at big text or a narrow phone the last ones wrap to a second line instead (was a 4-column grid with no-wrap words
+   that ran into each other at 125 / 150%). */
 .tm-awards-weeks {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .tm-awards-week {
+  flex: 1 1 0;
+  min-width: max-content;
+  box-sizing: border-box;
   min-height: 44px;
-  padding: 6px 4px;
+  padding: 6px 8px;
   border: 0;
   border-radius: 12px;
   background: var(--fill);

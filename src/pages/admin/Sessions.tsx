@@ -296,7 +296,7 @@ export function useOrganizerInOut(ctx: AdminCtx, s: AdminSessionView) {
   const set = (goingIn: boolean) =>
     run(async () => {
       const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
-      toast(!goingIn ? "You’re out" : res.result === 'waitlisted' || res.result === 'standby' ? `You’re ${ordinal(res.position ?? 1)} on the waitlist` : "You’re in");
+      toast(!goingIn ? "You’re out" : res.result === 'waitlisted' ? `You’re ${ordinal(res.position ?? 1)} on the waitlist` : "You’re in");
     });
   return { busy, mine, day, set };
 }
@@ -326,7 +326,7 @@ function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   );
 }
 
-/** "Court opened" / "Didn't open" while on the venue's court waitlist. Both one tap, "Didn't open" asks first. */
+/** "Hide this game": puts a game the organizer showed back out of the players' lists. */
 export function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   return (

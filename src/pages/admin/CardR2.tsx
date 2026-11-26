@@ -443,7 +443,7 @@ function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; s
       try {
         if (hold && actingStamp() !== as) throw new ApiError(409, 'screen_changed', 'Nothing was sent: the screen changed before it could save.');
         const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
-        const wait = goingIn && (res.result === 'waitlisted' || res.result === 'standby');
+        const wait = goingIn && res.result === 'waitlisted';
         if (wait) said = `You’re ${ordinal(res.position ?? 1)} on the waitlist`;
         if (me_ === latest.current && (!hold || wait)) toast(said);
       } catch (err) {

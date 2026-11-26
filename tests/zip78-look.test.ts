@@ -124,7 +124,7 @@ describe('Zip 78: names are never cut', () => {
   // Zip 90 (Alex, pictures 7 and 8): the player Home header's name ends in "…" only when the name alone can't fit on its one row.
   it('no ellipsis cut-off except four lines that are not names (a link, a text preview, the label over the name, the Players tab’s gray line), and the player header’s name (Zip 90)', () => {
     // Zip 92 (Alex): a team or player name on the players' night screen that is one word wider than its column ends in "…" (never broken mid-word).
-    const allowed = ['.set-link', '.sg-preview', '.topbar .eyebrow', '.pr-sub', '.ph-head .title-line h1', '.tc-gd-tn > b'];
+    const allowed = ['.set-link', '.sg-preview', '.topbar .eyebrow', '.pr-sub', '.ph-head .title-line h1', '.tc-gd-tn > b', '.sl-name > b', '.tc-gd-pname > b', '.tc-rv-name'];
     const bad: string[] = [];
     for (const f of CSS)
       for (const [sel, prop, val] of decls(read(f)))

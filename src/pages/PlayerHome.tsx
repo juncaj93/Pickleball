@@ -241,7 +241,7 @@ function withTourRow<R extends { s: PlayerSessionView; leaving: boolean }>(rows:
 const TIER_LABEL: Record<WeekTier, string> = { this: 'This week', next: 'Next week', later: 'Later' };
 
 type JoinResponse = {
-  result: 'confirmed' | 'already_confirmed' | 'waitlisted' | 'standby';
+  result: 'confirmed' | 'already_confirmed' | 'waitlisted';
   position?: number;
   /** Credit used on the seat at once (only when some was). */
   creditCents?: number;
@@ -252,7 +252,6 @@ type JoinResponse = {
 
 const GOOD_NEWS = {
   spot_opened: 'A spot opened. You’re in.',
-  court_opened: 'The court opened. You’re in.',
 };
 
 /**
@@ -263,7 +262,6 @@ const GOOD_NEWS = {
 export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, showDue = !noCourt): string {
   // A really full game has a real waitlist, court or no court: say so.
   if (d.result === 'waitlisted') return `You’re ${ordinal(d.position ?? 1)} on the waitlist`;
-  if (!noCourt && d.result === 'standby') return `You’re ${ordinal(d.position ?? 1)} on standby`;
   // `showDue`: the card shows "$ due" for this game (a booked court, or "Ask for payment on every game" is on).
   return joinedCreditText("You’re in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
 }
@@ -2420,10 +2418,9 @@ function SuggestionCard({
   // Zip 17, Unpaid nudge (null when off): the same block as the game cards' I'm in.
   const nudge = useNudge();
   const nudgeBlocked = !!nudge?.state.blocked;
-  // At the max they would wait (Zip 86: no court waitlist, so no standby).
   // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
   // warns first. With room, a game with no court booked reads like a normal one.
-  // "Card cleanup" (Zip 10): no waitlist and no cap, so the popup never says waitlist or standby ("12 are in. You'd make it 13.").
+  // "Card cleanup" (Zip 10): no waitlist and no cap, so the popup never says waitlist ("12 are in. You'd make it 13.").
   const cleanup = g.cardCleanup === true;
   const waitlistForm = !cleanup && s.confirmedCount >= g.group.maxPlayers;
   // At the database's 12 the popup only says how many are in (an I'm in there gets the plain refusal).
@@ -2472,7 +2469,6 @@ function SuggestionCard({
   if (g.alertCards === true) {
     const n = s.confirmedCount;
     const short = n < MIN_PLAYERS;
-    // (A venue-waitlist game, "standby": no count, as before.)
     // Zip 76: the title says which game ("Tonight 9:30 PM needs 1 more"), so nobody commits to a game without seeing its time.
     // Compact so it stays short on a phone: "Tonight 9:30 PM", "Sun 6 PM".
     // Zip 92: the game's own short weekday ("Wed 8 PM"), never the first letters of "next Wednesday" ("Nex").
@@ -2955,7 +2951,6 @@ export function ScheduleRow({
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
   const waiting = mine?.status === 'waitlisted';
-  // Zip 86: no court waitlist, so no standby words (a full game keeps its real waitlist).
   const open = !s.canceled && !s.started;
   const nowMs = Date.parse(g.now);
   const motion = useMotion();
@@ -3066,7 +3061,7 @@ export function ScheduleRow({
     setBusy(true);
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
-    // Instant taps (INSTANT_TAPS): a full game, the waitlist or standby is the server's call, so the button shows it is working.
+    // Instant taps (INSTANT_TAPS): a full game or the waitlist is the server's call, so the button shows it is working.
     const unmark = !instant && instantTaps ? markPressed() : () => {};
     try {
       await sendDropsBeforeJoin(s.id);
@@ -3179,7 +3174,7 @@ export function ScheduleRow({
   }, [asking, s.id]);
   // Shown only the first time this player sees this promotion on this phone (src/goodNews.ts).
   const promoted = !held && inSession && !!mine.promotion && !!g.me && seeGoodNews(goodNewsKey(g.me.id, s.id, mine.signupAt), demoOn() ? demoSessionNumber() : null);
-  const goodNews = promoted ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion!]) : null;
+  const goodNews = promoted ? GOOD_NEWS[mine.promotion!] : null;
 
   // Zip 42 "Guest spot": guestLine gives the same names when there is no guest.
   const line = guestLine(s.confirmed);
@@ -3201,7 +3196,6 @@ export function ScheduleRow({
   // Zip 7 switches. TONIGHT_GLOW: the tile wears TONIGHT or TOMORROW (Eastern calendar days). PLAYER_CARDS_SIMPLE: no court words or dot.
   const dayTag: TileDay | undefined = g.tonightGlow === true ? (gameDay ? 'tonight' : tileDay(s.startsAt, tz, nowMs, open && !s.canceled)) : undefined;
   const simple = g.playerCardsSimple === true;
-  // Standby is the venue-waitlist game's word for the list; PLAYER_CARDS_SIMPLE says waitlist (or nothing) everywhere.
   // Zip 9, CARD_TIME_BUTTONS: the start and the length under the tile, and one joined Calendar | Directions button instead of the icon.
   const cardButtons = g.cardTimeButtons === true;
   // Zip 10, CARD_CLEANUP: no count text (only the circles, one row), the people icon before the names, the content centered to the
@@ -3237,7 +3231,7 @@ export function ScheduleRow({
         <CalendarPlusIcon />
       </a>
     ));
-  // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
+  // PLAYER_CARDS_SIMPLE: the spots count is always there.
   const showCount = !s.canceled;
   // Zip 42 "Guest spot": the host's own guest. "Remove guest" sits right before Drop out while the switch is on for this screen.
   const myGuest = mine?.guest ?? null;

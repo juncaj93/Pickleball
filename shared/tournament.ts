@@ -211,14 +211,16 @@ export const mostPlayersVoted = (counts: VoteCounts, format: TournamentFormat): 
 
 /**
  * The player's alert once the date is locked (Home, the site's alert card): the title and the second line. `source` says whether to claim a vote;
- * Zip 80: `counts` (the votes of those who can make the date) must also show a real majority, else it says the format only.
+ * Zip 80: `counts` (the votes of those who can make the date) must also show a real majority, else it says the format only. Zip 93: `tomorrow`
+ * (the day before the night, Eastern) says "is tomorrow." instead of the date.
  */
-export function formatAlertWords(name: string, dayKeyOfDate: string, format: TournamentFormat, source: FormatSource, counts?: VoteCounts): { title: string; sub: string } {
+export function formatAlertWords(name: string, dayKeyOfDate: string, format: TournamentFormat, source: FormatSource, counts?: VoteCounts, tomorrow = false): { title: string; sub: string } {
   const s = stubParts(dayKeyOfDate);
   const day = `${s.weekday.charAt(0)}${s.weekday.slice(1).toLowerCase()} ${s.month.charAt(0)}${s.month.slice(1).toLowerCase()} ${s.day}`;
   const most = source === 'vote' && (!counts || mostPlayersVoted(counts, format));
   return {
-    title: `${name} is scheduled for ${day}.`,
+    // Zip 93 (Alex): the day before, "The Cold Open is tomorrow." (same card, same second line).
+    title: tomorrow ? `${name} is tomorrow.` : `${name} is scheduled for ${day}.`,
     sub: most ? `Most players voted ${formatName(format)}.` : `Format: ${formatName(format)}`,
   };
 }

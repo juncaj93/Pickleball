@@ -9,13 +9,12 @@ import { levelShort } from '../../../shared/tournament';
 import {
   CHART_LEVELS,
   changeText,
-  dateLong,
-  dateShort,
   type LevelRow,
   levelStep,
   levelsTable,
   mostImproved,
   type SkillsSort,
+  skillsDates,
   type SkillsView,
   toneOf,
   trendOf,
@@ -50,6 +49,8 @@ export function SkillsHistory({ ctx }: { ctx: AdminCtx }) {
   const top = mostImproved(view);
   const table = levelsTable(view, sort);
   const person = who ? (view.players.find((p) => p.id === who) ?? null) : null;
+  // Zip 93: the columns' dates as "AUG" (the day too when two columns share a month).
+  const colDate = skillsDates(table.columns.map((c) => c.date));
   return (
     <div className="stack tm-sk" data-skills>
       {top.length > 0 && (
@@ -96,7 +97,7 @@ export function SkillsHistory({ ctx }: { ctx: AdminCtx }) {
                   </th>
                   {table.columns.map((c) => (
                     <th scope="col" key={c.id} className="tm-sk-th-date">
-                      {dateLong(c.date)}
+                      {colDate(c.date)}
                     </th>
                   ))}
                   <th scope="col" className="tm-sk-th-now">
@@ -167,6 +168,8 @@ function TrendBody({ p, today }: { p: SkillsView['players'][number]; today: stri
   const x = (i: number) => (n <= 1 ? LEFT + (W - LEFT - RIGHT) / 2 : LEFT + 12 + (i * (W - LEFT - RIGHT - 24)) / (n - 1));
   const y = (v: number) => TOP + ((steps - levelStep(v)) * (H - TOP - BOTTOM)) / steps;
   const pts = tr.points.map((pt, i) => ({ x: x(i), y: y(pt.level), ...pt }));
+  // Zip 93: this player's dates as "AUG" ("AUG 3" and "AUG 24" when two of their entries fall in the same month).
+  const date = skillsDates(tr.list.map((l) => l.date));
   const last = pts[pts.length - 1];
   return (
     <div className="tm-sk-trend" data-skills-trend={p.name}>
@@ -178,7 +181,7 @@ function TrendBody({ p, today }: { p: SkillsView['players'][number]; today: stri
           </span>
         )}
       </div>
-      <figure className="tm-sk-chart" aria-label={`${p.name}’s level, ${tr.points.map((pt) => `${dateShort(pt.date)} ${levelShort(pt.level)}`).join(', ')}`}>
+      <figure className="tm-sk-chart" aria-label={`${p.name}’s level, ${tr.points.map((pt) => `${date(pt.date)} ${levelShort(pt.level)}`).join(', ')}`}>
         <div className="tm-sk-plot" style={{ aspectRatio: `${W} / ${H}` } as CSSProperties}>
           <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
             {CHART_LEVELS.map((l) => (
@@ -205,7 +208,7 @@ function TrendBody({ p, today }: { p: SkillsView['players'][number]; today: stri
             // Up to 5 dates under the chart (the first, the last, evenly between); every date is in the list below.
             i === pts.length - 1 || i % Math.ceil(pts.length / 5) === 0 ? (
               <span key={q.date} style={{ left: `${(q.x / W) * 100}%` } as CSSProperties}>
-                {dateShort(q.date)}
+                {date(q.date)}
               </span>
             ) : null,
           )}
@@ -214,7 +217,7 @@ function TrendBody({ p, today }: { p: SkillsView['players'][number]; today: stri
       <ul className="tm-sk-list">
         {tr.list.map((l) => (
           <li key={l.date} className="tm-sk-li" data-skills-entry={l.date}>
-            <span className="tm-sk-date">{dateLong(l.date)}</span>
+            <span className="tm-sk-date">{date(l.date)}</span>
             {l.change !== null && l.change !== 0 && <span className={`tm-sk-pill tm-sk-${toneOf(l.change)}`}>{changeText(l.change)}</span>}
             {l.change === 0 && <span className="tm-sk-pill tm-sk-same">same</span>}
             <span className="tm-sk-lvl">{levelShort(l.level)}</span>

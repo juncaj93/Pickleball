@@ -1037,7 +1037,7 @@ export function nameLabel(everyone: string[]): (name: string) => string {
 /**
  * Names on their own small line, in sign-up order, every one of them (never
  * "+2"), wrapping onto a second line when they don't fit. Yours is bold.
- * With `label` it's the waitlist or standby line: "Waitlist: Emery, Frankie".
+ * With `label` it's the waitlist line: "Waitlist: Emery, Frankie".
  * Nothing at all when the list is empty.
  */
 export function NamesLine({
@@ -1150,7 +1150,7 @@ export function PlayersLine({
   maxPlayers: number;
   /** Waiting players, in order. */
   waitlist: string[];
-  /** "Waitlist", or "Standby" while waiting on the court. */
+  /** "Waitlist". */
   waitLabel: string;
   /** The group's names, to tell two people with the same first name apart. */
   everyone: string[];

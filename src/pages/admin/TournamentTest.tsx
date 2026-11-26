@@ -60,6 +60,17 @@ const STAGES = [
     label: '94: mixed $18 and $20 tickets (Money + Prizes)',
     line: '5 locked in at $18, Quinn and Reese at $20, Alex free, Vic and Zoe still to pay ($20 now), 10 expected. Money: tickets $170 if all pay (5 × $18 + 4 × $20), paid now $130. Prizes: “Tickets $170 − courts …”, the suggestion from those real numbers.',
   },
+  // Zip 93 (🎾93.polish): the players' "scheduled" notice by day.
+  {
+    stage: 'zip93_day_before',
+    label: '93: scheduled notice, day before',
+    line: 'The Cold Open is tomorrow. View as Vic: the blue card at the top of Home says “The Cold Open is tomorrow.” with the same second line as before (earlier days still say “is scheduled for Tue Dec 1.”). If you closed it with its X on this phone before, it stays closed.',
+  },
+  {
+    stage: 'zip93_game_day',
+    label: '93: scheduled notice, game day',
+    line: 'The Cold Open is today. View as Vic: no “scheduled” or “tomorrow” card at all (from midnight Eastern on the day); the ticket card and everything else as before.',
+  },
   // Zip 92 (🎾92.dry run fixes): the 12-player switch, the Locked doubles extra round, the slow night's Time check.
   {
     stage: 'zip92_court_time',

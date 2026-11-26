@@ -459,6 +459,10 @@ const TEST_CREDIT = 'adjusted:Ticket stage credit';
 export async function tournamentTestStage(ctx: Ctx, body: Record<string, unknown>): Promise<unknown> {
   const group = await requireAdmin(ctx);
   if (!previewSiteFor(ctx)) throw new HttpError(404, 'not_found', 'Not found.');
+  // Zip 93: the players' "scheduled" notice the day before ("The Cold Open is tomorrow.") and on game day (no notice): Zip 87's Pay by day
+  // (the night tomorrow) and game day (the night today) stages, which already put the date there.
+  if (body.stage === 'zip93_day_before') return { ...((await tournamentTestStage(ctx, { ...body, stage: 'zip87_payday' })) as Record<string, unknown>), stage: 'zip93_day_before' };
+  if (body.stage === 'zip93_game_day') return { ...((await tournamentTestStage(ctx, { ...body, stage: 'zip87_gameday' })) as Record<string, unknown>), stage: 'zip93_game_day' };
   // Zip 92: the 12-player switch runs as style_odd on the preview's 10 names (see ZIP92_STAGES).
   if (body.stage === 'zip92_court_time') return { ...((await tournamentTestStage(ctx, { ...body, stage: 'zip87_payday' })) as Record<string, unknown>), stage: 'zip92_court_time' };
   if (body.stage === 'zip92_twelve') return { ...((await tournamentTestStage(ctx, { ...body, stage: 'style_odd' })) as Record<string, unknown>), stage: 'zip92_twelve' };

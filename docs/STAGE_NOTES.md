@@ -8826,6 +8826,35 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
   `index-BCw-MEQw.js`). Rollback: **fc5e5867-6c49-4182-81cf-32e84542706d**. Read-only live look: /, /admin, /api/status 200; dashboard 401;
   Home 390 light and dark: no errors, nothing wider, no writes.
 
+## 🎾93.polish (Thu Nov 26, 2026; LIVE 12:00 PM Eastern, deployment 86f85e98, rollback bd2e5dc4; --override-loud-hours with Alex OK, Thanksgiving game canceled)
+Branch `claude/new-session-3pvs4c`, from main `8ef2646`. Backup export-20261126165954, Time Travel bookmark 00002131-00000000-0000512f-7b0b3b6697d9a5c26dabe625fbf81fb7. Integrity 0 before and after (22 / 8 / 14 columns).
+
+### What changed (the code is the truth)
+1. COURT TAP AREAS (src/gameday.css, `.cm-pick` only): an invisible ::before on every square of the organizer's court picker, sized in the
+   tilted plane so it measures at least 44 x 44 px on screen. Before: 41.5 to 63 wide, 28 to 41 tall. After: smallest 54.5 x 45 (rows 13 to 16
+   about 45.5 tall, 9 to 12 45, 5 to 8 46, 1 to 4 52 to 54). Neighbors split the side and walkway gaps evenly; the 16 px row gaps lean to the
+   front (an even split leaves rows 9 to 12 at 42). The look is unchanged (pixel diff at most 1 colour step on 22 anti-aliased pixels). The
+   players' map and the X have no ::before.
+2. SCHEDULED NOTICE (server/tournament.ts formatAlertFor, shared/tournament.ts formatAlertWords): the day before the final date (group
+   timezone) the title is "<name> is tomorrow." with the same second line and the same key (closed stays closed); from midnight on the day
+   it is gone. Any tournament.
+3. EDIT AWARDS buttons (tournament-end.css `.tm-awards-weeks`): flex with wrap instead of a 4 column grid; each button at least its words wide.
+4. STANDINGS NAMES (standings-list.css, gameday-tour.css `.tc-gd-pname > b`, reveal.css `.tc-rv-name`): never break inside a word; one line
+   ending in "…" when too long.
+5. "ADJUSTED BY ORGANIZER" (credit-player.css, adjust-credit.css, credit-admin.css + credit-history.css): break-word, never anywhere.
+6. SKILLS DATES (shared/skills.ts skillsDates, SkillsHistory.tsx): "AUG"; two different dates in one month for a player: "AUG 3", "AUG 24".
+7. WAITLIST LEFTOVERS (Alex: "Only the surely-dead bits"): the court standby result, "The court opened. You're in.", the standby toast
+   condition in Sessions.tsx and the old standby words in comments. The real waitlist (behind Card cleanup) and the tournament standby stay.
+8. STAGES (THIS_ZIP): zip93_day_before, zip93_game_day (wrappers over zip87_payday / zip87_gameday).
+9. OLD TEST: e2e/money-visible.cjs reads the banner's message and its Undo pill separately (Chrome's innerText of the flex row sometimes ran
+   them together, "You dropped out.Undo", on main too).
+
+Review (fresh reviewer): no bugs; fixed its one edge, Skills dates group by month AND year (Aug 2025 and Aug 2026 each "AUG").
+
+### Checks
+tests/zip93-polish.test.ts (8), e2e/zip93.cjs (6: tap areas, notice by day, banner buttons, standings, adjusted line, Skills dates; 320 /
+375 / 420 / 440, 100 / 125 / 150%, light and dark). Full browser suite 90 of 90. Admin Home 4 trips / 63 statements, refresh 2 / 16, before
+and after (9 to 11 ms). No database change.
 ## 🎾94.early bird (Thu Nov 26, 2026; branch `claude/new-session-616ec9`, from main `8ef2646` (🎾92 round 3 live); NOT live: held for Alex's OK)
 
 ### What it is

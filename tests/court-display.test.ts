@@ -174,7 +174,7 @@ describe('(f) dropping out and joining again on a game with no court', () => {
   it('on a game that is not on any list the same words work, and a booked, full game keeps its waitlist words', async () => {
     const { ctx, noCourt, booked } = await scene();
     expect(joinedText({ result: 'confirmed' }, true)).toBe("You’re in");
-    expect(joinedText({ result: 'standby', position: 2 }, false)).toBe("You’re 2nd on standby");
+    // Zip 93: the court standby is gone (the server never answers 'standby'), so there are no standby words to say.
     expect(joinedText({ result: 'waitlisted', position: 1 }, false)).toBe("You’re 1st on the waitlist");
     // A really full game with no court booked has a real waitlist too: the banner says so, not "You're in".
     expect(joinedText({ result: 'waitlisted', position: 1 }, true)).toBe("You’re 1st on the waitlist");

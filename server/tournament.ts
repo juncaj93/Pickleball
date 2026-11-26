@@ -11,6 +11,7 @@ import { ADMIN_COOKIE } from './context';
 import { VIEW_ONLY_COOKIE_PREFIX, VIEW_ONLY_SESSION_PREFIX } from './viewOnly';
 import { audit, type GroupRow, organizerIdOf, organizerIdRead, playersRead, type ReadSpec } from './repo';
 import { localParts } from '../shared/time';
+import { addDays } from '../shared/venueAlert';
 import { boardRows, resultsShowing } from '../shared/results';
 import { revealHolding } from '../shared/reveal';
 import { formatPrice } from '../shared/money';
@@ -880,12 +881,15 @@ function formatAlertFor(t: TournamentRow, group: GroupRow, playerId: string, now
   // creating it (no source), changed by hand, or decided by the tie rule shows the date and the format only.
   const source: FormatSource = sourceOf(t.format_source) ?? 'admin';
   if (!t.final_date || (statusOf(t) !== 'tickets' && statusOf(t) !== 'date_picked')) return null;
-  if (t.final_date < todayKey(nowMs, group.timezone)) return null;
+  // Zip 93 (Alex): never on the night's own day (from midnight Eastern); the day before it says "is tomorrow.".
+  const today = todayKey(nowMs, group.timezone);
+  if (t.final_date <= today) return null;
+  const tomorrow = t.final_date === addDays(today, 1);
   // Zip 80: the votes of those who can make the date (the same count Finalize used; from the sign-ups the card already read, no new trip):
   // "Most players voted" only for a real majority of them.
   const date = t.final_date;
   const counts = tallyVotes(signups.filter((r) => r.status === 'in' && r.is_active === 1 && storedDays(r.dates).includes(date)).map((r) => r.format_vote));
-  const words = formatAlertWords(t.name, t.final_date, formatOf(t), source, counts);
+  const words = formatAlertWords(t.name, t.final_date, formatOf(t), source, counts, tomorrow);
   // Zip 64: the style is not final until tickets close: the alert says the vote's result only when it was a real majority, else "TBD".
   // (A real majority's "Most players voted Americano." stays: it is a fact about the vote, not the final style.)
   if (styleTbd && !words.sub.startsWith('Most players')) words.sub = 'Tournament style TBD';
