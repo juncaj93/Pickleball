@@ -8844,7 +8844,7 @@ bird). Nothing existing changed. Old code never reads them: a code rollback need
 - The private link (`/admin?earlybird=on`) only shows the gear rows on that organizer phone; prices follow the Settings row alone.
 
 ### Tests
-- tests/zip94-early-bird.test.ts (17): the rule and words; the gear rules (lower, before Pay by, fixed once locked in, Pay by never before it);
+- tests/zip94-early-bird.test.ts (19): the rule and words; the gear rules (lower, before Pay by, fixed once locked in, Pay by never before it);
   money to the cent: early $14 / late $16 lock ins, credit covering part, the 30 minute grace and the look-again after it, Mark paid, drop out
   and refund, standby taking a freed early spot, the kept late drop, Money with a mix, End with mixed tickets (prize credit once); both
   integrity files 0 after each. The Cold Open proof: a tournament with no early price gives the same organizer answer (but the gear row), the
@@ -8861,3 +8861,13 @@ reads it.
 https://claude-new-session-616ec9.pickleball-club-9h0.pages.dev (PIN 739514; the fake `pickleball-preview` database, migration 0030 applied,
 no re-seed). Stages: "94: early price, 3 days left", "94: early price, last day", "94: early price over", "94: mixed $18 and $20 tickets
 (Money + Prizes)". Picking a stage turns Early bird pricing on (the preview only).
+
+### Review (a fresh reviewer, no part in the build)
+Nothing charges more than shown, breaks a CHECK, counts twice or refunds wrong. Fixed: the 30 minute grace also reached Lock in and Mark
+paid (now an I paid only); an early end set before the date could land after the Pay by a date pick sets (now it must end before the
+earliest such Pay by, and the date pick and a ticket price edit refuse to leave it invalid); Finalize's money line used $20 before the
+deadline; a per-isolate cache of the switch row (removed). Left: edge cases after an organizer change in Settings (a $0 ticket).
+
+### Before shipping
+Unit 246 files, 4,547 passed, 12 skipped, 0 failed. e2e/zip94 7 of 7, zip92 B, zip86 8 of 8. zip87 A fails on main too (its selector meets
+🎾92's court time line; a test file, not this zip).
