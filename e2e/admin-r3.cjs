@@ -253,7 +253,7 @@ async function main() {
     }
   });
 
-  await check('4 Players: a row with BOTH pills and big numbers stays the same height (320 and 360) and the row name reads the numbers', async () => {
+  await check('4 Players: a row with BOTH pills and big numbers stays the same height, or one line taller when its stats wrap between words (320 and 360), and the row name reads the numbers', async () => {
     for (const w of [320, 360]) {
       const { ctx, page } = await openAdmin({ width: w });
       await tab(page, 'Players');
@@ -265,9 +265,27 @@ async function main() {
         held.className = 'r3-pill r3-held';
         held.textContent = '$28 held';
         sub.appendChild(held);
-        return [...document.querySelectorAll('[data-r3-players] > li:not(.r3-add)')].map((r) => Math.round(r.getBoundingClientRect().height));
+        const stats = sub.querySelector('[data-r3-stats]');
+        // Zip 92 (Alex: wrap or shrink, never cut): the stats may wrap, but only between words.
+        const node = stats.firstChild;
+        let at = 0;
+        const broken = [];
+        for (const word of node.textContent.split(/(\s+)/)) {
+          if (word.trim().length > 1) {
+            const r = document.createRange();
+            r.setStart(node, at);
+            r.setEnd(node, at + word.length);
+            const rects = [...r.getClientRects()].filter((x) => x.width > 0);
+            if (rects.length > 1 && Math.abs(rects[0].top - rects[rects.length - 1].top) > 2) broken.push(word);
+          }
+          at += word.length;
+        }
+        return { rows: [...document.querySelectorAll('[data-r3-players] > li:not(.r3-add)')].map((r) => Math.round(r.getBoundingClientRect().height)), alec: Math.round(li.getBoundingClientRect().height), broken };
       });
-      assert(new Set(hs).size === 1, `both pills at ${w}: row heights ${hs}`);
+      // Zip 92: every other row the same height; the row with both pills and big numbers may take one more line when its stats wrap (at 320).
+      const others = hs.rows.filter((h, i) => i !== hs.rows.indexOf(hs.alec));
+      assert(new Set(others).size === 1 && hs.alec >= others[0] && hs.alec <= others[0] + 14, `both pills at ${w}: row heights ${hs.rows}`);
+      assert(!hs.broken.length, `both pills at ${w}: stats broken mid-word: ${hs.broken}`);
       await noOverflow(page, `both pills ${w}`);
       await ctx.close();
     }
