@@ -7,6 +7,7 @@ import * as v from './validate';
 import { hiddenTask, lockDate, setTournamentsForAll, type SignupRow, todayKey, type TournamentRow } from './tournament';
 import { adminDayView, gamesFor, type GameRow, loadDay, playerDayView, spinTie, type TeamRow, writeBestOf3, writeSemis, writeTeamsAndGames } from './tournamentDay';
 import { americanoNight, pairSlot } from '../shared/americanoSchedule';
+import { americanoPlan } from '../shared/tournamentPlan';
 import { previewSiteFor } from './secondChance';
 import { type GroupRow, organizerIdOf } from './repo';
 import { dayKey, dayParts, FORMATS, monthsBetween, monthStartPlus, NIGHT_START_MINUTES, STORED_PLAN } from '../shared/tournament';
@@ -1059,8 +1060,10 @@ async function americanoStage(ctx: Ctx, group: Awaited<ReturnType<typeof require
   const nowMin = nowLocal.hour * 60 + nowLocal.minute;
   const later = stage === 'am_before' || stage === 'am_switched';
   const date = later ? dayAfter(ctx.nowMs + 86_400_000, tz) : todayKey(ctx.nowMs, tz);
-  // Rounds played before now: 0 (Round 1), 2 (Round 3), 3 (Round 4), 5 (Round 6); each round 23 minutes, plus a few minutes into the next one.
-  const done = stage === 'am_round3' ? 2 : stage === 'am_break' ? 3 : stage === 'am_standings' ? 5 : stage === 'am_done' ? 6 : 0;
+  // Rounds played before now: 0 (Round 1), 2 (Round 3), 3 (Round 4), all but the last (am_standings), all (am_done); each round 23 minutes, plus a
+  // few minutes into the next one. Zip 97: the plan's own round count (7 at 17 minutes a round; it was 6), so "every round in" stays true.
+  const planRounds = americanoPlan(AM_NAMES.filter((n) => idOf.has(n)).length, 2, 150).rounds;
+  const done = stage === 'am_round3' ? 2 : stage === 'am_break' ? 3 : stage === 'am_standings' ? planRounds - 1 : stage === 'am_done' ? planRounds : 0;
   const ago = later ? 0 : stage === 'zip71_am' ? 20 : done * 23 + (done ? 6 : 1);
   const start = later ? 19 * 60 + 30 : Math.max(0, Math.floor((nowMin - ago) / 5) * 5);
   const switched = stage === 'am_switched';
