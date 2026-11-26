@@ -40,6 +40,19 @@ export function yearBefore(today: string): string {
 export const dateLong = (d: string): string => `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(2, 4)}`;
 export const dateShort = (d: string): string => `${d.slice(5, 7)}/${d.slice(8, 10)}`;
 
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+/** "AUG" for '2026-08-03'. */
+export const monthCaps = (d: string): string => MONTHS[Number(d.slice(5, 7)) - 1] ?? d;
+/**
+ * Zip 93 (Alex): the Skills dates show the month only, in caps ("AUG"). When two of `dates` (one player's entries, or the table's columns)
+ * share a month, those show the day too ("AUG 3", "AUG 24"); the others stay "AUG". Returns the label for one of those dates.
+ */
+export function skillsDates(dates: readonly string[]): (d: string) => string {
+  const count = new Map<string, number>();
+  for (const d of new Set(dates)) count.set(monthCaps(d), (count.get(monthCaps(d)) ?? 0) + 1);
+  return (d: string) => ((count.get(monthCaps(d)) ?? 0) > 1 ? `${monthCaps(d)} ${Number(d.slice(8, 10))}` : monthCaps(d));
+}
+
 type Player = SkillsView['players'][number];
 const recent = (p: Player, today: string) => p.levels.filter((l) => l.date >= yearBefore(today) && l.date <= today);
 

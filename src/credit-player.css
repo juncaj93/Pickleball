@@ -259,7 +259,8 @@
   background: var(--info-bg);
   color: var(--info-fg);
   font-size: 0.9rem;
-  overflow-wrap: anywhere;
+  /* Zip 93: "Credit adjusted by organizer: +$5" wraps between words only (was anywhere). */
+  overflow-wrap: break-word;
 }
 .credit-adjusted > span,
 .pay-adjusted > span {

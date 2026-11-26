@@ -18,7 +18,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip92_court_time', 'zip92_twelve', 'zip92_ld_round', 'zip92_slow'];
+const THIS_ZIP: readonly string[] = ['zip93_day_before', 'zip93_game_day'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -39,6 +39,17 @@ const EARLY_LOOK: NightModel = {
 };
 
 const STAGES = [
+  // Zip 93 (🎾93.polish): the players' "scheduled" notice by day.
+  {
+    stage: 'zip93_day_before',
+    label: '93: scheduled notice, day before',
+    line: 'The Cold Open is tomorrow. View as Vic: the blue card at the top of Home says “The Cold Open is tomorrow.” with the same second line as before (earlier days still say “is scheduled for Tue Dec 1.”). If you closed it with its X on this phone before, it stays closed.',
+  },
+  {
+    stage: 'zip93_game_day',
+    label: '93: scheduled notice, game day',
+    line: 'The Cold Open is today. View as Vic: no “scheduled” or “tomorrow” card at all (from midnight Eastern on the day); the ticket card and everything else as before.',
+  },
   // Zip 92 (🎾92.dry run fixes): the 12-player switch, the Locked doubles extra round, the slow night's Time check.
   {
     stage: 'zip92_court_time',

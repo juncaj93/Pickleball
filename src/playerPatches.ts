@@ -16,7 +16,7 @@ export function iPaidPatch(sessionIds: string[]): (g: GroupView) => GroupView {
   });
 }
 
-/** Leave the waitlist (or standby): off the list at once, the seat reads "withdrawn" the way the server sends it. Nothing is paid on a
+/** Leave the waitlist: off the list at once, the seat reads "withdrawn" the way the server sends it. Nothing is paid on a
  * waiting seat, so no money line moves. */
 export function leaveWaitlistPatch(sessionId: string, name: string): (g: GroupView) => GroupView {
   return (g) => ({

@@ -371,6 +371,50 @@ button.cm-cl {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+/* Zip 93 (Alex, pictures 1 and 2): the organizer's picker gives every court an invisible tap area of at least 44 x 44 px on screen, measured
+   after the 3D tilt; the look does not change. The area lives in the tilted plane, so the numbers below are plane pixels (the back row shows
+   at about 0.57 of its height, the front row about 0.8). Side by side courts split their 8 px gap evenly (4 + 4); the walkway is split
+   evenly too (22 + 22). The rows' 16 px gaps cannot be split evenly: rows 9 to 12 would get only 42 px. So the areas touch without
+   overlapping and lean toward the front, where the rows show bigger: back row (13 to 16) 30 up / 3 down, rows 9 to 12 13 / 10, rows
+   5 to 8 6 / 10, front row (1 to 4) 6 / 10. A tap on any square's face still picks that square. e2e/zip93.cjs measures it. */
+.cm-pick button.cm-cl::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: -4px;
+  right: -4px;
+}
+.cm-pick .cm-pr:first-child button.cm-cl:first-child::before {
+  left: -12px;
+}
+.cm-pick .cm-pr:first-child button.cm-cl:last-child::before,
+.cm-pick .cm-pr:last-child button.cm-cl:first-child::before {
+  right: -22px;
+}
+.cm-pick .cm-pr:last-child button.cm-cl:first-child::before {
+  right: -4px;
+  left: -22px;
+}
+.cm-pick .cm-pr:last-child button.cm-cl:last-child::before {
+  right: -12px;
+}
+.cm-pick .cm-rw:first-child button.cm-cl::before {
+  top: -30px;
+  bottom: -3px;
+}
+.cm-pick .cm-rw:nth-child(2) button.cm-cl::before {
+  top: -13px;
+  bottom: -10px;
+}
+.cm-pick .cm-rw:nth-child(3) button.cm-cl::before {
+  top: -6px;
+  bottom: -10px;
+}
+.cm-pick .cm-rw:last-child button.cm-cl::before {
+  top: -6px;
+  bottom: -10px;
+}
 button.cm-cl:focus-visible {
   outline: 2.5px solid var(--primary);
   outline-offset: 2px;

@@ -300,7 +300,8 @@ async function check(name, fn) {
           assert(top.join(',') === 'Sage,Quinn,Wren', `Most improved: ${top}`);
           assert(/\+0\.7/.test(flat(await a.page.locator('[data-skills-top="Sage"]').innerText())), 'Sage +0.7');
           const heads = await a.page.locator('.tm-sk-table thead th').allInnerTexts();
-          assert(heads.length === 6 && /^\d\d\/\d\d\/\d\d$/.test(flat(heads[1])), `heads ${heads}`);
+          // Zip 93: the dates read as months in caps ("AUG", or "AUG 3" for two in one month).
+          assert(heads.length === 6 && /^[A-Z]{3}( \d{1,2})?$/.test(flat(heads[1])), `heads ${heads}`);
           const zoe = await a.page.locator('[data-skills-row="Zoe"] .tm-sk-cell').evaluateAll((els) => els.map((e) => e.getAttribute('data-tone')));
           assert(zoe[0] === 'down', `Zoe ${zoe}`);
           assert((await a.page.locator('[data-skills-row="Christopher Vanderberg"] .tm-sk-dash').count()) === 1, 'Christopher’s dash');

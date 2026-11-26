@@ -45,7 +45,8 @@
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
   font-size: 0.93rem;
-  overflow-wrap: anywhere;
+  /* Zip 93: break-word, not anywhere: "adjusted by organizer" never splits inside a word (only a word longer than the line would). */
+  overflow-wrap: break-word;
   font-variant-numeric: tabular-nums;
 }
 .credit-history > li:last-child {

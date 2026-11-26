@@ -849,7 +849,11 @@
 }
 .tc-gd-pname > b {
   min-width: 0;
-  overflow-wrap: break-word;
+  /* Zip 93 (Alex): never inside a word: wraps at spaces, a single word too wide ends in "…" (was break-word). */
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 700;
 }
 .tc-gd-pname > .tc-gd-tag {

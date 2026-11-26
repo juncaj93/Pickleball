@@ -45,7 +45,15 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow-wrap: anywhere;
+}
+/* Zip 93 (Alex): a name never breaks in the middle of a word. It wraps at its spaces; a single word wider than the column ends in "…". */
+.sl-name > b,
+.sl-players {
+  min-width: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sl-name b {
   font-weight: 750;
