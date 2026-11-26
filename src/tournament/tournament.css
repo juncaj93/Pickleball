@@ -1969,3 +1969,34 @@ dialog.sheet.tc-tw-overlay {
 .tm-level-prev-off .tm-level-text {
   color: var(--ink-2);
 }
+
+/* Zip 95 (pictures 3 and 4): the level the organizer recommended after the player's last tournament. A small green caps pill "RECOMMENDED",
+   then "Based on recent performance" in small green words, over the level's words. Never picked by itself: the previous level stays picked.
+   Picked, the row is the usual green row and the pill keeps a slightly deeper tint so it still reads as a pill. */
+.tm-level-recwrap {
+  display: block;
+}
+.tm-level-rectag {
+  display: inline-block;
+  margin-bottom: 2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  font-size: max(11px, 0.66rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.tm-level-on .tm-level-rectag {
+  background: color-mix(in srgb, var(--ok-fg) 16%, transparent);
+}
+.tm-level-recwhy {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--ok-fg);
+  font-size: max(11px, 0.7rem);
+  font-weight: 700;
+  line-height: 1.3;
+}

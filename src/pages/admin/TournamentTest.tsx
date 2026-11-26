@@ -18,7 +18,7 @@ const noop = () => undefined;
  * Zip 83 (Alex, Nov 24; SITE_RULES "Tournament test list"): the page shows only the stages of the zip being tested. Every older stage, and the
  * older look tools (Ball look, Pools look), sit behind one small "All tests" link at the bottom. The next zip changes THIS_ZIP to its own.
  */
-const THIS_ZIP: readonly string[] = ['zip92_court_time', 'zip92_twelve', 'zip92_ld_round', 'zip92_slow'];
+const THIS_ZIP: readonly string[] = ['zip95_check', 'zip95_signup'];
 
 /**
  * Zip 88: picture 2's moment as a LOOK (that page only): Court 1 started a Round 4 game early while Court 2 still plays Round 3 at Play to 9.
@@ -39,6 +39,17 @@ const EARLY_LOOK: NightModel = {
 };
 
 const STAGES = [
+  // Zip 95 (🎾95.level check): the Level check card after a tournament, and the next sign-up's RECOMMENDED level.
+  {
+    stage: 'zip95_check',
+    label: '95: level check after a tournament',
+    line: 'The Cold Open (Locked doubles) ended last night. Top of Home: “Level check · The Cold Open”, Vic “3.0 · won all 5 games” and Wren “3.2 · won 4 of 5, champion”. Rowan and Zoe went 3-2: not listed. Parker (3.6+) and you are never listed. Tap Yes on Vic: 3.2 is picked, then Save. Tap No on Wren. The card is gone.',
+  },
+  {
+    stage: 'zip95_signup',
+    label: '95: next sign-up with a recommendation',
+    line: 'You said Yes, 3.2 for Vic (and No for Wren) after The Cold Open; Winter Classic is open. View as Vic, Sign up: 3.0 stays picked (Previous rating), 3.2 says Recommended. Tap 3.2, then Next: the level up plays. View as Wren: no Recommended tag.',
+  },
   // Zip 92 (🎾92.dry run fixes): the 12-player switch, the Locked doubles extra round, the slow night's Time check.
   {
     stage: 'zip92_court_time',

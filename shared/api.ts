@@ -706,6 +706,8 @@ export interface AdminDashboard {
   /** Zip 85: tournament tickets owed after a Didn't pay on the night, and an I paid waiting on one (Money's Tournament tickets card). */
   ticketsOwed?: import('./tournament').AdminOwedTicket[];
   champions?: true;
+  /** Zip 95 (🎾95.level check): after a tournament ends, the players who played above their level, still to answer (the card at the top of Home). */
+  levelCheck?: import('./levelCheck').AdminLevelCheck;
   /** Zip 55: the Settings > Feature switches row is on (for everyone). Missing: off. */
   tournamentsForAll?: true;
   /** Zip 55, PREVIEW ONLY: this is a preview where the Tournament test page works (PREVIEW_CALM is set). Never on live. */

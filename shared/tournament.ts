@@ -680,6 +680,12 @@ export interface PlayerTournamentView {
    * to them, and never with `lockedLevel` (that one skips the level step).
    */
   previousLevel?: number;
+  /**
+   * Zip 95 (pictures 3 and 4): the level the organizer saved for this player on the Level check card after their last tournament, above
+   * `previousLevel`. Its row shows a small green "RECOMMENDED" tag with "Based on recent performance"; `previousLevel` stays picked. Only for
+   * the NEXT tournament they sign up for (gone once they have signed up for any tournament since).
+   */
+  recommendedLevel?: number;
 }
 
 /** Zip 79: one row of the final board (Americano: a player; Locked doubles: a team, with its two players). */

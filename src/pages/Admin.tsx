@@ -45,6 +45,7 @@ import { preloadTournamentHome } from '../TournamentSlot';
 /** Zip 55, PREVIEW BUILDS ONLY: the Tournament test row on a calm preview's Home. Null in every live build (vite.config.ts `__PREVIEW_BUILD__`). */
 const TournamentTestRow = __PREVIEW_BUILD__ ? lazy(() => import('./admin/TournamentTest')) : null;
 import { DoNowCard, useServerNow } from './admin/DoNowCard';
+import { LevelCheckCard } from './admin/LevelCheck';
 import { OwedVenmoCards } from './admin/VenmoRequest';
 import { ExtensionOwedCard } from './admin/ExtendedTime';
 import { RequestButton, SecondChanceHome, UnpaidTextSheet } from './admin/SecondChance';
@@ -473,6 +474,8 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   if (ctx.d.previewCalm === true) {
     return (
       <>
+        {/* Zip 95: after a tournament ends, who played above their level (this zip's card), at the very top. */}
+        <LevelCheckCard ctx={ctx} />
         {/* Zip 81: a game or the tournament outside its date's venue hours (this zip's card). */}
         <VenueConflictCards ctx={ctx} />
         {/* Zip 55, preview builds only: the Tournament test page, one tap from the preview link. */}
@@ -493,6 +496,8 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   }
   return (
     <>
+      {/* Zip 95 (🎾95.level check): after a tournament ends, who played above their level (Yes / No), at the very top (only while Tournaments is on). */}
+      <LevelCheckCard ctx={ctx} />
       {/* Zip 81: a game or the finalized tournament outside its date's venue hours (only while Booking hours is on), at the very top. */}
       <VenueConflictCards ctx={ctx} />
       {/* Zip 55 "Tournaments" (only while on, and a tournament open): the level list and picking the date, two taps from Home. */}
