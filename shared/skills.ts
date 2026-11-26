@@ -48,9 +48,10 @@ export const monthCaps = (d: string): string => MONTHS[Number(d.slice(5, 7)) - 1
  * share a month, those show the day too ("AUG 3", "AUG 24"); the others stay "AUG". Returns the label for one of those dates.
  */
 export function skillsDates(dates: readonly string[]): (d: string) => string {
+  // The same month of the same year (Aug 2025 and Aug 2026 are two months, each "AUG" alone).
   const count = new Map<string, number>();
-  for (const d of new Set(dates)) count.set(monthCaps(d), (count.get(monthCaps(d)) ?? 0) + 1);
-  return (d: string) => ((count.get(monthCaps(d)) ?? 0) > 1 ? `${monthCaps(d)} ${Number(d.slice(8, 10))}` : monthCaps(d));
+  for (const d of new Set(dates)) count.set(d.slice(0, 7), (count.get(d.slice(0, 7)) ?? 0) + 1);
+  return (d: string) => ((count.get(d.slice(0, 7)) ?? 0) > 1 ? `${monthCaps(d)} ${Number(d.slice(8, 10))}` : monthCaps(d));
 }
 
 type Player = SkillsView['players'][number];

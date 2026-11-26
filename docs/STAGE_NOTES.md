@@ -8848,6 +8848,8 @@ a clean checkout of the pushed branch. All four stages tried on the preview; lef
 9. OLD TEST: e2e/money-visible.cjs reads the banner's message and its Undo pill separately (Chrome's innerText of the flex row sometimes ran
    them together, "You dropped out.Undo", on main too).
 
+Review (fresh reviewer): no bugs; fixed its one edge, Skills dates group by month AND year (Aug 2025 and Aug 2026 each "AUG").
+
 ### Checks
 tests/zip93-polish.test.ts (8), e2e/zip93.cjs (6: tap areas, notice by day, banner buttons, standings, adjusted line, Skills dates; 320 /
 375 / 420 / 440, 100 / 125 / 150%, light and dark). Full browser suite 90 of 90. Admin Home 4 trips / 63 statements, refresh 2 / 16, before

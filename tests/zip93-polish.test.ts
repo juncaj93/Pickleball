@@ -59,6 +59,8 @@ describe('Skills dates', () => {
     expect(skillsDates(['2026-08-03'])('2026-08-03')).toBe('AUG');
     // The same date twice is one entry, not two.
     expect(skillsDates(['2026-08-03', '2026-08-03'])('2026-08-03')).toBe('AUG');
+    // August of two different years: two months, the day stays off.
+    expect(['2025-08-03', '2026-08-03'].map(skillsDates(['2025-08-03', '2026-08-03']))).toEqual(['AUG', 'AUG']);
   });
 });
 
