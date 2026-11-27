@@ -8986,7 +8986,7 @@ https://claude-new-session-2v5jzf.pickleball-club-9h0.pages.dev (the fake `pickl
 - Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark: new bundle, no errors, nothing
   wider, no writes. Organizer screens not opened (no read-only PIN in this session).
 
-## 🎾97.real pace (Thu Nov 26, 2026; branch `claude/new-session-wfeker`, from main `cdcc178` (🎾94 live); NOT live: held for Alex's OK, deploys after 🎾95)
+## 🎾97.real pace (Thu Nov 26, 2026; branch `claude/new-session-wfeker`, from main `cdcc178` (🎾94 live); LIVE Thu Nov 26, deployment `160b692b`)
 
 ### What changed (the code is the truth; SITE_RULES "Real pace (Zip 97)")
 1. THE PACE (shared/tournamentPlan.ts): ROUND_MINUTES { 11: 17, 9: 14, 7: 11 } for regular games; PLAYOFF_MINUTES 20 for semifinals, the Final,
@@ -9041,3 +9041,22 @@ re-seed, no migration). Built from a clean checkout of the pushed branch after m
   "OF 7", 14 games); after that the failures left are exactly main's: zip88 I (the countdown, date dependent), zip89 B (the No on "Add a round?
   Are you sure?" does not register in that script), zip61 G before the night (the All rounds sheet does not open), zip64 (28 vs main's 30, none new),
   zip70 (the same 42 as main). Not touched here.
+
+### The pace floor (Alex, Thu Nov 26 evening: "12 if nothing new goes past 10 PM, else 13, else keep 14")
+- Floor 12: the full dry run (80 nights) stays clean (latest 9:58 PM, money 0); fast nights with offers taken end 12 to 18 minutes fuller. But
+  tests/zip89-pacing-sim.test.ts's fast-then-slow nights: LD 10 min x3 then 22 ends 10:04 PM and AM 10 min x3 then 22 ends 10:06 PM. Not allowed.
+- Floor 13: LD back to 9:49 PM, AM 10 min x3 then 22 still 10:06 PM. Not allowed.
+- KEPT 14 (no code change): every simulated night by 10 PM except the one KNOWN extreme night (AM 9 min x4 then 24: 10:04 PM, as before).
+- Fast nights (12 to 13 minute games), minutes left before 10 PM, 🎾92 / now, offers taken (declined): 7 AM 1 court 37 / 39 (69 / 54),
+  8 LD 55 / 55 (66 / 66), 9 AM 38 / 38 (65 / 52), 10 LD 52 / 52 (64 / 64).
+
+### Live (Thu Nov 26, 2026, about 9:09 PM Eastern; Alex's go: ship tonight, no game (Thanksgiving), --override-loud-hours OKed until 11 PM)
+- Restore point: export `export-20261127020801` saved in `pickleball-backups` (checked against the file); Time Travel bookmark
+  `000021a3-00000000-00005130-a9f14a2243c1f2d1b9e62a3922a0ea42`.
+- Integrity before and after: 22, 8 and 14 columns, every problem column 0. No migration (none pending).
+- The local `main` here was a stale 🎾81-era copy from the clone (kept locally as `old-local-main-81`, not pushed); main was set to GitHub's
+  `301a9ef` and fast-forwarded to `9d33b4c`. `npm run deploy -- --override-loud-hours`: deployment **160b692b-a7fa-427f-8a46-7bfada8c0eb4**
+  (bundle `index-COt2o-tC.js`). Rollback: **163f45b2-2df4-4876-8016-a623756ee1f3** (🎾95). Nothing to undo in the data.
+- The Cold Open before and after (settings, 7 tickets, $90 paid, 10 sign-ups, 0 games, every row's fingerprint): identical.
+- Read-only live look (https://pickleball-club-9h0.pages.dev): /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and
+  dark: the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no read-only PIN in this session).
