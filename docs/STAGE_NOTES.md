@@ -9078,3 +9078,38 @@ re-seed, no migration). Built from a clean checkout of the pushed branch after m
 - The Cold Open before and after (fingerprint a81b37c94987f307: 7 tickets, $90 paid, 0 credit, 10 sign-ups, 0 games): identical.
 - Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home light and dark: the new bundle, no errors, nothing wider,
   no writes.
+
+## 🎾99: the small tournament row hides when it would be first (Fri Nov 27, 2026; Alex's pick over moving the snow)
+
+### What shipped
+- Player Home only (src/pages/PlayerHome.tsx `withTourRow`, `bigTourCard`): when the slim tournament row would be the FIRST card in the list and
+  the big tournament card shows above it (not ended, not its night, not its reveal), the row is left out. Week headings follow the cards listed,
+  so a heading left with no card goes too (My games with nothing that week: no empty NEXT WEEK). Any game before the tournament: the row stays
+  exactly as before. The Christmas snow cap stays on the first game card (the first try that moved it to the row was undone, never shipped).
+  Admin screens unchanged (the organizer's row is its own code in src/pages/Admin.tsx). No new words, no switch, no migration.
+- Preview's Tournament test page THIS_ZIP: zip86_next (row hidden) and zip86_signup (row kept).
+- e2e/zip99.cjs (in the full suite): row would be first, My games with nothing that week, a game before it, and 320/375/390/420/440 x light/dark
+  x 100/125/150% x skin off/on.
+
+### Tests
+- Unit: 249 files passed, 2 skipped; 4,579 passed, 13 skipped, 0 failed. tsc clean.
+- Browser, full suite (91 scripts): 89 green; run (48) and held (1) failed on the busy first run and were green alone. admin-v2 (Money Totals,
+  1 check) and admin-r3 (0/15) fail the same way on unchanged main 7dc1286 (today's date), not this change. zip99 4/4, zip86 8/8, zip38 28/28.
+- Fresh reviewer: no bugs. Its notes: the two preview stage lines updated; one redundant check merged.
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 64 statements, the 5 second check 2 / 16 (all_locked, mid); no server code changed.
+
+### Preview
+https://claude-new-session-9w2opm.pickleball-club-9h0.pages.dev (fake database, left on zip86_next: Parker sees the big card, then NEXT WEEK over
+the Dec 1 game, no row).
+
+### Live (Fri Nov 27, 2026, about 12:12 PM Eastern; quiet hours, no override)
+- Restore point: export `export-20261127170950` in `pickleball-backups` (checked); Time Travel bookmark
+  `0000225f-00000000-00005130-11f4687d2770749895f377480dd9b1fd`. Integrity before and after: 22, 8, 14 columns, all 0. No migration.
+- Deployment **af418447-1fae-4bc1-91f9-0f2b63d7e852** (commit 5ac082a, bundle `index-rV_QBnX3.js`). Rollback: **3d444526-c46f-45c4-a059-e78c0a1371ed**
+  (🎾97). Nothing to undo in the data.
+- The Cold Open before and after (3 rows named like it, 7 tickets, $90 paid, $0 credit, 10 sign-ups, 0 games; fingerprint 74cff669d7096e71): identical.
+- Read-only live look (https://pickleball-club-9h0.pages.dev; the custom domain is not reachable from this machine): /, /admin, /api/status 200;
+  dashboard 401 without a PIN; Home 390 light and dark: the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no
+  read-only PIN in this session).
