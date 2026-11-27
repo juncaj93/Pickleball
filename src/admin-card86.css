@@ -151,20 +151,50 @@
   text-underline-offset: 3px;
 }
 
-/* Bottom row: the paid pill, the court button, directions: all 44 px. Under the names on a wide card (picture 10, 420 px); across the whole card
-   when the card is narrower, so nothing is cut; it wraps only when even that is too narrow. */
+/* Bottom row: the paid pill, the court button (or Book), directions: all 44 px. Zip 100 (Alex's iPhone Air, "Court 16"): three steps, and the
+   browser picks the first that fits, from the buttons' real widths (no width guessed here):
+   1. one line under the names (the 66 px spacer lines it up with them);
+   2. too wide for that: the whole row drops under the spacer and spans the card (as it always did under 340 px), still one line;
+   3. too wide even then (320 px, big text): the paid pill takes its own line and the court + directions pair sits together under it.
+   The spacer is the row's own first item: when the buttons do not fit beside it, they move to the next line (full width) and it stays
+   alone on a line 0 px tall. */
 .r86-foot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 12px 0 0 66px;
+  margin: 12px 0 0 0;
   min-width: 0;
 }
+.r86-foot::before {
+  content: '';
+  flex: none;
+  width: 66px;
+  height: 0;
+}
 @container scard (max-width: 340px) {
-  .r86-foot {
-    margin-left: 0;
+  .r86-foot::before {
+    display: none;
   }
+}
+/* Very big text: the names already sit under the tile, across the card (src/admin-r2.css, the same pbwide rule), so the row lines up with them. */
+@container pbwide (max-width: 19rem) {
+  .r86-foot::before {
+    display: none;
+  }
+}
+.r86-foot-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 6px;
+}
+.r86-foot-end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .r86-paid,
@@ -185,7 +215,7 @@
   flex: 1 1 auto;
   min-width: 0;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--ink);
@@ -213,7 +243,7 @@
 }
 .r86-court {
   flex: none;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 0;
   background: var(--info-bg);
   color: var(--info-fg);
@@ -225,7 +255,7 @@
 }
 .r86-dir {
   flex: none;
-  width: 48px;
+  width: 44px;
   background: var(--info-bg);
   color: var(--info-fg);
   text-decoration: none;
@@ -264,9 +294,6 @@
 
 /* 320 px: a little tighter so the three still share one line. */
 @container scard (max-width: 280px) {
-  .r86-foot {
-    gap: 6px;
-  }
   .r86-paid,
   .r86-court {
     padding: 0 10px;

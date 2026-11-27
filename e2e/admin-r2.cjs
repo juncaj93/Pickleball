@@ -246,7 +246,7 @@ async function main() {
     assert((await card.locator('.scard-time').innerText()).length > 0, 'the time is under the tile');
     // Zip 86: the 3 equal footer cells with thin dividers (.r2-cell) were removed: the footer is the paid pill, the court button (or Book)
     // and directions, each 44 px to tap, on one line.
-    const foot = await card.locator('.r86-foot > *').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height > 0).map((e) => [Math.round(e.getBoundingClientRect().height), Math.round(e.getBoundingClientRect().top)]));
+    const foot = await card.locator('.r86-paid, .r86-court, .r86-book, .r86-dir').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height > 0).map((e) => [Math.round(e.getBoundingClientRect().height), Math.round(e.getBoundingClientRect().top)]));
     assert(foot.length >= 2 && foot.every(([h]) => h >= 44) && new Set(foot.map(([, t]) => t)).size === 1, `footer ${JSON.stringify(foot)}`);
     assert((await card.locator('.r2-cell, .r2-courtbtn, .r2-cancel').count()) === 0, 'the old 3-cell footer is gone');
     await shot(page, 'home-390-light', true);

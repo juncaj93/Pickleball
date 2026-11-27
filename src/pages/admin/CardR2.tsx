@@ -192,6 +192,9 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
         </div>
         {!canceled && (
           <div className="r86-foot" data-r2-foot>
+            {/* Zip 100: the paid pill, then the court (or Book) and directions as one pair. The row sits under the names when it fits, spans
+                the card when it does not, and only then puts the paid pill on its own line with the pair together under it (src/admin-card86.css). */}
+            <div className="r86-foot-row">
             <button
               type="button"
               className={`r86-paid${paidFlash ? ' m-flash' : ''}`}
@@ -214,17 +217,22 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
                 <RollText text={`${s.paidCount} of ${inCount} paid`} />
               </span>
             </button>
-            {needsBook ? (
-              <span className="r2-book r86-book" data-court-need>
-                <span className="sr-only">Court still needs to be booked. </span>
-                <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-                  Book
-                </CourtReserveLink>
+            {(needsBook || todayOrComing) && (
+              <span className="r86-foot-end">
+                {needsBook ? (
+                  <span className="r2-book r86-book" data-court-need>
+                    <span className="sr-only">Court still needs to be booked. </span>
+                    <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+                      Book
+                    </CourtReserveLink>
+                  </span>
+                ) : (
+                  todayOrComing && (ctx.d.gameDayCard === true || s.courtNum !== undefined) && <CourtButton ctx={ctx} s={s} dayLabel={formatShortDate(s.startsAt, tz)} />
+                )}
+                {todayOrComing && <DirectionsButton dayLabel={formatShortDate(s.startsAt, tz)} />}
               </span>
-            ) : (
-              todayOrComing && (ctx.d.gameDayCard === true || s.courtNum !== undefined) && <CourtButton ctx={ctx} s={s} dayLabel={formatShortDate(s.startsAt, tz)} />
             )}
-            {todayOrComing && <DirectionsButton dayLabel={formatShortDate(s.startsAt, tz)} />}
+            </div>
           </div>
         )}
         {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}

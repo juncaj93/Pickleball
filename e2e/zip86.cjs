@@ -172,7 +172,7 @@ const cutOrBroken = (page, sel) =>
           // No card has the focus when Home opens (the old green or lime ring).
           assert(await page.evaluate(() => !document.activeElement || !document.activeElement.closest('.scard, .hv2-short')), 'a card has the focus on load');
           // Bottom row: 44 px, one line.
-          const foot = await first.locator('.r86-foot > *').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height > 0).map((e) => [Math.round(e.getBoundingClientRect().height), Math.round(e.getBoundingClientRect().top)]));
+          const foot = await first.locator('.r86-paid, .r86-court, .r86-book, .r86-dir').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height > 0).map((e) => [Math.round(e.getBoundingClientRect().height), Math.round(e.getBoundingClientRect().top)]));
           assert(foot.length === 3 && foot.every(([h]) => h === 44) && new Set(foot.map(([, t]) => t)).size === 1, `foot ${JSON.stringify(foot)}`);
           assert(flat(await first.locator('.r86-paid').textContent()) === '3 of 3 paid', 'paid pill');
           assert(flat(await first.locator('.r86-court').textContent()) === 'Court 4', 'court 4');
