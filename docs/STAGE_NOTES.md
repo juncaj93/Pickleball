@@ -9113,3 +9113,29 @@ the Dec 1 game, no row).
 - Read-only live look (https://pickleball-club-9h0.pages.dev; the custom domain is not reachable from this machine): /, /admin, /api/status 200;
   dashboard 401 without a PIN; Home 390 light and dark: the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no
   read-only PIN in this session).
+
+## 🎾100.card row: paid, court and directions on one line with a two-digit court (Fri Nov 27, 2026; branch `claude/new-session-h0q2ys`, from main `0fc12a7` (🎾99 live))
+
+### What changed
+- Admin game card only (src/pages/admin/CardR2.tsx, src/admin-card86.css). Before: at 420 px (iPhone Air) with "Court 16" the row needed about
+  300 px but had 296 under the names, so directions dropped to its own line and the paid pill stretched across the first.
+- Now three steps, picked by the browser from the buttons' real widths: (1) one line under the names (a 66 px spacer, the row's own first item);
+  (2) too wide: the row moves under the spacer and spans the card, still one line (as under 340 px before, and now also when big text puts the
+  names under the tile); (3) still too wide: the paid pill on its own line, court (or Book) and directions together under it.
+- To fit Court 1 to 99 at 420: gaps 8 to 6 px, directions 48 to 44 px wide, court and paid padding 2 px less. 44 px tall, same colors, font
+  and words. Player cards untouched. No switch, no migration, no server code.
+- Preview's Tournament test page THIS_ZIP: zip86_home (the game card stage).
+- Known edge (reviewer): a coming game with no court button at all, 320 px and big text, can leave directions alone; live shows courts.
+
+### Tests
+- Unit: 249 files passed, 2 skipped; 4,579 passed, 13 skipped, 0 failed. tsc clean.
+- Browser, full suite (92 scripts): 90 green, 3,262 checks. admin-v2 (Money Totals) and admin-r3 fail the same way 🎾99 recorded on unchanged
+  main (today's date). zip100 3/3 (courts 1, 9, 16, 99, ?; four paid texts; 320/375/390/420/440; 100/125/150 %; light and dark; Book).
+  Outside the suite: zip86 8/8, zip93 6/6, zip87 10/11 (A: the tournament card's When block now has two lines, not this row).
+- Fresh reviewer: no blocking bugs.
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 64 statements, the 5 second check 2 / 16 (all_locked, mid): unchanged.
+
+### Preview
+https://claude-new-session-h0q2ys.pickleball-club-9h0.pages.dev (fake database on zip86_home, the tonight game on Court 16).
