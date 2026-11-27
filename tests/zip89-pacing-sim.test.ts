@@ -162,7 +162,9 @@ describe('zip 89 (review): a night that starts fast, takes every bonus, then slo
       // Zip 97 (KNOWN, told to Alex): the 17 minute table plans Americano 7 rounds (was 6), so the most extreme of these nights (9 minute games
       // for 4 rounds, both bonus rounds taken, then about 26 minutes a game with score entry) runs 4 minutes past 10 PM even with every round
       // after it at 7: the one night here allowed up to 5 minutes over. Every other night: never past the booked end.
-      const allowed = format === 'americano' && fast === 9 && slow === 24 ? 5 * 60_000 : 0;
+      // Zip 97, pace floor 12 (Alex OK Nov 26: real nights never swing from 10 to 22 minute games, and he taps every bonus himself): the two
+      // 10 minutes x3 then 22 nights end 10:04 PM (Locked doubles) and 10:06 PM (Americano); allowed up to 6 minutes over, no more.
+      const allowed = format === 'americano' && fast === 9 && slow === 24 ? 5 * 60_000 : fast === 10 && n === 3 && slow === 22 ? 6 * 60_000 : 0;
       expect(r.finish, 'never past the booked end').toBeLessThanOrEqual(END_MS + allowed);
     }, 120_000);
 });

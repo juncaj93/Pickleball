@@ -5,7 +5,7 @@
 //
 //   THE PACE   the average length of the rounds fully scored so far, counted from the real start (Start now included) to when the last of them
 //              got its last score, as minutes for a round to 11: a round played to 9 or 7 counts against its own table time (16 or 13), so a
-//              night of shorter games is measured fairly. Never under PACE_FLOOR (14 minutes a round to 11), so one lucky round never
+//              night of shorter games is measured fairly. Never under PACE_FLOOR (12 minutes a round to 11, Zip 97 with Alex OK; was 14), so one lucky round never
 //              over-promises.
 //   THE OFFER  after a round is fully scored, ONE bonus is offered when ALL of this holds:
 //                a. everything still to play (whole rounds; a round in progress counts as at most half done) plus the bonus, at the pace,
@@ -21,7 +21,7 @@
 import { BREAK_MINUTES, END_BUFFER, PLAYOFF_MINUTES, ROUND_MINUTES } from './tournamentPlan';
 
 /** The slowest a round to 11 is ever assumed to be, whatever the measured pace (minutes). */
-export const PACE_FLOOR = 14;
+export const PACE_FLOOR = 12;
 /** Minutes of court time that must still be free after the night with the bonus in it (the base plan keeps the same). */
 export const BONUS_SPARE = END_BUFFER;
 /** Planned pool / round robin rounds that must still be left to play for an offer (Americano; Locked doubles' semifinals and best of 3 need
