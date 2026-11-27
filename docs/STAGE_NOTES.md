@@ -9114,7 +9114,7 @@ the Dec 1 game, no row).
   dashboard 401 without a PIN; Home 390 light and dark: the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no
   read-only PIN in this session).
 
-## 🎾100.card row: paid, court and directions on one line with a two-digit court (Fri Nov 27, 2026; branch `claude/new-session-h0q2ys`, from main `0fc12a7` (🎾99 live))
+## 🎾100.card row: paid, court and directions on one line with a two-digit court (Fri Nov 27, 2026; branch `claude/new-session-h0q2ys`, from main `0fc12a7` (🎾99 live); LIVE Fri Nov 27, deployment `4a4af6b7`)
 
 ### What changed
 - Admin game card only (src/pages/admin/CardR2.tsx, src/admin-card86.css). Before: at 420 px (iPhone Air) with "Court 16" the row needed about
@@ -9139,3 +9139,14 @@ Dashboard 4 trips / 64 statements, the 5 second check 2 / 16 (all_locked, mid): 
 
 ### Preview
 https://claude-new-session-h0q2ys.pickleball-club-9h0.pages.dev (fake database on zip86_home, the tonight game on Court 16).
+
+### Live (Fri Nov 27, 2026, about 4:35 PM Eastern; quiet hours, no override; Alex said ship it)
+- Restore point: export `export-20261127212833` in `pickleball-backups` (checked); Time Travel bookmark
+  `00002295-00000000-00005130-7e25b6c5aa2f61e8e6d1163b5e408aec`. Integrity before and after: 22, 8, 14 columns, all 0. No migration.
+- Deployment **4a4af6b7-8dbb-45da-89a4-674443e10e47** (commit e7b86d9, bundle `index-BT5y9AZl.js`, admin `AdminEntry-C_p7Fnlk.css` has the new
+  row). Rollback: **af418447-1fae-4bc1-91f9-0f2b63d7e852** (🎾99). Nothing to undo in the data.
+- The Cold Open before and after (3 rows named like it, 7 tickets, 10 sign-ups; fingerprint 8b141d5fe91bc9a7): identical.
+- Read-only live look (https://pickleball-club-9h0.pages.dev): /, /admin, /api/status 200; dashboard 401 without a PIN; Home 420 light and dark:
+  the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no read-only PIN in this session).
+- Git: GitHub main fast-forwarded 0fc12a7 to e7b86d9. This machine's stale local `main` (b9d233b, 🎾81 era) was renamed
+  `old-local-main-b9d233b`, not deleted.
