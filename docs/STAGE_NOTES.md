@@ -8991,7 +8991,7 @@ https://claude-new-session-2v5jzf.pickleball-club-9h0.pages.dev (the fake `pickl
 ### What changed (the code is the truth; SITE_RULES "Real pace (Zip 97)")
 1. THE PACE (shared/tournamentPlan.ts): ROUND_MINUTES { 11: 17, 9: 14, 7: 11 } for regular games; PLAYOFF_MINUTES 20 for semifinals, the Final,
    3rd place and a best of 3's games (the plan's `used`, the Time check's `lenOf`, the night times, the pace rounds, the bonus minutes). TIE_MINUTES
-   8 (derived). shared/smartPacing.ts: the pace is in minutes for a regular round to 11 (FULL = 17); PACE_FLOOR stays 14 (see below).
+   8 (derived). shared/smartPacing.ts: the pace is in minutes for a regular round to 11 (FULL = 17); PACE_FLOOR 12 (was 14; Alex OK Fri Nov 27, see below).
 2. BONUS UNTIL THE PLAYOFFS (Locked doubles): PaceInput.minLeft (0 for the 'round' kind); server/tournamentDay.ts facts offers 'round' only while
    no playoff game has started (on a court, scored, skipped, or claim_at 'on:'), never looser than writePoolRound's guard. Americano and the
    semis / best of 3 offers unchanged.
@@ -9014,7 +9014,8 @@ Locked doubles: no count changes PASS/FAIL on 2 courts, so the style rule needs 
 Nothing past 10 PM (latest 9:58 PM, 7 on 1 court slow), money 0 every night, at most one Time check prompt a round, no game shortened on a court.
 Without the last resort, 7 slow Americano nights ran to 10:00 to 10:07 PM. 8 LD fast 55/55 (offers taken), 66/66 (declined); normal 34/34;
 slow 13/13; mixed 13/18. 10 LD fast 52/52, normal 24/28, slow 15/15. 10 AM fast 39/39, normal 24/22, slow 15/7, mixed 27/18.
-PACE_FLOOR 12 (tried, not shipped): fast nights end 12 to 18 minutes fuller (8 LD fast taken 55 -> 37 left), nothing past 9:46 PM.
+PACE_FLOOR 12 (shipped Fri Nov 27): fast nights end 12 to 18 minutes fuller (8 LD fast taken 55 -> 37 left); latest end still 9:58 PM (the slow
+7 AM 1 court night, the same at 14).
 
 ### Known
 tests/zip89-pacing-sim.test.ts: the reviewer's most extreme night (Americano 10, 9 minute games for 4 rounds, both bonuses taken, then about 26
@@ -9046,7 +9047,8 @@ re-seed, no migration). Built from a clean checkout of the pushed branch after m
 - Floor 12: the full dry run (80 nights) stays clean (latest 9:58 PM, money 0); fast nights with offers taken end 12 to 18 minutes fuller. But
   tests/zip89-pacing-sim.test.ts's fast-then-slow nights: LD 10 min x3 then 22 ends 10:04 PM and AM 10 min x3 then 22 ends 10:06 PM. Not allowed.
 - Floor 13: LD back to 9:49 PM, AM 10 min x3 then 22 still 10:06 PM. Not allowed.
-- KEPT 14 (no code change): every simulated night by 10 PM except the one KNOWN extreme night (AM 9 min x4 then 24: 10:04 PM, as before).
+- First pick KEPT 14 (deployment 160b692b). Then Alex (Thu Nov 26, late): "Go with PACE_FLOOR 12. I accept the two made-up fast-then-slow
+  sims (10:04 and 10:06 PM): real nights don't swing from 10-minute to 22-minute games, and I tap every bonus myself." SHIPPED 12.
 - Fast nights (12 to 13 minute games), minutes left before 10 PM, 🎾92 / now, offers taken (declined): 7 AM 1 court 37 / 39 (69 / 54),
   8 LD 55 / 55 (66 / 66), 9 AM 38 / 38 (65 / 52), 10 LD 52 / 52 (64 / 64).
 
@@ -9060,3 +9062,19 @@ re-seed, no migration). Built from a clean checkout of the pushed branch after m
 - The Cold Open before and after (settings, 7 tickets, $90 paid, 10 sign-ups, 0 games, every row's fingerprint): identical.
 - Read-only live look (https://pickleball-club-9h0.pages.dev): /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and
   dark: the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no read-only PIN in this session).
+
+### Live, pace floor 12 (Fri Nov 27, 2026, about 1:25 AM Eastern; quiet hours, no override)
+- Tests: zip89-pacing-sim expects the two 10 x3 then 22 nights (10:04 PM LD, 10:06 PM AM; nothing more over). zip92 fix 10 expected the bonus
+  round once on a fast 8-player night; at 12 that night has time for a second (after Round 2: Round 5 = Round 2, semis Round 6, ends 9:24 PM,
+  money 0), so the test now expects both. Unit: 4,579 passed, 0 failed. Browser suite: 89 of 90 green after reruns alone; admin-audit's one
+  miss was a slow page load on a busy machine (green alone); admin-v2 and admin-r3 fail the SAME way on the live 🎾97 code (9d33b4c), so they
+  come from today's date, not this change (left alone). zip97 2/2, zip92 7/7; zip89 B and zip88 I as on main. Dry run 80 nights: 0 past 10 PM.
+- Fast nights (offers taken), minutes left before 10 PM, floor 14 / 12: 7 AM 1 court 39 / 26, 8 LD 55 / 37, 9 AM 38 / 26, 10 LD 52 / 40.
+  Declined nights unchanged (54, 66, 52, 64).
+- Restore point: export `export-20261127062041` in `pickleball-backups` (checked); Time Travel bookmark
+  `000021d7-00000000-00005130-d148f247ccb18ee6204060fc83a6e092`. Integrity before and after: 22, 8, 14 columns, all 0. No migration.
+- Deployment **3d444526-c46f-45c4-a059-e78c0a1371ed** (commit e58dfbc, bundle `index-BmBr68MJ.js`). Rollback: **160b692b-a7fa-427f-8a46-7bfada8c0eb4**
+  (floor 14). Nothing to undo in the data.
+- The Cold Open before and after (fingerprint a81b37c94987f307: 7 tickets, $90 paid, 0 credit, 10 sign-ups, 0 games): identical.
+- Read-only live look: /, /admin, /api/status 200; dashboard 401 without a PIN; Home light and dark: the new bundle, no errors, nothing wider,
+  no writes.
