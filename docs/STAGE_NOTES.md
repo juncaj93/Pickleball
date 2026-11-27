@@ -9140,7 +9140,7 @@ Dashboard 4 trips / 64 statements, the 5 second check 2 / 16 (all_locked, mid): 
 ### Preview
 https://claude-new-session-h0q2ys.pickleball-club-9h0.pages.dev (fake database on zip86_home, the tonight game on Court 16).
 
-### Live (Fri Nov 27, 2026, about 4:35 PM Eastern; quiet hours, no override; Alex said ship it)
+### Live (Fri Nov 27, 2026, about 4:29 PM Eastern; quiet hours, no override; Alex said ship it)
 - Restore point: export `export-20261127212833` in `pickleball-backups` (checked); Time Travel bookmark
   `00002295-00000000-00005130-7e25b6c5aa2f61e8e6d1163b5e408aec`. Integrity before and after: 22, 8, 14 columns, all 0. No migration.
 - Deployment **4a4af6b7-8dbb-45da-89a4-674443e10e47** (commit e7b86d9, bundle `index-BT5y9AZl.js`, admin `AdminEntry-C_p7Fnlk.css` has the new
