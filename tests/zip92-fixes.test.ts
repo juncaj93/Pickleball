@@ -100,26 +100,31 @@ describe('fix 10: Locked doubles one more round robin round', () => {
       play_to: number;
     }[];
 
-  it('8 players on a fast night: offered after Round 1 (the semifinals are in the plan, a best of 3 needs 3 rounds left); Yes adds Round 4 = Round 1 again, before the semifinals; once only; nothing past 10 PM; money to the cent', async () => {
+  it('8 players on a fast night: offered after Round 1 (the semifinals are in the plan, a best of 3 needs 3 rounds left); Yes adds Round 4 = Round 1 again, before the semifinals; Zip 97 (pace floor 12): offered again after Round 2, Yes adds Round 5 = Round 2; nothing past 10 PM; money to the cent', async () => {
     const { ctx } = await coldOpen({ n: 8, style: 'vote', courts: 2, log: [] });
     const run = await playNight(ctx, 'fast', 811, true);
-    expect(run.offers.map((o) => [o.kind, o.afterRound, o.plannedLeft])).toEqual([['round', 1, 2]]);
+    // Zip 97: bonus rounds can come until the playoffs, and with the pace floor at 12 (Alex OK) a fast night has time for a second one, so the
+    // offer comes again after Round 2 (it was once only at floor 14). Both taken, the night still ends 9:24 PM.
+    expect(run.offers.map((o) => [o.kind, o.afterRound, o.plannedLeft])).toEqual([
+      ['round', 1, 2],
+      ['round', 2, 2],
+    ]);
     const g = rows(ctx);
     const pool = g.filter((x) => x.stage === 'pool');
-    expect(Math.max(...pool.map((x) => x.round))).toBe(4);
-    const r1 = pool.filter((x) => x.round === 1).map((x) => `${x.court}:${x.slot_a}-${x.slot_b}`);
-    const r4 = pool.filter((x) => x.round === 4).map((x) => `${x.court}:${x.slot_a}-${x.slot_b}`);
-    expect(r4).toEqual(r1);
-    // The playoffs moved one round later and two numbers on; the Final and 3rd place still point at the semifinals.
+    expect(Math.max(...pool.map((x) => x.round))).toBe(5);
+    const at = (r: number) => pool.filter((x) => x.round === r).map((x) => `${x.court}:${x.slot_a}-${x.slot_b}`);
+    expect(at(4)).toEqual(at(1));
+    expect(at(5)).toEqual(at(2));
+    // The playoffs moved two rounds later and four numbers on; the Final and 3rd place still point at the semifinals.
     const semis = g.filter((x) => x.stage === 'semi');
     expect(semis.map((x) => [x.round, x.slot_a, x.slot_b])).toEqual([
-      [5, 'P1', 'P4'],
-      [5, 'P2', 'P3'],
+      [6, 'P1', 'P4'],
+      [6, 'P2', 'P3'],
     ]);
     const fin = g.find((x) => x.stage === 'final')!;
     const third = g.find((x) => x.stage === 'third')!;
-    expect([fin.round, fin.slot_a, fin.slot_b]).toEqual([6, `W${semis[0].num}`, `W${semis[1].num}`]);
-    expect([third.round, third.slot_a, third.slot_b]).toEqual([6, `L${semis[0].num}`, `L${semis[1].num}`]);
+    expect([fin.round, fin.slot_a, fin.slot_b]).toEqual([7, `W${semis[0].num}`, `W${semis[1].num}`]);
+    expect([third.round, third.slot_a, third.slot_b]).toEqual([7, `L${semis[0].num}`, `L${semis[1].num}`]);
     expect(g.map((x) => x.num)).toEqual(g.map((_, i) => i + 1));
     expect(run.finish).toBeLessThanOrEqual(END_MS);
     expect(run.end?.status).toBe(200);
