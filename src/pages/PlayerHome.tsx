@@ -230,13 +230,22 @@ function canLock(t: NonNullable<GroupView['tournament']>): boolean {
   if (mine?.place === 'line') return mine.creditCents + mine.paidCents < k.priceCents && mine.claimCents === 0;
   return true;
 }
-/** Zip 86: the game rows with the tournament's row put in by time (before the first game that starts after it, else last). */
-function withTourRow<R extends { s: PlayerSessionView; leaving: boolean }>(rows: R[], tour: TourRowItem | null): (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] {
+/** Zip 86: the game rows with the tournament's row put in by time (before the first game that starts after it, else last).
+ *  Zip 99 (Alex): when the row would be the FIRST card in the list and the big tournament card is showing above it, the row is left out (the
+ *  big card already says it). Its week heading then goes with it unless a game under it keeps it (the headings follow the cards listed). */
+function withTourRow<R extends { s: PlayerSessionView; leaving: boolean }>(rows: R[], tour: TourRowItem | null, bigCard: boolean): (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] {
   const out: (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] = rows.map((r, gi) => ({ ...r, tour: null, gi }));
   if (!tour) return out;
   const i = rows.findIndex((r) => Date.parse(r.s.startsAt) > Date.parse(tour.at));
+  if (i === 0 && bigCard) return out;
+  if (i < 0 && rows.length === 0 && bigCard) return out;
   out.splice(i < 0 ? out.length : i, 0, { tour });
   return out;
+}
+/** Zip 99: the big tournament card (src/tournament/TournamentHome.tsx TicketCard) shows: a tournament not over, not on its night or its reveal. */
+function bigTourCard(v: GroupView): boolean {
+  const t = v.tournament;
+  return !!t && t.status !== 'ended' && !t.day?.today && !t.reveal;
 }
 const TIER_LABEL: Record<WeekTier, string> = { this: 'This week', next: 'Next week', later: 'Later' };
 
@@ -1082,7 +1091,7 @@ export function PlayerHome({
                   </button>
                 </div>
               )}
-              {withTourRow(rows, tourRowOf(view!, Date.parse(g.now), tz, mineOnly)).map((it, i, all) => {
+              {withTourRow(rows, tourRowOf(view!, Date.parse(g.now), tz, mineOnly), bigTourCard(view!)).map((it, i, all) => {
                 const at = it.tour ? it.tour.at : it.s.startsAt;
                 const tier = weekTier(at, Date.parse(g.now), tz);
                 const prevIt = i > 0 ? all[i - 1] : null;
