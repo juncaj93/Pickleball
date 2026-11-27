@@ -28,10 +28,10 @@ async function check(name, fn) {
   try {
     await fn();
     passed++;
-    console.log(`  ok    ${name} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+    console.log(`  ✓ ${name} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   } catch (err) {
     failed++;
-    console.log(`  FAIL  ${name}\n        ${String(err && err.stack ? err.stack : err).split('\n').slice(0, 5).join('\n        ')}`);
+    console.log(`  ✗ ${name}\n        ${String(err && err.stack ? err.stack : err).split('\n').slice(0, 5).join('\n        ')}`);
   }
 }
 
