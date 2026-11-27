@@ -237,8 +237,7 @@ function withTourRow<R extends { s: PlayerSessionView; leaving: boolean }>(rows:
   const out: (({ tour: null; gi: number } & R) | { tour: TourRowItem })[] = rows.map((r, gi) => ({ ...r, tour: null, gi }));
   if (!tour) return out;
   const i = rows.findIndex((r) => Date.parse(r.s.startsAt) > Date.parse(tour.at));
-  if (i === 0 && bigCard) return out;
-  if (i < 0 && rows.length === 0 && bigCard) return out;
+  if (bigCard && (i === 0 || rows.length === 0)) return out;
   out.splice(i < 0 ? out.length : i, 0, { tour });
   return out;
 }
