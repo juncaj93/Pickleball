@@ -9150,3 +9150,31 @@ https://claude-new-session-h0q2ys.pickleball-club-9h0.pages.dev (fake database o
   the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no read-only PIN in this session).
 - Git: GitHub main fast-forwarded 0fc12a7 to e7b86d9. This machine's stale local `main` (b9d233b, 🎾81 era) was renamed
   `old-local-main-b9d233b`, not deleted.
+
+## 🎾101.monday weeks: the player screen's weeks start on Monday (Fri Nov 27, 2026; Alex, reversing his Nov 1 Sunday rule; branch `claude/new-session-7td4bi`, from main `5225af8` (🎾100 live))
+
+### What changed
+- shared/time.ts `weekTier` (THIS WEEK / NEXT WEEK / LATER on the player screen) now counts Monday to Sunday weeks with `weekStart`, the same weeks
+  as the organizer screens. `sundayWeekStart` is gone (nothing else used it). Fri Nov 27: Sun Nov 29 = THIS WEEK; Tue Dec 1 and Wed Dec 2 =
+  NEXT WEEK. On a Sunday that Tuesday's game is NEXT WEEK (the trade-off Alex accepted).
+- Follows by itself: the small tournament row (only next week or later; hidden when it would be first under the big card, 🎾99), the LATER fold,
+  and the organizer's Players tab day chips (src/pages/admin/PlayersRedo.tsx upcomingDays, "this week or next"), now the same weeks as the
+  organizer's own This week / Next week.
+- Unchanged: day words in texts and cards, TONIGHT / TOMORROW tiles, muted looks (weekFade already used Monday weeks), the 🎾99 rule.
+- Tests: dryrun-clock, dryrun-times, dst-2027 expect Monday weeks; player-cards has Alex's dates (Fri, Sat, Sun 9 AM and 11:30 PM, Mon 12:01 AM).
+  e2e/zip101.cjs (in the full suite): the clock from Fri Nov 27 to Tue Dec 1 with a Sunday game, headings, no empty heading, the row rule, snow
+  on the first game card; Fri and Sun at 375/390/420/440 light and dark. Preview's Tournament test page THIS_ZIP: zip86_next.
+- No new words, no switch, no migration, no server code.
+
+### Tests
+- Unit: 249 files passed, 2 skipped; 4,580 passed, 13 skipped, 0 failed. tsc clean.
+- Browser, full suite (93 scripts): 91 green, 3,264 checks. admin-v2 (Money Totals) and admin-r3 fail the same way 🎾99 / 🎾100 recorded on
+  unchanged main (today's date). zip101 2/2, zip99 4/4.
+- Fresh reviewer: no bugs. Its note: docs/AUDIT_SCENARIOS_player.md still said Sunday weeks (updated).
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 64 statements, the 5 second check 2 / 16: unchanged.
+
+### Preview
+https://claude-new-session-7td4bi.pickleball-club-9h0.pages.dev (fake database on zip86_next plus a Sun Nov 29 10 AM game: Parker sees Sat and
+Sun under THIS WEEK, the row, Dec 1 and Dec 3 under NEXT WEEK).
