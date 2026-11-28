@@ -9188,3 +9188,42 @@ Sun under THIS WEEK, the row, Dec 1 and Dec 3 under NEXT WEEK).
 - Read-only live look (https://pickleball-club-9h0.pages.dev): /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark:
   the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no read-only PIN in this session).
 - Git: GitHub main fast-forwarded 5225af8 to 403bc0e. This machine's stale local `main` (b9d233b) renamed `old-local-main-b9d233b-2`.
+
+## 🎾102.skin first paint: the Christmas skin and its logo on the first frame (Sat Nov 28, 2026; branch `claude/new-session-b3k3bs`, from main `67fe743` (🎾101 live))
+
+### The problem (Alex, live, Everyone)
+Player Home drew its first screen plain (plain seats, plain logo, no snow, no candy cane line), then the skin and the Santa hat logo popped in
+when /api/group answered. Cause: nothing knew the skin was on before that answer. The saved last screen was meant to lend its flag, but
+`src/lastScreen.ts` sanitize never kept `christmasSkin`, so it always said off.
+
+### What changed
+- The phone remembers the last mode the server said: `pb_xmas_mode` = `all`, `me-on`, `me-off` or `off` (written only when it changes, only on
+  the player's own phone: never View as, the demo or Pretend; a load error is not written down). The theme choice stays in `pb_xmas_theme`.
+- `public/theme-2.js` (renamed from theme.js: phones keep that file a day, public/_headers; CSP forbids inline scripts) runs in <head> before the
+  page draws. Only on `/` and `/g/<key>`, only inside the window (Eastern, same rule as `earlySkin()` in shared/christmasSkin.ts; the unit test
+  runs both over every address x memory x day 2020 to 2040): Everyone sets `data-skin-early="all-on|all-off"` and preloads /logo-xmas.png;
+  theme on also sets `data-skin="christmas"`. Just me: `me-on|me-off`.
+- src/skin/store.ts starts from those markers (phase idle: no pop-in, no jingle). The first answer: same mode = nothing moves (Just me follows the
+  server's saved choice quietly); different = plain quietly, once. `resumeEarly()` covers React's double setup before the first answer and never
+  runs into View as. SiteHome (`/` while /api/status loads) draws the Christmas logo for Everyone and resets the skin if it lands on link only, a
+  group word, not set up or an error.
+- Player script budget (tests/zip48-split.test.ts) 147.0 to 147.5 KB gzipped (this adds about 0.2 KB).
+- No new words, no switch, no migration, no server code. Admin screens untouched.
+
+### Tests
+- Unit: tests/zip102.test.ts (19), zip38 and zip44 updated pins (theme-2.js). Full suite below.
+- Browser: e2e/zip102.cjs (in the suite), /api/group held 2 s, every frame recorded: A remembered ON (saved screen and shimmer): first frame
+  dressed with the hat logo loaded, nothing moves after; B Everyone theme off: hat logo from frame one, page plain; C first visit: plain as
+  before; D remembered off: plain; E server Off: dressed then plain once, no motion, memory off, next load plain; F Just me: Parker plain once,
+  Alex the normal logo; G /admin: no frame skinned; H 375/390/420/440, light and dark, reduced motion on and off. On the old code A and B fail
+  (checked). Full suite (94 scripts): 89 green in the shared run; circles, run and admin-motion green alone (crowding); admin-v2 (Money Totals)
+  and admin-r3 fail the same way 🎾99 to 🎾101 recorded (today's date). zip102 8/8 and zip38 28/28 on the final commit.
+- Fresh reviewer: 3 findings (View as could get the remembered skin; an error wrote `off`; a Just me tap on the loading header was lost), all fixed
+  with tests.
+
+### Admin speed (scripts/zip82-speed.ts)
+Dashboard 4 trips / 64 statements, the 5 second check 2 / 16: unchanged.
+
+### Preview
+https://claude-new-session-b3k3bs.pickleball-club-9h0.pages.dev (the fake database as 🎾101 left it; the Christmas skin set to Everyone to match
+live). Checked there: Parker, theme on, /api/group held 2 s: first frame dressed with the hat logo, light and dark; /admin plain.
