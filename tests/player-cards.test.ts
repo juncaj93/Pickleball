@@ -61,4 +61,19 @@ describe('card helpers', () => {
     expect(weekTier('2026-11-18T01:00:00Z', now, TZ)).toBe('later');
     expect(weekTier('2026-12-09T01:00:00Z', now, TZ)).toBe('later');
   });
+  it('weeks start on Monday (Alex, Nov 27): Sun Nov 29 is this week on Fri Nov 27; Tue Dec 1 and Wed Dec 2 are next week', () => {
+    const sun29 = '2026-11-29T15:00:00Z'; // Sun Nov 29, 10 AM EST
+    const tue1 = '2026-12-02T00:30:00Z'; // Tue Dec 1, 7:30 PM EST
+    const wed2 = '2026-12-03T01:00:00Z'; // Wed Dec 2, 8 PM EST
+    const tue8 = '2026-12-09T00:00:00Z'; // Tue Dec 8, 7 PM EST
+    const fri = Date.parse('2026-11-27T17:00:00Z');
+    expect([sun29, tue1, wed2, tue8].map((x) => weekTier(x, fri, TZ))).toEqual(['this', 'next', 'next', 'later']);
+    const sat = Date.parse('2026-11-28T17:00:00Z');
+    expect([sun29, tue1, tue8].map((x) => weekTier(x, sat, TZ))).toEqual(['this', 'next', 'later']);
+    // Sunday morning and 11:30 PM: that Tuesday is NEXT WEEK (the trade-off Alex accepted).
+    for (const sun of ['2026-11-29T13:00:00Z', '2026-11-30T04:30:00Z']) expect([tue1, tue8].map((x) => weekTier(x, Date.parse(sun), TZ)), sun).toEqual(['next', 'later']);
+    // Mon Nov 30, 12:01 AM: a new week, Tuesday is THIS WEEK, Dec 8 NEXT WEEK.
+    const mon = Date.parse('2026-11-30T05:01:00Z');
+    expect([tue1, wed2, tue8].map((x) => weekTier(x, mon, TZ))).toEqual(['this', 'this', 'next']);
+  });
 });

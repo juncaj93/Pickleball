@@ -319,8 +319,8 @@ describe('day words for a 7:00 PM game (already Wednesday in UTC)', () => {
     expect(playerDay(s.startsAt, TZ, nowMs).word).toBe(pd);
     expect(suggestDay(s.startsAt, TZ, nowMs).word).toBe(sd);
     expect(weekLabel(s.startsAt, nowMs, TZ)).toBe(label);
-    // The player screen's weeks start on Sunday (Alex, Nov 1): on a Sunday, the admin's "Next week" game is THIS WEEK there.
-    expect(weekTier(s.startsAt, nowMs, TZ)).toBe(label === 'This week' || localParts(nowMs, TZ).weekday === 0 ? 'this' : 'next');
+    // The player screen's weeks start on Monday (Alex, Nov 27), the same weeks as the organizer's "This week" / "Next week".
+    expect(weekTier(s.startsAt, nowMs, TZ)).toBe(label === 'This week' ? 'this' : 'next');
     expect(dayWord(s.startsAt, TZ, nowMs)).toBe(dw);
     const t = game === NOV5.startsAt ? '7:30 PM' : '7:00 PM';
     expect(plain(textWhenAt(s.startsAt, TZ, nowMs))).toBe(`${dw}, ${t}`);

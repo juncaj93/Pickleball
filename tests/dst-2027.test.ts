@@ -263,11 +263,11 @@ for (const season of [SPRING, FALL]) {
       for (const k of Object.keys(season.walk).filter((x) => x.startsWith('Sun'))) {
         expect(suggestDay(tue, TZ, now(k)).word, k).toBe('Tuesday');
         expect(playerDay(tue, TZ, now(k)).word, k).toBe('next Tuesday');
-        // The player screen's weeks start on Sunday: from 12:00 AM Sunday the coming Tuesday is THIS WEEK.
-        expect(weekTier(tue, now(k), TZ), k).toBe('this');
+        // The player screen's weeks start on Monday (Alex, Nov 27): on Sunday the coming Tuesday is still NEXT WEEK.
+        expect(weekTier(tue, now(k), TZ), k).toBe('next');
       }
       expect(weekTier(tue, now(satLate), TZ)).toBe('next');
-      expect(weekTier(tue, now(sun), TZ)).toBe('this');
+      expect(weekTier(tue, now(sun), TZ)).toBe('next');
     });
 
     it('the real 5-minute clock: every alert once, on its Eastern wall-clock time, across the change', { timeout: 60_000 }, async () => {

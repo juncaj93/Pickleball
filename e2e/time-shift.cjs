@@ -61,7 +61,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 500));
   }
   // Fake clock (so this passes on any real day): Sat Nov 7, 2026, 12:00 PM Eastern, on the server and in every browser page. A game's tier
-  // (THIS WEEK / NEXT WEEK / LATER, weeks start on Sunday) decides its tile border (2px this week, 1px after), and this script wants the first
+  // (THIS WEEK / NEXT WEEK / LATER, weeks start on Monday) decides its tile border (2px this week, 1px after), and this script wants the first
   // three games more than 36 hours out to share one look: on a Saturday they are Tue and Thu of next week and the Tuesday after.
   const clock = fixedClock(BASE);
   await clock.set(Date.parse('2026-11-07T17:00:00Z'));
