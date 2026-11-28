@@ -9227,3 +9227,14 @@ Dashboard 4 trips / 64 statements, the 5 second check 2 / 16: unchanged.
 ### Preview
 https://claude-new-session-b3k3bs.pickleball-club-9h0.pages.dev (the fake database as 🎾101 left it; the Christmas skin set to Everyone to match
 live). Checked there: Parker, theme on, /api/group held 2 s: first frame dressed with the hat logo, light and dark; /admin plain.
+
+### Live (Sat Nov 28, 2026, about 2:20 AM Eastern; quiet hours, no override; before the Sat 6 PM freeze)
+- Restore point: export `export-20261128071802` in `pickleball-backups` (checked); Time Travel bookmark
+  `00002319-00000000-00005131-5d94ba8ae842721bbdd01a5a19ef4eb2`. Integrity before and after: 22, 8, 14 columns, all 0. No migration.
+- Deployment **55619aee-958c-4bcd-af56-f8abca3dd60f** (commit 6053a03, bundle `index-BD1bnmwY.js`, `/theme-2.js` 200). Rollback:
+  **eeafa60b-3de1-4118-af30-576d68975705** (🎾101). Nothing to undo in the data.
+- Read-only live look (https://pickleball-club-9h0.pages.dev, no name picked, /api/group held 2 s, 0 writes): remembered ON = first frame dressed
+  with the hat logo, nothing moves; Everyone theme off = hat logo from frame one, page plain; first visit = plain, the logo comes with the answer
+  (as before); /admin plain every time; light and dark at 390. Live answers christmasSkin (Everyone). On a cold browser cache the hat picture
+  needs a few frames to download (the preload starts it in <head>); a phone keeps it a day. Organizer screens not opened (no read-only PIN).
+- Git: GitHub main fast-forwarded 67fe743 to 6053a03.
