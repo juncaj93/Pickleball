@@ -45,7 +45,7 @@ Where the tests live:
 | Game night 11:59 PM | "tonight" | PASS |
 | Thanksgiving Thu Nov 26 morning | "tonight" for that night's game | PASS |
 | Sunday, game on Tuesday | Drop question said "Out for next Tuesday?" for a game 2 days away | FIXED (now "Out for Tuesday?", same words as the Want in card) |
-| Sunday, Tuesday's game sits under NEXT WEEK | Weeks start Sunday on the player screen (Alex, Nov 1) | FIXED (`weekTier` in shared/time.ts; organizer screens keep Monday weeks) |
+| Sunday, Tuesday's game sits under NEXT WEEK | Weeks start Sunday on the player screen (Alex, Nov 1) | REVERSED by 🎾101 (Alex, Nov 27): the player screen uses Monday to Sunday weeks like the organizer screens (`weekTier` in shared/time.ts), so on a Sunday Tuesday's game is NEXT WEEK again |
 
 ## Totals
 
@@ -239,7 +239,7 @@ See the table at the top, plus: cancel-by on Election Day Nov 3, start and end e
 - Live on their own (bug fixes with no visible change): every FIXED row above except the five below.
 - Visible changes (Alex said "ship it" from before/after pictures, Nov 1; no preview because previews use the live
   database): the Good news note shows once; "Out for Tuesday?"; canceled cards no longer see-through; "If you paid,
-  it's now your credit." only for players who were in; the CREDIT word's color in dark mode; weeks start on Sunday.
+  it's now your credit." only for players who were in; the CREDIT word's color in dark mode; weeks start on Sunday (reversed by 🎾101: Monday weeks).
 
 ## Later cleanup batch (Alex, Nov 1) - done Mon Nov 2, 2026 (layout polish), except L5
 
