@@ -38,10 +38,11 @@ export function SiteHome() {
   // Zip 102: while the first checks run, the header and the saved copy wear what this phone started from (public/theme-2.js: the Christmas logo,
   // and the theme if it was on). Not the games after all (not set up, link only, a group word, an error): plain, before that screen paints.
   const skin = useSkin();
-  const skinLogo = skin.mode !== 'off' ? <SkinLogo /> : undefined;
+  // Everyone only: the Christmas logo. Just me draws the normal logo anyway, and its tap needs the player Home (it saves on the server).
+  const skinLogo = skin.mode === 'all' ? <SkinLogo /> : undefined;
   const notHome = notGames || !!status.error;
   useLayoutEffect(() => {
-    if (notHome) resetSkin();
+    if (notHome) resetSkin(false);
   }, [notHome]);
   if (status.loading && !s && saved && saved.view.sessions.length > 0) {
     return (

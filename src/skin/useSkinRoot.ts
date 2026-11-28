@@ -14,7 +14,7 @@ export function useSkinRoot(mode: SkinMode | null, demo: boolean, meOn = false, 
   // the player's own phone (not View as, the demo or Pretend): each answer is written down for the next page open.
   useLayoutEffect(() => {
     if (mode !== null) setSkinAvailable(mode, demo, meOn, remember);
-    else resumeEarly();
+    else resumeEarly(demo);
   }, [mode, demo, remember]); // eslint-disable-line react-hooks/exhaustive-deps
   // Just me: a tap on the logo saves the choice on the server (so a Home Screen app, which keeps its own storage, has it too). One request at a time, always ending on the latest choice (src/skin/meSave.ts); a failure is retried, then quiet.
   useEffect(() => {

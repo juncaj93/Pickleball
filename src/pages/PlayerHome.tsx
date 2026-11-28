@@ -426,9 +426,10 @@ export function PlayerHome({
   useZip7Root(g);
   // Zip 38 "Christmas skin": what the server said. Only this Home screen sets it, and it puts everything back on the way out, so no admin screen
   // carries the theme. Zip 102: until the first answer (null) the skin keeps what this phone started from (public/theme-2.js, the first paint);
-  // an error with nothing on screen draws plain. (The saved last screen never carried the skin flag: src/lastScreen.ts sanitize leaves it out.)
+  // an error with nothing on screen draws plain but is not written down (an error is not the server's answer, so the next open still starts dressed).
+  // (The saved last screen never carried the skin flag: src/lastScreen.ts sanitize leaves it out.)
   const skinMode = g ? (g.christmasSkin ? 'all' : g.christmasSkinMe ? 'me' : 'off') : load.error ? 'off' : null;
-  useSkinRoot(skinMode, !!viewAs, !!g?.christmasSkinMe?.on, ownPhone);
+  useSkinRoot(skinMode, !!viewAs, !!g?.christmasSkinMe?.on, ownPhone && !!g);
   const skin = useSkin();
   // Preview only (g.preview exists only where PREVIEW_CALM is set, never on live): ?as=Harper opens the page as that fake player, the same
   // as picking the name on Who are you?. On live the server never says preview, so the link does nothing.

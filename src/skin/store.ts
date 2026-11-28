@@ -197,13 +197,13 @@ function rememberMode(mode: SkinMode, meOn: boolean) {
 }
 
 /** The Home screen went away (admin, another page): nothing of the theme is left behind. */
-export function resetSkin() {
+export function resetSkin(keepEarly = true) {
   clearTimers();
   demo = false;
   remember = false;
   // Left before the server ever answered: the start from memory is kept aside, so a player Home that comes back (React's strict mode runs a
   // screen's setup twice in development) starts from it again (resumeEarly). Once an answer came, nothing is kept.
-  parked = fromMemory ? state : null;
+  parked = keepEarly && fromMemory ? state : null;
   fromMemory = false;
   if (state !== IDLE) emit(IDLE);
   else paint();
@@ -211,7 +211,9 @@ export function resetSkin() {
 
 let parked: SkinState | null = null;
 /** Zip 102: the player Home is on screen and the server has not answered yet: start again from this phone's memory if it was put aside. */
-export function resumeEarly() {
+export function resumeEarly(isDemo = false) {
+  // Never into View as or the demo (an organizer screen): the memory is this phone's own player Home only.
+  if (isDemo) parked = null;
   if (!parked || state !== IDLE) return;
   const back = parked;
   parked = null;

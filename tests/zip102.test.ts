@@ -227,6 +227,30 @@ describe('the skin store starts from the early script and settles on the first a
     expect(s.skinStateNow().mode).toBe('off');
     expect(attrs['data-skin']).toBeUndefined();
   });
+  it('review fix: the start from memory never comes back into View as, nor after SiteHome left for a screen that is not the games', async () => {
+    vi.useFakeTimers();
+    const { attrs } = fakePage(ON, { [MODE_KEY]: 'all', [THEME_KEY]: 'on' });
+    const s = await load();
+    s.resetSkin(); // left before any answer (for /admin)
+    s.resumeEarly(true); // the organizer's View as mounts the player Home
+    expect(s.skinStateNow().mode).toBe('off');
+    expect(attrs['data-skin']).toBeUndefined();
+    s.resumeEarly(false);
+    expect(s.skinStateNow().mode).toBe('off'); // and it is gone for good
+  });
+  it('review fix: SiteHome landing on link only / a group word / an error forgets the start (resetSkin(false))', async () => {
+    vi.useFakeTimers();
+    fakePage(ON, { [MODE_KEY]: 'all', [THEME_KEY]: 'on' });
+    const s = await load();
+    s.resetSkin(false);
+    s.resumeEarly();
+    expect(s.skinStateNow().mode).toBe('off');
+  });
+  it('review fix: an error is not written down; PlayerHome remembers only with an answer on screen', () => {
+    const src = readFileSync(new URL('../src/pages/PlayerHome.tsx', import.meta.url), 'utf8');
+    expect(src).toContain('useSkinRoot(skinMode, !!viewAs, !!g?.christmasSkinMe?.on, ownPhone && !!g);');
+    expect(readFileSync(new URL('../src/pages/SiteHome.tsx', import.meta.url), 'utf8')).toContain("skin.mode === 'all' ? <SkinLogo /> : undefined");
+  });
   it('markers that disagree (data-skin without the early mark): plain', async () => {
     const { attrs } = fakePage({ 'data-skin': 'christmas' });
     const s = await load();
