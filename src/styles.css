@@ -182,7 +182,7 @@
 }
 
 /* Dark mode: follows the phone unless Settings picks Light or Dark
-   (public/theme.js sets data-theme on <html> before the page draws).
+   (public/theme-2.js sets data-theme on <html> before the page draws).
    The same values twice: once for "follow the phone", once for "Dark". */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {

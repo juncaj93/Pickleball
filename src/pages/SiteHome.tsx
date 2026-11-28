@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useLayoutEffect, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import { api, ApiError, demoOn, navigate, storageGet, takeEarly, useLoad } from '../lib';
 import { clearLastScreen, readLastScreen } from '../lastScreen';
@@ -7,6 +7,8 @@ import { CupButton } from '../Champions';
 import { hasChampions } from '../../shared/champions';
 import { ErrorState, Notice, Spinner } from '../ui';
 import { PlayerHome, SavedScreenView } from './PlayerHome';
+import { SkinLogo } from '../skin/SkinLogo';
+import { resetSkin, useSkin } from '../skin/store';
 
 interface Status {
   setupComplete: boolean;
@@ -33,10 +35,19 @@ export function SiteHome() {
     void takeEarly('group')?.catch(() => {});
     clearLastScreen();
   }, [notGames]);
+  // Zip 102: while the first checks run, the header and the saved copy wear what this phone started from (public/theme-2.js: the Christmas logo,
+  // and the theme if it was on). Not the games after all (not set up, link only, a group word, an error): plain, before that screen paints.
+  const skin = useSkin();
+  const skinLogo = skin.mode !== 'off' ? <SkinLogo /> : undefined;
+  const notHome = notGames || !!status.error;
+  useLayoutEffect(() => {
+    if (notHome) resetSkin();
+  }, [notHome]);
   if (status.loading && !s && saved && saved.view.sessions.length > 0) {
     return (
       <>
         <TopBar
+          skinLogo={skinLogo}
           eyebrow={saved.view.group.name}
           title={saved.view.me!.name}
           // Zip 83: the saved copy's cup too (its medal counts), so the header does not move when the real screen comes.
@@ -56,7 +67,7 @@ export function SiteHome() {
   if (status.loading && !s) {
     return (
       <>
-        <TopBar eyebrow={SITE_NAME} title={SITE_NAME} />
+        <TopBar skinLogo={skinLogo} eyebrow={SITE_NAME} title={SITE_NAME} />
         <Spinner />
       </>
     );

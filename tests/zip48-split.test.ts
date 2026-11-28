@@ -35,7 +35,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // Zip 90: 146.5 to 147.0 on purpose (total 181.2 to 181.8): the prize reveal's header masking has to live on Home itself (the medal and
 // credit held back until each card is flipped, the chip's hold, the one-row player header rules), about 0.5 KB script and 0.35 KB style
 // gzipped; the reveal itself (cards, flight, burst) stays in the lazy TourAwards file. Main (Zip 89) about 146.2 KB script, this zip 146.7.
-export const BUDGET = { scriptKB: 147.0, styleKB: 36.5, pageKB: 1.5, totalKB: 181.8 };
+// Zip 102: script 147.0 to 147.5 (the skin store starts from the first paint, about 0.2 KB gzipped), total 181.8 to 182.3.
+export const BUDGET = { scriptKB: 147.5, styleKB: 36.5, pageKB: 1.5, totalKB: 182.3 };
 
 const ROOT = join(__dirname, '..');
 let split = '';

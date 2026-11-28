@@ -144,3 +144,31 @@ export function logoFor(inWindow: boolean): string {
 export const BUBBLE_FIRST = 'Tap for Christmas theme';
 export const BUBBLE_BACK = 'Tap to switch back';
 export const BUBBLE_MS = 2000;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Zip 102: the first paint. This phone remembers what the server last said (Everyone / Just me with its choice / off), so the next page open
+// can put the theme on before the page draws (public/theme-2.js reads these keys; src/skin/store.ts starts from what it set).
+// ---------------------------------------------------------------------------------------------------------------------
+
+export const MODE_KEY = 'pb_xmas_mode'; // 'all' | 'me-on' | 'me-off' | 'off' (anything else or nothing = off, exactly as before)
+/** The html marker the early script leaves next to data-skin, so the skin store starts from the same answer ('all' or 'me'). */
+export const EARLY_ATTR = 'data-skin-early';
+
+/** What is written down: the mode the server said, and for Just me its saved choice. */
+export function writeMode(m: Memory, mode: SkinMode, meOn = false): void {
+  safeSet(m, MODE_KEY, mode === 'me' ? (meOn ? 'me-on' : 'me-off') : mode);
+}
+
+/**
+ * The early script's rule, in one place (public/theme-2.js is the same rule in plain old JavaScript; tests/zip102.test.ts runs both side by
+ * side): only on a player Home address ("/" or "/g/<key>", never /admin or any other page), and only inside the window. The last answer was
+ * Everyone: start in Everyone (the Christmas logo draws at once, it is the button), with the theme ON only if this phone tapped it on. Just me:
+ * start in Just me with its saved choice. Anything else: null (draw plain, exactly as before).
+ */
+export function earlySkin(path: string, mode: string | null, theme: string | null, nowMs: number): { mode: 'all' | 'me'; on: boolean } | null {
+  if (!/^\/(g\/[A-Za-z0-9_-]+\/?)?$/.test(path)) return null;
+  if (!inChristmasWindow(nowMs)) return null;
+  if (mode === 'all') return { mode: 'all', on: theme === 'on' };
+  if (mode === 'me-on' || mode === 'me-off') return { mode: 'me', on: mode === 'me-on' };
+  return null;
+}

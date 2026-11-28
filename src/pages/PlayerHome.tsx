@@ -56,7 +56,6 @@ import { SkinLogo } from '../skin/SkinLogo';
 import { useSkin, useSkinOn } from '../skin/store';
 import { THEME } from '../skin/theme';
 import { useSkinRoot } from '../skin/useSkinRoot';
-import { sameEasternDay } from '../../shared/christmasSkin';
 import { GameDayButtons, isGameDayCard } from '../GameDay';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
@@ -425,11 +424,11 @@ export function PlayerHome({
   useLayoutEffect(() => () => setMotion(false), []);
   // Zip 7 switches (Tonight glow, Color cleanup, Simpler player cards): <html> attributes, only while their answer is yes.
   useZip7Root(g);
-  // Zip 38 "Christmas skin": what the server said (or, on a repeat visit, what the saved last screen said, so the logo does not flicker).
-  // Only this Home screen sets it, and it puts everything back on the way out, so no admin screen carries the theme.
-  const savedToday = !g && !!saved && sameEasternDay(saved.savedAt, Date.now());
-  const skinSource = g ?? (savedToday ? saved!.view : null);
-  useSkinRoot(skinSource?.christmasSkin ? 'all' : skinSource?.christmasSkinMe ? 'me' : 'off', !!viewAs, !!skinSource?.christmasSkinMe?.on);
+  // Zip 38 "Christmas skin": what the server said. Only this Home screen sets it, and it puts everything back on the way out, so no admin screen
+  // carries the theme. Zip 102: until the first answer (null) the skin keeps what this phone started from (public/theme-2.js, the first paint);
+  // an error with nothing on screen draws plain. (The saved last screen never carried the skin flag: src/lastScreen.ts sanitize leaves it out.)
+  const skinMode = g ? (g.christmasSkin ? 'all' : g.christmasSkinMe ? 'me' : 'off') : load.error ? 'off' : null;
+  useSkinRoot(skinMode, !!viewAs, !!g?.christmasSkinMe?.on, ownPhone);
   const skin = useSkin();
   // Preview only (g.preview exists only where PREVIEW_CALM is set, never on live): ?as=Harper opens the page as that fake player, the same
   // as picking the name on Who are you?. On live the server never says preview, so the link does nothing.

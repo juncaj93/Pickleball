@@ -79,23 +79,23 @@ describe('a day\'s keep for four small files (item 3)', () => {
   const headers = read('../public/_headers');
   const blocks = headers.split(/\n(?=\S)/).map((b) => b.trim()).filter((b) => b.startsWith('/'));
   const rule = (path: string) => blocks.find((b) => b.split('\n')[0].trim() === path);
-  it('theme.js, logo.png, logo-xmas.png and favicon-32.png are kept for a day (public, 86400 seconds)', () => {
-    for (const p of ['/theme.js', '/logo.png', '/logo-xmas.png', '/favicon-32.png']) {
+  it('theme-2.js, logo.png, logo-xmas.png and favicon-32.png are kept for a day (public, 86400 seconds)', () => {
+    for (const p of ['/theme-2.js', '/logo.png', '/logo-xmas.png', '/favicon-32.png']) {
       expect(rule(p), p).toBeTruthy();
       expect(rule(p), p).toMatch(/\n\s+Cache-Control: public, max-age=86400$/);
     }
   });
   it('nothing else gains a rule: the page, the manifest, the other icons and /api keep asking each time; the year-long rule is still only /assets/*', () => {
     const withCache = blocks.filter((b) => /Cache-Control/.test(b)).map((b) => b.split('\n')[0].trim()).sort();
-    expect(withCache).toEqual(['/assets/*', '/favicon-32.png', '/logo-xmas.png', '/logo.png', '/theme.js']);
+    expect(withCache).toEqual(['/assets/*', '/favicon-32.png', '/logo-xmas.png', '/logo.png', '/theme-2.js']);
     expect(headers.match(/Cache-Control: public, max-age=31536000/g)).toHaveLength(1);
     expect(rule('/*')).not.toMatch(/Cache-Control/);
   });
   it('every one of the four files exists, so a rule can never point at nothing', () => {
-    for (const f of ['theme.js', 'logo.png', 'logo-xmas.png', 'favicon-32.png']) expect(existsSync(new URL(`../public/${f}`, import.meta.url)), f).toBe(true);
+    for (const f of ['theme-2.js', 'logo.png', 'logo-xmas.png', 'favicon-32.png']) expect(existsSync(new URL(`../public/${f}`, import.meta.url)), f).toBe(true);
   });
-  it('the home page links theme.js, and nothing else in the page changes (no new tag, no version query)', () => {
+  it('the home page links theme-2.js, and nothing else in the page changes (no new tag, no version query)', () => {
     const html = read('../index.html');
-    expect(html).toContain('<script src="/theme.js"></script>');
+    expect(html).toContain('<script src="/theme-2.js"></script>');
   });
 });

@@ -10,7 +10,7 @@
 //           Never anything but idle with "reduce motion" on a phone.
 //   bubble  which speech bubble under the logo is showing right now (Everyone only).
 import { useSyncExternalStore } from 'react';
-import { BUBBLE_MS, readTheme, takeFirstOnHint, takeFirstVisitHint, writeTheme, type Memory, type SkinMode } from '../../shared/christmasSkin';
+import { BUBBLE_MS, EARLY_ATTR, readTheme, takeFirstOnHint, takeFirstVisitHint, writeMode, writeTheme, type Memory, type SkinMode } from '../../shared/christmasSkin';
 
 export type SkinPhase = 'idle' | 'in' | 'out';
 export type SkinBubble = null | 'first' | 'back';
@@ -24,8 +24,35 @@ export interface SkinState {
 }
 
 const IDLE: SkinState = { mode: 'off', on: false, phase: 'idle', seq: 0, bubble: null };
-let state: SkinState = IDLE;
+
+/**
+ * Zip 102: what public/theme-2.js decided before the page drew. On a player Home address, inside the window, it leaves data-skin-early =
+ * "all-on" / "all-off" / "me-on" / "me-off" (this phone's last answer) and data-skin="christmas" only when the theme is ON. The store starts
+ * from it, so the first screen (the loading shimmer or the saved last screen) already draws the Christmas logo (Everyone) and, theme ON, the
+ * theme, and nothing pops in when the games arrive. No pop-in on this start (phase idle). Anything else: IDLE, as before.
+ */
+function earlyState(): SkinState {
+  try {
+    if (typeof document === 'undefined') return IDLE;
+    const root = document.documentElement;
+    const m = /^(all|me)-(on|off)$/.exec(root.getAttribute(EARLY_ATTR) ?? '');
+    const dressed = root.getAttribute('data-skin') === 'christmas';
+    if (m && dressed === (m[2] === 'on')) return { mode: m[1] as 'all' | 'me', on: dressed, phase: 'idle', seq: 0, bubble: null };
+    // Nothing from the early script, or markers that do not agree (never written that way): the page starts plain.
+    root.removeAttribute(EARLY_ATTR);
+    if (dressed) root.removeAttribute('data-skin');
+  } catch {
+    /* nothing to start from */
+  }
+  return IDLE;
+}
+
+let state: SkinState = earlyState();
+/** True until the first real answer from the server: the state above came from this phone's memory, not from the server. */
+let fromMemory = state !== IDLE;
 let demo = false;
+/** Whether this screen's answers may be written down for the next first paint (the player's own phone: not View as, the demo or Pretend). */
+let remember = false;
 /** The first-visit bubble was already shown in this page load (a phone that blocks storage cannot remember it, so this keeps it to once). */
 let hintShown = false;
 let backShown = false;
@@ -67,6 +94,7 @@ export function reducedMotion(): boolean {
 function paint() {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
+  root.removeAttribute(EARLY_ATTR);
   if (state.mode !== 'off' && state.on) root.setAttribute('data-skin', 'christmas');
   else root.removeAttribute('data-skin');
   if (state.mode !== 'off' && state.phase !== 'idle') root.setAttribute('data-skin-anim', state.phase);
@@ -106,7 +134,21 @@ export function setMePersist(fn: ((on: boolean) => void) | null) {
  * The server's answer for this screen. Called on every refresh; it only does something when the mode changes.
  * `isDemo` = the organizer's "View as" copy: no bubble, nothing remembered, the theme starts off. `meOn` = Just me: the saved theme choice.
  */
-export function setSkinAvailable(mode: SkinMode, isDemo: boolean, meOn = false) {
+export function setSkinAvailable(mode: SkinMode, isDemo: boolean, meOn = false, rememberIt = false) {
+  parked = null;
+  remember = rememberIt && !isDemo;
+  // Zip 102: written down for the next page open's first paint (only when it changed, so a refresh every 5 seconds writes nothing).
+  if (remember) rememberMode(mode, meOn);
+  const early = fromMemory;
+  fromMemory = false;
+  // The first answer after a first paint from memory. The same mode: nothing moves, except Just me following the server's saved choice (another
+  // phone may have tapped it), quietly. A different mode (Off, the window over, Just me on another player): the normal path below, quietly too.
+  if (early && mode === state.mode && !isDemo) {
+    demo = false;
+    const on = mode === 'me' ? meOn : readTheme(memory);
+    if (on !== state.on) emit({ ...state, on, phase: 'idle', bubble: null });
+    return;
+  }
   if (mode === state.mode && isDemo === demo) return;
   demo = isDemo;
   clearTimers();
@@ -134,6 +176,7 @@ export function toggleSkin() {
   const on = !state.on;
   if (state.mode === 'all' && !demo) writeTheme(memory, on);
   if (state.mode === 'me') mePersist?.(on);
+  if (state.mode === 'me' && remember) rememberMode('me', on);
   clearTimers();
   const still = reducedMotion();
   // "Tap to switch back" shows only the first time the theme is turned ON on a phone (Everyone only, never in View as).
@@ -144,11 +187,36 @@ export function toggleSkin() {
   if (back) later(BUBBLE_MS, () => state.bubble === 'back' && emit({ ...state, bubble: null }));
 }
 
+/** Zip 102: the last mode written down in this page load (null = not yet), so the same answer is never written twice. */
+let written: string | null = null;
+function rememberMode(mode: SkinMode, meOn: boolean) {
+  const key = mode === 'me' ? `me-${meOn ? 'on' : 'off'}` : mode;
+  if (key === written) return;
+  written = key;
+  writeMode(memory, mode, meOn);
+}
+
 /** The Home screen went away (admin, another page): nothing of the theme is left behind. */
 export function resetSkin() {
   clearTimers();
   demo = false;
+  remember = false;
+  // Left before the server ever answered: the start from memory is kept aside, so a player Home that comes back (React's strict mode runs a
+  // screen's setup twice in development) starts from it again (resumeEarly). Once an answer came, nothing is kept.
+  parked = fromMemory ? state : null;
+  fromMemory = false;
   if (state !== IDLE) emit(IDLE);
+  else paint();
+}
+
+let parked: SkinState | null = null;
+/** Zip 102: the player Home is on screen and the server has not answered yet: start again from this phone's memory if it was put aside. */
+export function resumeEarly() {
+  if (!parked || state !== IDLE) return;
+  const back = parked;
+  parked = null;
+  fromMemory = true;
+  emit(back);
 }
 
 const subscribe = (l: () => void) => {
