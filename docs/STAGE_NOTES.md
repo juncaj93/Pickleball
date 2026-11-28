@@ -9178,3 +9178,13 @@ Dashboard 4 trips / 64 statements, the 5 second check 2 / 16: unchanged.
 ### Preview
 https://claude-new-session-7td4bi.pickleball-club-9h0.pages.dev (fake database on zip86_next plus a Sun Nov 29 10 AM game: Parker sees Sat and
 Sun under THIS WEEK, the row, Dec 1 and Dec 3 under NEXT WEEK).
+
+### Live (Fri Nov 27, 2026, about 11:55 PM Eastern; quiet hours, no override; before the Sat 6 PM freeze)
+- Restore point: export `export-20261128045245` in `pickleball-backups` (checked); Time Travel bookmark
+  `000022f9-00000000-00005131-5398e645e8067ea3764bc178b4513dc2`. Integrity before and after: 22, 8, 14 columns, all 0. No migration.
+- Deployment **eeafa60b-3de1-4118-af30-576d68975705** (commit 403bc0e, bundle `index-I5XSxJI9.js`). Rollback: **4a4af6b7-8dbb-45da-89a4-674443e10e47**
+  (🎾100). Nothing to undo in the data.
+- The Cold Open before and after (7 tickets, $90 paid, 10 sign-ups, untouched since Nov 20): identical.
+- Read-only live look (https://pickleball-club-9h0.pages.dev): /, /admin, /api/status 200; dashboard 401 without a PIN; Home 390 light and dark:
+  the new bundle, no errors, nothing wider, no writes. Organizer screens not opened (no read-only PIN in this session).
+- Git: GitHub main fast-forwarded 5225af8 to 403bc0e. This machine's stale local `main` (b9d233b) renamed `old-local-main-b9d233b-2`.
